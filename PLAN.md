@@ -15,12 +15,21 @@ Make the real assistive-technology experience of any website measurable and impr
 
 ### M0 — Spike: is the core bet real? (now)
 
-Prove that an AI model can judge the real screen-reader experience trustworthily.
+Prove that an AI model can judge the real screen-reader experience trustworthily, then prove we can capture that experience from a real screen reader.
 
-- [ ] Drive VoiceOver (Guidepup) through one real page using real navigation (browse-mode read, then heading jumps); capture the announcement transcript. `src/spike/run-spike.ts`
-- [ ] Pipe the transcript and the task to the AI judge; get a WCAG-cited, confidence-scored verdict. `src/spike/judge.ts`
-- [ ] Pre-register what "trustworthy enough" means before running it, e.g. across N real pages the judge's load-bearing findings match an expert's, with few false positives.
-- [ ] Run it on a handful of real pages and make the go/no-go call.
+**Judge half — substantially proven.**
+
+- [x] AI judge produces WCAG-cited, confidence-scored verdicts. `src/spike/judge.ts`
+- [x] Judge grounded in the verified WCAG 2.2 A/AA criteria and cites only from that list. `src/wcag/criteria.ts` (validated against the W3C spec)
+- [x] Catches the planted defects consistently and avoids false positives. `src/spike/judge-sample.ts`
+- [ ] Pre-register what "trustworthy enough" means, then confirm across N real pages against an expert.
+
+**Capture half — the remaining risk, now on Windows/NVDA.**
+
+VoiceOver capture was deferred: macOS AppleScript automation is fragile and deprecating (`-1708`), and VoiceOver cannot be containerised or run by contributors. Capture moves to NVDA on Windows, the most representative and most reliably automatable target. See `docs/adr/0001-capture-architecture.md`.
+
+- [ ] Stand up one NVDA-on-Windows capture worker (Guidepup) on a Proxmox VM, behind a `POST /capture` service. `src/capture/backend.ts`
+- [ ] Drive one real page through real navigation, capture the announcement transcript, pipe it to the judge, and make the go/no-go call.
 
 **Acceptance:** on real pages, the judgment is credible and a human can verify each finding from the transcript. If it is hallucinated or noisy, stop and rethink before building further.
 
@@ -28,6 +37,8 @@ Prove that an AI model can judge the real screen-reader experience trustworthily
 
 - [ ] CLI: `a11y-witness <url> --task "..."` produces an evidence-backed report (findings, WCAG references, confidence).
 - [ ] Real navigation as reusable strategies: read-through, by-heading, by-landmark, forms, task completion.
+- [ ] Portable control plane (container) that dispatches to capture workers and runs the judge. Judge made provider-pluggable (Codex CLI / OpenAI / Anthropic / local) so others are not tied to one account.
+- [ ] Make the NVDA worker reproducible and usable by others (per ADR 0001): a one-command PowerShell bootstrap for any Windows box, and a GitHub Actions `windows-latest` job so contributors run the full pipeline with zero infra.
 - [ ] Repo polish: examples, contribution guide, basic CI (typecheck and lint).
 - [ ] First launch artifact / blog post (this is the content roadmap's first concrete deliverable).
 
@@ -39,10 +50,13 @@ Prove that an AI model can judge the real screen-reader experience trustworthily
 
 ### M3 — Coverage and the development workflow
 
-- [ ] NVDA support (Windows; Guidepup), the most-used free screen reader.
+NVDA on Windows is the primary backend, proven in M0 and productionised in M1. M3 broadens coverage behind the same `CaptureBackend` interface.
+
+- [ ] A scalable worker fleet: Packer image + Terraform (Proxmox and cloud), with job dispatch across a pool of workers.
+- [ ] VoiceOver support (macOS), for Mac and iOS user coverage. Requires a Mac in the pool; AppleScript automation is fragile, so budget for it.
 - [ ] JAWS support (Windows; commercial, hardest to automate, deliberate fast-follow). Known gap.
-- [ ] Windows CI runners for NVDA and JAWS.
-- [ ] Multi-step flow automation (Playwright driving the page, Guidepup driving the screen reader).
+- [ ] Orca support (Linux), as an optional fully-portable local dev and CI tier.
+- [ ] Multi-step flow automation (Playwright driving the page, the screen reader driving assistive tech).
 - [ ] CI integration: run in a pipeline and catch accessibility regressions, including inaccessible AI-generated UI, before merge.
 
 ### M4 — Launch and standing
@@ -55,4 +69,5 @@ Prove that an AI model can judge the real screen-reader experience trustworthily
 
 - **Trustworthiness of AI judgment.** The make-or-break. M0 decides it.
 - **JAWS automation difficulty.** Commercial and awkward to drive; budget time for it.
-- **Representative coverage.** Most desktop screen-reader users are on Windows (NVDA and JAWS), so VoiceOver alone is not representative. M3 is required for credibility, not optional. VoiceOver is simply the cheapest way to prove the mechanism in M0.
+- **Representative coverage.** Most desktop screen-reader users are on Windows (NVDA and JAWS), so we lead with NVDA. VoiceOver (Mac and iOS) and Orca (Linux) follow behind the same interface; broad coverage is required for credibility, not optional.
+- **Capture is OS-bound.** No single portable container runs the whole product; capture workers live where the operating system allows (Windows for NVDA, a Mac for VoiceOver). The portable core hides this from users, but it shapes the infrastructure. See ADR 0001.
