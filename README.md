@@ -30,4 +30,6 @@ The spike opens the page, drives VoiceOver through real navigation, captures wha
 
 ## Licence
 
-Apache-2.0, open core. The engine is open source; a hosted version and enterprise features may sit on top of it later, the same model NetBox Labs uses.
+`a11y-witness` is licensed under the **GNU Affero General Public License v3.0 or later** (`AGPL-3.0-or-later`); see [`LICENSE`](./LICENSE). The engine is open source. Because the AGPL's network copyleft requires anyone who runs a modified version as a service to publish their changes, the project stays genuinely open while a closed, hosted fork is not a free ride.
+
+**Commercial licensing.** If the AGPL's obligations do not fit your use, for example embedding `a11y-witness` in a closed-source product or a proprietary hosted service, a separate commercial licence is available. Open an issue to start the conversation. A hosted version and enterprise features may sit on top of the open core later, the same open-core model NetBox Labs uses.

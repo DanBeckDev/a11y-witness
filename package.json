@@ -4,7 +4,7 @@
   "private": true,
   "description": "Judge the real assistive-technology experience of a website with AI: drive a real screen reader through real navigation and assess whether the experience is coherent and usable.",
   "type": "module",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "spike": "tsx src/spike/run-spike.ts",
     "typecheck": "tsc --noEmit"
