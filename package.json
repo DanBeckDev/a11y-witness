@@ -1,0 +1,22 @@
+{
+  "name": "a11y-witness",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Judge the real assistive-technology experience of a website with AI: drive a real screen reader through real navigation and assess whether the experience is coherent and usable.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "spike": "tsx src/spike/run-spike.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.106.0",
+    "@guidepup/guidepup": "^0.27.0",
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}
