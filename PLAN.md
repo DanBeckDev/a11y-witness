@@ -17,21 +17,23 @@ Make the real assistive-technology experience of any website measurable and impr
 
 Prove that an AI model can judge the real screen-reader experience trustworthily, then prove we can capture that experience from a real screen reader.
 
-**Judge half — substantially proven.**
+**Capture half — proven on Windows/NVDA.**
 
-- [x] AI judge produces WCAG-cited, confidence-scored verdicts. `src/spike/judge.ts`
-- [x] Judge grounded in the verified WCAG 2.2 A/AA criteria and cites only from that list. `src/wcag/criteria.ts` (validated against the W3C spec)
-- [x] Catches the planted defects consistently and avoids false positives. `src/spike/judge-sample.ts`
+VoiceOver capture was deferred: macOS AppleScript automation is fragile and deprecating (`-1708`), and VoiceOver cannot be containerised or run by contributors. Capture moved to NVDA on Windows, the most representative and most reliably automatable target. See `docs/adr/0001-capture-architecture.md`.
+
+- [x] NVDA capture running on a Proxmox Windows VM via Guidepup, in an interactive session, driven remotely. `src/capture/nvda/`
+- [x] Real browse-mode read-through of a real page, producing a faithful transcript that audibly contains the page's actual defects (unlabelled graphics, "Click here" links, unmarked headings). Fixture: `src/spike/fixtures/nvda-w3c-bad-before.json`
+- [x] End-to-end: capture (Windows) piped to the Codex judge (control plane) yields a grounded, hallucination-free verdict. `src/spike/judge-file.ts`
+- [ ] Productionise the worker as the `POST /capture` HTTP service behind `src/capture/backend.ts` (currently a scheduled-task recipe).
+
+**Judge half — works end-to-end, but recall is the open problem.**
+
+- [x] Produces WCAG-cited, confidence-scored verdicts, grounded in the verified WCAG 2.2 A/AA criteria and citing only from that list. `src/spike/judge.ts`, `src/wcag/criteria.ts` (validated against the W3C spec)
+- [x] On the short planted sample, catches the defects and avoids false positives. `src/spike/judge-sample.ts`
+- [ ] **Recall on long, real transcripts is weak.** On the 79-line real capture it surfaced one issue and missed the "Click here" links (2.4.4) and unmarked headings (1.3.1). Next: separate "task completable" from "full audit", and improve exhaustiveness (chunking, multi-pass, or a per-criterion sweep).
 - [ ] Pre-register what "trustworthy enough" means, then confirm across N real pages against an expert.
 
-**Capture half — the remaining risk, now on Windows/NVDA.**
-
-VoiceOver capture was deferred: macOS AppleScript automation is fragile and deprecating (`-1708`), and VoiceOver cannot be containerised or run by contributors. Capture moves to NVDA on Windows, the most representative and most reliably automatable target. See `docs/adr/0001-capture-architecture.md`.
-
-- [ ] Stand up one NVDA-on-Windows capture worker (Guidepup) on a Proxmox VM, behind a `POST /capture` service. `src/capture/backend.ts`
-- [ ] Drive one real page through real navigation, capture the announcement transcript, pipe it to the judge, and make the go/no-go call.
-
-**Acceptance:** on real pages, the judgment is credible and a human can verify each finding from the transcript. If it is hallucinated or noisy, stop and rethink before building further.
+**Acceptance:** on real pages, the judgment is credible AND reasonably complete, and a human can verify each finding from the transcript. The capture clears this bar; the judge's recall does not yet.
 
 ### M1 — v1 open-source tool
 
