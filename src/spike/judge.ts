@@ -1,8 +1,13 @@
-import { Codex } from "@openai/codex-sdk";
+import { spawn } from "node:child_process";
+import { writeFile, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-// Runs on your local Codex login (`codex login`), so the judge uses your existing
-// Codex subscription rather than a metered API. No API key is needed here.
-const codex = new Codex();
+// Reasoning effort and timeout are configurable; defaults keep the judge fast
+// and bounded. The judge runs through the Codex CLI on your local codex login,
+// so there is no metered API cost.
+const REASONING = process.env.JUDGE_REASONING ?? "low";
+const TIMEOUT_MS = Number(process.env.JUDGE_TIMEOUT_MS ?? 120_000);
 
 export type Severity = "blocker" | "serious" | "moderate" | "minor";
 
@@ -59,12 +64,48 @@ function buildPrompt(input: JudgeInput): string {
 }
 
 export async function judge(input: JudgeInput): Promise<Judgment> {
-  const thread = codex.startThread();
-  const turn = await thread.run(buildPrompt(input));
-  return JSON.parse(extractJson(turn.finalResponse ?? "")) as Judgment;
+  const promptFile = join(tmpdir(), `a11y-witness-judge-${Date.now()}.txt`);
+  await writeFile(promptFile, buildPrompt(input), "utf8");
+  try {
+    const output = await runCodex(promptFile);
+    return JSON.parse(extractJson(output)) as Judgment;
+  } finally {
+    await unlink(promptFile).catch(() => {});
+  }
 }
 
-/** The model is asked for raw JSON; strip stray code fences just in case. */
+/**
+ * Run the Codex CLI one-shot on your local codex login (no metered API).
+ * Streams Codex's own progress to stderr so the run is never a silent black
+ * box, and enforces a hard timeout so it can't hang forever.
+ */
+function runCodex(promptFile: string): Promise<string> {
+  const cmd = `codex exec "$(cat ${JSON.stringify(promptFile)})" -s read-only --skip-git-repo-check -c 'model_reasoning_effort="${REASONING}"' < /dev/null`;
+  process.stderr.write(`\nCalling Codex (reasoning=${REASONING}, timeout=${TIMEOUT_MS / 1000}s)...\n`);
+  return new Promise((resolve, reject) => {
+    const child = spawn("bash", ["-c", cmd]);
+    let stdout = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error(`Codex timed out after ${TIMEOUT_MS / 1000}s`));
+    }, TIMEOUT_MS);
+    child.stdout.on("data", (d) => {
+      stdout += d.toString();
+    });
+    child.stderr.on("data", (d) => process.stderr.write(d)); // live Codex progress
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`codex exec exited with code ${code}`));
+    });
+  });
+}
+
+/** Codex is asked for raw JSON; strip stray prose or fences just in case. */
 function extractJson(text: string): string {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) return fenced[1].trim();
