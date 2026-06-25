@@ -26,12 +26,12 @@ VoiceOver capture was deferred: macOS AppleScript automation is fragile and depr
 - [x] End-to-end: capture (Windows) piped to the Codex judge (control plane) yields a grounded, hallucination-free verdict. `src/spike/judge-file.ts`
 - [ ] Productionise the worker as the `POST /capture` HTTP service behind `src/capture/backend.ts` (currently a scheduled-task recipe).
 
-**Judge half — works end-to-end, but recall is the open problem.**
+**Judge half — works end-to-end; recall now strong, calibration next.**
 
 - [x] Produces WCAG-cited, confidence-scored verdicts, grounded in the verified WCAG 2.2 A/AA criteria and citing only from that list. `src/spike/judge.ts`, `src/wcag/criteria.ts` (validated against the W3C spec)
 - [x] On the short planted sample, catches the defects and avoids false positives. `src/spike/judge-sample.ts`
-- [ ] **Recall on long, real transcripts is weak.** On the 79-line real capture it surfaced one issue and missed the "Click here" links (2.4.4) and unmarked headings (1.3.1). Next: separate "task completable" from "full audit", and improve exhaustiveness (chunking, multi-pass, or a per-criterion sweep).
-- [ ] Pre-register what "trustworthy enough" means, then confirm across N real pages against an expert.
+- [x] **Recall fixed via a two-stage judge:** an exhaustive recall pass (task-independent) then a keep-biased grounding/verification pass. On the 79-line real capture this went from 1 finding to 8 distinct, correctly-cited ones (1.1.1, 1.3.1, 1.4.5, and four 2.4.4 link-purpose issues), with no regression on the planted sample.
+- [ ] Calibrate severity/confidence and "task completable" against an expert; pre-register what "trustworthy enough" means and confirm across N real pages.
 
 **Acceptance:** on real pages, the judgment is credible AND reasonably complete, and a human can verify each finding from the transcript. The capture clears this bar; the judge's recall does not yet.
 
