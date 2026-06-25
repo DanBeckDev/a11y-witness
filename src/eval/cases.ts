@@ -33,6 +33,14 @@ const W3C_BEFORE_DOCUMENTED_AA = [
   "3.1.1", "3.2.1", "3.2.2", "3.2.4", "3.3.2", "4.1.2",
 ];
 
+// W3C's documented Level A/AA failures on the inaccessible "before" SURVEY page
+// (https://www.w3.org/WAI/demos/bad/before/reports/survey.html). Form-heavy.
+const W3C_SURVEY_DOCUMENTED_AA = [
+  "1.1.1", "1.3.1", "1.3.2", "1.4.1", "1.4.3",
+  "2.1.1", "2.4.1", "2.4.2", "2.4.3", "2.4.4", "2.4.6", "2.4.7",
+  "3.1.1", "3.2.1", "3.2.2", "3.3.2", "4.1.2",
+];
+
 export const EVAL_CASES: EvalCase[] = [
   {
     id: "w3c-bad-before",
@@ -47,12 +55,26 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "w3c-bad-after",
-    fixture: "src/spike/fixtures/nvda-w3c-bad-after.json",
+    fixture: "src/spike/fixtures/nvda-w3c-bad-after-content.json",
     task: "Read the City Lights home page and find the latest news",
     // W3C documents the accessible page as fully conformant: expect nothing.
+    // Uses the content-only fixture (demo switcher chrome stripped) so we score
+    // the certified page, not W3C's demo navigation.
     expect: [],
     allow: [],
-    notes: "Ground truth: W3C BAD after-page report = full WCAG 2.0 AA conformance. Any finding is a false positive; the demo's own Show/QuickMenu chrome is a known confound.",
+    notes: "Ground truth: W3C BAD after-page report = full WCAG 2.0 AA conformance. Content-only fixture; any finding is a false positive.",
+  },
+  {
+    id: "w3c-bad-before-survey",
+    fixture: "src/spike/fixtures/nvda-w3c-bad-before-survey.json",
+    task: "Fill in and submit the City Lights visitor survey",
+    // Form-heavy page: radio buttons are announced with no label ("radio
+    // button, not checked, [no name]") and the menu is a junk-named combo box.
+    // Tests recall on unlabelled form controls. 3.3.2 (Labels or Instructions)
+    // is the equivalent citation and is allowed.
+    expect: ["4.1.2"],
+    allow: W3C_SURVEY_DOCUMENTED_AA,
+    notes: "Ground truth: W3C BAD before-survey report. Exercises form-control recall the home page didn't.",
   },
   {
     id: "w3c-wai-home",
