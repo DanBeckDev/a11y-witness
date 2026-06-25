@@ -9,6 +9,7 @@
     "spike": "tsx src/spike/run-spike.ts",
     "witness": "tsx src/cli.ts",
     "worker": "node src/capture/nvda/server.mjs",
+    "eval": "tsx src/eval/run.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -31,7 +31,9 @@ VoiceOver capture was deferred: macOS AppleScript automation is fragile and depr
 - [x] Produces WCAG-cited, confidence-scored verdicts, grounded in the verified WCAG 2.2 A/AA criteria and citing only from that list. `src/spike/judge.ts`, `src/wcag/criteria.ts` (validated against the W3C spec)
 - [x] On the short planted sample, catches the defects and avoids false positives. `src/spike/judge-sample.ts`
 - [x] **Recall fixed via a two-stage judge:** an exhaustive recall pass (task-independent) then a keep-biased grounding/verification pass. On the 79-line real capture this went from 1 finding to 8 distinct, correctly-cited ones (1.1.1, 1.3.1, 1.4.5, and four 2.4.4 link-purpose issues), with no regression on the planted sample.
-- [ ] Calibrate severity/confidence and "task completable" against an expert; pre-register what "trustworthy enough" means and confirm across N real pages.
+- [x] **Eval suite** scoring the judge against authoritative ground truth (W3C BAD before/after reports + a planted sample), with an automatic recall/precision scorer. `src/eval/`. Baseline: recall 100% on observable failures (before + planted) with 0 false positives there; aggregate precision 67%, dragged entirely by 2 minor false positives on the conformant "after" page that trace to the demo's own wrapper chrome (a fixture confound).
+- [ ] Tighten precision on clean/borderline pages and add a non-demo conformant fixture to remove the chrome confound. Grow the eval set (MDPI LLM-auditing dataset, public-sector accessibility statements, ACT Rules cases).
+- [ ] Calibrate severity/confidence and "task completable" against an expert; pre-register what "trustworthy enough" means.
 
 **Acceptance:** on real pages, the judgment is credible AND reasonably complete, and a human can verify each finding from the transcript. The capture clears this bar; the judge's recall does not yet.
 
