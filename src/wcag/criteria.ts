@@ -2,13 +2,15 @@
  * WCAG 2.2 success criteria, Levels A and AA.
  *
  * Sourced from the W3C WCAG 2.2 Recommendation (https://www.w3.org/TR/WCAG22/).
- * Corrected against the spec after an initial fetch error: 2.5.5 Target Size
- * (Enhanced) and 2.5.6 Concurrent Input Mechanisms are Level AAA and are
- * excluded; 3.2.6 Consistent Help (Level A, new in 2.2) was added. 4.1.1 Parsing
- * is intentionally absent (removed in WCAG 2.2). 55 criteria total.
+ * Validated 2026-06-25 by parsing the spec's own HTML (not a model summary) and
+ * diffing every number, name, and level: exact match on all 55. The spec lists
+ * 32 Level A + 24 Level AA = 56 entries, of which 4.1.1 Parsing is a tombstone
+ * marked "Obsolete and removed" and is excluded, leaving 55 active criteria.
+ * 2.5.5 Target Size (Enhanced) and 2.5.6 Concurrent Input Mechanisms are Level
+ * AAA and are excluded; 3.2.6 Consistent Help (Level A, new in 2.2) is included.
  *
- * The judge cites only from this list, so its accuracy matters. Verify against
- * the spec if in doubt.
+ * The judge cites only from this list, so its accuracy matters. To re-validate,
+ * re-parse https://www.w3.org/TR/WCAG22/ rather than trusting recall.
  */
 export interface Criterion {
   num: string;
