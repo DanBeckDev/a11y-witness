@@ -13,6 +13,14 @@ import { setTimeout as sleep } from "node:timers/promises";
 export async function captureWithNvda(url, opts = {}) {
   const steps = Number(opts.steps || 150);
   const browserWaitMs = Number(opts.browserWaitMs || 12000);
+  // "line" reads visual-line-by-line via NVDA browse mode (readNext) — this is
+  // the faithful full-page traversal in reading order, the way a user arrows
+  // down a page. It can fragment a wrapped heading/link across lines; the judge
+  // is instructed to treat that as one element rather than split structure.
+  // "object" navigation (moveToNextObject) does NOT do a full reading-order
+  // traversal (it walks siblings at one level and stops early), so it is not a
+  // usable read-through. Line is the default.
+  const nav = opts.nav === "object" ? "object" : "line";
 
   spawn(
     "cmd",
@@ -34,7 +42,8 @@ export async function captureWithNvda(url, opts = {}) {
 
   let last = null, dupes = 0;
   for (let i = 0; i < steps; i++) {
-    await nvda.next();
+    if (nav === "object") await nvda.perform(nvda.keyboardCommands.moveToNextObject);
+    else await nvda.next();
     const phrase = ((await nvda.lastSpokenPhrase()) || "").trim();
     if (!phrase) continue;
     if (phrase === last) { if (++dupes >= 3) break; continue; }

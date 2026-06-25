@@ -26,13 +26,13 @@ const server = createServer((req, res) => {
       let parsed;
       try { parsed = JSON.parse(body || "{}"); }
       catch { return send(res, 400, { error: "invalid JSON body" }); }
-      const { url, task = null, steps } = parsed;
+      const { url, task = null, steps, nav } = parsed;
       if (!url) return send(res, 400, { error: "url is required" });
       busy = true;
       const startedAt = new Date().toISOString();
-      console.log(`[${startedAt}] capture ${url}`);
+      console.log(`[${startedAt}] capture ${url} (nav=${nav || "object"})`);
       try {
-        const result = await captureWithNvda(url, { steps });
+        const result = await captureWithNvda(url, { steps, nav });
         console.log(`  -> ${result.transcript.length} phrases`);
         send(res, 200, { ...result, task });
       } catch (e) {
