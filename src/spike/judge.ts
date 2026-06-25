@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WCAG_22_AA } from "../wcag/criteria.js";
 
 // Reasoning effort and timeout are configurable; defaults keep the judge fast
 // and bounded. The judge runs through the Codex CLI on your local codex login,
@@ -44,15 +45,19 @@ Judge the LIVED experience, not mechanical rule compliance:
 
 Rules:
 - Judge ONLY from the transcript provided. Do not invent problems you cannot point to in it. If the transcript is insufficient to judge something, say so rather than guessing.
-- For every finding, cite the most relevant WCAG 2.2 success criterion (number and name), quote the announced text that evidences it, and give a calibrated confidence from 0 to 1.
+- For every finding, cite the single most precise WCAG 2.2 success criterion FROM THE PROVIDED LIST BELOW, using its exact number and name. Do not cite any criterion that is not in the list. Quote the announced text that evidences the finding, and give a calibrated confidence from 0 to 1.
 - Distinguish a real blocker (the user cannot complete the task) from lesser issues.
 
 Respond with ONLY a JSON object of this shape, and nothing else:
 {"taskCompletable": boolean, "summary": string, "findings": [{"issue": string, "wcag": string, "severity": "blocker"|"serious"|"moderate"|"minor", "evidence": string, "confidence": number}], "confidence": number}`;
 
 function buildPrompt(input: JudgeInput): string {
+  const criteria = WCAG_22_AA.map((c) => `${c.num} ${c.name} (${c.level})`).join("\n");
   return [
     INSTRUCTIONS,
+    ``,
+    `Cite only from these WCAG 2.2 Level A and AA success criteria, using the exact number and name:`,
+    criteria,
     ``,
     `URL: ${input.url}`,
     `Screen reader: ${input.screenReader}`,
