@@ -10,23 +10,26 @@ It does **not** tab through the page and call that a screen-reader test. Tabbing
 
 ## Status
 
-Early. The current focus is the **M0 spike**: proving that an AI model can judge the real screen-reader experience trustworthily enough to be credible. See [`PLAN.md`](./PLAN.md).
+Early but working end to end. The **M0 core bet is demonstrated**: a real screen reader (NVDA) is driven through a real page, and an AI judge produces grounded, WCAG-cited findings that discriminate broken pages from accessible ones. See [`PLAN.md`](./PLAN.md). The architecture is in [`docs/adr/0001-capture-architecture.md`](./docs/adr/0001-capture-architecture.md).
 
-## Quickstart (the spike)
+## How it works
 
-The spike drives **VoiceOver** on macOS, the cheapest first target. NVDA and JAWS on Windows are planned coverage milestones; see `PLAN.md` for why they matter.
+Capture is operating-system-bound, so it is split from the rest:
 
-Prerequisites:
-- macOS, with VoiceOver automation enabled (System Settings, Accessibility, VoiceOver) and your terminal allowed to control VoiceOver. Guidepup documents the exact toggles: https://www.guidepup.dev/docs/guides/voiceover
-- Node 20 or newer.
-- Codex installed and logged in (`codex login`). The AI judge runs through the Codex SDK on your existing Codex subscription, so there is no metered API cost.
+- **Capture worker** (Windows): drives **NVDA** through real browse-mode navigation and returns the announcement transcript over HTTP. See [`src/capture/nvda/`](./src/capture/nvda/) for the setup recipe.
+- **Control plane** (anywhere): the `witness` CLI asks a worker to capture a page, then judges the transcript locally via Codex (your subscription login, so no metered API cost), and prints WCAG-cited findings.
+
+## Quickstart
+
+Prerequisites: Node 20+, and Codex installed and logged in (`codex login`) on the machine running the CLI. A reachable NVDA capture worker (see `src/capture/nvda/README.md` to stand one up).
 
 ```bash
 npm install
-npm run spike -- https://example.com "Find the contact details and read them"
+A11Y_WORKER=http://<worker-host>:8765 \
+  npm run witness -- https://example.com --task "Find the contact details"
 ```
 
-The spike opens the page, drives VoiceOver through real navigation, captures what it announces, and prints an AI judgment of whether the experience was usable, with WCAG-cited findings you can verify against the transcript.
+This drives a real screen reader through the page, captures what it announces, and prints an AI judgment of whether the experience was usable, with WCAG-cited findings you can verify against the transcript. Add `--json` for machine-readable output.
 
 ## Licence
 
