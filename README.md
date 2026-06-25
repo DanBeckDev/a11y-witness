@@ -19,11 +19,10 @@ The spike drives **VoiceOver** on macOS, the cheapest first target. NVDA and JAW
 Prerequisites:
 - macOS, with VoiceOver automation enabled (System Settings, Accessibility, VoiceOver) and your terminal allowed to control VoiceOver. Guidepup documents the exact toggles: https://www.guidepup.dev/docs/guides/voiceover
 - Node 20 or newer.
-- An Anthropic API key.
+- Codex installed and logged in (`codex login`). The AI judge runs through the Codex SDK on your existing Codex subscription, so there is no metered API cost.
 
 ```bash
 npm install
-cp .env.example .env        # then add your ANTHROPIC_API_KEY
 npm run spike -- https://example.com "Find the contact details and read them"
 ```
 

@@ -1,7 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { Codex } from "@openai/codex-sdk";
 
-const MODEL = process.env.JUDGE_MODEL ?? "claude-sonnet-4-6";
-const client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
+// Runs on your local Codex login (`codex login`), so the judge uses your existing
+// Codex subscription rather than a metered API. No API key is needed here.
+const codex = new Codex();
 
 export type Severity = "blocker" | "serious" | "moderate" | "minor";
 
@@ -28,7 +29,7 @@ export interface Judgment {
   confidence: number;
 }
 
-const SYSTEM = `You are an expert accessibility auditor. You are given a transcript of what a screen reader actually announced while navigating a web page the way a real user would: reading in browse mode, jumping by headings and landmarks, and operating controls.
+const INSTRUCTIONS = `You are an expert accessibility auditor. You are given a transcript of what a screen reader actually announced while navigating a web page the way a real user would: reading in browse mode, jumping by headings and landmarks, and operating controls.
 
 Judge the LIVED experience, not mechanical rule compliance:
 - Could a screen-reader user understand the page and accomplish the stated task from what was announced?
@@ -46,6 +47,8 @@ Respond with ONLY a JSON object of this shape, and nothing else:
 
 function buildPrompt(input: JudgeInput): string {
   return [
+    INSTRUCTIONS,
+    ``,
     `URL: ${input.url}`,
     `Screen reader: ${input.screenReader}`,
     `Task the user was attempting: ${input.task}`,
@@ -56,15 +59,9 @@ function buildPrompt(input: JudgeInput): string {
 }
 
 export async function judge(input: JudgeInput): Promise<Judgment> {
-  const res = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    system: SYSTEM,
-    messages: [{ role: "user", content: buildPrompt(input) }],
-  });
-
-  const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-  return JSON.parse(extractJson(text)) as Judgment;
+  const thread = codex.startThread();
+  const turn = await thread.run(buildPrompt(input));
+  return JSON.parse(extractJson(turn.finalResponse ?? "")) as Judgment;
 }
 
 /** The model is asked for raw JSON; strip stray code fences just in case. */
