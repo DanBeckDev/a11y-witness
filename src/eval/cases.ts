@@ -55,6 +55,17 @@ export const EVAL_CASES: EvalCase[] = [
     notes: "Ground truth: W3C BAD after-page report = full WCAG 2.0 AA conformance. Any finding is a false positive; the demo's own Show/QuickMenu chrome is a known confound.",
   },
   {
+    id: "w3c-wai-home",
+    fixture: "src/spike/fixtures/nvda-w3c-wai-home.json",
+    task: "Find guidance on getting started with accessibility",
+    // W3C's own WAI site: a reference-quality accessible page, no demo chrome.
+    // A conformant page should yield ~no findings, so this is a clean
+    // false-positive test (unlike the confounded "after" demo page).
+    expect: [],
+    allow: [],
+    notes: "Reference-accessible real page (W3C WAI). Any finding is a false positive; measures over-flagging on good pages.",
+  },
+  {
     id: "planted-contact-form",
     fixture: "src/eval/fixtures/planted-contact-form.json",
     task: "Send a message to the team using the contact form",

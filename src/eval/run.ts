@@ -67,30 +67,38 @@ async function main(): Promise<void> {
   }
 
   console.log(`a11y-witness judge eval  (${RUNS} run(s) per case)\n`);
-  const allRecall: number[] = [];
-  const allPrecision: number[] = [];
+  const failureRecall: number[] = []; // recall, only on cases with expected failures
+  let totalFalsePositives = 0; // summed across the last run of every case
+  let conformantFalsePositives = 0; // false positives on conformant (expect-none) cases
 
   for (const c of cases) {
     process.stderr.write(`Scoring ${c.id} ...\n`);
     const scores: RunScore[] = [];
     for (let i = 0; i < RUNS; i++) scores.push(await scoreOnce(c));
     const recalls = scores.map((s) => s.recall);
-    const precisions = scores.map((s) => s.precision);
-    allRecall.push(...recalls);
-    allPrecision.push(...precisions);
     const last = scores[scores.length - 1];
+    const isFailureCase = c.expect.length > 0;
+    if (isFailureCase) failureRecall.push(...recalls);
+    totalFalsePositives += last.falsePositives.length;
+    if (!isFailureCase) conformantFalsePositives += last.falsePositives.length;
 
-    console.log(`# ${c.id}`);
+    console.log(`# ${c.id}${isFailureCase ? "" : "  (conformant: expect no findings)"}`);
     console.log(`  expect:    [${c.expect.join(", ") || "(none)"}]`);
     console.log(`  found:     [${last.found.join(", ") || "(none)"}]${RUNS > 1 ? " (last run)" : ""}`);
-    const range = RUNS > 1 ? ` (min ${pct(Math.min(...recalls))}, max ${pct(Math.max(...recalls))})` : "";
-    console.log(`  recall:    ${pct(mean(recalls))}${range}  caught [${last.caught.join(", ") || "-"}]  missed [${last.missed.join(", ") || "-"}]`);
-    console.log(`  precision: ${pct(mean(precisions))}  false positives [${last.falsePositives.join(", ") || "none"}]`);
+    if (isFailureCase) {
+      const range = RUNS > 1 ? ` (min ${pct(Math.min(...recalls))}, max ${pct(Math.max(...recalls))})` : "";
+      console.log(`  recall:    ${pct(mean(recalls))}${range}  caught [${last.caught.join(", ") || "-"}]  missed [${last.missed.join(", ") || "-"}]`);
+    }
+    console.log(`  false positives: ${last.falsePositives.length} [${last.falsePositives.join(", ") || "none"}]`);
     if (c.notes) console.log(`  note: ${c.notes}`);
     console.log("");
   }
 
-  console.log(`AGGREGATE  recall ${pct(mean(allRecall))}  precision ${pct(mean(allPrecision))}  over ${allRecall.length} run(s)`);
+  const recallStr = failureRecall.length ? pct(mean(failureRecall)) : "n/a";
+  console.log(
+    `AGGREGATE  recall ${recallStr} (over ${failureRecall.length} failure-case run(s))  |  ` +
+      `false positives ${totalFalsePositives} total, ${conformantFalsePositives} on conformant pages`
+  );
 }
 
 main().catch((e) => {

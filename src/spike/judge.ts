@@ -9,6 +9,10 @@ import { WCAG_22_AA } from "../wcag/criteria.js";
 // so there is no metered API cost.
 const REASONING = process.env.JUDGE_REASONING ?? "medium";
 const TIMEOUT_MS = Number(process.env.JUDGE_TIMEOUT_MS ?? 120_000);
+// Consensus: judge N times and keep only findings that recur in a majority of
+// runs. Real findings are stable across runs; speculative noise is not, so this
+// trades N x the cost for higher precision. Default 1 (no consensus).
+const CONSENSUS = Math.max(1, Number(process.env.JUDGE_CONSENSUS ?? 1));
 
 export type Severity = "blocker" | "serious" | "moderate" | "minor";
 
@@ -81,6 +85,7 @@ Rules:
 - A "Click here" or "Read more" link fails 2.4.4 UNLESS the immediately surrounding announced text makes its destination clear. A vague link beside unrelated text still fails.
 - Text or phone numbers shown as a graphic are 1.1.1 (and, if they convey readable text, 1.4.5 Images of Text).
 - The transcript is read line by line, so one heading, link, or sentence may wrap across consecutive lines. Do NOT create a finding for a "split", "fragmented", or "broken-up" heading or link that is merely line-wrapping (for example, consecutive "heading, level 1, ..." lines that form one title). Line-wrapping is not a WCAG failure.
+- Flag 1.3.1 Info and Relationships ONLY when structure is announced WITHOUT its semantics: a visual section title read as plain text with no "heading" role, or missing list/table relationships. A heading-level skip (for example level 1 then level 4) is NOT a 1.3.1 failure. If headings, lists, and landmarks ARE announced with their roles, do not raise 1.3.1.
 - Drop a candidate ONLY if its evidence supports no WCAG A or AA criterion, or it is not actually a barrier. Do not invent problems absent from the transcript.
 
 SEPARATELY, judge whether a screen-reader user could complete the stated task from what was announced. This task judgment must NOT reduce the findings: a page can be fully task-completable and still fail many criteria.
@@ -131,8 +136,14 @@ async function askCodex(label: string, prompt: string): Promise<string> {
   }
 }
 
-export async function judge(input: JudgeInput): Promise<Judgment> {
-  // Stage 1: exhaustive recall.
+/** "1.1.1 Non-text Content (A)" -> "1.1.1" */
+function criterionOf(wcag: string): string {
+  const m = wcag.match(/(\d+\.\d+\.\d+)/);
+  return m ? m[1] : wcag.trim();
+}
+
+/** One full two-stage pass: exhaustive recall, then grounding/verification. */
+async function judgeOnce(input: JudgeInput): Promise<Judgment> {
   let candidates: Candidate[] = [];
   try {
     const raw = await askCodex("recall", buildRecallPrompt(input));
@@ -141,15 +152,50 @@ export async function judge(input: JudgeInput): Promise<Judgment> {
   } catch {
     // If recall fails to parse, stage 2 still audits the transcript directly.
   }
-  process.stderr.write(
-    `Recall pass surfaced ${candidates.length} candidate issues:\n` +
-      candidates.map((c, i) => `  ${i + 1}. ${c.issue}`).join("\n") +
-      "\n"
-  );
-
-  // Stage 2: ground, verify, and judge the task separately.
+  process.stderr.write(`Recall pass surfaced ${candidates.length} candidate issues.\n`);
   const verdict = await askCodex("verify", buildVerifyPrompt(input, candidates));
   return JSON.parse(extractJson(verdict)) as Judgment;
+}
+
+/**
+ * Keep only findings whose WCAG criterion recurs in a majority of runs. For a
+ * kept criterion, the highest-confidence finding is the representative. This
+ * drops run-to-run noise (flaky speculative findings) while preserving the
+ * stable, real ones.
+ */
+function mergeByConsensus(runs: Judgment[]): Judgment {
+  const need = Math.ceil(runs.length / 2);
+  const byCriterion = new Map<string, { findings: Finding[]; runs: Set<number> }>();
+  runs.forEach((r, ri) => {
+    for (const f of r.findings) {
+      const c = criterionOf(f.wcag);
+      if (!byCriterion.has(c)) byCriterion.set(c, { findings: [], runs: new Set() });
+      const entry = byCriterion.get(c)!;
+      entry.findings.push(f);
+      entry.runs.add(ri);
+    }
+  });
+  const findings: Finding[] = [];
+  for (const { findings: fs, runs: seenIn } of byCriterion.values()) {
+    if (seenIn.size >= need) {
+      findings.push([...fs].sort((a, b) => b.confidence - a.confidence)[0]);
+    }
+  }
+  const taskVotes = runs.filter((r) => r.taskCompletable).length;
+  return {
+    taskCompletable: taskVotes >= need,
+    summary: runs[runs.length - 1].summary,
+    findings,
+    confidence: runs.reduce((a, r) => a + r.confidence, 0) / runs.length,
+  };
+}
+
+export async function judge(input: JudgeInput): Promise<Judgment> {
+  if (CONSENSUS <= 1) return judgeOnce(input);
+  process.stderr.write(`Consensus mode: ${CONSENSUS} runs, keeping findings in >= ${Math.ceil(CONSENSUS / 2)}.\n`);
+  const runs: Judgment[] = [];
+  for (let i = 0; i < CONSENSUS; i++) runs.push(await judgeOnce(input));
+  return mergeByConsensus(runs);
 }
 
 /**
