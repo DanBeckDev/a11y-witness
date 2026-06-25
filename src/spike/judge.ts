@@ -43,9 +43,17 @@ Judge the LIVED experience, not mechanical rule compliance:
 - Are controls, links, headings, and form fields announced with meaningful names and roles?
 - Are state changes, errors, and focus moves announced when they matter?
 
+Be systematic, not just impressionistic. Walk the transcript in order and check EVERY announced item before you conclude. In particular, for each one ask:
+- Images and non-text content: is it announced with a meaningful name, or only by its role (a bare "image" with no description is a finding)?
+- Controls and form fields: does each button, link, and field have a meaningful accessible name and role (a bare "button", "edit text", or "link" with no name is a finding)?
+- Headings and structure: do the headings form a coherent outline for the task?
+- State, errors, and focus: are changes that matter announced?
+Do not stop at the first blocker you find; surface every distinct problem in the transcript.
+
 Rules:
 - Judge ONLY from the transcript provided. Do not invent problems you cannot point to in it. If the transcript is insufficient to judge something, say so rather than guessing.
 - For every finding, cite the single most precise WCAG 2.2 success criterion FROM THE PROVIDED LIST BELOW, using its exact number and name. Do not cite any criterion that is not in the list. Quote the announced text that evidences the finding, and give a calibrated confidence from 0 to 1.
+- Judge link purpose in context: if the surrounding announced text makes a link's destination clear, do not flag it as a Level A failure even if the link text alone is vague.
 - Distinguish a real blocker (the user cannot complete the task) from lesser issues.
 
 Respond with ONLY a JSON object of this shape, and nothing else:
