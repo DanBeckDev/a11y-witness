@@ -1,0 +1,50 @@
+// capture-core.mjs — drive NVDA through a page and return what it announced.
+// Shared by the standalone CLI (capture.mjs) and the HTTP worker (server.mjs).
+// MUST run in an interactive desktop session.
+import { nvda } from "@guidepup/guidepup";
+import { spawn } from "node:child_process";
+import { setTimeout as sleep } from "node:timers/promises";
+
+/**
+ * Launch Edge at `url`, drive NVDA through a browse-mode read-through, and
+ * return the announcement transcript.
+ * @returns {Promise<{url:string,screenReader:string,capturedAt:string,transcript:string[]}>}
+ */
+export async function captureWithNvda(url, opts = {}) {
+  const steps = Number(opts.steps || 150);
+  const browserWaitMs = Number(opts.browserWaitMs || 12000);
+
+  spawn(
+    "cmd",
+    ["/c", "start", "", "msedge",
+      "--no-first-run", "--no-default-browser-check", "--start-maximized",
+      `--user-data-dir=${process.env.TEMP}\\edge-a11y`, "--new-window", url],
+    { detached: true, stdio: "ignore" }
+  );
+  await sleep(browserWaitMs); // cold start + page load + take foreground
+
+  await nvda.start();
+  await sleep(3000);
+
+  const transcript = [];
+  try {
+    const first = ((await nvda.itemText()) || "").trim();
+    if (first) transcript.push(first);
+  } catch { /* itemText not critical */ }
+
+  let last = null, dupes = 0;
+  for (let i = 0; i < steps; i++) {
+    await nvda.next();
+    const phrase = ((await nvda.lastSpokenPhrase()) || "").trim();
+    if (!phrase) continue;
+    if (phrase === last) { if (++dupes >= 3) break; continue; }
+    dupes = 0; last = phrase;
+    transcript.push(phrase);
+  }
+
+  await nvda.stop();
+  // Best-effort: close the browser so the next capture starts clean.
+  spawn("cmd", ["/c", "taskkill", "/im", "msedge.exe", "/f"], { stdio: "ignore" });
+
+  return { url, screenReader: "NVDA", capturedAt: new Date().toISOString(), transcript };
+}

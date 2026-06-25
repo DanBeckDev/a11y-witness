@@ -7,6 +7,8 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "spike": "tsx src/spike/run-spike.ts",
+    "witness": "tsx src/cli.ts",
+    "worker": "node src/capture/nvda/server.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
