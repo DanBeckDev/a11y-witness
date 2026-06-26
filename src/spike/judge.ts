@@ -25,6 +25,9 @@ export interface JudgeInput {
   /** Optional structural navigation passes (skim by element type). An empty list
    * for a type means the page exposes none of it, even if it looks like it does. */
   structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
+  /** Optional keyboard-interaction pass: how each focusable control is announced
+   * when tabbed to, and the announced state after activating disclosures. */
+  interaction?: { tabOrder: string[]; stateChanges: { control: string; after: string }[] };
 }
 
 export interface Finding {
@@ -128,9 +131,30 @@ function structureBlock(input: JudgeInput): string {
   ].join("\n");
 }
 
+/**
+ * Keyboard-interaction pass: how each focusable control is announced when
+ * tabbed to (focus mode), and the state announced after activating disclosures.
+ * A control announced with only a role and no name (just "button" / "edit") is
+ * unlabelled (4.1.2); a disclosure that does not announce "expanded" after
+ * activation does not convey its state (4.1.2).
+ */
+function interactionBlock(input: JudgeInput): string {
+  const it = input.interaction;
+  if (!it || (!it.tabOrder?.length && !it.stateChanges?.length)) return "";
+  const lines = [
+    ``,
+    `Keyboard interaction (Tab through focusable controls; each line is how a control is announced when focused):`,
+    ...it.tabOrder.map((x, i) => `  ${i + 1}. ${x}`),
+  ];
+  if (it.stateChanges?.length) {
+    lines.push(`After activating disclosure controls: ${it.stateChanges.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")}`);
+  }
+  return lines.join("\n");
+}
+
 function buildRecallPrompt(input: JudgeInput): string {
   // Note: the task is deliberately omitted here so it cannot bias recall.
-  return [RECALL_INSTRUCTIONS, ``, transcriptBlock(input), structureBlock(input)].join("\n");
+  return [RECALL_INSTRUCTIONS, ``, transcriptBlock(input), structureBlock(input), interactionBlock(input)].join("\n");
 }
 
 function buildVerifyPrompt(input: JudgeInput, candidates: Candidate[]): string {
@@ -145,6 +169,7 @@ function buildVerifyPrompt(input: JudgeInput, candidates: Candidate[]): string {
     ``,
     transcriptBlock(input),
     structureBlock(input),
+    interactionBlock(input),
     ``,
     `Candidate issues from the first pass:`,
     JSON.stringify(candidates, null, 2),

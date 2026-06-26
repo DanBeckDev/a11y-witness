@@ -106,9 +106,52 @@ export async function captureWithNvda(url, opts = {}) {
     };
   } catch { /* structural passes are best-effort */ }
 
+  // --- Interaction pass (focus mode): Tab through the focusable controls the
+  // way a keyboard user does, capturing each focused announcement (name / role /
+  // state). For disclosure controls (announced "collapsed"), activate them once
+  // and capture whether the state change is announced — a control that does not
+  // announce "expanded" after activation fails 4.1.2. Only "collapsed" controls
+  // are activated, to avoid following links or submitting forms. ---
+  let interaction = { tabOrder: [], stateChanges: [] };
+  try {
+    // Start at the top of the document so Tab traverses page controls from the
+    // beginning, and stop when focus leaves the page into the browser's own UI
+    // (Tab is a browser-global key, so it eventually reaches the chrome).
+    try { await withTimeout(nvda.press("Control+Home"), 4000, "home"); } catch { /* best effort */ }
+    const browserChrome = /\b(tab bar|tab control|tool ?bar|app bar|new tab|address (bar|field)|tab, selected)\b/i;
+    const tabOrder = [], stateChanges = [], activated = new Set();
+    let firstKey = null;
+    for (let i = 0; i < 40; i++) {
+      if (Date.now() > deadline) break;
+      let p;
+      try {
+        await withTimeout(nvda.press("Tab"), 6000, "tab");
+        p = ((await withTimeout(nvda.lastSpokenPhrase(), 4000, "tab")) || "").trim();
+      } catch { break; }
+      if (!p) continue;
+      if (browserChrome.test(p)) break; // left the page into the browser UI
+      const key = p.slice(0, 80);
+      if (firstKey === null) firstKey = key;
+      else if (key === firstKey) break; // cycled back to the first control
+      tabOrder.push(p);
+      if (/\bcollapsed\b/i.test(p) && !activated.has(key)) {
+        activated.add(key);
+        try {
+          // Space activates the FOCUSED control (Tab moved focus, not the
+          // navigator object, so act() would target the wrong element). A
+          // proper disclosure should now announce "expanded".
+          await withTimeout(nvda.press("Space"), 5000, "activate");
+          const after = ((await withTimeout(nvda.lastSpokenPhrase(), 4000, "activate")) || "").trim();
+          if (after) stateChanges.push({ control: p, after });
+        } catch { /* activation best-effort */ }
+      }
+    }
+    interaction = { tabOrder, stateChanges };
+  } catch { /* interaction pass best-effort */ }
+
   await nvda.stop();
   // Best-effort: close the browser so the next capture starts clean.
   spawn("cmd", ["/c", "taskkill", "/im", "msedge.exe", "/f"], { stdio: "ignore" });
 
-  return { url, screenReader: "NVDA", capturedAt: new Date().toISOString(), transcript, structure };
+  return { url, screenReader: "NVDA", capturedAt: new Date().toISOString(), transcript, structure, interaction };
 }

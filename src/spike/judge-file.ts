@@ -23,6 +23,7 @@ async function main(): Promise<void> {
     screenReader?: string;
     transcript: string[];
     structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
+    interaction?: { tabOrder: string[]; stateChanges: { control: string; after: string }[] };
   };
   const verdict = await judge({
     url: data.url,
@@ -30,6 +31,7 @@ async function main(): Promise<void> {
     screenReader: data.screenReader ?? "NVDA",
     transcript: data.transcript,
     structure: data.structure,
+    interaction: data.interaction,
   });
   console.log(JSON.stringify(verdict, null, 2));
 }
