@@ -165,6 +165,7 @@ independently-derived ground truth:
 - [Accessibility Principles (POUR)](https://www.w3.org/WAI/fundamentals/accessibility-principles/)
 - [How People with Disabilities Use the Web](https://www.w3.org/WAI/people-use-web/)
 - [ATAG (Authoring Tool Accessibility Guidelines)](https://www.w3.org/WAI/standards-guidelines/atag/)
+- [NVDA user guide — Navigating with NVDA](https://download.nvaccess.org/releases/2026.1.1/documentation/userGuide.html#NavigatingWithNVDA) (browse/focus/object modes; portable-copy limitations)
 
 ### LLM evaluation literature
 

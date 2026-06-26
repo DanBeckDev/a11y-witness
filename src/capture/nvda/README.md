@@ -65,6 +65,26 @@ Then collect `transcript.json` and feed it to the judge on the control plane:
   `Add-WindowsCapability` may stall on Windows Update; installing the
   Win32-OpenSSH release from GitHub is the reliable path.
 
+## Portable NVDA: caveats (from the official NVDA user guide)
+
+Guidepup installs and drives a **portable** copy of NVDA. Per the
+[official NVDA user guide](https://download.nvaccess.org/releases/2026.1.1/documentation/userGuide.html#NavigatingWithNVDA),
+portable/temporary copies have restrictions, notably **no browse mode in Windows
+Store (UWP) apps**. We drive **desktop (Win32) Edge**, where browse mode works
+(every capture confirms it), so this does not affect us — but the worker must
+**not** be pointed at a UWP/Store-app browser, where the read-through would be
+empty.
+
+Also: `@guidepup/setup` installs the portable NVDA under `%TEMP%` by default,
+which the OS may clean. For a durable worker, pin it with
+`npx @guidepup/setup --nvda-install-dir C:\guidepup-nvda`.
+
+Navigation model (same guide): NVDA has **browse mode** (single-letter quick-nav
+by element type — h headings, d landmarks, f form fields, etc.), **focus mode**
+(keystrokes go to the control; toggle with **NVDA+Space**), and **object
+navigation**. The structural passes use browse-mode quick-nav; operating
+controls (Layer 2 part 2) will use focus mode.
+
 ## Sample output
 
 `../../spike/fixtures/nvda-w3c-bad-before.json` is a real capture of the W3C WAI
