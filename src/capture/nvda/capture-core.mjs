@@ -1,7 +1,7 @@
 // capture-core.mjs — drive NVDA through a page and return what it announced.
 // Shared by the standalone CLI (capture.mjs) and the HTTP worker (server.mjs).
 // MUST run in an interactive desktop session.
-import { nvda } from "@guidepup/guidepup";
+import { nvda, windowsActivate, windowsQuit } from "@guidepup/guidepup";
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -30,7 +30,10 @@ export async function captureWithNvda(url, opts = {}) {
       `--user-data-dir=${process.env.TEMP}\\edge-a11y`, "--new-window", url],
     { detached: true, stdio: "ignore" }
   );
-  await sleep(browserWaitMs); // cold start + page load + take foreground
+  await sleep(browserWaitMs); // cold start + page load
+  // Explicitly bring the Edge window to the foreground and focus. Relying on
+  // the launch to take focus was a source of flaky, empty captures.
+  try { await windowsActivate("msedge.exe", "Edge"); await sleep(800); } catch { /* best effort */ }
 
   await nvda.start();
   await sleep(3000);
@@ -114,8 +117,10 @@ export async function captureWithNvda(url, opts = {}) {
   // are activated, to avoid following links or submitting forms. ---
   let interaction = { tabOrder: [], stateChanges: [] };
   try {
-    // Start at the top of the document so Tab traverses page controls from the
-    // beginning, and stop when focus leaves the page into the browser's own UI
+    // Re-focus the page (the structural passes may have left focus elsewhere)
+    // before tabbing, then start at the top of the document so Tab traverses
+    // page controls from the beginning, stopping when focus leaves into chrome.
+    try { await windowsActivate("msedge.exe", "Edge"); await sleep(300); } catch { /* best effort */ }
     // (Tab is a browser-global key, so it eventually reaches the chrome).
     try { await withTimeout(nvda.press("Control+Home"), 4000, "home"); } catch { /* best effort */ }
     const browserChrome = /\b(tab bar|tab control|tool ?bar|app bar|new tab|address (bar|field)|tab, selected)\b/i;
@@ -150,8 +155,9 @@ export async function captureWithNvda(url, opts = {}) {
   } catch { /* interaction pass best-effort */ }
 
   await nvda.stop();
-  // Best-effort: close the browser so the next capture starts clean.
-  spawn("cmd", ["/c", "taskkill", "/im", "msedge.exe", "/f"], { stdio: "ignore" });
+  // Quit the browser cleanly so the next capture starts fresh (taskkill fallback).
+  try { await windowsQuit("msedge.exe"); }
+  catch { spawn("cmd", ["/c", "taskkill", "/im", "msedge.exe", "/f"], { stdio: "ignore" }); }
 
   return { url, screenReader: "NVDA", capturedAt: new Date().toISOString(), transcript, structure, interaction };
 }

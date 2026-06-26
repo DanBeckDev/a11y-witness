@@ -64,6 +64,23 @@ Then collect `transcript.json` and feed it to the judge on the control plane:
 - **OpenSSH via Windows Update can hang.** Installing OpenSSH with
   `Add-WindowsCapability` may stall on Windows Update; installing the
   Win32-OpenSSH release from GitHub is the reliable path.
+- **Focus the browser window explicitly — the #1 flakiness fix.** Do NOT rely on
+  the launched browser taking the foreground. Call Guidepup's
+  `windowsActivate("msedge.exe", "Edge")` before `nvda.start()` and again before
+  the Tab-through, or captures come back empty/partial. Use `windowsQuit` to
+  close cleanly. This was the root cause of flaky captures.
+
+## Guidepup API reference
+
+The authoritative API is the Guidepup docs, not the bundled `.d.ts`:
+[intro](https://www.guidepup.dev/docs/intro),
+[NVDA class](https://www.guidepup.dev/docs/api/class-nvda),
+[Guidepup class](https://www.guidepup.dev/docs/api/class-guidepup).
+Methods we rely on: `nvda.start/stop`, `next/previous` (arrow read), `perform(command)`
+(quick-nav via `keyboardCommands`, e.g. `moveToNextHeading`/`moveToPreviousHeading`,
+no `moveToTop`), `press(key)` (key on the focused control, e.g. "Tab"/"Space"/"Control+Home"),
+`act` (Enter on the focused item), `lastSpokenPhrase`/`spokenPhraseLog`. For NVDA,
+`itemText` equals `lastSpokenPhrase`. Top-level helpers: `windowsActivate`, `windowsQuit`.
 
 ## Portable NVDA: caveats (from the official NVDA user guide)
 
