@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   await sh(`open -a Safari ${JSON.stringify(url)}`);
   await delay(3000);
 
-  let transcript: string[] = [];
+  let transcript: string[];
   await voiceOver.start();
   try {
     // Browse-style read-through, NOT tabbing: step the VoiceOver cursor forward

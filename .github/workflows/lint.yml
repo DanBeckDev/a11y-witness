@@ -1,0 +1,24 @@
+name: lint
+
+# Mechanical code-convention gate (see CLAUDE.md "Code conventions"). The eval
+# needs a local Codex login and the capture worker needs the NVDA VM, so neither
+# runs here — CI is ESLint + tsc only, which need no browsers or external state.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # --ignore-scripts: skip Playwright/Guidepup postinstall browser/AT setup,
+      # which the static checks don't need (keeps CI fast and Linux-safe).
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run typecheck

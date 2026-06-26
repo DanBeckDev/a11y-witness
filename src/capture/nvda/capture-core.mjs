@@ -133,7 +133,7 @@ async function startScreenReader(diag) {
     diag.mark("nvdaStart", { ok: true });
   } catch (e) {
     diag.mark("nvdaStart", { ok: false, error: errMsg(e) });
-    throw new Error("nvda.start failed: " + errMsg(e));
+    throw new Error("nvda.start failed: " + errMsg(e), { cause: e });
   }
 }
 
@@ -215,11 +215,14 @@ async function navigateByStructure({ deadline, diag, probeForms }) {
 
   const structure = { headings: [], landmarks: [], formFields: [] };
   try {
-    structure.headings = await collectByType(K.moveToPreviousHeading, K.moveToNextHeading, "heading", null, deadline);
-    structure.landmarks = await collectByType(K.moveToPreviousLandmark, K.moveToNextLandmark, "landmark", null, deadline);
+    structure.headings = await collectByType(
+      { prev: K.moveToPreviousHeading, next: K.moveToNextHeading }, { label: "heading", onItem: null, deadline });
+    structure.landmarks = await collectByType(
+      { prev: K.moveToPreviousLandmark, next: K.moveToNextLandmark }, { label: "landmark", onItem: null, deadline });
     // Form fields (which NVDA's "F" nav reaches, incl. buttons that "B" misses)
     // also drive the disclosure and (opt-in) form-submit probes in place.
-    structure.formFields = await collectByType(K.moveToPreviousFormField, K.moveToNextFormField, "formField", onFormField, deadline);
+    structure.formFields = await collectByType(
+      { prev: K.moveToPreviousFormField, next: K.moveToNextFormField }, { label: "formField", onItem: onFormField, deadline });
     diag.mark("structural", { headings: structure.headings.length, landmarks: structure.landmarks.length, formFields: structure.formFields.length });
   } catch (e) {
     diag.mark("structural", { error: errMsg(e) });
@@ -242,16 +245,17 @@ async function navigateByStructure({ deadline, diag, probeForms }) {
 // "move to top") so every element is reached regardless of cursor position. An
 // empty list means the page exposes none of that type, even if it looks like it
 // does. `onItem` fires when the cursor lands on a new element.
-async function collectByType(prevCmd, nextCmd, label, onItem, deadline) {
+async function collectByType(commands, ctx) {
   const out = [], seenKeys = new Set();
-  await sweepInDirection(prevCmd, label, out, seenKeys, onItem, deadline);
-  await sweepInDirection(nextCmd, label, out, seenKeys, onItem, deadline);
+  const sweepCtx = { ...ctx, out, seenKeys };
+  await sweepInDirection(commands.prev, sweepCtx);
+  await sweepInDirection(commands.next, sweepCtx);
   return out;
 }
 
 // Walk one direction with a single quick-nav command until it runs out, the cap
 // is hit, or the deadline passes, appending each new element to `out`.
-async function sweepInDirection(cmd, label, out, seenKeys, onItem, deadline) {
+async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline }) {
   for (let i = 0; i < MAX_SWEEP_STEPS; i++) {
     if (Date.now() > deadline) break;
     let phrase;

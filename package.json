@@ -11,6 +11,7 @@
     "worker": "node src/capture/nvda/server.mjs",
     "eval": "tsx src/eval/run.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "scan": "tsx src/scan/run-axe.ts"
   },
   "dependencies": {
@@ -19,8 +20,12 @@
     "playwright": "^1.61.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^26.0.1",
+    "eslint": "^10.5.0",
+    "globals": "^17.7.0",
     "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.0"
   }
 }

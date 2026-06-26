@@ -96,7 +96,7 @@ async function main(): Promise<void> {
   if (json) {
     console.log(JSON.stringify({ url, task, screenReader: cap.screenReader, transcript: cap.transcript, ruleBased: axeFindings, verdict }, null, 2));
   } else {
-    printReport(url, task, cap.screenReader, cap.transcript.length, verdict, axeFindings);
+    printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: axeFindings });
   }
 }
 
@@ -118,7 +118,16 @@ async function captureViaWorker(url: string, { task, worker, probeForms }: Captu
   return (await res.json()) as CaptureResponse;
 }
 
-function printReport(url: string, task: string, sr: string, n: number, v: Judgment, axe: AxeFinding[]): void {
+interface Report {
+  url: string;
+  task: string;
+  screenReader: string;
+  announcements: number;
+  verdict: Judgment;
+  axe: AxeFinding[];
+}
+
+function printReport({ url, task, screenReader, announcements, verdict, axe }: Report): void {
   const lines: string[] = [
     "",
     "a11y-witness report",
@@ -135,12 +144,12 @@ function printReport(url: string, task: string, sr: string, n: number, v: Judgme
   }
   lines.push(
     "",
-    `-- Lived-experience layer (${sr} + AI judge): ${n} announcements --`,
-    `Task completable: ${v.taskCompletable ? "yes" : "no"} (overall confidence ${v.confidence})`,
-    v.summary,
-    `${v.findings.length} finding(s):`
+    `-- Lived-experience layer (${screenReader} + AI judge): ${announcements} announcements --`,
+    `Task completable: ${verdict.taskCompletable ? "yes" : "no"} (overall confidence ${verdict.confidence})`,
+    verdict.summary,
+    `${verdict.findings.length} finding(s):`
   );
-  for (const f of v.findings) {
+  for (const f of verdict.findings) {
     lines.push(`  [${f.severity.toUpperCase()}] ${f.wcag}  (confidence ${f.confidence})`);
     lines.push(`     ${f.issue}`);
     lines.push(`     evidence: ${f.evidence}`);

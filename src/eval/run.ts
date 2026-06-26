@@ -62,6 +62,39 @@ async function scoreOnce(c: EvalCase): Promise<RunScore> {
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
+// One scored case: its per-run recalls, whether it expects failures, and how
+// many false positives the last run produced (the unit the aggregate sums).
+interface CaseReport {
+  recalls: number[];
+  isFailureCase: boolean;
+  falsePositives: number;
+}
+
+// Score a case (RUNS times), print its block, and return what the aggregate needs.
+async function reportCase(c: EvalCase): Promise<CaseReport> {
+  process.stderr.write(`Scoring ${c.id} ...\n`);
+  const scores: RunScore[] = [];
+  for (let i = 0; i < RUNS; i++) scores.push(await scoreOnce(c));
+  const recalls = scores.map((s) => s.recall);
+  const last = scores[scores.length - 1];
+  const isFailureCase = c.expect.length > 0;
+  printCaseScore(c, last, recalls, isFailureCase);
+  return { recalls, isFailureCase, falsePositives: last.falsePositives.length };
+}
+
+function printCaseScore(c: EvalCase, last: RunScore, recalls: number[], isFailureCase: boolean): void {
+  console.log(`# ${c.id}${isFailureCase ? "" : "  (conformant: expect no findings)"}`);
+  console.log(`  expect:    [${c.expect.join(", ") || "(none)"}]`);
+  console.log(`  found:     [${last.found.join(", ") || "(none)"}]${RUNS > 1 ? " (last run)" : ""}`);
+  if (isFailureCase) {
+    const range = RUNS > 1 ? ` (min ${pct(Math.min(...recalls))}, max ${pct(Math.max(...recalls))})` : "";
+    console.log(`  recall:    ${pct(mean(recalls))}${range}  caught [${last.caught.join(", ") || "-"}]  missed [${last.missed.join(", ") || "-"}]`);
+  }
+  console.log(`  false positives: ${last.falsePositives.length} [${last.falsePositives.join(", ") || "none"}]`);
+  if (c.notes) console.log(`  note: ${c.notes}`);
+  console.log("");
+}
+
 async function main(): Promise<void> {
   const filter = process.argv[2];
   // Substring match so e.g. `npm run eval -- tut-` runs all tutorial cases.
@@ -77,26 +110,10 @@ async function main(): Promise<void> {
   let conformantFalsePositives = 0; // false positives on conformant (expect-none) cases
 
   for (const c of cases) {
-    process.stderr.write(`Scoring ${c.id} ...\n`);
-    const scores: RunScore[] = [];
-    for (let i = 0; i < RUNS; i++) scores.push(await scoreOnce(c));
-    const recalls = scores.map((s) => s.recall);
-    const last = scores[scores.length - 1];
-    const isFailureCase = c.expect.length > 0;
-    if (isFailureCase) failureRecall.push(...recalls);
-    totalFalsePositives += last.falsePositives.length;
-    if (!isFailureCase) conformantFalsePositives += last.falsePositives.length;
-
-    console.log(`# ${c.id}${isFailureCase ? "" : "  (conformant: expect no findings)"}`);
-    console.log(`  expect:    [${c.expect.join(", ") || "(none)"}]`);
-    console.log(`  found:     [${last.found.join(", ") || "(none)"}]${RUNS > 1 ? " (last run)" : ""}`);
-    if (isFailureCase) {
-      const range = RUNS > 1 ? ` (min ${pct(Math.min(...recalls))}, max ${pct(Math.max(...recalls))})` : "";
-      console.log(`  recall:    ${pct(mean(recalls))}${range}  caught [${last.caught.join(", ") || "-"}]  missed [${last.missed.join(", ") || "-"}]`);
-    }
-    console.log(`  false positives: ${last.falsePositives.length} [${last.falsePositives.join(", ") || "none"}]`);
-    if (c.notes) console.log(`  note: ${c.notes}`);
-    console.log("");
+    const report = await reportCase(c);
+    if (report.isFailureCase) failureRecall.push(...report.recalls);
+    totalFalsePositives += report.falsePositives;
+    if (!report.isFailureCase) conformantFalsePositives += report.falsePositives;
   }
 
   const recallStr = failureRecall.length ? pct(mean(failureRecall)) : "n/a";
