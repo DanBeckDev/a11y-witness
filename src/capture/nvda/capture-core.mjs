@@ -21,7 +21,7 @@ const DEFAULT_BROWSER_WAIT_MS = 12_000; // Edge cold start + page load
 const DEFAULT_BUDGET_MS = 120_000; // overall wall-clock budget for one capture
 const WINDOW_SETTLE_MS = 800; // after focusing the Edge window
 const NVDA_SETTLE_MS = 3_000; // after nvda.start() before reading
-const STATE_SETTLE_MS = 2_500; // after activating a control, for a live region to announce (CI runners can be slow)
+const STATE_SETTLE_MS = 1_200; // after activating a control, for a live region to announce
 
 const ADVANCE_TIMEOUT_MS = 8_000; // moving to the next line/object
 const READ_TIMEOUT_MS = 5_000; // reading the phrase after advancing
@@ -256,6 +256,12 @@ async function collectByType(commands, ctx) {
 // Walk one direction with a single quick-nav command until it runs out, the cap
 // is hit, or the deadline passes, appending each new element to `out`.
 async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline }) {
+  // Seed with what is currently spoken. If a quick-nav jump leaves the spoken
+  // phrase UNCHANGED, NVDA did not move (no element of this type in that
+  // direction) and lastSpokenPhrase is just echoing a stale phrase — stop
+  // rather than record it as a phantom element. More robust than matching
+  // NVDA's "no next/previous heading" wording, which varies by version.
+  let prev = (await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, label).catch(() => "") || "").trim();
   for (let i = 0; i < MAX_SWEEP_STEPS; i++) {
     if (Date.now() > deadline) break;
     let phrase;
@@ -263,7 +269,8 @@ async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline })
       await withTimeout(nvda.perform(cmd), NAV_TIMEOUT_MS, label);
       phrase = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, label)) || "").trim();
     } catch { break; }
-    if (!phrase || /\bno (next|previous|more)\b/i.test(phrase)) break;
+    if (!phrase || /\bno (next|previous|more)\b/i.test(phrase) || phrase === prev) break;
+    prev = phrase;
     if (phrase.length < MIN_CONTROL_NAME_LEN) continue; // stray key echo, not a control
     const key = phrase.slice(0, DEDUPE_KEY_LEN);
     if (seenKeys.has(key)) continue;
