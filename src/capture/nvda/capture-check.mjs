@@ -95,30 +95,42 @@ function capturedText(r) {
   ].join(" | ");
 }
 
-async function runCheck(check) {
+// Browser focus on a shared CI desktop is racy: a transient window/banner can
+// steal focus so NVDA reads chrome instead of our page. We can't make a single
+// attempt deterministic, but the integrity signature lets us VERIFY each capture
+// and RETRY until we have genuinely read the target page (or give up loudly).
+const MAX_ATTEMPTS = 4;
+
+async function captureConfirmed(check) {
   const url = pathToFileURL(join(pagesDir, check.page)).href;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let result;
+    try {
+      result = await captureWithNvda(url, { steps: STEPS, probeForms: !!check.probeForms });
+    } catch (e) {
+      console.log(`  attempt ${attempt}/${MAX_ATTEMPTS}: capture threw: ${(e && e.message) || e}`);
+      continue;
+    }
+    if (check.signature.test(capturedText(result))) return result; // genuinely read the target page
+    console.log(`  attempt ${attempt}/${MAX_ATTEMPTS}: page identity NOT confirmed (${check.signature}) — read the wrong content, retrying`);
+  }
+  return null;
+}
+
+async function runCheck(check) {
   process.stdout.write(`\n=== ${check.page} ===\n`);
-  let result;
-  try {
-    result = await captureWithNvda(url, { steps: STEPS, probeForms: !!check.probeForms });
-  } catch (e) {
-    console.log(`  FAIL  capture threw: ${(e && e.message) || e}`);
+  const result = await captureConfirmed(check);
+  if (!result) {
+    console.log(`  FAIL  page identity NOT confirmed after ${MAX_ATTEMPTS} attempts (could not read the target page)`);
     return 1;
   }
-  // Dump the full capture so a CI failure shows exactly what NVDA produced
-  // (NVDA phrasing/behaviour varies by version, so failures need the raw text).
+  // Dump the full (confirmed) capture so a failure shows exactly what NVDA produced.
   console.log(`  headings:    ${JSON.stringify(result.structure.headings)}`);
   console.log(`  landmarks:   ${JSON.stringify(result.structure.landmarks)}`);
   console.log(`  formFields:  ${JSON.stringify(result.structure.formFields)}`);
   console.log(`  stateChanges:${JSON.stringify(result.interaction.stateChanges)}`);
   console.log(`  formChanges: ${JSON.stringify(result.interaction.formChanges)}`);
   console.log(`  postSubmit:  ${JSON.stringify(result.interaction.postSubmitFields)}`);
-  // Root-1 integrity gate: confirm NVDA actually read THIS page before trusting
-  // any other assertion. A miss means it read the browser chrome / start page.
-  if (!check.signature.test(capturedText(result))) {
-    console.log(`  FAIL  page identity NOT confirmed — capture does not contain ${check.signature} (read the wrong content?)`);
-    return 1;
-  }
   console.log(`  PASS  page identity confirmed (${check.signature})`);
   let failed = 0;
   for (const [label, passed, actual] of check.assert(result)) {
