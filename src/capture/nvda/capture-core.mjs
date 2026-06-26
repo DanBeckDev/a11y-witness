@@ -115,15 +115,13 @@ export async function captureWithNvda(url, opts = {}) {
   // and capture whether the state change is announced — a control that does not
   // announce "expanded" after activation fails 4.1.2. Only "collapsed" controls
   // are activated, to avoid following links or submitting forms. ---
-  let interaction = { tabOrder: [], stateChanges: [] };
-  try {
+  const browserChrome = /\b(tab bar|tab control|tool ?bar|app bar|new tab|address (bar|field)|tab, selected)\b/i;
+  async function runTabThrough() {
     // Re-focus the page (the structural passes may have left focus elsewhere)
-    // before tabbing, then start at the top of the document so Tab traverses
-    // page controls from the beginning, stopping when focus leaves into chrome.
+    // and start at the top so Tab traverses page controls from the beginning,
+    // stopping when focus leaves into the browser chrome.
     try { await windowsActivate("msedge.exe", "Edge"); await sleep(300); } catch { /* best effort */ }
-    // (Tab is a browser-global key, so it eventually reaches the chrome).
     try { await withTimeout(nvda.press("Control+Home"), 4000, "home"); } catch { /* best effort */ }
-    const browserChrome = /\b(tab bar|tab control|tool ?bar|app bar|new tab|address (bar|field)|tab, selected)\b/i;
     const tabOrder = [], stateChanges = [], activated = new Set();
     let firstKey = null;
     for (let i = 0; i < 40; i++) {
@@ -135,6 +133,7 @@ export async function captureWithNvda(url, opts = {}) {
       } catch { break; }
       if (!p) continue;
       if (browserChrome.test(p)) break; // left the page into the browser UI
+      if (/,\s*document$/i.test(p)) continue; // the document node itself, not a control
       const key = p.slice(0, 80);
       if (firstKey === null) firstKey = key;
       else if (key === firstKey) break; // cycled back to the first control
@@ -142,16 +141,25 @@ export async function captureWithNvda(url, opts = {}) {
       if (/\bcollapsed\b/i.test(p) && !activated.has(key)) {
         activated.add(key);
         try {
-          // Space activates the FOCUSED control (Tab moved focus, not the
-          // navigator object, so act() would target the wrong element). A
-          // proper disclosure should now announce "expanded".
+          // Space activates the FOCUSED control. A proper disclosure now
+          // announces "expanded"; one that does not fails 4.1.2.
           await withTimeout(nvda.press("Space"), 5000, "activate");
           const after = ((await withTimeout(nvda.lastSpokenPhrase(), 4000, "activate")) || "").trim();
           if (after) stateChanges.push({ control: p, after });
         } catch { /* activation best-effort */ }
       }
     }
-    interaction = { tabOrder, stateChanges };
+    return { tabOrder, stateChanges };
+  }
+
+  let interaction = { tabOrder: [], stateChanges: [] };
+  try {
+    interaction = await runTabThrough();
+    // Focus can intermittently fail to advance past the document node on very
+    // sparse pages; retry once if nothing was captured.
+    if (interaction.tabOrder.length === 0 && Date.now() < deadline) {
+      interaction = await runTabThrough();
+    }
   } catch { /* interaction pass best-effort */ }
 
   await nvda.stop();
