@@ -2,9 +2,9 @@
 
 > Working name, easy to change later. Judge the real assistive-technology experience of a website with AI.
 
-Most accessibility tools check whether code satisfies mechanical rules, and they reliably catch only about a third of WCAG. The rest is the lived experience: whether what a screen reader actually announces, as a real person navigates, is coherent and usable.
+Rule-based scanners automate the mechanical layer well: Deque reports that axe-core finds about 57% of WCAG issues automatically and flags the rest as needing human review. That human-review remainder is largely the **lived experience**: whether what a screen reader actually announces, as a real person navigates and operates the page, is coherent and usable. That is the judgment-based work `a11y-witness` automates.
 
-`a11y-witness` drives a **real screen reader** through a page the way a real user navigates it, reading in browse mode, jumping by headings and landmarks, completing a task, and uses an AI model to judge whether that experience was coherent and usable. Every finding cites the specific WCAG criterion it rests on, carries a confidence level, and can be checked by a human against the actual announcements.
+`a11y-witness` drives a **real screen reader** through a page the way a real user navigates it, reading in browse mode, jumping by headings and landmarks, operating controls, and completing a task, and uses an AI model to judge whether that experience was coherent and usable. Every finding cites the specific WCAG criterion it rests on, carries a confidence level, and can be checked by a human against the actual announcements. It is designed to sit **alongside** a rule-based engine like [axe-core](https://github.com/dequelabs/axe-core), not replace it: the rule engine covers contrast, colour, and parsing that a screen reader cannot perceive; we cover the lived experience it cannot judge. See [`docs/adr/0002-layered-coverage.md`](./docs/adr/0002-layered-coverage.md).
 
 It does **not** tab through the page and call that a screen-reader test. Tabbing only reaches interactive controls and skips the way screen-reader users actually read and explore a page. Modelling real navigation is the whole point.
 

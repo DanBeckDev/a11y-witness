@@ -10,6 +10,12 @@ Make the real assistive-technology experience of any website measurable and impr
 2. **Trustworthy by construction.** Every finding cites a WCAG criterion, carries a calibrated confidence, and is verifiable by a human against the actual announcements. The overlay vendors lost the market (and drew an FTC fine) by over-claiming. We do not.
 3. **Prove the riskiest thing first.** The core bet is unproven; everything waits on M0.
 4. **Open core.** AGPL-3.0 engine (dual-licensed: free under AGPL, commercial licence available), with a hosted/enterprise layer possible later. Copyleft keeps a competitor from closing a hosted fork; dual licensing keeps the business open.
+5. **Layered, complementary coverage (ADR 0002).** Rule engines (axe-core) cover the mechanical/visual ~57% a screen reader cannot perceive; we cover the lived-experience remainder that needs human judgment; what neither can determine is flagged for a human. We do not reimplement contrast/ARIA rules, and we do not pretend a screen reader sees visual issues.
+
+### Next architecture steps (from ADR 0002)
+
+- [ ] **Integrate axe-core** (rule-based layer): run it on the page the capture already loads; merge its WCAG-tagged findings into the report, attributed to source. Closes the visual/mechanical gap (contrast, colour, target size, parsing).
+- [ ] **Evolve capture into an interaction model**: beyond the passive read, add navigation strategies (by heading/landmark/form/table), operate controls in focus mode (activate, expand, fill forms), and capture dynamic state changes. Covers keyboard/focus/state issues a single read-through misses (e.g. real carousel and menu operation).
 
 ## Milestones
 
