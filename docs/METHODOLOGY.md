@@ -37,9 +37,9 @@ self-critical: the point is to find the gaps before we build on top of them.
 | Self-consistency / ensembling | Done (opt-in) | Consensus mode keeps only recurring findings. Quantified: it removes flaky FPs, not stable ones. |
 | Confidence calibration | Not done | Findings carry a confidence number, but it has not been validated against outcomes. |
 | Test-retest reliability | Partial | `EVAL_RUNS` can repeat cases, but reliability is not yet reported as a metric. We have observed run-to-run variation. |
-| Human-agreement baseline | Not done | No expert-labeled cases. This is the single biggest gap: the gold standard for any LLM judge is agreement with human experts. |
-| Held-out set / anti-overfitting | Not done | We have tuned judge guards against the same 5 cases we score. That is indirect overfitting; there is no held-out set. |
-| Contamination control | Partial | The evidence-constrained design mitigates it, but the ground-truth pages (W3C BAD, W3C WAI) are public and famous, so they are almost certainly in training data. We have not validated on novel, unseen pages. |
+| Human-agreement baseline | Not done | No expert-labeled cases. This is now the single biggest remaining gap: the gold standard for any LLM judge is agreement with human experts. |
+| Held-out set / anti-overfitting | Started | A fresh authored page (`src/eval/pages/contamination-test.html`) was added as a held-out case, not tuned against; the judge scored it 4/4 recall, 0 false positives. More held-out pages still needed. |
+| Contamination control | Partial (initial evidence) | The evidence-constrained design mitigates it, and a fresh, never-published page confirms recall is genuine judging rather than recall-from-memory (see Validation log). The public ground-truth pages (W3C BAD, WAI) remain a caveat; more novel pages needed. |
 | Reproducibility | Partial | Reasoning effort is pinned; the model is whatever the local Codex login resolves to; sampling temperature is not controlled; prompts live in-repo but are not versioned. |
 | Reporting standard | Not done | We have quoted bare "recall 100%" on n=5 without sample sizes, confidence intervals, or test-retest. |
 
@@ -102,6 +102,19 @@ independently-derived ground truth:
 4. **Calibration study**: check whether confidence tracks correctness.
 5. **Engineering hygiene**: schema-enforced output, and pin the model, sampling,
    and prompt version per run.
+
+## Validation log
+
+- **Contamination / held-out test (passed, initial).** A page was authored fresh
+  for this purpose (`src/eval/pages/contamination-test.html`), never published,
+  with a known set of planted violations mixed with correct controls. Captured
+  via the real NVDA worker and judged. The judge caught all four planted
+  observable violation categories with high confidence (1.1.1 at 0.99, 2.4.4 at
+  0.98, 4.1.2 at 0.97, 1.3.1 at 0.93) and flagged none of the correct controls.
+  Because no model can have memorized this page, the result is evidence that
+  recall reflects genuine judging of the transcript, not recall-from-memory.
+  One page is not a suite; more novel pages and an expert-labeled baseline are
+  still required.
 
 ## References
 

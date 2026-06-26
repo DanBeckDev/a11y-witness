@@ -88,6 +88,21 @@ export const EVAL_CASES: EvalCase[] = [
     notes: "Reference-accessible real page (W3C WAI). Any finding is a false positive; measures over-flagging on good pages.",
   },
   {
+    id: "contamination-fresh-page",
+    fixture: "src/eval/fixtures/contamination-test.json",
+    task: "Sign up for an Acme Widgets account",
+    // Authored fresh (src/eval/pages/contamination-test.html), never published,
+    // so no model can have memorized it. This is both an anti-contamination
+    // test (recall here cannot be recall-from-memory) and a held-out case (not
+    // tuned against). Planted observable violations: a visual title that is not
+    // a real heading (1.3.1), an alt-less image (1.1.1), a vague "click here"
+    // link (2.4.4), and an unlabelled input + icon-only button (4.1.2 / 3.3.2),
+    // mixed with correct controls (real alt, descriptive link, labelled input).
+    expect: ["1.1.1", "1.3.1", "2.4.4", "4.1.2"],
+    allow: ["1.1.1", "1.3.1", "2.4.4", "4.1.2", "3.3.2", "2.4.6"],
+    notes: "Contamination + held-out test: ground truth is the planted issues, not a public report.",
+  },
+  {
     id: "planted-contact-form",
     fixture: "src/eval/fixtures/planted-contact-form.json",
     task: "Send a message to the team using the contact form",

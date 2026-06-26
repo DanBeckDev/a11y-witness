@@ -1,0 +1,19 @@
+{
+  "url": "file: authored fresh contamination-test.html (held-out, never published)",
+  "screenReader": "NVDA",
+  "transcript": [
+    "graphic, Acme Widgets company logo",
+    "Acme Widgets helps small teams track inventory. Create an account to get started.",
+    "Why teams choose Acme",
+    "Fast setup, fair pricing, and friendly support.",
+    "graphic, \ufffc",
+    "Not sure yet?, link, See our pricing plans, dot",
+    "To continue,, link, click here, dot",
+    "form, Create your account",
+    "Email address",
+    "Email address, edit, \ufffc",
+    "edit, \ufffc",
+    "button, \ufffc",
+    "button, Create account"
+  ]
+}
