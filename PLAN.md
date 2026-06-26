@@ -22,6 +22,16 @@ Make the real assistive-technology experience of any website measurable and impr
 - [x] **Debug mode / structured diagnostics (all levels).** Every capture phase records a diagnostic (`browserLaunched`, `windowsActivate`, `nvdaStart`, `afterStart`, `readThrough` with stopReason + firstStepError, `structural`, `formProbe`, `interaction` sweepLog, `done`) instead of a silent catch; surfaced via `server.log` and the CLI `--debug`, with a 0-announcement WARNING. This is what pinpointed the permission-dialog outage. `src/capture/nvda/capture-core.mjs`.
 - [x] **Validated part 2 against paired W3C tutorial examples.** Disclosure pair (`disclosure-good` announces the state change → clean; `disclosure-bad` never updates `aria-expanded` → 4.1.2 caught) and form-validation pair (`forms-validation-good` announces the error via a live region → clean; `forms-validation-bad` shows it visually only → 3.3.1 + 4.1.3 caught), both with zero false positives. Added as eval cases; the signal lives in `interaction.stateChanges` / `interaction.formChanges`, invisible to a static read.
 
+### Next: reproducible testing + distribution (ADR 0003)
+
+Real NVDA runs in GitHub Actions (via `guidepup/setup-action`), which makes capture reproducible by anyone AND is the foundation of the chosen distribution vector — a GitHub Action teams drop into their own CI. Dependency-ordered:
+
+- [ ] **Phase 0 — Prove real NVDA in GitHub Actions.** Throwaway workflow on `windows-2022`: `guidepup/setup-action` → capture one tutorial page → assert non-empty transcript + expected structure. De-risks the interactive-session/focus needs before building on them.
+- [ ] **Phase 1 — Capture-regression CI.** Capture the good/bad tutorial pages on the runner, diff against committed fixtures (first automated test of the capture half). Extract a one-shot capture entrypoint; document `npx @guidepup/setup` as the local path.
+- [ ] **Phase 2 — Pluggable judge backend.** Codex (author, local) / BYO Anthropic-OpenAI key (CI + Action users) / hosted (future SaaS). Unblocks all external consumption; preserves the no-metered-API constraint for the author.
+- [ ] **Phase 3 — The GitHub Action.** `a11y-witness-action`: on a Windows runner, setup → capture → judge (user's key) → findings as a job summary + PR comment + optional failing check. Example workflow + marketplace listing.
+- [ ] **Phase 4 (later) — Hosted open-core layer.** Managed capture pool + judge-as-a-service + dashboard, once the Action proves demand.
+
 ## Milestones
 
 ### M0 — Spike: is the core bet real? (now)
