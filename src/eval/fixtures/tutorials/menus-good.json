@@ -1,0 +1,12 @@
+{
+  "url": "tutorial: menus-good (authored from W3C guidance)",
+  "screenReader": "NVDA",
+  "transcript": [
+    "link, Products",
+    "button, collapsed, Support",
+    "list, with 2 items, link, Help center",
+    "link, Contact",
+    "out of list, out of list, main landmark, heading, level 1, Home",
+    "Welcome to Acme."
+  ]
+}

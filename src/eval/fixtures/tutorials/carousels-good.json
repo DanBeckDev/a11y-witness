@@ -1,0 +1,10 @@
+{
+  "url": "tutorial: carousels-good (authored from W3C guidance)",
+  "screenReader": "NVDA",
+  "transcript": [
+    "Featured products, region, heading, level 2, Featured",
+    "button, Previous slide",
+    "graphic, Acme running shoe, side view",
+    "button, Next slide"
+  ]
+}

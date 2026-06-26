@@ -1,0 +1,10 @@
+{
+  "url": "tutorial: menus-bad (authored from W3C guidance)",
+  "screenReader": "NVDA",
+  "transcript": [
+    "button, \ufffc",
+    "link, Help center, link, Contact",
+    "Home",
+    "Welcome to Acme."
+  ]
+}
