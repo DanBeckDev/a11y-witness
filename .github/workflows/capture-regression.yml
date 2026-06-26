@@ -35,5 +35,16 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - name: Set up NVDA (Guidepup)
         uses: guidepup/setup-action@0.20.0
+      # A fresh Edge profile shows a first-run welcome/sign-in surface; on a
+      # page with no headings of a type, NVDA quick-nav escapes the empty
+      # document into that browser UI and pollutes the capture. Suppress it via
+      # the documented Edge policies (runner steps are admin).
+      - name: Suppress Edge first-run experience
+        shell: pwsh
+        run: |
+          $key = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+          New-Item -Path $key -Force | Out-Null
+          Set-ItemProperty -Path $key -Name "HideFirstRunExperience" -Value 1 -Type DWord
+          Set-ItemProperty -Path $key -Name "BrowserSignin" -Value 0 -Type DWord
       - name: Capture-regression checks (real NVDA)
         run: node src/capture/nvda/capture-check.mjs
