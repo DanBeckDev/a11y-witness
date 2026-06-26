@@ -4,9 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WCAG_22_AA } from "../wcag/criteria.js";
 
+// Model backend (the judge needs an LLM). The DEFAULT is the local Codex CLI,
+// which uses your codex login — no metered API cost. External consumers (CI, the
+// GitHub Action) can't use that login, so JUDGE_BACKEND=anthropic calls the
+// Anthropic API with their own ANTHROPIC_API_KEY (JUDGE_MODEL overrides the
+// model). The backend is one clean seam: a prompt in, raw text out.
+const BACKEND = (process.env.JUDGE_BACKEND ?? "codex").toLowerCase();
+const JUDGE_MODEL = process.env.JUDGE_MODEL ?? "claude-opus-4-8";
+
 // Reasoning effort and timeout are configurable; defaults keep the judge fast
-// and bounded. The judge runs through the Codex CLI on your local codex login,
-// so there is no metered API cost.
+// and bounded.
 const REASONING = process.env.JUDGE_REASONING ?? "medium";
 const TIMEOUT_MS = Number(process.env.JUDGE_TIMEOUT_MS ?? 120_000);
 // Consensus: judge N times and keep only findings that recur in a majority of
@@ -210,7 +217,15 @@ function buildVerifyPrompt(input: JudgeInput, candidates: Candidate[]): string {
   ].join("\n");
 }
 
-/** Run one Codex pass against a prompt string and return its raw stdout. */
+/** Run one model pass against a prompt and return its raw text. Dispatches to
+ * the selected backend (Codex by default; Anthropic API when JUDGE_BACKEND is
+ * set). Both return text; extractJson handles either one's output. */
+function ask(label: string, prompt: string): Promise<string> {
+  if (BACKEND === "anthropic") return askAnthropic(label, prompt);
+  return askCodex(label, prompt);
+}
+
+/** Codex backend (default): the local codex login, no metered API cost. */
 async function askCodex(label: string, prompt: string): Promise<string> {
   const promptFile = join(tmpdir(), `a11y-witness-${label}-${Date.now()}.txt`);
   await writeFile(promptFile, prompt, "utf8");
@@ -219,6 +234,26 @@ async function askCodex(label: string, prompt: string): Promise<string> {
   } finally {
     await unlink(promptFile).catch(() => {});
   }
+}
+
+/** Anthropic-API backend (BYO ANTHROPIC_API_KEY) — for CI / the GitHub Action,
+ * where the local Codex login isn't available. Uses the official SDK with
+ * adaptive thinking, streamed so large prompts can't hit request timeouts. The
+ * SDK is lazy-imported so Codex-only users never load it. */
+async function askAnthropic(label: string, prompt: string): Promise<string> {
+  const { default: Anthropic } = await import("@anthropic-ai/sdk");
+  const client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
+  process.stderr.write(`\nCalling Anthropic API (model=${JUDGE_MODEL}, ${label})...\n`);
+  const stream = client.messages.stream({
+    model: JUDGE_MODEL,
+    max_tokens: 16000,
+    thinking: { type: "adaptive" },
+    messages: [{ role: "user", content: prompt }],
+  });
+  const message = await stream.finalMessage();
+  // Join the text blocks; thinking blocks contribute nothing. The JSON the judge
+  // asked for lives in the text, and extractJson strips any surrounding prose.
+  return message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
 }
 
 /** "1.1.1 Non-text Content (A)" -> "1.1.1" */
@@ -231,14 +266,14 @@ function criterionOf(wcag: string): string {
 async function judgeOnce(input: JudgeInput): Promise<Judgment> {
   let candidates: Candidate[] = [];
   try {
-    const raw = await askCodex("recall", buildRecallPrompt(input));
+    const raw = await ask("recall", buildRecallPrompt(input));
     const parsed = JSON.parse(extractJson(raw));
     if (Array.isArray(parsed)) candidates = parsed as Candidate[];
   } catch {
     // If recall fails to parse, stage 2 still audits the transcript directly.
   }
   process.stderr.write(`Recall pass surfaced ${candidates.length} candidate issues.\n`);
-  const verdict = await askCodex("verify", buildVerifyPrompt(input, candidates));
+  const verdict = await ask("verify", buildVerifyPrompt(input, candidates));
   return JSON.parse(extractJson(verdict)) as Judgment;
 }
 

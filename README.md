@@ -17,11 +17,11 @@ Early but working end to end. The **M0 core bet is demonstrated**: a real screen
 Capture is operating-system-bound, so it is split from the rest:
 
 - **Capture worker** (Windows): drives **NVDA** through real browse-mode navigation and returns the announcement transcript over HTTP. See [`src/capture/nvda/`](./src/capture/nvda/) for the setup recipe.
-- **Control plane** (anywhere): the `witness` CLI asks a worker to capture a page, then judges the transcript locally via Codex (your subscription login, so no metered API cost), and prints WCAG-cited findings.
+- **Control plane** (anywhere): the `witness` CLI asks a worker to capture a page, then judges the transcript and prints WCAG-cited findings. The judge backend is pluggable: by default it runs through your local **Codex** login (no metered API cost); set `JUDGE_BACKEND=anthropic` (with `ANTHROPIC_API_KEY`, and optionally `JUDGE_MODEL`) to use the Anthropic API instead — the path for CI and the planned GitHub Action, where a local Codex login isn't available.
 
 ## Quickstart
 
-Prerequisites: Node 20+, and Codex installed and logged in (`codex login`) on the machine running the CLI. A reachable NVDA capture worker (see `src/capture/nvda/README.md` to stand one up).
+Prerequisites: Node 20+, and a judge backend — either Codex installed and logged in (`codex login`, the default, no metered cost) or `JUDGE_BACKEND=anthropic` with `ANTHROPIC_API_KEY` set. A reachable NVDA capture worker (see `src/capture/nvda/README.md` to stand one up).
 
 ```bash
 npm install
