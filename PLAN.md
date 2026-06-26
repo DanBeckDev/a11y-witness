@@ -33,6 +33,13 @@ Real NVDA runs in GitHub Actions (via `guidepup/setup-action`), which makes capt
 - [ ] **Phase 3 — The GitHub Action.** `a11y-witness-action`: on a Windows runner, setup → capture → judge (user's key) → findings as a job summary + PR comment + optional failing check. Example workflow + marketplace listing.
 - [ ] **Phase 4 (later) — Hosted open-core layer.** Managed capture pool + judge-as-a-service + dashboard, once the Action proves demand.
 
+### NVDA correctness audit (`docs/nvda-correctness-audit.md`)
+
+Systematic review of the capture worker against the official NVDA user guide (four parallel dimension reviews, re-verified on the live worker). **Verdict: no incorrect or unsafe usage.** Fixed: read-through/structural sweeps now anchor to the document top (`anchorToTop()` — also cancels NVDA's default auto say-all so it can't race the read, and stops quick-nav escaping a content-less page into browser chrome); pinned the NVDA install dir; softened an unsupported "F reaches buttons B misses" comment to a build-specific observation. Backlog:
+- [ ] **Elements List (`NVDA+F7`) enumeration** — the guide's purpose-built bulk listing of links/headings/form-fields/buttons/landmarks; cleaner than repeated quick-nav (must read the dialog via list nav, not `lastSpokenPhrase`).
+- [ ] **Pin a known NVDA settings profile** (symbol level, element-reporting toggles, "Report live regions", auto-focus-mode) for cross-version reproducibility instead of inheriting Guidepup's defaults.
+- [ ] **Use Space (not Enter) for any future checkbox/radio probe; enter focus mode deliberately if a probe ever types into a field.**
+
 ## Milestones
 
 ### M0 — Spike: is the core bet real? (now)

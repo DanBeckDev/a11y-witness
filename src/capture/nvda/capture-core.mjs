@@ -85,6 +85,7 @@ export async function captureWithNvda(url, opts = {}) {
   const deadline = Date.now() + maxMs;
   await recordStartupHealth(diag);
 
+  await anchorToTop(); // begin the read-through from a known top-of-document position
   const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
   const { structure, interaction } = await navigateByStructure({ deadline, diag, probeForms: !!opts.probeForms });
 
@@ -215,13 +216,20 @@ async function navigateByStructure({ deadline, diag, probeForms }) {
   const onFormField = (phrase) => operateControl(phrase, { probeForms, deadline, interaction });
 
   const structure = { headings: [], landmarks: [], formFields: [] };
+  // Anchor in the document first so an element-less page can't let quick-nav
+  // wander out of browse mode into the browser UI (observed on a heading-less page).
+  await anchorToTop();
   try {
     structure.headings = await collectByType(
       { prev: K.moveToPreviousHeading, next: K.moveToNextHeading }, { label: "heading", onItem: null, deadline });
     structure.landmarks = await collectByType(
       { prev: K.moveToPreviousLandmark, next: K.moveToNextLandmark }, { label: "landmark", onItem: null, deadline });
-    // Form fields (which NVDA's "F" nav reaches, incl. buttons that "B" misses)
-    // also drive the disclosure and (opt-in) form-submit probes in place.
+    // Enumerate interactive controls with the form-field command ("F"), which
+    // covers buttons, edits, checkboxes, combos and radios in one pass. (The NVDA
+    // guide lists "F" and "B" as distinct co-equal commands; in our testing the
+    // "B" button command under Guidepup missed some plain <button>s that "F"
+    // reached, but that's a build-specific observation, not documented behaviour.)
+    // This sweep also drives the disclosure and (opt-in) form-submit probes in place.
     structure.formFields = await collectByType(
       { prev: K.moveToPreviousFormField, next: K.moveToNextFormField }, { label: "formField", onItem: onFormField, deadline });
     diag.mark("structural", { headings: structure.headings.length, landmarks: structure.landmarks.length, formFields: structure.formFields.length });
@@ -239,18 +247,16 @@ async function navigateByStructure({ deadline, diag, probeForms }) {
   let postSubmitFields = [];
   if (probeForms && interaction.formChanges.length > 0) {
     try {
-      // Re-read the form fields' state after the submit. Two NVDA facts (per the
-      // user guide) make the naive approaches fail: (a) an accessible form moves
-      // focus to the invalid field, putting NVDA in focus mode where single-letter
-      // quick-nav is inert — so Escape back to browse mode; (b) quick-nav skips
-      // the element the cursor already sits on — so Ctrl+Home anchors at the top
-      // and the sweep then LANDS on each field. An accessible form marks the
-      // invalid field (aria-invalid + an associated error), announcing "invalid
-      // entry"/the error; an inaccessible one does not. Version- and mode-robust,
-      // unlike the transient live-region text in formChanges.after.
-      await withTimeout(nvda.press("Escape"), NAV_TIMEOUT_MS, "esc").catch(() => undefined);
-      await withTimeout(nvda.press("Control+Home"), NAV_TIMEOUT_MS, "ctrlHome").catch(() => undefined);
-      await sleep(ANCHOR_SETTLE_MS);
+      // Re-read the form fields' state after the submit. anchorToTop() handles
+      // two NVDA facts that defeat a naive re-scan: an accessible form moves focus
+      // to the invalid field (focus mode -> single-letter quick-nav is inert, so
+      // Escape back to browse mode), and quick-nav skips the element the cursor
+      // sits on (so Ctrl+Home anchors at the top and the sweep LANDS on each
+      // field). An accessible form marks the invalid field (aria-invalid + an
+      // associated error), announcing "invalid entry"/the error; an inaccessible
+      // one does not. Version- and mode-robust, unlike the transient live-region
+      // text in formChanges.after.
+      await anchorToTop();
       postSubmitFields = await collectByType(
         { prev: K.moveToPreviousFormField, next: K.moveToNextFormField }, { label: "postSubmit", onItem: null, deadline });
     } catch (e) {
@@ -274,6 +280,19 @@ async function navigateByStructure({ deadline, diag, probeForms }) {
     sweepLog: interaction.sweepLog,
   });
   return { structure, interaction: result };
+}
+
+// Return NVDA to a known starting point. Per the NVDA user guide: Escape
+// "switches back to browse mode if focus mode was previously switched to
+// automatically" (single-letter quick-nav and caret reading are browse-mode
+// features, inert in focus mode); Ctrl+Home is a standard Windows caret key that
+// browse mode passes through (not an NVDA command) to move to the document top.
+// Moving the caret also cancels NVDA's "Automatic say all on page load" (on by
+// default), so its auto-read can't race our line-stepping.
+async function anchorToTop() {
+  await withTimeout(nvda.press("Escape"), NAV_TIMEOUT_MS, "esc").catch(() => undefined);
+  await withTimeout(nvda.press("Control+Home"), NAV_TIMEOUT_MS, "ctrlHome").catch(() => undefined);
+  await sleep(ANCHOR_SETTLE_MS);
 }
 
 // Collect every element of one type, sweeping both directions (Guidepup has no

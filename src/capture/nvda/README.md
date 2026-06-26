@@ -30,11 +30,18 @@ cd a11y-witness; npm install
 
 # Guidepup installs a portable NVDA and records it in HKCU\Software\Guidepup\Nvda,
 # and zeroes ForegroundLockTimeout so the browser can take focus during capture.
-npx --yes @guidepup/setup
+# Pin the install dir (NOT the default %TEMP%): the OS can clean %TEMP%, which
+# would force a silent reinstall with whatever defaults a newer Guidepup ships —
+# a reproducibility hazard for a durable worker.
+npx --yes @guidepup/setup --nvda-install-dir C:\guidepup-nvda
 ```
 
-> Note: `@guidepup/setup` installs the portable NVDA under `%TEMP%` by default.
-> For a durable worker, pin it: `npx @guidepup/setup --nvda-install-dir C:\guidepup-nvda`.
+> A portable NVDA copy cannot persist settings across reinstalls, so capture
+> reproducibility depends on the install staying put — hence the pinned dir.
+> The settings that shape the transcript (NVDA's "Report live regions" — on by
+> default — "Automatic say all on page load", and the element-reporting toggles)
+> come from Guidepup's bundled config; the capture worker anchors with
+> Escape + Ctrl+Home, which also cancels the auto say-all so it can't race the read.
 
 ## Running a capture (in the interactive session)
 
