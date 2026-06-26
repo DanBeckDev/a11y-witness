@@ -205,6 +205,32 @@ export const EVAL_CASES: EvalCase[] = [
     notes: "W3C carousels tutorial failures, OBSERVABLE subset: unnamed prev/next icon buttons (4.1.2), slide image with no alt (1.1.1). Motion/keyboard/announcement issues are out of scope for a passive read.",
   },
   {
+    id: "tut-disclosure-good",
+    fixture: "src/eval/fixtures/tutorials/disclosure-good.json",
+    task: "Expand the FAQ answer about resetting a password",
+    // A proper disclosure: the toggle is a named button announced "collapsed",
+    // and activating it announces the new state/revealed content. This is the
+    // Layer-2 interaction case — the only signal is in interaction.stateChanges,
+    // not the static transcript. A conformant disclosure yields no findings.
+    expect: [],
+    allow: [],
+    notes: "W3C disclosure tutorial, correct: named toggle button with collapsed/expanded state announced on activation. Lives in interaction.stateChanges. Clean.",
+  },
+  {
+    id: "tut-disclosure-bad",
+    fixture: "src/eval/fixtures/tutorials/disclosure-bad.json",
+    task: "Expand the FAQ answer about resetting a password",
+    // A broken disclosure: it visually reveals content but never updates
+    // aria-expanded, so activating the control announces nothing — the screen
+    // reader user has no feedback that the state changed (4.1.2 Name, Role,
+    // Value). Only catchable by actually operating the control, which is what
+    // the Layer-2 interaction probe does. 1.3.1 allowed (revealed content not
+    // programmatically associated is a defensible adjacent citation).
+    expect: ["4.1.2"],
+    allow: ["4.1.2", "1.3.1"],
+    notes: "W3C disclosure tutorial failure: toggle never updates aria-expanded, so state change is not conveyed. Exercises the operate-the-control interaction probe.",
+  },
+  {
     id: "planted-contact-form",
     fixture: "src/eval/fixtures/planted-contact-form.json",
     task: "Send a message to the team using the contact form",

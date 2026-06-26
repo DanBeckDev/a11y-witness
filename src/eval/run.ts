@@ -38,12 +38,16 @@ async function scoreOnce(c: EvalCase): Promise<RunScore> {
     url: string;
     screenReader?: string;
     transcript: string[];
+    structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
+    interaction?: { controls: string[]; stateChanges: { control: string; after: string }[] };
   };
   const verdict = await judge({
     url: data.url,
     task: c.task,
     screenReader: data.screenReader ?? "NVDA",
     transcript: data.transcript,
+    structure: data.structure,
+    interaction: data.interaction,
   });
   const found = Array.from(new Set(verdict.findings.map((f) => criterion(f.wcag))));
   const allow = new Set(c.allow);

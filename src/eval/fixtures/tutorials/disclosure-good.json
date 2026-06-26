@@ -1,0 +1,27 @@
+{
+  "url": "tutorial: disclosure-good",
+  "screenReader": "NVDA",
+  "transcript": [
+    "button, collapsed, How do I reset my password?"
+  ],
+  "structure": {
+    "headings": [
+      "FAQ, heading, level 1"
+    ],
+    "landmarks": [],
+    "formFields": [
+      "How do I reset my password?, button, collapsed"
+    ]
+  },
+  "interaction": {
+    "controls": [
+      "How do I reset my password?, button, collapsed"
+    ],
+    "stateChanges": [
+      {
+        "control": "How do I reset my password?, button, collapsed",
+        "after": "FAQ (working disclosure), document"
+      }
+    ]
+  }
+}

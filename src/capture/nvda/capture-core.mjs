@@ -87,8 +87,25 @@ export async function captureWithNvda(url, opts = {}) {
   // --- Structural navigation passes: skim by element type (quick-nav), swept
   // both directions (Guidepup has no "move to top") so every element is reached
   // regardless of cursor position. An empty list => the page exposes none. ---
-  async function sweep(cmd, label, out, seenKeys, max = 40) {
-    for (let i = 0; i < max; i++) {
+  // An onItem callback fires when the sweep lands ON each element (cursor is on
+  // it), so disclosures can be activated in place — a separate next/previous
+  // sweep would miss the only control on sparse pages (it is the current
+  // position, not a next/previous one).
+  const stateChanges = [];
+  const sweepLog = [];
+  async function activateIfCollapsed(p) {
+    if (!/\bcollapsed\b/i.test(p)) return;
+    try {
+      await withTimeout(nvda.act(), 5000, "activate"); // Enter on the control under the cursor
+      const after = ((await withTimeout(nvda.lastSpokenPhrase(), 4000, "activate")) || "").trim();
+      sweepLog.push(`activate ${JSON.stringify(p.slice(0, 40))} -> ${JSON.stringify(after)}`);
+      // Always record, even when `after` is empty: a disclosure that announces
+      // nothing after activation is exactly the 4.1.2 failure the judge needs to see.
+      stateChanges.push({ control: p, after });
+    } catch (e) { sweepLog.push(`activate ERROR ${errMsg(e)}`); }
+  }
+  async function sweep(cmd, label, out, seenKeys, onItem) {
+    for (let i = 0; i < 40; i++) {
       if (Date.now() > deadline) break;
       let p;
       try {
@@ -97,64 +114,31 @@ export async function captureWithNvda(url, opts = {}) {
       } catch { break; }
       if (!p || /\bno (next|previous|more)\b/i.test(p)) break;
       const key = p.slice(0, 80);
-      if (!seenKeys.has(key)) { seenKeys.add(key); out.push(p); }
+      if (!seenKeys.has(key)) { seenKeys.add(key); out.push(p); if (onItem) await onItem(p); }
     }
   }
-  async function collect(prevCmd, nextCmd, label) {
+  async function collect(prevCmd, nextCmd, label, onItem) {
     const out = [], seenKeys = new Set();
-    await sweep(prevCmd, label, out, seenKeys);
-    await sweep(nextCmd, label, out, seenKeys);
+    await sweep(prevCmd, label, out, seenKeys, onItem);
+    await sweep(nextCmd, label, out, seenKeys, onItem);
     return out;
   }
 
   let structure = { headings: [], landmarks: [], formFields: [] };
   try {
-    structure = {
-      headings: await collect(K.moveToPreviousHeading, K.moveToNextHeading, "heading"),
-      landmarks: await collect(K.moveToPreviousLandmark, K.moveToNextLandmark, "landmark"),
-      formFields: await collect(K.moveToPreviousFormField, K.moveToNextFormField, "formField"),
-    };
+    structure.headings = await collect(K.moveToPreviousHeading, K.moveToNextHeading, "heading");
+    structure.landmarks = await collect(K.moveToPreviousLandmark, K.moveToNextLandmark, "landmark");
+    // Form fields (which NVDA's F nav reaches, incl. buttons) also drive the
+    // disclosure-activation probe inline.
+    structure.formFields = await collect(K.moveToPreviousFormField, K.moveToNextFormField, "formField", activateIfCollapsed);
     mark("structural", { headings: structure.headings.length, landmarks: structure.landmarks.length, formFields: structure.formFields.length });
   } catch (e) { mark("structural", { error: errMsg(e) }); }
 
-  // --- Interaction pass: enumerate interactive controls via quick-nav (buttons),
-  // and activate disclosures ("collapsed") to capture the announced state change.
-  // A disclosure that does not announce "expanded" afterwards fails 4.1.2. ---
-  let interaction = { controls: [], stateChanges: [] };
-  const sweepLog = [];
-  try {
-    const controls = [], stateChanges = [], activated = new Set(), seenKeys = new Set();
-    async function sweepButtons(cmd, label) {
-      for (let i = 0; i < 40; i++) {
-        if (Date.now() > deadline) { sweepLog.push(`${label}: deadline`); break; }
-        let p;
-        try {
-          await withTimeout(nvda.perform(cmd), 6000, "button");
-          await sleep(400); // navigating to an element triggers speech that may lag
-          p = ((await withTimeout(nvda.lastSpokenPhrase(), 4000, "button")) || "").trim();
-          if (!p) { await sleep(600); p = ((await withTimeout(nvda.lastSpokenPhrase(), 4000, "button")) || "").trim(); }
-        } catch (e) { sweepLog.push(`${label}: ERROR ${errMsg(e)}`); break; }
-        sweepLog.push(`${label}[${i}]: ${JSON.stringify(p)}`);
-        if (!p || /\bno (next|previous|more)\b/i.test(p)) break;
-        const key = p.slice(0, 80);
-        if (seenKeys.has(key)) continue;
-        seenKeys.add(key);
-        controls.push(p);
-        if (/\bcollapsed\b/i.test(p) && !activated.has(key)) {
-          activated.add(key);
-          try {
-            await withTimeout(nvda.act(), 5000, "activate");
-            const after = ((await withTimeout(nvda.lastSpokenPhrase(), 4000, "activate")) || "").trim();
-            if (after) stateChanges.push({ control: p, after });
-          } catch (e) { sweepLog.push(`activate: ERROR ${errMsg(e)}`); }
-        }
-      }
-    }
-    await sweepButtons(K.moveToPreviousButton, "prev");
-    await sweepButtons(K.moveToNextButton, "next");
-    interaction = { controls, stateChanges };
-    mark("interaction", { controls: controls.length, stateChanges: stateChanges.length, sweepLog });
-  } catch (e) { mark("interaction", { error: errMsg(e), sweepLog }); }
+  // Interactive controls = the form-field controls (buttons, inputs, selects)
+  // found above; the disclosure state changes were captured inline during that
+  // sweep. (NVDA's "B" button quick-nav missed these <button>s; "F" reaches them.)
+  const interaction = { controls: structure.formFields, stateChanges };
+  mark("interaction", { controls: interaction.controls.length, stateChanges: stateChanges.length, sweepLog });
 
   try { await nvda.stop(); } catch (e) { mark("nvdaStop", { error: errMsg(e) }); }
   // Quit the browser cleanly so the next capture starts fresh (taskkill fallback).

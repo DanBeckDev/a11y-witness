@@ -148,7 +148,7 @@ function interactionBlock(input: JudgeInput): string {
   ];
   if (it.stateChanges?.length) {
     lines.push(
-      `Disclosure controls after activation (a proper one announces "expanded"; one that stays "collapsed" or announces nothing fails 4.1.2): ` +
+      `Disclosure controls activated (control -> what was announced after). An EMPTY announcement ("") means the control changed nothing audible: its state is not conveyed to the user, failing 4.1.2 Name, Role, Value. Any announcement of the new state or revealed content is acceptable. ` +
         it.stateChanges.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")
     );
   }
