@@ -18,6 +18,7 @@ interface Args {
   worker: string;
   json: boolean;
   debug: boolean;
+  probeForms: boolean;
 }
 
 function parseArgs(): Args {
@@ -27,19 +28,21 @@ function parseArgs(): Args {
   let worker = process.env.A11Y_WORKER ?? "http://localhost:8765";
   let json = false;
   let debug = false;
+  let probeForms = false;
   for (let i = 0; i < a.length; i++) {
     const v = a[i];
     if (v === "--task") task = a[++i] ?? task;
     else if (v === "--worker") worker = a[++i] ?? worker;
     else if (v === "--json") json = true;
     else if (v === "--debug") debug = true;
+    else if (v === "--probe-forms") probeForms = true;
     else if (!v.startsWith("--")) url = v;
   }
   if (!url) {
-    console.error('Usage: npm run witness -- <url> --task "..." [--worker http://host:port] [--json] [--debug]');
+    console.error('Usage: npm run witness -- <url> --task "..." [--worker http://host:port] [--json] [--debug] [--probe-forms]');
     process.exit(1);
   }
-  return { url, task, worker, json, debug };
+  return { url, task, worker, json, debug, probeForms };
 }
 
 interface CaptureResponse {
@@ -47,19 +50,23 @@ interface CaptureResponse {
   screenReader: string;
   transcript: string[];
   structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
-  interaction?: { controls: string[]; stateChanges: { control: string; after: string }[] };
+  interaction?: {
+    controls: string[];
+    stateChanges: { control: string; after: string }[];
+    formChanges?: { control: string; after: string }[];
+  };
   diagnostics?: unknown[];
 }
 
 async function main(): Promise<void> {
-  const { url, task, worker, json, debug } = parseArgs();
+  const { url, task, worker, json, debug, probeForms } = parseArgs();
 
   process.stderr.write(`Scanning ${url} (rule-based axe-core + real screen reader) ...\n`);
   // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
   const [cap, axeFindings] = await Promise.all([
-    captureViaWorker(url, task, worker),
+    captureViaWorker(url, task, worker, probeForms),
     scanWithAxe(url).catch((e) => {
       process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
       return [] as AxeFinding[];
@@ -93,11 +100,11 @@ async function main(): Promise<void> {
   }
 }
 
-async function captureViaWorker(url: string, task: string, worker: string): Promise<CaptureResponse> {
+async function captureViaWorker(url: string, task: string, worker: string, probeForms: boolean): Promise<CaptureResponse> {
   const res = await fetch(`${worker}/capture`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ url, task }),
+    body: JSON.stringify({ url, task, probeForms }),
   });
   if (!res.ok) {
     throw new Error(`Worker error ${res.status}: ${await res.text()}`);

@@ -66,9 +66,28 @@ Then collect `transcript.json` and feed it to the judge on the control plane:
   Win32-OpenSSH release from GitHub is the reliable path.
 - **Focus the browser window explicitly — the #1 flakiness fix.** Do NOT rely on
   the launched browser taking the foreground. Call Guidepup's
-  `windowsActivate("msedge.exe", "Edge")` before `nvda.start()` and again before
-  the Tab-through, or captures come back empty/partial. Use `windowsQuit` to
-  close cleanly. This was the root cause of flaky captures.
+  `windowsActivate("msedge.exe", "Edge")` before `nvda.start()`, or captures come
+  back empty/partial. Use `windowsQuit` to close cleanly. This was a root cause
+  of flaky captures.
+- **A modal dialog silently freezes the session.** A whole-capture outage (0
+  phrases even on a known-good page) was a Windows permission dialog blocking the
+  interactive session, not an NVDA fault. Accept it on the console; it will not
+  surface over SSH. The structured diagnostics (`afterStart.lastSpoken` empty +
+  every read empty with no error) are what pinpointed it.
+- **Do not manually `taskkill nvda.exe`.** Let Guidepup own NVDA's lifecycle via
+  `nvda.start()` / `nvda.stop()`; killing it out from under Guidepup destabilises
+  the speech-capture channel.
+- **Operate controls in place during the form-field sweep.** A separate
+  next/previous sweep to find a control fails on sparse pages: after the
+  structural sweep the cursor sits at the end, so "next form field" returns
+  nothing — the only control is the *current* position. Activate via the sweep's
+  on-item callback instead. (Also: NVDA's "B" button quick-nav misses plain
+  `<button>`s that "F"/form-field nav reaches.)
+- **Capture the `spokenPhraseLog` delta, not just `lastSpokenPhrase`, after
+  activating something.** A live-region alert (e.g. a form error) is often
+  immediately followed by a focus move or document re-announce that overwrites
+  `lastSpokenPhrase`, hiding the alert. Snapshot the log length before, then take
+  everything announced after.
 
 ## Guidepup API reference
 

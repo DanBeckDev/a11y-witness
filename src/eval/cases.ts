@@ -231,6 +231,31 @@ export const EVAL_CASES: EvalCase[] = [
     notes: "W3C disclosure tutorial failure: toggle never updates aria-expanded, so state change is not conveyed. Exercises the operate-the-control interaction probe.",
   },
   {
+    id: "tut-forms-validation-good",
+    fixture: "src/eval/fixtures/tutorials/forms-validation-good.json",
+    task: "Sign up for the newsletter",
+    // Submitting with an empty required field announces the error through a live
+    // region ("There is a problem. Email address is required.") — the screen
+    // reader user is told what failed without hunting. Conformant: no findings.
+    // The signal lives in interaction.formChanges, not the static transcript.
+    expect: [],
+    allow: [],
+    notes: "W3C forms/notifications, correct: error announced via role=alert live region on submit (3.3.1 + 4.1.3). Lives in interaction.formChanges. Clean.",
+  },
+  {
+    id: "tut-forms-validation-bad",
+    fixture: "src/eval/fixtures/tutorials/forms-validation-bad.json",
+    task: "Sign up for the newsletter",
+    // The same form shows the validation error only as red text: no live region,
+    // no association, no focus move. On submit the screen reader announces
+    // nothing about the failure, so the user is never told what went wrong
+    // (3.3.1 Error Identification; 4.1.3 Status Messages). Only catchable by
+    // actually submitting the form, which is what the opt-in form probe does.
+    expect: ["3.3.1"],
+    allow: ["3.3.1", "4.1.3"],
+    notes: "W3C forms/notifications failure: validation error shown visually only, never announced on submit. Exercises the operate-the-form (submit) probe.",
+  },
+  {
     id: "planted-contact-form",
     fixture: "src/eval/fixtures/planted-contact-form.json",
     task: "Send a message to the team using the contact form",

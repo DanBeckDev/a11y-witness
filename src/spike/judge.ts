@@ -26,8 +26,13 @@ export interface JudgeInput {
    * for a type means the page exposes none of it, even if it looks like it does. */
   structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
   /** Optional interaction pass: how each interactive control is announced (found
-   * via quick-nav), and the announced state after activating disclosures. */
-  interaction?: { controls: string[]; stateChanges: { control: string; after: string }[] };
+   * via quick-nav), the announced state after activating disclosures, and what
+   * was announced after submitting a form with no valid input. */
+  interaction?: {
+    controls: string[];
+    stateChanges: { control: string; after: string }[];
+    formChanges?: { control: string; after: string }[];
+  };
 }
 
 export interface Finding {
@@ -140,7 +145,7 @@ function structureBlock(input: JudgeInput): string {
  */
 function interactionBlock(input: JudgeInput): string {
   const it = input.interaction;
-  if (!it || (!it.controls?.length && !it.stateChanges?.length)) return "";
+  if (!it || (!it.controls?.length && !it.stateChanges?.length && !it.formChanges?.length)) return "";
   const lines = [
     ``,
     `Interactive controls (found by quick-nav; each line is how the control is announced, with its name/role/state):`,
@@ -150,6 +155,12 @@ function interactionBlock(input: JudgeInput): string {
     lines.push(
       `Disclosure controls activated (control -> what was announced after). An EMPTY announcement ("") means the control changed nothing audible: its state is not conveyed to the user, failing 4.1.2 Name, Role, Value. Any announcement of the new state or revealed content is acceptable. ` +
         it.stateChanges.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")
+    );
+  }
+  if (it.formChanges?.length) {
+    lines.push(
+      `Form submitted with NO valid input (control activated -> what was announced after). An accessible form must identify the error in text (3.3.1 Error Identification) and announce it as a status message the user hears without moving focus (4.1.3 Status Messages). If the announcement names the error or the invalid field (e.g. "invalid entry", "email is required", "there is a problem"), the error was conveyed and there is no failure. An EMPTY announcement ("") or one that only re-reads the button means submission failed silently: the screen-reader user is never told what went wrong, failing 3.3.1 (and 4.1.3 if no status message was announced). ` +
+        it.formChanges.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")
     );
   }
   return lines.join("\n");

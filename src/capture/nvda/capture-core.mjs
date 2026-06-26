@@ -16,7 +16,8 @@ const errMsg = (e) => (e && e.message) || String(e);
 /**
  * @returns {Promise<{url:string,screenReader:string,capturedAt:string,
  *   transcript:string[], structure:{headings:string[],landmarks:string[],formFields:string[]},
- *   interaction:{controls:string[],stateChanges:{control:string,after:string}[]},
+ *   interaction:{controls:string[],stateChanges:{control:string,after:string}[],
+ *     formChanges:{control:string,after:string}[]},
  *   diagnostics:object[]}>}
  */
 export async function captureWithNvda(url, opts = {}) {
@@ -92,17 +93,44 @@ export async function captureWithNvda(url, opts = {}) {
   // sweep would miss the only control on sparse pages (it is the current
   // position, not a next/previous one).
   const stateChanges = [];
+  const formChanges = [];
   const sweepLog = [];
-  async function activateIfCollapsed(p) {
-    if (!/\bcollapsed\b/i.test(p)) return;
-    try {
-      await withTimeout(nvda.act(), 5000, "activate"); // Enter on the control under the cursor
-      const after = ((await withTimeout(nvda.lastSpokenPhrase(), 4000, "activate")) || "").trim();
-      sweepLog.push(`activate ${JSON.stringify(p.slice(0, 40))} -> ${JSON.stringify(after)}`);
-      // Always record, even when `after` is empty: a disclosure that announces
-      // nothing after activation is exactly the 4.1.2 failure the judge needs to see.
-      stateChanges.push({ control: p, after });
-    } catch (e) { sweepLog.push(`activate ERROR ${errMsg(e)}`); }
+  // Submit-like button names. Used only when opts.probeForms is set, because
+  // activating a submit button has side effects and must be opt-in.
+  const SUBMIT_RE = /\b(submit|sign ?up|sign ?in|log ?in|send|search|continue|save|register|join|subscribe)\b/i;
+  // Fires when the form-field sweep lands ON a control (cursor is on it), so we
+  // can operate it in place. A separate next/previous sweep cannot: after the
+  // sweep the cursor sits at the end, so "next" returns nothing on sparse pages.
+  async function onFormField(p) {
+    // Disclosure: activating toggles visibility (safe). Record the announced
+    // state even when empty — a disclosure that says nothing fails 4.1.2.
+    if (/\bcollapsed\b/i.test(p)) {
+      try {
+        await withTimeout(nvda.act(), 5000, "activate"); // Enter on the control under the cursor
+        const after = ((await withTimeout(nvda.lastSpokenPhrase(), 4000, "activate")) || "").trim();
+        sweepLog.push(`disclosure ${JSON.stringify(p.slice(0, 40))} -> ${JSON.stringify(after)}`);
+        stateChanges.push({ control: p, after });
+      } catch (e) { sweepLog.push(`disclosure ERROR ${errMsg(e)}`); }
+      return;
+    }
+    // Submit (opt-in): submit with no input to test error handling. An
+    // accessible form announces the error (3.3.1) via a status message (4.1.3);
+    // an inaccessible one shows it visually and the screen reader hears nothing.
+    if (opts.probeForms && /\bbutton\b/i.test(p) && SUBMIT_RE.test(p)) {
+      try {
+        // Capture EVERY phrase announced after the submit, not just the last one:
+        // a live-region alert can be followed by a focus move or document
+        // re-announce that overwrites lastSpokenPhrase, hiding the error. The
+        // spokenPhraseLog delta keeps the alert text regardless of what follows.
+        const before = ((await withTimeout(nvda.spokenPhraseLog(), 4000, "submit")) || []).length;
+        await withTimeout(nvda.act(), 5000, "submit"); // Enter on the submit button
+        await sleep(1200); // let a live region / focus move announce
+        const log = (await withTimeout(nvda.spokenPhraseLog(), 4000, "submit")) || [];
+        const after = log.slice(before).map((s) => String(s).trim()).filter(Boolean).join(" | ");
+        sweepLog.push(`submit ${JSON.stringify(p.slice(0, 40))} -> ${JSON.stringify(after)}`);
+        formChanges.push({ control: p, after });
+      } catch (e) { sweepLog.push(`submit ERROR ${errMsg(e)}`); }
+    }
   }
   async function sweep(cmd, label, out, seenKeys, onItem) {
     for (let i = 0; i < 40; i++) {
@@ -113,6 +141,9 @@ export async function captureWithNvda(url, opts = {}) {
         p = ((await withTimeout(nvda.lastSpokenPhrase(), 4000, label)) || "").trim();
       } catch { break; }
       if (!p || /\bno (next|previous|more)\b/i.test(p)) break;
+      // Skip junk announcements (a stray quick-nav key echo like "f"): a 1-2 char
+      // phrase is never a real control name and would read as an unlabelled control.
+      if (p.length <= 2) continue;
       const key = p.slice(0, 80);
       if (!seenKeys.has(key)) { seenKeys.add(key); out.push(p); if (onItem) await onItem(p); }
     }
@@ -129,16 +160,17 @@ export async function captureWithNvda(url, opts = {}) {
     structure.headings = await collect(K.moveToPreviousHeading, K.moveToNextHeading, "heading");
     structure.landmarks = await collect(K.moveToPreviousLandmark, K.moveToNextLandmark, "landmark");
     // Form fields (which NVDA's F nav reaches, incl. buttons) also drive the
-    // disclosure-activation probe inline.
-    structure.formFields = await collect(K.moveToPreviousFormField, K.moveToNextFormField, "formField", activateIfCollapsed);
+    // disclosure-activation and (opt-in) form-submit probes inline.
+    structure.formFields = await collect(K.moveToPreviousFormField, K.moveToNextFormField, "formField", onFormField);
     mark("structural", { headings: structure.headings.length, landmarks: structure.landmarks.length, formFields: structure.formFields.length });
   } catch (e) { mark("structural", { error: errMsg(e) }); }
+  if (opts.probeForms) mark("formProbe", { activated: formChanges.length });
 
   // Interactive controls = the form-field controls (buttons, inputs, selects)
   // found above; the disclosure state changes were captured inline during that
   // sweep. (NVDA's "B" button quick-nav missed these <button>s; "F" reaches them.)
-  const interaction = { controls: structure.formFields, stateChanges };
-  mark("interaction", { controls: interaction.controls.length, stateChanges: stateChanges.length, sweepLog });
+  const interaction = { controls: structure.formFields, stateChanges, formChanges };
+  mark("interaction", { controls: interaction.controls.length, stateChanges: stateChanges.length, formChanges: formChanges.length, sweepLog });
 
   try { await nvda.stop(); } catch (e) { mark("nvdaStop", { error: errMsg(e) }); }
   // Quit the browser cleanly so the next capture starts fresh (taskkill fallback).

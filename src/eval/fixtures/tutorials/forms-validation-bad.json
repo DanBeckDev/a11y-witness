@@ -1,0 +1,34 @@
+{
+  "url": "tutorial: forms-validation-bad",
+  "screenReader": "NVDA",
+  "transcript": [
+    "form, Email address (required),",
+    "edit",
+    "button, Sign up"
+  ],
+  "structure": {
+    "headings": [
+      "Newsletter sign up, heading, level 1"
+    ],
+    "landmarks": [
+      "form, Email address (required),"
+    ],
+    "formFields": [
+      "Email address (required), edit",
+      "Sign up, button"
+    ]
+  },
+  "interaction": {
+    "controls": [
+      "Email address (required), edit",
+      "Sign up, button"
+    ],
+    "stateChanges": [],
+    "formChanges": [
+      {
+        "control": "Sign up, button",
+        "after": ""
+      }
+    ]
+  }
+}

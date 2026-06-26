@@ -29,7 +29,9 @@ A11Y_WORKER=http://<worker-host>:8765 \
   npm run witness -- https://example.com --task "Find the contact details"
 ```
 
-This drives a real screen reader through the page, captures what it announces, and prints an AI judgment of whether the experience was usable, with WCAG-cited findings you can verify against the transcript. Add `--json` for machine-readable output.
+This drives a real screen reader through the page, captures what it announces, and prints an AI judgment of whether the experience was usable, with WCAG-cited findings you can verify against the transcript. Add `--json` for machine-readable output, `--debug` for per-phase capture diagnostics.
+
+To test how the page *behaves* when operated, add `--probe-forms`: the worker submits the form with no valid input and records what the screen reader announces, catching forms that fail silently (the error is shown only visually and never announced — WCAG 3.3.1 Error Identification / 4.1.3 Status Messages). It is opt-in because activating a submit button has side effects. Disclosure controls are always activated to check that their expanded/collapsed state change is announced (4.1.2).
 
 ## Licence
 
