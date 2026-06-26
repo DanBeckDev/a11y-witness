@@ -77,6 +77,15 @@ Then collect `transcript.json` and feed it to the judge on the control plane:
 - **Do not manually `taskkill nvda.exe`.** Let Guidepup own NVDA's lifecycle via
   `nvda.start()` / `nvda.stop()`; killing it out from under Guidepup destabilises
   the speech-capture channel.
+- **Suppress Edge's first-run experience on a fresh profile.** A brand-new Edge
+  profile shows a welcome/sign-in surface despite `--no-first-run`. On a page
+  with no headings (or no controls), NVDA quick-nav escapes the empty document
+  into that browser UI and records it as a phantom element ("Welcome to
+  Microsoft Edge…", "Sign in to sync data"). Set the documented Edge policies
+  before capturing: `HideFirstRunExperience=1` and `BrowserSignin=0` under
+  `HKLM\SOFTWARE\Policies\Microsoft\Edge`. An established profile (like a
+  long-used VM) doesn't show it, which is why this only bit a fresh CI runner —
+  see `.github/workflows/capture-regression.yml`.
 - **Operate controls in place during the form-field sweep.** A separate
   next/previous sweep to find a control fails on sparse pages: after the
   structural sweep the cursor sits at the end, so "next form field" returns
