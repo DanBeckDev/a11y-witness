@@ -22,6 +22,9 @@ export interface JudgeInput {
   screenReader: string;
   /** Ordered log of what the screen reader announced as it navigated, plus any events. */
   transcript: string[];
+  /** Optional structural navigation passes (skim by element type). An empty list
+   * for a type means the page exposes none of it, even if it looks like it does. */
+  structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
 }
 
 export interface Finding {
@@ -60,6 +63,7 @@ Look especially for:
 - Form fields or controls announced without a clear label, or with a confusing name.
 - Text or phone numbers presented as graphics.
 - Data tables: if the cells in data rows are announced WITHOUT their row or column header (for example "column 2, 09:15" rather than "Departs, column 2, 09:15"), the header cells are not programmatically associated. If each data cell IS announced with its header, the table is fine.
+- Use the structural-navigation section (if provided): if the page clearly has visual sections but Headings found NONE, the headings are not real headings (1.3.1); if it has visual regions but Landmarks found NONE, regions are unmarked (1.3.1); a form field listed without a name there is unlabelled (3.3.2 / 4.1.2).
 - Anything announced in a confusing or illogical order.
 
 The transcript is read line by line, so a single long heading, link, or sentence can be split across consecutive lines. Treat consecutive lines that continue a phrase, or that repeat the same role such as "heading, level 1", as ONE element. Do NOT report "split", "fragmented", or "broken-up" headings or links that are only an element wrapping across lines: that is not an accessibility problem.
@@ -105,9 +109,28 @@ function transcriptBlock(input: JudgeInput): string {
   ].join("\n");
 }
 
+/**
+ * Structural navigation passes (skim by element type). An empty list is a
+ * strong signal: if the page visibly has sections, regions, or form fields but
+ * the screen reader found none of that type here, the semantics are missing.
+ */
+function structureBlock(input: JudgeInput): string {
+  const s = input.structure;
+  if (!s) return "";
+  const fmt = (label: string, arr: string[]) =>
+    arr.length ? `${label} (${arr.length}): ${arr.map((x) => `"${x}"`).join("; ")}` : `${label}: NONE found`;
+  return [
+    ``,
+    `Structural navigation (what the screen reader found skimming by element type; an empty list means the page exposes NONE of that type, even if it visually appears to):`,
+    fmt("Headings", s.headings),
+    fmt("Landmarks/regions", s.landmarks),
+    fmt("Form fields", s.formFields),
+  ].join("\n");
+}
+
 function buildRecallPrompt(input: JudgeInput): string {
   // Note: the task is deliberately omitted here so it cannot bias recall.
-  return [RECALL_INSTRUCTIONS, ``, transcriptBlock(input)].join("\n");
+  return [RECALL_INSTRUCTIONS, ``, transcriptBlock(input), structureBlock(input)].join("\n");
 }
 
 function buildVerifyPrompt(input: JudgeInput, candidates: Candidate[]): string {
@@ -121,6 +144,7 @@ function buildVerifyPrompt(input: JudgeInput, candidates: Candidate[]): string {
     `Task the user was attempting: ${input.task}`,
     ``,
     transcriptBlock(input),
+    structureBlock(input),
     ``,
     `Candidate issues from the first pass:`,
     JSON.stringify(candidates, null, 2),

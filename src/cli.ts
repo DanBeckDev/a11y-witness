@@ -43,6 +43,7 @@ interface CaptureResponse {
   url: string;
   screenReader: string;
   transcript: string[];
+  structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
 }
 
 async function main(): Promise<void> {
@@ -66,6 +67,7 @@ async function main(): Promise<void> {
     task,
     screenReader: cap.screenReader,
     transcript: cap.transcript,
+    structure: cap.structure,
   });
 
   if (json) {

@@ -22,12 +22,14 @@ async function main(): Promise<void> {
     url: string;
     screenReader?: string;
     transcript: string[];
+    structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
   };
   const verdict = await judge({
     url: data.url,
     task,
     screenReader: data.screenReader ?? "NVDA",
     transcript: data.transcript,
+    structure: data.structure,
   });
   console.log(JSON.stringify(verdict, null, 2));
 }

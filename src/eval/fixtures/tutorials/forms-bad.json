@@ -7,5 +7,18 @@
     "Contact preference",
     "radio button, not checked, \ufffc",
     "button, Subscribe"
-  ]
+  ],
+  "structure": {
+    "headings": [
+      "Sign up, heading, level 1"
+    ],
+    "landmarks": [
+      "form, Email address"
+    ],
+    "formFields": [
+      "edit, \ufffc",
+      "\ufffc, radio button, not checked",
+      "Subscribe, button"
+    ]
+  }
 }

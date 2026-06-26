@@ -10,5 +10,10 @@
     "Children's story time",
     "Saturdays at 11am.",
     "Contact us at the front desk."
-  ]
+  ],
+  "structure": {
+    "headings": [],
+    "landmarks": [],
+    "formFields": []
+  }
 }
