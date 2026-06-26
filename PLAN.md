@@ -35,10 +35,16 @@ Real NVDA runs in GitHub Actions (via `guidepup/setup-action`), which makes capt
 
 ### NVDA correctness audit (`docs/nvda-correctness-audit.md`)
 
-Systematic review of the capture worker against the official NVDA user guide (four parallel dimension reviews, re-verified on the live worker). **Verdict: no incorrect or unsafe usage.** Applied: softened an unsupported "F reaches buttons B misses" comment to a build-specific observation (defend-or-retract); pinned the NVDA install dir for reproducibility; `anchorToTop()` helper (Escape → browse mode, Ctrl+Home → top) validated and used in the post-submit field re-read. Backlog:
-- [ ] **Harden the Edge launch + re-apply read-through/structural anchoring.** The audit's recommended anchoring (anchorToTop before the read-through and structural sweep) was applied and reverted — on a fresh CI Edge profile, firing Escape+Ctrl+Home before NVDA settled on our page surfaced Edge's MSN start-page content instead of the target page. Make Edge open ONLY the target page (suppress the start-page/NTP tab), then re-apply the anchoring (which also fixes the auto-focus-page read start, the content-less-page chrome escape, and the auto-say-all race).
-- [ ] **Elements List (`NVDA+F7`) enumeration** — the guide's purpose-built bulk listing of links/headings/form-fields/buttons/landmarks; cleaner than repeated quick-nav (must read the dialog via list nav, not `lastSpokenPhrase`).
-- [ ] **Pin a known NVDA settings profile** (symbol level, element-reporting toggles, "Report live regions", auto-focus-mode) for cross-version reproducibility instead of inheriting Guidepup's defaults.
+Systematic review of the capture worker against the official NVDA user guide (four parallel dimension reviews, re-verified on the live worker). **Verdict: no incorrect or unsafe usage.** A follow-on three-whys root-cause pass then fixed the recurring *capture* issues at their roots:
+- [x] **Root 1 — control + verify the browser NVDA reads.** Capture-integrity net (each capture must contain a page signature, else fails loudly — caught wrong-content reads the old test silently passed); Edge launched as a chromeless `--app` window (no chrome/banners/tabs to wander into); verify-and-retry (re-capture until the page is confirmed, since CI-desktop focus is racy).
+- [x] **Root 3 — establish known NVDA state.** `anchorToTop()` (Escape → browse mode, Ctrl+Home → top) before the read-through, structural sweep, and post-submit re-read (also cancels auto-say-all); safe once `--app` controlled the env.
+- [x] **Root 2 — prefer persistent state over transient speech** (mitigated): post-submit `aria-invalid` re-read + judge positive-evidence + verify-retry.
+- [x] Softened an unsupported "F reaches buttons B misses" comment (defend-or-retract); pinned the NVDA install dir.
+
+Remaining backlog:
+- [ ] **Product-level verify-and-retry in the control plane.** The CLI knows the page title (axe/Playwright loads it); verify the worker's capture actually read that page and retry if not — bring the gate's robustness to end-user captures.
+- [ ] **Elements List (`NVDA+F7`) enumeration** — the guide's purpose-built bulk listing; cleaner than repeated quick-nav (read the dialog via list nav, not `lastSpokenPhrase`).
+- [ ] **Pin a known NVDA settings profile** (symbol level, element-reporting toggles, "Report live regions", auto-focus-mode) for cross-version reproducibility.
 - [ ] **Use Space (not Enter) for any future checkbox/radio probe; enter focus mode deliberately if a probe ever types into a field.**
 
 ## Milestones
