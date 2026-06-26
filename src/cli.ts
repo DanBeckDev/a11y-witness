@@ -10,6 +10,7 @@
  * The worker URL also reads from A11Y_WORKER. Default http://localhost:8765.
  */
 import { judge, type Judgment } from "./spike/judge.js";
+import { scanWithAxe, type AxeFinding } from "./scan/axe.js";
 
 interface Args {
   url: string;
@@ -47,17 +48,17 @@ interface CaptureResponse {
 async function main(): Promise<void> {
   const { url, task, worker, json } = parseArgs();
 
-  process.stderr.write(`Capturing ${url} via ${worker} (real screen reader) ...\n`);
-  const res = await fetch(`${worker}/capture`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ url, task }),
-  });
-  if (!res.ok) {
-    console.error(`Worker error ${res.status}: ${await res.text()}`);
-    process.exit(1);
-  }
-  const cap = (await res.json()) as CaptureResponse;
+  process.stderr.write(`Scanning ${url} (rule-based axe-core + real screen reader) ...\n`);
+  // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
+  // load the same URL independently, so run them concurrently. axe failure is
+  // non-fatal: we still report the lived-experience layer.
+  const [cap, axeFindings] = await Promise.all([
+    captureViaWorker(url, task, worker),
+    scanWithAxe(url).catch((e) => {
+      process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
+      return [] as AxeFinding[];
+    }),
+  ]);
 
   process.stderr.write(`Captured ${cap.transcript.length} announcements; judging ...\n`);
   const verdict = await judge({
@@ -68,32 +69,57 @@ async function main(): Promise<void> {
   });
 
   if (json) {
-    console.log(JSON.stringify({ url, task, screenReader: cap.screenReader, transcript: cap.transcript, verdict }, null, 2));
+    console.log(JSON.stringify({ url, task, screenReader: cap.screenReader, transcript: cap.transcript, ruleBased: axeFindings, verdict }, null, 2));
   } else {
-    printReport(url, task, cap.screenReader, cap.transcript.length, verdict);
+    printReport(url, task, cap.screenReader, cap.transcript.length, verdict, axeFindings);
   }
 }
 
-function printReport(url: string, task: string, sr: string, n: number, v: Judgment): void {
+async function captureViaWorker(url: string, task: string, worker: string): Promise<CaptureResponse> {
+  const res = await fetch(`${worker}/capture`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url, task }),
+  });
+  if (!res.ok) {
+    throw new Error(`Worker error ${res.status}: ${await res.text()}`);
+  }
+  return (await res.json()) as CaptureResponse;
+}
+
+function printReport(url: string, task: string, sr: string, n: number, v: Judgment, axe: AxeFinding[]): void {
   const lines: string[] = [
     "",
     "a11y-witness report",
     "===================",
     `URL:   ${url}`,
     `Task:  ${task}`,
-    `Read by ${sr}: ${n} announcements captured`,
-    `Task completable: ${v.taskCompletable ? "yes" : "no"} (overall confidence ${v.confidence})`,
     "",
-    v.summary,
-    "",
-    `${v.findings.length} finding(s):`,
+    "-- Rule-based layer (axe-core): contrast, colour, ARIA, parsing --",
+    `${axe.length} violation(s):`,
   ];
+  for (const f of axe) {
+    lines.push(`  [${f.impact}] ${f.wcag.join(", ") || "(no SC)"}  ${f.rule}: ${f.help}`);
+    if (f.nodes[0]) lines.push(`     evidence: ${f.nodes[0].html.slice(0, 100)}`);
+  }
+  lines.push(
+    "",
+    `-- Lived-experience layer (${sr} + AI judge): ${n} announcements --`,
+    `Task completable: ${v.taskCompletable ? "yes" : "no"} (overall confidence ${v.confidence})`,
+    v.summary,
+    `${v.findings.length} finding(s):`
+  );
   for (const f of v.findings) {
     lines.push(`  [${f.severity.toUpperCase()}] ${f.wcag}  (confidence ${f.confidence})`);
     lines.push(`     ${f.issue}`);
     lines.push(`     evidence: ${f.evidence}`);
   }
-  lines.push("");
+  lines.push(
+    "",
+    "Note: visual issues (contrast, colour, target size) come from the rule-based layer;",
+    "a screen reader cannot perceive them. Some criteria still need human review.",
+    ""
+  );
   console.log(lines.join("\n"));
 }
 

@@ -14,7 +14,7 @@ Make the real assistive-technology experience of any website measurable and impr
 
 ### Next architecture steps (from ADR 0002)
 
-- [ ] **Integrate axe-core** (rule-based layer): run it on the page the capture already loads; merge its WCAG-tagged findings into the report, attributed to source. Closes the visual/mechanical gap (contrast, colour, target size, parsing).
+- [x] **Integrated axe-core** (rule-based layer): `src/scan/axe.ts` runs it via Playwright (A/AA tags) on the same URL; the `witness` CLI now emits a two-layer report (rule-based + lived-experience), run concurrently. Proven: catches 1.4.3 contrast (which the screen-reader layer cannot perceive) and agrees with the lived-experience layer on overlapping structural criteria (1.1.1). Clean on correct markup.
 - [ ] **Evolve capture into an interaction model**: beyond the passive read, add navigation strategies (by heading/landmark/form/table), operate controls in focus mode (activate, expand, fill forms), and capture dynamic state changes. Covers keyboard/focus/state issues a single read-through misses (e.g. real carousel and menu operation).
 
 ## Milestones

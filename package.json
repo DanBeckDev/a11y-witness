@@ -10,10 +10,13 @@
     "witness": "tsx src/cli.ts",
     "worker": "node src/capture/nvda/server.mjs",
     "eval": "tsx src/eval/run.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "scan": "tsx src/scan/run-axe.ts"
   },
   "dependencies": {
-    "@guidepup/guidepup": "^0.27.0"
+    "@axe-core/playwright": "^4.12.1",
+    "@guidepup/guidepup": "^0.27.0",
+    "playwright": "^1.61.1"
   },
   "devDependencies": {
     "@types/node": "^26.0.1",
