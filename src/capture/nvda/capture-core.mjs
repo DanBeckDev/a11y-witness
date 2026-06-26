@@ -105,11 +105,16 @@ export async function captureWithNvda(url, opts = {}) {
 
 // Open the page in a fresh, maximized Edge window (own profile, no first-run UI).
 function launchBrowser(url) {
+  // --app opens a single chromeless window (no tab strip, address bar, toolbar
+  // or banners) showing ONLY this URL, so NVDA's browse-mode quick-nav cannot
+  // wander out of our document into browser UI (the Root-1 cause: captures that
+  // read Edge's image-viewer/"Close banner" chrome or the MSN start page).
   spawn(
     "cmd",
     ["/c", "start", "", "msedge",
       "--no-first-run", "--no-default-browser-check", "--start-maximized",
-      `--user-data-dir=${process.env.TEMP}\\edge-a11y`, "--new-window", url],
+      "--disable-session-crashed-bubble", "--disable-features=msEdgeWelcomePage",
+      `--user-data-dir=${process.env.TEMP}\\edge-a11y`, `--app=${url}`],
     { detached: true, stdio: "ignore" }
   );
 }
