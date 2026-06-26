@@ -85,6 +85,11 @@ export async function captureWithNvda(url, opts = {}) {
   const deadline = Date.now() + maxMs;
   await recordStartupHealth(diag);
 
+  // Start from a known state (browse mode + document top). Safe now that --app
+  // gives a chromeless single-page window — earlier this surfaced the browser
+  // start page because the window was not controlled. Also cancels NVDA's
+  // auto-say-all so it can't race the read.
+  await anchorToTop();
   const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
   const { structure, interaction } = await navigateByStructure({ deadline, diag, probeForms: !!opts.probeForms });
 
@@ -220,6 +225,7 @@ async function navigateByStructure({ deadline, diag, probeForms }) {
   const onFormField = (phrase) => operateControl(phrase, { probeForms, deadline, interaction });
 
   const structure = { headings: [], landmarks: [], formFields: [] };
+  await anchorToTop(); // browse mode + document top before the structural sweep
   try {
     structure.headings = await collectByType(
       { prev: K.moveToPreviousHeading, next: K.moveToNextHeading }, { label: "heading", onItem: null, deadline });
