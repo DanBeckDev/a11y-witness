@@ -66,7 +66,7 @@ async function main(): Promise<void> {
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
   const [cap, axeFindings] = await Promise.all([
-    captureViaWorker(url, task, worker, probeForms),
+    captureViaWorker(url, { task, worker, probeForms }),
     scanWithAxe(url).catch((e) => {
       process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
       return [] as AxeFinding[];
@@ -100,7 +100,13 @@ async function main(): Promise<void> {
   }
 }
 
-async function captureViaWorker(url: string, task: string, worker: string, probeForms: boolean): Promise<CaptureResponse> {
+interface CaptureRequest {
+  task: string;
+  worker: string;
+  probeForms: boolean;
+}
+
+async function captureViaWorker(url: string, { task, worker, probeForms }: CaptureRequest): Promise<CaptureResponse> {
   const res = await fetch(`${worker}/capture`, {
     method: "POST",
     headers: { "content-type": "application/json" },
