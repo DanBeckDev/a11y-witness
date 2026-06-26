@@ -1,0 +1,53 @@
+name: capture-spike
+
+# Phase 0 (ADR 0003): prove that real NVDA capture works on a GitHub-hosted
+# Windows runner — the premise behind both reproducible testing and the planned
+# GitHub Action. Manual trigger only: this is a de-risking spike, not a gate.
+# If this goes green, Phase 1 promotes it into a real capture-regression test.
+on:
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: windows-2022 # Guidepup supports Windows Server 2022/2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Capture needs @guidepup/guidepup at runtime but NOT Playwright browsers
+      # (axe-core's layer isn't exercised here), so skip that heavy download.
+      - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      - name: Set up NVDA (Guidepup)
+        uses: guidepup/setup-action@0.20.0
+      - name: Capture a tutorial page with real NVDA
+        shell: pwsh
+        run: |
+          $page = Join-Path $env:GITHUB_WORKSPACE 'src/eval/pages/tutorials/structure-good.html'
+          $url = 'file:///' + ($page -replace '\\','/')
+          Write-Host "Capturing $url"
+          node src/capture/nvda/capture.mjs $url out.json 40
+      - name: Assert NVDA actually read the page
+        shell: pwsh
+        run: |
+          $j = Get-Content out.json -Raw | ConvertFrom-Json
+          Write-Host "transcript phrases: $($j.transcript.Count)"
+          Write-Host "structure: headings=$($j.structure.headings.Count) landmarks=$($j.structure.landmarks.Count) formFields=$($j.structure.formFields.Count)"
+          Write-Host "--- diagnostics ---"
+          $j.diagnostics | ConvertTo-Json -Depth 6
+          if ($j.transcript.Count -lt 3) {
+            Write-Error "NVDA produced < 3 phrases - capture did not work on this runner"
+            exit 1
+          }
+          Write-Host "OK: real NVDA capture works on a GitHub-hosted Windows runner."
+      - name: Upload capture output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-output
+          path: out.json
+          if-no-files-found: warn
