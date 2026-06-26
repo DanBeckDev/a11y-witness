@@ -48,13 +48,13 @@ const CHECKS = [
       ["disclosure probe fired", r.interaction.stateChanges.length >= 1, r.interaction.stateChanges.length],
     ],
   },
-  // The exact announcement after submit is NVDA-version-sensitive: some NVDA
-  // builds re-announce the document after act() instead of the role="alert"
-  // live region (observed on the CI runner; see ADR 0003 Phase 1b). So CI gates
-  // only on the robust signal — the form-submit probe fires and identifies the
-  // submit control. The good/bad error-text DISTINCTION is gated by `npm run
-  // eval` on the committed fixtures (captured where the alert is present), not
-  // here. The dump above still records the actual `after` for visibility.
+  // CI gates only on the robust signal: the form-submit probe fires and finds
+  // the submit control. Whether the error was CONVEYED (the good/bad distinction)
+  // is NOT gated here — NVDA's post-submit announcements are nondeterministic in
+  // both channels (live-region and field re-read), even on a stable machine, so
+  // gating on it would flake. The dump records both signals for visibility, and
+  // the semantic distinction is validated by `npm run eval` on representative
+  // fixtures (see ADR 0003 Phase 1b).
   {
     page: "forms-validation-good.html",
     probeForms: true,
@@ -89,6 +89,7 @@ async function runCheck(check) {
   console.log(`  formFields:  ${JSON.stringify(result.structure.formFields)}`);
   console.log(`  stateChanges:${JSON.stringify(result.interaction.stateChanges)}`);
   console.log(`  formChanges: ${JSON.stringify(result.interaction.formChanges)}`);
+  console.log(`  postSubmit:  ${JSON.stringify(result.interaction.postSubmitFields)}`);
   let failed = 0;
   for (const [label, passed, actual] of check.assert(result)) {
     console.log(`  ${passed ? "PASS" : "FAIL"}  ${label}  (got ${JSON.stringify(actual)})`);

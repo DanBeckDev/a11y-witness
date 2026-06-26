@@ -29,6 +29,10 @@
         "control": "Sign up, button",
         "after": ""
       }
+    ],
+    "postSubmitFields": [
+      "form, Email address (required), edit",
+      "Sign up, button"
     ]
   }
 }

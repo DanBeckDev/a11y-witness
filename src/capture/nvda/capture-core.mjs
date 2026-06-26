@@ -22,6 +22,7 @@ const DEFAULT_BUDGET_MS = 120_000; // overall wall-clock budget for one capture
 const WINDOW_SETTLE_MS = 800; // after focusing the Edge window
 const NVDA_SETTLE_MS = 3_000; // after nvda.start() before reading
 const STATE_SETTLE_MS = 1_200; // after activating a control, for a live region to announce
+const ANCHOR_SETTLE_MS = 400; // after Escape + Ctrl+Home, before re-reading fields
 
 const ADVANCE_TIMEOUT_MS = 8_000; // moving to the next line/object
 const READ_TIMEOUT_MS = 5_000; // reading the phrase after advancing
@@ -63,7 +64,7 @@ function createDiagnostics() {
  * @returns {Promise<{url:string,screenReader:string,capturedAt:string,
  *   transcript:string[], structure:{headings:string[],landmarks:string[],formFields:string[]},
  *   interaction:{controls:string[],stateChanges:{control:string,after:string}[],
- *     formChanges:{control:string,after:string}[]},
+ *     formChanges:{control:string,after:string}[], postSubmitFields:string[]},
  *   diagnostics:object[]}>}
  */
 export async function captureWithNvda(url, opts = {}) {
@@ -229,13 +230,47 @@ async function navigateByStructure({ deadline, diag, probeForms }) {
   }
   if (probeForms) diag.mark("formProbe", { activated: interaction.formChanges.length });
 
+  // After a form was submitted in place during the sweep above, re-scan the
+  // form fields to capture their now-persistent state. An accessible form marks
+  // the invalid field (aria-invalid + an associated error) so it announces
+  // "invalid entry"/the error whenever the cursor lands on it; an inaccessible
+  // one leaves the field unchanged. This is version-robust, unlike the transient
+  // live-region text in formChanges.after (which some NVDA builds don't emit).
+  let postSubmitFields = [];
+  if (probeForms && interaction.formChanges.length > 0) {
+    try {
+      // Re-read the form fields' state after the submit. Two NVDA facts (per the
+      // user guide) make the naive approaches fail: (a) an accessible form moves
+      // focus to the invalid field, putting NVDA in focus mode where single-letter
+      // quick-nav is inert — so Escape back to browse mode; (b) quick-nav skips
+      // the element the cursor already sits on — so Ctrl+Home anchors at the top
+      // and the sweep then LANDS on each field. An accessible form marks the
+      // invalid field (aria-invalid + an associated error), announcing "invalid
+      // entry"/the error; an inaccessible one does not. Version- and mode-robust,
+      // unlike the transient live-region text in formChanges.after.
+      await withTimeout(nvda.press("Escape"), NAV_TIMEOUT_MS, "esc").catch(() => undefined);
+      await withTimeout(nvda.press("Control+Home"), NAV_TIMEOUT_MS, "ctrlHome").catch(() => undefined);
+      await sleep(ANCHOR_SETTLE_MS);
+      postSubmitFields = await collectByType(
+        { prev: K.moveToPreviousFormField, next: K.moveToNextFormField }, { label: "postSubmit", onItem: null, deadline });
+    } catch (e) {
+      interaction.sweepLog.push(`postSubmit ERROR ${errMsg(e)}`);
+    }
+  }
+
   // Interactive controls = the form-field controls found above; the state and
   // form changes were captured inline during that sweep.
-  const result = { controls: structure.formFields, stateChanges: interaction.stateChanges, formChanges: interaction.formChanges };
+  const result = {
+    controls: structure.formFields,
+    stateChanges: interaction.stateChanges,
+    formChanges: interaction.formChanges,
+    postSubmitFields,
+  };
   diag.mark("interaction", {
     controls: result.controls.length,
     stateChanges: result.stateChanges.length,
     formChanges: result.formChanges.length,
+    postSubmit: postSubmitFields.length,
     sweepLog: interaction.sweepLog,
   });
   return { structure, interaction: result };

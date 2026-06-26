@@ -54,6 +54,7 @@ interface CaptureResponse {
     controls: string[];
     stateChanges: { control: string; after: string }[];
     formChanges?: { control: string; after: string }[];
+    postSubmitFields?: string[];
   };
   diagnostics?: unknown[];
 }

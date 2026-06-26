@@ -29,6 +29,10 @@
         "control": "Sign up, button",
         "after": "There is a problem. Email address is required."
       }
+    ],
+    "postSubmitFields": [
+      "form, Email address (required), edit, invalid entry, Error: enter your email address., ff",
+      "Sign up, button"
     ]
   }
 }

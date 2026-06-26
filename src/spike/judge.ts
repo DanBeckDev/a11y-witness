@@ -32,6 +32,9 @@ export interface JudgeInput {
     controls: string[];
     stateChanges: { control: string; after: string }[];
     formChanges?: { control: string; after: string }[];
+    /** Form fields re-read after a submit: an accessible form marks the invalid
+     * field (aria-invalid + an associated error), an inaccessible one does not. */
+    postSubmitFields?: string[];
   };
 }
 
@@ -145,7 +148,7 @@ function structureBlock(input: JudgeInput): string {
  */
 function interactionBlock(input: JudgeInput): string {
   const it = input.interaction;
-  if (!it || (!it.controls?.length && !it.stateChanges?.length && !it.formChanges?.length)) return "";
+  if (!it || (!it.controls?.length && !it.stateChanges?.length && !it.formChanges?.length && !it.postSubmitFields?.length)) return "";
   const lines = [
     ``,
     `Interactive controls (found by quick-nav; each line is how the control is announced, with its name/role/state):`,
@@ -157,13 +160,30 @@ function interactionBlock(input: JudgeInput): string {
         it.stateChanges.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")
     );
   }
+  lines.push(...formSubmitLines(it));
+  return lines.join("\n");
+}
+
+// Two best-effort signals from submitting a form with no valid input. NVDA's
+// post-action announcements are nondeterministic, so treat them as POSITIVE
+// evidence: if EITHER names the error, it was conveyed (no finding). Flag a
+// failure only when BOTH show no error — strong evidence the form failed
+// silently. This keeps single-channel flakiness from causing false positives.
+function formSubmitLines(it: NonNullable<JudgeInput["interaction"]>): string[] {
+  const lines: string[] = [];
   if (it.formChanges?.length) {
     lines.push(
-      `Form submitted with NO valid input (control activated -> what was announced after). An accessible form must identify the error in text (3.3.1 Error Identification) and announce it as a status message the user hears without moving focus (4.1.3 Status Messages). If the announcement names the error or the invalid field (e.g. "invalid entry", "email is required", "there is a problem"), the error was conveyed and there is no failure. An EMPTY announcement ("") or one that only re-reads the button means submission failed silently: the screen-reader user is never told what went wrong, failing 3.3.1 (and 4.1.3 if no status message was announced). ` +
+      `Announced immediately after the submit (4.1.3 Status Messages — an accessible form announces the error here without moving focus). Naming the error ("there is a problem", "email is required") satisfies it; an EMPTY ("") or page/button re-read means no status was announced: ` +
         it.formChanges.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")
     );
   }
-  return lines.join("\n");
+  if (it.postSubmitFields?.length) {
+    lines.push(
+      `Form fields re-read AFTER that submit (3.3.1 Error Identification). An accessible form marks the invalid field, so it announces "invalid entry" and/or an associated error ("Error: enter your email address"); a field label merely saying "(required)" is NOT error identification. Only conclude 3.3.1/4.1.3 failure if NEITHER this NOR the announcement above shows any error: ` +
+        it.postSubmitFields.map((s) => `"${s}"`).join("; ")
+    );
+  }
+  return lines;
 }
 
 function buildRecallPrompt(input: JudgeInput): string {
