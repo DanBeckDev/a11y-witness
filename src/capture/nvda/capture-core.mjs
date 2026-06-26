@@ -40,12 +40,26 @@ export async function captureWithNvda(url, opts = {}) {
     if (first) transcript.push(first);
   } catch { /* itemText not critical */ }
 
+  // Bound the read so a stuck screen reader can never hang the worker: an
+  // overall time budget plus a per-step timeout. On timeout we stop and return
+  // whatever was captured so far.
+  const maxMs = Number(opts.maxMs || 90000);
+  const deadline = Date.now() + maxMs;
+  const withTimeout = (p, ms, label) =>
+    Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${label} timed out after ${ms}ms`)), ms))]);
+
   const seen = new Set();
   let last = null, dupes = 0, wrapRun = 0;
   for (let i = 0; i < steps; i++) {
-    if (nav === "object") await nvda.perform(nvda.keyboardCommands.moveToNextObject);
-    else await nvda.next();
-    const phrase = ((await nvda.lastSpokenPhrase()) || "").trim();
+    if (Date.now() > deadline) break;
+    let phrase;
+    try {
+      if (nav === "object") await withTimeout(nvda.perform(nvda.keyboardCommands.moveToNextObject), 8000, "advance");
+      else await withTimeout(nvda.next(), 8000, "advance");
+      phrase = ((await withTimeout(nvda.lastSpokenPhrase(), 5000, "read")) || "").trim();
+    } catch {
+      break; // a step hung; stop reading and return what we have
+    }
     if (!phrase) continue;
     if (phrase === last) { if (++dupes >= 3) break; continue; } // stuck at the bottom of a short page
     dupes = 0; last = phrase;
