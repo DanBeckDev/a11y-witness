@@ -1,0 +1,14 @@
+{
+  "url": "tutorial: structure-bad (authored from W3C guidance)",
+  "screenReader": "NVDA",
+  "transcript": [
+    "link, Hours, link, Events",
+    "Welcome to the City Library",
+    "Opening hours",
+    "Open 9am to 8pm on weekdays.",
+    "Upcoming events",
+    "Children's story time",
+    "Saturdays at 11am.",
+    "Contact us at the front desk."
+  ]
+}

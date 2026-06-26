@@ -1,0 +1,17 @@
+{
+  "url": "tutorial: tables-good (authored from W3C guidance)",
+  "screenReader": "NVDA",
+  "transcript": [
+    "Weekday departures from Central, table, with 3 rows and 3 columns, Weekday departures from Central",
+    "row 1, column 1, Destination",
+    "column 2, Departs",
+    "column 3, Platform",
+    "row 2, Destination, column 1, Riverside",
+    "Departs, column 2, 09:15",
+    "Platform, column 3, 2",
+    "row 3, Destination, column 1, Hilltop",
+    "Departs, column 2, 09:40",
+    "Platform, column 3, 5",
+    "5"
+  ]
+}

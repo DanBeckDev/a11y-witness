@@ -60,7 +60,8 @@ const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
 async function main(): Promise<void> {
   const filter = process.argv[2];
-  const cases = filter ? EVAL_CASES.filter((c) => c.id === filter) : EVAL_CASES;
+  // Substring match so e.g. `npm run eval -- tut-` runs all tutorial cases.
+  const cases = filter ? EVAL_CASES.filter((c) => c.id.includes(filter)) : EVAL_CASES;
   if (!cases.length) {
     console.error(`No eval case matches "${filter}". Known: ${EVAL_CASES.map((c) => c.id).join(", ")}`);
     process.exit(1);

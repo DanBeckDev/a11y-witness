@@ -65,8 +65,8 @@ The approach is anchored in primary W3C material, not just our own intuition:
 | Self-consistency / ensembling | Done (opt-in) | Consensus mode keeps only recurring findings. Quantified: it removes flaky FPs, not stable ones. |
 | Confidence calibration | Not done | Findings carry a confidence number, but it has not been validated against outcomes. |
 | Test-retest reliability | Partial | `EVAL_RUNS` can repeat cases, but reliability is not yet reported as a metric. We have observed run-to-run variation. |
-| Human-agreement baseline | Not done | No expert-labeled cases. This is now the single biggest remaining gap: the gold standard for any LLM judge is agreement with human experts. |
-| Held-out set / anti-overfitting | Started | A fresh authored page (`src/eval/pages/contamination-test.html`) was added as a held-out case, not tuned against; the judge scored it 4/4 recall, 0 false positives. More held-out pages still needed. |
+| Human-agreement baseline | Partial | No direct expert labelling yet, but the W3C tutorial baseline derives its ground truth from W3C's own documented techniques, not our judgment, which reduces (does not eliminate) the self-grading concern. A live expert-labelled sample is still wanted. |
+| Held-out set / anti-overfitting | Substantial | Beyond the contamination page, 8 paired good/bad pages authored fresh from the W3C tutorials (`src/eval/pages/tutorials/`) form a held-out, contamination-resistant baseline across the four observable categories. Good pages score 0 findings; bad pages are caught. |
 | Contamination control | Partial (initial evidence) | The evidence-constrained design mitigates it, and a fresh, never-published page confirms recall is genuine judging rather than recall-from-memory (see Validation log). The public ground-truth pages (W3C BAD, WAI) remain a caveat; more novel pages needed. |
 | Reproducibility | Partial | Reasoning effort is pinned; the model is whatever the local Codex login resolves to; sampling temperature is not controlled; prompts live in-repo but are not versioned. |
 | Reporting standard | Not done | We have quoted bare "recall 100%" on n=5 without sample sizes, confidence intervals, or test-retest. |
@@ -143,6 +143,15 @@ independently-derived ground truth:
   recall reflects genuine judging of the transcript, not recall-from-memory.
   One page is not a suite; more novel pages and an expert-labeled baseline are
   still required.
+- **W3C tutorial baseline (passed).** Paired good/bad pages authored from the
+  W3C WAI tutorials (images, forms, page structure, tables;
+  `src/eval/pages/tutorials/`), captured via the real NVDA worker. Good pages:
+  0 findings (precision). Bad pages: the documented failure caught in every
+  topic (1.1.1, 4.1.2, 1.3.1 for structure, 1.3.1 for tables). The baseline
+  surfaced a genuine recall gap on missing table-header association, which was
+  then fixed with a W3C-grounded recall hint that generalises (the correct
+  table still scores clean). This is the value of the baseline: it found a real
+  weakness the public-page tests had not.
 
 ## References
 

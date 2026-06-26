@@ -102,6 +102,76 @@ export const EVAL_CASES: EvalCase[] = [
     allow: ["1.1.1", "1.3.1", "2.4.4", "4.1.2", "3.3.2", "2.4.6"],
     notes: "Contamination + held-out test: ground truth is the planted issues, not a public report.",
   },
+  // --- W3C tutorial baseline: paired good/bad pages authored from the W3C WAI
+  // tutorials (https://www.w3.org/WAI/tutorials/). Ground truth is W3C's own
+  // documented technique. Good pages must be clean (precision); bad pages must
+  // surface the documented failure (recall). Pages in src/eval/pages/tutorials/.
+  {
+    id: "tut-images-good",
+    fixture: "src/eval/fixtures/tutorials/images-good.json",
+    task: "View the trail photos",
+    expect: [],
+    allow: [],
+    notes: "W3C images tutorial, correct: descriptive alt, null alt for decorative, functional-link alt. Clean.",
+  },
+  {
+    id: "tut-images-bad",
+    fixture: "src/eval/fixtures/tutorials/images-bad.json",
+    task: "View the trail photos",
+    expect: ["1.1.1"],
+    // 4.1.2 is allowed: the alt-less image used as a link genuinely has no
+    // accessible name, so citing Name/Role/Value alongside 1.1.1 is defensible.
+    allow: ["1.1.1", "4.1.2"],
+    notes: "W3C images tutorial failures: missing alt on informative image and image link, filename-as-alt.",
+  },
+  {
+    id: "tut-forms-good",
+    fixture: "src/eval/fixtures/tutorials/forms-good.json",
+    task: "Sign up for the newsletter",
+    expect: [],
+    allow: [],
+    notes: "W3C forms tutorial, correct: label/for, fieldset/legend grouping. Clean.",
+  },
+  {
+    id: "tut-forms-bad",
+    fixture: "src/eval/fixtures/tutorials/forms-bad.json",
+    task: "Sign up for the newsletter",
+    expect: ["4.1.2"],
+    allow: ["4.1.2", "3.3.2", "1.3.1"],
+    notes: "W3C forms tutorial failures: unlabelled input, ungrouped unlabelled radios.",
+  },
+  {
+    id: "tut-structure-good",
+    fixture: "src/eval/fixtures/tutorials/structure-good.json",
+    task: "Find the library's opening hours",
+    expect: [],
+    allow: [],
+    notes: "W3C page-structure tutorial, correct: landmarks + h1/h2/h3 hierarchy + skip link. Clean.",
+  },
+  {
+    id: "tut-structure-bad",
+    fixture: "src/eval/fixtures/tutorials/structure-bad.json",
+    task: "Find the library's opening hours",
+    expect: ["1.3.1"],
+    allow: ["1.3.1", "2.4.6", "2.4.1"],
+    notes: "W3C page-structure tutorial failures: visual titles as styled text (no heading role), no landmarks.",
+  },
+  {
+    id: "tut-tables-good",
+    fixture: "src/eval/fixtures/tutorials/tables-good.json",
+    task: "Find which platform the Hilltop train departs from",
+    expect: [],
+    allow: [],
+    notes: "W3C tables tutorial, correct: caption + th/scope; cells announced with their headers. Clean.",
+  },
+  {
+    id: "tut-tables-bad",
+    fixture: "src/eval/fixtures/tutorials/tables-bad.json",
+    task: "Find which platform the Hilltop train departs from",
+    expect: ["1.3.1"],
+    allow: ["1.3.1"],
+    notes: "W3C tables tutorial failure: data table with no header cells; cells not associated with headers.",
+  },
   {
     id: "planted-contact-form",
     fixture: "src/eval/fixtures/planted-contact-form.json",

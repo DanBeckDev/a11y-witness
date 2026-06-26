@@ -1,0 +1,16 @@
+{
+  "url": "tutorial: structure-good (authored from W3C guidance)",
+  "screenReader": "NVDA",
+  "transcript": [
+    "banner landmark, City Library",
+    "Main, navigation landmark, link, Hours, link, Events",
+    "main landmark, heading, level 1, Welcome to the City Library",
+    "heading, level 2, Opening hours",
+    "Open 9am to 8pm on weekdays.",
+    "heading, level 2, Upcoming events",
+    "heading, level 3, Children's story time",
+    "Saturdays at 11am.",
+    "content info landmark, Contact us at the front desk.",
+    "Contact us at the front desk."
+  ]
+}

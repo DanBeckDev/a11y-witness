@@ -1,0 +1,11 @@
+{
+  "url": "tutorial: forms-bad (authored from W3C guidance)",
+  "screenReader": "NVDA",
+  "transcript": [
+    "form, Email address",
+    "edit, \ufffc",
+    "Contact preference",
+    "radio button, not checked, \ufffc",
+    "button, Subscribe"
+  ]
+}

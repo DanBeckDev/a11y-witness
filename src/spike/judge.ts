@@ -59,6 +59,7 @@ Look especially for:
 - Visual section titles announced as plain text instead of "heading level N" (missing heading semantics).
 - Form fields or controls announced without a clear label, or with a confusing name.
 - Text or phone numbers presented as graphics.
+- Data tables: if the cells in data rows are announced WITHOUT their row or column header (for example "column 2, 09:15" rather than "Departs, column 2, 09:15"), the header cells are not programmatically associated. If each data cell IS announced with its header, the table is fine.
 - Anything announced in a confusing or illogical order.
 
 The transcript is read line by line, so a single long heading, link, or sentence can be split across consecutive lines. Treat consecutive lines that continue a phrase, or that repeat the same role such as "heading, level 1", as ONE element. Do NOT report "split", "fragmented", or "broken-up" headings or links that are only an element wrapping across lines: that is not an accessibility problem.

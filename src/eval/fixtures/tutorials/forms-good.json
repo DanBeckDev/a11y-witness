@@ -1,0 +1,13 @@
+{
+  "url": "tutorial: forms-good (authored from W3C guidance)",
+  "screenReader": "NVDA",
+  "transcript": [
+    "form, Email address",
+    "Email address, edit, \ufffc",
+    "Contact preference, grouping, Contact preference",
+    "Email, radio button, not checked, \ufffc",
+    "Phone, radio button, not checked, \ufffc",
+    "out of grouping, button, Subscribe",
+    "button, Subscribe"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "url": "tutorial: tables-bad (authored from W3C guidance)",
+  "screenReader": "NVDA",
+  "transcript": [
+    "table, with 3 rows and 3 columns, row 1, column 1, Destination",
+    "column 2, Departs",
+    "column 3, Platform",
+    "row 2, column 1, Riverside",
+    "column 2, 09:15",
+    "column 3, 2",
+    "row 3, column 1, Hilltop",
+    "column 2, 09:40",
+    "column 3, 5",
+    "5"
+  ]
+}
