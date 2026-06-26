@@ -26,6 +26,34 @@ self-critical: the point is to find the gaps before we build on top of them.
 - **Eval.** Labeled cases scored automatically for recall and false positives
   against authoritative ground truth. See `src/eval/`.
 
+## Grounding in W3C guidance
+
+The approach is anchored in primary W3C material, not just our own intuition:
+
+- **POUR alignment.** W3C's [Accessibility Principles](https://www.w3.org/WAI/fundamentals/accessibility-principles/)
+  separate requirements that are perceivable without sight from those that are
+  not. Their "observable" set (text alternatives, heading structure, link
+  purpose, form labels, names/roles/values, reading order, language) matches
+  exactly what our eval marks as `expect`-able; their vision/interaction set
+  (contrast, colour, keyboard, focus visible, timing, target size) matches what
+  we deliberately do not flag. Our observable-subset scoping is W3C's own
+  distinction, not an arbitrary one.
+- **WCAG version coverage.** Each criterion is tagged with the version that
+  introduced it (`src/wcag/criteria.ts`), parsed from the 2.0, 2.1, and 2.2
+  specs. We can therefore report against **WCAG 2.1 AA**, the version most law
+  and regulation references (for example EN 301 549), as well as 2.2 AA. Every
+  criterion new in 2.2 needs interaction, vision, or cross-page context, so the
+  subset a read-through detects is identical under 2.1 and 2.2; the version
+  changes only how a finding is labelled.
+- **ATAG positioning.** Under [ATAG](https://www.w3.org/WAI/standards-guidelines/atag/),
+  `a11y-witness` is a Part B style tool: it helps authors produce content that
+  conforms to WCAG by giving evidence-backed feedback in their workflow. ATAG
+  Part A then binds us too: the tool's own outputs (reports, CLI, any future UI)
+  must themselves be accessible. We adopt that as a self-requirement.
+- **Whose experience.** The judgments target the real barriers described in
+  [How People with Disabilities Use the Web](https://www.w3.org/WAI/people-use-web/),
+  specifically the non-visual perception and navigation strategies of screen-reader users.
+
 ## Best-practice audit (LLM-as-judge)
 
 | Practice | Status | Notes |
@@ -117,6 +145,17 @@ independently-derived ground truth:
   still required.
 
 ## References
+
+### W3C standards and guidance
+
+- [WCAG 2.1](https://www.w3.org/TR/WCAG21/) and [WCAG 2.2](https://www.w3.org/TR/WCAG22/)
+- [How to Meet WCAG (Quick Reference)](https://www.w3.org/WAI/WCAG22/quickref/?versions=2.1)
+- [WCAG overview](https://www.w3.org/WAI/standards-guidelines/wcag/)
+- [Accessibility Principles (POUR)](https://www.w3.org/WAI/fundamentals/accessibility-principles/)
+- [How People with Disabilities Use the Web](https://www.w3.org/WAI/people-use-web/)
+- [ATAG (Authoring Tool Accessibility Guidelines)](https://www.w3.org/WAI/standards-guidelines/atag/)
+
+### LLM evaluation literature
 
 - [How to Correctly Report LLM-as-a-Judge Evaluations](https://arxiv.org/pdf/2511.21140)
 - [From Generation to Judgment: Opportunities and Challenges of LLM-as-a-judge](https://arxiv.org/pdf/2411.16594)
