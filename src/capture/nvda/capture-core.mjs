@@ -21,7 +21,7 @@ const DEFAULT_BROWSER_WAIT_MS = 12_000; // Edge cold start + page load
 const DEFAULT_BUDGET_MS = 120_000; // overall wall-clock budget for one capture
 const WINDOW_SETTLE_MS = 800; // after focusing the Edge window
 const NVDA_SETTLE_MS = 3_000; // after nvda.start() before reading
-const STATE_SETTLE_MS = 1_200; // after activating a control, for a live region to announce
+const STATE_SETTLE_MS = 2_500; // after activating a control, for a live region to announce (CI runners can be slow)
 
 const ADVANCE_TIMEOUT_MS = 8_000; // moving to the next line/object
 const READ_TIMEOUT_MS = 5_000; // reading the phrase after advancing

@@ -77,6 +77,13 @@ async function runCheck(check) {
     console.log(`  FAIL  capture threw: ${(e && e.message) || e}`);
     return 1;
   }
+  // Dump the full capture so a CI failure shows exactly what NVDA produced
+  // (NVDA phrasing/behaviour varies by version, so failures need the raw text).
+  console.log(`  headings:    ${JSON.stringify(result.structure.headings)}`);
+  console.log(`  landmarks:   ${JSON.stringify(result.structure.landmarks)}`);
+  console.log(`  formFields:  ${JSON.stringify(result.structure.formFields)}`);
+  console.log(`  stateChanges:${JSON.stringify(result.interaction.stateChanges)}`);
+  console.log(`  formChanges: ${JSON.stringify(result.interaction.formChanges)}`);
   let failed = 0;
   for (const [label, passed, actual] of check.assert(result)) {
     console.log(`  ${passed ? "PASS" : "FAIL"}  ${label}  (got ${JSON.stringify(actual)})`);
