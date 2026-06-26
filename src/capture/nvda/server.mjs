@@ -33,7 +33,11 @@ const server = createServer((req, res) => {
       console.log(`[${startedAt}] capture ${url} (nav=${nav || "object"})`);
       try {
         const result = await captureWithNvda(url, { steps, nav });
-        console.log(`  -> ${result.transcript.length} phrases`);
+        const after = (result.diagnostics || []).find((e) => e.event === "afterStart");
+        console.log(`  -> ${result.transcript.length} phrases; afterStart.lastSpoken=${JSON.stringify(after && after.lastSpoken)}`);
+        if (result.transcript.length === 0) {
+          console.log("  WARNING: 0 phrases. If afterStart.lastSpoken is empty, NVDA is running but not speaking — restart/reboot the worker.");
+        }
         send(res, 200, { ...result, task });
       } catch (e) {
         console.error("  capture failed:", (e && e.stack) || e);

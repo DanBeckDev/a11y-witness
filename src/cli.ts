@@ -17,6 +17,7 @@ interface Args {
   task: string;
   worker: string;
   json: boolean;
+  debug: boolean;
 }
 
 function parseArgs(): Args {
@@ -25,18 +26,20 @@ function parseArgs(): Args {
   let task = "Read and understand this page";
   let worker = process.env.A11Y_WORKER ?? "http://localhost:8765";
   let json = false;
+  let debug = false;
   for (let i = 0; i < a.length; i++) {
     const v = a[i];
     if (v === "--task") task = a[++i] ?? task;
     else if (v === "--worker") worker = a[++i] ?? worker;
     else if (v === "--json") json = true;
+    else if (v === "--debug") debug = true;
     else if (!v.startsWith("--")) url = v;
   }
   if (!url) {
-    console.error('Usage: npm run witness -- <url> --task "..." [--worker http://host:port] [--json]');
+    console.error('Usage: npm run witness -- <url> --task "..." [--worker http://host:port] [--json] [--debug]');
     process.exit(1);
   }
-  return { url, task, worker, json };
+  return { url, task, worker, json, debug };
 }
 
 interface CaptureResponse {
@@ -44,11 +47,12 @@ interface CaptureResponse {
   screenReader: string;
   transcript: string[];
   structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
-  interaction?: { tabOrder: string[]; stateChanges: { control: string; after: string }[] };
+  interaction?: { controls: string[]; stateChanges: { control: string; after: string }[] };
+  diagnostics?: unknown[];
 }
 
 async function main(): Promise<void> {
-  const { url, task, worker, json } = parseArgs();
+  const { url, task, worker, json, debug } = parseArgs();
 
   process.stderr.write(`Scanning ${url} (rule-based axe-core + real screen reader) ...\n`);
   // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
@@ -62,6 +66,16 @@ async function main(): Promise<void> {
     }),
   ]);
 
+  if (debug && cap.diagnostics) {
+    process.stderr.write("-- capture diagnostics --\n");
+    for (const e of cap.diagnostics) process.stderr.write("  " + JSON.stringify(e) + "\n");
+  }
+  if (cap.transcript.length === 0) {
+    process.stderr.write(
+      "WARNING: 0 announcements captured. Run with --debug; if afterStart.lastSpoken is empty, " +
+        "NVDA is running but not producing speech (the worker likely needs a clean restart/reboot).\n"
+    );
+  }
   process.stderr.write(`Captured ${cap.transcript.length} announcements; judging ...\n`);
   const verdict = await judge({
     url: cap.url,

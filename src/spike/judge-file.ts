@@ -23,7 +23,7 @@ async function main(): Promise<void> {
     screenReader?: string;
     transcript: string[];
     structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
-    interaction?: { tabOrder: string[]; stateChanges: { control: string; after: string }[] };
+    interaction?: { controls: string[]; stateChanges: { control: string; after: string }[] };
   };
   const verdict = await judge({
     url: data.url,

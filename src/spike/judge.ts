@@ -25,9 +25,9 @@ export interface JudgeInput {
   /** Optional structural navigation passes (skim by element type). An empty list
    * for a type means the page exposes none of it, even if it looks like it does. */
   structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
-  /** Optional keyboard-interaction pass: how each focusable control is announced
-   * when tabbed to, and the announced state after activating disclosures. */
-  interaction?: { tabOrder: string[]; stateChanges: { control: string; after: string }[] };
+  /** Optional interaction pass: how each interactive control is announced (found
+   * via quick-nav), and the announced state after activating disclosures. */
+  interaction?: { controls: string[]; stateChanges: { control: string; after: string }[] };
 }
 
 export interface Finding {
@@ -140,14 +140,17 @@ function structureBlock(input: JudgeInput): string {
  */
 function interactionBlock(input: JudgeInput): string {
   const it = input.interaction;
-  if (!it || (!it.tabOrder?.length && !it.stateChanges?.length)) return "";
+  if (!it || (!it.controls?.length && !it.stateChanges?.length)) return "";
   const lines = [
     ``,
-    `Keyboard interaction (Tab through focusable controls; each line is how a control is announced when focused):`,
-    ...it.tabOrder.map((x, i) => `  ${i + 1}. ${x}`),
+    `Interactive controls (found by quick-nav; each line is how the control is announced, with its name/role/state):`,
+    ...it.controls.map((x, i) => `  ${i + 1}. ${x}`),
   ];
   if (it.stateChanges?.length) {
-    lines.push(`After activating disclosure controls: ${it.stateChanges.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")}`);
+    lines.push(
+      `Disclosure controls after activation (a proper one announces "expanded"; one that stays "collapsed" or announces nothing fails 4.1.2): ` +
+        it.stateChanges.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")
+    );
   }
   return lines.join("\n");
 }
