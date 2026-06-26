@@ -59,6 +59,28 @@ interface CaptureResponse {
   diagnostics?: unknown[];
 }
 
+const MAX_CAPTURE_ATTEMPTS = 3;
+
+// Best-effort check that the screen-reader capture actually read the target page
+// (not browser chrome). True if the title gives nothing to check (empty / no
+// significant words) or at least one significant title word appears in what NVDA
+// announced. Catches the egregious wrong-content case (e.g. the browser start
+// page) without over-retrying when a page's title legitimately isn't spoken.
+function captureReadPage(cap: CaptureResponse, title: string): boolean {
+  const words = title.toLowerCase().match(/[a-z0-9]{4,}/g) ?? [];
+  if (words.length === 0) return true;
+  const s = cap.structure;
+  const it = cap.interaction;
+  const haystack = [
+    ...cap.transcript,
+    ...(s?.headings ?? []), ...(s?.landmarks ?? []), ...(s?.formFields ?? []),
+    ...(it?.controls ?? []),
+    ...(it?.stateChanges ?? []).map((x) => `${x.control} ${x.after}`),
+    ...(it?.postSubmitFields ?? []),
+  ].join(" ").toLowerCase();
+  return words.some((w) => haystack.includes(w));
+}
+
 async function main(): Promise<void> {
   const { url, task, worker, json, debug, probeForms } = parseArgs();
 
@@ -66,13 +88,27 @@ async function main(): Promise<void> {
   // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
-  const [cap, axeFindings] = await Promise.all([
+  const [firstCap, axe] = await Promise.all([
     captureViaWorker(url, { task, worker, probeForms }),
     scanWithAxe(url).catch((e) => {
       process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
-      return [] as AxeFinding[];
+      return { findings: [] as AxeFinding[], title: "" };
     }),
   ]);
+  const axeFindings = axe.findings;
+
+  // Verify-and-retry (the Root-1 fix, brought to the product). Browser focus on
+  // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
+  // axe (Playwright) gives us the page title; if the capture doesn't contain it,
+  // NVDA likely read the wrong content — re-capture before judging.
+  let cap = firstCap;
+  for (let attempt = 2; attempt <= MAX_CAPTURE_ATTEMPTS && !captureReadPage(cap, axe.title); attempt++) {
+    process.stderr.write(`Capture did not appear to read "${axe.title}" (wrong content?); re-capturing (attempt ${attempt}/${MAX_CAPTURE_ATTEMPTS}) ...\n`);
+    cap = await captureViaWorker(url, { task, worker, probeForms });
+  }
+  if (axe.title && !captureReadPage(cap, axe.title)) {
+    process.stderr.write(`WARNING: after ${MAX_CAPTURE_ATTEMPTS} attempts the capture still doesn't match the page title "${axe.title}" — results may reflect browser chrome, not the page.\n`);
+  }
 
   if (debug && cap.diagnostics) {
     process.stderr.write("-- capture diagnostics --\n");

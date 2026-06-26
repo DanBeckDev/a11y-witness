@@ -42,7 +42,7 @@ Systematic review of the capture worker against the official NVDA user guide (fo
 - [x] Softened an unsupported "F reaches buttons B misses" comment (defend-or-retract); pinned the NVDA install dir.
 
 Remaining backlog:
-- [ ] **Product-level verify-and-retry in the control plane.** The CLI knows the page title (axe/Playwright loads it); verify the worker's capture actually read that page and retry if not — bring the gate's robustness to end-user captures.
+- [x] **Product-level verify-and-retry in the control plane.** `scanWithAxe` now returns the page title; the `witness` CLI verifies the worker's capture contains it and re-captures (up to 3x) if NVDA read the wrong content, warning if still unconfirmed. Brings the gate's robustness to end-user captures. Validated e2e on a public page (happy path: title matched, no retry, judged normally).
 - [ ] **Elements List (`NVDA+F7`) enumeration** — the guide's purpose-built bulk listing; cleaner than repeated quick-nav (read the dialog via list nav, not `lastSpokenPhrase`).
 - [ ] **Pin a known NVDA settings profile** (symbol level, element-reporting toggles, "Report live regions", auto-focus-mode) for cross-version reproducibility.
 - [ ] **Use Space (not Enter) for any future checkbox/radio probe; enter focus mode deliberately if a probe ever types into a field.**

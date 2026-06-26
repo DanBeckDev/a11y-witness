@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   if (!/^(https?|file):/.test(target) && existsSync(target)) {
     target = pathToFileURL(resolve(target)).href;
   }
-  const findings = await scanWithAxe(target);
+  const { findings } = await scanWithAxe(target);
   console.log(`\naxe-core (rule-based layer): ${findings.length} violation(s) on ${target}\n`);
   for (const f of findings) {
     console.log(`  [${f.impact}] ${f.wcag.join(", ") || "(no SC tag)"}  ${f.rule}`);

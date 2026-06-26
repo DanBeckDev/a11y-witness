@@ -35,15 +35,23 @@ function criteriaFromTags(tags: string[]): string[] {
   return out;
 }
 
-export async function scanWithAxe(url: string): Promise<AxeFinding[]> {
+export interface AxeResult {
+  findings: AxeFinding[];
+  /** The page's document.title — used to verify the screen-reader worker
+   * actually captured THIS page and not browser chrome (see cli.ts). */
+  title: string;
+}
+
+export async function scanWithAxe(url: string): Promise<AxeResult> {
   const browser = await chromium.launch();
   try {
     // @axe-core/playwright requires a page from an explicit context.
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto(url, { waitUntil: "load" });
+    const title = await page.title();
     const results = await new AxeBuilder({ page }).withTags(WCAG_AA_TAGS).analyze();
-    return results.violations.map((v) => ({
+    const findings = results.violations.map((v) => ({
       source: "axe-core" as const,
       wcag: criteriaFromTags(v.tags),
       rule: v.id,
@@ -52,6 +60,7 @@ export async function scanWithAxe(url: string): Promise<AxeFinding[]> {
       helpUrl: v.helpUrl,
       nodes: v.nodes.map((n) => ({ html: n.html, target: n.target.map(String) })),
     }));
+    return { findings, title };
   } finally {
     await browser.close();
   }
