@@ -10,7 +10,7 @@ It does **not** tab through the page and call that a screen-reader test. Tabbing
 
 ## Status
 
-Early but working end to end. The **M0 core bet is demonstrated**: a real screen reader (NVDA) is driven through a real page, and an AI judge produces grounded, WCAG-cited findings that discriminate broken pages from accessible ones. See [`PLAN.md`](./PLAN.md). The architecture is in [`docs/adr/0001-capture-architecture.md`](./docs/adr/0001-capture-architecture.md).
+Early but working end to end. The **M0 core bet is demonstrated**: a real screen reader (NVDA) is driven through a real page, and an AI judge produces grounded, WCAG-cited findings that discriminate broken pages from accessible ones. See [`PLAN.md`](./PLAN.md). The architecture is in [`docs/adr/0001-capture-architecture.md`](./docs/adr/0001-capture-architecture.md), and an honest audit of how we use AI (and where the evaluation is not yet validated) is in [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md).
 
 ## How it works
 
