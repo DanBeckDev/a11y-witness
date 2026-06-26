@@ -1,0 +1,39 @@
+name: capture-regression
+
+# Phase 1 (ADR 0003): the capture half's regression gate. Drives the real
+# capture worker (NVDA on a Windows runner via guidepup/setup-action) over the
+# bundled tutorial pages and asserts the stable raw signals each should yield
+# (see src/capture/nvda/capture-check.mjs). Path-filtered so it only spends
+# Windows-runner minutes when capture could have regressed; also on-demand.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/capture/**"
+      - "src/eval/pages/tutorials/**"
+      - ".github/workflows/capture-regression.yml"
+  pull_request:
+    paths:
+      - "src/capture/**"
+      - "src/eval/pages/tutorials/**"
+      - ".github/workflows/capture-regression.yml"
+
+jobs:
+  capture:
+    runs-on: windows-2022 # Guidepup supports Windows Server 2022/2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Capture needs @guidepup/guidepup at runtime but NOT Playwright browsers.
+      - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      - name: Set up NVDA (Guidepup)
+        uses: guidepup/setup-action@0.20.0
+      - name: Capture-regression checks (real NVDA)
+        run: node src/capture/nvda/capture-check.mjs
