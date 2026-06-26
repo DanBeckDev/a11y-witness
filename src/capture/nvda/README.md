@@ -40,8 +40,10 @@ npx --yes @guidepup/setup --nvda-install-dir C:\guidepup-nvda
 > reproducibility depends on the install staying put — hence the pinned dir.
 > The settings that shape the transcript (NVDA's "Report live regions" — on by
 > default — "Automatic say all on page load", and the element-reporting toggles)
-> come from Guidepup's bundled config; the capture worker anchors with
-> Escape + Ctrl+Home, which also cancels the auto say-all so it can't race the read.
+> come from Guidepup's bundled config. Note: "Automatic say all on page load"
+> can race the line-stepping read on long pages; today the startup settle
+> mitigates it (anchoring the read-through to cancel the auto-read is a backlog
+> item — see PLAN.md and docs/nvda-correctness-audit.md).
 
 ## Running a capture (in the interactive session)
 

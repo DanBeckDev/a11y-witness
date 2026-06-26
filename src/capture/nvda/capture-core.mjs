@@ -85,7 +85,6 @@ export async function captureWithNvda(url, opts = {}) {
   const deadline = Date.now() + maxMs;
   await recordStartupHealth(diag);
 
-  await anchorToTop(); // begin the read-through from a known top-of-document position
   const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
   const { structure, interaction } = await navigateByStructure({ deadline, diag, probeForms: !!opts.probeForms });
 
@@ -216,9 +215,6 @@ async function navigateByStructure({ deadline, diag, probeForms }) {
   const onFormField = (phrase) => operateControl(phrase, { probeForms, deadline, interaction });
 
   const structure = { headings: [], landmarks: [], formFields: [] };
-  // Anchor in the document first so an element-less page can't let quick-nav
-  // wander out of browse mode into the browser UI (observed on a heading-less page).
-  await anchorToTop();
   try {
     structure.headings = await collectByType(
       { prev: K.moveToPreviousHeading, next: K.moveToNextHeading }, { label: "heading", onItem: null, deadline });
