@@ -26,7 +26,7 @@ Make the real assistive-technology experience of any website measurable and impr
 
 Real NVDA runs in GitHub Actions (via `guidepup/setup-action`), which makes capture reproducible by anyone AND is the foundation of the chosen distribution vector — a GitHub Action teams drop into their own CI. Dependency-ordered:
 
-- [ ] **Phase 0 — Prove real NVDA in GitHub Actions.** Throwaway workflow on `windows-2022`: `guidepup/setup-action` → capture one tutorial page → assert non-empty transcript + expected structure. De-risks the interactive-session/focus needs before building on them.
+- [x] **Phase 0 — Prove real NVDA in GitHub Actions.** `capture-spike.yml` on `windows-2022` with `guidepup/setup-action@0.20.0` captured `structure-good.html` with NO personal VM: 10 transcript phrases, 5 headings, 5 landmarks via structural quick-nav. Premise confirmed — capture is reproducible on GitHub-hosted infra. (Read-through + structural nav exercised; the interaction probes come in Phase 1's fixture diff.)
 - [ ] **Phase 1 — Capture-regression CI.** Capture the good/bad tutorial pages on the runner, diff against committed fixtures (first automated test of the capture half). Extract a one-shot capture entrypoint; document `npx @guidepup/setup` as the local path.
 - [ ] **Phase 2 — Pluggable judge backend.** Codex (author, local) / BYO Anthropic-OpenAI key (CI + Action users) / hosted (future SaaS). Unblocks all external consumption; preserves the no-metered-API constraint for the author.
 - [ ] **Phase 3 — The GitHub Action.** `a11y-witness-action`: on a Windows runner, setup → capture → judge (user's key) → findings as a job summary + PR comment + optional failing check. Example workflow + marketplace listing.
