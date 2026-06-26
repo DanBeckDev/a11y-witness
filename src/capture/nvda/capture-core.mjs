@@ -40,14 +40,26 @@ export async function captureWithNvda(url, opts = {}) {
     if (first) transcript.push(first);
   } catch { /* itemText not critical */ }
 
-  let last = null, dupes = 0;
+  const seen = new Set();
+  let last = null, dupes = 0, wrapRun = 0;
   for (let i = 0; i < steps; i++) {
     if (nav === "object") await nvda.perform(nvda.keyboardCommands.moveToNextObject);
     else await nvda.next();
     const phrase = ((await nvda.lastSpokenPhrase()) || "").trim();
     if (!phrase) continue;
-    if (phrase === last) { if (++dupes >= 3) break; continue; }
+    if (phrase === last) { if (++dupes >= 3) break; continue; } // stuck at the bottom of a short page
     dupes = 0; last = phrase;
+    // Wrap detection: NVDA "read next" can loop back to the top of a long page.
+    // A run of substantial phrases we have already captured means we have
+    // wrapped around, so stop and do not record the repeats. Short tokens
+    // ("blank", "link") legitimately recur, so they do not count.
+    const substantial = phrase.length > 20;
+    if (substantial && seen.has(phrase)) {
+      if (++wrapRun >= 4) break;
+      continue;
+    }
+    wrapRun = 0;
+    if (substantial) seen.add(phrase);
     transcript.push(phrase);
   }
 
