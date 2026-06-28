@@ -11,6 +11,12 @@ import { WCAG_22_AA } from "../wcag/criteria.js";
 // model). The backend is one clean seam: a prompt in, raw text out.
 const BACKEND = (process.env.JUDGE_BACKEND ?? "codex").toLowerCase();
 const JUDGE_MODEL = process.env.JUDGE_MODEL ?? "claude-opus-4-8";
+// OpenAI-compatible backend (JUDGE_BACKEND=openai): works against hosted OpenAI
+// or any local server that speaks /v1/chat/completions (llama.cpp, vLLM, Ollama,
+// LM Studio). JUDGE_BASE_URL points at the endpoint; OPENAI_API_KEY is optional
+// (local servers usually ignore it).
+const JUDGE_BASE_URL = (process.env.JUDGE_BASE_URL ?? "https://api.openai.com/v1").replace(/\/+$/, "");
+const JUDGE_MAX_TOKENS = Number(process.env.JUDGE_MAX_TOKENS ?? 8000);
 
 // Reasoning effort and timeout are configurable; defaults keep the judge fast
 // and bounded.
@@ -222,6 +228,7 @@ function buildVerifyPrompt(input: JudgeInput, candidates: Candidate[]): string {
  * set). Both return text; extractJson handles either one's output. */
 function ask(label: string, prompt: string): Promise<string> {
   if (BACKEND === "anthropic") return askAnthropic(label, prompt);
+  if (BACKEND === "openai") return askOpenAICompatible(label, prompt);
   return askCodex(label, prompt);
 }
 
@@ -254,6 +261,38 @@ async function askAnthropic(label: string, prompt: string): Promise<string> {
   // Join the text blocks; thinking blocks contribute nothing. The JSON the judge
   // asked for lives in the text, and extractJson strips any surrounding prose.
   return message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+}
+
+/** OpenAI-compatible backend (BYO key, or a local server). Plain /v1/chat/
+ * completions over fetch — works against hosted OpenAI and local engines
+ * (llama.cpp/vLLM/Ollama/LM Studio) alike, no SDK needed. Reasoning models that
+ * use a separate reasoning_content field leave content clean; the <think> strip
+ * covers servers that inline it instead. */
+async function askOpenAICompatible(label: string, prompt: string): Promise<string> {
+  process.stderr.write(`\nCalling OpenAI-compatible API (model=${JUDGE_MODEL}, base=${JUDGE_BASE_URL}, ${label})...\n`);
+  const apiKey = process.env.OPENAI_API_KEY ?? process.env.JUDGE_API_KEY ?? "";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${JUDGE_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) },
+      body: JSON.stringify({
+        model: JUDGE_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: JUDGE_MAX_TOKENS,
+        temperature: 0,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`OpenAI-compatible API error ${res.status}: ${await res.text()}`);
+    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const content = data.choices?.[0]?.message?.content ?? "";
+    return content.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** "1.1.1 Non-text Content (A)" -> "1.1.1" */

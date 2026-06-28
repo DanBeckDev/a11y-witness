@@ -17,7 +17,7 @@ Early but working end to end. The **M0 core bet is demonstrated**: a real screen
 Capture is operating-system-bound, so it is split from the rest:
 
 - **Capture worker** (Windows): drives **NVDA** through real browse-mode navigation and returns the announcement transcript over HTTP. See [`src/capture/nvda/`](./src/capture/nvda/) for the setup recipe.
-- **Control plane** (anywhere): the `witness` CLI asks a worker to capture a page, then judges the transcript and prints WCAG-cited findings. The judge backend is pluggable: by default it runs through your local **Codex** login (no metered API cost); set `JUDGE_BACKEND=anthropic` (with `ANTHROPIC_API_KEY`, and optionally `JUDGE_MODEL`) to use the Anthropic API instead — the path for CI and the planned GitHub Action, where a local Codex login isn't available.
+- **Control plane** (anywhere): the `witness` CLI asks a worker to capture a page, then judges the transcript and prints WCAG-cited findings. The judge backend is pluggable (the `ask()` seam in `src/spike/judge.ts`): by default it runs through your local **Codex** login (no metered API cost). Set `JUDGE_BACKEND=anthropic` (with `ANTHROPIC_API_KEY`, optional `JUDGE_MODEL`) for the Anthropic API, or `JUDGE_BACKEND=openai` (with `JUDGE_BASE_URL`, optional `JUDGE_API_KEY`/`JUDGE_MODEL`) for any **OpenAI-compatible endpoint** — hosted OpenAI *or* a local engine (llama.cpp/vLLM/Ollama/LM Studio). The `openai` backend is the path for CI and the GitHub Action, where a local Codex login isn't available, and it makes a **self-hosted, zero-API-cost judge** possible — a local Qwen3.6-27B (Q4) scored 88% recall with clean precision on the W3C subset (see PLAN.md).
 
 ## Quickstart
 
