@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WCAG_22_AA } from "../wcag/criteria.js";
 import { ruleFindings } from "./rules.js";
+import { applyGate } from "./verify-gate.js";
 
 // Model backend (the judge needs an LLM). The DEFAULT is the local Codex CLI,
 // which uses your codex login — no metered API cost. External consumers (CI, the
@@ -407,7 +408,10 @@ function mergeByConsensus(runs: Judgment[]): Judgment {
 
 export async function judge(input: JudgeInput): Promise<Judgment> {
   const verdict = await runModelJudge(input);
-  return withRuleFindings(verdict, input);
+  // Discriminative gate (opt-in): drop the model's unconfirmed semantic findings
+  // and its absence findings (the rules re-supply those). No-op unless enabled.
+  const gated: Judgment = { ...verdict, findings: await applyGate(verdict.findings) };
+  return withRuleFindings(gated, input);
 }
 
 /** The model-based verdict: one two-stage pass, or a consensus of several. */
