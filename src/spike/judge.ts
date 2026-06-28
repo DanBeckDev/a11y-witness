@@ -3,6 +3,7 @@ import { writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WCAG_22_AA } from "../wcag/criteria.js";
+import { ruleFindings } from "./rules.js";
 
 // Model backend (the judge needs an LLM). The DEFAULT is the local Codex CLI,
 // which uses your codex login — no metered API cost. External consumers (CI, the
@@ -405,11 +406,30 @@ function mergeByConsensus(runs: Judgment[]): Judgment {
 }
 
 export async function judge(input: JudgeInput): Promise<Judgment> {
+  const verdict = await runModelJudge(input);
+  return withRuleFindings(verdict, input);
+}
+
+/** The model-based verdict: one two-stage pass, or a consensus of several. */
+async function runModelJudge(input: JudgeInput): Promise<Judgment> {
   if (CONSENSUS <= 1) return judgeOnce(input);
   process.stderr.write(`Consensus mode: ${CONSENSUS} runs, keeping findings in >= ${Math.ceil(CONSENSUS / 2)}.\n`);
   const runs: Judgment[] = [];
   for (let i = 0; i < CONSENSUS; i++) runs.push(await judgeOnce(input));
   return mergeByConsensus(runs);
+}
+
+/** Merge the deterministic absence-rule findings into the model verdict. The
+ * rules are high-precision (confidence 1) and cover the absence-of-name criteria
+ * (1.1.1, 4.1.2) the model judges poorly; add any whose criterion the model did
+ * not already flag, so the hybrid gains recall without the model's over-flagging.
+ * The rules produce nothing on conformant pages, so this cannot add false
+ * positives. */
+function withRuleFindings(verdict: Judgment, input: JudgeInput): Judgment {
+  const seen = new Set(verdict.findings.map((f) => criterionOf(f.wcag)));
+  const extra = ruleFindings(input).filter((f) => !seen.has(criterionOf(f.wcag)));
+  if (extra.length) process.stderr.write(`Rules added ${extra.length} absence finding(s) the model missed.\n`);
+  return { ...verdict, findings: [...verdict.findings, ...extra] };
 }
 
 /**
