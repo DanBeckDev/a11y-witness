@@ -17,6 +17,14 @@ const JUDGE_MODEL = process.env.JUDGE_MODEL ?? "claude-opus-4-8";
 // (local servers usually ignore it).
 const JUDGE_BASE_URL = (process.env.JUDGE_BASE_URL ?? "https://api.openai.com/v1").replace(/\/+$/, "");
 const JUDGE_MAX_TOKENS = Number(process.env.JUDGE_MAX_TOKENS ?? 8000);
+// Constrained decoding: when on (default), the openai backend sends a JSON
+// schema as response_format so the server grammar-constrains output to valid,
+// correctly-shaped JSON. This eliminates the malformed/empty-JSON failures small
+// local models otherwise produce. Object-root schemas only: local servers
+// (Ollama) reliably constrain an object schema but return empty for an array
+// root, so recall returns {issues:[...]} rather than a bare array. Set
+// JUDGE_STRUCTURED=off if a server rejects response_format.
+const STRUCTURED = (process.env.JUDGE_STRUCTURED ?? "on").toLowerCase() !== "off";
 
 // Reasoning effort and timeout are configurable; defaults keep the judge fast
 // and bounded.
@@ -94,8 +102,8 @@ The transcript is read line by line, so a single long heading, link, or sentence
 
 For each problem, quote the exact transcript line(s) that evidence it.
 
-Respond with ONLY a JSON array, nothing else:
-[{"issue": string, "evidence": string}]`;
+Respond with ONLY a JSON object, nothing else:
+{"issues": [{"issue": string, "evidence": string}]}`;
 
 // Stage 2 — GROUND + VERIFY. Assign the precise criterion, drop the unsupported,
 // judge the task SEPARATELY so it cannot delete a finding.
@@ -122,6 +130,47 @@ SEPARATELY, judge whether a screen-reader user could complete the stated task fr
 
 Respond with ONLY a JSON object of this shape, and nothing else:
 {"taskCompletable": boolean, "summary": string, "findings": [{"issue": string, "wcag": string, "severity": "blocker"|"serious"|"moderate"|"minor", "evidence": string, "confidence": number}], "confidence": number}`;
+
+// JSON schemas for constrained decoding (sent as response_format by the openai
+// backend when STRUCTURED is on). Object-root only — see the STRUCTURED note.
+const RECALL_SCHEMA = {
+  type: "object",
+  properties: {
+    issues: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { issue: { type: "string" }, evidence: { type: "string" } },
+        required: ["issue", "evidence"],
+      },
+    },
+  },
+  required: ["issues"],
+};
+
+const VERIFY_SCHEMA = {
+  type: "object",
+  properties: {
+    taskCompletable: { type: "boolean" },
+    summary: { type: "string" },
+    findings: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          issue: { type: "string" },
+          wcag: { type: "string" },
+          severity: { type: "string", enum: ["blocker", "serious", "moderate", "minor"] },
+          evidence: { type: "string" },
+          confidence: { type: "number" },
+        },
+        required: ["issue", "wcag", "severity", "evidence", "confidence"],
+      },
+    },
+    confidence: { type: "number" },
+  },
+  required: ["taskCompletable", "summary", "findings", "confidence"],
+};
 
 function transcriptBlock(input: JudgeInput): string {
   return [
@@ -226,9 +275,9 @@ function buildVerifyPrompt(input: JudgeInput, candidates: Candidate[]): string {
 /** Run one model pass against a prompt and return its raw text. Dispatches to
  * the selected backend (Codex by default; Anthropic API when JUDGE_BACKEND is
  * set). Both return text; extractJson handles either one's output. */
-function ask(label: string, prompt: string): Promise<string> {
+function ask(label: string, prompt: string, schema?: unknown): Promise<string> {
   if (BACKEND === "anthropic") return askAnthropic(label, prompt);
-  if (BACKEND === "openai") return askOpenAICompatible(label, prompt);
+  if (BACKEND === "openai") return askOpenAICompatible(label, prompt, schema);
   return askCodex(label, prompt);
 }
 
@@ -268,7 +317,7 @@ async function askAnthropic(label: string, prompt: string): Promise<string> {
  * (llama.cpp/vLLM/Ollama/LM Studio) alike, no SDK needed. Reasoning models that
  * use a separate reasoning_content field leave content clean; the <think> strip
  * covers servers that inline it instead. */
-async function askOpenAICompatible(label: string, prompt: string): Promise<string> {
+async function askOpenAICompatible(label: string, prompt: string, schema?: unknown): Promise<string> {
   process.stderr.write(`\nCalling OpenAI-compatible API (model=${JUDGE_MODEL}, base=${JUDGE_BASE_URL}, ${label})...\n`);
   const apiKey = process.env.OPENAI_API_KEY ?? process.env.JUDGE_API_KEY ?? "";
   const controller = new AbortController();
@@ -283,6 +332,9 @@ async function askOpenAICompatible(label: string, prompt: string): Promise<strin
         max_tokens: JUDGE_MAX_TOKENS,
         temperature: 0,
         stream: false,
+        ...(STRUCTURED && schema
+          ? { response_format: { type: "json_schema", json_schema: { name: label, strict: true, schema } } }
+          : {}),
       }),
       signal: controller.signal,
     });
@@ -305,14 +357,17 @@ function criterionOf(wcag: string): string {
 async function judgeOnce(input: JudgeInput): Promise<Judgment> {
   let candidates: Candidate[] = [];
   try {
-    const raw = await ask("recall", buildRecallPrompt(input));
-    const parsed = JSON.parse(extractJson(raw));
-    if (Array.isArray(parsed)) candidates = parsed as Candidate[];
+    const raw = await ask("recall", buildRecallPrompt(input), RECALL_SCHEMA);
+    const parsed = JSON.parse(extractJson(raw)) as unknown;
+    // Constrained decoding wraps the list as {issues:[...]}; older/unconstrained
+    // backends may still return a bare array. Accept either.
+    const arr = Array.isArray(parsed) ? parsed : (parsed as { issues?: unknown })?.issues;
+    if (Array.isArray(arr)) candidates = arr as Candidate[];
   } catch {
     // If recall fails to parse, stage 2 still audits the transcript directly.
   }
   process.stderr.write(`Recall pass surfaced ${candidates.length} candidate issues.\n`);
-  const verdict = await ask("verify", buildVerifyPrompt(input, candidates));
+  const verdict = await ask("verify", buildVerifyPrompt(input, candidates), VERIFY_SCHEMA);
   return JSON.parse(extractJson(verdict)) as Judgment;
 }
 
