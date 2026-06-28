@@ -1,0 +1,105 @@
+/**
+ * Deterministic absence-criteria rules.
+ *
+ * Some WCAG failures are not judgment calls — they are the literal ABSENCE of an
+ * accessible name. A screen reader announces these as a role with no name (the
+ * U+FFFC object-replacement char, "￼"), e.g. "edit, ￼" or "graphic, ￼". An LLM
+ * or NLI verifier cannot reliably infer a violation from "nothing was
+ * announced", but a rule can: if the name is empty, it is unlabelled, full stop.
+ *
+ * These rules run alongside the model-based verifier (which keeps the SEMANTIC
+ * criteria: vague links, non-descriptive headings, etc.). They are exact: they
+ * only inspect image announcements and role-only controls, never links or
+ * headings, so they cannot produce the over-flagging the generative judge did.
+ */
+import type { Finding } from "./judge.js";
+
+/** The capture fields the rules inspect (a subset of JudgeInput; a full
+ * JudgeInput is assignable to this). */
+export interface RuleInput {
+  transcript: string[];
+  structure?: { formFields?: string[] };
+  interaction?: { controls?: string[] };
+}
+
+const EMPTY_NAME = "￼"; // ￼ — screen reader announced an element with no text/name
+
+// Role and state tokens that are NOT part of an accessible name. Longest first
+// so multi-word roles ("edit text") are stripped before their substrings ("edit").
+const ROLE_TOKENS = [
+  "navigation landmark", "main landmark", "banner landmark", "radio button",
+  "edit text", "combo box", "list box", "menu button", "menu item",
+  "graphic", "image", "button", "checkbox", "heading", "region", "banner",
+  "navigation", "radio", "edit", "link", "list",
+].sort((a, b) => b.length - a.length);
+
+const STATE_RE =
+  /\b(not checked|checked|not pressed|pressed|collapsed|expanded|not selected|selected|read only|required|invalid entry|out of list|out of region|clickable|level \d+)\b/gi;
+
+// A spoken or written file name used as alt text: "IMG 4821", "photo dot jpg", "logo.png".
+const FILENAME_RE = /\b(img[\s_]?\d+|\S+\s+dot\s+(jpe?g|png|gif|svg|webp|bmp)|\S+\.(jpe?g|png|gif|svg|webp|bmp))\b/i;
+
+// NVDA spells out a missing alt: it announces "Unlabelled graphic".
+const UNLABELLED_RE = /\bunlabell?ed\b/i;
+
+/** Reduce an announcement to its accessible NAME by removing role/state tokens,
+ * the empty-name marker, and punctuation. An empty result means no name. */
+function accessibleName(announcement: string): string {
+  let s = announcement.split(EMPTY_NAME).join(" ").replace(STATE_RE, " ");
+  for (const role of ROLE_TOKENS) s = s.replace(new RegExp(`\\b${role}\\b`, "gi"), " ");
+  return s.replace(/[\s,]+/g, " ").trim();
+}
+
+/** True when an element is announced with a role but NO accessible name: it
+ * carries the empty-name marker (￼) and nothing remains after stripping role and
+ * state tokens. Requiring the marker avoids false positives from line-wrapping,
+ * where a labelled field's role and name land on separate transcript lines. */
+function hasEmptyName(announcement: string): boolean {
+  return announcement.includes(EMPTY_NAME) && accessibleName(announcement) === "";
+}
+
+const isImage = (line: string): boolean => /\b(graphic|image)\b/i.test(line);
+const isControl = (entry: string): boolean =>
+  /\b(button|edit|radio|checkbox|combo box|list box|menu button|link)\b/i.test(entry);
+
+/** Apply the deterministic absence rules to a capture. Findings carry
+ * confidence 1: an empty name is a fact, not a judgment. */
+export function ruleFindings(input: RuleInput): Finding[] {
+  const findings: Finding[] = [];
+  const seen = new Set<string>();
+  const add = (wcag: string, issue: string, evidence: string): void => {
+    const key = `${wcag}|${evidence}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    findings.push({ issue, wcag, severity: "serious", evidence, confidence: 1 });
+  };
+
+  // 1.1.1 — images with no text alternative: announced "unlabelled", an empty
+  // name, or a file name used as the alt text.
+  for (const line of input.transcript) {
+    if (!isImage(line)) continue;
+    if (UNLABELLED_RE.test(line)) {
+      add("1.1.1 Non-text Content", "Image announced as unlabelled (no text alternative)", line);
+    } else if (hasEmptyName(line)) {
+      add("1.1.1 Non-text Content", "Image announced with no text alternative", line);
+    } else if (FILENAME_RE.test(accessibleName(line))) {
+      add("1.1.1 Non-text Content", "Image alternative text is a file name, not a description", line);
+    }
+  }
+
+  // 4.1.2 — controls announced with a role but no accessible name. Scan the
+  // transcript as well as the structural passes: unlabelled controls often
+  // appear only in the read-through (e.g. "button, ￼"), not the form-field list.
+  const controlSources = [
+    ...input.transcript,
+    ...(input.structure?.formFields ?? []),
+    ...(input.interaction?.controls ?? []),
+  ];
+  for (const entry of controlSources) {
+    if (isControl(entry) && hasEmptyName(entry)) {
+      add("4.1.2 Name, Role, Value", "Control announced with a role but no accessible name", entry);
+    }
+  }
+
+  return findings;
+}
