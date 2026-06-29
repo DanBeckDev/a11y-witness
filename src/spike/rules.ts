@@ -11,6 +11,17 @@
  * criteria: vague links, non-descriptive headings, etc.). They are exact: they
  * only inspect image announcements and role-only controls, never links or
  * headings, so they cannot produce the over-flagging the generative judge did.
+ *
+ * A note on announcement strings (verified against the real NVDA captures in
+ * src/spike/fixtures/nvda-w3c-*.json, 2026-06-29): published guides document an
+ * unlabelled control as "edit, blank" and unnamed image-in-link as a filename or
+ * spelled-out URL. Those are JAWS/VoiceOver/version-specific — they do NOT match
+ * what our NVDA pipeline emits. Our NVDA announces an empty name as the U+FFFC
+ * marker (below) or the literal word "Unlabelled". In our captures the bare word
+ * "blank" is empty-LINE/spacing noise on its own line, never role-adjacent, so it
+ * is NOT an empty-name signal here and must not be keyed on (it would false-fire
+ * on spacing). Validate any new announcement-string rule against our own captures,
+ * not against a book's strings.
  */
 import type { Finding } from "./judge.js";
 

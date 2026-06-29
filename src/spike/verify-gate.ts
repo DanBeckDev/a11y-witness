@@ -39,6 +39,13 @@ const HYPOTHESES: Record<string, string[]> = {
   "1.3.1": [
     "This is a section title shown as plain text with no heading role.",
     "This table cell is announced without its column or row header.",
+    // A grouped-controls hypothesis (radios without fieldset/legend, the
+    // "question is lost" failure) was probe-tested (2026-06-29) and NOT added:
+    // ungrouped radios already entail the table-cell hypothesis above (~0.7), and
+    // every candidate phrasing also fired on CONFORMANT grouped controls
+    // ("…, grouping. Yes, radio button…", 0.43–0.68), regressing precision. Like
+    // 2.4.4 below, the residual semantic gap here is a fine-tune / threshold
+    // calibration problem, not a hypothesis-wording one.
   ],
   // 2.4.4 (Link Purpose) is a KNOWN WEAK SPOT for the zero-shot encoder. Validated
   // 3 hypothesis sets (2026-06-29): none separates vague from descriptive links —
