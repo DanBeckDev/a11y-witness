@@ -267,4 +267,122 @@ export const EVAL_CASES: EvalCase[] = [
     allow: ["1.1.1", "4.1.2", "3.3.2"],
     notes: "Synthetic; tests recall on labels/names and that in-context 'click here' is NOT flagged.",
   },
+  // --- Book-grounded cases: paired good/bad pages authored from published,
+  // expert-reviewed references (Web Accessibility Cookbook, Matuzović 2024;
+  // Practical Web Accessibility, Firth 2024). Pages in src/eval/pages/books/;
+  // see that README for the source recipe/chapter per topic. Each fixture is
+  // captured by the real NVDA worker into src/eval/fixtures/books/*.json. Until
+  // a fixture exists, the runner lists the case as "pending capture" and skips
+  // it (it does not affect metrics), so these can be authored before capture.
+  {
+    id: "book-links-good",
+    fixture: "src/eval/fixtures/books/links-good.json",
+    task: "Read the latest city news",
+    expect: [],
+    allow: [],
+    notes: "Cookbook ch3 / Firth ch17, correct: descriptive link text. Clean.",
+  },
+  {
+    id: "book-links-bad",
+    fixture: "src/eval/fixtures/books/links-bad.json",
+    task: "Read the latest city news",
+    // Link text announced detached from its sentence: "Read more...", bullet-list
+    // "Click here", and a bare "Go!" do not convey purpose (mirrors W3C BAD's
+    // documented 2.4.4 failures). 2.4.4 is a known semantic/fine-tune target.
+    expect: ["2.4.4"],
+    allow: ["2.4.4"],
+    notes: "Cookbook ch3 / Firth ch17 failure: ambiguous 'Click here'/'Read more'/'Go!' link text.",
+  },
+  {
+    id: "book-headings-good",
+    fixture: "src/eval/fixtures/books/headings-good.json",
+    task: "Find how to reset your password",
+    expect: [],
+    allow: [],
+    notes: "Firth ch15 / Cookbook ch2, correct: descriptive headings. Clean.",
+  },
+  {
+    id: "book-headings-bad",
+    fixture: "src/eval/fixtures/books/headings-bad.json",
+    task: "Find how to reset your password",
+    // Headings have proper roles/levels (so not 1.3.1) but are non-descriptive:
+    // "Welcome", "Stuff", a vague title, and a run-on title. Semantic 2.4.6.
+    expect: ["2.4.6"],
+    allow: ["2.4.6"],
+    notes: "Firth ch15 / Cookbook ch2 failure: vague / run-on / non-descriptive headings.",
+  },
+  {
+    id: "book-alt-quality-good",
+    fixture: "src/eval/fixtures/books/alt-quality-good.json",
+    task: "Review the quarterly results",
+    expect: [],
+    allow: [],
+    notes: "Firth ch5, correct: descriptive alt that conveys the image's information. Clean.",
+  },
+  {
+    id: "book-alt-quality-bad",
+    fixture: "src/eval/fixtures/books/alt-quality-bad.json",
+    task: "Review the quarterly results",
+    // Alt is PRESENT (so the absence rule won't fire) but unhelpful: a declaration
+    // ("A graph about stocks") and a generic placeholder ("image"). Semantic 1.1.1
+    // — exercises the gate, distinct from the absence case in tut-images-bad.
+    expect: ["1.1.1"],
+    allow: ["1.1.1"],
+    notes: "Firth ch5 failure: alt present but a declaration/generic placeholder, not a description.",
+  },
+  {
+    id: "book-custom-control-good",
+    fixture: "src/eval/fixtures/books/custom-control-good.json",
+    task: "Save your settings",
+    expect: [],
+    allow: [],
+    notes: "Cookbook ch4 / Firth ch4-6, correct: native button + icon button with aria-label. Clean.",
+  },
+  {
+    id: "book-custom-control-bad",
+    fixture: "src/eval/fixtures/books/custom-control-bad.json",
+    task: "Save your settings",
+    // An icon-only button with no accessible name (rule-catchable 4.1.2) plus a
+    // <div> styled as a button with no role (announced as plain text, not operable).
+    expect: ["4.1.2"],
+    allow: ["4.1.2", "1.3.1"],
+    notes: "Cookbook ch4 / Firth ch4-6 failure: unnamed icon button + roleless div-as-button.",
+  },
+  {
+    id: "book-filter-status-good",
+    fixture: "src/eval/fixtures/books/filter-status-good.json",
+    task: "Filter the products to show only bags",
+    expect: [],
+    allow: [],
+    notes: "Cookbook ch10, correct: result count in a role=status live region, announced on filter. Lives in interaction. Clean.",
+  },
+  {
+    id: "book-filter-status-bad",
+    fixture: "src/eval/fixtures/books/filter-status-bad.json",
+    task: "Filter the products to show only bags",
+    // Filtering updates the visible result count, but it is not in any live region
+    // and focus does not move, so the change is never announced (4.1.3). Only
+    // catchable by operating the filter — exercises the interaction probe.
+    expect: ["4.1.3"],
+    allow: ["4.1.3"],
+    notes: "Cookbook ch10 failure: filter result change not announced (no live region). Lives in interaction.",
+  },
+  {
+    id: "book-layout-table-good",
+    fixture: "src/eval/fixtures/books/layout-table-good.json",
+    task: "Read about the company",
+    expect: [],
+    allow: [],
+    notes: "Firth ch25, correct: layout table marked role=presentation, no table semantics announced. Clean.",
+  },
+  {
+    id: "book-layout-table-bad",
+    fixture: "src/eval/fixtures/books/layout-table-bad.json",
+    task: "Read about the company",
+    // A <table> used purely for two-column layout, with no role=presentation, so a
+    // screen reader announces table/row/column relationships that do not exist.
+    expect: ["1.3.1"],
+    allow: ["1.3.1"],
+    notes: "Firth ch25 failure: layout table without role=presentation; spurious table semantics announced.",
+  },
 ];

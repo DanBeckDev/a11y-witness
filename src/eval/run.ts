@@ -12,7 +12,7 @@
  *
  * Fixtures are frozen transcripts, so this evaluates the JUDGE, not capture.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { judge } from "../spike/judge.js";
 import { EVAL_CASES, type EvalCase } from "./cases.js";
 import { evaluateFitness, thresholdsFromEnv } from "./fitness.js";
@@ -99,10 +99,22 @@ function printCaseScore(c: EvalCase, last: RunScore, recalls: number[], isFailur
 async function main(): Promise<void> {
   const filter = process.argv[2];
   // Substring match so e.g. `npm run eval -- tut-` runs all tutorial cases.
-  const cases = filter ? EVAL_CASES.filter((c) => c.id.includes(filter)) : EVAL_CASES;
-  if (!cases.length) {
+  const matched = filter ? EVAL_CASES.filter((c) => c.id.includes(filter)) : EVAL_CASES;
+  if (!matched.length) {
     console.error(`No eval case matches "${filter}". Known: ${EVAL_CASES.map((c) => c.id).join(", ")}`);
     process.exit(1);
+  }
+
+  // A case whose fixture has not been captured yet (authored page awaiting the
+  // NVDA worker) is skipped, not an error: it does not exist to score.
+  const cases = matched.filter((c) => existsSync(c.fixture));
+  const pending = matched.filter((c) => !existsSync(c.fixture));
+  if (pending.length) {
+    console.log(`Pending capture (skipped — author'd, awaiting NVDA worker): ${pending.map((c) => c.id).join(", ")}\n`);
+  }
+  if (!cases.length) {
+    console.log("No captured fixtures to score yet.");
+    return;
   }
 
   console.log(`a11y-witness judge eval  (${RUNS} run(s) per case)\n`);
