@@ -354,7 +354,7 @@ export const EVAL_CASES: EvalCase[] = [
     task: "Filter the products to show only bags",
     expect: [],
     allow: [],
-    notes: "Cookbook ch10, correct: result count in a role=status live region, announced on filter. Lives in interaction. Clean.",
+    notes: "Cookbook ch10, correct: result count in a role=status live region, announced on filter. Lives in interaction. Clean. PENDING richer capture (2026-06-29): probeForms does not actuate plain filter <button>s, so good/bad capture identically; needs a probe that clicks the filter and snapshots the live-region delta.",
   },
   {
     id: "book-filter-status-bad",
@@ -365,7 +365,7 @@ export const EVAL_CASES: EvalCase[] = [
     // catchable by operating the filter — exercises the interaction probe.
     expect: ["4.1.3"],
     allow: ["4.1.3"],
-    notes: "Cookbook ch10 failure: filter result change not announced (no live region). Lives in interaction.",
+    notes: "Cookbook ch10 failure: filter result change not announced (no live region). Lives in interaction. PENDING richer capture (2026-06-29): probeForms does not actuate plain filter <button>s, so the (non-)announcement is not captured and good/bad look identical; needs a probe that clicks the filter and snapshots the live-region delta.",
   },
   {
     id: "book-layout-table-good",
@@ -373,7 +373,7 @@ export const EVAL_CASES: EvalCase[] = [
     task: "Read about the company",
     expect: [],
     allow: [],
-    notes: "Firth ch25, correct: layout table marked role=presentation, no table semantics announced. Clean.",
+    notes: "Firth ch25, correct: layout table marked role=presentation, no table semantics announced. Clean. PENDING richer capture (2026-06-29): NVDA browse-mode say-all announces NO table semantics for the layout table either way, so good/bad capture identically; needs table-navigation capture to surface the difference.",
   },
   {
     id: "book-layout-table-bad",
@@ -383,6 +383,6 @@ export const EVAL_CASES: EvalCase[] = [
     // screen reader announces table/row/column relationships that do not exist.
     expect: ["1.3.1"],
     allow: ["1.3.1"],
-    notes: "Firth ch25 failure: layout table without role=presentation; spurious table semantics announced.",
+    notes: "Firth ch25 failure: layout table without role=presentation; spurious table semantics announced. PENDING richer capture (2026-06-29): NVDA browse-mode say-all did NOT announce table semantics here, so the failure is not surfaced by a passive read and good/bad capture identically; needs table-navigation capture.",
   },
 ];

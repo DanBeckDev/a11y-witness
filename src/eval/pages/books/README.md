@@ -36,14 +36,25 @@ baseline (`../tutorials/`). Same principles as that baseline:
 
 ## Status
 
-The HTML pages are authored. Their capture transcripts
-(`../../fixtures/books/*.json`) are produced by the real NVDA worker; until a
-page is captured, its case is listed by the eval runner as **pending capture**
-and skipped (it does not affect metrics). Capturing a page activates its case
-with no further code change.
+Captured via the real NVDA worker on 2026-06-29 and tuned against the actual
+transcripts. Outcome:
 
-The `expect` / `allow` sets in `../../cases.ts` are provisional: they are based
-on the documented failure for each topic, but the exact criteria should be
-re-checked against the first real NVDA transcript (announcement strings are
-screen-reader/version-specific — see the note in `src/spike/rules.ts`). Tune
-`expect`/`allow` to what NVDA actually announces when the fixture is captured.
+- **Active (4 pairs):** `links` (2.4.4), `headings` (2.4.6), `alt-quality`
+  (1.1.1), `custom-control` (4.1.2). Each captured cleanly with the bad page
+  surfacing its failure and the good page clean. Tuning surfaced one real rule
+  gap: NVDA announces an unnamed icon button as the bare token `"button"` (no
+  `￼`) in the control sweep, which `rules.ts` now catches (sweep entries are not
+  line-wrapped, so a bare role with no name is unambiguously unnamed).
+- **Pending richer capture (2 pairs):** `filter-status` (4.1.3) and
+  `layout-table` (1.3.1). Both captured good and bad **identically**, so they
+  cannot be scored yet:
+  - `filter-status` — `probeForms` does not actuate plain filter `<button>`s, so
+    the live-region (non-)announcement is never captured. Needs a probe that
+    clicks the filter and snapshots the `spokenPhraseLog` delta.
+  - `layout-table` — NVDA browse-mode say-all announces no table semantics for
+    the layout table either way; the failure is only visible under
+    table-navigation, which our passive read does not perform.
+
+  Their fixtures are intentionally absent, so the runner skips them as pending;
+  re-capturing once the probe supports them will activate them with no code
+  change.
