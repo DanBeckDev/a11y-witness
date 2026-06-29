@@ -370,7 +370,12 @@ async function judgeOnce(input: JudgeInput): Promise<Judgment> {
   }
   process.stderr.write(`Recall pass surfaced ${candidates.length} candidate issues.\n`);
   const verdict = await ask("verify", buildVerifyPrompt(input, candidates), VERIFY_SCHEMA);
-  return JSON.parse(extractJson(verdict)) as Judgment;
+  const judged = JSON.parse(extractJson(verdict)) as Judgment;
+  // Drop findings with no parseable WCAG criterion. Constrained decoding lets the
+  // model emit a finding with an empty/garbage `wcag`, which otherwise surfaces as
+  // a phantom false positive; a finding without a criterion is not actionable.
+  judged.findings = (judged.findings ?? []).filter((f) => /\d+\.\d+\.\d+/.test(f.wcag ?? ""));
+  return judged;
 }
 
 /**
