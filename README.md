@@ -26,6 +26,8 @@ The judge is a hybrid, because no single model handles every WCAG criterion well
 - **Deterministic rules** (always on, [`src/spike/rules.ts`](./src/spike/rules.ts)) own the *absence-of-name* criteria — an image announced with no alternative text (1.1.1), or a control announced with a role but no accessible name (4.1.2). These are facts, not judgement calls, so a rule catches them exactly and for free, with no false positives.
 - **A discriminative gate** (opt-in, [`src/spike/verify-gate.ts`](./src/spike/verify-gate.ts)) re-judges the *semantic* findings (vague link text 2.4.4, non-descriptive headings 2.4.6, and so on) with a small encoder (DeBERTa-v3 NLI, ONNX) run in-process via [transformers.js](https://github.com/huggingface/transformers.js). A discriminative model *scores* a candidate rather than *generating* it, so it cannot invent a finding — which removes the over-flagging small generative models produce on clean pages. It keeps a semantic finding only when the encoder confirms the violation.
 
+Findings are reported along the screen-reader experience waterfall — **Perceive → Navigate → Interact** (Firth, _Practical Web Accessibility_) — so the most fundamental barriers (content that can't be perceived) appear before downstream ones (controls that can't be operated).
+
 The gate is opt-in and self-contained (no API key, no GPU, a few milliseconds per check on CPU). Enable it with:
 
 ```bash

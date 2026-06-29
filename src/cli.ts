@@ -11,6 +11,7 @@
  */
 import { judge, type Judgment } from "./spike/judge.js";
 import { scanWithAxe, type AxeFinding } from "./scan/axe.js";
+import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "./spike/layers.js";
 
 interface Args {
   url: string;
@@ -131,7 +132,8 @@ async function main(): Promise<void> {
   });
 
   if (json) {
-    console.log(JSON.stringify({ url, task, screenReader: cap.screenReader, transcript: cap.transcript, ruleBased: axeFindings, verdict }, null, 2));
+    const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
+    console.log(JSON.stringify({ url, task, screenReader: cap.screenReader, transcript: cap.transcript, ruleBased: axeFindings, verdict: layered }, null, 2));
   } else {
     printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: axeFindings });
   }
@@ -186,10 +188,18 @@ function printReport({ url, task, screenReader, announcements, verdict, axe }: R
     verdict.summary,
     `${verdict.findings.length} finding(s):`
   );
-  for (const f of verdict.findings) {
-    lines.push(`  [${f.severity.toUpperCase()}] ${f.wcag}  (confidence ${f.confidence})`);
-    lines.push(`     ${f.issue}`);
-    lines.push(`     evidence: ${f.evidence}`);
+  // Group findings by the Perceive -> Navigate -> Interact waterfall (most
+  // fundamental first), with a heading per layer.
+  let currentLayer: ExperienceLayer | "" = "";
+  for (const f of orderByLayer(verdict.findings)) {
+    const layer = layerOf(f.wcag);
+    if (layer !== currentLayer) {
+      currentLayer = layer;
+      lines.push(`  ${LAYER_LABEL[layer]}`);
+    }
+    lines.push(`    [${f.severity.toUpperCase()}] ${f.wcag}  (confidence ${f.confidence})`);
+    lines.push(`       ${f.issue}`);
+    lines.push(`       evidence: ${f.evidence}`);
   }
   lines.push(
     "",
