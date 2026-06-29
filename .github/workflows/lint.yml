@@ -24,3 +24,6 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # Deterministic absence-rules fitness function: no model needed, so it runs
+      # on every push and fails if the rules regress (e.g. a clean-page false positive).
+      - run: npm run rules-check

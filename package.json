@@ -12,6 +12,7 @@
     "eval": "tsx src/eval/run.ts",
     "rules-check": "tsx src/eval/rules-check.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
+    "eval:gate": "EVAL_GATE=1 tsx src/eval/run.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "scan": "tsx src/scan/run-axe.ts"

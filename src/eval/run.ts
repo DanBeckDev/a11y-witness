@@ -15,6 +15,7 @@
 import { readFileSync } from "node:fs";
 import { judge } from "../spike/judge.js";
 import { EVAL_CASES, type EvalCase } from "./cases.js";
+import { evaluateFitness, thresholdsFromEnv } from "./fitness.js";
 
 const RUNS = Number(process.env.EVAL_RUNS || 1);
 
@@ -116,11 +117,20 @@ async function main(): Promise<void> {
     if (!report.isFailureCase) conformantFalsePositives += report.falsePositives;
   }
 
-  const recallStr = failureRecall.length ? pct(mean(failureRecall)) : "n/a";
+  const recall = failureRecall.length ? mean(failureRecall) : 1;
   console.log(
-    `AGGREGATE  recall ${recallStr} (over ${failureRecall.length} failure-case run(s))  |  ` +
+    `AGGREGATE  recall ${pct(recall)} (over ${failureRecall.length} failure-case run(s))  |  ` +
       `false positives ${totalFalsePositives} total, ${conformantFalsePositives} on conformant pages`
   );
+
+  // Fitness-function gate (opt-in via EVAL_GATE): fail the run if judge quality
+  // regresses below the thresholds, so it can be used as a regression gate.
+  if (process.env.EVAL_GATE) {
+    const thresholds = thresholdsFromEnv();
+    const fitness = evaluateFitness({ recall, conformantFP: conformantFalsePositives }, thresholds);
+    console.log(fitness.pass ? "\nFITNESS: PASS" : `\nFITNESS: FAIL — ${fitness.reasons.join("; ")}`);
+    if (!fitness.pass) process.exitCode = 1;
+  }
 }
 
 main().catch((e) => {
