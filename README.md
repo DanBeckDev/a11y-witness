@@ -19,6 +19,23 @@ Capture is operating-system-bound, so it is split from the rest:
 - **Capture worker** (Windows): drives **NVDA** through real browse-mode navigation and returns the announcement transcript over HTTP. See [`src/capture/nvda/`](./src/capture/nvda/) for the setup recipe.
 - **Control plane** (anywhere): the `witness` CLI asks a worker to capture a page, then judges the transcript and prints WCAG-cited findings. The judge backend is pluggable (the `ask()` seam in `src/spike/judge.ts`): by default it runs through your local **Codex** login (no metered API cost). Set `JUDGE_BACKEND=anthropic` (with `ANTHROPIC_API_KEY`, optional `JUDGE_MODEL`) for the Anthropic API, or `JUDGE_BACKEND=openai` (with `JUDGE_BASE_URL`, optional `JUDGE_API_KEY`/`JUDGE_MODEL`) for any **OpenAI-compatible endpoint** — hosted OpenAI *or* a local engine (llama.cpp/vLLM/Ollama/LM Studio). The `openai` backend is the path for CI and the GitHub Action, where a local Codex login isn't available, and it makes a **self-hosted, zero-API-cost judge** possible — a local Qwen3.6-27B (Q4) scored 88% recall with clean precision on the W3C subset (see PLAN.md).
 
+### Hybrid verification: model + rules + discriminative gate
+
+The judge is a hybrid, because no single model handles every WCAG criterion well. A generative model drafts findings from the transcript, and two layers refine them:
+
+- **Deterministic rules** (always on, [`src/spike/rules.ts`](./src/spike/rules.ts)) own the *absence-of-name* criteria — an image announced with no alternative text (1.1.1), or a control announced with a role but no accessible name (4.1.2). These are facts, not judgement calls, so a rule catches them exactly and for free, with no false positives.
+- **A discriminative gate** (opt-in, [`src/spike/verify-gate.ts`](./src/spike/verify-gate.ts)) re-judges the *semantic* findings (vague link text 2.4.4, non-descriptive headings 2.4.6, and so on) with a small encoder (DeBERTa-v3 NLI, ONNX) run in-process via [transformers.js](https://github.com/huggingface/transformers.js). A discriminative model *scores* a candidate rather than *generating* it, so it cannot invent a finding — which removes the over-flagging small generative models produce on clean pages. It keeps a semantic finding only when the encoder confirms the violation.
+
+The gate is opt-in and self-contained (no API key, no GPU, a few milliseconds per check on CPU). Enable it with:
+
+```bash
+npm install @huggingface/transformers
+JUDGE_GATE=on GATE_MODEL_PATH=/path/to/onnx-model-dir \
+  npm run witness -- https://example.com
+```
+
+Optional: `GATE_DTYPE` (default `fp32`) and `GATE_THRESHOLD` (default `0.4`). The model directory uses the standard transformers.js layout (`onnx/model.onnx` plus the tokenizer and `config.json`).
+
 ## Quickstart
 
 Prerequisites: Node 20+, and a judge backend — either Codex installed and logged in (`codex login`, the default, no metered cost) or `JUDGE_BACKEND=anthropic` with `ANTHROPIC_API_KEY` set. A reachable NVDA capture worker (see `src/capture/nvda/README.md` to stand one up).
