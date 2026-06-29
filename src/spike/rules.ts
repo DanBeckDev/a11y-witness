@@ -73,6 +73,25 @@ const isImage = (line: string): boolean => /\b(graphic|image)\b/i.test(line);
 const isControl = (entry: string): boolean =>
   /\b(button|edit|radio|checkbox|combo box|list box|menu button|link)\b/i.test(entry);
 
+type AddFinding = (wcag: string, issue: string, evidence: string) => void;
+
+/**
+ * Flag controls announced with a role but no accessible name. In the transcript
+ * (`requireMarker = true`) require the ￼ marker, because a labelled field's role
+ * and name can wrap onto separate read-through lines, so a bare role token alone
+ * is ambiguous. In the structural sweep (`requireMarker = false`) each entry is
+ * ONE control's full announcement, never line-wrapped, so an empty name alone is
+ * unambiguous — NVDA announces an unnamed button as just "button" (verified
+ * against a real capture, 2026-06-29).
+ */
+function addUnnamedControls(entries: string[], requireMarker: boolean, add: AddFinding): void {
+  for (const entry of entries) {
+    if (!isControl(entry)) continue;
+    const unnamed = requireMarker ? hasEmptyName(entry) : accessibleName(entry) === "";
+    if (unnamed) add("4.1.2 Name, Role, Value", "Control announced with a role but no accessible name", entry);
+  }
+}
+
 /** Apply the deterministic absence rules to a capture. Findings carry
  * confidence 1: an empty name is a fact, not a judgment. */
 export function ruleFindings(input: RuleInput): Finding[] {
@@ -98,19 +117,11 @@ export function ruleFindings(input: RuleInput): Finding[] {
     }
   }
 
-  // 4.1.2 — controls announced with a role but no accessible name. Scan the
-  // transcript as well as the structural passes: unlabelled controls often
-  // appear only in the read-through (e.g. "button, ￼"), not the form-field list.
-  const controlSources = [
-    ...input.transcript,
-    ...(input.structure?.formFields ?? []),
-    ...(input.interaction?.controls ?? []),
-  ];
-  for (const entry of controlSources) {
-    if (isControl(entry) && hasEmptyName(entry)) {
-      add("4.1.2 Name, Role, Value", "Control announced with a role but no accessible name", entry);
-    }
-  }
+  // 4.1.2 — controls announced with a role but no accessible name. Transcript
+  // path requires the ￼ marker; the structural-sweep path does not (see
+  // addUnnamedControls).
+  addUnnamedControls(input.transcript, true, add);
+  addUnnamedControls([...(input.structure?.formFields ?? []), ...(input.interaction?.controls ?? [])], false, add);
 
   return findings;
 }

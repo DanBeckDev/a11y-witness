@@ -35,6 +35,20 @@ test("does not flag a bare role with no ￼ marker (line-wrapping guard)", () =>
   assert.equal(ruleFindings({ transcript: ["edit"] }).length, 0);
 });
 
+test("flags a bare role token in the sweep — no ￼ needed (real NVDA capture)", () => {
+  // In the structural sweep each entry is one control's full announcement, so a
+  // bare role with no name is unambiguously unnamed even without the ￼ marker.
+  // NVDA announced an unnamed icon button as just "button" (verified 2026-06-29).
+  assert.deepEqual(criteria(ruleFindings({ transcript: [], interaction: { controls: ["button"] } })), ["4.1.2"]);
+});
+
+test("does not flag a named control in the sweep", () => {
+  assert.equal(
+    ruleFindings({ transcript: [], interaction: { controls: ["Save changes, button", "Search, button"] } }).length,
+    0,
+  );
+});
+
 test("reads unlabelled fields from structure.formFields too", () => {
   assert.deepEqual(
     criteria(ruleFindings({ transcript: [], structure: { formFields: ["￼, radio button, not checked"] } })),
