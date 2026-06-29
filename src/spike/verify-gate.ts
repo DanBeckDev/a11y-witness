@@ -40,6 +40,13 @@ const HYPOTHESES: Record<string, string[]> = {
     "This is a section title shown as plain text with no heading role.",
     "This table cell is announced without its column or row header.",
   ],
+  // 2.4.4 (Link Purpose) is a KNOWN WEAK SPOT for the zero-shot encoder. Validated
+  // 3 hypothesis sets (2026-06-29): none separates vague from descriptive links —
+  // the model scores genuinely-vague text ("read more", "more", "this") at
+  // 0.04–0.27 and descriptive text at 0.16–0.59, fully overlapping, so any
+  // threshold either misses real violations or flags fine links. Link purpose is a
+  // subtle semantic judgment and is a PRIORITY for the planned fine-tune; prompt
+  // tuning does not fix it. The phrasing below is the best available off-the-shelf.
   "2.4.4": [
     "This link's text is vague and does not say where it leads.",
     "This link is announced as 'click here' or 'read more' with no destination.",
