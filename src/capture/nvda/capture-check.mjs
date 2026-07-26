@@ -29,6 +29,10 @@ const CHECKS = [
     signature: /City Library/i,
     assert: (r) => [
       ["read-through produced lines", r.transcript.length >= 3, r.transcript.length],
+      // Specifically the h1: this is the announcement the readiness gate used to eat.
+      ["read-through announces a heading level",
+        r.transcript.some((p) => /heading, level/i.test(p)),
+        r.transcript.filter((p) => /heading, level/i.test(p)).length],
       ["structural nav found headings", r.structure.headings.length >= 3, r.structure.headings.length],
       ["structural nav found landmarks", r.structure.landmarks.length >= 1, r.structure.landmarks.length],
     ],
@@ -139,6 +143,25 @@ async function captureConfirmed(check) {
 // So on a capture we have just CONFIRMED read the right page, documentReady must say so. If
 // this assertion ever fails, the indicator has stopped tracking reality — which is the
 // failure that hid a quarter of a run. See docs/nvda-correctness-audit.md, Root C.
+// Every fixture page here has headings and controls, so a read-through that carries no role
+// information at all is a regression regardless of which page it is.
+//
+// This exists because a count-based check could not see content rot. The readiness gate was
+// overwriting the read-through's first line with the document title, which deleted the h1's
+// "heading, level 1, ..." announcement from every page -- and nothing went red: the phrase
+// COUNT was unchanged, and the heading assertions below read the structural sweep, which uses
+// a different NVDA command and was unaffected. Across 90 captures, "heading, level N" phrases
+// fell from 105 to 15 and every check stayed green.
+const ROLE_WORD = /\b(button|link|graphic|edit|heading|table|row|column|form|list)\b/i;
+
+function fidelityAssertions(result) {
+  const spoken = result.transcript ?? [];
+  const withRole = spoken.filter((phrase) => ROLE_WORD.test(phrase));
+  return [
+    ["read-through carries role information", withRole.length > 0, `${withRole.length}/${spoken.length} phrases`],
+  ];
+}
+
 function diagnosticsAssertions(result) {
   const ready = (result.diagnostics ?? []).find((e) => e.event === "documentReady");
   return [
@@ -163,7 +186,8 @@ async function runCheck(check) {
   console.log(`  postSubmit:  ${JSON.stringify(result.interaction.postSubmitFields)}`);
   console.log(`  PASS  page identity confirmed (${check.signature})`);
   let failed = 0;
-  for (const [label, passed, actual] of [...diagnosticsAssertions(result), ...check.assert(result)]) {
+  const assertions = [...diagnosticsAssertions(result), ...fidelityAssertions(result), ...check.assert(result)];
+  for (const [label, passed, actual] of assertions) {
     console.log(`  ${passed ? "PASS" : "FAIL"}  ${label}  (got ${JSON.stringify(actual)})`);
     if (!passed) failed++;
   }

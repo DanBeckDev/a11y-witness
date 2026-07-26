@@ -243,3 +243,27 @@ Start-ScheduledTask -TaskName a11ysrv
 
 Do **not** `Stop-Process nvda*` to fix this. Killing NVDA outside Guidepup is what produces
 the leftover state in the first place — it is how this failure was reproduced.
+
+## `nvda.start failed: NVDA is not supported`
+
+You ran the capture in **session 0**. Guidepup cannot drive NVDA without an interactive
+desktop, and reports it as an unsupported platform rather than a missing session.
+
+`utmctl exec` and bare SSH both land in session 0. Neither can run a capture, however correct
+everything else is. Run it through a scheduled task with `LogonType Interactive` instead:
+
+```powershell
+$a = New-ScheduledTaskAction -Execute 'C:\Users\witness\capcheck.cmd'
+$p = New-ScheduledTaskPrincipal -UserId 'A11Y-WORKER\witness' -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName capcheck -Action $a -Principal $p
+Start-ScheduledTask -TaskName capcheck
+```
+
+Note the two failure modes read almost identically and are not the same thing:
+`"NVDA is not supported"` is the wrong session, `"NVDA not installed"` is a Guidepup/NVDA
+version mismatch (see above).
+
+Also: stopping the worker with `Stop-Process` leaves its NVDA **orphaned** — the process
+survives, still holding port 6837, because the clean shutdown path never runs. The next cold
+start recovers from that by itself, but if you are debugging by hand, expect to see NVDA
+running with no worker attached.
