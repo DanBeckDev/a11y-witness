@@ -61,6 +61,13 @@ function pair({
 // the page is wrong rather than the pattern.
 const UNNAMED_GRAPHIC = "(?:\\ufffc|to get missing image descriptions)";
 
+// NVDA speaks a filename rather than spelling it: harbour_07-final.jpg is announced
+// "harbour 07-final dot jpg". A pattern written from the filename therefore never matches
+// what was actually said. Underscores become spaces and "." becomes " dot ".
+function spokenForm(text) {
+  return text.replaceAll("_", "[ _]").replaceAll(".", "(?:\\.| dot )");
+}
+
 const cases = [
   pair({
     id: "image-missing-alt",
@@ -195,7 +202,7 @@ const cases = [
     task: "Enter the name of the person receiving the parcel.",
     source: "Practical Web Accessibility, chapter 6; Inclusive Design for Accessibility, chapter 13",
     mutation: "The text field has no programmatic label and relies on nearby visual text.",
-    badSignal: { type: "regex", pattern: "(?:edit text|edit)[, ]*(?:\\ufffc)?\\s*$", flags: "im" },
+    badSignal: { type: "unnamed-form-field" },
     good: page({
       title: "Parcel details",
       heading: "Parcel details",
@@ -217,6 +224,11 @@ const cases = [
     source: "Practical Web Accessibility, chapter 6",
     mutation: "The only visible cue is a placeholder that disappears when typing starts.",
     badSignal: { type: "regex", pattern: "(?:edit text|edit)[, ]*(?:\\ufffc)?\\s*$", flags: "im" },
+    // Deliberately NOT unnamed-form-field: a placeholder-only field is not unnamed, the
+    // placeholder becomes its name. The discriminator is ORDER -- NVDA announces the bad page
+    // as "<placeholder>, edit" (placeholder used as the name) and the good page as
+    // "Confirmation email, edit, <placeholder>" (real label, placeholder as description), so
+    // only the bad one ends on the role.
     good: page({
       title: "Booking confirmation",
       heading: "Booking confirmation",
@@ -300,7 +312,7 @@ const cases = [
     task: "Submit the request without entering a reference number and understand what needs fixing.",
     source: "Web Accessibility Cookbook, chapter 22; Practical Web Accessibility, chapter 6",
     mutation: "A validation message appears visually but is not associated with the invalid field or announced as a live update.",
-    badSignal: { type: "form-activation-silent", control: "Submit request" },
+    badSignal: { type: "validation-error-silent", control: "Submit request" },
     good: page({
       title: "Service request",
       heading: "Service request",
@@ -367,7 +379,11 @@ function imageVariant({ id, title, heading, description, file, goodAlt, badAlt, 
     task,
     source: "Practical Web Accessibility, chapter 22",
     mutation: "The informative image loses a useful alternative and is announced without its meaning.",
-    badSignal: { type: "regex", pattern: "graphic.*" + (badAlt === null ? UNNAMED_GRAPHIC : badAlt), flags: "i" },
+    badSignal: {
+      type: "regex",
+      pattern: "graphic.*" + (badAlt === null ? UNNAMED_GRAPHIC : spokenForm(badAlt)),
+      flags: "i",
+    },
     good: page({ title, heading, body: "<p>" + description + "</p>" + goodImage }),
     bad: page({ title, heading, body: "<p>" + description + "</p>" + badImage }),
   });
@@ -448,7 +464,7 @@ function unlabelledFieldVariant({ id, title, heading, label, name, task }) {
     task,
     source: "Practical Web Accessibility, chapter 6; Inclusive Design for Accessibility, chapter 13",
     mutation: "The field has nearby visible text but no programmatic label.",
-    badSignal: { type: "regex", pattern: "(?:edit text|edit)[, ]*(?:\\ufffc)?\\s*$", flags: "im" },
+    badSignal: { type: "unnamed-form-field" },
     good: page({
       title,
       heading,
@@ -497,7 +513,10 @@ function unnamedIconVariant({ id, title, heading, name, task }) {
     task,
     source: "Practical Web Accessibility, chapter 6",
     mutation: "An icon-only button has no accessible name.",
-    badSignal: { type: "regex", pattern: "(?:^|\\n)button[, ]*(?:$|\\n)", flags: "im" },
+    // NVDA announces an unnamed control as "button, <U+FFFC>", not as a bare "button" --
+    // the same object-replacement character the image rules key on. The old pattern looked
+    // for "button" alone on a line, which never occurs.
+    badSignal: { type: "regex", pattern: "button[, ]+" + UNNAMED_GRAPHIC, flags: "i" },
     good: page({
       title,
       heading,
@@ -545,7 +564,7 @@ function errorVariant({ id, title, heading, field, submit, message, task }) {
     task,
     source: "Web Accessibility Cookbook, chapter 22; Practical Web Accessibility, chapter 6",
     mutation: "A validation message appears visually but is not associated with the invalid field or announced.",
-    badSignal: { type: "form-activation-silent", control: submit },
+    badSignal: { type: "validation-error-silent", control: submit },
     good: page({ title, heading, body: goodBody, script: goodScript }),
     bad: page({ title, heading, body: badBody, script: badScript }),
     probeForms: true,
@@ -674,30 +693,96 @@ function hasMissingRole(capture, signal) {
     && !/button|link|checkbox|radio|menu|switch|heading/i.test(value));
 }
 
+const STATE_WORD = /\b(expanded|collapsed|open|closed|pressed|checked)\b/i;
+
+const stateWordOf = (text) => (text.match(STATE_WORD)?.[1] ?? "").toLowerCase();
+
+// The disclosure failure is "operating the control did not change the announced state".
+//
+// This used to test whether the announcement was EMPTY, which was right when the probe
+// listened for a spontaneous announcement. The probe now re-reads the control after
+// activating it, so `after` always carries a state word and the emptiness test could never
+// fire again -- it silently stopped discriminating and took three cases with it. A probe and
+// its signal are coupled; changing one means revisiting the other.
 function stateChangeIsSilent(capture, signal) {
   const changes = capture.interaction?.stateChanges || [];
-  return changes.some(({ control, after }) => control.toLowerCase().includes(signal.control.toLowerCase())
-    && !/expanded|collapsed|open|closed/i.test(after));
+  return changes.some(({ control, after }) => {
+    if (!control.toLowerCase().includes(signal.control.toLowerCase())) return false;
+    const before = stateWordOf(control);
+    const now = stateWordOf(after);
+    // No state word at all is still a failure: nothing was conveyed either way.
+    return now === "" || now === before;
+  });
 }
 
+// Two failures that both involve activating a control, but whose evidence lives in
+// different channels. Conflating them cost three cases: a single matcher tuned for one
+// reported the other's GOOD page as failing.
+//
+// (a) 4.1.3 Status Messages -- a filter updates results and says nothing. The status IS the
+// announcement, so it lands in `formChanges.after`: the good page carries "Showing 2 bags.",
+// the bad page carries "".
 function formActivationIsSilent(capture, signal) {
   const changes = capture.interaction?.formChanges || [];
   const target = changes.filter(({ control }) => control.toLowerCase().includes(signal.control.toLowerCase()));
   return target.length === 0 || target.every(({ after }) => after.trim() === "");
 }
 
+// An announced validation error leaves a durable trace on the field: NVDA reports
+// "invalid entry" for aria-invalid, plus the message via the field's description.
+const ANNOUNCED_ERROR = /invalid|\berror\b/i;
+
+// (b) 3.3.1 Error Identification -- submitting bad input announces no error. Here
+// `formChanges.after` is useless: it records the focus move after submit and reads
+// "Newsletter signup, document" on BOTH pages. The evidence is in `postSubmitFields`, the
+// deliberate re-read of durable field state -- persistent state over transient speech, which
+// is the lesson the NVDA correctness audit already drew (its Root 2).
+function validationErrorIsSilent(capture, signal) {
+  const submitted = (capture.interaction?.formChanges || [])
+    .some(({ control }) => control.toLowerCase().includes(signal.control.toLowerCase()));
+  if (!submitted) return true; // the submit never happened, so nothing could be announced
+  return !(capture.interaction?.postSubmitFields || []).some((field) => ANNOUNCED_ERROR.test(field));
+}
+
+// A data cell in a properly-marked-up table is announced with its header
+// ("row 2, Destination, column 1, Riverside"); without header association NVDA can only
+// announce the position ("row 2, column 1, Riverside"). So the failure is a data row whose
+// "row N" runs straight into "column".
+//
+// The previous version could never match ANY input: written as a regex literal, `\\s` is an
+// escaped backslash followed by "s", not whitespace. It also keyed on the literal time
+// "09:15", so it would not have generalised to the other two pages even once fixed.
+// Excludes row 1: that is the header row, which announces "row 1, column 1" on a correct
+// table too. Only DATA rows should carry their header names.
+const POSITION_ONLY_CELL = /row\s+(?!1\b)\d+[, ]+column/i;
+
 function tableHeadersAreUnassociated(capture) {
-  const text = flattenCapture(capture);
-  return /column\\s+2[, ]+09:15/i.test(text) || /row\\s+2[, ]+column/i.test(text);
+  return POSITION_ONLY_CELL.test(flattenCapture(capture));
+}
+
+// A form field NVDA announces as a bare role, with no name in front of it: "edit" rather
+// than "Recipient name, edit".
+//
+// This replaces a transcript regex for a trailing "edit", which fired on the GOOD page too
+// and so discriminated nothing -- NVDA announces a correctly labelled field across two
+// lines, the label then the role, leaving a line that is only "edit". The structural
+// form-field sweep does not have that ambiguity: the name and role arrive together.
+// Same rule as the 4.1.2 check in src/spike/rules.ts.
+const LEADING_ROLE = /^(edit(\s+text)?|button|checkbox|radio|combo\s*box|list\s*box|slider|spin\s*button)\b/i;
+
+function hasUnnamedFormField(capture) {
+  return (capture.structure?.formFields || []).some((field) => LEADING_ROLE.test(field.trim()));
 }
 
 export function signalMatches(capture, signal) {
+  if (signal.type === "unnamed-form-field") return hasUnnamedFormField(capture);
   if (signal.type === "regex") return regexMatches(capture, signal);
   if (signal.type === "structure-empty") return structureIsEmpty(capture, signal);
   if (signal.type === "missing-heading") return headingIsMissing(capture, signal);
   if (signal.type === "missing-role") return hasMissingRole(capture, signal);
   if (signal.type === "state-change-silent") return stateChangeIsSilent(capture, signal);
   if (signal.type === "form-activation-silent") return formActivationIsSilent(capture, signal);
+  if (signal.type === "validation-error-silent") return validationErrorIsSilent(capture, signal);
   if (signal.type === "table-unassociated") return tableHeadersAreUnassociated(capture);
   return false;
 }
