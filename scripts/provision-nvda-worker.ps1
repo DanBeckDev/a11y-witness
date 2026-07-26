@@ -107,21 +107,19 @@ Step 3 'Guidepup environment (zeroes ForegroundLockTimeout so Edge can take focu
 Push-Location $RepoPath
 try { Invoke-Native $npx @('--yes', '@guidepup/setup', 'setup') 'guidepup setup' 2 }
 finally { Pop-Location }
-# Set this ourselves rather than trusting `guidepup setup` to have done it. On a fresh
-# Windows 11 ARM64 install it was still at the default 200000, and the cost is brutal to
-# diagnose: captures return 0 phrases with NO error anywhere -- nvda.start() succeeds,
-# windowsActivate reports ok, and then every read comes back empty, because Edge is
-# refused the foreground and NVDA has nothing to read. The README calls this the #1
-# flakiness fix; it deserves to be asserted, not hoped for.
-Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name ForegroundLockTimeout -Value 0 -Type DWord
-$flt = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name ForegroundLockTimeout -ErrorAction SilentlyContinue).ForegroundLockTimeout
-if ($flt -eq 0) {
-  # The value is cached per session, so a session that is already running keeps the old
-  # one until the next logon. With auto-logon plus the at-logon trigger, a reboot applies
-  # it and brings the worker back on its own.
-  OK 'ForegroundLockTimeout = 0 (takes effect at next logon)'
+# Apply ForegroundLockTimeout to THIS session, now, via SystemParametersInfo. A registry
+# write alone is not enough: the value is cached per session, and Windows does not reliably
+# consume it at logon either, so "it will work after a reboot" is not a safe claim. Left
+# non-zero, captures return 0 phrases with NO error anywhere -- nvda.start() succeeds,
+# windowsActivate reports ok, and every read comes back empty, because Edge is refused the
+# foreground. See scripts/apply-foreground-lock-timeout.ps1 for the detail.
+$fltScript = Join-Path $PSScriptRoot 'apply-foreground-lock-timeout.ps1'
+if (Test-Path $fltScript) {
+  $fltOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $fltScript 2>&1
+  if ($LASTEXITCODE -eq 0) { OK ($fltOut | Select-Object -First 1) }
+  else { Warn (($fltOut | Out-String).Trim()) }
 } else {
-  Warn "ForegroundLockTimeout = $flt (could not set it; Edge may fail to take focus)"
+  Warn "not found: $fltScript (ForegroundLockTimeout not applied; Edge may fail to take focus)"
 }
 
 # ---------------------------------------------------------------------------
