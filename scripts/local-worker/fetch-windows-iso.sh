@@ -25,6 +25,8 @@ LANG_CODE="${A11Y_WIN_LANG:-en-us}"
 # honours the unattend file. Override with A11Y_WIN_VERSION if you want to retest 24H2.
 WIN_VERSION="${A11Y_WIN_VERSION:-23H2}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 die() { echo "error: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
 
@@ -78,6 +80,20 @@ info "build uuid: $UUID"
 mkdir -p "$OUT_DIR"
 cd "$OUT_DIR"
 
+# Idempotence: if a finished ISO with a UEFI boot record is already here, stop. And if the
+# converter's output is present, skip straight to the rebuild rather than re-downloading
+# ~10 GB. Re-running this script should cost minutes, not an hour.
+EXISTING="$(ls -t "$OUT_DIR"/*.ISO "$OUT_DIR"/*.iso 2>/dev/null | grep -vi support | head -1 || true)"
+if [ -n "$EXISTING" ] && xorriso -indev "$EXISTING" -report_el_torito plain 2>/dev/null | grep -q UEFI; then
+  echo "ISO ready (already built): $EXISTING"
+  echo "Next:  ./scripts/local-worker/create-utm-vm.sh \"$EXISTING\""
+  exit 0
+fi
+if [ -n "$EXISTING" ]; then
+  info "found an existing converter ISO; skipping download and going straight to the rebuild"
+  SKIP_DOWNLOAD=1
+fi
+
 info "Fetching the UUP download+convert pack"
 # autodl=2 is "download using aria2 and convert". autodl=3 is the virtual-editions
 # flow and errors out unless you request extra editions.
@@ -95,9 +111,13 @@ GENTLE='-x4 -s4 -j2 --async-dns-server=1.1.1.1,8.8.8.8,9.9.9.9 --max-tries=0 --r
 sed -i '' "s/-x16 -s16 -j5/$GENTLE/; s/-x16 -s16 -j2/$GENTLE/" uup_download_macos.sh
 grep -q 'async-dns-server' uup_download_macos.sh && info "aria2 settings softened for flaky links"
 
-info "Downloading (~10 GB) and converting. This is the slow part."
-# aria2 resumes, so re-running this script after an interruption picks up where it left off.
-./uup_download_macos.sh
+if [ "${SKIP_DOWNLOAD:-0}" = "1" ]; then
+  info "skipping download/convert (existing ISO found)"
+else
+  info "Downloading (~10 GB) and converting. This is the slow part."
+  # aria2 resumes, so re-running after an interruption picks up where it left off.
+  ./uup_download_macos.sh
+fi
 
 ISO="$(ls -t "$OUT_DIR"/*.ISO "$OUT_DIR"/*.iso 2>/dev/null | grep -vi 'support\|fixed' | head -1 || true)"
 [ -n "$ISO" ] || die "conversion finished but no ISO was produced (see the log in $OUT_DIR)"
@@ -124,6 +144,10 @@ else
   info "Rebuilding the ISO with a UEFI El Torito record (the converter's is BIOS-only)"
   STAGE_DIR="$OUT_DIR/isodir"
   MNT="$OUT_DIR/mnt"
+  # ditto preserves the ISO's read-only bits, so a previous staging tree cannot be
+  # removed (or modified) without restoring write permission first -- otherwise a re-run
+  # dies on "rm: ...: Permission denied" and leaves a half-deleted tree behind.
+  [ -d "$STAGE_DIR" ] && chmod -R u+w "$STAGE_DIR" 2>/dev/null || true
   rm -rf "$STAGE_DIR" "$MNT"; mkdir -p "$STAGE_DIR" "$MNT"
   # Must copy via a macOS UDF mount: the converter passes `--hide "*"`, so every file
   # lives ONLY in the UDF tree and an ISO9660 reader (including xorriso) sees an empty
@@ -132,9 +156,12 @@ else
   ditto --norsrc --noextattr "$MNT" "$STAGE_DIR" 2>/dev/null || true
   hdiutil detach "$MNT" >/dev/null
   rmdir "$MNT" 2>/dev/null || true
+  # Same reason: the staged copy is read-only, and we need to write autounattend.xml into
+  # it and update boot.wim.
+  chmod -R u+w "$STAGE_DIR"
   [ -f "$STAGE_DIR/sources/boot.wim" ] || die "extraction failed (no sources/boot.wim)"
 
-  UNATTEND="$(dirname "${BASH_SOURCE[0]}")/autounattend.xml"
+  UNATTEND="$SCRIPT_DIR/autounattend.xml"
 
   # GUARD 1: language must match the media. The answer file's SetupUILanguage/UILanguage
   # must name a language pack that actually exists in sources/. Ask for en-GB on an EN-US
@@ -185,6 +212,7 @@ else
     --no-emul-boot --udf -iso-level 3 --hide "*" -V "$LABEL" -o "$FIXED" "$STAGE_DIR"
   xorriso -indev "$FIXED" -report_el_torito plain 2>/dev/null | grep -q "UEFI" \
     || die "rebuild still has no UEFI El Torito record"
+  chmod -R u+w "$STAGE_DIR" 2>/dev/null || true
   rm -rf "$STAGE_DIR"
   ISO="$FIXED"
   info "rebuilt: $ISO"
