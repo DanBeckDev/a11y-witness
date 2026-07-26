@@ -60,13 +60,22 @@ no sound device at all and this is fine; do not go hunting for audio problems.
 Windows 11 (or Server 2022/2025), an admin account, SSH reachable, and — critically
 — **that account logged in at the console**, so an interactive session exists.
 
+Run the bootstrap; it installs the prerequisites, clones the repo, and hands off to
+provisioning:
+
 ```powershell
-winget install --id OpenJS.NodeJS.LTS -e --silent --accept-source-agreements --accept-package-agreements
-winget install --id Git.Git -e --silent --accept-source-agreements --accept-package-agreements
-git clone https://github.com/DanBeckDev/a11y-witness.git $env:USERPROFILE\a11y-witness
+Set-ExecutionPolicy -Scope Process Bypass -Force
+irm https://raw.githubusercontent.com/DanBeckDev/a11y-witness/main/scripts/bootstrap-windows-worker.ps1 | iex
 ```
 
-Then run the provisioning script; it does the remaining nine steps and verifies each:
+> **Do not reach for `winget` here.** On a freshly installed Windows it does not exist:
+> it ships as the "App Installer" Store package, which is not registered on a new image,
+> so the call dies with `'winget' is not recognized`. The bootstrap fetches the official
+> ARM64 archives directly instead — and note the current Node LTS publishes **no arm64
+> MSI**, only a zip, so archive extraction is the only version-agnostic route.
+
+If the box already has Node and Git, you can skip straight to provisioning, which does
+the remaining nine steps and verifies each:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\provision-nvda-worker.ps1
@@ -138,12 +147,18 @@ signal the product depends on:
 
 | fixture | healthy `after` value |
 |---|---|
-| `disclosure-good` | `"expanded"` |
-| `disclosure-bad` | `""` |
+| `disclosure-good` | `"…button, focused, **expanded**"` |
+| `disclosure-bad` | `"…button, focused, **collapsed**"` (state never updated) |
 | `forms-validation-good` | `"There is a problem. Email address is required."` |
 | `forms-validation-bad` | `""` |
 
 If good and bad look **identical**, the Speech Viewer is on. That is the tell.
+
+The disclosure probe re-reads the control rather than waiting for a spontaneous
+announcement, because NVDA 2026.1.1 announces only a document re-announce on
+activation for BOTH pages — so the spontaneous route cannot separate them. Comparing
+the state word against the control's original state is deterministic, and is what
+4.1.2 actually asks.
 
 ## Debugging: error string → real cause
 
