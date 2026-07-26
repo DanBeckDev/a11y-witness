@@ -438,6 +438,31 @@ responsible — guest-tools drivers settling, or first-logon shell state holding
 foreground — and it has not been pinned down. `bootstrap-windows-worker.ps1` therefore ends
 by rebooting; auto-logon plus the at-logon task bring the worker back on their own.
 
+### `utmctl` says the VM is `unknown` and the worker is unreachable
+
+`utmctl` is a client for the **UTM app**, not a standalone daemon. If UTM is not running it
+cannot answer, and the symptoms point the wrong way: the bundle is present and intact, but the
+VM's state comes back `unknown` (or the command fails), which reads as a corrupted or missing
+guest. `worker-ctl.sh` now launches UTM and waits for it before doing anything, and prints
+what `unknown` actually means when it sees it.
+
+Check in this order:
+
+```bash
+pgrep -x UTM              # utmctl needs this
+pgrep -f QEMULauncher     # is a guest actually running?
+utmctl list               # is the VM registered, and under what UUID?
+./scripts/local-worker/worker-ctl.sh status
+```
+
+**Two shells or two agents driving one worker will produce exactly this confusion.** There is
+one VM and one NVDA on this machine, so a second party stopping, restarting or rebuilding the
+worker makes the first one's view wrong — a VM reported as `unknown` mid-restart, or a worker
+unreachable for a minute while its scheduled task comes back. It is the same single-shared-
+resource problem as running `capture-check` against a live worker. Before concluding the guest
+is broken, check nothing else is mid-operation on it; `worker-ctl.sh status` is the cheap way
+to ask.
+
 ### Never `utmctl delete` a VM whose name appears twice
 
 `utmctl list` can show two UUIDs with the same name, and **both point at the same bundle

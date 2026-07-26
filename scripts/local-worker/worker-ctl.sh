@@ -49,6 +49,24 @@ ARG="${2:-}"
 die() { echo "error: $*" >&2; exit 1; }
 command -v utmctl >/dev/null || die "utmctl not found (brew install --cask utm)"
 
+# utmctl is a client for the UTM APP, not a standalone daemon. With UTM not running it cannot
+# answer, and the symptoms are misleading: a VM reports its state as `unknown` (or the command
+# fails outright) even though the bundle is present and intact. Seen for real -- quitting UTM
+# to edit its preferences made every utmctl call useless until the app was relaunched.
+#
+# So launch it and wait, rather than reporting a healthy VM as unknown.
+ensure_utm_running() {
+  pgrep -x UTM >/dev/null && return
+  echo "UTM is not running (utmctl needs the app); launching it ..."
+  open -a UTM || die "could not launch UTM"
+  for _ in $(seq 1 15); do
+    sleep 2
+    utmctl list >/dev/null 2>&1 && { echo "  UTM is up"; return; }
+  done
+  die "UTM did not become responsive. Open it once by hand and check it starts cleanly."
+}
+ensure_utm_running
+
 # Resolve by UUID, never by name. Two registrations can share a name, and then `utmctl
 # start <name>` silently picks the wrong one -- worse, `utmctl delete <name>` removes the
 # shared bundle and takes the other VM's disk with it.
@@ -75,6 +93,16 @@ deleting either destroys the other's disk. Resolve it by renaming one VM in the 
 }
 
 vm_state() { utmctl status "$1" 2>/dev/null || echo unknown; }
+
+# `unknown` means utmctl could not answer, not that the VM is broken. Almost always UTM was
+# not running (handled above) or the UUID is stale -- so say which, instead of leaving a
+# caller to conclude the guest is dead.
+explain_unknown() {
+  echo "  state 'unknown' means utmctl could not answer for this VM, NOT that the guest is broken." >&2
+  echo "  UTM app running: $(pgrep -x UTM >/dev/null && echo yes || echo NO)" >&2
+  echo "  guest process:   $(pgrep -f QEMULauncher >/dev/null && echo running || echo none)" >&2
+  echo "  registered VMs:" >&2; utmctl list 2>&1 | sed 's/^/    /' >&2
+}
 
 guest_ip() {
   utmctl ip-address "$1" 2>/dev/null \
@@ -168,7 +196,9 @@ case "$CMD" in
 
   status)
     echo "vm:      $VM_NAME ($UUID)"
-    echo "state:   $(vm_state "$UUID")"
+    state="$(vm_state "$UUID")"
+    echo "state:   $state"
+    [ "$state" = unknown ] && explain_unknown
     echo "host:    $(qemu_usage)"
     ip="$(guest_ip "$UUID" || true)"
     echo "guest:   ${ip:-no ip (agent not reporting)}"
