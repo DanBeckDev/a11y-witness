@@ -513,10 +513,15 @@ function unnamedIconVariant({ id, title, heading, name, task }) {
     task,
     source: "Practical Web Accessibility, chapter 6",
     mutation: "An icon-only button has no accessible name.",
-    // NVDA announces an unnamed control as "button, <U+FFFC>", not as a bare "button" --
-    // the same object-replacement character the image rules key on. The old pattern looked
-    // for "button" alone on a line, which never occurs.
-    badSignal: { type: "regex", pattern: "button[, ]+" + UNNAMED_GRAPHIC, flags: "i" },
+    // NVDA announces an unnamed control EITHER as "button, <U+FFFC>" or as a bare "button",
+    // and it varies between runs of the same page -- observed both ways across two full
+    // capture runs. Match both: keying a signal on one observed string is how these went
+    // blind in the first place.
+    badSignal: {
+      type: "regex",
+      pattern: "(?:^|\\n)button[, ]*(?:" + UNNAMED_GRAPHIC + ")?[, ]*(?:$|\\n)",
+      flags: "im",
+    },
     good: page({
       title,
       heading,

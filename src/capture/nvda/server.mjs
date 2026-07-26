@@ -9,11 +9,26 @@ import { captureWithNvda, shutdownScreenReader } from "./capture-core.mjs";
 const PORT = Number(process.env.A11Y_PORT || 8765);
 let busy = false;
 
-// Keep NVDA running between captures. Starting it costs ~10s, and this process exists to
-// serve many captures in a row -- per-capture start/stop was 16 minutes of a 98-minute
-// dataset run. capture-core recycles it periodically so a long-lived screen reader cannot
-// drift unnoticed. Set A11Y_REUSE_NVDA=0 to go back to a fresh NVDA per capture, which is
-// the first thing to try if captures start behaving differently as a run progresses.
+// Keep NVDA running between captures. Starting it costs ~5s, and this process serves many
+// captures in a row.
+//
+// I turned this OFF for a while on the strength of a wrong conclusion, which is worth
+// recording. A full run with reuse enabled produced markedly poorer evidence -- role words in
+// 47% of phrases against 76% before, and "heading, level N" down from 105 to 15 -- so reuse
+// looked like it was costing fidelity. It was not: the readiness gate landed in the same run
+// and was overwriting the read-through's first line with the document title (see the
+// re-anchor in capture-core). Two changes, one run, and a phrase COUNT that did not move, so
+// neither the benchmark nor capture-check noticed.
+//
+// Measured properly afterwards, same 6 pages, gate fixed, one variable at a time:
+//
+//   reuse on:  29 phrases, 23 role words (79%), 8 "heading, level", 93s
+//   reuse off: 29 phrases, 23 role words (79%), 8 "heading, level", 126s
+//
+// Identical evidence, 26% faster. capture-core recycles NVDA every 25 captures so a
+// long-lived screen reader cannot drift unnoticed -- observed firing 3 times across 90
+// captures. Set A11Y_REUSE_NVDA=0 for a fresh NVDA per capture, which remains the first thing
+// to try if captures start behaving differently as a run progresses.
 const REUSE_NVDA = process.env.A11Y_REUSE_NVDA !== "0";
 
 function send(res, code, obj) {

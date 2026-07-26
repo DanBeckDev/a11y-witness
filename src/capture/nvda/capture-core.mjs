@@ -128,6 +128,18 @@ export async function captureWithNvda(url, opts = {}) {
   // auto-say-all so it can't race the read.
   await anchorToTop();
   await waitForDocument(diag);
+  // Re-anchor AFTER the gate. waitForDocument asks NVDA to report the document title, which
+  // leaves that title as `lastSpokenPhrase` -- and the read-through deliberately reads the
+  // current line in place before its first move, so it captured the TITLE instead of the
+  // page's first line. Measured: the h1's "heading, level 1, ..." announcement disappeared
+  // from every page ("heading, level N" phrases fell from 105 to 15 across 90 captures) and
+  // was replaced by the <title>. Ctrl+Home moves the caret back to the top, which makes the
+  // first line the last thing spoken again.
+  //
+  // I first blamed this on reusing NVDA between captures. It was not: the same loss happens
+  // with reuse off. Both changes landed in one run, and the phrase COUNT was unchanged, so
+  // neither the benchmark nor capture-check saw it.
+  await anchorToTop();
   await recordStartupHealth(diag);
   const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
   const { structure, interaction } = await navigateByStructure({ deadline, diag, probeForms: !!opts.probeForms, task: opts.task });
