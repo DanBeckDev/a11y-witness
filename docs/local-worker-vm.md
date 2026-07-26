@@ -339,19 +339,23 @@ wraps the lifecycle:
 
 ```bash
 ./scripts/local-worker/worker-ctl.sh up        # start or resume, then wait for /health
-./scripts/local-worker/worker-ctl.sh pause     # ~0.6% CPU, ~0.8 GB held, resume under a second
+./scripts/local-worker/worker-ctl.sh pause     # ~0.6% CPU, resume under a second
 ./scripts/local-worker/worker-ctl.sh stop      # nothing held, ~15 s to come back
 ./scripts/local-worker/worker-ctl.sh idle-pause 15   # pause after 15 min with no capture
 ```
 
 `idle-*` polls the worker's own `busy` flag, so a capture in flight resets the clock.
-Measured figures and their caveats are in the script header; the two that matter are that
-"idle" CPU readings swing between 2% and 86% (Windows background work — sample once and
-you will believe whatever you happened to catch), and that a paused guest's memory is not
-released until macOS reclaims it about 40 s later.
+Measured figures and their caveats are in the script header; the two that matter:
 
-Use `pause` by default. `stop` is honest too — a capture immediately after a cold start was
-verified working, disclosure state change included — it just costs the boot.
+- "Idle" CPU readings swing between 2% and 86% — Windows background work. Sample once and
+  you will believe whatever you happened to catch.
+- **`pause` gives back CPU, not necessarily memory.** One paused run settled to ~0.8 GB
+  within 40 s; the next held ~4.5 GB for three minutes with 66% of host memory free.
+  Reclaiming a suspended guest's pages is the host's call, not ours.
+
+So `pause` for a short gap — instant resume, since the guest never rebooted — and `stop`
+when you want the memory back for certain. `stop` is cheap: a capture immediately after a
+cold start was verified working, disclosure state change included.
 
 One thing `worker-ctl.sh` deliberately does *not* do is send `utmctl stop` bare. That
 defaults to `--force`, a power-off event: from Windows' point of view the plug was pulled,

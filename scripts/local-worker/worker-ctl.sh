@@ -3,7 +3,7 @@
 # while you are not capturing.
 #
 #   ./scripts/local-worker/worker-ctl.sh up            # make it ready (start or resume), wait for /health
-#   ./scripts/local-worker/worker-ctl.sh pause         # freeze it: ~0.6% CPU, ~0.8 GB held, instant resume
+#   ./scripts/local-worker/worker-ctl.sh pause         # freeze it: ~0.6% CPU, instant resume, RAM not guaranteed
 #   ./scripts/local-worker/worker-ctl.sh stop          # shut it down: nothing held, ~15 s to come back
 #   ./scripts/local-worker/worker-ctl.sh status        # state, resource use, health
 #   ./scripts/local-worker/worker-ctl.sh idle-pause 15 # watch, then pause after 15 idle minutes
@@ -12,34 +12,35 @@
 # Measured on an M4 Max, 4 vCPU / 8 GB guest. Every number here was observed on this
 # machine; none is an estimate:
 #
-#   | state        | host CPU            | host RSS         | back to /health   |
-#   |--------------|---------------------|------------------|-------------------|
-#   | running idle | 2-86%, spiky        | ~5 GB            | -                 |
-#   | paused       | ~0.6%               | ~0.8 GB          | under 1 s         |
-#   | stopped      | none (no process)   | none             | 12-15 s           |
+#   | state        | host CPU          | host RSS              | back to /health |
+#   |--------------|-------------------|-----------------------|-----------------|
+#   | running idle | 2-86%, spiky      | ~5 GB                 | -               |
+#   | paused       | ~0.6%             | 0.8 GB *or* 4.5 GB    | under 1 s       |
+#   | stopped      | none (no process) | none                  | 12-15 s         |
 #
-# Read those two caveats before trusting the table:
+# Read the caveats before trusting the table:
 #   - "running idle" is not idle. Windows keeps working in the background (Defender,
 #     Update, the search indexer), so a single sample means nothing: consecutive readings
-#     20 s apart gave 1.8%, 25%, 86%. That is why `pause` is worth having at all.
-#   - `paused` settles. Immediately after suspending, RSS still reads ~5 GB and only drops
-#     to ~0.8 GB once macOS reclaims the pages, about 40 s later. Sampling too early is
-#     what produced the earlier (wrong) claim that pause frees CPU but not memory.
+#     20 s apart gave 1.8%, 25% and 86%. That is why `pause` is worth having at all.
+#   - `pause` reliably buys back CPU. It does NOT reliably give back memory. One paused run
+#     settled to ~0.8 GB within 40 s; the next held ~4.5 GB for three minutes straight with
+#     66% of host memory free. Whether the host reclaims a suspended guest's pages is not
+#     ours to decide, so do not count on it.
 #
-# So: `pause` is the default choice for idling -- near-zero CPU, most of the RAM back, and
-# resume is instant because the guest never rebooted. `stop` gives back everything and is
-# still cheap to undo: cold start reached /health in 12 s, 12 s and 15 s across three runs
-# (`up` returns a few seconds later once it has the IP), and a capture immediately after a
-# cold start was verified working, disclosure state change included. It comes back on its
-# own because auto-logon plus the at-logon trigger restart the worker -- see
-# docs/local-worker-vm.md.
+# So: `pause` for a short gap between captures -- near-zero CPU and the guest never
+# rebooted, so resume is instant. `stop` when you actually want the memory back, because it
+# is the only one that guarantees it, and it is cheap: cold start reached /health in 12 s,
+# 12 s and 15 s across three runs (`up` returns a few seconds later once it has the IP), and
+# a capture immediately after a cold start was verified working, disclosure state change
+# included. It comes back unattended because auto-logon plus the at-logon trigger restart
+# the worker -- see docs/local-worker-vm.md.
 set -euo pipefail
 
 VM_NAME="${A11Y_VM_NAME:-a11y-worker}"
 PORT="${A11Y_PORT:-8765}"
 CMD="${1:-status}"
 SHUTDOWN_GRACE_S=120   # how long to let Windows shut down cleanly before forcing
-RECLAIM_SETTLE_S=45    # macOS takes ~40s to reclaim a suspended guest's pages
+RECLAIM_SETTLE_S=45    # give the host a chance to reclaim pages before reporting usage
 ARG="${2:-}"
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -127,10 +128,12 @@ case "$CMD" in
   pause)
     [ "$(vm_state "$UUID")" = "started" ] || { echo "not running (state: $(vm_state "$UUID"))"; exit 0; }
     utmctl suspend "$UUID" >/dev/null
-    # Report usage only after macOS has had time to reclaim the suspended guest's pages.
-    # Sampling immediately shows the full running footprint and reads as "pause did nothing".
+    # Give the host a chance to reclaim the suspended guest's pages before reporting, but
+    # do not promise it will: observed both ~0.8 GB and ~4.5 GB while paused. Say which one
+    # happened, so a still-large footprint is visible rather than assumed away.
     sleep "$RECLAIM_SETTLE_S"
     echo "paused ($(qemu_usage)) -- resume with: $0 up (under a second; the guest never rebooted)"
+    echo "note: CPU is back either way; memory may or may not be. Use '$0 stop' to be sure of it."
     ;;
 
   stop)
