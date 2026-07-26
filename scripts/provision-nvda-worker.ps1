@@ -270,10 +270,21 @@ $principal = New-ScheduledTaskPrincipal -UserId $account -LogonType Interactive 
 # An at-logon trigger is what makes the worker self-healing across reboots. Without
 # it the task sits at "Ready" forever and the machine looks dead after a restart.
 $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $account
-Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal -Trigger $trigger -Force | Out-Null
+# The at-logon trigger covers reboots but NOT a crash: when the worker process died the task
+# went back to "Ready" and stayed there, so the machine answered nothing until someone logged
+# on again. Observed for real -- an NVDA socket error killed the worker and it never came back.
+#
+# RestartCount/RestartInterval make Task Scheduler bring it back on a non-zero exit, which is
+# why server.mjs now exits 1 on an unrecoverable error instead of limping on.
+# ExecutionTimeLimit 0 = no limit: this is a long-running service, not a batch job, and the
+# default 3-day limit would silently kill it.
+$settings  = New-ScheduledTaskSettingsSet -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1) `
+  -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal -Trigger $trigger `
+  -Settings $settings -Force | Out-Null
 
 $task = Get-ScheduledTask -TaskName $TaskName
-OK "registered: logon=$($task.Principal.LogonType) runLevel=$($task.Principal.RunLevel) triggers=$(($task.Triggers | Measure-Object).Count)"
+OK "registered: logon=$($task.Principal.LogonType) runLevel=$($task.Principal.RunLevel) triggers=$(($task.Triggers | Measure-Object).Count) restarts=$($task.Settings.RestartCount)"
 
 # ---------------------------------------------------------------------------
 Step 9 'Start and verify'

@@ -170,6 +170,30 @@ async function runCheck(check) {
   return failed;
 }
 
+// Refuse to run alongside a live worker. NVDA is a single machine-wide resource, and this
+// script drives it directly: two drivers on one machine stop each other's screen reader.
+// Learned by doing it -- this check ran while the worker held a reused NVDA, stopped it on
+// exit, and the worker then died on `Cannot connect to NVDA`.
+async function workerIsServing() {
+  const port = Number(process.env.A11Y_PORT || 8765);
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(2000) });
+    return response.ok;
+  } catch {
+    return false; // nothing listening is exactly what we want
+  }
+}
+
+if (await workerIsServing()) {
+  console.error(
+    "A capture worker is already serving on this machine. It drives the same NVDA this check " +
+      "would, and whichever finishes first stops the other's screen reader.\n" +
+      "Stop it first:  Stop-ScheduledTask -TaskName a11ysrv\n" +
+      "Then re-run, and start it again afterwards."
+  );
+  process.exit(2);
+}
+
 let failures = 0;
 for (const check of CHECKS) failures += await runCheck(check);
 

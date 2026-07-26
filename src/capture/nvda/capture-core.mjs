@@ -18,6 +18,7 @@
 import { nvda, windowsActivate, windowsQuit } from "@guidepup/guidepup";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { connect } from "node:net";
 import { existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -35,6 +36,10 @@ const EDGE_EXIT_TIMEOUT_MS = 8_000; // wait for Edge to actually exit during cle
 // capture, but a screen reader held open indefinitely is exactly the long-running-state
 // risk the correctness audit warns about, so bound it rather than trusting it forever.
 const MAX_CAPTURES_PER_NVDA = 25;
+// NVDA's Remote Access channel, which is how guidepup talks to it. Hardcoded in guidepup too
+// (lib/windows/NVDA/constants.js), so there is nothing to configure on either side.
+const NVDA_REMOTE_PORT = 6837;
+const REUSE_PROBE_MS = 2_000;
 const STATE_SETTLE_MS = 1_200; // after activating a control, for a live region to announce
 const ANCHOR_SETTLE_MS = 400; // after Escape + Ctrl+Home, before re-reading fields
 
@@ -269,26 +274,81 @@ let screenReader = { running: false, captures: 0 };
 // long-running screen reader cannot accumulate silently across a whole run.
 // Returns true when NVDA was actually started, so the caller can skip the settle it only
 // needs on a cold start.
+// Is the NVDA we think we own actually there? `screenReader.running` is a belief, and
+// anything else on the machine can invalidate it: NVDA is a single machine-wide resource, so
+// another process running a capture (capture-check, a stray CLI run) stops the same NVDA this
+// one is reusing. Trusting the flag cost a worker outage -- the reuse path connected to a
+// dead NVDA and guidepup's socket error arrived asynchronously, outside any request handler.
+//
+// Probe the SOCKET, not the API. `lastSpokenPhrase()` reads guidepup's own local log of
+// phrases it has already received, so it answers happily while NVDA is dead -- measured: after
+// killing NVDA it still returned, the capture was reused, and the transcript came back empty.
+// A liveness check that cannot detect death is worse than none, because it launders a broken
+// state into a confident one.
+//
+// Connecting to NVDA's Remote Access port is the real question, and it is what guidepup's own
+// isRunning() does (lib/windows/NVDA/isRunning.js). Done with node:net rather than importing
+// that, since it is not part of the public surface.
+function screenReaderResponds() {
+  return new Promise((resolve) => {
+    const socket = connect(NVDA_REMOTE_PORT, "127.0.0.1");
+    const settle = (alive) => { socket.destroy(); resolve(alive); };
+    socket.setTimeout(REUSE_PROBE_MS, () => settle(false));
+    socket.on("connect", () => settle(true));
+    socket.on("error", () => settle(false));
+  });
+}
+
 async function startScreenReader(diag, { reuse }) {
   if (reuse && screenReader.running && screenReader.captures < MAX_CAPTURES_PER_NVDA) {
-    screenReader.captures += 1;
-    diag.mark("nvdaStart", { ok: true, reused: true, captures: screenReader.captures });
-    return false;
+    if (await screenReaderResponds()) {
+      screenReader.captures += 1;
+      diag.mark("nvdaStart", { ok: true, reused: true, captures: screenReader.captures });
+      return false;
+    }
+    // Something outside this process stopped it. Fall through to a cold start rather than
+    // failing the capture.
+    diag.mark("nvdaGone", { after: screenReader.captures });
+    screenReader = { running: false, captures: 0 };
   }
   if (screenReader.running) {
     diag.mark("nvdaRecycle", { after: screenReader.captures });
     await stopScreenReader(diag);
   }
   try {
-    await nvda.start();
+    await startFreshScreenReader(diag);
     screenReader = { running: true, captures: 1 };
-    diag.mark("nvdaStart", { ok: true, reused: false });
     return true;
   } catch (e) {
     screenReader = { running: false, captures: 0 };
     diag.mark("nvdaStart", { ok: false, error: errMsg(e) });
     throw new Error("nvda.start failed: " + errMsg(e), { cause: e });
   }
+}
+
+// Start NVDA, clearing a leftover instance out of the way if one is blocking us.
+//
+// "NVDA is already running" is a dead end otherwise: something outside this process left an
+// NVDA behind — a crashed capture, a stray CLI run, a kill that did not fully take — and every
+// subsequent capture fails with it while the worker keeps answering /health. Measured: the
+// socket probe correctly spotted the dead screen reader, the cold start then refused, and the
+// worker was stuck until a human intervened.
+//
+// This is still Guidepup owning the lifecycle (nvda.stop(), never taskkill), just recovering
+// from a state it did not create.
+async function startFreshScreenReader(diag) {
+  try {
+    await nvda.start();
+    diag.mark("nvdaStart", { ok: true, reused: false });
+    return;
+  } catch (e) {
+    if (!/already running/i.test(errMsg(e))) throw e;
+    diag.mark("nvdaLeftover", { error: errMsg(e) });
+  }
+  await nvda.stop().catch((e) => diag.mark("nvdaStopLeftover", { error: errMsg(e) }));
+  await sleep(STATE_SETTLE_MS);
+  await nvda.start();
+  diag.mark("nvdaStart", { ok: true, reused: false, afterClearingLeftover: true });
 }
 
 // Clear NVDA's speech logs so every capture starts from the same state, reused or not.
