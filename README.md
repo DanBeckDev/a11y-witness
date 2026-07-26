@@ -118,6 +118,14 @@ To test how a page *behaves* when operated, add `--probe-forms`: the worker subm
 
 **The axe-core layer is optional.** It is ~100 lines and about a second, but it pulls half a gigabyte of Chromium, which is a poor trade if you already run axe in your own pipeline — and two differently-versioned axe runs in one CI produce duplicate findings, which is worse than none. So `playwright` and `@axe-core/playwright` are `optionalDependencies`: skip them and the rule-based layer simply does not run. Turn it off explicitly with `--no-axe` or `A11Y_AXE=0`. The report then says *"not run — visual criteria are unchecked, not clean"*, because silence must never read as a pass.
 
+**Better still, feed it the axe run you already have:**
+
+```bash
+npm run witness -- https://example.com --axe-results ./axe.json
+```
+
+You keep your own axe, at your own version, on your own schedule; we consume its output and still print the two-layer report — no second scan, no Chromium, no duplicate findings. It accepts what the common tools emit (`{ "violations": [...] }`, the axe CLI's array of those, or a bare violations array) and maps them through the same code as our own run, so a finding cannot differ by who scanned. If the file records a `url` that disagrees with the page you are testing, it says so.
+
 ## Using it
 
 Running it is one command; getting value out of it is a few habits.
@@ -141,6 +149,8 @@ Running it is one command; getting value out of it is a few habits.
 **Expect the false positives where they live.** They concentrate in the two subjective criteria — link purpose (2.4.4) and descriptive headings (2.4.6) — which is exactly why those are the fine-tune target for part 3. A finding you can disprove from the transcript is one you should dismiss.
 
 **"0 announcements" is a broken worker, not a clean page.** The CLI warns when this happens. Run `--debug` and read `documentReady` first; [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) has the error-to-cause table.
+
+**Already running axe? Feed it in rather than running ours.** `--axe-results ./axe.json` keeps one engine, one version, one set of rule findings — and you still get the layered report.
 
 **Where it fits.** This is not a gate to put in front of every commit — a capture takes about a minute of real screen-reader time. It earns its keep on the flows that matter (checkout, sign-up, search), before a release, or as the evidence base for an audit. Keep your rule scanner where it is, on every commit, doing the fast mechanical layer.
 

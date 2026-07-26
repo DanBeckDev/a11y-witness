@@ -46,6 +46,38 @@ export interface AxeResult {
   title: string;
 }
 
+/** One violation as axe-core reports it, in the shape both our own run and an imported
+ * results file share. Loosely typed on purpose: an imported file comes from someone
+ * else's axe version and may carry more or fewer fields than ours. */
+export interface AxeViolation {
+  id?: unknown;
+  tags?: unknown;
+  impact?: unknown;
+  help?: unknown;
+  helpUrl?: unknown;
+  nodes?: unknown;
+}
+
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+/** Map axe's violations to our findings. Shared so an imported results file and our own
+ * run produce identical output — a finding must not look different depending on who ran
+ * the scan. */
+export function toFindings(violations: readonly AxeViolation[]): AxeFinding[] {
+  return violations.map((v) => ({
+    source: "axe-core" as const,
+    wcag: criteriaFromTags(Array.isArray(v.tags) ? v.tags.map(str) : []),
+    rule: str(v.id),
+    impact: str(v.impact),
+    help: str(v.help),
+    helpUrl: str(v.helpUrl),
+    nodes: (Array.isArray(v.nodes) ? v.nodes : []).map((n: { html?: unknown; target?: unknown }) => ({
+      html: str(n?.html),
+      target: (Array.isArray(n?.target) ? n.target : []).map(String),
+    })),
+  }));
+}
+
 /** Thrown when the optional browser dependencies are not installed. */
 export class AxeUnavailableError extends Error {
   constructor(cause: unknown) {
@@ -90,16 +122,7 @@ export async function scanWithAxe(url: string): Promise<AxeResult> {
     await page.goto(url, { waitUntil: "load" });
     const title = await page.title();
     const results = await new AxeBuilder({ page }).withTags(WCAG_AA_TAGS).analyze();
-    const findings = results.violations.map((v) => ({
-      source: "axe-core" as const,
-      wcag: criteriaFromTags(v.tags),
-      rule: v.id,
-      impact: v.impact ?? "",
-      help: v.help,
-      helpUrl: v.helpUrl,
-      nodes: v.nodes.map((n) => ({ html: n.html, target: n.target.map(String) })),
-    }));
-    return { findings, title };
+    return { findings: toFindings(results.violations), title };
   } finally {
     await browser.close();
   }

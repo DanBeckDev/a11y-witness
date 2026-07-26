@@ -74,3 +74,42 @@ standard rather than reinventing contrast/ARIA rules is also the mature choice.
 Proposed. Suggested order: integrate axe-core first (a fast, deterministic win
 that immediately closes the visual/mechanical gap), then evolve the
 screen-reader capture into the interaction model.
+
+Both are now done. See the amendment below for how Layer 1 changed once it was in use.
+
+## Amendment (2026-07-26): Layer 1 is optional, and may be fed rather than run
+
+The decision above is unchanged in substance — layered coverage, and we still do not
+reimplement contrast/ARIA rules. What changed is that **running axe ourselves is no
+longer required**.
+
+Two things became clear once the layer existed:
+
+1. **The cost is entirely in the dependency, not the code.** Measured: 99 lines,
+   ~1 second, running concurrently with a ~53-second capture, so it adds no wall-clock
+   and has needed no maintenance. But `playwright` pulled ~536 MB of Chromium as a hard
+   dependency, for one `page.goto` plus `analyze()`.
+2. **Most adopters already run axe.** Running a second, differently-versioned copy in
+   the same CI produces duplicate findings from two engines that can disagree — worse
+   than not having the layer. "Do not reimplement axe" is served better by *consuming*
+   their results than by executing our own.
+
+So:
+
+- `playwright` and `@axe-core/playwright` move to `optionalDependencies`, imported
+  dynamically. Their absence is a supported state that reports how to enable the layer.
+- `--axe-results <file>` imports results produced elsewhere (`{violations}`, an array of
+  those from the axe CLI, or a bare violations array), mapped through the same code as
+  our own run so a finding cannot differ by who scanned. A recorded `url` that disagrees
+  with the target warns.
+- `--no-axe` / `A11Y_AXE=0` disable it outright.
+- The report distinguishes **"did not run"** from **"ran and found nothing"**. This
+  follows directly from the "never silently claim coverage we do not have" rule in the
+  Decision above: an empty rule section that reads as a pass is exactly the false
+  assurance this ADR exists to avoid.
+
+One coupling had to be removed first. The page title used to verify the worker read the
+right page came from axe's Playwright page, so disabling axe would have silently
+disabled a capture-integrity check. It now comes from `src/scan/page-title.ts`, which
+fetches the page directly — and deliberately **not** from the worker's own report of
+what it saw, since verifying a capture against its own claim is circular.

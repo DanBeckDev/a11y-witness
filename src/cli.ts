@@ -15,6 +15,7 @@
 import { judge, type Judgment } from "./spike/judge.js";
 import { scanWithAxe, axeAvailable, type AxeFinding } from "./scan/axe.js";
 import { fetchPageTitle } from "./scan/page-title.js";
+import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "./spike/layers.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "./capture/local-vm.js";
 import { captureMentionsTitle } from "./capture/verify.js";
@@ -30,6 +31,8 @@ interface Args {
   probeForms: boolean;
   /** Run the optional axe-core layer. Off with --no-axe or A11Y_AXE=0. */
   axe: boolean;
+  /** Path to axe results produced elsewhere, used instead of running our own scan. */
+  axeResults: string | null;
 }
 
 function parsedAfterRun(): AfterRun {
@@ -40,32 +43,53 @@ function parsedAfterRun(): AfterRun {
   process.exit(1);
 }
 
-function parseArgs(): Args {
-  const a = process.argv.slice(2);
-  let url = "";
-  let task = "Read and understand this page";
-  let worker = process.env.A11Y_WORKER ?? null;
-  let after = parsedAfterRun();
-  let json = false;
-  let debug = false;
-  let probeForms = false;
-  let axe = process.env.A11Y_AXE !== "0";
-  for (let i = 0; i < a.length; i++) {
-    const v = a[i];
-    if (v === "--task") task = a[++i] ?? task;
-    else if (v === "--worker") worker = a[++i] ?? worker;
-    else if (v === "--after") after = afterRunArg(a[++i]);
-    else if (v === "--json") json = true;
-    else if (v === "--debug") debug = true;
-    else if (v === "--probe-forms") probeForms = true;
-    else if (v === "--no-axe") axe = false;
-    else if (!v.startsWith("--")) url = v;
+const USAGE =
+  'Usage: npm run witness -- <url> --task "..." [--worker http://host:port] ' +
+  "[--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms] [--no-axe] [--axe-results <file>]";
+
+function defaultArgs(): Args {
+  return {
+    url: "",
+    task: "Read and understand this page",
+    worker: process.env.A11Y_WORKER ?? null,
+    after: parsedAfterRun(),
+    json: false,
+    debug: false,
+    probeForms: false,
+    axe: process.env.A11Y_AXE !== "0",
+    axeResults: process.env.A11Y_AXE_RESULTS ?? null,
+  };
+}
+
+// Applies one argument and returns the index it consumed up to, so value-taking flags can
+// swallow their value. Split out of parseArgs to keep each side simple: this one knows the
+// flags, parseArgs knows the loop and the validation.
+function applyArg(args: Args, argv: string[], i: number): number {
+  const v = argv[i];
+  switch (v) {
+    case "--task": args.task = argv[++i] ?? args.task; return i;
+    case "--worker": args.worker = argv[++i] ?? args.worker; return i;
+    case "--after": args.after = afterRunArg(argv[++i]); return i;
+    case "--axe-results": args.axeResults = argv[++i] ?? args.axeResults; return i;
+    case "--json": args.json = true; return i;
+    case "--debug": args.debug = true; return i;
+    case "--probe-forms": args.probeForms = true; return i;
+    case "--no-axe": args.axe = false; return i;
+    default:
+      if (!v.startsWith("--")) args.url = v;
+      return i;
   }
-  if (!url) {
-    console.error('Usage: npm run witness -- <url> --task "..." [--worker http://host:port] [--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms] [--no-axe]');
+}
+
+function parseArgs(): Args {
+  const argv = process.argv.slice(2);
+  const args = defaultArgs();
+  for (let i = 0; i < argv.length; i++) i = applyArg(args, argv, i);
+  if (!args.url) {
+    console.error(USAGE);
     process.exit(1);
   }
-  return { url, task, worker, after, json, debug, probeForms, axe };
+  return args;
 }
 
 function afterRunArg(v: string | undefined): AfterRun {
@@ -105,21 +129,15 @@ async function main(): Promise<void> {
 
 type RunOptions = Omit<Args, "worker"> & { worker: string };
 
-async function runWitness({ url, task, worker, json, debug, probeForms, axe: wantAxe }: RunOptions): Promise<void> {
-  const useAxe = wantAxe && (await axeAvailable());
-  if (wantAxe && !useAxe) {
-    process.stderr.write(
-      "axe-core layer skipped: its optional dependencies are not installed " +
-        "(npm install playwright @axe-core/playwright && npx playwright install chromium).\n"
-    );
-  }
-  process.stderr.write(`Scanning ${url} (${useAxe ? "rule-based axe-core + " : ""}real screen reader) ...\n`);
+async function runWitness({ url, task, worker, json, debug, probeForms, axe: wantAxe, axeResults }: RunOptions): Promise<void> {
+  const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults });
+  process.stderr.write(`Scanning ${url} (${ruleLayer === "none" ? "" : "rule-based axe-core + "}real screen reader) ...\n`);
   // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
   const [firstCap, axe] = await Promise.all([
     captureViaWorker(url, { task, worker, probeForms }),
-    pageContext(url, useAxe),
+    pageContext(url, ruleLayer, axeResults),
   ]);
   const axeFindings = axe.findings;
 
@@ -160,15 +178,37 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
     const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
     console.log(JSON.stringify({ url, task, screenReader: cap.screenReader, transcript: cap.transcript, ruleBased: axeFindings, verdict: layered }, null, 2));
   } else {
-    printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: useAxe ? axeFindings : null });
+    printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: ruleLayer === "none" ? null : axeFindings });
   }
 }
 
+type RuleLayer = "none" | "run" | "import";
+
+// Imported results win over running our own. Someone who supplies a file has already run
+// axe; scanning again would give them two differently-versioned opinions on one page.
+async function chooseRuleLayer({ wantAxe, axeResults }: { wantAxe: boolean; axeResults: string | null }): Promise<RuleLayer> {
+  if (axeResults) return "import";
+  if (!wantAxe) return "none";
+  if (await axeAvailable()) return "run";
+  process.stderr.write(
+    "axe-core layer skipped: its optional dependencies are not installed " +
+      "(npm install playwright @axe-core/playwright && npx playwright install chromium), " +
+      "or pass --axe-results <file> to use results you already have.\n"
+  );
+  return "none";
+}
+
 // The rule-based findings plus the page title, from whichever source is available. The
-// title is NOT optional the way axe is: without it the capture cannot be checked for
-// having read the wrong page, so when axe is off it comes from a plain fetch instead.
-async function pageContext(url: string, useAxe: boolean): Promise<{ findings: AxeFinding[]; title: string }> {
-  if (!useAxe) return { findings: [], title: await fetchPageTitle(url) };
+// title is NOT optional the way the rule layer is: without it the capture cannot be checked
+// for having read the wrong page, so it falls back to a plain fetch.
+async function pageContext(url: string, layer: RuleLayer, axeResults: string | null): Promise<{ findings: AxeFinding[]; title: string }> {
+  if (layer === "import" && axeResults) {
+    const imported = await loadAxeResults(axeResults);
+    warnOnUrlMismatch(imported.scannedUrl, url);
+    process.stderr.write(`Using ${imported.findings.length} imported axe violation(s) from ${axeResults}\n`);
+    return { findings: imported.findings, title: await fetchPageTitle(url) };
+  }
+  if (layer === "none") return { findings: [], title: await fetchPageTitle(url) };
   return scanWithAxe(url).catch(async (e: Error) => {
     process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
     return { findings: [] as AxeFinding[], title: await fetchPageTitle(url) };
