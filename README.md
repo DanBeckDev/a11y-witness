@@ -6,6 +6,8 @@
 
 **a11y-witness drives a real screen reader through a web page and has an AI judge assess whether the experience was actually usable.** Every finding cites a WCAG criterion and quotes the announcement it rests on, so you can check it yourself.
 
+It is three things: a testing pipeline, the reproducible screen-reader infrastructure that makes it runnable by anyone, and an accessibility model of our own being trained on the evidence the first two produce.
+
 It is not a rule scanner, and it is not a wrapper around one. Rule engines automate the mechanical layer well — Deque reports [axe-core](https://github.com/dequelabs/axe-core) finds about 57% of WCAG issues automatically and flags the rest for human review. That remainder is largely the **lived experience**: whether what a screen reader announces, as someone reads and operates the page, adds up to something a person can use. Automating that judgment is what this project is for.
 
 ## What it produces
@@ -47,6 +49,18 @@ The `evidence` line is the point. Findings are grounded in a transcript of what 
 
 Findings are ordered along the screen-reader experience waterfall — **Perceive → Navigate → Interact** (Firth, *Practical Web Accessibility*) — so barriers that stop someone perceiving content come before ones that stop them operating it.
 
+## Three parts
+
+The project is three pieces of work, each useful on its own:
+
+| | what it is | state |
+|---|---|---|
+| **1. The testing pipeline** | Drive a real screen reader through real navigation, judge the transcript, report WCAG-cited findings alongside axe-core. | **Working end to end** |
+| **2. Reproducible screen-reader infrastructure** | Screen readers are OS-bound desktop apps that cannot be containerised. Getting NVDA running, unattended and repeatably, is a genuine engineering problem — so it is solved as a first-class part rather than a prerequisite chore. | **Working**: scripted VM build, one-command Windows bootstrap, CI path |
+| **3. An accessibility model of our own** | A model that judges screen-reader evidence against WCAG criteria, trained on paired captures the other two parts produce. | **In development** — dataset being collected, nothing trained yet |
+
+They compound. Part 2 makes part 1 reproducible by anyone; parts 1 and 2 together generate the labelled evidence that part 3 needs, which no public dataset provides — because the training signal here is *what a screen reader announced*, not HTML.
+
 ## What it does not do
 
 - **It does not tab through the page and call that a screen-reader test.** Tabbing reaches interactive controls only; it skips how screen-reader users actually read and explore. Modelling real navigation — browse mode, jumping by heading and landmark, operating controls — is the whole point.
@@ -55,7 +69,7 @@ Findings are ordered along the screen-reader experience waterfall — **Perceive
 - **It does not claim to reproduce what it is like to be blind.** It reports the screen-reader navigation experience judged against success criteria. Disability-simulation framing misleads, and screen-reader users themselves navigate in divergent ways.
 - **Where neither layer can decide, it says so.** Whether alt text is *accurate* rather than merely present, or whether a reading order is *meaningful*, goes to a human — the way axe flags "incomplete". We do not silently claim coverage we do not have.
 
-## How it works
+## Part 1: the testing pipeline
 
 Capture is operating-system-bound, so it is split from everything else:
 
@@ -102,15 +116,19 @@ Add `--json` for machine-readable output and `--debug` for per-phase capture dia
 
 To test how a page *behaves* when operated, add `--probe-forms`: the worker submits the form with no valid input and records what is announced, catching forms that fail silently — the error shown visually and never announced (3.3.1 Error Identification, 4.1.3 Status Messages). It is opt-in because activating a submit button has side effects. Disclosure controls are always activated, to check the expanded/collapsed change is announced at all (4.1.2).
 
-### Getting a worker
+## Part 2: getting a real screen reader to run, repeatably
 
-| you have | do this |
-|---|---|
-| a Mac | build a local Windows VM: [`docs/local-worker-vm.md`](./docs/local-worker-vm.md). Scripted end to end — ISO build, unattended install, NVDA provisioning |
-| a Windows box | [`scripts/bootstrap-windows-worker.ps1`](./scripts/bootstrap-windows-worker.ps1), then point at it with `A11Y_WORKER=http://host:8765` |
-| neither | GitHub Actions runs real NVDA on `windows-2022` — see [`.github/workflows/capture-regression.yml`](./.github/workflows/capture-regression.yml) |
+This is not a footnote to the interesting work — it *is* some of the work. Screen readers are operating-system-bound desktop applications, not libraries. VoiceOver cannot be containerised at all; NVDA needs a full interactive Windows desktop, which Windows Server containers do not have. There is no Docker image that runs this product. The reproducible form of NVDA is a **Windows VM**, and a hand-tuned pet VM is not reproducible, scalable or usable by anyone else. So the infrastructure is built and documented as a deliverable. Rationale: [`ADR 0001`](./docs/adr/0001-capture-architecture.md).
 
-With a local VM and no `A11Y_WORKER` set, a run manages the VM on demand: it starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15s, which is cheaper than leaving a Windows guest idling (it is never actually idle). Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`scripts/local-worker/worker-ctl.sh`](./scripts/local-worker/worker-ctl.sh) does `up | pause | stop | status | idle-pause`.
+| you have | do this | what you get |
+|---|---|---|
+| a Mac | [`docs/local-worker-vm.md`](./docs/local-worker-vm.md) | A scripted Windows VM: ISO build, unattended install, auto-logon, NVDA provisioning, capture verified — no GUI clicking |
+| a Windows box | [`scripts/bootstrap-windows-worker.ps1`](./scripts/bootstrap-windows-worker.ps1) | One idempotent script, then `A11Y_WORKER=http://host:8765` |
+| neither | [`capture-regression.yml`](./.github/workflows/capture-regression.yml) | Real NVDA on a GitHub-hosted runner, so a contributor needs no infrastructure at all |
+
+Because a Windows guest is never genuinely idle, the pipeline manages it **on demand**: with a local VM and no `A11Y_WORKER` set, a run starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15 s. Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`worker-ctl.sh`](./scripts/local-worker/worker-ctl.sh) does `up | pause | stop | status | idle-pause`.
+
+When a worker breaks, the error messages lie — `"NVDA not installed"` usually means a version mismatch, not a missing install. [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) maps error string to actual cause, and [`scripts/diagnose-nvda-worker.ps1`](./scripts/diagnose-nvda-worker.ps1) applies that table automatically across six layers.
 
 ## How we know it works
 
@@ -141,9 +159,15 @@ The strongest evidence so far is structural rather than a number: the judge sees
 | `scripts/` | worker provisioning, diagnosis, and the scripted local VM |
 | `docs/adr/` | why the architecture is the way it is |
 
-## Where this is going: a small local model
+## Part 3: the accessibility model we are building
 
-The generative judge is the current engine, not the destination. The plan — [`docs/local-model.md`](./docs/local-model.md) — is deliberately **not** to train a general-purpose language model. The project already produces a structured signal, so the useful local model is a small **discriminative scorer** answering one question at a time:
+A frontier model calling an API is the current engine, not the destination. The goal is **our own model of the screen-reader experience** — and the reason it can exist is that parts 1 and 2 manufacture something no public dataset contains: paired captures of *what a screen reader actually announced* on pages that differ by one deliberate accessibility defect.
+
+**Nothing is trained yet.** What follows is the plan of record ([`docs/local-model.md`](./docs/local-model.md)), and the dataset is being collected now.
+
+### Now: a scorer over captured evidence
+
+Deliberately **not** a general-purpose language model. The project already produces a structured signal, so the useful model is a small **discriminative scorer** answering one question at a time:
 
 > Does this captured evidence support WCAG 2.4.4 Link Purpose?
 
@@ -168,6 +192,12 @@ npm run training:export        # JSONL, only for pairs where the contrast was ob
 A long unattended run publishes its state rather than expecting you to watch a log: `training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. `--resume` picks up from the captures already on disk. See [`src/training/README.md`](./src/training/README.md).
 
 45 pairs is a **pipeline seed and coverage smoke test, not a trainable dataset**. `docs/local-model.md` sets out the planning bands honestly — roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality, which across the current criterion matrix is on the order of thousands of labelled records. Splits must be grouped by page family, template and source so a good and bad version of the same template never straddle train and test, and repeated captures of one page do not count as independent examples. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by [`scripts/verify-safetensors.mjs`](./scripts/verify-safetensors.mjs).
+
+### Later, and unproven: predicting the announcement
+
+The scorer still needs a real screen reader to produce its input, so every run costs a VM. The further ambition is a model that **predicts what a screen reader would announce** for a page, giving a fast path that needs no VM in the loop — with real NVDA remaining the ground truth that trains it and spot-checks it, never removed.
+
+That is a materially harder claim than scoring evidence, and it is stated here as a direction, not a plan with a date. It is also the reason the dataset is built the way it is: paired good/bad captures of controlled pages are exactly the supervision such a model would need. If it does not pan out, parts 1–3 stand on their own.
 
 ## Status and roadmap
 
