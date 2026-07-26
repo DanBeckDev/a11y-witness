@@ -193,3 +193,19 @@ controls (Layer 2 part 2) will use focus mode.
 "Before" (deliberately inaccessible) demo. It audibly contains the real defects:
 unlabelled graphics, "Click here" links, and visual headings not marked up as
 headings.
+
+## Running `capture-check` on a live worker
+
+It refuses, and that is deliberate: NVDA is a single machine-wide resource, so the check and
+the worker would drive the same screen reader and whichever finished first would stop the
+other's. Stop the worker, run the check **in the interactive session** (a scheduled task —
+`utmctl exec` and SSH are session 0 and report the missing desktop as `NVDA is not supported`),
+then **start the worker again**, which the check does not do for you.
+
+```powershell
+Stop-ScheduledTask -TaskName a11ysrv
+Get-Process node -EA SilentlyContinue | Stop-Process -Force   # note: this orphans NVDA
+Start-ScheduledTask -TaskName capcheck                        # LogonType Interactive
+# ... read C:\Users\<user>\capcheck.log ...
+Start-ScheduledTask -TaskName a11ysrv
+```

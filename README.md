@@ -176,6 +176,12 @@ This is not a footnote to the interesting work — it *is* some of the work. Scr
 
 Because a Windows guest is never genuinely idle, the pipeline manages it **on demand**: with a local VM and no `A11Y_WORKER` set, a run starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15 s. Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`worker-ctl.sh`](./scripts/local-worker/worker-ctl.sh) does `up | pause | stop | status | idle-pause`.
 
+**A worker serves one capture at a time.** One machine has one desktop, one foreground window
+and one NVDA, so captures are serialised by design — the worker returns `429` while busy.
+Throughput scales by running more workers, not more threads ([ADR 0001](./docs/adr/0001-capture-architecture.md)).
+It also means a second shell or agent driving the same worker will see your restarts as
+breakage; `worker-ctl.sh status` is the arbiter.
+
 When a worker breaks, the error messages lie — `"NVDA not installed"` usually means a version mismatch, not a missing install. [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) maps error string to actual cause, and [`scripts/diagnose-nvda-worker.ps1`](./scripts/diagnose-nvda-worker.ps1) applies that table automatically across six layers.
 
 ## How we know it works
@@ -211,7 +217,7 @@ The strongest evidence so far is structural rather than a number: the judge sees
 
 A frontier model calling an API is the current engine, not the destination. The goal is **our own model of the screen-reader experience** — and the reason it can exist is that parts 1 and 2 manufacture something no public dataset contains: paired captures of *what a screen reader actually announced* on pages that differ by one deliberate accessibility defect.
 
-**Nothing is trained yet.** What follows is the plan of record ([`docs/local-model.md`](./docs/local-model.md)), and the dataset is being collected now.
+**No release candidate is trained yet.** The repository now has a reproducible frozen-encoder runner, and the current 90-row seed can produce a safetensors smoke-test artifact. It is deliberately marked ineligible for release; the plan of record is [`docs/local-model.md`](./docs/local-model.md), and the dataset still needs to grow substantially.
 
 ### Now: a scorer over captured evidence
 
