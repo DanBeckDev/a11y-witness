@@ -4,6 +4,7 @@
 // drift.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { leaseWorker, guestReachableUrl, isAfterRun } from "../capture/local-vm.js";
 import { captureMentionsTitle, titleOf } from "../capture/verify.js";
 import { beginRun, readProgress } from "./capture-progress.mjs";
@@ -132,6 +133,45 @@ async function pageTitle(url) {
 
 const REJECTED_PREVIEW_PHRASES = 3;
 const CAPTURE_ATTEMPTS = 3;
+const WORKER_WAIT_MS = Number(process.env.DATASET_WORKER_WAIT_MS || 600000);
+const WORKER_POLL_MS = 10000;
+
+// A worker that vanishes mid-run is recoverable; treating it as a failed case is not.
+//
+// The first full run lost its last 4 cases this way. The guest bugchecked at 10:10, and
+// because a connection error failed each case outright, one recoverable outage cascaded into
+// four permanent failures -- while the worker itself came back on its own via auto-logon and
+// the at-logon task. The run just was not patient.
+const TRANSIENT = /fetch failed|ECONNREFUSED|ECONNRESET|socket hang up|timed out|aborted/i;
+
+async function waitForWorker(worker) {
+  const deadline = Date.now() + WORKER_WAIT_MS;
+  while (Date.now() < deadline) {
+    try {
+      await fetchJson(worker + "/health", {}, WORKER_POLL_MS);
+      const waited = Math.round((WORKER_WAIT_MS - (deadline - Date.now())) / 1000);
+      console.log("    worker is back after " + waited + "s");
+      return;
+    } catch {
+      // Expected while it is down -- the whole point is to keep asking. The loop's own
+      // timeout is the error path, so there is nothing to record here.
+      await sleep(WORKER_POLL_MS);
+    }
+  }
+  throw new Error("the worker did not come back within " + Math.round(WORKER_WAIT_MS / 60000) + " minutes");
+}
+
+// One capture, tolerant of the worker disappearing underneath it.
+async function captureTolerantly(ctx, testCase, url) {
+  try {
+    return await captureOne(ctx, testCase, url);
+  } catch (error) {
+    if (!TRANSIENT.test(error.message)) throw error;
+    console.log("    worker unreachable (" + error.message + "); waiting for it to come back");
+    await waitForWorker(ctx.worker);
+    return captureOne(ctx, testCase, url);
+  }
+}
 
 function describeWrongPage(capture, { title, url }) {
   const preview = capture.transcript.slice(0, REJECTED_PREVIEW_PHRASES).map((p) => JSON.stringify(p)).join(", ");
@@ -161,7 +201,7 @@ function writeRejected(testCase, variant, capture, attempt) {
 async function captureVerified(ctx, testCase, { url, title, variant }) {
   let wrong = "";
   for (let attempt = 1; attempt <= CAPTURE_ATTEMPTS; attempt++) {
-    const capture = await captureOne(ctx, testCase, url);
+    const capture = await captureTolerantly(ctx, testCase, url);
     if (captureMentionsTitle(capture, title)) return capture;
     wrong = describeWrongPage(capture, { title, url });
     const kept = writeRejected(testCase, variant, capture, attempt);

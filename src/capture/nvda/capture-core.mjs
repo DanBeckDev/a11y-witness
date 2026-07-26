@@ -31,6 +31,10 @@ const NVDA_SETTLE_MS = 3_000; // after nvda.start() before reading
 const WINDOW_POLL_MS = 400; // between attempts to activate the Edge window
 const READY_ATTEMPTS = 3; // re-activate + re-anchor tries before reading anyway
 const EDGE_EXIT_TIMEOUT_MS = 8_000; // wait for Edge to actually exit during cleanup
+// Recycle NVDA after this many captures even when reuse is on. Reuse saves ~10s per
+// capture, but a screen reader held open indefinitely is exactly the long-running-state
+// risk the correctness audit warns about, so bound it rather than trusting it forever.
+const MAX_CAPTURES_PER_NVDA = 25;
 const STATE_SETTLE_MS = 1_200; // after activating a control, for a live region to announce
 const ANCHOR_SETTLE_MS = 400; // after Escape + Ctrl+Home, before re-reading fields
 
@@ -105,8 +109,11 @@ export async function captureWithNvda(url, opts = {}) {
   const browser = launchBrowser(url, diag);
 
   await focusBrowserWindow(browserWaitMs, diag);
-  await startScreenReader(diag); // throws if NVDA cannot start
-  await sleep(NVDA_SETTLE_MS);
+  const coldStart = await startScreenReader(diag, { reuse: !!opts.reuseScreenReader });
+  // The settle is for NVDA's own startup, so it is dead time when NVDA was already
+  // running. waitForDocument below is what actually establishes readiness either way.
+  if (coldStart) await sleep(NVDA_SETTLE_MS);
+  await resetSpeechLogs(diag);
 
   const deadline = Date.now() + maxMs;
 
@@ -120,7 +127,7 @@ export async function captureWithNvda(url, opts = {}) {
   const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
   const { structure, interaction } = await navigateByStructure({ deadline, diag, probeForms: !!opts.probeForms, task: opts.task });
 
-  await stopAndCleanup(diag, browser);
+  await stopAndCleanup(diag, browser, { keepScreenReader: !!opts.reuseScreenReader });
   diag.mark("done", { transcript: transcript.length });
   return {
     url,
@@ -247,16 +254,80 @@ async function reportedTitle(diag) {
   }
 }
 
-// Start NVDA. This is the one unrecoverable failure: with no screen reader there
-// is nothing to capture, so propagate it instead of recording and continuing.
-async function startScreenReader(diag) {
+// Is NVDA already running from a previous capture, and how many has it served? Only
+// meaningful when the caller asks to reuse it (the HTTP worker does; the one-shot CLI does
+// not). Module-level because the screen reader is a single machine-wide resource -- there
+// is exactly one of it, so exactly one place tracks it.
+let screenReader = { running: false, captures: 0 };
+
+// Start NVDA, or reuse the running instance. This is the one unrecoverable failure: with no
+// screen reader there is nothing to capture, so propagate it instead of recording and
+// continuing.
+//
+// Starting NVDA costs ~10s, and doing it per capture was 16 minutes of a 98-minute dataset
+// run. Reuse skips it -- but recycles after MAX_CAPTURES_PER_NVDA so drift in a
+// long-running screen reader cannot accumulate silently across a whole run.
+// Returns true when NVDA was actually started, so the caller can skip the settle it only
+// needs on a cold start.
+async function startScreenReader(diag, { reuse }) {
+  if (reuse && screenReader.running && screenReader.captures < MAX_CAPTURES_PER_NVDA) {
+    screenReader.captures += 1;
+    diag.mark("nvdaStart", { ok: true, reused: true, captures: screenReader.captures });
+    return false;
+  }
+  if (screenReader.running) {
+    diag.mark("nvdaRecycle", { after: screenReader.captures });
+    await stopScreenReader(diag);
+  }
   try {
     await nvda.start();
-    diag.mark("nvdaStart", { ok: true });
+    screenReader = { running: true, captures: 1 };
+    diag.mark("nvdaStart", { ok: true, reused: false });
+    return true;
   } catch (e) {
+    screenReader = { running: false, captures: 0 };
     diag.mark("nvdaStart", { ok: false, error: errMsg(e) });
     throw new Error("nvda.start failed: " + errMsg(e), { cause: e });
   }
+}
+
+// Clear NVDA's speech logs so every capture starts from the same state, reused or not.
+//
+// Two things go wrong without this once NVDA persists across captures, and both look like
+// flakiness rather than a bug:
+//
+//   1. `spokenPhraseLog` is cumulative. Over 90 captures it grows without bound, and every
+//      probe that reads it marshals a bigger array across the wire until the 4s query
+//      timeout starts firing late in a run.
+//   2. `lastSpokenPhrase` still holds the PREVIOUS capture's final phrase. The read-through
+//      seeds its no-movement guard from it, so a stale phrase can be mistaken for "the
+//      cursor did not move" -- the same class of bug as the phantom elements the NVDA
+//      correctness audit already fixed once.
+//
+// Run unconditionally, not only when reusing: a reused capture should begin in exactly the
+// state a cold one does, or the dataset quietly depends on which it got.
+async function resetSpeechLogs(diag) {
+  try {
+    await withTimeout(nvda.clearSpokenPhraseLog(), QUERY_TIMEOUT_MS, "clearSpeechLog");
+    await withTimeout(nvda.clearItemTextLog(), QUERY_TIMEOUT_MS, "clearItemLog");
+  } catch (e) {
+    // Not fatal, but it means the probes' deltas start from a dirty baseline, so say so.
+    diag.mark("resetSpeechLogs", { ok: false, error: errMsg(e) });
+  }
+}
+
+async function stopScreenReader(diag) {
+  if (!screenReader.running) return;
+  try { await nvda.stop(); } catch (e) { diag.mark("nvdaStop", { error: errMsg(e) }); }
+  screenReader = { running: false, captures: 0 };
+}
+
+/** Stop the shared screen reader. The HTTP worker calls this on shutdown; without it a
+ * reused NVDA would outlive the process that started it. */
+export async function shutdownScreenReader() {
+  const diag = createDiagnostics();
+  await stopScreenReader(diag);
+  return diag.entries;
 }
 
 // What does NVDA announce right after starting? Empty here means it is not
@@ -556,8 +627,8 @@ async function probeTaskButton(phrase, { interaction }) {
 // --- Teardown phase -------------------------------------------------------
 
 // Stop NVDA and close the browser so the next capture starts fresh.
-async function stopAndCleanup(diag, browser) {
-  try { await nvda.stop(); } catch (e) { diag.mark("nvdaStop", { error: errMsg(e) }); }
+async function stopAndCleanup(diag, browser, { keepScreenReader }) {
+  if (!keepScreenReader) await stopScreenReader(diag);
   await closeBrowser(diag, browser);
 }
 

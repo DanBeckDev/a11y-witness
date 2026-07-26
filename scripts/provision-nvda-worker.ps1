@@ -193,9 +193,40 @@ if ($elevated) {
   New-Item -Path $edgeKey -Force | Out-Null
   Set-ItemProperty $edgeKey -Name 'HideFirstRunExperience' -Value 1 -Type DWord
   Set-ItemProperty $edgeKey -Name 'BrowserSignin' -Value 0 -Type DWord
-  OK 'Edge first-run policies set'
+  # Stop Edge doing anything when we are not asking it to. A capture launches and kills Edge
+  # once per capture -- 90 times in a dataset run -- and background work racing that is both
+  # a source of leaked processes and of noise in the guest.
+  #
+  # Observed after a 45-pair run: 5 msedge processes alive on an idle, freshly booted machine
+  # with zero captures run, plus WER crash reports from MicrosoftEdgeUpdate.exe and Edge's
+  # own setup.exe (EdgeInstallerError 0x220). Edge was updating itself underneath the run.
+  Set-ItemProperty $edgeKey -Name 'BackgroundModeEnabled' -Value 0 -Type DWord
+  Set-ItemProperty $edgeKey -Name 'StartupBoostEnabled' -Value 0 -Type DWord
+  OK 'Edge policies set (first-run suppressed, no background mode, no startup boost)'
+
+  # Edge auto-update, off. On a workstation this is right; on a capture appliance it means an
+  # installer runs unannounced while we are driving the browser.
+  $edgeUpdateKey = 'HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate'
+  New-Item -Path $edgeUpdateKey -Force | Out-Null
+  Set-ItemProperty $edgeUpdateKey -Name 'UpdateDefault' -Value 0 -Type DWord
+  Set-ItemProperty $edgeUpdateKey -Name 'AutoUpdateCheckPeriodMinutes' -Value 0 -Type DWord
+  OK 'Edge auto-update disabled'
+
+  # Windows must not choose its own downtime. During one 94-minute dataset run Windows
+  # Update rebooted the worker TWICE mid-capture:
+  #   id=1074  winlogon.exe has initiated the power off ... on behalf of NT AUTHORITY\SYSTEM
+  # at 09:02:55 and 09:09:30. The run only survived because auto-logon plus the at-logon task
+  # self-heal, and the outages happened to fall between cases.
+  #
+  # Updates still download and install -- we are not leaving the box unpatched -- but the
+  # reboot waits for a human. The worker always has a logged-on user (auto-logon is required
+  # for NVDA), which is exactly the condition this policy keys on.
+  $auKey = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
+  New-Item -Path $auKey -Force | Out-Null
+  Set-ItemProperty $auKey -Name 'NoAutoRebootWithLoggedOnUsers' -Value 1 -Type DWord
+  OK 'Windows Update will not reboot on its own while a user is logged on'
 } else {
-  Warn 'skipped firewall + Edge policies (needs elevation)'
+  Warn 'skipped firewall + Edge/Update policies (needs elevation)'
 }
 
 # UAC prompts land on the secure desktop, where NVDA cannot read them and
