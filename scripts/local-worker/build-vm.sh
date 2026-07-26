@@ -80,10 +80,19 @@ info "support ISO: $(du -h "$SUPPORT_ISO" | cut -f1)"
 info "Creating disk and UEFI vars"
 [ -f "$VM_DIR/disk.qcow2" ] || qemu-img create -f qcow2 "$VM_DIR/disk.qcow2" "${DISK_GB}G" >/dev/null
 [ -f "$VM_DIR/efi-vars.fd" ] || cp "$FW_VARS_SRC" "$VM_DIR/efi-vars.fd"
-# Symlink rather than copy: the Windows ISO is ~6 GB and only needed for --install.
+# Symlink rather than copy: the Windows ISO is ~4 GB and only needed for --install.
 # (When exporting the VM to another machine, the symlink is simply absent, which is
 # fine -- normal boots do not use it.)
-ln -sf "$(cd "$(dirname "$WIN_ISO")" && pwd)/$(basename "$WIN_ISO")" "$VM_DIR/windows.iso"
+#
+# Guard against the source ALREADY being $VM_DIR/windows.iso: `ln -sf x x` creates a
+# symlink to itself and destroys the file. Passing the staged ISO back in is the obvious
+# thing to do on a second run, so this must not eat it.
+WIN_ISO_ABS="$(cd "$(dirname "$WIN_ISO")" && pwd)/$(basename "$WIN_ISO")"
+if [ "$WIN_ISO_ABS" != "$VM_DIR/windows.iso" ]; then
+  ln -sf "$WIN_ISO_ABS" "$VM_DIR/windows.iso"
+else
+  info "ISO is already staged at $VM_DIR/windows.iso; leaving it alone"
+fi
 
 # ---------------------------------------------------------------------------
 info "Writing run.sh"
