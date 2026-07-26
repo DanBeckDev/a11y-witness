@@ -159,4 +159,4 @@ JAWS and VoiceOver backends are designed for (the capture interface is screen-re
 
 Licensed under the **GNU Affero General Public License v3.0 or later** (`AGPL-3.0-or-later`); see [`LICENSE`](./LICENSE). The AGPL's network copyleft means anyone running a modified version as a service must publish their changes, so the project stays genuinely open and a closed hosted fork is not a free ride.
 
-**Commercial licensing.** If the AGPL does not fit — embedding in a closed-source product, or a proprietary hosted service — a separate commercial licence is available; open an issue to start the conversation. A hosted version and enterprise features may sit on top of the open core later, the same open-core model NetBox Labs uses.
+**Commercial licensing.** If the AGPL does not fit — embedding in a closed-source product, or a proprietary hosted service — a separate commercial licence is available; open an issue to start the conversation. A hosted version and enterprise features may sit on top of the open core later, following the standard open-core model.
