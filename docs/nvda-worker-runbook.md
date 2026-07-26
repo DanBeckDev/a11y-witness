@@ -104,7 +104,7 @@ all of them.
 | NVDA install lives outside `%TEMP%` | Windows cleanup empties `%TEMP%` | install gutted; NVDA start times out |
 | Edge profile lives outside `%TEMP%` | same cleanup | phantom "Welcome to Microsoft Edge" elements |
 | `showSpeechViewerAtStartup = False` | that window's focus event pollutes probe results | every probe returns `"NVDA Speech Viewer"`; **capture-check still passes** |
-| `ForegroundLockTimeout = 0` | Edge must be able to take focus | empty/partial captures |
+| `ForegroundLockTimeout = 0` **in the live session** | Edge must be able to take focus. A registry write is NOT enough: the value is cached per session and Windows does not reliably consume it at logon, so it is applied via `SystemParametersInfo` by provisioning and re-applied by `run-server.cmd` on every start | **0 phrases, no error at all** |
 | Firewall `NotifyOnListen = False` | the allow-app dialog is unclickable on a VM | session frozen |
 | guidepup and NVDA versions paired | see below | `"NVDA not installed"` |
 
@@ -169,7 +169,7 @@ The error text is often actively misleading. This table is the shortcut.
 | `Timed out waiting for NVDA to be running`, and **no `nvda.log` anywhere** | the install is a stub — payload deleted, `nvda.exe` launches and dies | reinstall NVDA (Layer 4) |
 | `NVDA not installed` | **rarely** a missing install. Thrown by `NVDAClient.connect` when the speech-channel cert is absent — usually guidepup too old for this NVDA | upgrade guidepup ≥0.29.2 |
 | `NVDA is not supported` | `getNVDAInstallationPath()` found nothing at guidepup's cache path | `npx @guidepup/setup install nvda` from the repo |
-| 0 phrases, `afterStart.lastSpoken` empty, no error | NVDA is running but not speaking: no interactive desktop, or a modal dialog is freezing the session | log in at the console; dismiss the dialog *on the console* — it never surfaces over SSH |
+| 0 phrases, `afterStart.lastSpoken` empty, no error | Three candidates, in order of likelihood: **`ForegroundLockTimeout` is not 0 in the live session** (Edge cannot take focus, so there is nothing to read); no interactive desktop; or a modal dialog freezing the session | run `scripts/apply-foreground-lock-timeout.ps1` **in the interactive session** and re-capture; otherwise log in at the console and dismiss the dialog *there* — it never surfaces over SSH |
 | every probe `after` is `"NVDA Speech Viewer"` | Speech Viewer enabled; probes record that window, not the page | patch `nvda.ini` |
 | phantom `"Welcome to Microsoft Edge"` / `"Sign in to sync data"` | fresh Edge profile; quick-nav escaped an empty document into browser UI | Edge policies + durable profile dir |
 | `/health` refused, SSH fine | worker not started (task has no trigger), or firewall/IP changed | `Start-ScheduledTask -TaskName a11ysrv` |
