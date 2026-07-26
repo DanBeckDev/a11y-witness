@@ -3,24 +3,34 @@
 // MUST run in an interactive desktop session.
 //
 // Every phase records a structured diagnostic (returned as `diagnostics`)
-// instead of swallowing errors. The most important one is `afterStart.lastSpoken`:
-// if NVDA announces nothing right after starting, it is not reading the page
-// (focus / session / speech-pipe problem) and the whole capture will be empty —
-// that single field explains an otherwise-mysterious empty result.
+// instead of swallowing errors. When a capture comes back empty, read them in this
+// order: `documentReady` (did NVDA ever name the document? ok:false means it was
+// reading a blank or not-yet-rendered window), then `windowsActivate` (did Edge reach
+// the foreground, and how long did it take), then `afterStart.lastSpoken`.
+//
+// Do NOT treat an empty `afterStart.lastSpoken` as the smoking gun on its own. It used
+// to be sampled before anchoring, when NVDA legitimately had not spoken yet: across 13
+// healthy captures it was empty 13 times, so it diagnosed nothing. It is now sampled
+// after the document is anchored and named, which makes it meaningful.
 //
 // captureWithNvda reads as a top-down narrative; each phase below it is one
 // level of abstraction down (the "stepdown rule").
 import { nvda, windowsActivate, windowsQuit } from "@guidepup/guidepup";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 
 // --- Tunables. Named so the timing/limits can be reasoned about and adjusted
 // in one place rather than hunting for bare numbers in the control flow. ---
 const DEFAULT_STEPS = 150; // read-through line count cap
-const DEFAULT_BROWSER_WAIT_MS = 12_000; // Edge cold start + page load
+const DEFAULT_BROWSER_WAIT_MS = 12_000; // UPPER BOUND on waiting for Edge, not a fixed sleep
 const DEFAULT_BUDGET_MS = 120_000; // overall wall-clock budget for one capture
 const WINDOW_SETTLE_MS = 800; // after focusing the Edge window
 const NVDA_SETTLE_MS = 3_000; // after nvda.start() before reading
+const WINDOW_POLL_MS = 400; // between attempts to activate the Edge window
+const READY_ATTEMPTS = 3; // re-activate + re-anchor tries before reading anyway
+const EDGE_EXIT_TIMEOUT_MS = 8_000; // wait for Edge to actually exit during cleanup
 const STATE_SETTLE_MS = 1_200; // after activating a control, for a live region to announce
 const ANCHOR_SETTLE_MS = 400; // after Escape + Ctrl+Home, before re-reading fields
 
@@ -92,26 +102,25 @@ export async function captureWithNvda(url, opts = {}) {
   const maxMs = Number(opts.maxMs || DEFAULT_BUDGET_MS);
   const diag = createDiagnostics();
 
-  launchBrowser(url);
-  diag.mark("browserLaunched", { url });
-  await sleep(browserWaitMs);
+  const browser = launchBrowser(url, diag);
 
-  await focusBrowserWindow(diag);
+  await focusBrowserWindow(browserWaitMs, diag);
   await startScreenReader(diag); // throws if NVDA cannot start
   await sleep(NVDA_SETTLE_MS);
 
   const deadline = Date.now() + maxMs;
-  await recordStartupHealth(diag);
 
   // Start from a known state (browse mode + document top). Safe now that --app
   // gives a chromeless single-page window — earlier this surfaced the browser
   // start page because the window was not controlled. Also cancels NVDA's
   // auto-say-all so it can't race the read.
   await anchorToTop();
+  await waitForDocument(diag);
+  await recordStartupHealth(diag);
   const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
   const { structure, interaction } = await navigateByStructure({ deadline, diag, probeForms: !!opts.probeForms, task: opts.task });
 
-  await stopAndCleanup(diag);
+  await stopAndCleanup(diag, browser);
   diag.mark("done", { transcript: transcript.length });
   return {
     url,
@@ -126,31 +135,115 @@ export async function captureWithNvda(url, opts = {}) {
 
 // --- Setup phases ---------------------------------------------------------
 
-// Open the page in a fresh, maximized Edge window (own profile, no first-run UI).
-function launchBrowser(url) {
-  // --app opens a single chromeless window (no tab strip, address bar, toolbar
-  // or banners) showing ONLY this URL, so NVDA's browse-mode quick-nav cannot
-  // wander out of our document into browser UI (the Root-1 cause: captures that
-  // read Edge's image-viewer/"Close banner" chrome or the MSN start page).
-  spawn(
-    "cmd",
-    ["/c", "start", "", "msedge",
-      "--no-first-run", "--no-default-browser-check", "--start-maximized",
-      "--disable-session-crashed-bubble", "--disable-features=msEdgeWelcomePage",
-      `--user-data-dir=${EDGE_PROFILE_DIR}`, `--app=${url}`],
-    { detached: true, stdio: "ignore" }
-  );
+// Where Edge lives. Resolved so we can spawn it directly and OWN the process: launching
+// via `cmd /c start` returns no handle, which means teardown can only be guessed at. See
+// closeBrowser.
+const EDGE_EXES = [
+  `${process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)"}\\Microsoft\\Edge\\Application\\msedge.exe`,
+  `${process.env.ProgramFiles || "C:\\Program Files"}\\Microsoft\\Edge\\Application\\msedge.exe`,
+];
+
+// --app opens a single chromeless window (no tab strip, address bar, toolbar or banners)
+// showing ONLY this URL, so NVDA's browse-mode quick-nav cannot wander out of our document
+// into browser UI (the Root-1 cause: captures that read Edge's image-viewer/"Close banner"
+// chrome or the MSN start page).
+function edgeArgs(url) {
+  return [
+    "--no-first-run", "--no-default-browser-check", "--start-maximized",
+    "--disable-session-crashed-bubble", "--disable-features=msEdgeWelcomePage",
+    `--user-data-dir=${EDGE_PROFILE_DIR}`, `--app=${url}`,
+  ];
+}
+
+// Open the page in a fresh, maximized Edge window, returning the process when we own it.
+//
+// Owning it matters: with a dedicated --user-data-dir there is no existing instance to hand
+// off to, so this process IS the browser and its "exit" is a real event we can await
+// instead of polling the task list. That is what lets the next capture know the previous
+// Edge has genuinely gone -- captures run back to back, and starting one while the last is
+// still tearing down produced exactly the "blank, blank" transcripts we kept retrying past.
+function launchBrowser(url, diag) {
+  const exe = EDGE_EXES.find((p) => existsSync(p));
+  if (!exe) {
+    // Fall back to the old indirect launch rather than failing the capture: an unusual Edge
+    // install should cost us the exit event, not the whole run.
+    diag.mark("browserLaunched", { url, owned: false, reason: "msedge.exe not found in the standard locations" });
+    spawn("cmd", ["/c", "start", "", "msedge", ...edgeArgs(url)], { detached: true, stdio: "ignore" });
+    return null;
+  }
+  const child = spawn(exe, edgeArgs(url), { stdio: "ignore" });
+  child.on("error", (e) => diag.mark("browserError", { error: errMsg(e) }));
+  diag.mark("browserLaunched", { url, owned: true, pid: child.pid });
+  return child;
 }
 
 // Bring Edge to the foreground. Relying on the launch to take focus was a source
 // of flaky, empty captures, so we focus it explicitly.
-async function focusBrowserWindow(diag) {
+//
+// POLLS rather than sleeping a fixed 12s first. The old fixed wait was both too slow
+// (Edge is usually up in well under a second, and 12s x 90 captures is 18 minutes of
+// doing nothing) and too optimistic: under load Edge took longer than the guess, the
+// window was activated before it existed, and the capture came back as two "blank"
+// phrases with no error anywhere. Waiting for the condition is faster AND correct;
+// browserWaitMs is now the upper bound rather than the wait itself.
+async function focusBrowserWindow(maxWaitMs, diag) {
+  const deadline = Date.now() + maxWaitMs;
+  const startedAt = Date.now();
+  let lastError = "";
+  while (Date.now() < deadline) {
+    try {
+      await windowsActivate("msedge.exe", "Edge");
+      await sleep(WINDOW_SETTLE_MS);
+      diag.mark("windowsActivate", { ok: true, waitedMs: Date.now() - startedAt });
+      return;
+    } catch (e) {
+      lastError = errMsg(e);
+      await sleep(WINDOW_POLL_MS);
+    }
+  }
+  diag.mark("windowsActivate", { ok: false, error: lastError, waitedMs: Date.now() - startedAt });
+}
+
+// Ask NVDA what document it is in, and re-focus until it names one.
+//
+// This is the gate that makes a capture self-verifying. `windowsActivate` succeeding only
+// means an Edge process owns a window; it does not mean the page is rendered, and reading
+// too early yields "blank" lines that look exactly like a page with no content. Rather
+// than lengthen a guess, ask the screen reader what it can actually see.
+//
+// Deliberately does NOT throw when the title never arrives: not every page has a title,
+// and the caller (and the dataset capture step) verify content independently. Recording
+// documentReady:false makes the cause visible instead of leaving a mystery blank capture.
+async function waitForDocument(diag) {
+  for (let attempt = 1; attempt <= READY_ATTEMPTS; attempt++) {
+    const title = await reportedTitle(diag);
+    if (title && title.toLowerCase() !== "blank") {
+      diag.mark("documentReady", { ok: true, title, attempt });
+      return;
+    }
+    diag.mark("documentReady", { ok: false, title, attempt });
+    try {
+      await windowsActivate("msedge.exe", "Edge");
+    } catch (e) {
+      diag.mark("reactivate", { ok: false, error: errMsg(e), attempt });
+    }
+    await sleep(STATE_SETTLE_MS);
+    await anchorToTop();
+  }
+}
+
+// Polling here is not a shortcut, it is the only option: guidepup's NVDA client is purely
+// request/response (start, next, act, lastSpokenPhrase, spokenPhraseLog -- no emitter, no
+// async iterator), so there is no "NVDA is ready" event to await. Asking costs one round
+// trip and normally answers on the first attempt.
+async function reportedTitle(diag) {
   try {
-    await windowsActivate("msedge.exe", "Edge");
-    await sleep(WINDOW_SETTLE_MS);
-    diag.mark("windowsActivate", { ok: true });
+    await withTimeout(nvda.perform(nvda.keyboardCommands.reportTitle), NAV_TIMEOUT_MS, "reportTitle");
+    await sleep(ANCHOR_SETTLE_MS);
+    return ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "reportTitle")) || "").trim();
   } catch (e) {
-    diag.mark("windowsActivate", { ok: false, error: errMsg(e) });
+    diag.mark("reportTitle", { error: errMsg(e) });
+    return "";
   }
 }
 
@@ -463,8 +556,38 @@ async function probeTaskButton(phrase, { interaction }) {
 // --- Teardown phase -------------------------------------------------------
 
 // Stop NVDA and close the browser so the next capture starts fresh.
-async function stopAndCleanup(diag) {
+async function stopAndCleanup(diag, browser) {
   try { await nvda.stop(); } catch (e) { diag.mark("nvdaStop", { error: errMsg(e) }); }
-  try { await windowsQuit("msedge.exe"); }
-  catch { spawn("cmd", ["/c", "taskkill", "/im", "msedge.exe", "/f"], { stdio: "ignore" }); }
+  await closeBrowser(diag, browser);
+}
+
+// Close Edge and do not return until it has actually gone.
+//
+// The old version asked it to quit and moved on. Because captures run back to back, the
+// next one could launch into a browser that was still terminating -- and NVDA then read an
+// empty document, producing "blank, blank" with no error. That is the race the host-side
+// retry was papering over.
+//
+// When we own the process this is an event, not a poll: await its "exit". The taskkill is
+// the escalation for a browser that ignores the request, and the unowned fallback path.
+async function closeBrowser(diag, browser) {
+  const exited = browser ? once(browser, "exit") : null;
+  try {
+    await windowsQuit("msedge.exe");
+  } catch (e) {
+    diag.mark("browserQuit", { ok: false, error: errMsg(e) });
+  }
+  if (!exited) {
+    spawn("cmd", ["/c", "taskkill", "/im", "msedge.exe", "/f"], { stdio: "ignore" });
+    diag.mark("browserClosed", { owned: false });
+    return;
+  }
+  const timedOut = Symbol("timeout");
+  const outcome = await Promise.race([exited, sleep(EDGE_EXIT_TIMEOUT_MS, timedOut)]);
+  if (outcome === timedOut) {
+    browser.kill();
+    diag.mark("browserClosed", { owned: true, forced: true });
+    return;
+  }
+  diag.mark("browserClosed", { owned: true, forced: false });
 }
