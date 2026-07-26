@@ -52,6 +52,8 @@ Findings are ordered along the screen-reader experience waterfall — **Perceive
 - **It does not tab through the page and call that a screen-reader test.** Tabbing reaches interactive controls only; it skips how screen-reader users actually read and explore. Modelling real navigation — browse mode, jumping by heading and landmark, operating controls — is the whole point.
 - **It does not judge what a screen reader cannot perceive.** Contrast, colour and target size come from the rule-based layer. We do not reimplement those rules or pretend to see them.
 - **It is not a compliance certificate.** It produces evidence and cited, confidence-scored findings for a human to act on. Overlay vendors lost the market — and drew an FTC fine — by over-claiming, and [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) is an honest audit of where our own evaluation is and is not validated.
+- **It does not claim to reproduce what it is like to be blind.** It reports the screen-reader navigation experience judged against success criteria. Disability-simulation framing misleads, and screen-reader users themselves navigate in divergent ways.
+- **Where neither layer can decide, it says so.** Whether alt text is *accurate* rather than merely present, or whether a reading order is *meaningful*, goes to a human — the way axe flags "incomplete". We do not silently claim coverage we do not have.
 
 ## How it works
 
@@ -85,7 +87,7 @@ The model call itself is one seam (`ask()` in [`src/spike/judge.ts`](./src/spike
 | `anthropic` | `ANTHROPIC_API_KEY` | optional `JUDGE_MODEL` |
 | `openai` | `JUDGE_BASE_URL` | hosted OpenAI **or** any local engine (llama.cpp, vLLM, Ollama, LM Studio) |
 
-The `openai` backend makes a self-hosted, zero-cost judge realistic: a local **Qwen3.6-27B (Q4)** scored 88% recall with no false positives on the clean reference page over the W3C subset, missing only the most judgment-heavy criterion (1.4.5). Details in [`PLAN.md`](./PLAN.md).
+The `openai` backend makes a self-hosted, zero-cost judge realistic. Measured against a local **Qwen3.6-27B (Q4)** on the W3C subset: it caught the high-signal criteria and produced no false positives on the clean reference page — the main risk with a small model — missing only the most judgment-heavy criterion (1.4.5). That was a subset, not the full suite, and not the interaction cases; see [`PLAN.md`](./PLAN.md) for the caveats.
 
 ## Quickstart
 
@@ -117,24 +119,14 @@ There are no unit tests; verification is layered, and each layer tests something
 | command | what it checks |
 |---|---|
 | `npm run lint` / `npm run typecheck` | mechanical; both gate CI |
-| `npm run eval` | judge quality against **34 labelled fixtures** (W3C tutorial pages and paired good/bad cases). Headline: 100% recall over the failure cases, ~2 false positives — both on the subjective 2.4.4/2.4.6 link/label criteria. Needs a local Codex login, so it cannot run in CI |
+| `npm run eval` | judge quality against **34 labelled fixtures** — W3C tutorial pages and paired good/bad cases. Needs a local Codex login, so it cannot run in CI |
 | `npm run rules-check` | the deterministic rules in isolation. Exits non-zero on **any** false positive against a conformant page — precision is the entire point of a rule |
 | `node src/capture/nvda/capture-check.mjs` | the capture half, on the worker itself. Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
 | `capture-regression.yml` | real NVDA on a GitHub-hosted Windows runner |
 
-## Building a training set
+**On the numbers.** The suite currently reports full recall on the observable failure cases with a small number of false positives, concentrated in the subjective link-purpose (2.4.4) and descriptive-heading (2.4.6) criteria. Treat that as *promising, not validated*, and read [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) before quoting it anywhere: the guards were iteratively tuned against these cases, scoring is single-run with no test-retest interval, and **there is no expert human-agreement baseline yet**. That document sets the bar for "trustworthy enough" *before* measuring against it, and lists what is still missing — deliberately, so the goalposts cannot move.
 
-`src/training/` collects screen-reader-only evidence from **45 controlled page pairs**, each a known-good page and a mutated one that breaks a single criterion, so a label comes from the contrast rather than a human's opinion. Model input is deliberately limited to what a screen reader produced — no HTML, DOM, CSS or axe findings — so a model trained on it cannot learn to cheat by reading the markup.
-
-```bash
-npm run training:generate      # write the page pairs + manifest
-npx serve runs/screenreader-dataset/pages -l 5050
-npm run training:capture       # ~90 NVDA captures; starts a local VM on demand
-npm run training:status        # progress, current case, failures, worker health
-npm run training:export        # JSONL, only for pairs where the contrast was observable
-```
-
-A long unattended run publishes its state rather than expecting you to watch a log: `training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. `--resume` picks up from the captures already on disk. See [`src/training/README.md`](./src/training/README.md).
+The strongest evidence so far is structural rather than a number: the judge sees the **transcript, not the page**, so it cannot recall a well-known page's documented issues — it has to point at something that was announced. A page authored fresh and never published ([`src/eval/pages/contamination-test.html`](./src/eval/pages/contamination-test.html)) was caught correctly on all four planted violation categories with no false positives on the correct controls, which is evidence that recall is genuine judging rather than memorisation. One page is not a suite.
 
 ## Repository map
 
@@ -149,11 +141,59 @@ A long unattended run publishes its state rather than expecting you to watch a l
 | `scripts/` | worker provisioning, diagnosis, and the scripted local VM |
 | `docs/adr/` | why the architecture is the way it is |
 
-## Status
+## Where this is going: a small local model
 
-Working end to end. The core bet is demonstrated: a real screen reader is driven through a real page, and the judge produces grounded, WCAG-cited findings that separate broken pages from accessible ones. What is deliberately still open — calibration, criteria we do not yet cover, and where the evaluation is thin — is written down in [`PLAN.md`](./PLAN.md) and [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) rather than glossed over.
+The generative judge is the current engine, not the destination. The plan — [`docs/local-model.md`](./docs/local-model.md) — is deliberately **not** to train a general-purpose language model. The project already produces a structured signal, so the useful local model is a small **discriminative scorer** answering one question at a time:
 
-JAWS and VoiceOver backends are designed for (the capture interface is screen-reader agnostic) but not implemented.
+> Does this captured evidence support WCAG 2.4.4 Link Purpose?
+
+That model can *score* a candidate finding but cannot invent one, which is the property that matters: a generator that hallucinates a violation destroys the trust the whole project depends on. The division of labour stays as it is — deterministic rules keep the exact absence cases, the scorer takes the judgment calls, and the explanation is rendered from captured evidence and a fixed WCAG template.
+
+It slots into the existing `applyGate` seam in [`src/spike/verify-gate.ts`](./src/spike/verify-gate.ts), so it can run as an opt-in gate alongside the current judge and be measured against it before it replaces anything. **The acceptance bar is pre-registered**: it may only replace a model-generated finding once it meets the holdout bar for that criterion with zero false positives on the clean paired pages. Until then it is an independently measured signal and the current judge remains the fallback.
+
+There is a concrete reason this needs its own dataset. Link purpose (2.4.4) is a known weak spot: the zero-shot entailment gate does not separate vague from descriptive link text reliably — validated, they score in overlapping ranges. That is a fine-tune target, not something more prompt-engineering will fix.
+
+### Building the training set
+
+`src/training/` collects screen-reader-only evidence from **45 controlled page pairs**, each a known-good page and a mutated one that breaks a single criterion, so a label comes from the contrast rather than from anyone's opinion. Model input is deliberately limited to what a screen reader produced — **no HTML, DOM, CSS, URL or axe findings** — so a model trained on it cannot learn to cheat by reading the markup. The pages are instruments for producing captures and labels; they are not training input.
+
+```bash
+npm run training:generate      # write the page pairs + manifest
+npx serve runs/screenreader-dataset/pages -l 5050
+npm run training:capture       # ~90 NVDA captures; starts a local VM on demand
+npm run training:status        # progress, current case, failures, worker health
+npm run training:export        # JSONL, only for pairs where the contrast was observable
+```
+
+A long unattended run publishes its state rather than expecting you to watch a log: `training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. `--resume` picks up from the captures already on disk. See [`src/training/README.md`](./src/training/README.md).
+
+45 pairs is a **pipeline seed and coverage smoke test, not a trainable dataset**. `docs/local-model.md` sets out the planning bands honestly — roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality, which across the current criterion matrix is on the order of thousands of labelled records. Splits must be grouped by page family, template and source so a good and bad version of the same template never straddle train and test, and repeated captures of one page do not count as independent examples. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by [`scripts/verify-safetensors.mjs`](./scripts/verify-safetensors.mjs).
+
+## Status and roadmap
+
+Working end to end, and under active development. The core bet is demonstrated: a real screen reader is driven through a real page, and the judge produces grounded, WCAG-cited findings that separate broken pages from accessible ones. What is still open is written down rather than glossed over — the full backlog is [`PLAN.md`](./PLAN.md), the honest evaluation audit is [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md).
+
+**Next: making it consumable.** The primary distribution vector is a **GitHub Action** ([`ADR 0003`](./docs/adr/0003-testing-and-distribution.md)) — teams drop it into their workflow and get findings on the PR, where accessibility regressions actually happen. The groundwork is done: real NVDA runs on a GitHub-hosted Windows runner, and the judge backend is pluggable so it can use the team's own key. A hosted layer on top of the open core comes only if the Action proves demand.
+
+**Trust work, in priority order:** an expert-labelled human-agreement baseline (the single biggest gap), confidence calibration measured against outcomes, reported test-retest reliability, and schema-enforced judge output with the model and prompt version pinned per run.
+
+**Coverage.** More screen readers behind the same `CaptureBackend` interface — JAWS (Windows; commercial and the hardest to automate, a deliberate fast-follow), VoiceOver (macOS/iOS; needs a real Mac, and the AppleScript path is fragile), Orca (Linux; the only one that runs headless in a container, which makes it a useful portable dev tier). Then multi-step flows, with Playwright driving the page while the screen reader drives the assistive technology.
+
+**Capture gaps with known fixes.** Announced *language* (3.1.1/3.1.2 — wrong-voice pronunciation is high-impact and invisible to us today), name/role *mismatch* under 4.1.2 (needs both the visible label and the announced name), NVDA's Elements List for bulk enumeration instead of repeated quick-nav, and a pinned NVDA settings profile for cross-version reproducibility.
+
+**Not covered, and not pretended otherwise.** Braille output, magnification and voice control are all real assistive-technology experiences this tool says nothing about. One screen reader in browse mode is *one* valid lived experience, not the universal one.
+
+## Documentation
+
+| document | what it is for |
+|---|---|
+| [`PLAN.md`](./PLAN.md) | the working backlog and milestones, with what is proven and what is not |
+| [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) | how we use AI, audited against LLM-as-judge practice; the biases we are exposed to; the pre-registered bar; what is out of scope and why |
+| [`docs/local-model.md`](./docs/local-model.md) | the local discriminative-scorer plan: model shape, data sources, how much data is enough, split rules, weight-handling policy, acceptance bar |
+| [`docs/local-worker-vm.md`](./docs/local-worker-vm.md) | building a Windows worker VM on a Mac, fully scripted, plus the traps that cost real time |
+| [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) | when a worker breaks: error string → actual cause. The messages are misleading and this table is faster than first principles |
+| [`docs/nvda-correctness-audit.md`](./docs/nvda-correctness-audit.md) | a review of how we drive NVDA against the official user guide, and the root-cause pass that followed |
+| [`docs/adr/`](./docs/adr/) | why the architecture is the way it is: capture as a network service, layered coverage, testing and distribution |
 
 ## Licence
 
