@@ -6,6 +6,7 @@
 #   ./scripts/local-worker/worker-ctl.sh pause         # freeze it: ~0.6% CPU, instant resume, RAM not guaranteed
 #   ./scripts/local-worker/worker-ctl.sh stop          # shut it down: nothing held, ~15 s to come back
 #   ./scripts/local-worker/worker-ctl.sh status        # state, resource use, health
+#   ./scripts/local-worker/worker-ctl.sh json          # the same, machine-readable (used by the CLI)
 #   ./scripts/local-worker/worker-ctl.sh idle-pause 15 # watch, then pause after 15 idle minutes
 #   ./scripts/local-worker/worker-ctl.sh idle-stop 30  # same but shut down instead
 #
@@ -173,6 +174,18 @@ case "$CMD" in
     echo "health:  ${body:-unreachable}"
     ;;
 
+  json)
+    # One line of JSON for the control plane (src/capture/local-vm.ts). Keeping every UTM
+    # detail behind this command means the TS side never parses human-readable output and
+    # never learns about utmctl, bundles or bookmarks.
+    ip="$(guest_ip "$UUID" || true)"
+    body="$(health "$UUID" || true)"
+    healthy=false; [ -n "$body" ] && healthy=true
+    busy=false; if echo "$body" | grep -q '"busy":true'; then busy=true; fi
+    printf '{"uuid":"%s","name":"%s","state":"%s","ip":"%s","port":%s,"healthy":%s,"busy":%s}\n' \
+      "$UUID" "$VM_NAME" "$(vm_state "$UUID")" "${ip:-}" "$PORT" "$healthy" "$busy"
+    ;;
+
   idle-pause|idle-stop)
     mins="${ARG:-15}"
     action=pause; [ "$CMD" = "idle-stop" ] && action=stop
@@ -200,5 +213,5 @@ case "$CMD" in
     done
     ;;
 
-  *) die "unknown command '$CMD' (up | pause | stop | status | idle-pause [min] | idle-stop [min])";;
+  *) die "unknown command '$CMD' (up | pause | stop | status | json | idle-pause [min] | idle-stop [min])";;
 esac

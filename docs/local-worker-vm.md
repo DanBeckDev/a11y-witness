@@ -357,6 +357,43 @@ So `pause` for a short gap — instant resume, since the guest never rebooted �
 when you want the memory back for certain. `stop` is cheap: a capture immediately after a
 cold start was verified working, disclosure state change included.
 
+### The pipeline drives this for you
+
+You rarely need `worker-ctl.sh up` by hand. Run the CLI with **no** `A11Y_WORKER` set and it
+manages the VM itself:
+
+```bash
+npm run witness -- https://example.com --task "Find the contact details"
+# Local worker VM 'a11y-worker' is stopped; bringing it up ...
+#   ready after 12s: {"ok":true,"screenReader":"NVDA","busy":false}
+# ... report ...
+# Shutting down the local worker VM ...
+```
+
+Measured: 88 s for that whole cycle from a stopped VM, of which only ~25 s is the VM
+(12–15 s boot, ~10 s clean shutdown) — the rest is the judge. So the VM lifecycle is not
+what makes a run slow, which is the argument for shutting it down every time.
+
+The default is `restore`: put the VM back in the state it was found in. That needs no
+configuration to be correct in every case, including the one that matters — a VM you had
+already started is left running, so a run never pulls the floor out from under a session
+you were using. Release also stands down if the worker reports `busy`, in case a second run
+started a capture while the first was finishing.
+
+| you want | do |
+|---|---|
+| the default | nothing; `--after restore` |
+| always shut down | `--after stop`, or `A11Y_VM_AFTER=stop` |
+| keep it warm between runs | `--after leave` |
+| a remote worker, no VM management | `--worker http://host:8765` or `A11Y_WORKER=...` |
+| the old behaviour (localhost:8765) | `A11Y_LOCAL_VM=0` |
+
+Everything UTM-specific stays in `worker-ctl.sh`; `src/capture/local-vm.ts` only reads its
+`json` output, so the control plane never learns about utmctl, bundles or bookmarks.
+
+Not wired in yet: `npm run training:capture` still requires `A11Y_WORKER` (it is `.mjs` and
+cannot import the TypeScript module). Give it one with `worker-ctl.sh up`.
+
 One thing `worker-ctl.sh` deliberately does *not* do is send `utmctl stop` bare. That
 defaults to `--force`, a power-off event: from Windows' point of view the plug was pulled,
 so every stop leaves a dirty volume. It sends `--request` (ACPI shutdown, ~10 s) and only

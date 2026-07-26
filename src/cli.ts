@@ -7,26 +7,43 @@
  *
  * Usage:
  *   npm run witness -- <url> --task "..." [--worker http://host:port] [--json]
- * The worker URL also reads from A11Y_WORKER. Default http://localhost:8765.
+ * The worker URL also reads from A11Y_WORKER.
+ *
+ * With neither set, the run manages a local UTM worker VM on demand: it starts one if
+ * needed and puts it back how it found it afterwards. See resolveWorker below.
  */
 import { judge, type Judgment } from "./spike/judge.js";
 import { scanWithAxe, type AxeFinding } from "./scan/axe.js";
 import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "./spike/layers.js";
+import { acquireLocalWorker, findLocalVm, isAfterRun, type AfterRun, type WorkerLease } from "./capture/local-vm.js";
+
+const DEFAULT_WORKER = "http://localhost:8765";
 
 interface Args {
   url: string;
   task: string;
-  worker: string;
+  /** null when the user named no worker, which is what enables local-VM management. */
+  worker: string | null;
+  after: AfterRun;
   json: boolean;
   debug: boolean;
   probeForms: boolean;
+}
+
+function parsedAfterRun(): AfterRun {
+  const v = process.env.A11Y_VM_AFTER;
+  if (!v) return "restore";
+  if (isAfterRun(v)) return v;
+  console.error(`A11Y_VM_AFTER must be restore|stop|pause|leave (got "${v}")`);
+  process.exit(1);
 }
 
 function parseArgs(): Args {
   const a = process.argv.slice(2);
   let url = "";
   let task = "Read and understand this page";
-  let worker = process.env.A11Y_WORKER ?? "http://localhost:8765";
+  let worker = process.env.A11Y_WORKER ?? null;
+  let after = parsedAfterRun();
   let json = false;
   let debug = false;
   let probeForms = false;
@@ -34,16 +51,43 @@ function parseArgs(): Args {
     const v = a[i];
     if (v === "--task") task = a[++i] ?? task;
     else if (v === "--worker") worker = a[++i] ?? worker;
+    else if (v === "--after") after = afterRunArg(a[++i]);
     else if (v === "--json") json = true;
     else if (v === "--debug") debug = true;
     else if (v === "--probe-forms") probeForms = true;
     else if (!v.startsWith("--")) url = v;
   }
   if (!url) {
-    console.error('Usage: npm run witness -- <url> --task "..." [--worker http://host:port] [--json] [--debug] [--probe-forms]');
+    console.error('Usage: npm run witness -- <url> --task "..." [--worker http://host:port] [--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms]');
     process.exit(1);
   }
-  return { url, task, worker, json, debug, probeForms };
+  return { url, task, worker, after, json, debug, probeForms };
+}
+
+function afterRunArg(v: string | undefined): AfterRun {
+  if (v && isAfterRun(v)) return v;
+  console.error(`--after must be restore|stop|pause|leave (got "${v ?? ""}")`);
+  process.exit(1);
+}
+
+/**
+ * Decide what to capture against, in priority order:
+ *
+ *   1. A worker the user named (--worker / A11Y_WORKER) is used as-is. Naming one is a
+ *      statement that you are managing it yourself, so the VM lifecycle is never touched.
+ *   2. Otherwise, a registered local UTM VM is started on demand and released afterwards.
+ *   3. Otherwise, the historical default, so a hand-run worker on this machine still works.
+ *
+ * A11Y_LOCAL_VM=0 skips step 2 for anyone who wants the old behaviour back.
+ */
+async function resolveWorker({ worker, after }: Pick<Args, "worker" | "after">): Promise<WorkerLease> {
+  const noop = { release: async () => {} };
+  if (worker) return { worker, ...noop };
+  if (process.env.A11Y_LOCAL_VM === "0") return { worker: DEFAULT_WORKER, ...noop };
+
+  const vm = await findLocalVm();
+  if (!vm) return { worker: DEFAULT_WORKER, ...noop };
+  return acquireLocalWorker(vm, after);
 }
 
 interface CaptureResponse {
@@ -83,8 +127,21 @@ function captureReadPage(cap: CaptureResponse, title: string): boolean {
 }
 
 async function main(): Promise<void> {
-  const { url, task, worker, json, debug, probeForms } = parseArgs();
+  const args = parseArgs();
+  const lease = await resolveWorker(args);
+  // finally, not a catch: the VM must be released whether the run succeeded, threw, or the
+  // judge rejected the capture. Leaking a running Windows guest is the failure mode this
+  // whole module exists to prevent.
+  try {
+    await runWitness({ ...args, worker: lease.worker });
+  } finally {
+    await lease.release();
+  }
+}
 
+type RunOptions = Omit<Args, "worker"> & { worker: string };
+
+async function runWitness({ url, task, worker, json, debug, probeForms }: RunOptions): Promise<void> {
   process.stderr.write(`Scanning ${url} (rule-based axe-core + real screen reader) ...\n`);
   // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
   // load the same URL independently, so run them concurrently. axe failure is
