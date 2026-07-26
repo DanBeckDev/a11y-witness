@@ -164,6 +164,24 @@ The error text is often actively misleading. This table is the shortcut.
 field: if it is empty **and** every read is empty, the problem is the session, not
 your code. (Empty `lastSpoken` alongside a full transcript is normal.)
 
+## Local VM: reading the guest without a screen
+
+If the worker is a local UTM VM, you have a control channel that needs no SSH and no
+display, and it is what makes an unattended build debuggable:
+
+```bash
+utmctl file pull <uuid> 'C:\\a11y-first-boot.log'   # bootstrap + provisioning output
+utmctl exec <uuid> --cmd cmd.exe /c "C:\\some.cmd"   # exit code only, NOT stdout
+osascript -e 'tell application "UTM" to get address of serial port 1 of virtual machine id "<uuid>"'
+```
+
+`exec` runs as **SYSTEM in session 0**, so anything needing the user's desktop or `HKCU`
+must go via a scheduled task with `-LogonType Interactive -RunLevel Highest`. A live log
+is locked -- copy it in the guest first, then pull the copy. And the serial PTY carries
+EDK2's console, so you can read and drive firmware before any OS exists.
+
+See docs/local-worker-vm.md for the full set.
+
 ## Never do these
 
 - **Never elevate the worker or the browser.** `nvda_noUIAccess.exe` cannot read

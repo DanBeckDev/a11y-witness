@@ -86,7 +86,17 @@ curl -sL --fail -o pack.zip \
 unzip -o -q pack.zip
 chmod +x uup_download_macos.sh
 
+# Soften aria2's fan-out before running it. The stock script uses -x16 -s16 across many
+# hosts, which overwhelmed a resolver mid-download here: 42 x errorCode=19 ("Name
+# resolution ... failed") and the run aborted twice with ~7 GB still to fetch. Fewer
+# connections plus explicit resolvers and unlimited retries turns a DNS blip into a pause
+# instead of a failure. Costs nothing on a healthy link; rescues a flaky one.
+GENTLE='-x4 -s4 -j2 --async-dns-server=1.1.1.1,8.8.8.8,9.9.9.9 --max-tries=0 --retry-wait=5 --connect-timeout=30 --timeout=60'
+sed -i '' "s/-x16 -s16 -j5/$GENTLE/; s/-x16 -s16 -j2/$GENTLE/" uup_download_macos.sh
+grep -q 'async-dns-server' uup_download_macos.sh && info "aria2 settings softened for flaky links"
+
 info "Downloading (~10 GB) and converting. This is the slow part."
+# aria2 resumes, so re-running this script after an interruption picks up where it left off.
 ./uup_download_macos.sh
 
 ISO="$(ls -t "$OUT_DIR"/*.ISO "$OUT_DIR"/*.iso 2>/dev/null | grep -vi 'support\|fixed' | head -1 || true)"

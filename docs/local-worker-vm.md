@@ -201,6 +201,45 @@ since only Windows needs to).
 > AT codes) reaches the emulated keyboard. Symptom: Enter produces new shell prompts
 > while your typed text never appears.
 
+### Reading files out of the guest (the channel that actually solved things)
+
+Once the guest tools are installed, `qemu-ga` is running and UTM exposes file transfer.
+This is the single most useful debugging tool here, because it turns "I can't see what's
+happening" into "read the log":
+
+```bash
+utmctl file pull <uuid> 'C:\a11y-first-boot.log'      # bootstrap + provisioning output
+utmctl file push <uuid> 'C:\fixed.ps1' < local.ps1    # patch a script without a rebuild
+```
+
+Two gotchas:
+
+- **`utmctl exec` returns only the exit code, not stdout.** Redirect to a file in the
+  guest and pull it. It also runs as **SYSTEM in session 0**, so anything that must land
+  in the user's desktop session (or write to the user's `HKCU`) has to go through a
+  scheduled task with `-UserId <user> -LogonType Interactive -RunLevel Highest`. Register
+  the task under the wrong identity and provisioning produces a worker task with no
+  interactive desktop, which means NVDA announces nothing.
+- **A live log is locked.** `copy /y C:\the.log C:\snap.txt` in the guest first, then pull
+  the copy, or you get "being used by another process".
+- **`file push` into a directory that does not exist silently succeeds and writes
+  nothing.** Create the directory first (via a pushed `.cmd`, since `exec` mangles
+  quoting) and verify by pulling the file back.
+
+### Which Windows Setup screen you land on tells you what broke
+
+Setup fails in two distinguishable ways, and the screen is the fastest triage available
+without reading `setupact.log`:
+
+| Where it stops | What it means |
+|---|---|
+| **Language / region page** | the answer file was **rejected or never found** — bad schema, or a UI language the media does not carry |
+| **Any later page** (edition picker, disk) | the answer file was **accepted**; one specific setting did not resolve |
+
+Both of ours were content bugs that look identical to "file not found": locales set to
+`en-GB` on `EN-US` media, and `/IMAGE/NAME` matched against the WIM's *Description*
+rather than its *Name*. `fetch-windows-iso.sh` now fails the build on both.
+
 ### Getting eyes on a headless VM
 
 `run.sh` runs with `-display none` plus a QEMU monitor socket, so you can screenshot
