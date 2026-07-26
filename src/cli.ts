@@ -253,7 +253,7 @@ function printReport({ url, task, screenReader, announcements, verdict, axe }: R
     "",
     "-- Rule-based layer (axe-core): contrast, colour, ARIA, parsing --",
     axe === null
-      ? "not run (--no-axe). Visual criteria are unchecked, not clean."
+      ? "not run. Visual criteria are unchecked, not clean."
       : `${axe.length} violation(s):`,
   ];
   for (const f of axe ?? []) {
