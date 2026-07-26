@@ -10,14 +10,13 @@
  * The worker URL also reads from A11Y_WORKER.
  *
  * With neither set, the run manages a local UTM worker VM on demand: it starts one if
- * needed and puts it back how it found it afterwards. See resolveWorker below.
+ * needed and puts it back how it found it afterwards. See leaseWorker in capture/local-vm.
  */
 import { judge, type Judgment } from "./spike/judge.js";
 import { scanWithAxe, type AxeFinding } from "./scan/axe.js";
 import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "./spike/layers.js";
-import { acquireLocalWorker, findLocalVm, isAfterRun, type AfterRun, type WorkerLease } from "./capture/local-vm.js";
-
-const DEFAULT_WORKER = "http://localhost:8765";
+import { leaseWorker, isAfterRun, type AfterRun } from "./capture/local-vm.js";
+import { captureMentionsTitle } from "./capture/verify.js";
 
 interface Args {
   url: string;
@@ -70,26 +69,6 @@ function afterRunArg(v: string | undefined): AfterRun {
   process.exit(1);
 }
 
-/**
- * Decide what to capture against, in priority order:
- *
- *   1. A worker the user named (--worker / A11Y_WORKER) is used as-is. Naming one is a
- *      statement that you are managing it yourself, so the VM lifecycle is never touched.
- *   2. Otherwise, a registered local UTM VM is started on demand and released afterwards.
- *   3. Otherwise, the historical default, so a hand-run worker on this machine still works.
- *
- * A11Y_LOCAL_VM=0 skips step 2 for anyone who wants the old behaviour back.
- */
-async function resolveWorker({ worker, after }: Pick<Args, "worker" | "after">): Promise<WorkerLease> {
-  const noop = { release: async () => {} };
-  if (worker) return { worker, ...noop };
-  if (process.env.A11Y_LOCAL_VM === "0") return { worker: DEFAULT_WORKER, ...noop };
-
-  const vm = await findLocalVm();
-  if (!vm) return { worker: DEFAULT_WORKER, ...noop };
-  return acquireLocalWorker(vm, after);
-}
-
 interface CaptureResponse {
   url: string;
   screenReader: string;
@@ -106,29 +85,9 @@ interface CaptureResponse {
 
 const MAX_CAPTURE_ATTEMPTS = 3;
 
-// Best-effort check that the screen-reader capture actually read the target page
-// (not browser chrome). True if the title gives nothing to check (empty / no
-// significant words) or at least one significant title word appears in what NVDA
-// announced. Catches the egregious wrong-content case (e.g. the browser start
-// page) without over-retrying when a page's title legitimately isn't spoken.
-function captureReadPage(cap: CaptureResponse, title: string): boolean {
-  const words = title.toLowerCase().match(/[a-z0-9]{4,}/g) ?? [];
-  if (words.length === 0) return true;
-  const s = cap.structure;
-  const it = cap.interaction;
-  const haystack = [
-    ...cap.transcript,
-    ...(s?.headings ?? []), ...(s?.landmarks ?? []), ...(s?.formFields ?? []),
-    ...(it?.controls ?? []),
-    ...(it?.stateChanges ?? []).map((x) => `${x.control} ${x.after}`),
-    ...(it?.postSubmitFields ?? []),
-  ].join(" ").toLowerCase();
-  return words.some((w) => haystack.includes(w));
-}
-
 async function main(): Promise<void> {
   const args = parseArgs();
-  const lease = await resolveWorker(args);
+  const lease = await leaseWorker(args);
   // finally, not a catch: the VM must be released whether the run succeeded, threw, or the
   // judge rejected the capture. Leaking a running Windows guest is the failure mode this
   // whole module exists to prevent.
@@ -160,11 +119,11 @@ async function runWitness({ url, task, worker, json, debug, probeForms }: RunOpt
   // axe (Playwright) gives us the page title; if the capture doesn't contain it,
   // NVDA likely read the wrong content — re-capture before judging.
   let cap = firstCap;
-  for (let attempt = 2; attempt <= MAX_CAPTURE_ATTEMPTS && !captureReadPage(cap, axe.title); attempt++) {
+  for (let attempt = 2; attempt <= MAX_CAPTURE_ATTEMPTS && !captureMentionsTitle(cap, axe.title); attempt++) {
     process.stderr.write(`Capture did not appear to read "${axe.title}" (wrong content?); re-capturing (attempt ${attempt}/${MAX_CAPTURE_ATTEMPTS}) ...\n`);
     cap = await captureViaWorker(url, { task, worker, probeForms });
   }
-  if (axe.title && !captureReadPage(cap, axe.title)) {
+  if (axe.title && !captureMentionsTitle(cap, axe.title)) {
     process.stderr.write(`WARNING: after ${MAX_CAPTURE_ATTEMPTS} attempts the capture still doesn't match the page title "${axe.title}" — results may reflect browser chrome, not the page.\n`);
   }
 

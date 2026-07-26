@@ -53,6 +53,26 @@ DATASET_BASE_URL=http://control-host:5050 \
 npm run training:capture
 ~~~
 
+On a Mac with the local UTM worker VM, set neither. The capture step starts the
+VM on demand, works out the address the guest can use to reach this host, and
+puts the VM back in the state it found it (see docs/local-worker-vm.md):
+
+~~~sh
+npx serve runs/screenreader-dataset/pages -l 5050
+npm run training:capture
+~~~
+
+DATASET_BASE_URL still wins if you set it, but a `localhost` value is rewritten
+to the host's address on the VM's subnet, because `localhost` inside the guest
+is the guest.
+
+Two checks guard the data, both learned the hard way. Before capturing, the
+pages must actually answer on the base URL; and each capture must mention a
+significant word from the page's own `<title>` or it is rejected rather than
+written. Without the second, a stray server holding port 5050 produced
+`Capture complete: 3/3 cases` while every transcript read `Error code: 404` --
+mislabelled training data that looks entirely plausible downstream.
+
 The capture step is serialized because NVDA is a single shared resource. It
 writes raw captures under runs/screenreader-dataset/captures/. A failed case
 does not discard completed captures.
@@ -81,7 +101,8 @@ remain reviewable in this directory.
 ## What cannot run on this Mac
 
 The generator and exporter run locally, but NVDA capture requires the
-interactive Windows desktop documented in src/capture/nvda/README.md. If
-A11Y_WORKER is absent, the capture command stops instead of fabricating
-transcripts. Once the worker is reachable, the complete collection and label
+interactive Windows desktop documented in src/capture/nvda/README.md -- either
+a remote worker or the local UTM VM (docs/local-worker-vm.md), which this Mac
+can host. With neither available, the capture command stops instead of
+fabricating transcripts. Once the worker is reachable, the complete collection and label
 validation process is unattended.

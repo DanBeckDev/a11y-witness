@@ -53,6 +53,14 @@ function pair({
   return { id, family, criterion, task, source, mutation, badSignal, probeForms, good, bad };
 }
 
+// What NVDA announces for an image it cannot name, across versions: older builds emit the
+// object-replacement character (U+FFFC) as a stand-in for content they cannot describe, while
+// NVDA 2026.1 emits its missing-description hint. Both mean the same thing -- the image has no
+// usable alternative -- so a badSignal that matches only one form silently skips the case at
+// export time, reported as "bad signal was not observable in NVDA output", which reads like
+// the page is wrong rather than the pattern.
+const UNNAMED_GRAPHIC = "(?:\\ufffc|to get missing image descriptions)";
+
 const cases = [
   pair({
     id: "image-missing-alt",
@@ -60,7 +68,7 @@ const cases = [
     task: "Read the project update and understand what the illustration shows.",
     source: "Practical Web Accessibility, chapter 22; Web Accessibility Cookbook, chapter 3",
     mutation: "The informative illustration has no alternative text.",
-    badSignal: { type: "regex", pattern: "graphic[, ]+\\ufffc", flags: "i" },
+    badSignal: { type: "regex", pattern: "graphic[, ]+" + UNNAMED_GRAPHIC, flags: "i" },
     good: page({
       title: "Project update with an informative illustration",
       heading: "Project update",
@@ -359,7 +367,7 @@ function imageVariant({ id, title, heading, description, file, goodAlt, badAlt, 
     task,
     source: "Practical Web Accessibility, chapter 22",
     mutation: "The informative image loses a useful alternative and is announced without its meaning.",
-    badSignal: { type: "regex", pattern: "graphic.*" + (badAlt === null ? "\\ufffc" : badAlt), flags: "i" },
+    badSignal: { type: "regex", pattern: "graphic.*" + (badAlt === null ? UNNAMED_GRAPHIC : badAlt), flags: "i" },
     good: page({ title, heading, body: "<p>" + description + "</p>" + goodImage }),
     bad: page({ title, heading, body: "<p>" + description + "</p>" + badImage }),
   });

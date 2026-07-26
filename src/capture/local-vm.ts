@@ -17,8 +17,12 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { networkInterfaces } from "node:os";
 
 const execFileAsync = promisify(execFile);
+
+/** Where a hand-started worker on this machine has always lived. */
+export const DEFAULT_WORKER = "http://localhost:8765";
 
 // Relative to this module, not the process cwd: `npm run` happens to start in the repo
 // root, but a direct `tsx src/cli.ts` from elsewhere would not.
@@ -53,8 +57,47 @@ interface VmStatus {
 /** A worker to capture against, and the cleanup that matches how it was obtained. */
 export interface WorkerLease {
   worker: string;
+  /** How `worker` was chosen, so callers can tailor their own error messages. */
+  source: "explicit" | "local-vm" | "default";
+  /**
+   * The address the GUEST can use to reach THIS host, when capturing via a local VM.
+   * Undefined otherwise. Needed because anything the host serves on `localhost` is
+   * unreachable from the guest -- `localhost` there means the guest itself.
+   */
+  hostAddress?: string;
   /** Never throws: a cleanup failure must not mask the run's own result. */
   release: () => Promise<void>;
+}
+
+const IPV4_OCTETS = 4;
+
+function ipv4ToInt(ip: string): number | null {
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== IPV4_OCTETS || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+  return parts.reduce((acc, octet) => acc * 256 + octet, 0);
+}
+
+/**
+ * This host's address on the same subnet as the guest -- the gateway end of UTM's shared
+ * network (bridge100 on macOS). Derived by matching interfaces against the guest's address
+ * rather than assuming the usual `x.y.z.1`, because guessing an address that silently does
+ * not answer is worse than reporting that we could not find one.
+ */
+function hostAddressFor(guestIp: string): string | undefined {
+  const guest = ipv4ToInt(guestIp);
+  if (guest === null) return undefined;
+  for (const addresses of Object.values(networkInterfaces())) {
+    for (const a of addresses ?? []) {
+      if (a.family !== "IPv4" || a.internal) continue;
+      const host = ipv4ToInt(a.address);
+      const mask = ipv4ToInt(a.netmask);
+      if (host === null || mask === null) continue;
+      // Both sides go through the same int32 coercion, so addresses above 2^31 comparing
+      // as negative is harmless here.
+      if ((host & mask) === (guest & mask)) return a.address;
+    }
+  }
+  return undefined;
 }
 
 async function ctl(args: string[], timeoutMs: number): Promise<string> {
@@ -125,6 +168,8 @@ export async function acquireLocalWorker(vm: VmStatus, after: AfterRun): Promise
 
   return {
     worker: `http://${ready.ip}:${ready.port}`,
+    source: "local-vm",
+    hostAddress: hostAddressFor(ready.ip),
     release: () =>
       releaseVm(after, stateBefore).catch((e: Error) => {
         // Report and move on. The run's verdict is the product; a VM left running is a
@@ -132,4 +177,52 @@ export async function acquireLocalWorker(vm: VmStatus, after: AfterRun): Promise
         process.stderr.write(`WARNING: could not release the local worker VM: ${e.message}\n`);
       }),
   };
+}
+
+interface LeaseRequest {
+  /** A worker the caller was given explicitly (--worker / A11Y_WORKER), or null. */
+  worker: string | null;
+  after: AfterRun;
+}
+
+/**
+ * Decide what to capture against, in priority order:
+ *
+ *   1. A worker the caller named is used as-is. Naming one is a statement that you are
+ *      managing it yourself, so the VM lifecycle is never touched.
+ *   2. Otherwise, a registered local UTM VM is started on demand and released afterwards.
+ *   3. Otherwise, the historical default, so a hand-run worker on this machine still works.
+ *
+ * A11Y_LOCAL_VM=0 skips step 2 for anyone who wants the old behaviour back.
+ *
+ * Shared by every entry point that needs a worker, so the priority order cannot drift
+ * between them.
+ */
+export async function leaseWorker({ worker, after }: LeaseRequest): Promise<WorkerLease> {
+  const release = async () => {};
+  // Strip a trailing slash once, here, so no caller has to remember that `${worker}/capture`
+  // would otherwise produce a double slash.
+  if (worker) return { worker: worker.replace(/\/$/, ""), source: "explicit", release };
+  if (process.env.A11Y_LOCAL_VM === "0") return { worker: DEFAULT_WORKER, source: "default", release };
+
+  const vm = await findLocalVm();
+  if (!vm) return { worker: DEFAULT_WORKER, source: "default", release };
+  return acquireLocalWorker(vm, after);
+}
+
+/**
+ * Rewrite a base URL the GUEST has to fetch so it points at this host rather than at
+ * `localhost`, which from inside the guest means the guest.
+ *
+ * This is the trap in dataset capture: the pages are served by a plain HTTP server on the
+ * Mac, and the default base URL is `http://localhost:5050`. Left alone, every capture
+ * loads the guest's own empty port and the transcripts come back describing nothing --
+ * with no error, because a connection refused inside Edge is not a worker failure.
+ */
+export function guestReachableUrl(baseUrl: string, lease: WorkerLease): string {
+  if (!lease.hostAddress) return baseUrl;
+  const parsed = new URL(baseUrl);
+  if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") return baseUrl;
+  parsed.hostname = lease.hostAddress;
+  return parsed.toString().replace(/\/$/, "");
 }

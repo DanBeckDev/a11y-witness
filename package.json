@@ -18,7 +18,7 @@
     "scan": "tsx src/scan/run-axe.ts",
     "training:generate": "node src/training/generate-screenreader-dataset.mjs",
     "training:preflight": "node src/training/preflight-screenreader-dataset.mjs",
-    "training:capture": "node src/training/capture-screenreader-dataset.mjs",
+    "training:capture": "tsx src/training/capture-screenreader-dataset.mjs",
     "training:export": "node src/training/export-screenreader-dataset.mjs"
   },
   "dependencies": {
