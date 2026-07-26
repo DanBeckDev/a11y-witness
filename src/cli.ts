@@ -13,7 +13,8 @@
  * needed and puts it back how it found it afterwards. See leaseWorker in capture/local-vm.
  */
 import { judge, type Judgment } from "./spike/judge.js";
-import { scanWithAxe, type AxeFinding } from "./scan/axe.js";
+import { scanWithAxe, axeAvailable, type AxeFinding } from "./scan/axe.js";
+import { fetchPageTitle } from "./scan/page-title.js";
 import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "./spike/layers.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "./capture/local-vm.js";
 import { captureMentionsTitle } from "./capture/verify.js";
@@ -27,6 +28,8 @@ interface Args {
   json: boolean;
   debug: boolean;
   probeForms: boolean;
+  /** Run the optional axe-core layer. Off with --no-axe or A11Y_AXE=0. */
+  axe: boolean;
 }
 
 function parsedAfterRun(): AfterRun {
@@ -46,6 +49,7 @@ function parseArgs(): Args {
   let json = false;
   let debug = false;
   let probeForms = false;
+  let axe = process.env.A11Y_AXE !== "0";
   for (let i = 0; i < a.length; i++) {
     const v = a[i];
     if (v === "--task") task = a[++i] ?? task;
@@ -54,13 +58,14 @@ function parseArgs(): Args {
     else if (v === "--json") json = true;
     else if (v === "--debug") debug = true;
     else if (v === "--probe-forms") probeForms = true;
+    else if (v === "--no-axe") axe = false;
     else if (!v.startsWith("--")) url = v;
   }
   if (!url) {
-    console.error('Usage: npm run witness -- <url> --task "..." [--worker http://host:port] [--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms]');
+    console.error('Usage: npm run witness -- <url> --task "..." [--worker http://host:port] [--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms] [--no-axe]');
     process.exit(1);
   }
-  return { url, task, worker, after, json, debug, probeForms };
+  return { url, task, worker, after, json, debug, probeForms, axe };
 }
 
 function afterRunArg(v: string | undefined): AfterRun {
@@ -100,17 +105,21 @@ async function main(): Promise<void> {
 
 type RunOptions = Omit<Args, "worker"> & { worker: string };
 
-async function runWitness({ url, task, worker, json, debug, probeForms }: RunOptions): Promise<void> {
-  process.stderr.write(`Scanning ${url} (rule-based axe-core + real screen reader) ...\n`);
+async function runWitness({ url, task, worker, json, debug, probeForms, axe: wantAxe }: RunOptions): Promise<void> {
+  const useAxe = wantAxe && (await axeAvailable());
+  if (wantAxe && !useAxe) {
+    process.stderr.write(
+      "axe-core layer skipped: its optional dependencies are not installed " +
+        "(npm install playwright @axe-core/playwright && npx playwright install chromium).\n"
+    );
+  }
+  process.stderr.write(`Scanning ${url} (${useAxe ? "rule-based axe-core + " : ""}real screen reader) ...\n`);
   // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
   const [firstCap, axe] = await Promise.all([
     captureViaWorker(url, { task, worker, probeForms }),
-    scanWithAxe(url).catch((e) => {
-      process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
-      return { findings: [] as AxeFinding[], title: "" };
-    }),
+    pageContext(url, useAxe),
   ]);
   const axeFindings = axe.findings;
 
@@ -151,8 +160,19 @@ async function runWitness({ url, task, worker, json, debug, probeForms }: RunOpt
     const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
     console.log(JSON.stringify({ url, task, screenReader: cap.screenReader, transcript: cap.transcript, ruleBased: axeFindings, verdict: layered }, null, 2));
   } else {
-    printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: axeFindings });
+    printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: useAxe ? axeFindings : null });
   }
+}
+
+// The rule-based findings plus the page title, from whichever source is available. The
+// title is NOT optional the way axe is: without it the capture cannot be checked for
+// having read the wrong page, so when axe is off it comes from a plain fetch instead.
+async function pageContext(url: string, useAxe: boolean): Promise<{ findings: AxeFinding[]; title: string }> {
+  if (!useAxe) return { findings: [], title: await fetchPageTitle(url) };
+  return scanWithAxe(url).catch(async (e: Error) => {
+    process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
+    return { findings: [] as AxeFinding[], title: await fetchPageTitle(url) };
+  });
 }
 
 interface CaptureRequest {
@@ -179,7 +199,8 @@ interface Report {
   screenReader: string;
   announcements: number;
   verdict: Judgment;
-  axe: AxeFinding[];
+  /** null when the rule-based layer did not run — distinct from "ran and found nothing". */
+  axe: AxeFinding[] | null;
 }
 
 function printReport({ url, task, screenReader, announcements, verdict, axe }: Report): void {
@@ -191,9 +212,11 @@ function printReport({ url, task, screenReader, announcements, verdict, axe }: R
     `Task:  ${task}`,
     "",
     "-- Rule-based layer (axe-core): contrast, colour, ARIA, parsing --",
-    `${axe.length} violation(s):`,
+    axe === null
+      ? "not run (--no-axe). Visual criteria are unchecked, not clean."
+      : `${axe.length} violation(s):`,
   ];
-  for (const f of axe) {
+  for (const f of axe ?? []) {
     lines.push(`  [${f.impact}] ${f.wcag.join(", ") || "(no SC)"}  ${f.rule}: ${f.help}`);
     if (f.nodes[0]) lines.push(`     evidence: ${f.nodes[0].html.slice(0, 100)}`);
   }

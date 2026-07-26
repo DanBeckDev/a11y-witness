@@ -6,9 +6,13 @@
  * does not replace it.
  *
  * Scoped to WCAG A/AA to match src/wcag/criteria.ts and the legal baseline.
+ *
+ * OPTIONAL. Playwright and @axe-core/playwright are optionalDependencies: the layer is
+ * ~100 lines and about a second of wall-clock, but it pulls half a gigabyte of Chromium,
+ * which is a poor trade for anyone who already runs axe in their own pipeline. So the
+ * imports are dynamic and their absence is a supported state, not a crash. The
+ * lived-experience layer — the part only this project does — never depends on them.
  */
-import { chromium } from "playwright";
-import { AxeBuilder } from "@axe-core/playwright";
 
 // A/AA across WCAG 2.0/2.1/2.2 (axe tags conformance level + version).
 const WCAG_AA_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
@@ -42,7 +46,42 @@ export interface AxeResult {
   title: string;
 }
 
+/** Thrown when the optional browser dependencies are not installed. */
+export class AxeUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super(
+      "the axe layer needs its optional dependencies: npm install playwright @axe-core/playwright && npx playwright install chromium",
+      { cause }
+    );
+    this.name = "AxeUnavailableError";
+  }
+}
+
+// The NAMED export, not the default. The package exports the same class both ways
+// (`export { AxeBuilder, AxeBuilder as default }`), but under dynamic import the default
+// resolves to the module namespace, which is not constructable.
+async function loadAxe() {
+  try {
+    const [playwright, axe] = await Promise.all([import("playwright"), import("@axe-core/playwright")]);
+    return { chromium: playwright.chromium, AxeBuilder: axe.AxeBuilder };
+  } catch (e) {
+    throw new AxeUnavailableError(e);
+  }
+}
+
+/** True when the rule-based layer can run here. Cheap: resolves the modules, launches nothing. */
+export async function axeAvailable(): Promise<boolean> {
+  try {
+    await loadAxe();
+    return true;
+  } catch (e) {
+    if (e instanceof AxeUnavailableError) return false;
+    throw e;
+  }
+}
+
 export async function scanWithAxe(url: string): Promise<AxeResult> {
+  const { chromium, AxeBuilder } = await loadAxe();
   const browser = await chromium.launch();
   try {
     // @axe-core/playwright requires a page from an explicit context.

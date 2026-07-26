@@ -55,7 +55,7 @@ The project is three pieces of work, each useful on its own:
 
 | | what it is | state |
 |---|---|---|
-| **1. The testing pipeline** | Drive a real screen reader through real navigation, judge the transcript, report WCAG-cited findings alongside axe-core. | **Working end to end** |
+| **1. The testing pipeline** | Drive a real screen reader through real navigation, judge the transcript, report WCAG-cited findings. Optionally alongside axe-core, for the visual criteria a screen reader cannot perceive. | **Working end to end** |
 | **2. Reproducible screen-reader infrastructure** | Screen readers are OS-bound desktop apps that cannot be containerised. Getting NVDA running, unattended and repeatably, is a genuine engineering problem — so it is solved as a first-class part rather than a prerequisite chore. | **Working**: scripted VM build, one-command Windows bootstrap, CI path |
 | **3. An accessibility model of our own** | A model that judges screen-reader evidence against WCAG criteria, trained on paired captures the other two parts produce. | **In development** — dataset being collected, nothing trained yet |
 
@@ -77,14 +77,14 @@ Capture is operating-system-bound, so it is split from everything else:
   your machine (any OS)                         Windows worker
  ┌──────────────────────────┐                 ┌────────────────────────────┐
  │ witness CLI              │  POST /capture  │ NVDA + Edge                │
- │  ├─ axe-core (Playwright)│ ──────────────► │  browse-mode read-through  │
+ │  ├─ axe-core (optional)  │ ──────────────► │  browse-mode read-through  │
  │  └─ AI judge             │ ◄────────────── │  heading/landmark quick-nav│
  │      rules + gate        │   transcript    │  operate controls          │
  └──────────────────────────┘                 └────────────────────────────┘
 ```
 
 - **Capture worker** (Windows): drives **NVDA** via [Guidepup](https://github.com/guidepup/guidepup) through real navigation and returns the announcement transcript over HTTP. Speech is read over NVDA's Remote Access channel, not audio, so the machine needs no sound device. See [`src/capture/nvda/`](./src/capture/nvda/).
-- **Control plane** (anywhere): the `witness` CLI runs axe-core and the capture concurrently, then judges the transcript and prints a two-layer report. Architecture rationale: [`docs/adr/0001-capture-architecture.md`](./docs/adr/0001-capture-architecture.md) and [`0002-layered-coverage.md`](./docs/adr/0002-layered-coverage.md).
+- **Control plane** (anywhere): the `witness` CLI runs the capture and — if the optional axe layer is installed — axe-core concurrently, then judges the transcript and prints the report. Architecture rationale: [`docs/adr/0001-capture-architecture.md`](./docs/adr/0001-capture-architecture.md) and [`0002-layered-coverage.md`](./docs/adr/0002-layered-coverage.md).
 
 ### The judge is a hybrid
 
@@ -105,7 +105,7 @@ The `openai` backend makes a self-hosted, zero-cost judge realistic. Measured ag
 
 ## Quickstart
 
-Prerequisites: Node 20+, a judge backend (Codex logged in by default — `codex login`), and a capture worker.
+Prerequisites: Node 20+, a judge backend (Codex logged in by default — `codex login`), and a capture worker. The axe-core layer is optional and not installed by default; see below.
 
 ```bash
 npm install
@@ -115,6 +115,34 @@ npm run witness -- https://example.com --task "Find the contact details"
 Add `--json` for machine-readable output and `--debug` for per-phase capture diagnostics.
 
 To test how a page *behaves* when operated, add `--probe-forms`: the worker submits the form with no valid input and records what is announced, catching forms that fail silently — the error shown visually and never announced (3.3.1 Error Identification, 4.1.3 Status Messages). It is opt-in because activating a submit button has side effects. Disclosure controls are always activated, to check the expanded/collapsed change is announced at all (4.1.2).
+
+**The axe-core layer is optional.** It is ~100 lines and about a second, but it pulls half a gigabyte of Chromium, which is a poor trade if you already run axe in your own pipeline — and two differently-versioned axe runs in one CI produce duplicate findings, which is worse than none. So `playwright` and `@axe-core/playwright` are `optionalDependencies`: skip them and the rule-based layer simply does not run. Turn it off explicitly with `--no-axe` or `A11Y_AXE=0`. The report then says *"not run — visual criteria are unchecked, not clean"*, because silence must never read as a pass.
+
+## Using it
+
+Running it is one command; getting value out of it is a few habits.
+
+**Give it a real task.** `--task` is not a label — task-completability is judged separately from the criteria, so "Find the contact details" produces a usable answer and "test accessibility" does not. Use the words a user would.
+
+**Read a finding as a claim plus its evidence.**
+
+```
+    [MODERATE] 2.4.4 Link Purpose (In Context) (A)  (confidence 0.94)
+       The link text "Learn more" does not clearly convey its destination or purpose in context.
+       evidence: 4. link, Learn more
+```
+
+`evidence` points at a line in the transcript. **Check it.** Run with `--json` to get the full transcript and find that line. If a finding's evidence is not in the transcript, that is a bug in this tool, not a defect in your page — please report it.
+
+**Fix in the order it prints them.** Findings are grouped Perceive → Navigate → Interact. Something a user cannot perceive outranks something they cannot operate, because the second doesn't matter if the first blocks them.
+
+**Treat confidence as ordering, not probability.** It has not been calibrated against outcomes yet ([`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) is explicit about this). Use it to sort, and treat anything below ~0.7 as "a human should look", not "70% likely true".
+
+**Expect the false positives where they live.** They concentrate in the two subjective criteria — link purpose (2.4.4) and descriptive headings (2.4.6) — which is exactly why those are the fine-tune target for part 3. A finding you can disprove from the transcript is one you should dismiss.
+
+**"0 announcements" is a broken worker, not a clean page.** The CLI warns when this happens. Run `--debug` and read `documentReady` first; [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) has the error-to-cause table.
+
+**Where it fits.** This is not a gate to put in front of every commit — a capture takes about a minute of real screen-reader time. It earns its keep on the flows that matter (checkout, sign-up, search), before a release, or as the evidence base for an audit. Keep your rule scanner where it is, on every commit, doing the fast mechanical layer.
 
 ## Part 2: getting a real screen reader to run, repeatably
 
