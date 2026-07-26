@@ -128,6 +128,25 @@ async function captureConfirmed(check) {
   return null;
 }
 
+// Assert the DIAGNOSTICS discriminate, not just that the capture is good.
+//
+// This exists because they did not. A dataset run rejected 25% of its captures for reading
+// a blank document, and the worker recorded success for every one of them: across 73 kept
+// captures `afterStart.lastSpoken` was empty 73/73 and `windowsActivate ok:false` never
+// fired once. The file header named afterStart as the first thing to check when a capture
+// comes back empty, and it could not tell empty from healthy.
+//
+// So on a capture we have just CONFIRMED read the right page, documentReady must say so. If
+// this assertion ever fails, the indicator has stopped tracking reality — which is the
+// failure that hid a quarter of a run. See docs/nvda-correctness-audit.md, Root C.
+function diagnosticsAssertions(result) {
+  const ready = (result.diagnostics ?? []).find((e) => e.event === "documentReady");
+  return [
+    ["documentReady recorded", !!ready, ready ? "present" : "MISSING"],
+    ["documentReady agrees the page was read", ready?.ok === true, ready?.title ?? null],
+  ];
+}
+
 async function runCheck(check) {
   process.stdout.write(`\n=== ${check.page} ===\n`);
   const result = await captureConfirmed(check);
@@ -144,7 +163,7 @@ async function runCheck(check) {
   console.log(`  postSubmit:  ${JSON.stringify(result.interaction.postSubmitFields)}`);
   console.log(`  PASS  page identity confirmed (${check.signature})`);
   let failed = 0;
-  for (const [label, passed, actual] of check.assert(result)) {
+  for (const [label, passed, actual] of [...diagnosticsAssertions(result), ...check.assert(result)]) {
     console.log(`  ${passed ? "PASS" : "FAIL"}  ${label}  (got ${JSON.stringify(actual)})`);
     if (!passed) failed++;
   }

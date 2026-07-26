@@ -11,6 +11,7 @@ import { beginRun, readProgress } from "./capture-progress.mjs";
 const ROOT = resolve(process.cwd(), "runs/screenreader-dataset");
 const MANIFEST_PATH = resolve(ROOT, "manifest.json");
 const CAPTURE_ROOT = resolve(ROOT, "captures");
+const REJECTED_ROOT = resolve(CAPTURE_ROOT, "rejected");
 const DEFAULT_BASE_URL = "http://localhost:5050";
 const STEPS = Number(process.env.DATASET_CAPTURE_STEPS || 150);
 const ONLY = process.argv.find((arg) => arg.startsWith("--only="))?.slice("--only=".length);
@@ -146,15 +147,29 @@ function describeWrongPage(capture, { title, url }) {
 //
 // A capture that read the wrong page is still never written: mislabelled training data is
 // worse than a gap, because nothing downstream can tell it apart from real evidence.
-async function captureVerified(ctx, testCase, { url, title }) {
+// Keep a rejected capture instead of dropping it. Learned the hard way: a dataset run hit a
+// 25% rejection rate, and because every rejected capture was discarded, the worker's own
+// diagnostics recorded nothing but success and the only trace was one line in a host log.
+// The evidence for diagnosing this class of failure has to survive it.
+function writeRejected(testCase, variant, capture, attempt) {
+  mkdirSync(REJECTED_ROOT, { recursive: true });
+  const path = resolve(REJECTED_ROOT, testCase.id + "." + variant + ".attempt" + attempt + ".json");
+  writeFileSync(path, JSON.stringify(capture, null, 2) + "\n", "utf8");
+  return path;
+}
+
+async function captureVerified(ctx, testCase, { url, title, variant }) {
   let wrong = "";
   for (let attempt = 1; attempt <= CAPTURE_ATTEMPTS; attempt++) {
     const capture = await captureOne(ctx, testCase, url);
     if (captureMentionsTitle(capture, title)) return capture;
     wrong = describeWrongPage(capture, { title, url });
+    const kept = writeRejected(testCase, variant, capture, attempt);
     console.log("  attempt " + attempt + "/" + CAPTURE_ATTEMPTS + ": " + wrong);
+    console.log("    diagnostics kept: " + kept);
   }
-  throw new Error(wrong + " after " + CAPTURE_ATTEMPTS + " attempts. Not written.");
+  throw new Error(wrong + " after " + CAPTURE_ATTEMPTS + " attempts. Not written as evidence; " +
+    "the rejected captures are in " + REJECTED_ROOT + " for diagnosis.");
 }
 
 async function captureCase(ctx, testCase) {
@@ -164,7 +179,7 @@ async function captureCase(ctx, testCase) {
     const title = await pageTitle(url);
     ctx.progress.startCase(testCase.id, variant);
     console.log("Capturing " + testCase.id + " (" + variant + ")");
-    const capture = await captureVerified(ctx, testCase, { url, title });
+    const capture = await captureVerified(ctx, testCase, { url, title, variant });
     const path = writeCapture(testCase, variant, capture);
     console.log("  " + capture.transcript.length + " transcript phrases -> " + path);
     phrases[variant] = capture.transcript.length;

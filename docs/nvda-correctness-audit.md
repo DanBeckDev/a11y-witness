@@ -69,3 +69,103 @@ CI focus race rather than flaking). Remaining backlog (Elements List
 enumeration; pinned NVDA settings profile; product-level verify-and-retry in the
 control plane) is tracked in `PLAN.md`. This whole pass is another argument for
 reproducible CI: the VM's established Edge profile hid every one of these.
+
+---
+
+# Second root-cause pass (2026-07-26): capture under batch load
+
+The first pass reviewed correctness against the user guide, one capture at a time. The
+first **batch** workload — a training-dataset run of 45 page pairs, 90 captures back to
+back — exposed problems a single capture cannot show. Three whys on each, per the practice
+established above.
+
+## The observations
+
+- 18 of 72 captures (**25%**) came back as `"blank", "blank"` instead of the page and had
+  to be re-captured.
+- Each capture took **50s, of which only 13s was work** (`readThrough` 6.2s +
+  `structural` 6.8s). The rest was setup and teardown, 90 times over.
+- The worker reported **success on all 18 failures**. Across the 73 captures it kept,
+  `afterStart.lastSpoken` was empty **73/73** and `windowsActivate ok:false` fired **0**
+  times.
+
+## Root A — a timer stood in for a state check
+
+**Why did NVDA announce "blank"?** It was reading an Edge window that was not showing the
+target page.
+
+**Why was the wrong window in front?** Readiness was inferred from a fixed 12-second sleep
+after launching Edge. Under load that is not always enough — and because captures run back
+to back, the *previous* capture's Edge could still be terminating when the next one
+launched, so `windowsActivate` could attach to a dying window.
+
+**Why infer readiness from a duration at all?** Because nothing verified that the document
+was actually up. The first pass fixed *which* browser NVDA reads (Root 1, the chromeless
+`--app` window) and *what state* the cursor starts in (Root 3, `anchorToTop`), but left the
+question "is the page there yet" answered by a clock.
+
+**Root: a duration was used as a proxy for a state.** This is a recurrence of the first
+pass's Root 1/3 rather than a new problem — those fixes were incomplete in a way that only
+a batch run makes visible.
+
+*Fixed:* poll for the window instead of sleeping; ask NVDA to name the document and
+re-focus until it can (`waitForDocument`); wait for Edge to actually exit before the next
+capture starts, which is now an event because the worker owns the process.
+
+## Root B — a one-shot contract inside a long-lived server
+
+**Why 37 seconds of overhead per capture?** Fixed sleeps (12s + 3s) plus starting and
+stopping NVDA (10s + 3s), every time.
+
+**Why per capture?** `captureWithNvda` owns the whole lifecycle: launch the browser, start
+the screen reader, tear both down before returning.
+
+**Why is that still the shape when the worker serves 90 captures in a row?** Because the
+HTTP worker was built *around* the existing one-shot function without revisiting where the
+lifecycle boundary belonged. "Do everything and leave nothing running" is the right
+contract for a CLI invocation and the wrong one for a server, and nothing forced the
+question until a batch run made it cost 16 minutes.
+
+**Root: a decision that was correct in its original context was carried into a new one
+unexamined.** Same shape as Root A.
+
+*Fixed:* NVDA persists across captures (recycled every 25, `A11Y_REUSE_NVDA=0` to revert),
+and the startup settle is skipped when it was already running. Speech logs are cleared per
+capture so a reused capture starts in the same state as a cold one.
+
+## Root C — the instrumentation was never validated
+
+**Why did the worker report success on 18 failed captures?** Nothing it recorded could tell
+the difference.
+
+**Why not?** `afterStart.lastSpoken` was sampled before anchoring, when NVDA has
+legitimately not spoken yet — so it read empty on healthy captures too, 73 times out of 73.
+`windowsActivate` reports only whether the API call threw, not whether the right document
+ended up in front. Neither indicator distinguishes a good capture from a blank one.
+
+**Why was that not noticed?** Because we validate *captures* and never validate
+*diagnostics*. `capture-check` asserts that probe values look right; nothing asserts that
+an indicator can separate a known-good capture from a known-broken one. A diagnostic that
+cannot discriminate is not a weak signal, it is a misleading one — and this one was
+documented in the file header as the first thing to check.
+
+**Root: diagnostics are unvalidated instrumentation.** Compounding it, a rejected capture
+is discarded, so the only trace of this failure mode was a line in a host-side log that
+nothing inspects. The worker had no evidence at all.
+
+*Fix:* `documentReady` replaces `afterStart` as the primary indicator and is asserted in
+`capture-check` — positively on a page that reads correctly. Rejected captures are now
+written to `captures/rejected/` instead of being dropped, so the next occurrence of this
+class has evidence to look at.
+
+## What this pass says about the practice
+
+Both A and B are the same mistake in different clothes: an assumption that held for one
+capture at a time, surviving unexamined into a batch of ninety. The dataset run is the
+first workload of that shape, and it found both within an hour.
+
+C is the one that should change how we work. The 25% failure rate was invisible from the
+worker's own reporting; it was only ever visible because a host-side check rejected the
+captures and printed why. Instrumentation deserves the same treatment as the code it
+watches: if a diagnostic is documented as the thing to check when something breaks, there
+should be a test that it actually goes red when that thing breaks.

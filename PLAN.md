@@ -49,6 +49,89 @@ Remaining backlog:
 - [ ] **Pin a known NVDA settings profile** (symbol level, element-reporting toggles, "Report live regions", auto-focus-mode) for cross-version reproducibility.
 - [ ] **Use Space (not Enter) for any future checkbox/radio probe; enter focus mode deliberately if a probe ever types into a field.**
 
+## First full dataset run (2026-07-26) — what it broke, and the plan
+
+45 pairs / 90 captures, 94 minutes. Everything captured; **30 of 45 pairs exported** (60
+records). The pipeline works; the **labelling matrix and the worker's OS defaults** are the
+weak links. Each item below is grounded in a captured transcript, not a guess.
+
+### Root 1 — signal definitions went stale when the capture changed (8 cases)
+
+The `badSignal` checkers and the capture probes are coupled, and nothing tests them
+together. When a probe's output shape changes, its signal silently stops discriminating.
+
+- [ ] **`state-change-silent` (disclosure ×3).** The signal still means "the announcement
+  was empty". The probe was changed today to *re-read the control*, so `after` is never
+  empty: good is `"...focused, expanded"`, bad is `"...focused, collapsed"`. The signal must
+  compare the **state word**, not test for emptiness. Caused by our own probe fix.
+- [ ] **`form-activation-silent` (form-error ×2).** Checks `formChanges`, which is identical
+  on both sides (`"Newsletter signup, document"`). The discriminator is in
+  `postSubmitFields`: good carries `"invalid entry, Enter an email address before joining."`,
+  bad carries nothing. Point the signal at the field that holds the evidence.
+- [ ] **`table-unassociated` (×3).** The evidence is plainly there — good announces
+  `"row 2, Destination, column 1, Riverside"` (header names in data rows), bad announces
+  `"row 2, column 1, Riverside"`. Check for header names in data-row announcements.
+
+### Root 2 — wrong instrument: a regex where structure is the discriminator (4 cases)
+
+- [ ] **`form-unlabelled` ×4 — currently INVALID, the worst failure mode**, because the
+  signal fires on the *good* page too. Pattern `(?:edit text|edit)[, ]*\s*$` matches a bare
+  `"edit"` line, and NVDA announces a *correctly labelled* field across two lines
+  (`"form, Recipient name"` then `"edit"`). So it can never discriminate.
+  `structure.formFields` does, cleanly: good `"Recipient name, edit"` vs bad `"edit"`.
+  Reuse the bare-role-no-name logic already in `src/spike/rules.ts` rather than writing a
+  third copy.
+
+### Root 3 — NVDA transforms the string before speaking it (3 cases)
+
+- [ ] **`image-filename-alt-exhibit`.** Pattern expects `harbour_07-final.jpg`; NVDA says
+  `"harbour 07-final dot jpg"` — punctuation spoken, underscore flattened. Any
+  filename-derived pattern needs the spoken form, and this generalises to the whole family.
+- [ ] **`icon-button-unnamed` ×2.** Pattern wants a bare `"button"`; NVDA says
+  `"button, ￼"`. Match the object-replacement character, as the image rules already do.
+- [ ] **Instrument defect in the same pair:** the *good* page announces `"button, O"` — an
+  icon button whose accessible name is the icon glyph. That is not a good control, so the
+  pair does not isolate what it claims. Give it a real name.
+
+### Root 4 — systemic: the labels are unvalidated instrumentation
+
+This is the same root as the capture audit's Root C, one level up: we assert on captures and
+never assert that a *signal* can tell good from bad.
+
+- [ ] **Extend `training:preflight` to run against captured pairs**, asserting every
+  `badSignal` fires on bad and stays silent on good. All 15 failures above would have been
+  caught the moment the first pair was captured, instead of after 94 minutes.
+
+### Worker reliability (from the 0xD1 bugcheck that killed 4 cases)
+
+- [ ] **Stop Windows Update rebooting the worker.** Proven twice in one run
+  (`id=1074 winlogon.exe has initiated the power off ... on behalf of NT AUTHORITY\SYSTEM`
+  at 09:02:55 and 09:09:30, mid-run). A capture worker is an appliance; it must not choose
+  its own downtime.
+- [ ] **Suppress Edge background/startup-boost processes.** 5 `msedge` processes were alive
+  on an idle, freshly booted machine with 0 captures run. Teardown does not tear down, and
+  94 minutes of launch/kill churn is the context in which a driver faulted.
+- [ ] **Get the minidump and name the faulting driver.** `0x000000d1`
+  (DRIVER_IRQL_NOT_LESS_OR_EQUAL) is a driver touching bad memory at raised IRQL; if it is
+  the SPICE/virtio guest tools then the fix is a driver version, not a policy tweak. Do this
+  before optimising the capture loop on a machine with a known-faulty driver.
+- [ ] **Make a run wait out a transient worker.** A connection failure fails the case
+  immediately, so one outage cascaded into 4 lost cases. The worker self-heals via
+  auto-logon; the run needs to be patient, not clever.
+
+### Capture efficiency (written, staged, not yet validated on the VM)
+
+Measured: 50s per capture, of which only 13s is work (`readThrough` + `structural`).
+
+- [ ] **Deploy and validate** persistent NVDA (recycled every 25, `A11Y_REUSE_NVDA=0` to
+  revert), the Edge-window poll replacing the fixed 12s sleep, the conditional startup
+  settle, and per-capture speech-log clearing. Validate with `capture-check` **plus** the
+  disclosure and form probes by value, then benchmark with `scripts/bench-capture.mjs`.
+  Expected 50s -> 20-25s, i.e. ~98 min -> ~45 min for a full run.
+- [ ] **Then** consider a second worker VM (~5 GB, host has headroom). Needs a dispatcher
+  across a pool, which nothing implements yet. Deliberately after the above: parallelism
+  multiplies whatever the per-capture cost is.
+
 ## Milestones
 
 ### M0 — Spike: is the core bet real? (now)
