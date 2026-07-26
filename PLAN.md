@@ -166,6 +166,60 @@ never assert that a *signal* can tell good from bad.
   immediately, so one outage cascaded into 4 lost cases. The worker self-heals via
   auto-logon; the run needs to be patient, not clever.
 
+### Efficiency and reliability backlog — identified, measured where possible, NOT done
+
+Current cost per capture is ~13-19s: `structural` 4.8s, the readiness gate 4.5s,
+`readThrough` 1.6-3.6s, the rest setup and teardown. Ideas below are ordered by expected
+value, each with the reason it is still open — so nobody re-derives the analysis.
+
+- [ ] **Reuse one Edge window across captures instead of launching a new one each time.**
+  The biggest remaining win, and it is *two* wins: it removes the per-capture browser launch
+  and foreground fight (a large slice of the remaining time), and it directly targets the
+  crash. `viogpudo.sys` faulted in `dwm.exe` while we created and destroyed 90 windows in a
+  run, so cutting that churn attacks the driver's stress path rather than working around it.
+  Blocked on navigation: the window is deliberately chromeless (`--app`), so there is no
+  address bar to drive, and reusing it needs another mechanism — most likely CDP via
+  `--remote-debugging-port`, which also gives a real `Page.loadEventFired` to replace part of
+  the readiness gate. Non-trivial, and the `--app` isolation that keeps NVDA out of browser
+  chrome must survive it (that was Root 1 of the correctness audit).
+- [ ] **Halve the structural sweep's round trips.** Each step is two calls: `perform(move)`
+  then `lastSpokenPhrase()`. Issuing several moves and reading `spokenPhraseLog()` once would
+  roughly halve them on the largest remaining phase. The catch is the no-movement guard, which
+  is per-step today and is what stops phantom elements being recorded — a batched version has
+  to detect "the cursor stopped moving" from the log instead. Untried.
+- [ ] **Update the virtio-win guest drivers.** `viogpudo.sys` is from a 22.7 package
+  (`Red Hat VirtIO GPU DOD controller v22.7.38.43`) and is the named cause of the only crash
+  we have seen. Cheap to try, and it is remediation rather than mitigation.
+- [ ] **Or change the VM's display device.** The VM runs `-device virtio-ramfb`; a different
+  backend may not load `viogpudo` at all. Worth testing against the driver update, since
+  whichever works is the one to codify in `create-utm-vm.sh`.
+- [ ] **Trim the readiness gate (~1.4s of 4.5s).** Check `lastSpokenPhrase()` after anchoring
+  and only issue the `reportTitle` round trip when it comes back blank — cheap on the happy
+  path, full diagnostic on the failure path. Deliberately not done: it weakens
+  `documentReady.title` on the happy path, and this gate is what took the flake rate from 25%
+  to ~3%. Revisit only if the gate stops being load-bearing.
+- [ ] **A second worker VM.** One worker is one capture at a time by design; scaling is
+  horizontal (ADR 0001) and the host has headroom. Needs a dispatcher across a pool, which
+  nothing implements. Deliberately after the per-capture work: parallelism multiplies whatever
+  the per-capture cost is.
+- [ ] **Multiple NVDA instances on one machine, if we ever want it.** Blocked by our own
+  tooling, not by NVDA: NVDA's single-instance guard is a per-desktop mutex
+  (`Local\NVDA_{desktopName}`) and its Remote Access port is configurable, but guidepup
+  hardcodes `NVDA_PORT = 6837` with no way to select an instance. One constant to plumb
+  through, plus an upstream PR. **Verify multiple interactive Windows sessions actually work
+  on the worker before touching guidepup** — that is the load-bearing unknown, and in-session
+  parallelism is impossible regardless because a session has one foreground window.
+- [ ] **Chase the truncated read.** `icon-button-unnamed-menu`'s good page announces
+  `"button, O"` where its two siblings announce their full `aria-label`, and it reproduced
+  across runs, so it is deterministic rather than flaky. Both the transcript and the structural
+  sweep saw `"O"`, so the accessible name really was that at query time. Harmless today — no
+  other case shows it — but a transcript silently losing most of an announcement matters
+  everywhere.
+- [ ] **Pin an NVDA settings profile** (symbol level, element-reporting toggles, "Report live
+  regions", auto-focus-mode) for cross-version reproducibility. Pre-existing backlog item from
+  the correctness audit; announcement strings are version- and settings-specific, and we now
+  have two runs where the same page was announced two different ways.
+
 ### Capture efficiency (written, staged, not yet validated on the VM)
 
 Measured: 50s per capture, of which only 13s is work (`readThrough` + `structural`).
