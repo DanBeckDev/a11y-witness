@@ -159,6 +159,9 @@ That is a working install. `--json` gives you the full transcript alongside the 
 | `WARNING: 0 announcements captured` | The worker is running but NVDA produced no speech. **This is a worker problem, not a clean page.** Re-run with `--debug` and read `documentReady` first |
 | `Local worker VM ... did not become healthy` | Route A: the VM booted but the worker task did not start. `./scripts/local-worker/worker-ctl.sh status` |
 | `NVDA not installed` | Almost always a **version mismatch**, not a missing install |
+| `nvda.start failed: NVDA is not supported` | You ran the capture in **session 0** — `utmctl exec` and SSH both land there and cannot drive NVDA. Use a scheduled task with `LogonType Interactive` |
+| VM state `unknown`, worker unreachable, but the bundle is there | **UTM is not running.** `utmctl` is a client for the app, not a daemon; `worker-ctl.sh` launches it for you. `pgrep -x UTM` to confirm |
+| It worked a minute ago and now nothing responds | Something else is driving the worker. There is **one** VM and **one** NVDA here, so another shell, agent, or a `capture-check` run restarts it out from under you. `worker-ctl.sh status` before assuming breakage |
 | Findings that look wrong | Check the `evidence` line against the transcript in `--json`. If the evidence is not in the transcript, that is a bug here — please report it |
 
 On a Windows worker, `scripts/diagnose-nvda-worker.ps1` checks six layers and prints

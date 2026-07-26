@@ -267,3 +267,21 @@ Also: stopping the worker with `Stop-Process` leaves its NVDA **orphaned** — t
 survives, still holding port 6837, because the clean shutdown path never runs. The next cold
 start recovers from that by itself, but if you are debugging by hand, expect to see NVDA
 running with no worker attached.
+
+## `utmctl` reports the VM as `unknown`, or fails, while the bundle is clearly there
+
+`utmctl` drives the **UTM app**; it is not a standalone daemon. With UTM closed it cannot
+answer, and an intact bundle plus a state of `unknown` reads as a corrupted VM. It is not.
+
+```bash
+pgrep -x UTM              # utmctl needs this
+pgrep -f QEMULauncher     # is a guest actually running?
+utmctl list               # registered, and under which UUID?
+./scripts/local-worker/worker-ctl.sh status   # launches UTM if needed, explains `unknown`
+```
+
+The other cause is contention. One machine hosts **one** VM and **one** NVDA, so a second
+shell or agent restarting the worker makes your view wrong: mid-restart the state genuinely is
+`unknown`, and the worker genuinely is unreachable for the minute its scheduled task takes to
+return. Same shared-resource problem as running `capture-check` against a live worker. Check
+that nothing else is mid-operation before diagnosing corruption.
