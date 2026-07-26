@@ -62,6 +62,22 @@ server.listen(PORT, () =>
   console.log(`a11y-witness NVDA worker listening on :${PORT} (reuse NVDA: ${REUSE_NVDA})`)
 );
 
+// An NVDA socket error arrives asynchronously, outside the request handler that caused it,
+// so it lands here as an uncaught exception. Without this the worker dies with a bare stack
+// trace -- which is exactly what happened when another process stopped the NVDA this one was
+// reusing: `Cannot connect to NVDA / ECONNREFUSED 127.0.0.1:6837`, task result 1, no worker.
+//
+// Exit deliberately non-zero rather than trying to soldier on: the screen reader's state is
+// unknown at this point, and a worker that keeps answering /health while unable to capture is
+// worse than one that is honestly gone. The scheduled task is configured to restart it.
+for (const fatal of ["uncaughtException", "unhandledRejection"]) {
+  process.on(fatal, (error) => {
+    console.error(`${fatal}: ${(error && error.stack) || error}`);
+    console.error("exiting so the scheduled task can restart a clean worker");
+    process.exit(1);
+  });
+}
+
 // A reused NVDA outlives the capture that started it, so it has to be stopped when this
 // process goes away -- otherwise the scheduled task restarts the worker into a machine that
 // already has a screen reader running, which is how the speech channel destabilises.

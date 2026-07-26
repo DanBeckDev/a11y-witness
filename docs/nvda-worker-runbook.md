@@ -210,3 +210,36 @@ See docs/local-worker-vm.md for the full set.
 - **Never point the worker at a Store/UWP browser.** Portable NVDA has no browse
   mode there, so the read-through would be empty. Desktop (Win32) Edge only.
 - **Never trust an all-pass `capture-check` alone.** See the probe-value table above.
+
+## Worker dead, guest alive, `server.log` ends in a stack trace
+
+```
+Error: Cannot connect to NVDA
+connect ECONNREFUSED 127.0.0.1:6837
+```
+
+Something else on the machine drove NVDA. It is a single machine-wide resource: a second
+driver (`capture-check`, a stray `capture.mjs` run, a manual Guidepup script) stops the same
+NVDA the worker is reusing, and the worker then connects to a corpse. The socket error arrives
+asynchronously, outside any request handler.
+
+Mitigated on three sides now, but worth knowing when triaging an old worker:
+
+- the worker probes NVDA's port before reusing it, and cold-starts if nothing answers
+  (`lastSpokenPhrase()` is NOT a liveness check — it reads Guidepup's local phrase log and
+  answers happily while NVDA is dead);
+- `capture-check` refuses to run while a worker is serving, and says how to stop it;
+- `a11ysrv` has `RestartCount 5` so a crashed worker comes back. Before that it went to
+  "Ready" and stayed there: the at-logon trigger covers reboots, not process death.
+
+If a cold start reports **"NVDA is already running"**, a leftover instance is blocking it. The
+worker clears that itself (`nvda.stop()` then retry). By hand:
+
+```powershell
+Stop-ScheduledTask -TaskName a11ysrv
+Get-Process node -EA SilentlyContinue | Stop-Process -Force
+Start-ScheduledTask -TaskName a11ysrv
+```
+
+Do **not** `Stop-Process nvda*` to fix this. Killing NVDA outside Guidepup is what produces
+the leftover state in the first place — it is how this failure was reproduced.
