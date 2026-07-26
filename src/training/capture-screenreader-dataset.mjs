@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { leaseWorker, guestReachableUrl, isAfterRun } from "../capture/local-vm.js";
 import { captureMentionsTitle, titleOf } from "../capture/verify.js";
+import { beginRun, readProgress } from "./capture-progress.mjs";
 
 const ROOT = resolve(process.cwd(), "runs/screenreader-dataset");
 const MANIFEST_PATH = resolve(ROOT, "manifest.json");
@@ -13,6 +14,7 @@ const CAPTURE_ROOT = resolve(ROOT, "captures");
 const DEFAULT_BASE_URL = "http://localhost:5050";
 const STEPS = Number(process.env.DATASET_CAPTURE_STEPS || 150);
 const ONLY = process.argv.find((arg) => arg.startsWith("--only="))?.slice("--only=".length);
+const RESUME = process.argv.includes("--resume");
 const CAPTURE_TIMEOUT_MS = Number(process.env.DATASET_CAPTURE_TIMEOUT_MS || 300000);
 
 async function fetchJson(url, options = {}, timeoutMs = 30000) {
@@ -128,31 +130,62 @@ async function pageTitle(url) {
 }
 
 const REJECTED_PREVIEW_PHRASES = 3;
+const CAPTURE_ATTEMPTS = 3;
 
-// A capture that read the wrong page is worse than a missing one: it is plausible-looking
-// training data with the wrong label. Refuse to write it.
-function assertReadTheRightPage(capture, { title, url }) {
-  if (captureMentionsTitle(capture, title)) return;
+function describeWrongPage(capture, { title, url }) {
   const preview = capture.transcript.slice(0, REJECTED_PREVIEW_PHRASES).map((p) => JSON.stringify(p)).join(", ");
-  throw new Error(
-    'the screen reader did not read "' + title + '" at ' + url +
-      " (announced: " + (preview || "nothing") + "). Not written -- it would be mislabelled training data."
-  );
+  return 'the screen reader did not read "' + title + '" at ' + url +
+    " (announced: " + (preview || "nothing") + ")";
+}
+
+// NVDA capture is racy: a page that reads correctly one minute comes back as two "blank"
+// phrases the next, when Edge has not taken the foreground in time. The witness CLI already
+// retries for exactly this reason. Without the same here, an hour-long unattended run
+// silently loses cases to flake -- observed immediately: image-missing-alt-building failed
+// this way on its first full run, and captured fine on a retry.
+//
+// A capture that read the wrong page is still never written: mislabelled training data is
+// worse than a gap, because nothing downstream can tell it apart from real evidence.
+async function captureVerified(ctx, testCase, { url, title }) {
+  let wrong = "";
+  for (let attempt = 1; attempt <= CAPTURE_ATTEMPTS; attempt++) {
+    const capture = await captureOne(ctx, testCase, url);
+    if (captureMentionsTitle(capture, title)) return capture;
+    wrong = describeWrongPage(capture, { title, url });
+    console.log("  attempt " + attempt + "/" + CAPTURE_ATTEMPTS + ": " + wrong);
+  }
+  throw new Error(wrong + " after " + CAPTURE_ATTEMPTS + " attempts. Not written.");
 }
 
 async function captureCase(ctx, testCase) {
-  const paths = [];
+  const phrases = {};
   for (const variant of ["good", "bad"]) {
     const url = captureUrl(ctx.baseUrl, testCase, variant);
     const title = await pageTitle(url);
+    ctx.progress.startCase(testCase.id, variant);
     console.log("Capturing " + testCase.id + " (" + variant + ")");
-    const capture = await captureOne(ctx, testCase, url);
-    assertReadTheRightPage(capture, { title, url });
+    const capture = await captureVerified(ctx, testCase, { url, title });
     const path = writeCapture(testCase, variant, capture);
     console.log("  " + capture.transcript.length + " transcript phrases -> " + path);
-    paths.push(path);
+    phrases[variant] = capture.transcript.length;
   }
-  return paths;
+  return phrases;
+}
+
+// A run interrupted an hour in should not start over. Must be read BEFORE beginRun, which
+// replaces the progress file with a fresh all-pending one.
+//
+// A case counts as done only if the previous run recorded it captured AND both files are
+// still on disk: the progress file and the captures can be deleted independently, and
+// trusting either alone silently skips work that no longer exists.
+function previouslyCaptured() {
+  if (!RESUME) return new Set();
+  const cases = readProgress(ROOT)?.cases ?? {};
+  const done = Object.entries(cases)
+    .filter(([id, entry]) => entry.status === "captured" &&
+      ["good", "bad"].every((v) => existsSync(resolve(CAPTURE_ROOT, id + "." + v + ".json"))))
+    .map(([id]) => id);
+  return new Set(done);
 }
 
 function afterRun() {
@@ -162,19 +195,29 @@ function afterRun() {
   throw new Error('A11Y_VM_AFTER must be restore|stop|pause|leave (got "' + v + '")');
 }
 
-async function captureAll(ctx, cases) {
+async function captureAll(ctx, cases, done) {
   const failures = [];
   for (const testCase of cases) {
+    if (done.has(testCase.id)) {
+      ctx.progress.skipped(testCase.id, "already captured (--resume)");
+      console.log("Skipping " + testCase.id + " (already captured)");
+      continue;
+    }
     try {
-      await captureCase(ctx, testCase);
+      ctx.progress.captured(testCase.id, await captureCase(ctx, testCase));
     } catch (error) {
       failures.push(testCase.id + ": " + error.message);
+      ctx.progress.failed(testCase.id, error.message);
       console.error("  CAPTURE_FAILED " + failures.at(-1));
     }
   }
-  console.log("Capture complete: " + (cases.length - failures.length) + "/" + cases.length + " cases.");
+  const outcome = (cases.length - failures.length - done.size) + " captured, " +
+    failures.length + " failed, " + done.size + " skipped, of " + cases.length + " cases";
+  ctx.progress.finish(outcome);
+  console.log("Capture complete: " + outcome + ".");
   if (failures.length) {
-    throw new Error(failures.length + " case(s) failed. The completed captures were kept.");
+    throw new Error(failures.length + " case(s) failed. The completed captures were kept; " +
+      "see npm run training:status, and re-run with --resume to retry only what is missing.");
   }
 }
 
@@ -186,6 +229,9 @@ async function main() {
   // Same lease as the witness CLI: an explicit A11Y_WORKER is used untouched, otherwise a
   // local VM is started on demand and put back as it was found. Dataset capture is the run
   // that benefits most -- it is long, unattended, and used to leave the guest running after.
+  const done = previouslyCaptured();
+  if (done.size) console.log("Resuming: " + done.size + " case(s) already captured.");
+
   const lease = await leaseWorker({ worker: process.env.A11Y_WORKER ?? null, after: afterRun() });
   try {
     await checkWorker(lease);
@@ -194,7 +240,15 @@ async function main() {
     // a per-case failure, so without this a wrong base URL reports the same error 45 times
     // over -- and each one costs a full NVDA capture first.
     await pageTitle(captureUrl(baseUrl, cases[0], "good"));
-    await captureAll({ worker: lease.worker, baseUrl }, cases);
+    const progress = beginRun({
+      root: ROOT,
+      worker: lease.worker,
+      baseUrl,
+      cases,
+      captureTimeoutMs: CAPTURE_TIMEOUT_MS,
+    });
+    console.log("Progress: " + progress.path + " (watch it with: npm run training:status)");
+    await captureAll({ worker: lease.worker, baseUrl, progress }, cases, done);
   } finally {
     await lease.release();
   }

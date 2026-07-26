@@ -19,6 +19,7 @@
     "training:generate": "node src/training/generate-screenreader-dataset.mjs",
     "training:preflight": "node src/training/preflight-screenreader-dataset.mjs",
     "training:capture": "tsx src/training/capture-screenreader-dataset.mjs",
+    "training:status": "node src/training/capture-status.mjs",
     "training:export": "node src/training/export-screenreader-dataset.mjs"
   },
   "dependencies": {
