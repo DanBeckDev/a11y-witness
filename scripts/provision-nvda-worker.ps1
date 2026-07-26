@@ -68,7 +68,9 @@ OK "node $(& node --version), npm $(& $npm --version)"
 # NVDA is a GUI app: it needs a real logged-on desktop. Over SSH alone there is no
 # interactive session and NVDA announces nothing at all, so this is worth asserting
 # loudly rather than discovering later via empty transcripts.
-$console = (query session 2>$null | Select-String '^\s*console\s+\S+\s+\d+\s+Active')
+# `query session` prefixes the CURRENT session with '>', so the anchor must allow it;
+# otherwise this warns "NO active console session" on a box that plainly has one.
+$console = (query session 2>$null | Select-String '^\s*>?\s*console\s+\S+\s+\d+\s+Active')
 if ($console) { OK 'an interactive console session is logged on' }
 else { Warn 'NO active console session. NVDA cannot run until someone is logged on at the console (see the auto-logon step).' }
 
