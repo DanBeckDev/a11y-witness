@@ -208,24 +208,30 @@ export const EVAL_CASES: EvalCase[] = [
     id: "tut-disclosure-good",
     fixture: "src/eval/fixtures/tutorials/disclosure-good.json",
     task: "Expand the FAQ answer about resetting a password",
-    // A proper disclosure: the toggle is a named button announced "collapsed",
-    // and activating it announces the new state/revealed content. This is the
-    // Layer-2 interaction case — the only signal is in interaction.stateChanges,
-    // not the static transcript. A conformant disclosure yields no findings.
+    // A proper disclosure: the toggle is a named button announced "collapsed", and
+    // activating it flips aria-expanded, so re-reading the control reports
+    // "expanded". This is the Layer-2 interaction case — the only signal is in
+    // interaction.stateChanges, not the static transcript. Conformant => no findings.
+    //
+    // The probe re-reads the control instead of listening for a spontaneous
+    // announcement, because NVDA 2026.1.1 announces only a document re-announce on
+    // activation for BOTH this page and the broken one. This fixture previously held
+    // that noise ("FAQ (working disclosure), document") as its `after` value, and the
+    // judge flagged a false 4.1.2 here as a result.
     expect: [],
     allow: [],
-    notes: "W3C disclosure tutorial, correct: named toggle button with collapsed/expanded state announced on activation. Lives in interaction.stateChanges. Clean.",
+    notes: "W3C disclosure tutorial, correct: named toggle button whose aria-expanded flips, so the re-read reports 'expanded'. Lives in interaction.stateChanges. Clean.",
   },
   {
     id: "tut-disclosure-bad",
     fixture: "src/eval/fixtures/tutorials/disclosure-bad.json",
     task: "Expand the FAQ answer about resetting a password",
     // A broken disclosure: it visually reveals content but never updates
-    // aria-expanded, so activating the control announces nothing — the screen
-    // reader user has no feedback that the state changed (4.1.2 Name, Role,
-    // Value). Only catchable by actually operating the control, which is what
-    // the Layer-2 interaction probe does. 1.3.1 allowed (revealed content not
-    // programmatically associated is a defensible adjacent citation).
+    // aria-expanded, so re-reading the control after activation still reports
+    // "collapsed" — the screen-reader user has no indication the state changed
+    // (4.1.2 Name, Role, Value). Only catchable by actually operating the control,
+    // which is what the Layer-2 interaction probe does. 1.3.1 allowed (revealed
+    // content not programmatically associated is a defensible adjacent citation).
     expect: ["4.1.2"],
     allow: ["4.1.2", "1.3.1"],
     notes: "W3C disclosure tutorial failure: toggle never updates aria-expanded, so state change is not conveyed. Exercises the operate-the-control interaction probe.",
@@ -354,7 +360,7 @@ export const EVAL_CASES: EvalCase[] = [
     task: "Filter the products to show only bags",
     expect: [],
     allow: [],
-    notes: "Cookbook ch10, correct: result count in a role=status live region, announced on filter. Lives in interaction. Clean. PENDING richer capture (2026-06-29): probeForms does not actuate plain filter <button>s, so good/bad capture identically; needs a probe that clicks the filter and snapshots the live-region delta.",
+    notes: "Cookbook ch10, correct: result count in a role=status live region, announced on filter. Captured via the task-button probe (clicking 'Bags' announced 'Showing 2 of 4 products'). Lives in interaction.formChanges. Clean.",
   },
   {
     id: "book-filter-status-bad",
@@ -365,7 +371,7 @@ export const EVAL_CASES: EvalCase[] = [
     // catchable by operating the filter — exercises the interaction probe.
     expect: ["4.1.3"],
     allow: ["4.1.3"],
-    notes: "Cookbook ch10 failure: filter result change not announced (no live region). Lives in interaction. PENDING richer capture (2026-06-29): probeForms does not actuate plain filter <button>s, so the (non-)announcement is not captured and good/bad look identical; needs a probe that clicks the filter and snapshots the live-region delta.",
+    notes: "Cookbook ch10 failure: filter result change not announced (no live region). Captured via the task-button probe (clicking 'Bags' announced nothing — empty delta). 4.1.3. Lives in interaction.formChanges.",
   },
   {
     id: "book-layout-table-good",

@@ -37,9 +37,27 @@ const SUBSTANTIAL_PHRASE_LEN = 20; // a phrase longer than this is worth dedupin
 const MIN_CONTROL_NAME_LEN = 3; // shorter is a stray key echo ("f"), not a control name
 const DEDUPE_KEY_LEN = 80; // prefix length used to dedupe announcements
 
+// Edge's capture profile must NOT live under %TEMP%. Windows temp cleanup deletes
+// it (it silently wiped the NVDA install the same way), and a purged profile
+// reverts Edge to its first-run state, whose welcome/sign-in surface NVDA records
+// as phantom elements on pages with no headings — the first-run gotcha in the
+// README. LOCALAPPDATA survives cleanup.
+const EDGE_PROFILE_DIR =
+  process.env.A11Y_EDGE_PROFILE ||
+  `${process.env.LOCALAPPDATA || process.env.TEMP}\\a11y-witness\\edge-profile`;
+
 // Submit-like button names. Used only when probing forms, because activating a
 // submit button has side effects and must be opt-in.
 const SUBMIT_RE = /\b(submit|sign ?up|sign ?in|log ?in|send|search|continue|save|register|join|subscribe)\b/i;
+
+// Role/state words to ignore when matching a control's NAME against the task, so
+// a button is only activated when its actual label appears in the user's task.
+const CONTROL_WORDS = new Set([
+  "button", "link", "graphic", "image", "edit", "text", "checkbox", "radio", "combo",
+  "box", "list", "clickable", "menu", "item", "heading", "level", "not", "checked",
+  "pressed", "collapsed", "expanded", "selected", "of", "out",
+]);
+
 
 const errMsg = (e) => (e && e.message) || String(e);
 
@@ -91,7 +109,7 @@ export async function captureWithNvda(url, opts = {}) {
   // auto-say-all so it can't race the read.
   await anchorToTop();
   const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
-  const { structure, interaction } = await navigateByStructure({ deadline, diag, probeForms: !!opts.probeForms });
+  const { structure, interaction } = await navigateByStructure({ deadline, diag, probeForms: !!opts.probeForms, task: opts.task });
 
   await stopAndCleanup(diag);
   diag.mark("done", { transcript: transcript.length });
@@ -119,7 +137,7 @@ function launchBrowser(url) {
     ["/c", "start", "", "msedge",
       "--no-first-run", "--no-default-browser-check", "--start-maximized",
       "--disable-session-crashed-bubble", "--disable-features=msEdgeWelcomePage",
-      `--user-data-dir=${process.env.TEMP}\\edge-a11y`, `--app=${url}`],
+      `--user-data-dir=${EDGE_PROFILE_DIR}`, `--app=${url}`],
     { detached: true, stdio: "ignore" }
   );
 }
@@ -219,10 +237,10 @@ async function advanceAndRead(navStrategy) {
 // quick-nav, and — while a control is under the cursor — operate it to capture
 // the announcements only interaction reveals. Returns the structure model and
 // the interaction model.
-async function navigateByStructure({ deadline, diag, probeForms }) {
+async function navigateByStructure({ deadline, diag, probeForms, task }) {
   const K = nvda.keyboardCommands;
   const interaction = { stateChanges: [], formChanges: [], sweepLog: [] };
-  const onFormField = (phrase) => operateControl(phrase, { probeForms, deadline, interaction });
+  const onFormField = (phrase) => operateControl(phrase, { probeForms, deadline, interaction, task });
 
   const structure = { headings: [], landmarks: [], formFields: [] };
   await anchorToTop(); // browse mode + document top before the structural sweep
@@ -348,41 +366,98 @@ async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline })
 // current position, not a next one.
 async function operateControl(phrase, ctx) {
   if (/\bcollapsed\b/i.test(phrase)) return probeDisclosure(phrase, ctx);
-  if (ctx.probeForms && /\bbutton\b/i.test(phrase) && SUBMIT_RE.test(phrase)) return probeFormSubmit(phrase, ctx);
+  if (!ctx.probeForms || !/\bbutton\b/i.test(phrase)) return undefined;
+  if (SUBMIT_RE.test(phrase)) return probeFormSubmit(phrase, ctx);
+  if (taskNamesControl(phrase, ctx.task)) return probeTaskButton(phrase, ctx);
+  return undefined;
 }
 
-// Activate a disclosure (safe — it just toggles visibility) and record the
-// announced state, even when empty: a disclosure that says nothing after
-// activation does not convey its state and fails 4.1.2 Name, Role, Value.
+// True when the control's announced NAME shares a meaningful word with the task,
+// so activating it matches the user's stated intent (e.g. task "show only bags"
+// -> button "Bags"). This guards the task-button probe so it never clicks an
+// unrelated or destructive control: only a button the task actually names.
+function taskNamesControl(phrase, task) {
+  if (!task) return false;
+  const taskWords = new Set(task.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+  return phrase
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .some((w) => w.length >= MIN_CONTROL_NAME_LEN && !CONTROL_WORDS.has(w) && taskWords.has(w));
+}
+
+// Activate a disclosure (safe — it just toggles visibility) and record the state it
+// exposes afterwards, so a control that never updates its state is caught (4.1.2
+// Name, Role, Value).
+//
+// We RE-READ the control rather than listening for a spontaneous announcement,
+// because the spontaneous route cannot separate a conformant disclosure from a
+// broken one. Measured on NVDA 2026.1.1: activating either fixture announces only a
+// document re-announce (~625ms) — "expanded" is never spoken, and neither
+// `lastSpokenPhrase` nor the `spokenPhraseLog` delta contains it. Judging on that
+// meant a broken disclosure could look identical to a working one.
+//
+// Re-reading asks the accessibility tree instead: has the control's state actually
+// changed? That is precisely what 4.1.2 requires, and it is deterministic. The
+// spontaneous announcement is still recorded in the sweep log as evidence.
 async function probeDisclosure(phrase, { interaction }) {
   try {
-    await withTimeout(nvda.act(), ACT_TIMEOUT_MS, "activate"); // Enter on the control under the cursor
-    const after = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "activate")) || "").trim();
-    interaction.sweepLog.push(`disclosure ${JSON.stringify(phrase.slice(0, 40))} -> ${JSON.stringify(after)}`);
+    const before = ((await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, "disclosure")) || []).length;
+    await withTimeout(nvda.act(), ACT_TIMEOUT_MS, "disclosure"); // Enter on the control under the cursor
+    await sleep(STATE_SETTLE_MS);
+    const log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, "disclosure")) || [];
+    const announced = log.slice(before).map((s) => String(s).trim()).filter(Boolean).join(" | ");
+    const after = await reportFocusedControl();
+    interaction.sweepLog.push(
+      `disclosure ${JSON.stringify(phrase.slice(0, 40))} announced=${JSON.stringify(announced)} state=${JSON.stringify(after)}`
+    );
     interaction.stateChanges.push({ control: phrase, after });
   } catch (e) {
     interaction.sweepLog.push(`disclosure ERROR ${errMsg(e)}`);
   }
 }
 
-// Submit the form with no valid input to test error handling. An accessible form
-// announces the error (3.3.1) via a status message (4.1.3); an inaccessible one
-// shows it visually and the screen reader hears nothing. Capture EVERY phrase
-// announced after the submit, not just the last one: a live-region alert can be
-// followed by a focus move or document re-announce that overwrites
-// lastSpokenPhrase, so the spokenPhraseLog delta keeps the alert text.
-async function probeFormSubmit(phrase, { interaction }) {
+// Ask NVDA to re-announce the focused control, and return that announcement — which
+// carries the control's CURRENT state ("... button, focused, expanded").
+async function reportFocusedControl() {
+  await withTimeout(
+    nvda.perform(nvda.keyboardCommands.reportCurrentFocus), NAV_TIMEOUT_MS, "reportFocus"
+  );
+  await sleep(STATE_SETTLE_MS);
+  return ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "reportFocus")) || "").trim();
+}
+
+// Activate the control under the cursor and capture EVERY phrase announced
+// afterwards, not just the last one: a live-region status (4.1.3) can be followed
+// by a focus move or document re-announce that overwrites lastSpokenPhrase, so we
+// keep the spokenPhraseLog delta. An empty delta means the action conveyed
+// nothing to the screen reader.
+async function activateAndCaptureDelta(phrase, interaction, kind) {
   try {
-    const before = ((await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, "submit")) || []).length;
-    await withTimeout(nvda.act(), ACT_TIMEOUT_MS, "submit"); // Enter on the submit button
+    const before = ((await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, kind)) || []).length;
+    await withTimeout(nvda.act(), ACT_TIMEOUT_MS, kind); // Enter on the control under the cursor
     await sleep(STATE_SETTLE_MS);
-    const log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, "submit")) || [];
+    const log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, kind)) || [];
     const after = log.slice(before).map((s) => String(s).trim()).filter(Boolean).join(" | ");
-    interaction.sweepLog.push(`submit ${JSON.stringify(phrase.slice(0, 40))} -> ${JSON.stringify(after)}`);
+    interaction.sweepLog.push(`${kind} ${JSON.stringify(phrase.slice(0, 40))} -> ${JSON.stringify(after)}`);
     interaction.formChanges.push({ control: phrase, after });
   } catch (e) {
-    interaction.sweepLog.push(`submit ERROR ${errMsg(e)}`);
+    interaction.sweepLog.push(`${kind} ERROR ${errMsg(e)}`);
   }
+}
+
+// Submit the form with no valid input to test error handling. An accessible form
+// announces the error (3.3.1) via a status message (4.1.3); an inaccessible one
+// shows it visually and the screen reader hears nothing.
+async function probeFormSubmit(phrase, { interaction }) {
+  return activateAndCaptureDelta(phrase, interaction, "submit");
+}
+
+// Activate a non-submit button the task explicitly names (e.g. a filter "Bags"
+// for the task "show only bags") and capture what is announced. A page that
+// updates results in a live region announces the new state (4.1.3); one that
+// updates silently announces nothing.
+async function probeTaskButton(phrase, { interaction }) {
+  return activateAndCaptureDelta(phrase, interaction, "taskButton");
 }
 
 // --- Teardown phase -------------------------------------------------------

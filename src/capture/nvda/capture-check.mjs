@@ -43,12 +43,19 @@ const CHECKS = [
       ["no landmarks exposed", r.structure.landmarks.length === 0, r.structure.landmarks.length],
     ],
   },
+  // Unlike the form-submit probe below, the disclosure probe re-reads the control's
+  // state from the accessibility tree instead of waiting for a spontaneous
+  // announcement, so it IS deterministic and the good/bad distinction can be gated.
+  // Gate it: asserting only that the probe "fired" is what let a silent regression
+  // through before, when both pages returned a document re-announce and a broken
+  // disclosure became indistinguishable from a working one.
   {
     page: "disclosure-good.html",
     signature: /password|FAQ/i,
     assert: (r) => [
       ["disclosure probe fired", r.interaction.stateChanges.length >= 1, r.interaction.stateChanges.length],
       ["found a collapsed control", /collapsed/i.test(r.interaction.stateChanges[0]?.control ?? ""), r.interaction.stateChanges[0]?.control],
+      ["state updated to expanded", /\bexpanded\b/i.test(r.interaction.stateChanges[0]?.after ?? ""), r.interaction.stateChanges[0]?.after],
     ],
   },
   {
@@ -56,6 +63,10 @@ const CHECKS = [
     signature: /password|FAQ/i,
     assert: (r) => [
       ["disclosure probe fired", r.interaction.stateChanges.length >= 1, r.interaction.stateChanges.length],
+      // The whole point of the bad page: it reveals the panel but never updates
+      // aria-expanded, so the re-read must still say "collapsed".
+      ["state NOT updated (still collapsed)", /\bcollapsed\b/i.test(r.interaction.stateChanges[0]?.after ?? ""), r.interaction.stateChanges[0]?.after],
+      ["state does not claim expanded", !/\bexpanded\b/i.test(r.interaction.stateChanges[0]?.after ?? ""), r.interaction.stateChanges[0]?.after],
     ],
   },
   // CI gates only on the robust signal: the form-submit probe fires and finds

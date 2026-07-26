@@ -1,5 +1,13 @@
 # NVDA capture worker (Windows)
 
+> **Standing up, repairing, or debugging a worker?** Use
+> [`docs/nvda-worker-runbook.md`](../../../docs/nvda-worker-runbook.md) and the two
+> scripts it drives — `scripts/provision-nvda-worker.ps1` (idempotent setup/repair)
+> and `scripts/diagnose-nvda-worker.ps1` (read-only PASS/FAIL per layer, with the
+> fix for each). The runbook also carries the error-string → real-cause table; the
+> messages NVDA and guidepup emit are actively misleading. This file explains the
+> mechanics and the hard-won quirks behind those scripts.
+
 The proven recipe for driving **real NVDA** through a real browser and capturing
 what it announces. This is the spike that proved the capture half of the core
 bet (see `../../../docs/adr/0001-capture-architecture.md`). It is not yet the
@@ -28,16 +36,29 @@ winget install --id Git.Git -e --silent --accept-source-agreements --accept-pack
 git clone https://github.com/DanBeckDev/a11y-witness.git
 cd a11y-witness; npm install
 
-# Guidepup installs a portable NVDA and records it in HKCU\Software\Guidepup\Nvda,
-# and zeroes ForegroundLockTimeout so the browser can take focus during capture.
-# Pin the install dir (NOT the default %TEMP%): the OS can clean %TEMP%, which
-# would force a silent reinstall with whatever defaults a newer Guidepup ships —
-# a reproducibility hazard for a durable worker.
-npx --yes @guidepup/setup --nvda-install-dir C:\guidepup-nvda
+# `setup` zeroes ForegroundLockTimeout so the browser can take focus during
+# capture; `install nvda` downloads the portable NVDA build pinned in
+# @guidepup/guidepup's manifest.json into %LOCALAPPDATA%\guidepup.
+npx --yes @guidepup/setup setup
+npx --yes @guidepup/setup install nvda   # run from the repo: it reads the LOCAL guidepup's manifest
+
+# Guidepup ships the Speech Viewer ON, and that window's focus event lands in the
+# spokenPhraseLog delta — so every interaction probe records "NVDA Speech Viewer"
+# instead of the page's response, making accessible and inaccessible pages
+# indistinguishable. Turn it off in the installed config (see the gotcha below).
 ```
 
-> A portable NVDA copy cannot persist settings across reinstalls, so capture
-> reproducibility depends on the install staying put — hence the pinned dir.
+> **Version pairing is not optional.** guidepup ≤0.27 reaches for the old NVDA
+> Remote *add-on* (`userConfig\addons\remote\...\server.pem`); NVDA 2026.1.x ships
+> Remote Access in core (`userConfig\remoteAccess\localRelay\NvdaRemoteRelay.pem`)
+> and has no such add-on, so an old guidepup with a new NVDA fails at
+> `NVDAClient.connect` — reported, misleadingly, as "NVDA not installed" even
+> though NVDA started fine. guidepup 0.29.2 accepts both paths. It also resolves
+> the install from `%LOCALAPPDATA%\guidepup` (override:
+> `GUIDEPUP_SCREEN_READERS_PATH`) rather than the old
+> `HKCU\Software\Guidepup\Nvda` registry pointer, which is what makes the install
+> survive temp cleanup.
+>
 > The settings that shape the transcript (NVDA's "Report live regions" — on by
 > default — "Automatic say all on page load", and the element-reporting toggles)
 > come from Guidepup's bundled config. Note: "Automatic say all on page load"
@@ -101,6 +122,27 @@ Then collect `transcript.json` and feed it to the judge on the control plane:
   nothing — the only control is the *current* position. Activate via the sweep's
   on-item callback instead. (Also: NVDA's "B" button quick-nav misses plain
   `<button>`s that "F"/form-field nav reaches.)
+- **Turn the NVDA Speech Viewer OFF, or every interaction probe is worthless.**
+  Guidepup's bundled `nvda.ini` sets `[speechViewer] showSpeechViewerAtStartup =
+  True`. That window's focus event is announced, so it lands in the
+  `spokenPhraseLog` delta captured right after activating a control: the
+  disclosure and form-submit probes both came back `after: "NVDA Speech Viewer"`
+  on *every* page, so an accessible page (which announces its error) and an
+  inaccessible one (which is silent) looked identical — the 3.3.1 / 4.1.3 signal
+  was destroyed while `capture-check` still reported all-pass, because it asserts
+  the probe *fired*, not what it heard. Set it to `False` in
+  `%LOCALAPPDATA%\guidepup\nvda\all\<version>\extracted\userConfig\nvda.ini`
+  after installing; a reinstall resets it. With it off: `disclosure-good` →
+  `"expanded"`, `disclosure-bad` → `""`, `forms-validation-good` → `"There is a
+  problem. Email address is required."`, `forms-validation-bad` → `""`.
+- **A screen reader without UIAccess cannot read elevated windows.** Guidepup runs
+  `nvda_noUIAccess.exe`, so do NOT "fix" permission problems by running the worker
+  or the browser elevated — NVDA would go silent on that window. Elevation is also
+  what summons UAC, and with `PromptOnSecureDesktop=1` that dialog lands on the
+  secure desktop, where it is both unreadable by NVDA and unclickable by
+  automation: fatal on a headless VM. Nothing in the capture path needs elevation.
+  Set the firewall profiles' `NotifyOnListen` to `False` so a listening program can
+  never raise the "allow this app" dialog either.
 - **Capture the `spokenPhraseLog` delta, not just `lastSpokenPhrase`, after
   activating something.** A live-region alert (e.g. a form error) is often
   immediately followed by a focus move or document re-announce that overwrites
@@ -129,9 +171,15 @@ Store (UWP) apps**. We drive **desktop (Win32) Edge**, where browse mode works
 **not** be pointed at a UWP/Store-app browser, where the read-through would be
 empty.
 
-Also: `@guidepup/setup` installs the portable NVDA under `%TEMP%` by default,
-which the OS may clean. For a durable worker, pin it with
-`npx @guidepup/setup --nvda-install-dir C:\guidepup-nvda`.
+Also, a warning learned the hard way: older `@guidepup/setup` installed the
+portable NVDA under `%TEMP%`, and Windows temp cleanup **silently gutted it** —
+`library.zip`, `nvda_slave.exe` and `nvdaHelperLocal.dll` deleted, leaving
+`nvda.exe` as a 77 KB stub that launches and dies. The symptom was
+`Timed out waiting for NVDA to be running` with no `nvda.log` at all, three days
+after the last good capture. guidepup 0.29.2 installs to `%LOCALAPPDATA%\guidepup`
+instead, which cleanup does not touch; use `GUIDEPUP_SCREEN_READERS_PATH` if you
+need it somewhere else. The old `--nvda-install-dir` flag no longer exists — the
+CLI was rewritten into `setup` / `install` subcommands in 0.24.0.
 
 Navigation model (same guide): NVDA has **browse mode** (single-letter quick-nav
 by element type — h headings, d landmarks, f form fields, etc.), **focus mode**

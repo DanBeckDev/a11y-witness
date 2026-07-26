@@ -35,8 +35,36 @@ jobs:
       - run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      # Install NVDA via the repo's OWN guidepup rather than guidepup/setup-action:
+      # the action predates the @guidepup/setup 0.24.0 CLI rewrite and installs the
+      # pre-0.29 layout (registry pointer + %TEMP%), which guidepup >=0.29 does not
+      # look at — CI would fail with "NVDA is not supported". Running the installer
+      # from the repo makes it read our local manifest.json, keeping the screen
+      # reader and the driver in lockstep with package.json. See
+      # docs/nvda-worker-runbook.md.
       - name: Set up NVDA (Guidepup)
-        uses: guidepup/setup-action@0.20.0
+        shell: pwsh
+        run: |
+          npx --yes @guidepup/setup setup
+          npx --yes @guidepup/setup install nvda
+      # Guidepup ships the Speech Viewer ON. Its focus event lands in the
+      # spokenPhraseLog delta captured after activating a control, so every
+      # interaction probe records "NVDA Speech Viewer" instead of the page's
+      # response — and capture-check would still pass, because it asserts the probe
+      # fired, not what it heard. Turn it off before capturing.
+      - name: Disable the NVDA Speech Viewer
+        shell: pwsh
+        run: |
+          $cacheRoot = if ($env:GUIDEPUP_SCREEN_READERS_PATH) { $env:GUIDEPUP_SCREEN_READERS_PATH }
+                       else { Join-Path $env:LOCALAPPDATA 'guidepup' }
+          $inis = Get-ChildItem (Join-Path $cacheRoot 'nvda') -Recurse -Filter 'nvda.ini' -ErrorAction SilentlyContinue
+          if (-not $inis) { throw "No NVDA config found under $cacheRoot - the install step failed." }
+          foreach ($ini in $inis) {
+            $body = Get-Content $ini.FullName -Raw
+            Set-Content -Path $ini.FullName -NoNewline `
+              -Value ($body -replace 'showSpeechViewerAtStartup = True', 'showSpeechViewerAtStartup = False')
+          }
+          if ($inis | Select-String 'showSpeechViewerAtStartup = True') { throw 'Speech Viewer still enabled.' }
       # A fresh Edge profile shows a first-run welcome/sign-in surface; on a
       # page with no headings of a type, NVDA quick-nav escapes the empty
       # document into that browser UI and pollutes the capture. Suppress it via

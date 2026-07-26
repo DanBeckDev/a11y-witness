@@ -220,7 +220,7 @@ function interactionBlock(input: JudgeInput): string {
   ];
   if (it.stateChanges?.length) {
     lines.push(
-      `Disclosure controls activated (control -> what was announced after). An EMPTY announcement ("") means the control changed nothing audible: its state is not conveyed to the user, failing 4.1.2 Name, Role, Value. Any announcement of the new state or revealed content is acceptable. ` +
+      `Disclosure controls activated, then RE-READ (control as first announced -> the same control re-read after activation, which reports its CURRENT state). Compare the state word on each side. "collapsed" -> "expanded" means the new state IS exposed to the screen reader: correct, raise nothing. If the state word is UNCHANGED ("collapsed" -> "collapsed"), the control revealed its content visually but never updated its state, so a screen-reader user gets no indication anything changed: that fails 4.1.2 Name, Role, Value. An EMPTY re-read ("") is also a 4.1.2 failure. Judge ONLY the state word; a page title or document re-announce on either side is capture noise, not evidence. ` +
         it.stateChanges.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")
     );
   }

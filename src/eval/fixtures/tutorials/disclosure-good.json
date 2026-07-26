@@ -20,7 +20,7 @@
     "stateChanges": [
       {
         "control": "How do I reset my password?, button, collapsed",
-        "after": "FAQ (working disclosure), document"
+        "after": "How do I reset my password?, button, focused, expanded"
       }
     ]
   }

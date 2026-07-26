@@ -22,18 +22,41 @@ export interface CaptureRequest {
   strategy?: NavigationStrategy;
 }
 
-/**
- * What a screen reader announced, plus the context the judge needs. This shape
- * is a superset of the judge's input, so a CaptureResult can be judged directly
- * (see src/spike/judge.ts, JudgeInput).
- */
+/** Screen-reader-derived structural quick-navigation results. These are
+ * announcements produced by NVDA's heading, landmark, and form-field commands,
+ * not DOM queries. */
+export interface CaptureStructure {
+  headings: string[];
+  landmarks: string[];
+  formFields: string[];
+}
+
+/** Screen-reader-derived results of operating controls. Empty `after` strings
+ * are meaningful: they record that activation produced no announcement. */
+export interface CaptureInteraction {
+  controls: string[];
+  stateChanges: { control: string; after: string }[];
+  formChanges: { control: string; after: string }[];
+  postSubmitFields: string[];
+}
+
+/** What a screen reader announced, plus capture metadata. `task` is request
+ * metadata for task-completion probing; it is not part of the accessibility
+ * model's evidence boundary. */
 export interface CaptureResult {
   /** Which screen reader produced this, e.g. "NVDA", "VoiceOver", "Orca". */
   screenReader: string;
   url: string;
-  task: string;
+  task?: string;
   /** Ordered log of what the screen reader announced, plus salient events. */
   transcript: string[];
+  /** Optional structural navigation output produced by the screen reader. */
+  structure?: CaptureStructure;
+  /** Optional control-operation output produced by the screen reader. */
+  interaction?: CaptureInteraction;
+  /** Capture timestamp and structured worker diagnostics, when available. */
+  capturedAt?: string;
+  diagnostics?: unknown[];
   /** Backend metadata: tool/SR versions, strategy used, timings, etc. */
   meta?: Record<string, unknown>;
 }

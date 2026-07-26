@@ -15,12 +15,16 @@
     "eval:gate": "EVAL_GATE=1 tsx src/eval/run.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "scan": "tsx src/scan/run-axe.ts"
+    "scan": "tsx src/scan/run-axe.ts",
+    "training:generate": "node src/training/generate-screenreader-dataset.mjs",
+    "training:preflight": "node src/training/preflight-screenreader-dataset.mjs",
+    "training:capture": "node src/training/capture-screenreader-dataset.mjs",
+    "training:export": "node src/training/export-screenreader-dataset.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
     "@axe-core/playwright": "^4.12.1",
-    "@guidepup/guidepup": "^0.27.0",
+    "@guidepup/guidepup": "^0.29.2",
     "playwright": "^1.61.1"
   },
   "devDependencies": {

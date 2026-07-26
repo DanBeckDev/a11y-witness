@@ -32,7 +32,7 @@ const server = createServer((req, res) => {
       const startedAt = new Date().toISOString();
       console.log(`[${startedAt}] capture ${url} (nav=${nav || "object"}, probeForms=${probeForms})`);
       try {
-        const result = await captureWithNvda(url, { steps, nav, probeForms });
+        const result = await captureWithNvda(url, { steps, nav, probeForms, task });
         const after = (result.diagnostics || []).find((e) => e.event === "afterStart");
         console.log(`  -> ${result.transcript.length} phrases; afterStart.lastSpoken=${JSON.stringify(after && after.lastSpoken)}`);
         if (result.transcript.length === 0) {
