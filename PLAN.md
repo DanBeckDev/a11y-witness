@@ -126,12 +126,38 @@ never assert that a *signal* can tell good from bad.
 - [x] **Suppress Edge background/startup-boost processes — and its auto-updater.** 5 `msedge` processes were alive
   on an idle, freshly booted machine with 0 captures run. Teardown does not tear down, and
   94 minutes of launch/kill churn is the context in which a driver faulted.
-- [ ] **Name the faulting driver — still open.** WER kept the dump
+- [x] **Faulting driver named: `viogpudo.sys`, the VirtIO GPU display driver.** WER kept the dump
   (`C:\Windows\Minidump\072626-3484-01.dmp`, 0.4 MB) but for a kernel bugcheck it records no
   module, only the signature: `d1`, P1 `fffff8071b7d80b8`, P2 `2` (DISPATCH_LEVEL), P3 `8`
   (execute), P4 **the same address as P1**. Code jumped to an address it could not execute at
   raised IRQL — typically a driver whose code page went away underneath it. Naming the module
-  needs windbg against that dump, which is the remaining work here.
+  needs windbg against that dump, so that is what we did -- Debugging Tools installed on the
+  guest (`winsdksetup.exe /features OptionId.WindowsDesktopDebuggers /quiet`), `!analyze -v`
+  with public symbols:
+
+  ```
+  MODULE_NAME:        viogpudo
+  IMAGE_NAME:         viogpudo.sys
+  PROCESS_NAME:       dwm.exe
+  FAILURE_BUCKET_ID:  AV_CODE_AV_PAGED_IP_viogpudo!unknown_function
+  faulting address:   viogpudo+180b8
+  ```
+
+  `Red Hat VirtIO GPU DOD controller v22.7.38.43`. The bucket matches the raw signature
+  exactly: an attempt to EXECUTE at a paged-out instruction pointer, which is why P1 == P4 and
+  P3 == 8. It faulted in the context of **dwm.exe**, the compositor -- and our workload is
+  brutal on exactly that path, creating and destroying an Edge window per capture, 90 times a
+  run, each forced to the foreground.
+
+  So: a guest display-driver bug, not our code, and not Windows Update or Edge (which only
+  added load). Options now that it is named, none yet done:
+  - update the virtio-win guest drivers (this one is from a 22.7 package);
+  - or change the VM's display device -- the VM currently runs `-device virtio-ramfb`, and a
+    different backend may avoid `viogpudo` altogether;
+  - or stop churning windows: reuse one Edge window across captures instead of launching a new
+    one each time, which would cut the driver's stress path enormously. Not trivial -- a
+    chromeless `--app` window has no address bar to navigate with -- but it is also the single
+    biggest remaining efficiency win, so the two motivations point the same way.
   The two background activities found alongside it (Edge auto-updating itself mid-run, per
   WER reports from `MicrosoftEdgeUpdate.exe` and Edge's `setup.exe` with
   `EdgeInstallerError 0x220`; and Windows Update rebooting twice) are now both disabled, so
@@ -159,6 +185,26 @@ Measured: 50s per capture, of which only 13s is work (`readThrough` + `structura
   argument for the policy fixes above. The new readiness gate costs 4.5s of the remaining
   13.3s and is the obvious next target, but it is the gate that removed a 25% flake rate, so
   it earns its keep for now.
+- [x] **Elements List (`NVDA+F7`) — analysed and DECLINED, with a measured detour.**
+  The audit backlog proposed it as a cleaner replacement for repeated quick-nav. On
+  inspection it is a poor trade: the form-field sweep does not merely enumerate, it drives the
+  disclosure and form-submit probes **in place** on each control, and inside a modal Elements
+  List dialog you cannot activate a control where it stands. Adopting it would mean
+  re-architecting the two probes that took the most validation effort to get right, in exchange
+  for maybe 1-2s on read-only heading/landmark enumeration, via version-sensitive modal UI.
+
+  While looking at it I found what seemed a safer win in the same place: the sweep runs BOTH
+  directions per type, with a comment explaining that Guidepup has no "move to top" -- which is
+  no longer true, since `anchorToTop()` runs immediately before it. Anchoring per type and
+  sweeping forward only should have been cheaper and more deterministic. Measured, it was
+  **worse**: `structural` 4.8s -> 11.7s, and one capture dropped from 12 phrases to 2.
+  `anchorToTop` (Escape + Ctrl+Home + a 400ms settle) costs more than the single cheap
+  backward probe it replaced, and I did three of them. Reverted; baseline confirmed restored at
+  4.8s and 12/12/12 phrases.
+
+  Left alone deliberately. The remaining costs are `structural` 4.8s and the readiness gate
+  4.5s, and both are earning their keep.
+
 - [ ] **Then** consider a second worker VM (~5 GB, host has headroom). Needs a dispatcher
   across a pool, which nothing implements yet. Deliberately after the above: parallelism
   multiplies whatever the per-capture cost is.
