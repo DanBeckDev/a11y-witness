@@ -51,6 +51,12 @@ utmctl exec "$UUID" --cmd powershell.exe -NoProfile -Command 'Stop-ScheduledTask
 Always hash-check both sides. A stale worker running old code looks exactly like a logic bug
 and will waste an hour.
 
+**`utmctl` needs the UTM app running.** With UTM closed, a perfectly healthy VM reports its
+state as `unknown` and the worker looks unreachable — the bundle being present makes it read
+like corruption. `worker-ctl.sh` launches UTM and waits. Also: there is **one** VM and **one**
+NVDA on this machine, so two shells or two agents driving the worker will see each other's
+restarts as breakage. Check `worker-ctl.sh status` before concluding the guest is broken.
+
 **`utmctl exec` and SSH land in session 0 and cannot run a capture.** Guidepup needs an
 interactive desktop and reports its absence as `nvda.start failed: NVDA is not supported`,
 which reads like a broken install and is not one. Run captures through a scheduled task with
