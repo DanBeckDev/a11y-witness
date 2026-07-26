@@ -105,18 +105,28 @@ The `openai` backend makes a self-hosted, zero-cost judge realistic. Measured ag
 
 ## Quickstart
 
-Prerequisites: Node 20+, a judge backend (Codex logged in by default — `codex login`), and a capture worker. The axe-core layer is optional and not installed by default; see below.
+**→ [Full getting-started guide](./docs/getting-started.md)** — zero to your first report, including setting up a worker.
+
+The short version, which assumes you have a capture worker already:
 
 ```bash
-npm install
+npm install                        # Node 20+
+codex login                        # or JUDGE_BACKEND=anthropic|openai
 npm run witness -- https://example.com --task "Find the contact details"
 ```
+
+**If that last command cannot reach a worker, nothing happens** — and a worker is a
+Windows machine running NVDA, not a flag you can pass. That is inherent: screen readers
+are OS-bound desktop applications, so there is no Docker image that runs this whole
+product. Getting one takes ~20 minutes on a Windows box you already have, or 1.5–2 hours
+to build a VM from scratch on a Mac. [The guide](./docs/getting-started.md) walks all
+three routes, including CI.
 
 Add `--json` for machine-readable output and `--debug` for per-phase capture diagnostics.
 
 To test how a page *behaves* when operated, add `--probe-forms`: the worker submits the form with no valid input and records what is announced, catching forms that fail silently — the error shown visually and never announced (3.3.1 Error Identification, 4.1.3 Status Messages). It is opt-in because activating a submit button has side effects. Disclosure controls are always activated, to check the expanded/collapsed change is announced at all (4.1.2).
 
-**The axe-core layer is optional.** It is ~100 lines and about a second, but it pulls half a gigabyte of Chromium, which is a poor trade if you already run axe in your own pipeline — and two differently-versioned axe runs in one CI produce duplicate findings, which is worse than none. So `playwright` and `@axe-core/playwright` are `optionalDependencies`: skip them and the rule-based layer simply does not run. Turn it off explicitly with `--no-axe` or `A11Y_AXE=0`. The report then says *"not run — visual criteria are unchecked, not clean"*, because silence must never read as a pass.
+**The axe-core layer is optional.** It is ~100 lines and about a second, but it pulls half a gigabyte of Chromium, which is a poor trade if you already run axe in your own pipeline — and two differently-versioned axe runs in one CI produce duplicate findings, which is worse than none. So `playwright` and `@axe-core/playwright` are `optionalDependencies`: skip them and the rule-based layer simply does not run. Turn it off explicitly with `--no-axe` or `A11Y_AXE=0`. The report then says *"not run. Visual criteria are unchecked, not clean."*, because silence must never read as a pass.
 
 **Better still, feed it the axe run you already have:**
 
@@ -255,6 +265,7 @@ Working end to end, and under active development. The core bet is demonstrated: 
 
 | document | what it is for |
 |---|---|
+| [`docs/getting-started.md`](./docs/getting-started.md) | **start here**: install, set up a worker by whichever route fits, run your first report, and what to do when it fails |
 | [`PLAN.md`](./PLAN.md) | the working backlog and milestones, with what is proven and what is not |
 | [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) | how we use AI, audited against LLM-as-judge practice; the biases we are exposed to; the pre-registered bar; what is out of scope and why |
 | [`docs/local-model.md`](./docs/local-model.md) | the local discriminative-scorer plan: model shape, data sources, how much data is enough, split rules, weight-handling policy, acceptance bar |
