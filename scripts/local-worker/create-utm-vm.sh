@@ -35,6 +35,25 @@ DOCS="$HOME/Library/Containers/com.utmapp.UTM/Data/Documents"
 BUNDLE="$DOCS/$VM_NAME.utm"
 [ -e "$BUNDLE" ] && die "$BUNDLE already exists. Remove it first: utmctl delete $VM_NAME"
 
+# Refuse to create a SECOND registration with this name. Two registrations end up pointing
+# at the same $VM_NAME.utm bundle, and then `utmctl delete` on EITHER of them removes that
+# shared directory -- taking the other VM's disk and UEFI vars with it. That is not a
+# name-resolution problem you can dodge by using UUIDs: it destroyed a fully provisioned
+# worker here, and the only symptom afterwards is a start failing with
+# 'The file "edk2-arm-vars.fd" doesn't exist'.
+EXISTING_REG="$(utmctl list 2>/dev/null | awk -v n="$VM_NAME" '$3 == n { print $1 }' || true)"
+if [ -n "$EXISTING_REG" ]; then
+  # Note we only get here when the bundle is ALREADY gone (checked just above), so this is
+  # an orphaned registration -- and `utmctl delete` on one of those fails with -2700 and
+  # leaves the entry behind. Editing UTM's registry is the route that works.
+  die "UTM already has a VM registered as '$VM_NAME', but its bundle is gone:
+$EXISTING_REG
+Clear the stale registration first -- see 'Never utmctl delete a VM whose name appears
+twice' in docs/local-worker-vm.md for the PlistBuddy recipe. Do NOT use 'utmctl delete':
+registrations sharing a name share one bundle, so it can destroy a working VM's disk.
+Or pass A11Y_VM_NAME=<other> to build alongside the existing one."
+fi
+
 # UTM is sandboxed and will not follow a symlink out to /private/tmp, so give it real
 # files in the user's home.
 STAGE="$HOME/a11y-worker-vm"

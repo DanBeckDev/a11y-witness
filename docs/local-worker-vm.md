@@ -332,6 +332,85 @@ create a local admin (`Shift+F10` → `start ms-cxh:localonly` to dodge the Micr
 account requirement), then run `scripts/bootstrap-windows-worker.ps1` in the guest —
 it does everything from Node through to a verified worker.
 
+## Running it day to day — `worker-ctl.sh`
+
+A Windows guest is never really idle, so leaving it running costs you. `worker-ctl.sh`
+wraps the lifecycle:
+
+```bash
+./scripts/local-worker/worker-ctl.sh up        # start or resume, then wait for /health
+./scripts/local-worker/worker-ctl.sh pause     # ~0.6% CPU, ~0.8 GB held, resume under a second
+./scripts/local-worker/worker-ctl.sh stop      # nothing held, ~15 s to come back
+./scripts/local-worker/worker-ctl.sh idle-pause 15   # pause after 15 min with no capture
+```
+
+`idle-*` polls the worker's own `busy` flag, so a capture in flight resets the clock.
+Measured figures and their caveats are in the script header; the two that matter are that
+"idle" CPU readings swing between 2% and 86% (Windows background work — sample once and
+you will believe whatever you happened to catch), and that a paused guest's memory is not
+released until macOS reclaims it about 40 s later.
+
+Use `pause` by default. `stop` is honest too — a capture immediately after a cold start was
+verified working, disclosure state change included — it just costs the boot.
+
+One thing `worker-ctl.sh` deliberately does *not* do is send `utmctl stop` bare. That
+defaults to `--force`, a power-off event: from Windows' point of view the plug was pulled,
+so every stop leaves a dirty volume. It sends `--request` (ACPI shutdown, ~10 s) and only
+escalates if the guest ignores it.
+
+### A fresh install cannot capture until it has rebooted once
+
+Observed on two independent clean builds: provisioning finishes, `/health` answers
+`{"ok":true,"screenReader":"NVDA"}`, NVDA connects — and every read returns **0 phrases
+with no error anywhere**. One reboot fixes it permanently.
+
+It is *not* `ForegroundLockTimeout`, which is the reflex diagnosis for a silent 0-phrase
+capture. On the build where it failed, both logs said otherwise:
+
+```
+provisioning: OK ForegroundLockTimeout: 2147483647 -> 0 (applied to this session)
+server.log:      ForegroundLockTimeout: 0 -> 0 (applied to this session)
+```
+
+...and the very next capture in that same session still returned 0 phrases; after
+`shutdown /r`, the same capture returned 2. Something else about the first-logon session is
+responsible — guest-tools drivers settling, or first-logon shell state holding the
+foreground — and it has not been pinned down. `bootstrap-windows-worker.ps1` therefore ends
+by rebooting; auto-logon plus the at-logon task bring the worker back on their own.
+
+### Never `utmctl delete` a VM whose name appears twice
+
+`utmctl list` can show two UUIDs with the same name, and **both point at the same bundle
+directory**. Confirmed in UTM's own registry — two entries, one path:
+
+```
+"B317855F-..." => { "Name" => "a11y-worker", "Package" => { "Path" => ".../a11y-worker.utm" } }
+"D2615973-..." => { "Name" => "a11y-worker", "Package" => { "Path" => ".../a11y-worker.utm" } }
+```
+
+So `utmctl delete` on *either* removes that directory and destroys the other VM's disk. The
+aftermath is a start that fails with `The file "edk2-arm-vars.fd" doesn't exist`. This has
+already cost one fully provisioned VM here. Resolving by UUID does **not** protect you —
+the danger is the shared path, not the name lookup.
+
+Remove the stale registration by editing UTM's registry instead, which never touches the
+bundle:
+
+```bash
+PL=~/Library/Containers/com.utmapp.UTM/Data/Library/Preferences/com.utmapp.UTM.plist
+STALE=<uuid-to-drop>
+osascript -e 'tell application "UTM" to quit'   # UTM rewrites this file on exit
+cp "$PL" "$PL.bak"
+/usr/libexec/PlistBuddy -c "Print :VMEntryList:0" "$PL"    # confirm the index is the stale UUID
+/usr/libexec/PlistBuddy -c "Delete :VMEntryList:0" -c "Delete :Registry:$STALE" "$PL"
+killall cfprefsd    # or UTM reads the pre-edit copy straight back out of the cache
+open -a UTM
+```
+
+Then check the bundle still has its `Data/*.qcow2`, `efi_vars.fd` and `support.iso` before
+trusting it. `worker-ctl.sh` refuses to act at all while duplicates exist rather than
+guessing which one you meant.
+
 ## Keeping a local worker in sync
 
 The worker runs the repo from a clone, so `git pull` on the VM is part of the loop.

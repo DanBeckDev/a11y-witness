@@ -150,6 +150,20 @@ $env:A11Y_REPO_PATH = $RepoPath
 & powershell -NoProfile -ExecutionPolicy Bypass -File $provision
 if ($LASTEXITCODE -ne 0) { throw "Provisioning failed (exit $LASTEXITCODE)." }
 
+# A fresh install needs ONE reboot before it can capture. Observed on two independent
+# clean builds: provisioning completes, /health answers, NVDA connects -- and every read
+# comes back empty (0 phrases, no error). After a single reboot, capture works.
+#
+# It is NOT ForegroundLockTimeout: that is applied live via SystemParametersInfo by both
+# provisioning and run-server.cmd, and the logs confirm 0 in the session that still failed.
+# The remaining cause is something about the first-logon session (guest-tools drivers
+# settling, or first-logon shell state holding the foreground) and is not yet pinned down.
+# The remedy is reliable and reproducible, so take it: auto-logon plus the at-logon trigger
+# bring the worker back on their own, ~65s later.
+Step 6 'Reboot to finish (a fresh install cannot capture until it has restarted once)'
+OK 'rebooting now; the worker restarts itself via auto-logon + the at-logon task'
+Start-Process -FilePath 'shutdown.exe' -ArgumentList '/r','/t','5' -NoNewWindow
+
 Write-Host @"
 
 --- Bootstrap complete ---
