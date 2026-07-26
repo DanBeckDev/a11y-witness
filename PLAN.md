@@ -119,18 +119,24 @@ never assert that a *signal* can tell good from bad.
 
 ### Worker reliability (from the 0xD1 bugcheck that killed 4 cases)
 
-- [ ] **Stop Windows Update rebooting the worker.** Proven twice in one run
+- [x] **Stop Windows Update rebooting the worker.** Proven twice in one run
   (`id=1074 winlogon.exe has initiated the power off ... on behalf of NT AUTHORITY\SYSTEM`
   at 09:02:55 and 09:09:30, mid-run). A capture worker is an appliance; it must not choose
   its own downtime.
-- [ ] **Suppress Edge background/startup-boost processes.** 5 `msedge` processes were alive
+- [x] **Suppress Edge background/startup-boost processes — and its auto-updater.** 5 `msedge` processes were alive
   on an idle, freshly booted machine with 0 captures run. Teardown does not tear down, and
   94 minutes of launch/kill churn is the context in which a driver faulted.
-- [ ] **Get the minidump and name the faulting driver.** `0x000000d1`
-  (DRIVER_IRQL_NOT_LESS_OR_EQUAL) is a driver touching bad memory at raised IRQL; if it is
-  the SPICE/virtio guest tools then the fix is a driver version, not a policy tweak. Do this
-  before optimising the capture loop on a machine with a known-faulty driver.
-- [ ] **Make a run wait out a transient worker.** A connection failure fails the case
+- [ ] **Name the faulting driver — still open.** WER kept the dump
+  (`C:\Windows\Minidump\072626-3484-01.dmp`, 0.4 MB) but for a kernel bugcheck it records no
+  module, only the signature: `d1`, P1 `fffff8071b7d80b8`, P2 `2` (DISPATCH_LEVEL), P3 `8`
+  (execute), P4 **the same address as P1**. Code jumped to an address it could not execute at
+  raised IRQL — typically a driver whose code page went away underneath it. Naming the module
+  needs windbg against that dump, which is the remaining work here.
+  The two background activities found alongside it (Edge auto-updating itself mid-run, per
+  WER reports from `MicrosoftEdgeUpdate.exe` and Edge's `setup.exe` with
+  `EdgeInstallerError 0x220`; and Windows Update rebooting twice) are now both disabled, so
+  the conditions have changed even though the driver is unidentified.
+- [x] **Make a run wait out a transient worker.** A connection failure fails the case
   immediately, so one outage cascaded into 4 lost cases. The worker self-heals via
   auto-logon; the run needs to be patient, not clever.
 
@@ -138,11 +144,21 @@ never assert that a *signal* can tell good from bad.
 
 Measured: 50s per capture, of which only 13s is work (`readThrough` + `structural`).
 
-- [ ] **Deploy and validate** persistent NVDA (recycled every 25, `A11Y_REUSE_NVDA=0` to
+- [x] **Deployed and validated** persistent NVDA (recycled every 25, `A11Y_REUSE_NVDA=0` to
   revert), the Edge-window poll replacing the fixed 12s sleep, the conditional startup
   settle, and per-capture speech-log clearing. Validate with `capture-check` **plus** the
   disclosure and form probes by value, then benchmark with `scripts/bench-capture.mjs`.
-  Expected 50s -> 20-25s, i.e. ~98 min -> ~45 min for a full run.
+  **Measured on the worker: 28.8s -> 13.3s per capture**, with identical output (3 phrases on
+  every run, before and after). `windowsActivate` 13.3s -> 1.5s, `nvdaStart` 2.1s -> 0.5s
+  (reused on 3 of 4 captures), `afterStart` 3s -> 0s. `capture-check` passes all 7 pages
+  including the value assertions -- `disclosure-good` reaches `expanded`, `disclosure-bad`
+  stays `collapsed` -- so the reuse does not leak state between captures.
+
+  Note the baseline: 28.8s, not the 50s measured during the dataset run. The 50s was a
+  machine degraded by accumulating Edge processes and background updates, which is its own
+  argument for the policy fixes above. The new readiness gate costs 4.5s of the remaining
+  13.3s and is the obvious next target, but it is the gate that removed a 25% flake rate, so
+  it earns its keep for now.
 - [ ] **Then** consider a second worker VM (~5 GB, host has headroom). Needs a dispatcher
   across a pool, which nothing implements yet. Deliberately after the above: parallelism
   multiplies whatever the per-capture cost is.
