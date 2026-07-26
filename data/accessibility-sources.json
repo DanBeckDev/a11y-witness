@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "purpose": "Source registry for accessibility examples and local-model evaluation data.",
+  "collection_policy": {
+    "capture_with": "NVDA",
+    "label_target": "screen-reader evidence, not HTML alone",
+    "split_rule": "split by source, page family, and template; never split near-duplicate good/bad variants",
+    "training_artifacts": "store provenance and hashes; do not silently redistribute source material"
+  },
+  "sources": [
+    {
+      "id": "project-fixtures",
+      "role": "seed-and-regression",
+      "url": null,
+      "local_path": "src/eval",
+      "status": "available",
+      "notes": "Project-owned authored pages and captured NVDA fixtures; keep these as regression data, not the only holdout."
+    },
+    {
+      "id": "w3c-wai-tutorials",
+      "role": "paired-component-examples",
+      "url": "https://www.w3.org/WAI/tutorials/",
+      "status": "available",
+      "notes": "Author fresh paired pages from the guidance and capture them locally. Preserve attribution and check W3C reuse terms before redistributing copied material."
+    },
+    {
+      "id": "w3c-act-testcases",
+      "role": "large-authoritative-candidate-pool",
+      "url": "https://www.w3.org/WAI/standards-guidelines/act/report/testcases/",
+      "status": "candidate",
+      "expected_cases": 1132,
+      "notes": "JSON metadata includes expected outcome and WCAG mappings. Recapture only cases observable by this NVDA pipeline."
+    },
+    {
+      "id": "w3c-bad-demo",
+      "role": "end-to-end-paired-sanity-check",
+      "url": "https://www.w3.org/WAI/demos/bad/",
+      "status": "available",
+      "notes": "Before/after versions of several pages with evaluation reports; use for validation and avoid treating it as the sole training source."
+    },
+    {
+      "id": "w3c-apg",
+      "role": "good-pattern-seeds-and-controlled-mutations",
+      "url": "https://www.w3.org/WAI/ARIA/apg/",
+      "status": "candidate",
+      "notes": "Functional patterns provide good examples. Generate and label one known mutation at a time, then capture with NVDA."
+    },
+    {
+      "id": "a11ybench",
+      "role": "static-layer-candidate",
+      "url": "https://huggingface.co/datasets/LLM4APR/A11YBench",
+      "status": "candidate",
+      "notes": "Not an input source for the NVDA model. The dataset card describes 147 pages and 8,886 checker violations; it may inform the separate static layer only after auditing each underlying repository license."
+    },
+    {
+      "id": "accessguru",
+      "role": "static-layer-candidate",
+      "url": "https://darus.uni-stuttgart.de/dataset.xhtml?persistentId=doi%3A10.18419%2FDARUS-5177",
+      "status": "candidate",
+      "expected_instances": 3500,
+      "notes": "Not an input source for the NVDA model. The dataset description reports violations from 448 websites; it may inform the separate static layer only after checking dataset and underlying-page terms separately."
+    }
+  ]
+}

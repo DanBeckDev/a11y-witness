@@ -1,0 +1,115 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  captureEvidenceText,
+  evidenceUnits,
+  signalMatches,
+} from "./case-matrix.mjs";
+
+const ROOT = resolve(process.cwd(), "runs/screenreader-dataset");
+const MANIFEST_PATH = resolve(ROOT, "manifest.json");
+const DEFAULT_OUTPUT = resolve(ROOT, "screenreader-evidence.jsonl");
+const outputArg = process.argv.find((arg) => arg.startsWith("--out="));
+const OUTPUT_PATH = resolve(process.cwd(), outputArg?.slice("--out=".length) || DEFAULT_OUTPUT);
+const FORBIDDEN_INPUT_KEYS = ["url", "task", "html", "dom", "css", "axe", "diagnostics"];
+
+function readJson(path) {
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function capturePath(testCase, variant) {
+  return resolve(ROOT, "captures", testCase.id + "." + variant + ".json");
+}
+
+function readCapture(testCase, variant) {
+  const path = capturePath(testCase, variant);
+  return existsSync(path) ? readJson(path) : null;
+}
+
+function usableCapture(capture) {
+  return capture && Array.isArray(capture.transcript) && capture.transcript.length > 0;
+}
+
+function validatePair(testCase, good, bad) {
+  if (!usableCapture(good) || !usableCapture(bad)) {
+    return { status: "skipped", reason: "missing or empty screen-reader capture" };
+  }
+  const badObserved = signalMatches(bad, testCase.badSignal);
+  const goodContaminated = signalMatches(good, testCase.badSignal);
+  if (!badObserved) return { status: "skipped", reason: "bad signal was not observable in NVDA output" };
+  if (goodContaminated) return { status: "invalid", reason: "good control also contained the bad signal" };
+  return { status: "observed" };
+}
+
+function modelInput(capture) {
+  return {
+    screenReader: capture.screenReader || "unknown",
+    transcript: capture.transcript,
+    structure: capture.structure || null,
+    interaction: capture.interaction || null,
+    evidenceUnits: evidenceUnits(capture),
+    evidenceText: captureEvidenceText(capture),
+  };
+}
+
+function assertModelBoundary(input, caseId) {
+  const leaked = FORBIDDEN_INPUT_KEYS.filter((key) => Object.hasOwn(input, key));
+  if (leaked.length) throw new Error(caseId + " leaked forbidden model input: " + leaked.join(", "));
+}
+
+function record(testCase, variant, capture) {
+  const isBad = variant === "bad";
+  const input = modelInput(capture);
+  assertModelBoundary(input, testCase.id);
+  return {
+    input,
+    target: {
+      label: isBad ? "violation" : "clean",
+      criteria: isBad ? [testCase.criterion] : [],
+    },
+    provenance: {
+      caseId: testCase.id,
+      family: testCase.family || testCase.id,
+      variant,
+      source: testCase.source,
+      mutation: testCase.mutation,
+      capturedAt: capture.capturedAt || null,
+    },
+  };
+}
+
+function exportCases(manifest) {
+  const records = [];
+  const summary = { observed: 0, skipped: 0, invalid: 0, records: 0, reasons: {} };
+  for (const testCase of manifest.cases) {
+    const good = readCapture(testCase, "good");
+    const bad = readCapture(testCase, "bad");
+    const result = validatePair(testCase, good, bad);
+    summary[result.status]++;
+    if (result.reason) summary.reasons[result.reason] = (summary.reasons[result.reason] || 0) + 1;
+    if (result.status !== "observed") {
+      console.log(testCase.id + ": " + result.status + " (" + result.reason + ")");
+      continue;
+    }
+    records.push(JSON.stringify(record(testCase, "good", good)));
+    records.push(JSON.stringify(record(testCase, "bad", bad)));
+    summary.records += 2;
+    console.log(testCase.id + ": observed");
+  }
+  return { records, summary };
+}
+
+function main() {
+  if (!existsSync(MANIFEST_PATH)) {
+    throw new Error("Missing " + MANIFEST_PATH + ". Run npm run training:generate first.");
+  }
+  const manifest = readJson(MANIFEST_PATH);
+  const { records, summary } = exportCases(manifest);
+  writeFileSync(OUTPUT_PATH, records.length ? records.join("\n") + "\n" : "", "utf8");
+  const summaryPath = OUTPUT_PATH.replace(/\.jsonl$/i, ".summary.json");
+  writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + "\n", "utf8");
+  console.log("Exported " + summary.records + " records to " + OUTPUT_PATH);
+  console.log("Summary: " + summary.observed + " observed, " + summary.skipped + " skipped, " + summary.invalid + " invalid.");
+}
+
+main();
