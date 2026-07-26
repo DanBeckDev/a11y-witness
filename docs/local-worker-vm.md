@@ -372,7 +372,9 @@ npm run witness -- https://example.com --task "Find the contact details"
 
 Measured: 88 s for that whole cycle from a stopped VM, of which only ~25 s is the VM
 (12–15 s boot, ~10 s clean shutdown) — the rest is the judge. So the VM lifecycle is not
-what makes a run slow, which is the argument for shutting it down every time.
+what makes a run slow, which is the argument for shutting it down every time. Boot time is
+not a constant, mind: a later run took 81 s to reach /health on a busier host, which is why
+`up` waits for health rather than a fixed delay.
 
 The default is `restore`: put the VM back in the state it was found in. That needs no
 configuration to be correct in every case, including the one that matters — a VM you had
@@ -391,8 +393,25 @@ started a capture while the first was finishing.
 Everything UTM-specific stays in `worker-ctl.sh`; `src/capture/local-vm.ts` only reads its
 `json` output, so the control plane never learns about utmctl, bundles or bookmarks.
 
-Not wired in yet: `npm run training:capture` still requires `A11Y_WORKER` (it is `.mjs` and
-cannot import the TypeScript module). Give it one with `worker-ctl.sh up`.
+`npm run training:capture` uses the same lease (it runs under `tsx` so it can import the
+TypeScript module), and it is the run that benefits most: long, unattended, and previously
+guaranteed to leave the guest running afterwards.
+
+Dataset capture has one extra trap, now handled. Its pages are served by a plain HTTP server
+**on the Mac**, and the default base URL is `http://localhost:5050` — which from inside the
+guest means the guest, where nothing is listening. The lease therefore exposes the host's
+address on the VM's subnet (the gateway end of UTM's shared network, `bridge100`, found by
+matching interfaces against the guest's own address rather than assuming `x.y.z.1`) and the
+base URL is rewritten:
+
+```
+Dataset pages: rewrote http://localhost:5050 -> http://192.168.64.1:5050 (the guest cannot reach the host's localhost)
+```
+
+Verified end to end: 3 cases (6 captures) from a stopped VM in 207 s, returned to stopped,
+with the transcripts carrying the real 1.1.1 contrast — `graphic, A shaded seating area
+beside the community garden` for the good page against NVDA's missing-description prompt for
+the bad one.
 
 One thing `worker-ctl.sh` deliberately does *not* do is send `utmctl stop` bare. That
 defaults to `--force`, a power-off event: from Windows' point of view the plug was pulled,

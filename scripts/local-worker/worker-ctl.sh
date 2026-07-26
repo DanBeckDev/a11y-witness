@@ -17,7 +17,7 @@
 #   |--------------|-------------------|-----------------------|-----------------|
 #   | running idle | 2-86%, spiky      | ~5 GB                 | -               |
 #   | paused       | ~0.6%             | 0.8 GB *or* 4.5 GB    | under 1 s       |
-#   | stopped      | none (no process) | none                  | 12-15 s         |
+#   | stopped      | none (no process) | none                  | 12-15 s, once 81 s |
 #
 # Read the caveats before trusting the table:
 #   - "running idle" is not idle. Windows keeps working in the background (Defender,
@@ -33,8 +33,10 @@
 # is the only one that guarantees it, and it is cheap: cold start reached /health in 12 s,
 # 12 s and 15 s across three runs (`up` returns a few seconds later once it has the IP), and
 # a capture immediately after a cold start was verified working, disclosure state change
-# included. It comes back unattended because auto-logon plus the at-logon trigger restart
-# the worker -- see docs/local-worker-vm.md.
+# included. Do not read 12-15 s as a guarantee, though: a later run took 81 s, on a busier
+# host with Windows doing its own post-boot work. `up` waits for /health rather than a fixed
+# delay for exactly that reason. It comes back unattended because auto-logon plus the
+# at-logon trigger restart the worker -- see docs/local-worker-vm.md.
 set -euo pipefail
 
 VM_NAME="${A11Y_VM_NAME:-a11y-worker}"
