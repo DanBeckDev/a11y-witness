@@ -60,21 +60,21 @@ weak links. Each item below is grounded in a captured transcript, not a guess.
 The `badSignal` checkers and the capture probes are coupled, and nothing tests them
 together. When a probe's output shape changes, its signal silently stops discriminating.
 
-- [ ] **`state-change-silent` (disclosure ×3).** The signal still means "the announcement
+- [x] **`state-change-silent` (disclosure ×3).** The signal still means "the announcement
   was empty". The probe was changed today to *re-read the control*, so `after` is never
   empty: good is `"...focused, expanded"`, bad is `"...focused, collapsed"`. The signal must
   compare the **state word**, not test for emptiness. Caused by our own probe fix.
-- [ ] **`form-activation-silent` (form-error ×2).** Checks `formChanges`, which is identical
+- [x] **`form-activation-silent` (form-error ×2).** Checks `formChanges`, which is identical
   on both sides (`"Newsletter signup, document"`). The discriminator is in
   `postSubmitFields`: good carries `"invalid entry, Enter an email address before joining."`,
   bad carries nothing. Point the signal at the field that holds the evidence.
-- [ ] **`table-unassociated` (×3).** The evidence is plainly there — good announces
+- [x] **`table-unassociated` (×3).** The evidence is plainly there — good announces
   `"row 2, Destination, column 1, Riverside"` (header names in data rows), bad announces
   `"row 2, column 1, Riverside"`. Check for header names in data-row announcements.
 
 ### Root 2 — wrong instrument: a regex where structure is the discriminator (4 cases)
 
-- [ ] **`form-unlabelled` ×4 — currently INVALID, the worst failure mode**, because the
+- [x] **`form-unlabelled` ×4 — was INVALID, the worst failure mode**, because the
   signal fires on the *good* page too. Pattern `(?:edit text|edit)[, ]*\s*$` matches a bare
   `"edit"` line, and NVDA announces a *correctly labelled* field across two lines
   (`"form, Recipient name"` then `"edit"`). So it can never discriminate.
@@ -84,23 +84,38 @@ together. When a probe's output shape changes, its signal silently stops discrim
 
 ### Root 3 — NVDA transforms the string before speaking it (3 cases)
 
-- [ ] **`image-filename-alt-exhibit`.** Pattern expects `harbour_07-final.jpg`; NVDA says
+- [x] **`image-filename-alt-exhibit`.** Pattern expects `harbour_07-final.jpg`; NVDA says
   `"harbour 07-final dot jpg"` — punctuation spoken, underscore flattened. Any
   filename-derived pattern needs the spoken form, and this generalises to the whole family.
-- [ ] **`icon-button-unnamed` ×2.** Pattern wants a bare `"button"`; NVDA says
+- [x] **`icon-button-unnamed` ×2.** Pattern wants a bare `"button"`; NVDA says
   `"button, ￼"`. Match the object-replacement character, as the image rules already do.
-- [ ] **Instrument defect in the same pair:** the *good* page announces `"button, O"` — an
-  icon button whose accessible name is the icon glyph. That is not a good control, so the
-  pair does not isolate what it claims. Give it a real name.
+- [ ] **Open question, not a page defect (corrected):** the *good* page announces
+  `"button, O"`, and I first read that as the button being named after its icon glyph. The
+  page is fine — it carries `aria-label="Open project menu"`. So `"O"` is a **truncated
+  read**, most likely `lastSpokenPhrase` sampled mid-utterance. Harmless for the label (the
+  signal keys on the bad page's U+FFFC) but it means a transcript can silently lose most of
+  an announcement, which matters everywhere else. Worth chasing on the capture side.
 
-### Root 4 — systemic: the labels are unvalidated instrumentation
+### Root 4 — systemic: the labels are unvalidated instrumentation — FIXED
 
 This is the same root as the capture audit's Root C, one level up: we assert on captures and
 never assert that a *signal* can tell good from bad.
 
-- [ ] **Extend `training:preflight` to run against captured pairs**, asserting every
-  `badSignal` fires on bad and stays silent on good. All 15 failures above would have been
-  caught the moment the first pair was captured, instead of after 94 minutes.
+- [x] **`npm run training:check-signals`** asserts every `badSignal` fires on bad and stays
+  silent on good, against captures already on disk, so it costs no worker time. It reports
+  two distinct verdicts because they need different fixes: BLIND (never fired on bad) and
+  CONTAMINATED (fired on good — worse, since a signal that flags both sides discriminates
+  nothing). Written test-first: it reproduced the export's verdict exactly (30 discriminating
+  / 11 blind / 4 contaminated) before a single signal was touched.
+
+  It then earned its keep immediately. Two of my repairs were overreaches that the export
+  alone would have hidden as "still 15 broken": conflating two criteria under
+  `form-activation-silent` reported the filter-status GOOD pages as failing, and the new
+  `unnamed-form-field` type wrongly captured `form-placeholder-only`, whose placeholder
+  *becomes* the name. Both surfaced in seconds.
+
+  **Result: 45/45 signals discriminate. Export goes 30 -> 45 observed, 60 -> 90 records,
+  0 skipped, 0 invalid — with no new captures.**
 
 ### Worker reliability (from the 0xD1 bugcheck that killed 4 cases)
 

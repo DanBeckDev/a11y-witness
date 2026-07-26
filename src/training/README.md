@@ -98,7 +98,20 @@ Resume skips a case only when the previous run recorded it captured *and* both o
 files are still on disk, since the progress file and the captures can be deleted
 independently.
 
-Two checks guard the data, both learned the hard way. Before capturing, the
+Before exporting, prove the labels can actually tell the pairs apart:
+
+~~~sh
+npm run training:check-signals
+~~~
+
+It runs each case's `badSignal` against the captures on disk and asserts it fires on
+the bad page and stays silent on the good one, reporting BLIND (never fired) and
+CONTAMINATED (fired on good) separately, since they need different fixes. It needs no
+worker, so it is cheap to run after any change to a probe's output shape -- a probe and
+its signal are coupled, and the first full run lost 8 cases to signals that silently
+stopped matching when a probe changed. Exit codes: 0 all discriminating, 1 otherwise.
+
+Two further checks guard the data, both learned the hard way. Before capturing, the
 pages must actually answer on the base URL; and each capture must mention a
 significant word from the page's own `<title>` or it is rejected rather than
 written. Without the second, a stray server holding port 5050 produced

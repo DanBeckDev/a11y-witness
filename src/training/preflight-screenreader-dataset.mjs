@@ -14,6 +14,8 @@ const KNOWN_SIGNALS = new Set([
   "state-change-silent",
   "form-activation-silent",
   "table-unassociated",
+  "unnamed-form-field",
+  "validation-error-silent",
 ]);
 
 function readJson(path) {
