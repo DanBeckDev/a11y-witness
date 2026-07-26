@@ -66,6 +66,38 @@ DATASET_BASE_URL still wins if you set it, but a `localhost` value is rewritten
 to the host's address on the VM's subnet, because `localhost` inside the guest
 is the guest.
 
+A full run is ~90 NVDA captures over roughly an hour, so it publishes its state instead
+of expecting you to watch a log:
+
+~~~sh
+npm run training:status
+~~~
+
+~~~
+run:      started 2026-07-26T08:20:19.822Z
+progress: 12/45 cases  (11 captured, 1 failed, 0 skipped)
+worker:   http://192.168.64.4:8765
+pages:    http://192.168.64.1:5050
+current:  form-unlabelled-phone (bad), 0.4 min so far
+last update: 0.4 min ago
+worker now: capturing now
+~~~
+
+It reads `runs/screenreader-dataset/capture-progress.json`, which the run rewrites
+atomically after every step, and separately asks the worker whether it is still
+capturing -- so "finished", "working" and "wedged" are distinguishable rather than
+inferred from silence. Exit codes: 0 healthy or finished clean, 1 finished with
+failures, 2 no run recorded, 3 wedged (no update within one capture timeout plus
+slack). A wedged or interrupted run does not have to start over:
+
+~~~sh
+npm run training:capture -- --resume
+~~~
+
+Resume skips a case only when the previous run recorded it captured *and* both of its
+files are still on disk, since the progress file and the captures can be deleted
+independently.
+
 Two checks guard the data, both learned the hard way. Before capturing, the
 pages must actually answer on the base URL; and each capture must mention a
 significant word from the page's own `<title>` or it is rejected rather than
