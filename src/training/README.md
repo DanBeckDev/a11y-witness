@@ -84,6 +84,13 @@ last update: recently
 worker now: idle
 ~~~
 
+Do not poll it in a loop. To block until a run finishes:
+
+~~~sh
+npm run training:wait              # exits 0 clean, 1 failures, 2 no run, 3 wedged
+npm run training:wait -- --json    # plus next_command
+~~~
+
 It reads `runs/screenreader-dataset/capture-progress.json`, which the run rewrites
 atomically after every step, and separately asks the worker whether it is still
 capturing -- so "finished", "working" and "wedged" are distinguishable rather than

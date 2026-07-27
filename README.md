@@ -107,6 +107,13 @@ The `openai` backend makes a self-hosted, zero-cost judge realistic. Measured ag
 
 **→ [Full getting-started guide](./docs/getting-started.md)** — zero to your first report, including setting up a worker.
 
+**Check the environment first — one command, and every failure names its own fix:**
+
+```bash
+npm run doctor              # VM, worker, page server, judge, unfinished runs
+npm run doctor -- --json    # same, machine-readable
+```
+
 The short version, which assumes you have a capture worker already:
 
 ```bash
@@ -244,7 +251,21 @@ npm run training:export        # JSONL, only for pairs where the contrast was ob
 npm run training:analyze-errors # held-out false positives/negatives with NVDA evidence
 ```
 
-A long unattended run publishes its state rather than expecting you to watch a log: `training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. `--resume` picks up from the captures already on disk. See [`src/training/README.md`](./src/training/README.md).
+A long unattended run publishes its state rather than expecting you to watch a log — and you
+can block on it instead of polling:
+
+```bash
+npm run training:wait              # blocks until it finishes, exits with the outcome
+npm run training:wait -- --json
+npm run training:status -- --json  # snapshot: eta_minutes, failures, next_command
+```
+
+`wait` watches the progress file rather than polling, and cannot hang on a dead run — if
+updates go cold past one capture timeout it exits 3. Exit codes are the contract: **0** clean,
+**1** finished with failures, **2** no run recorded, **3** wedged. Both commands emit a
+`next_command` field, so a script never has to infer the next step.
+
+ `training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. `--resume` picks up from the captures already on disk. See [`src/training/README.md`](./src/training/README.md).
 
 The current 800 pairs are an expanded candidate dataset: 100 controlled positive pairs per criterion, with 1,600 total transcript records. The resulting scorer is useful for measuring the approach, but it is not yet a release candidate because held-out test results still contain false positives on clean paired pages (notably precision 0.615 for 1.3.1 and 0.600 for 3.3.2). `docs/local-model.md` sets out the planning bands honestly — roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality. Splits must be grouped by page family, template and source so a good and bad version of the same template never straddle train and test, and repeated captures of one page do not count as independent examples. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by [`scripts/verify-safetensors.mjs`](./scripts/verify-safetensors.mjs).
 
