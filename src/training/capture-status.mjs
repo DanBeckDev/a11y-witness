@@ -12,7 +12,7 @@
  *   3  in progress but wedged (no update within one capture timeout plus slack)
  */
 import { resolve } from "node:path";
-import { isStale, readProgress, stalenessMs, tally } from "./capture-progress.mjs";
+import { inFlight, isStale, readProgress, stalenessMs, tally } from "./capture-progress.mjs";
 
 const ROOT = resolve(process.cwd(), "runs/screenreader-dataset");
 const HEALTH_TIMEOUT_MS = 5_000;
@@ -63,9 +63,9 @@ function printProgressLines(progress, counts, now) {
     counts.captured + " captured, " + counts.failed + " failed, " + counts.skipped + " skipped)");
   console.log("worker:   " + progress.worker);
   console.log("pages:    " + progress.baseUrl);
-  if (progress.current) {
-    console.log("current:  " + progress.current.id + " (" + progress.current.variant + "), " +
-      minutes(now - Date.parse(progress.current.startedAt)) + " so far");
+  for (const c of inFlight(progress)) {
+    console.log("current:  " + c.id + " (" + c.variant + "), " +
+      minutes(now - Date.parse(c.startedAt)) + " so far" + (c.worker ? " on " + c.worker : ""));
   }
   const quiet = stalenessMs(progress, now);
   if (quiet !== null) console.log("last update: " + minutes(quiet) + " ago");
@@ -106,7 +106,8 @@ async function main() {
       captured: counts.captured,
       failed: counts.failed,
       skipped: counts.skipped,
-      current: progress.current ?? null,
+      current: inFlight(progress),
+      workers: progress.workers ?? [progress.worker],
       eta_minutes: etaMinutes(progress, counts, now),
       worker: progress.worker,
       last_update_ms_ago: stalenessMs(progress, now),

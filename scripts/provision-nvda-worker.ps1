@@ -221,6 +221,25 @@ if ($elevated) {
   # Updates still download and install -- we are not leaving the box unpatched -- but the
   # reboot waits for a human. The worker always has a logged-on user (auto-logon is required
   # for NVDA), which is exactly the condition this policy keys on.
+  # Nothing may pop to the foreground uninvited. A capture works by forcing Edge to the front
+  # and reading what NVDA announces; a notification that steals focus mid-capture corrupts the
+  # evidence, and one that sits over the page does it silently. Observed on the guest: OneDrive
+  # offering "Turn On Windows Backup" during a run.
+  $explorerPolicy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer'
+  New-Item -Path $explorerPolicy -Force | Out-Null
+  Set-ItemProperty $explorerPolicy -Name 'DisableNotificationCenter' -Value 1 -Type DWord
+  $oneDrive = 'HKLM:\SOFTWARE\Policies\Microsoft\OneDrive'
+  New-Item -Path $oneDrive -Force | Out-Null
+  Set-ItemProperty $oneDrive -Name 'DisableFileSyncNGSC' -Value 1 -Type DWord
+  Set-ItemProperty $oneDrive -Name 'PreventNetworkTrafficPreUserSignIn' -Value 1 -Type DWord
+  $contentDelivery = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+  if (Test-Path $contentDelivery) {
+    foreach ($n in @('SubscribedContent-338389Enabled','SubscribedContent-310093Enabled','SoftLandingEnabled','SystemPaneSuggestionsEnabled')) {
+      Set-ItemProperty $contentDelivery -Name $n -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    }
+  }
+  OK 'notifications, OneDrive prompts and suggestion popups disabled'
+
   $auKey = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
   New-Item -Path $auKey -Force | Out-Null
   Set-ItemProperty $auKey -Name 'NoAutoRebootWithLoggedOnUsers' -Value 1 -Type DWord

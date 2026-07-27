@@ -219,10 +219,32 @@ export async function leaseWorker({ worker, after }: LeaseRequest): Promise<Work
  * loads the guest's own empty port and the transcripts come back describing nothing --
  * with no error, because a connection refused inside Edge is not a worker failure.
  */
+/**
+ * This host's address as seen from a worker at `workerUrl`, when the two share a subnet.
+ * Returns undefined for a hostname, or for a worker somewhere we have no interface onto --
+ * in which case the caller must be told where to reach us rather than have it guessed.
+ */
+export function hostAddressForWorker(workerUrl: string): string | undefined {
+  try {
+    const { hostname } = new URL(workerUrl);
+    return ipv4ToInt(hostname) === null ? undefined : hostAddressFor(hostname);
+  } catch {
+    return undefined;
+  }
+}
+
 export function guestReachableUrl(baseUrl: string, lease: WorkerLease): string {
-  if (!lease.hostAddress) return baseUrl;
+  // Fall back to deriving it from the worker's own address.
+  //
+  // hostAddress used to be set only on the managed-VM path, so naming a worker explicitly --
+  // A11Y_WORKER, or any pool -- silently skipped the rewrite and every capture fetched the
+  // GUEST's localhost. Edge shows "localhost refused to connect", the title check rejects the
+  // capture, and three attempts are burned per page before it gives up. The worker being
+  // remote or explicit does not change the fact that it cannot reach our localhost.
+  const hostAddress = lease.hostAddress ?? hostAddressForWorker(lease.worker);
+  if (!hostAddress) return baseUrl;
   const parsed = new URL(baseUrl);
   if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") return baseUrl;
-  parsed.hostname = lease.hostAddress;
+  parsed.hostname = hostAddress;
   return parsed.toString().replace(/\/$/, "");
 }

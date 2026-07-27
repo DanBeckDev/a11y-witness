@@ -17,6 +17,9 @@ const DEFAULT_BASE_URL = "http://localhost:5050";
 const STEPS = Number(process.env.DATASET_CAPTURE_STEPS || 150);
 const ONLY = process.argv.find((arg) => arg.startsWith("--only="))?.slice("--only=".length);
 const RESUME = process.argv.includes("--resume");
+// A comma-separated list of worker URLs runs cases across them concurrently. Get one from
+// `scripts/local-worker/worker-ctl.sh pool`. Unset keeps the single-worker behaviour.
+const WORKERS_ENV = process.env.A11Y_WORKERS ?? null;
 const CAPTURE_TIMEOUT_MS = Number(process.env.DATASET_CAPTURE_TIMEOUT_MS || 300000);
 
 async function fetchJson(url, options = {}, timeoutMs = 30000) {
@@ -221,8 +224,9 @@ async function captureCase(ctx, testCase) {
   for (const variant of ["good", "bad"]) {
     const url = captureUrl(ctx.baseUrl, testCase, variant);
     const title = await pageTitle(url);
-    ctx.progress.startCase(testCase.id, variant);
-    console.log("Capturing " + testCase.id + " (" + variant + ")");
+    ctx.progress.startCase(testCase.id, variant, ctx.worker);
+    console.log("Capturing " + testCase.id + " (" + variant + ")" +
+      (ctx.poolSize > 1 ? " on " + ctx.worker : ""));
     const capture = await captureVerified(ctx, testCase, { url, title, variant });
     const path = writeCapture(testCase, variant, capture);
     console.log("  " + capture.transcript.length + " transcript phrases -> " + path);
@@ -272,6 +276,40 @@ function afterRun() {
   throw new Error('A11Y_VM_AFTER must be restore|stop|pause|leave (got "' + v + '")');
 }
 
+// One case per worker at a time, pulled from a shared queue.
+//
+// The unit of work is a CASE, not a capture: its good and bad variants must be captured by the
+// same worker, because the pair is only comparable if both came from the same screen reader on
+// the same machine. Splitting a pair across workers would compare two NVDA instances and call
+// the difference evidence.
+//
+// A queue rather than a static split, so a slow case does not leave a worker idle while
+// another still has a backlog.
+async function captureAcrossPool(ctxBase, cases, done, workers) {
+  const queue = [...cases];
+  const failures = [];
+  const skipped = [];
+  await Promise.all(workers.map(async (worker) => {
+    const ctx = { ...ctxBase, worker };
+    while (queue.length) {
+      const testCase = queue.shift();
+      if (done.has(testCase.id)) {
+        ctx.progress.skipped(testCase.id, "already captured (--resume)");
+        skipped.push(testCase.id);
+        continue;
+      }
+      try {
+        ctx.progress.captured(testCase.id, await captureCase(ctx, testCase));
+      } catch (error) {
+        failures.push(testCase.id + ": " + error.message);
+        ctx.progress.failed(testCase.id, error.message);
+        console.error("  CAPTURE_FAILED " + failures.at(-1));
+      }
+    }
+  }));
+  return { failures, skippedCount: skipped.length };
+}
+
 async function captureAll(ctx, cases, done) {
   const failures = [];
   for (const testCase of cases) {
@@ -309,9 +347,20 @@ async function main() {
   const done = previouslyCaptured(cases);
   if (done.size) console.log("Resuming: " + done.size + " case(s) already captured.");
 
-  const lease = await leaseWorker({ worker: process.env.A11Y_WORKER ?? null, after: afterRun() });
+  // An explicit pool short-circuits the lease: those workers are someone else's to manage.
+  const pool = WORKERS_ENV ? WORKERS_ENV.split(",").map((w) => w.trim().replace(/\/$/, "")).filter(Boolean) : null;
+  const lease = pool
+    ? { worker: pool[0], source: "explicit", hostAddress: undefined, release: async () => {} }
+    : await leaseWorker({ worker: process.env.A11Y_WORKER ?? null, after: afterRun() });
   try {
-    await checkWorker(lease);
+    if (pool) {
+      // Check every one of them before starting: discovering a dead worker an hour in wastes
+      // the hour, and the pool driver would keep handing it cases.
+      for (const worker of pool) await checkWorker({ worker, source: "explicit" });
+      console.log(`Pool of ${pool.length}: ${pool.join(", ")}`);
+    } else {
+      await checkWorker(lease);
+    }
     const baseUrl = resolveBaseUrl(lease);
     // Prove the pages are served before capturing anything. captureAll treats a bad page as
     // a per-case failure, so without this a wrong base URL reports the same error 45 times
@@ -324,8 +373,22 @@ async function main() {
       cases,
       captureTimeoutMs: CAPTURE_TIMEOUT_MS,
     });
-    console.log("Progress: " + progress.path + " (watch it with: npm run training:status)");
-    await captureAll({ worker: lease.worker, baseUrl, progress }, cases, done);
+    progress.setWorkers(pool ?? [lease.worker]);
+    console.log("Progress: " + progress.path + " (watch it: npm run training:status, or block: npm run training:wait)");
+    if (pool && pool.length > 1) {
+      const { failures, skippedCount } = await captureAcrossPool(
+        { baseUrl, progress, poolSize: pool.length }, cases, done, pool);
+      const captured = cases.length - failures.length - skippedCount;
+      const outcome = `${captured} captured, ${failures.length} failed, ${skippedCount} skipped, of ${cases.length} cases across ${pool.length} workers`;
+      progress.finish(outcome);
+      console.log("Capture complete: " + outcome + ".");
+      if (failures.length) {
+        throw new Error(failures.length + " case(s) failed. The completed captures were kept; " +
+          "see npm run training:status, and re-run with --resume to retry only what is missing.");
+      }
+    } else {
+      await captureAll({ worker: lease.worker, baseUrl, progress, poolSize: 1 }, cases, done);
+    }
   } finally {
     await lease.release();
   }
