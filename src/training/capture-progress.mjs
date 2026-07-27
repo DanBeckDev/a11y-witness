@@ -53,9 +53,15 @@ export function beginRun({ root, worker, baseUrl, cases, captureTimeoutMs }) {
     baseUrl,
     captureTimeoutMs,
     total: cases.length,
-    current: null,
+    workers: [],
+    // A LIST, because with a worker pool there are several cases in flight at once. Readers
+    // must tolerate the old single-object shape from runs recorded before pooling.
+    current: [],
     cases: Object.fromEntries(cases.map((c) => [c.id, { status: "pending" }])),
   };
+
+  // Tolerates the pre-pool shape, where `current` was a single object or null.
+  const current = () => (Array.isArray(state.current) ? state.current : state.current ? [state.current] : []);
 
   const save = () => {
     state.updatedAt = new Date().toISOString();
@@ -69,25 +75,30 @@ export function beginRun({ root, worker, baseUrl, cases, captureTimeoutMs }) {
       state.cases[id] = { status: "skipped", reason };
       save();
     },
-    startCase(id, variant) {
-      state.current = { id, variant, startedAt: new Date().toISOString() };
+    setWorkers(workers) {
+      state.workers = workers;
+      save();
+    },
+    startCase(id, variant, worker = null) {
+      const entry = { id, variant, worker, startedAt: new Date().toISOString() };
+      state.current = [...current().filter((c) => c.id !== id), entry];
       state.cases[id] = { ...state.cases[id], status: "capturing" };
       save();
     },
     captured(id, phrases) {
       state.cases[id] = { status: "captured", phrases };
-      state.current = null;
+      state.current = current().filter((c) => c.id !== id);
       save();
     },
     failed(id, reason) {
       state.cases[id] = { status: "failed", reason };
-      state.current = null;
+      state.current = current().filter((c) => c.id !== id);
       save();
     },
     finish(outcome) {
       state.finishedAt = new Date().toISOString();
       state.outcome = outcome;
-      state.current = null;
+      state.current = [];
       save();
     },
   };
@@ -116,4 +127,10 @@ export function isStale(progress, now) {
   const quiet = stalenessMs(progress, now);
   if (quiet === null) return false;
   return quiet > (progress.captureTimeoutMs ?? 0) + STALE_SLACK_MS;
+}
+
+/** `current` as a list, whatever shape the file uses. Pre-pool runs recorded a single object. */
+export function inFlight(progress) {
+  const c = progress?.current;
+  return Array.isArray(c) ? c : c ? [c] : [];
 }

@@ -7,6 +7,12 @@
 #   ./scripts/local-worker/worker-ctl.sh stop          # shut it down: nothing held, ~15 s to come back
 #   ./scripts/local-worker/worker-ctl.sh status        # state, resource use, health
 #   ./scripts/local-worker/worker-ctl.sh json          # the same, machine-readable (used by the CLI)
+#   ./scripts/local-worker/worker-ctl.sh pool          # every a11y-worker* VM, as JSON
+#   ./scripts/local-worker/worker-ctl.sh pool-up       # start them all, wait for health
+#
+# One VM serves one capture at a time, so throughput comes from more VMs. `pool` reports the
+# lot; add one with clone-worker.sh (which handles the duplicate-MAC trap).
+# Operate on a single named VM with A11Y_VM_NAME=a11y-worker-2.
 #   ./scripts/local-worker/worker-ctl.sh idle-pause 15 # watch, then pause after 15 idle minutes
 #   ./scripts/local-worker/worker-ctl.sh idle-stop 30  # same but shut down instead
 #
@@ -251,6 +257,31 @@ case "$CMD" in
       "$UUID" "$VM_NAME" "$(vm_state "$UUID")" "${ip:-}" "$PORT" "$healthy" "$busy"
     ;;
 
+  pool|pool-up)
+    # Every VM whose name starts with the base name: a11y-worker, a11y-worker-2, ...
+    # Emitted as one JSON array so a dispatcher can consume it without parsing prose.
+    names="$(utmctl list | awk -v n="$VM_NAME" '$3 ~ "^"n { print $3 }' | sort -u)"
+    [ -n "$names" ] || die "no VM whose name starts with '$VM_NAME'"
+    if [ "$CMD" = "pool-up" ]; then
+      # Sequentially, not in parallel: two Windows guests booting at once contend badly for
+      # disk, and one that is already up costs nothing to skip.
+      for n in $names; do
+        echo "--- $n ---" >&2
+        A11Y_VM_NAME="$n" "$0" up >&2 || echo "  '$n' did not come up" >&2
+      done
+    fi
+    printf '['
+    first=1
+    for n in $names; do
+      entry="$(A11Y_VM_NAME="$n" "$0" json 2>/dev/null || true)"
+      [ -n "$entry" ] || continue
+      [ "$first" -eq 1 ] || printf ','
+      printf '%s' "$entry"
+      first=0
+    done
+    printf ']\n'
+    ;;
+
   idle-pause|idle-stop)
     mins="${ARG:-15}"
     action=pause; [ "$CMD" = "idle-stop" ] && action=stop
@@ -278,5 +309,5 @@ case "$CMD" in
     done
     ;;
 
-  *) die "unknown command '$CMD' (up | pause | stop | status | json | idle-pause [min] | idle-stop [min])";;
+  *) die "unknown command '$CMD' (up | pause | stop | status | json | pool | pool-up | idle-pause [min] | idle-stop [min])";;
 esac
