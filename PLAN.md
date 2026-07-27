@@ -290,12 +290,20 @@ Measured: 50s per capture, of which only 13s is work (`readThrough` + `structura
 
   Extrapolated to the current 836-case matrix: **7.4h serial -> 3.9h on two workers.**
 
-  Cost: ~5 GB RSS and 4 vCPU per VM. 6 GB is the realistic memory floor (3.5 GB in use), not
-  the 4 GB first suggested, so four workers would be ~24 GB of a 36 GB host.
+  Cost: **4 GB per VM**, which is the documented Windows 11 minimum and measured sufficient.
+  I had claimed 6 GB was the floor, reasoning from an 8 GB guest reporting "3.5 GB in use" --
+  wrong metric. That figure includes Windows' file cache, which grows to fill whatever it is
+  given, so it says nothing about demand. Tested directly instead: the same 10 cases on 4 GB
+  VMs took **165s against 167s on 8 GB**, evidence byte-identical (62 phrases, 51 role words,
+  22 heading-levels), and **zero pagefile use** on either guest, so the result is not being
+  faked by paging. Combined host footprint fell from ~10 GB to **3.0 GB**.
 
-- [ ] **A third and fourth worker**, if 3.9h is still too long. Untested past two; each adds
-  ~5 GB and 4 vCPU, and 14 cores will start to bite. Shrinking each VM matters more than
-  adding another past this point.
+  So four workers is ~16 GB of a 36 GB host, not the ~24 GB I projected.
+
+- [ ] **A third and fourth worker**, if 3.9h is still too long. Untested past two. Memory is
+  no longer the constraint at 4 GB each (~1.5 GB resident apiece in practice); 14 cores and
+  4 vCPU per VM is what will bite first, so the next thing to test is fewer vCPUs rather than
+  less RAM.
 
 - [ ] **Then** consider a second worker VM (~5 GB, host has headroom). Needs a dispatcher
   across a pool, which nothing implements yet. Deliberately after the above: parallelism
