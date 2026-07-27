@@ -274,6 +274,29 @@ Measured: 50s per capture, of which only 13s is work (`readThrough` + `structura
   Left alone deliberately. The remaining costs are `structural` 4.8s and the readiness gate
   4.5s, and both are earning their keep.
 
+- [x] **Second worker VM: measured 1.90x on real cases.** Same 10 mixed-family cases, same
+  starting point, one worker then two:
+
+  | | wall | per case | notes |
+  |---|---|---|---|
+  | 1 worker  | 318s | 31.8s | |
+  | 2 workers | 167s | 16.7s wall (33.4s per worker) | **1.90x** |
+
+  Only **5% per-case degradation** under contention, which is much better than the naive
+  concurrent test suggested (that one had both workers capturing the SAME page simultaneously
+  — maximally contended; a real run offsets them). Zero failures either way, the queue
+  balanced 5 cases each, and fidelity is IDENTICAL on the files present in both runs: 62
+  phrases, 51 role words (82%), 22 heading-levels. Signals still discriminate 10/10.
+
+  Extrapolated to the current 836-case matrix: **7.4h serial -> 3.9h on two workers.**
+
+  Cost: ~5 GB RSS and 4 vCPU per VM. 6 GB is the realistic memory floor (3.5 GB in use), not
+  the 4 GB first suggested, so four workers would be ~24 GB of a 36 GB host.
+
+- [ ] **A third and fourth worker**, if 3.9h is still too long. Untested past two; each adds
+  ~5 GB and 4 vCPU, and 14 cores will start to bite. Shrinking each VM matters more than
+  adding another past this point.
+
 - [ ] **Then** consider a second worker VM (~5 GB, host has headroom). Needs a dispatcher
   across a pool, which nothing implements yet. Deliberately after the above: parallelism
   multiplies whatever the per-capture cost is.

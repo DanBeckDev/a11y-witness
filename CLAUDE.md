@@ -73,6 +73,14 @@ It answers VM state, worker health, page server, judge backend and whether a pre
 was left mid-flight — the last one being the difference between `capture` and
 `capture -- --resume`, which is hours either way if you guess wrong.
 
+For a long run, use more than one worker — 1.90x measured on two:
+
+```bash
+./scripts/local-worker/clone-worker.sh              # add one (handles utmctl's MAC copying)
+./scripts/local-worker/worker-ctl.sh pool-up        # start them all
+A11Y_WORKERS=url1,url2 npm run training:capture     # cases dispatched across the pool
+```
+
 For long runs, do not poll:
 
 ```bash

@@ -84,6 +84,22 @@ last update: recently
 worker now: idle
 ~~~
 
+Run across several workers to cut wall-clock. Measured on 10 mixed cases: 318s on one
+worker, 167s on two -- **1.90x**, with only 5% per-case degradation and byte-identical
+evidence:
+
+~~~sh
+# every a11y-worker* VM, started and reported as JSON
+./scripts/local-worker/worker-ctl.sh pool-up
+
+A11Y_WORKERS=http://192.168.64.4:8765,http://192.168.64.5:8765 npm run training:capture
+~~~
+
+Add a worker with `./scripts/local-worker/clone-worker.sh` (it handles the duplicate-MAC
+trap that `utmctl clone` leaves behind). A pair's good and bad variants always run on the
+SAME worker: the comparison is only meaningful if both came from one screen reader on one
+machine.
+
 Do not poll it in a loop. To block until a run finishes:
 
 ~~~sh
