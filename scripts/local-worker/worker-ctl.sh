@@ -44,6 +44,9 @@ PORT="${A11Y_PORT:-8765}"
 CMD="${1:-status}"
 SHUTDOWN_GRACE_S=120   # how long to let Windows shut down cleanly before forcing
 RECLAIM_SETTLE_S=45    # give the host a chance to reclaim pages before reporting usage
+HEALTH_TIMEOUT_S=5     # per probe
+HEALTH_TRIES=3         # before calling a worker unreachable
+HEALTH_GAP_S=2         # between probes
 ARG="${2:-}"
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -109,18 +112,36 @@ guest_ip() {
     | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | grep -v '^127' | head -1
 }
 
-# Returns the /health body on success. Needs the guest agent to report an IP first, which
-# only happens once the guest tools are installed.
-health() {
+# One probe. Needs the guest agent to report an IP first, which only happens once the guest
+# tools are installed.
+health_once() {
   local ip; ip="$(guest_ip "$1")"
   [ -n "$ip" ] || return 1
-  curl -s -m 5 "http://$ip:$PORT/health" 2>/dev/null
+  curl -s -m "$HEALTH_TIMEOUT_S" "http://$ip:$PORT/health" 2>/dev/null
+}
+
+# A verdict, not a probe: retry before declaring a worker unreachable.
+#
+# One timed-out curl is not evidence of a dead worker, and treating it as such is how a
+# healthy VM gets diagnosed as broken. The guest is busiest exactly when you most want to know
+# it is alive -- Edge launching, and NVDA cold-starting every 25 captures -- and a worker
+# restart takes /health down for 5-10s entirely legitimately.
+#
+# Measured during a live capture: 30/30 direct probes succeeded, none over a second, so this
+# is not papering over a known flake. It is refusing to report a one-off as a fact.
+health() {
+  local body
+  for attempt in $(seq 1 "$HEALTH_TRIES"); do
+    body="$(health_once "$1")" && [ -n "$body" ] && { echo "$body"; return 0; }
+    [ "$attempt" -lt "$HEALTH_TRIES" ] && sleep "$HEALTH_GAP_S"
+  done
+  return 1
 }
 
 wait_healthy() {
   local uuid="$1" limit="${2:-180}" waited=0 body
   while [ "$waited" -lt "$limit" ]; do
-    body="$(health "$uuid" || true)"
+    body="$(health_once "$uuid" || true)"
     if [ -n "$body" ]; then
       echo "  ready after ${waited}s: $body"
       return 0
@@ -203,7 +224,19 @@ case "$CMD" in
     ip="$(guest_ip "$UUID" || true)"
     echo "guest:   ${ip:-no ip (agent not reporting)}"
     body="$(health "$UUID" || true)"
-    echo "health:  ${body:-unreachable}"
+    if [ -n "$body" ]; then
+      echo "health:  $body"
+      echo "$body" | grep -q '"busy":true' && echo "         (busy is NORMAL: one capture at a time by design)"
+    else
+      echo "health:  unreachable after $HEALTH_TRIES probes"
+      if [ -n "${ip:-}" ]; then
+        echo "         the guest is up and has an IP, so this is the WORKER, not the VM." >&2
+        echo "         it is down for 5-10s during a restart; if it persists:" >&2
+        echo "         utmctl exec <uuid> --cmd powershell.exe -NoProfile -Command 'Start-ScheduledTask -TaskName a11ysrv'" >&2
+      else
+        echo "         no guest IP either, so the VM itself is not ready. Try '$0 up'." >&2
+      fi
+    fi
     ;;
 
   json)

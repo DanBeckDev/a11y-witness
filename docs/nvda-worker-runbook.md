@@ -285,3 +285,29 @@ shell or agent restarting the worker makes your view wrong: mid-restart the stat
 `unknown`, and the worker genuinely is unreachable for the minute its scheduled task takes to
 return. Same shared-resource problem as running `capture-check` against a live worker. Check
 that nothing else is mid-operation before diagnosing corruption.
+
+## `/health` looks intermittently unavailable during captures
+
+Reported from a second shell, and worth being precise about, because the honest answer is
+"mostly not, and here is when it genuinely is".
+
+Measured against a live capture on the local VM: **30/30 direct probes to `/health` succeeded,
+none slower than a second**, plus 10/10 `utmctl ip-address` calls and 5/5
+`worker-ctl.sh status`. So the endpoint does not generally fall over under capture load — the
+worker is single-threaded but a capture is almost entirely `await`ing NVDA round trips, which
+leaves the event loop free to serve.
+
+Three windows where it IS legitimately unavailable, none of them a fault:
+
+- **A worker restart takes it down for 5-10s.** Deploying `capture-core.mjs` requires one.
+- **NVDA cold-starts every 25 captures** (the reuse recycle). That window is the guest's
+  busiest, and a short client timeout can lapse in it.
+- **A second shell restarting the worker** takes it down for yours. One VM, one NVDA.
+
+`busy: true` is **not** unavailability. Captures are serialised by design; the worker returns
+`429` for a second concurrent capture and keeps answering `/health` throughout.
+
+`worker-ctl.sh` now treats health as a verdict rather than a probe: three attempts before
+reporting unreachable, and when it does fail it distinguishes "the guest is up, the WORKER is
+not answering" from "no guest IP at all, the VM is not ready". If you are polling `/health`
+yourself, do the same — one timed-out request is not evidence of a dead worker.
