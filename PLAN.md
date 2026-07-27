@@ -324,6 +324,45 @@ Measured: 50s per capture, of which only 13s is work (`readThrough` + `structura
   host. That is why per-case time rises while the host stays idle, and why a fourth worker is
   worth trying but unlikely to be linear.
 
+### tiny11 / a debloated Windows image — assessed, NOT recommended now
+
+Proposal: build a stripped Windows 11 image (tiny11builder) to run workers on 2 GB and go
+faster. Assessed against the facts rather than the pitch.
+
+**The premise is already satisfied without it.** Stock Windows 11 runs this workload at 2 GB:
+the same 10 cases on three 2 GB workers took **142s against 135s at 4 GB**, with **zero
+pagefile use on all three guests** and byte-identical evidence. So 2 GB is not something a
+custom image is needed to unlock.
+
+**And memory was never the bottleneck.** Measured, at three workers: 69% of 1400% host CPU
+and a couple of GB resident. Per-case time rises with worker count (31.8s -> 33.0s -> 40.5s)
+while the host stays idle, which places the constraint inside each guest -- NVDA and Edge
+serialising one capture at a time -- where an image diet does not reach.
+
+**What it would cost us:**
+- **tiny11 removes Microsoft Edge.** We drive Edge specifically: a chromeless `--app` window
+  is what keeps NVDA's quick-nav out of browser chrome (Root 1 of the correctness audit), and
+  provisioning sets Edge policies. Reinstalling Edge into a debloated image is possible but it
+  is the one component the pipeline cannot do without, and it is the component the image
+  deliberately strips.
+- `tiny11core` additionally removes Windows Update, Defender and WinRE. Tempting for an
+  appliance -- we spent real effort stopping Update rebooting mid-run -- but it is explicitly
+  **unserviceable**: no updates, languages or features can be added afterwards.
+- ARM64 is supported, with a known quirk (the arm64 image has no `OneDriveSetup.exe`, so the
+  script errors on that step).
+- It is a second image pipeline to build, validate and keep current, and every worker would
+  need re-provisioning and re-validating against `capture-check`.
+
+**Where it would genuinely help, neither of which binds today:** disk, at ~28 GB per bundle if
+we ever want many workers per host (though APFS cloning makes copies nearly free), and boot
+time, which is 15s and not on any critical path.
+
+- [ ] **Cheaper version of the same idea: turn off the specific services that cost us.**
+  Defender real-time scanning, the search indexer and SysMain are the background work a
+  debloated image would remove, and they can be disabled in provisioning in minutes with no
+  custom image and no risk to Edge. Worth measuring: if per-case time does not move, that
+  confirms the bottleneck is NVDA round trips and closes the whole line of enquiry.
+
 - [ ] **A fourth worker.** Cheap to test now (clone-worker.sh, ~4 GB, 2 vCPU). Expect ~2.7x
   rather than 3.2x on this trend. Worth it only if 3.1h is still too slow, since each worker
   adds a Windows guest to keep patched and provisioned.
