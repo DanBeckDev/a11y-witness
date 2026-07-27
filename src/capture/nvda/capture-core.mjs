@@ -40,6 +40,7 @@ const MAX_CAPTURES_PER_NVDA = 25;
 // (lib/windows/NVDA/constants.js), so there is nothing to configure on either side.
 const NVDA_REMOTE_PORT = 6837;
 const REUSE_PROBE_MS = 2_000;
+const NVDA_EXIT_TIMEOUT_MS = 15_000; // for an old NVDA to release port 6837
 const STATE_SETTLE_MS = 1_200; // after activating a control, for a live region to announce
 const ANCHOR_SETTLE_MS = 400; // after Escape + Ctrl+Home, before re-reading fields
 
@@ -126,9 +127,15 @@ export async function captureWithNvda(url, opts = {}) {
   // gives a chromeless single-page window — earlier this surfaced the browser
   // start page because the window was not controlled. Also cancels NVDA's
   // auto-say-all so it can't race the read.
-  await anchorToTop();
+  // Anchor ONCE, after the gate rather than either side of it.
+  //
+  // There used to be an anchor here too, from when the read-through followed immediately.
+  // The gate does not care where the cursor is -- reporting the document title is
+  // position-independent -- and the anchor below re-establishes browse mode and the top
+  // regardless, so the earlier one was pure cost: measured at ~3s of a 15.8s capture, since
+  // each anchorToTop is two keystroke round trips plus a settle.
   await waitForDocument(diag);
-  // Re-anchor AFTER the gate. waitForDocument asks NVDA to report the document title, which
+  // Anchor AFTER the gate. waitForDocument asks NVDA to report the document title, which
   // leaves that title as `lastSpokenPhrase` -- and the read-through deliberately reads the
   // current line in place before its first move, so it captured the TITLE instead of the
   // page's first line. Measured: the h1's "heading, level 1, ..." announcement disappeared
@@ -358,7 +365,7 @@ async function startFreshScreenReader(diag) {
     diag.mark("nvdaLeftover", { error: errMsg(e) });
   }
   await nvda.stop().catch((e) => diag.mark("nvdaStopLeftover", { error: errMsg(e) }));
-  await sleep(STATE_SETTLE_MS);
+  await waitForScreenReaderGone(diag);
   await nvda.start();
   diag.mark("nvdaStart", { ok: true, reused: false, afterClearingLeftover: true });
 }
@@ -386,6 +393,25 @@ async function resetSpeechLogs(diag) {
     // Not fatal, but it means the probes' deltas start from a dirty baseline, so say so.
     diag.mark("resetSpeechLogs", { ok: false, error: errMsg(e) });
   }
+}
+
+// Wait for the old NVDA to actually let go of the port before starting a new one.
+//
+// A fixed settle was not enough. Restarting the worker leaves an orphaned NVDA (killing the
+// node process skips the clean shutdown), and the next cold start would race its teardown:
+// `nvda.start()` proceeded while the port was still in flux and the client hit
+// `Cannot connect to NVDA / ECONNREFUSED 127.0.0.1:6837` -- asynchronously, so it arrived as
+// an unhandled rejection and took the worker down. Recoverable, since the scheduled task
+// restarts it, but it cost a capture and a restart every time.
+//
+// Same probe as the reuse check, inverted: ask the socket rather than guess a duration.
+async function waitForScreenReaderGone(diag) {
+  const deadline = Date.now() + NVDA_EXIT_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (!(await screenReaderResponds())) return;
+    await sleep(REUSE_PROBE_MS);
+  }
+  diag.mark("nvdaStillListening", { afterMs: NVDA_EXIT_TIMEOUT_MS });
 }
 
 async function stopScreenReader(diag) {
