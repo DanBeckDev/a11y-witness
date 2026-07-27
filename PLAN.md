@@ -357,11 +357,20 @@ serialising one capture at a time -- where an image diet does not reach.
 we ever want many workers per host (though APFS cloning makes copies nearly free), and boot
 time, which is 15s and not on any critical path.
 
-- [ ] **Cheaper version of the same idea: turn off the specific services that cost us.**
-  Defender real-time scanning, the search indexer and SysMain are the background work a
-  debloated image would remove, and they can be disabled in provisioning in minutes with no
-  custom image and no risk to Edge. Worth measuring: if per-case time does not move, that
-  confirms the bottleneck is NVDA round trips and closes the whole line of enquiry.
+- [x] **Ran the cheap version, and it closes the line of enquiry.** Disabled Defender
+  real-time scanning, the search indexer (WSearch) and SysMain on all three workers -- the
+  background work a debloated image removes -- and re-ran the same 10 cases:
+  **137s against 135s with them all running.** No improvement, within noise. Evidence
+  identical. Reverted, since it bought nothing and an unreverted experiment is a liability.
+
+  So image weight is not the constraint, and a customised tiny11 that kept Edge could not help
+  either. It is worth being precise about what this rules out: not that tiny11 works, but that
+  the thing it does cannot buy us time.
+
+  Per-phase, with the services off: structural 4.7s, afterStart 3.0s, windowsActivate 2.2s,
+  readThrough 1.5s, documentReady 0.7s, wall 12.4s. Every item is NVDA round trips and fixed
+  settles. **The only lever left inside a capture is making fewer round trips** -- the batched
+  sweep already in this backlog -- and beyond that, more workers.
 
 - [ ] **A fourth worker.** Cheap to test now (clone-worker.sh, ~4 GB, 2 vCPU). Expect ~2.7x
   rather than 3.2x on this trend. Worth it only if 3.1h is still too slow, since each worker
