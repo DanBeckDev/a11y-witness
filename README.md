@@ -183,6 +183,20 @@ This is not a footnote to the interesting work — it *is* some of the work. Scr
 
 Because a Windows guest is never genuinely idle, the pipeline manages it **on demand**: with a local VM and no `A11Y_WORKER` set, a run starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15 s. Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`worker-ctl.sh`](./scripts/local-worker/worker-ctl.sh) does `up | pause | stop | status | idle-pause`.
 
+**Scaling past one worker.** Because captures serialise per machine, throughput comes from
+more machines. On a Mac that is one command, and the lifecycle is handled for you:
+
+```bash
+./scripts/local-worker/clone-worker.sh          # add a worker (handles a MAC-copying trap)
+./scripts/local-worker/worker-ctl.sh pool       # what have I got
+npm run training:capture                        # uses them all, then puts them back
+./scripts/local-worker/worker-ctl.sh pool-stop  # or release them yourself
+```
+
+Measured: **1.90x on two workers, 2.36x on three**, with byte-identical evidence at each step.
+The returns bend because the bottleneck is inside each guest — NVDA answers one request at a
+time — not on the host, which sits at under 70% of its CPU with three running.
+
 **A worker serves one capture at a time.** One machine has one desktop, one foreground window
 and one NVDA, so captures are serialised by design — the worker returns `429` while busy.
 Throughput scales by running more workers, not more threads ([ADR 0001](./docs/adr/0001-capture-architecture.md)).

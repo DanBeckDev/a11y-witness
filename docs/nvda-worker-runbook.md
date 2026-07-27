@@ -336,3 +336,30 @@ utmctl exec "$UUID" --cmd powershell.exe -NoProfile -Command \
   'Copy-Item C:\Users\witness\a11y-witness\server.log C:\Users\witness\log-copy.txt -Force'
 utmctl file pull "$UUID" 'C:\Users\witness\log-copy.txt'
 ```
+
+## Stopping a VM takes 2+ minutes and says "guest ignored ACPI shutdown"
+
+The guest is almost certainly shutting down fine. The wait loop was the problem, and it only
+misbehaves once you have more than one worker.
+
+It used to break out only when **no** `QEMULauncher` process existed anywhere on the host. With
+a single VM that is equivalent to "our VM has stopped"; with a pool, the other workers' processes
+keep it spinning for the full 120s grace, after which it force-stops a VM that shut down cleanly
+two minutes earlier. The tell is the force-stop then failing:
+
+```
+guest ignored ACPI shutdown after 120s -- forcing
+The virtual machine is not running.
+```
+
+That second line means it had already stopped. The cost is not just the wait: every "clean"
+shutdown was being recorded as a power cut, which is what `--request` exists to avoid, so the
+next boot could spend time on dirty-volume repair.
+
+Fixed by polling **this VM's own** qemu process (`pgrep -f "uuid $UUID"`). A stop went from 154s
+to 17s, and the whole pool from ~7 minutes to 13 seconds. Note that polling `utmctl status`
+instead is correct but too slow to poll -- forty iterations took 464s of wall clock, because the
+loop counted its sleeps and not utmctl's latency.
+
+Stops now also ask Windows directly through the guest agent (`shutdown /s /t 0`) with ACPI as
+the fallback, since the guest agent needs neither the network nor a working power-button mapping.

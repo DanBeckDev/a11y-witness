@@ -188,3 +188,7 @@ enough that the table is faster than reasoning from first principles.
   valid input and record whether the error is announced at all.
 - **Keeping the VM cheap** — `worker-ctl.sh pause` between runs; `idle-pause 15` to do it
   automatically.
+- **Making it faster** — add a second worker with
+  `./scripts/local-worker/clone-worker.sh`, then just run as normal: with no `A11Y_WORKER` set,
+  a run uses every local worker and puts each one back afterwards. Measured 1.90x on two
+  workers, 2.36x on three. See [`local-worker-vm.md`](./local-worker-vm.md).

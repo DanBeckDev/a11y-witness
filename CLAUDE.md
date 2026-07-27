@@ -73,13 +73,23 @@ It answers VM state, worker health, page server, judge backend and whether a pre
 was left mid-flight — the last one being the difference between `capture` and
 `capture -- --resume`, which is hours either way if you guess wrong.
 
-For a long run, use more than one worker — 1.90x measured on two:
+For a long run, use more than one worker. **Set nothing** — with neither `A11Y_WORKER` nor
+`A11Y_WORKERS` set, a run finds every local worker VM, starts what is stopped, dispatches
+cases across them, and **puts each one back as it found it**: stopped stays stopped, and a VM
+you had already started is left running. Measured 1.90x on two, 2.36x on three.
 
 ```bash
+npm run training:capture                            # uses every local worker, releases them after
 ./scripts/local-worker/clone-worker.sh              # add one (handles utmctl's MAC copying)
+./scripts/local-worker/worker-ctl.sh pool           # what have I got, as JSON
 ./scripts/local-worker/worker-ctl.sh pool-up        # start them all
-A11Y_WORKERS=url1,url2 npm run training:capture     # cases dispatched across the pool
+./scripts/local-worker/worker-ctl.sh pool-stop      # release the lot (~13 s for three)
+A11Y_WORKERS=url1,url2 npm run training:capture     # explicit pool: yours to manage, no lifecycle
 ```
+
+`A11Y_WORKERS` is the escape hatch, not the normal path: naming workers means you are managing
+them, so nothing is started or stopped for you. `--after stop|pause|leave` overrides the
+restore behaviour.
 
 For long runs, do not poll:
 

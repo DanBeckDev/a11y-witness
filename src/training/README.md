@@ -84,7 +84,13 @@ last update: recently
 worker now: idle
 ~~~
 
-Run across several workers to cut wall-clock. Measured on 10 mixed cases: 318s on one
+Run across several workers to cut wall-clock, and **set nothing to get it**: with neither
+`A11Y_WORKER` nor `A11Y_WORKERS` set, the run discovers every local worker VM, starts what is
+stopped, spreads cases across them, and puts each back as it found it afterwards -- so an
+overnight run does not leave three Windows guests burning resources. A VM you had already
+started is left running, and one busy with another capture is never stopped underneath it.
+
+Measured on 10 mixed cases: 318s on one
 worker, 167s on two -- **1.90x**, with only 5% per-case degradation and byte-identical
 evidence:
 
@@ -96,7 +102,8 @@ A11Y_WORKERS=http://192.168.64.4:8765,http://192.168.64.5:8765 npm run training:
 ~~~
 
 Add a worker with `./scripts/local-worker/clone-worker.sh` (it handles the duplicate-MAC
-trap that `utmctl clone` leaves behind). A pair's good and bad variants always run on the
+trap that `utmctl clone` leaves behind), and release them by hand with
+`./scripts/local-worker/worker-ctl.sh pool-stop` if you ever need to. A pair's good and bad variants always run on the
 SAME worker: the comparison is only meaningful if both came from one screen reader on one
 machine.
 
