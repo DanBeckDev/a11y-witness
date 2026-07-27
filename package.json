@@ -21,7 +21,10 @@
     "training:capture": "tsx src/training/capture-screenreader-dataset.mjs",
     "training:status": "node src/training/capture-status.mjs",
     "training:check-signals": "node src/training/check-signals.mjs",
-    "training:export": "node src/training/export-screenreader-dataset.mjs"
+    "training:export": "node src/training/export-screenreader-dataset.mjs",
+    "training:analyze-errors": ".venv/bin/python scripts/report-screenreader-errors.py",
+    "training:fetch-encoder": ".venv/bin/python scripts/fetch-screenreader-encoder.py",
+    "training:train": ".venv/bin/python scripts/train-screenreader-model.py"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",

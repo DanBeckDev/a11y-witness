@@ -559,7 +559,11 @@ function disclosureVariant({ id, title, heading, control, content, task }) {
 
 function errorVariant({ id, title, heading, field, submit, message, task }) {
   const goodBody = "<form id=\"form\"><label for=\"field\">" + field + "</label><input id=\"field\" aria-describedby=\"error\"><button type=\"submit\">" + submit + "</button><p id=\"error\" role=\"alert\" hidden>" + message + "</p></form>";
-  const badBody = "<form id=\"form\"><span>" + field + "</span><input id=\"field\"><button type=\"submit\">" + submit + "</button><p class=\"error\" hidden>" + message + "</p></form>";
+  // Keep this pair single-criterion. The original bad fixture also removed the field label,
+  // which made every 3.3.1 failure a hidden 3.3.2 failure and taught the 3.3.2 head that an
+  // unrelated silent validation message is evidence of an unlabeled control. The mutation
+  // here is only the missing error association/announcement; the field stays labelled.
+  const badBody = "<form id=\"form\"><label for=\"field\">" + field + "</label><input id=\"field\"><button type=\"submit\">" + submit + "</button><p class=\"error\" hidden>" + message + "</p></form>";
   const goodScript = "document.querySelector('#form').addEventListener('submit', (event) => { event.preventDefault(); document.querySelector('#field').setAttribute('aria-invalid', 'true'); document.querySelector('#error').hidden = false; document.querySelector('#field').focus(); });";
   const badScript = "document.querySelector('#form').addEventListener('submit', (event) => { event.preventDefault(); document.querySelector('.error').hidden = false; });";
   return pair({
@@ -587,7 +591,7 @@ function statusVariant({ id, title, heading, control, task }) {
     task,
     source: "Web Accessibility Cookbook, chapter 22; Practical Web Accessibility, chapter 6",
     mutation: "A result count changes without a live status announcement.",
-    badSignal: { type: "form-activation-silent", control },
+    badSignal: { type: "form-activation-silent", control, expected: "Showing 2 matching items." },
     good: page({ title, heading, body: goodBody, script }),
     bad: page({ title, heading, body, script }),
     probeForms: true,
@@ -607,6 +611,55 @@ function tableVariant({ id, title, heading, destination, task }) {
     badSignal: { type: "table-unassociated" },
     good: page({ title, heading, body: good }),
     bad: page({ title, heading, body: bad }),
+  });
+}
+
+function variedTableVariant({ id, title, heading, caption, headers, row, task }) {
+  const good = "<table><caption>" + caption + "</caption><thead><tr>"
+    + headers.map((header) => "<th scope=\"col\">" + header + "</th>").join("")
+    + "</tr></thead><tbody><tr><th scope=\"row\">" + row[0] + "</th>"
+    + row.slice(1).map((value) => "<td>" + value + "</td>").join("")
+    + "</tr></tbody></table>";
+  const bad = "<table><caption>" + caption + "</caption><tr>"
+    + headers.map((header) => "<td>" + header + "</td>").join("")
+    + "</tr><tr>" + row.map((value) => "<td>" + value + "</td>").join("") + "</tr></table>";
+  return pair({
+    id,
+    family: id,
+    criterion: "1.3.1",
+    task,
+    source: "Web Accessibility Cookbook, chapter 22; Practical Web Accessibility, chapter 4",
+    mutation: "The data table loses header associations while retaining its visible rows and caption.",
+    badSignal: { type: "table-unassociated" },
+    good: page({ title, heading, body: good }),
+    bad: page({ title, heading, body: bad }),
+  });
+}
+
+function labelledControlVariant({ id, title, heading, label, name, control, selector = "input", task }) {
+  const labelled = control({ labelled: true, name });
+  const unlabelled = control({ labelled: false, name });
+  return pair({
+    id,
+    family: id,
+    criterion: "3.3.2",
+    task,
+    source: "Practical Web Accessibility, chapter 6; Inclusive Design for Accessibility, chapter 13",
+    mutation: "The form control loses its programmatic label while the same visible cue remains nearby.",
+    badSignal: { type: "unnamed-form-field" },
+    good: page({
+      title,
+      heading,
+      body: "<form><label for=\"" + name + "\">" + label + "</label>" + labelled + "</form>",
+      script: "document.querySelector('" + selector + "').focus();",
+    }),
+    bad: page({
+      title,
+      heading,
+      body: "<form><span>" + label + "</span>" + unlabelled + "</form>",
+      script: "document.querySelector('" + selector + "').focus();",
+    }),
+    probeForms: true,
   });
 }
 
@@ -644,6 +697,388 @@ const generatedCases = [
 ];
 
 cases.push(...generatedCases);
+
+// A seed matrix proves that the capture and labelling instruments work. The next layer
+// deliberately varies topic, wording, and content shape while keeping one known mutation
+// per pair. Each generated case gets its own family so grouped train/test splits do not
+// mistake a dozen unrelated pages for one independent example.
+const independent = (testCase) => ({ ...testCase, family: testCase.id });
+
+const expandedCases = [
+  ...[
+    ["image-missing-alt-ferry", "River ferry", "River ferry", "The new ferry leaves every hour.", "ferry-terminal.jpg", "Photograph of the new river ferry at the terminal", null, "Find the new ferry on the page."],
+    ["image-missing-alt-garden", "Winter garden", "Winter garden", "The garden stays open throughout winter.", "winter-garden.jpg", "A glasshouse filled with winter plants", null, "Understand what the winter garden looks like."],
+    ["image-missing-alt-hall", "Community hall", "Community hall", "The hall is available for evening meetings.", "community-hall.jpg", "Front entrance of the community hall", null, "Find the entrance to the community hall."],
+    ["image-missing-alt-coast", "Coastal path", "Coastal path", "The path follows the cliffs to the lighthouse.", "coastal-path.jpg", "Coastal path leading towards the lighthouse", null, "Understand where the coastal path leads."],
+    ["image-missing-alt-orchard", "Community orchard", "Community orchard", "The first apples are ready in September.", "orchard.jpg", "Rows of apple trees in the community orchard", null, "Understand what is growing in the orchard."],
+    ["image-missing-alt-observatory", "Hill observatory", "Hill observatory", "The observatory opens after sunset.", "observatory.jpg", "The hill observatory beneath a clear evening sky", null, "Find out what the observatory looks like."],
+    ["image-missing-alt-cycleway", "Bicycle route", "Bicycle route", "The new route avoids the busy road.", "cycleway.jpg", "A separated bicycle route beside the river", null, "Understand the new bicycle route."],
+    ["image-missing-alt-library", "Library entrance", "Library entrance", "The library entrance is on the quieter side of the building.", "library-entrance.jpg", "The accessible entrance to the public library", null, "Find the accessible library entrance."],
+    ["image-generic-alt-sports", "Sports centre", "Sports centre", "The centre has reopened its swimming pool.", "sports-centre.jpg", "Indoor swimming pool at the sports centre", "image", "Understand what facilities have reopened."],
+    ["image-generic-alt-allotment", "Allotment garden", "Allotment garden", "Volunteers planted vegetables for the food bank.", "allotment.jpg", "Raised vegetable beds in the allotment garden", "photo", "Understand what the volunteers planted."],
+    ["image-generic-alt-market", "Farmers market", "Farmers market", "The Saturday market has moved to the square.", "market-stall.jpg", "A fruit stall at the Saturday farmers market", "picture", "Understand what is sold at the market."],
+    ["image-generic-alt-theatre", "Theatre stage", "Theatre stage", "The autumn programme begins next week.", "theatre-stage.jpg", "The stage prepared for the autumn programme", "graphic", "Understand what is ready for the autumn programme."],
+    ["image-filename-alt-flood", "Flood barrier", "Flood barrier", "The barrier protects the lower walkway.", "flood-barrier-final.jpg", "Flood barrier protecting the lower walkway", "flood-barrier-final.jpg", "Understand what the flood barrier protects."],
+    ["image-filename-alt-wildlife", "Wildlife reserve", "Wildlife reserve", "The reserve protects nesting birds.", "reserve-entrance-02.jpg", "Entrance to the wildlife reserve beside the reed beds", "reserve-entrance-02.jpg", "Find the entrance to the wildlife reserve."],
+    ["image-filename-alt-solar", "Solar array", "Solar array", "The solar array powers the visitor centre.", "solar-array-2026.jpg", "Solar panels beside the visitor centre", "solar-array-2026.jpg", "Understand what powers the visitor centre."],
+    ["image-filename-alt-clinic", "Health clinic", "Health clinic", "The clinic has added a new reception desk.", "clinic-reception-01.jpg", "Reception desk at the new health clinic", "clinic-reception-01.jpg", "Find the new clinic reception desk."],
+  ].map(([id, title, heading, description, file, goodAlt, badAlt, task]) => independent(imageVariant({ id, title, heading, description, file, goodAlt, badAlt, task }))),
+  ...[
+    ["link-vague-ferry", "Ferry timetable", "Ferry timetable", "The morning ferry reaches the island at nine.", "Here", "Read the morning ferry timetable", "Open the morning ferry timetable."],
+    ["link-vague-garden", "Garden visits", "Garden visits", "The winter garden requires a booking.", "Details", "View winter garden booking details", "Open the winter garden booking details."],
+    ["link-vague-hall", "Hall bookings", "Hall bookings", "The community hall is available on Tuesdays.", "More", "See community hall Tuesday availability", "Check Tuesday availability for the hall."],
+    ["link-vague-coast", "Coastal safety", "Coastal safety", "Check the tide before walking near the cliffs.", "Read more", "Read coastal cliff safety advice", "Read the coastal cliff safety advice."],
+    ["link-vague-orchard", "Orchard volunteering", "Orchard volunteering", "The next volunteer day is in October.", "Click here", "Register for the October orchard volunteer day", "Register for the orchard volunteer day."],
+    ["link-vague-observatory", "Observatory visits", "Observatory visits", "The evening tour starts at eight.", "Go", "Open the evening observatory tour information", "Open the evening observatory tour information."],
+    ["link-vague-cycleway", "Cycle route map", "Cycle route map", "The route includes a new bridge crossing.", "Info", "View the cycle route bridge information", "View the cycle route bridge information."],
+    ["link-vague-library", "Library services", "Library services", "The library offers home delivery to members.", "This", "Read about library home delivery", "Read about library home delivery."],
+    ["link-vague-sports", "Sports centre classes", "Sports centre classes", "New swimming classes start in September.", "Learn more", "View September swimming class times", "View the September swimming class times."],
+    ["link-vague-allotment", "Allotment plots", "Allotment plots", "A few plots are available near the entrance.", "More", "Apply for an allotment plot near the entrance", "Apply for an allotment plot."],
+    ["link-vague-market", "Market traders", "Market traders", "Local traders can apply for a Saturday pitch.", "Details", "Read the Saturday market trader requirements", "Read the Saturday market trader requirements."],
+    ["link-vague-theatre", "Theatre programme", "Theatre programme", "The autumn play opens on Thursday.", "Here", "See the autumn theatre programme", "See the autumn theatre programme."],
+    ["link-vague-flood", "Flood preparation", "Flood preparation", "Residents should prepare before heavy rain.", "Click here", "Read flood preparation guidance for residents", "Read flood preparation guidance."],
+    ["link-vague-wildlife", "Wildlife reserve visits", "Wildlife reserve visits", "The nesting area closes in spring.", "More", "Read wildlife reserve nesting-area guidance", "Read the nesting-area guidance."],
+    ["link-vague-solar", "Energy centre", "Energy centre", "The visitor centre explains how solar power works.", "Go", "Visit the solar power explanation", "Visit the solar power explanation."],
+    ["link-vague-clinic", "Clinic appointments", "Clinic appointments", "Appointments can be changed online.", "Details", "Change a health clinic appointment online", "Change a health clinic appointment online."],
+  ].map(([id, title, heading, context, vague, descriptive, task]) => independent(linkVariant({ id, title, heading, context, vague, descriptive, task }))),
+  ...[
+    ["heading-vague-ferry", "Ferry information", "Ferry information", "Welcome", "Ferry departure times", "Find the ferry departure times."],
+    ["heading-vague-garden", "Garden guide", "Garden guide", "Overview", "Winter planting advice", "Find the winter planting advice."],
+    ["heading-vague-hall", "Hall guide", "Hall guide", "Stuff", "Facilities available in the hall", "Find the hall facilities."],
+    ["heading-vague-coast", "Coastal walk", "Coastal walk", "Things", "Safety advice for the coastal walk", "Find the coastal safety advice."],
+    ["heading-vague-orchard", "Orchard guide", "Orchard guide", "Information", "How to volunteer in the orchard", "Find how to volunteer in the orchard."],
+    ["heading-vague-observatory", "Observatory guide", "Observatory guide", "Notes", "What to expect on an evening visit", "Find what to expect on the evening visit."],
+    ["heading-vague-cycleway", "Cycle route guide", "Cycle route guide", "Updates", "Changes to the cycle route", "Find the cycle route changes."],
+    ["heading-vague-library", "Library guide", "Library guide", "Welcome", "How home delivery works", "Find how library home delivery works."],
+    ["heading-vague-sports", "Sports centre guide", "Sports centre guide", "Options", "Swimming classes for beginners", "Find the beginner swimming classes."],
+    ["heading-vague-allotment", "Allotment guide", "Allotment guide", "More", "Preparing a new allotment plot", "Find how to prepare a plot."],
+    ["heading-vague-market", "Market guide", "Market guide", "Section", "Rules for Saturday traders", "Find the Saturday trader rules."],
+    ["heading-vague-theatre", "Theatre guide", "Theatre guide", "Introduction", "Access arrangements for performances", "Find the performance access arrangements."],
+    ["heading-vague-flood", "Flood guide", "Flood guide", "Help", "Steps to take before heavy rain", "Find the flood preparation steps."],
+    ["heading-vague-wildlife", "Wildlife guide", "Wildlife guide", "Miscellaneous", "Keeping dogs away from nesting birds", "Find the nesting-bird guidance."],
+    ["heading-vague-solar", "Energy guide", "Energy guide", "Next", "How the solar array supports the centre", "Find how the solar array works."],
+    ["heading-vague-clinic", "Clinic guide", "Clinic guide", "Details", "Changing an appointment", "Find how to change an appointment."],
+  ].map(([id, title, heading, vague, descriptive, task]) => independent(vagueHeadingVariant({ id, title, heading, vague, descriptive, task }))),
+  ...[
+    ["landmark-vague-ferry", "Ferry services", "Ferry services", "Departure information", "Ferries leave from the east quay.", "Jump to ferry departure information."],
+    ["landmark-vague-garden", "Garden services", "Garden services", "Visitor information", "The glasshouse is open every afternoon.", "Jump to garden visitor information."],
+    ["landmark-vague-hall", "Hall services", "Hall services", "Booking information", "Bookings are available six weeks ahead.", "Jump to hall booking information."],
+    ["landmark-vague-coast", "Coastal services", "Coastal services", "Walking information", "The path is closed during severe weather.", "Jump to coastal walking information."],
+    ["landmark-vague-orchard", "Orchard services", "Orchard services", "Volunteer information", "Volunteers meet at the tool shed.", "Jump to orchard volunteer information."],
+    ["landmark-vague-observatory", "Observatory services", "Observatory services", "Visit information", "Evening visitors should arrive fifteen minutes early.", "Jump to observatory visit information."],
+    ["landmark-vague-cycleway", "Cycle services", "Cycle services", "Route information", "The route is signposted from the station.", "Jump to cycle route information."],
+    ["landmark-vague-library", "Library services", "Library services", "Delivery information", "Members can request two deliveries each month.", "Jump to library delivery information."],
+  ].map(([id, title, heading, label, text, task]) => independent(landmarkVariant({ id, title, heading, label, text, task }))),
+  ...[
+    ["table-ferry", "Ferry departures", "Ferry departures", "Island", "Compare the departure time and platform for Island."],
+    ["table-garden", "Garden timetable", "Garden timetable", "Glasshouse", "Compare the opening time and gate for Glasshouse."],
+    ["table-hall", "Hall timetable", "Hall timetable", "Main hall", "Compare the booking time and room for Main hall."],
+    ["table-coast", "Coastal buses", "Coastal buses", "Lighthouse", "Compare the departure time and stop for Lighthouse."],
+    ["table-orchard", "Orchard schedule", "Orchard schedule", "Tool shed", "Compare the meeting time and location for Tool shed."],
+    ["table-observatory", "Observatory tours", "Observatory tours", "Evening tour", "Compare the start time and room for Evening tour."],
+    ["table-cycleway", "Cycle buses", "Cycle buses", "Riverside", "Compare the departure time and stop for Riverside."],
+    ["table-library", "Library deliveries", "Library deliveries", "Home delivery", "Compare the day and route for Home delivery."],
+  ].map(([id, title, heading, destination, task]) => independent(tableVariant({ id, title, heading, destination, task }))),
+  ...[
+    ["form-unlabelled-ferry", "Ferry booking", "Ferry booking", "Passenger name", "passenger", "Enter the passenger name for the ferry booking."],
+    ["form-unlabelled-garden", "Garden booking", "Garden booking", "Visit date", "visit-date", "Enter the date for the garden visit."],
+    ["form-unlabelled-hall", "Hall booking", "Hall booking", "Booking contact", "contact", "Enter the hall booking contact."],
+    ["form-unlabelled-coast", "Coastal permit", "Coastal permit", "Group size", "group-size", "Enter the group size for the coastal permit."],
+    ["form-unlabelled-orchard", "Orchard volunteer", "Orchard volunteer", "Emergency contact", "emergency", "Enter the emergency contact for volunteering."],
+    ["form-unlabelled-observatory", "Observatory booking", "Observatory booking", "Visitor count", "visitors", "Enter the number of observatory visitors."],
+    ["form-unlabelled-cycleway", "Cycle hire", "Cycle hire", "Hire duration", "duration", "Enter the cycle hire duration."],
+    ["form-unlabelled-library", "Library delivery", "Library delivery", "Delivery postcode", "postcode", "Enter the delivery postcode."],
+    ["form-unlabelled-sports", "Sports class", "Sports class", "Participant name", "participant", "Enter the participant name for the class."],
+    ["form-unlabelled-allotment", "Allotment request", "Allotment request", "Plot preference", "plot", "Enter the preferred allotment plot."],
+    ["form-unlabelled-market", "Market pitch", "Market pitch", "Trader name", "trader", "Enter the trader name for the market pitch."],
+    ["form-unlabelled-theatre", "Theatre booking", "Theatre booking", "Booking email", "booking-email", "Enter the theatre booking email."],
+    ["form-unlabelled-flood", "Flood alert", "Flood alert", "Alert postcode", "alert-postcode", "Enter the postcode for flood alerts."],
+    ["form-unlabelled-wildlife", "Wildlife visit", "Wildlife visit", "Group leader", "leader", "Enter the wildlife group leader."],
+    ["form-unlabelled-solar", "Energy tour", "Energy tour", "Visitor organisation", "organisation", "Enter the visitor organisation."],
+    ["form-unlabelled-clinic", "Clinic booking", "Clinic booking", "Patient identifier", "patient", "Enter the patient identifier."],
+  ].map(([id, title, heading, label, name, task]) => independent(unlabelledFieldVariant({ id, title, heading, label, name, task }))),
+  ...[
+    ["custom-control-ferry", "Ferry dashboard", "Ferry dashboard", "Refresh departure board", "Refresh the ferry departure board."],
+    ["custom-control-garden", "Garden dashboard", "Garden dashboard", "Book a garden visit", "Book a garden visit."],
+    ["custom-control-hall", "Hall dashboard", "Hall dashboard", "Save hall booking", "Save the hall booking."],
+    ["custom-control-coast", "Coastal dashboard", "Coastal dashboard", "Show tide warning", "Show the coastal tide warning."],
+    ["custom-control-orchard", "Orchard dashboard", "Orchard dashboard", "Join volunteer list", "Join the orchard volunteer list."],
+    ["custom-control-observatory", "Observatory dashboard", "Observatory dashboard", "Start evening tour", "Start the evening observatory tour."],
+    ["custom-control-cycleway", "Cycle dashboard", "Cycle dashboard", "Plan cycle route", "Plan the cycle route."],
+    ["custom-control-library", "Library dashboard", "Library dashboard", "Request delivery", "Request a library delivery."],
+  ].map(([id, title, heading, label, task]) => independent(customControlVariant({ id, title, heading, label, task }))),
+  ...[
+    ["icon-button-unnamed-ferry", "Ferry controls", "Ferry controls", "Open departure filters", "Open the ferry departure filters."],
+    ["icon-button-unnamed-garden", "Garden controls", "Garden controls", "Open visitor filters", "Open the garden visitor filters."],
+    ["icon-button-unnamed-hall", "Hall controls", "Hall controls", "Open booking filters", "Open the hall booking filters."],
+    ["icon-button-unnamed-coast", "Coastal controls", "Coastal controls", "Open route filters", "Open the coastal route filters."],
+  ].map(([id, title, heading, name, task]) => independent(unnamedIconVariant({ id, title, heading, name, task }))),
+  ...[
+    ["disclosure-state-silent-ferry", "Ferry advice", "Ferry advice", "Ferry rules", "Passengers may bring one small bag.", "Open the ferry rules."],
+    ["disclosure-state-silent-garden", "Garden advice", "Garden advice", "Glasshouse rules", "Visitors should keep to the marked paths.", "Open the glasshouse rules."],
+    ["disclosure-state-silent-hall", "Hall advice", "Hall advice", "Booking rules", "Bookings must be cancelled two days ahead.", "Open the hall booking rules."],
+    ["disclosure-state-silent-coast", "Coastal advice", "Coastal advice", "Tide rules", "Do not cross the rocks at high tide.", "Open the coastal tide rules."],
+  ].map(([id, title, heading, control, content, task]) => independent(disclosureVariant({ id, title, heading, control, content, task }))),
+  ...[
+    ["form-error-silent-ferry", "Ferry booking", "Ferry booking", "Passenger name", "Submit booking", "Enter the passenger name before booking.", "Submit the ferry booking without a passenger name."],
+    ["form-error-silent-garden", "Garden booking", "Garden booking", "Visit date", "Book visit", "Enter the visit date before booking.", "Submit the garden booking without a visit date."],
+    ["form-error-silent-hall", "Hall booking", "Hall booking", "Contact email", "Save booking", "Enter a contact email before saving.", "Submit the hall booking without a contact email."],
+    ["form-error-silent-coast", "Coastal permit", "Coastal permit", "Group size", "Request permit", "Enter the group size before requesting.", "Submit the coastal permit without a group size."],
+    ["form-error-silent-orchard", "Orchard volunteer", "Orchard volunteer", "Emergency contact", "Join list", "Enter an emergency contact before joining.", "Submit the volunteer form without an emergency contact."],
+    ["form-error-silent-observatory", "Observatory booking", "Observatory booking", "Visitor count", "Submit booking", "Enter the visitor count before booking.", "Submit the observatory booking without a visitor count."],
+    ["form-error-silent-cycleway", "Cycle hire", "Cycle hire", "Hire duration", "Hire cycle", "Enter the hire duration before hiring.", "Submit the cycle hire form without a duration."],
+    ["form-error-silent-library", "Library delivery", "Library delivery", "Delivery postcode", "Request delivery", "Enter the postcode before requesting.", "Submit the library delivery form without a postcode."],
+    ["form-error-silent-sports", "Sports class", "Sports class", "Participant name", "Join class", "Enter the participant name before joining.", "Submit the sports class form without a participant name."],
+    ["form-error-silent-allotment", "Allotment request", "Allotment request", "Plot preference", "Request plot", "Enter a plot preference before requesting.", "Submit the allotment request without a plot preference."],
+    ["form-error-silent-market", "Market pitch", "Market pitch", "Trader name", "Request pitch", "Enter the trader name before requesting.", "Submit the market pitch form without a trader name."],
+    ["form-error-silent-theatre", "Theatre booking", "Theatre booking", "Booking email", "Submit booking", "Enter the booking email before reserving.", "Submit the theatre booking without a booking email."],
+    ["form-error-silent-flood", "Flood alert", "Flood alert", "Alert postcode", "Join alerts", "Enter the postcode before joining alerts.", "Submit the flood alert form without a postcode."],
+    ["form-error-silent-wildlife", "Wildlife visit", "Wildlife visit", "Group leader", "Book visit", "Enter the group leader before booking.", "Submit the wildlife visit without a group leader."],
+    ["form-error-silent-solar", "Energy tour", "Energy tour", "Organisation", "Book tour", "Enter the organisation before booking.", "Submit the energy tour without an organisation."],
+    ["form-error-silent-clinic", "Clinic booking", "Clinic booking", "Patient identifier", "Confirm booking", "Enter the patient identifier before confirming.", "Submit the clinic booking without an identifier."],
+  ].map(([id, title, heading, field, submit, message, task]) => independent(errorVariant({ id, title, heading, field, submit, message, task }))),
+  ...[
+    ["filter-status-silent-ferry", "Ferry results", "Ferry results", "Show morning ferries", "Show morning ferries and notice the result count."],
+    ["filter-status-silent-garden", "Garden results", "Garden results", "Show indoor gardens", "Show indoor gardens and notice the result count."],
+    ["filter-status-silent-hall", "Hall results", "Hall results", "Show evening bookings", "Show evening bookings and notice the result count."],
+    ["filter-status-silent-coast", "Coastal results", "Coastal results", "Show safe routes", "Show safe coastal routes and notice the result count."],
+    ["filter-status-silent-orchard", "Orchard results", "Orchard results", "Show volunteer days", "Show orchard volunteer days and notice the result count."],
+    ["filter-status-silent-observatory", "Observatory results", "Observatory results", "Show evening tours", "Show evening tours and notice the result count."],
+    ["filter-status-silent-cycleway", "Cycle results", "Cycle results", "Show short routes", "Show short cycle routes and notice the result count."],
+    ["filter-status-silent-library", "Library results", "Library results", "Show delivered books", "Show delivered books and notice the result count."],
+    ["filter-status-silent-sports", "Sports results", "Sports results", "Show beginner classes", "Show beginner classes and notice the result count."],
+    ["filter-status-silent-allotment", "Allotment results", "Allotment results", "Show available plots", "Show available plots and notice the result count."],
+    ["filter-status-silent-market", "Market results", "Market results", "Show food traders", "Show food traders and notice the result count."],
+    ["filter-status-silent-theatre", "Theatre results", "Theatre results", "Show accessible shows", "Show accessible shows and notice the result count."],
+    ["filter-status-silent-flood", "Flood results", "Flood results", "Show current alerts", "Show current flood alerts and notice the result count."],
+    ["filter-status-silent-wildlife", "Wildlife results", "Wildlife results", "Show bird walks", "Show bird walks and notice the result count."],
+    ["filter-status-silent-solar", "Energy results", "Energy results", "Show solar tours", "Show solar tours and notice the result count."],
+    ["filter-status-silent-clinic", "Clinic results", "Clinic results", "Show morning appointments", "Show morning appointments and notice the result count."],
+  ].map(([id, title, heading, control, task]) => independent(statusVariant({ id, title, heading, control, task }))),
+];
+
+cases.push(...expandedCases);
+
+// The first 173 pairs proved the instruments. This second batch is intentionally generated
+// from many independent topics so the useful-baseline run has enough positive examples per
+// criterion without hand-authoring hundreds of near-identical fixtures. These are still page
+// instruments only: the exporter uses the NVDA captures, never these HTML strings.
+const BULK_TOPICS = [
+  "Aquarium", "Meadow", "Harbour", "Museum", "Station", "Playground", "Civic hall", "Wetland",
+  "Gallery", "Food co-op", "Health centre", "Town square", "Bus depot", "Railway", "Ferry terminal", "Concert hall",
+  "Learning centre", "Repair cafe", "Energy park", "River walk", "Hill farm", "Marina", "Stadium", "Greenhouse",
+  "Bookshop", "Town hall", "Garden centre", "Science lab", "Swimming pool", "Wildlife trust", "Carers centre", "Housing office",
+  "Youth club", "Shelter", "Recycling centre", "Fire station", "Post office", "Park gate", "Farm shop", "Bird hide",
+  "Community kitchen", "Health pavilion", "Makerspace", "Market garden", "Coastal path", "Waterworks", "Sports field", "Cemetery",
+  "Cultural centre", "Heritage centre", "Visitor dock", "Bus interchange", "Train depot", "Community forest", "Solar field", "Flood gate",
+  "Volunteer centre", "Food bank", "Public square", "Local archive", "Bike workshop", "Day centre", "Civic theatre", "Music room",
+  "Tide station", "Public garden", "Learning hub", "Wellbeing centre", "Nature trail", "Community pool", "Digital lab", "Art studio",
+  "Farmers hall", "Advice centre", "Harbour office", "River station", "Town library", "Marsh boardwalk", "Coastal clinic", "Rail depot",
+  "Forest cabin", "Wind farm", "Community orchard", "Canal lock", "Visitor shelter", "Sports pavilion", "Public archive", "Travel office",
+];
+
+function bulkTopic(index) {
+  const code = String(index).padStart(3, "0");
+  const place = BULK_TOPICS[(index - 1) % BULK_TOPICS.length];
+  const slug = place.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + code;
+  return { code, place, slug, label: place + " " + code };
+}
+
+function bulkImageCase(index) {
+  const topic = bulkTopic(index);
+  return independent(imageVariant({
+    id: "image-missing-alt-bulk-" + topic.slug,
+    title: topic.label + " image",
+    heading: topic.label + " image",
+    description: "The latest update explains what visitors can expect at the " + topic.place.toLowerCase() + ".",
+    file: "bulk-image-" + topic.slug + ".jpg",
+    goodAlt: "Photograph of the " + topic.place.toLowerCase() + " visitor area",
+    badAlt: null,
+    task: "Understand what the " + topic.place.toLowerCase() + " visitor area looks like.",
+  }));
+}
+
+function bulkLinkCase(index) {
+  const topic = bulkTopic(index);
+  const vague = ["Details", "More", "Here", "Go", "Info", "This"][index % 6];
+  return independent(linkVariant({
+    id: "link-vague-bulk-" + topic.slug,
+    title: topic.label + " links",
+    heading: topic.label + " links",
+    context: "Read the latest information about the " + topic.place.toLowerCase() + ".",
+    vague,
+    descriptive: "View the " + topic.place.toLowerCase() + " visitor information",
+    task: "Open the " + topic.place.toLowerCase() + " visitor information.",
+  }));
+}
+
+function bulkHeadingCase(index) {
+  const topic = bulkTopic(index);
+  const vague = ["Overview", "Details", "Stuff", "Things", "Updates", "More"][index % 6];
+  return independent(vagueHeadingVariant({
+    id: "heading-vague-bulk-" + topic.slug,
+    title: topic.label + " guide",
+    heading: topic.label + " guide",
+    vague,
+    descriptive: "Visitor guidance for the " + topic.place.toLowerCase(),
+    task: "Find the visitor guidance for the " + topic.place.toLowerCase() + ".",
+  }));
+}
+
+function bulkLandmarkCase(index) {
+  const topic = bulkTopic(index);
+  const label = topic.place + " information";
+  return independent(landmarkVariant({
+    id: "landmark-vague-bulk-" + topic.slug,
+    title: topic.label + " services",
+    heading: topic.label + " services",
+    label,
+    text: "Opening information for the " + topic.place.toLowerCase() + " is listed here.",
+    task: "Jump to the " + topic.place.toLowerCase() + " information.",
+  }));
+}
+
+function bulkTableCase(index) {
+  const topic = bulkTopic(index);
+  return independent(tableVariant({
+    id: "table-bulk-" + topic.slug,
+    title: topic.label + " schedule",
+    heading: topic.label + " schedule",
+    destination: topic.place,
+    task: "Compare the departure time and platform for " + topic.place + ".",
+  }));
+}
+
+function bulkFieldCase(index) {
+  const topic = bulkTopic(index);
+  const name = "field-" + topic.slug;
+  return independent(unlabelledFieldVariant({
+    id: "form-unlabelled-bulk-" + topic.slug,
+    title: topic.label + " form",
+    heading: topic.label + " form",
+    label: topic.place + " reference",
+    name,
+    task: "Enter the " + topic.place.toLowerCase() + " reference.",
+  }));
+}
+
+function bulkCustomControlCase(index) {
+  const topic = bulkTopic(index);
+  const label = "Open " + topic.place.toLowerCase() + " details";
+  return independent(customControlVariant({
+    id: "custom-control-bulk-" + topic.slug,
+    title: topic.label + " controls",
+    heading: topic.label + " controls",
+    label,
+    task: "Open the " + topic.place.toLowerCase() + " details.",
+  }));
+}
+
+function bulkDisclosureCase(index) {
+  const topic = bulkTopic(index);
+  const control = topic.place + " advice";
+  return independent(disclosureVariant({
+    id: "disclosure-state-silent-bulk-" + topic.slug,
+    title: topic.label + " advice",
+    heading: topic.label + " advice",
+    control,
+    content: "Visitors should follow the posted advice at the " + topic.place.toLowerCase() + ".",
+    task: "Open the " + topic.place.toLowerCase() + " advice.",
+  }));
+}
+
+function bulkErrorCase(index) {
+  const topic = bulkTopic(index);
+  const field = topic.place + " contact";
+  const submit = "Submit " + topic.place.toLowerCase() + " form";
+  return independent(errorVariant({
+    id: "form-error-silent-bulk-" + topic.slug,
+    title: topic.label + " booking",
+    heading: topic.label + " booking",
+    field,
+    submit,
+    message: "Enter the " + topic.place.toLowerCase() + " contact before submitting.",
+    task: "Submit the " + topic.place.toLowerCase() + " form without a contact.",
+  }));
+}
+
+function bulkStatusCase(index) {
+  const topic = bulkTopic(index);
+  const control = "Show " + topic.place.toLowerCase() + " results";
+  return independent(statusVariant({
+    id: "filter-status-silent-bulk-" + topic.slug,
+    title: topic.label + " results",
+    heading: topic.label + " results",
+    control,
+    task: "Show the " + topic.place.toLowerCase() + " results and notice the count.",
+  }));
+}
+
+const bulkCases = [
+  ...Array.from({ length: 77 }, (_, index) => bulkImageCase(index + 1)),
+  ...Array.from({ length: 78 }, (_, index) => bulkLinkCase(index + 1)),
+  ...Array.from({ length: 81 }, (_, index) => bulkHeadingCase(index + 1)),
+  ...Array.from({ length: 38 }, (_, index) => bulkLandmarkCase(index + 1)),
+  ...Array.from({ length: 38 }, (_, index) => bulkTableCase(index + 1)),
+  ...Array.from({ length: 79 }, (_, index) => bulkFieldCase(index + 1)),
+  ...Array.from({ length: 37 }, (_, index) => bulkCustomControlCase(index + 1)),
+  ...Array.from({ length: 37 }, (_, index) => bulkDisclosureCase(index + 1)),
+  ...Array.from({ length: 81 }, (_, index) => bulkErrorCase(index + 1)),
+  ...Array.from({ length: 81 }, (_, index) => bulkStatusCase(index + 1)),
+];
+
+cases.push(...bulkCases);
+
+// Follow-up contrasts are chosen from the held-out error report. The first pass had enough
+// volume to expose the problem, but its broad 1.3.1 head over-weighted the word "table" and
+// its 3.3.2 head saw correctly named controls as suspicious. These are fresh page families,
+// so they remain independent from the original split groups.
+const TARGETED_CASES = [
+  ...[
+    ["table-followup-clinic", "Clinic appointments", "Clinic appointments", "Appointments for Monday", ["Patient", "Time", "Room"], ["Morgan", "09:00", "2"], "Compare Morgan's appointment time and room."],
+    ["table-followup-garden", "Garden tasks", "Garden tasks", "Tasks for volunteers", ["Task", "Start", "Lead"], ["Seed beds", "08:30", "Priya"], "Find who leads seed beds and when it starts."],
+    ["table-followup-market", "Market stalls", "Market stalls", "Saturday stall plan", ["Trader", "Stall", "Produce"], ["Amina", "14", "Apples"], "Find Amina's stall and produce."],
+    ["table-followup-library", "Library returns", "Library returns", "Returns desk rota", ["Day", "Desk", "Staff"], ["Tuesday", "North", "Lee"], "Find the Tuesday returns desk and staff member."],
+    ["table-followup-ferry", "Ferry fares", "Ferry fares", "Fares by passenger type", ["Passenger", "Single", "Return"], ["Adult", "8 pounds", "14 pounds"], "Compare the adult single and return fares."],
+    ["table-followup-theatre", "Theatre seating", "Theatre seating", "Seats for the evening show", ["Section", "Rows", "Access"], ["Balcony", "A to D", "Lift"], "Find the accessible route to the balcony."],
+    ["table-followup-weather", "Weather readings", "Weather readings", "Readings at noon", ["Station", "Temperature", "Wind"], ["Harbour", "18 degrees", "West"], "Find the harbour temperature and wind."],
+    ["table-followup-recycling", "Recycling days", "Recycling days", "Collection schedule", ["Material", "Day", "Bin"], ["Glass", "Friday", "Blue"], "Find the glass collection day and bin."],
+    ["table-followup-sports", "Sports fixtures", "Sports fixtures", "Fixtures this weekend", ["Team", "Opponent", "Pitch"], ["Rovers", "United", "Three"], "Find the Rovers pitch and opponent."],
+    ["table-followup-archive", "Archive boxes", "Archive boxes", "Boxes awaiting review", ["Box", "Date", "Reviewer"], ["A12", "June", "Noor"], "Find who reviews box A12."],
+    ["table-followup-bus", "Bus fares", "Bus fares", "Fares from the station", ["Destination", "Adult", "Child"], ["Riverside", "3 pounds", "1 pound"], "Compare the Riverside adult and child fares."],
+    ["table-followup-courses", "Course timetable", "Course timetable", "Evening classes", ["Course", "Day", "Room"], ["Drawing", "Thursday", "Studio"], "Find the drawing class day and room."],
+  ].map(([id, title, heading, caption, headers, row, task]) => variedTableVariant({ id, title, heading, caption, headers, row, task })),
+  ...[
+    ["landmark-followup-health", "Health centre", "Health centre", "Appointments", "Appointments are listed by clinic.", "Jump to the appointments information."],
+    ["landmark-followup-travel", "Travel office", "Travel office", "Accessible travel", "Step-free routes leave from the east entrance.", "Jump to accessible travel information."],
+    ["landmark-followup-museum", "Museum guide", "Museum guide", "Current exhibition", "The current exhibition opens at ten.", "Jump to the current exhibition."],
+    ["landmark-followup-housing", "Housing advice", "Housing advice", "Repairs", "Emergency repairs can be reported at any time.", "Jump to repairs information."],
+    ["landmark-followup-school", "School visits", "School visits", "Group bookings", "Group bookings need two weeks' notice.", "Jump to group bookings."],
+    ["landmark-followup-water", "Water safety", "Water safety", "River conditions", "The river is fast after heavy rain.", "Jump to river conditions."],
+    ["landmark-followup-park", "Park information", "Park information", "Play area", "The play area is open until dusk.", "Jump to play area information."],
+    ["landmark-followup-energy", "Energy advice", "Energy advice", "Home energy", "Advice is available for insulation and heating.", "Jump to home energy advice."],
+  ].map(([id, title, heading, label, text, task]) => independent(landmarkVariant({ id, title, heading, label, text, task }))),
+  ...[
+    ["field-followup-date", "Garden booking", "Garden booking", "Visit date", "visit-date", "input", ({ labelled, name }) => `<input type="date" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the date for the garden visit."],
+    ["field-followup-number", "Sports booking", "Sports booking", "Number of visitors", "visitor-count", "input", ({ labelled, name }) => `<input type="number" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the number of visitors."],
+    ["field-followup-email", "Archive contact", "Archive contact", "Contact email", "contact-email", "input", ({ labelled, name }) => `<input type="email" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the archive contact email."],
+    ["field-followup-select", "Ferry booking", "Ferry booking", "Passenger type", "passenger-type", "select", ({ labelled, name }) => `<select ${labelled ? `id="${name}"` : ""} name="${name}"><option>Adult</option><option>Child</option></select>`, "Choose the passenger type."],
+    ["field-followup-select-route", "Travel booking", "Travel booking", "Route preference", "route", "select", ({ labelled, name }) => `<select ${labelled ? `id="${name}"` : ""} name="${name}"><option>Step-free route</option><option>Fastest route</option></select>`, "Choose a route preference."],
+    ["field-followup-textarea", "Volunteer details", "Volunteer details", "Relevant experience", "experience", "textarea", ({ labelled, name }) => `<textarea ${labelled ? `id="${name}"` : ""} name="${name}"></textarea>`, "Describe the relevant experience."],
+    ["field-followup-textarea-notes", "Clinic booking", "Clinic booking", "Appointment notes", "notes", "textarea", ({ labelled, name }) => `<textarea ${labelled ? `id="${name}"` : ""} name="${name}"></textarea>`, "Enter appointment notes."],
+    ["field-followup-time", "Class booking", "Class booking", "Preferred start time", "start-time", "input", ({ labelled, name }) => `<input type="time" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Choose the preferred start time."],
+    ["field-followup-tel", "Support request", "Support request", "Telephone number", "telephone", "input", ({ labelled, name }) => `<input type="tel" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the telephone number."],
+    ["field-followup-search", "Library search", "Library search", "Search phrase", "search-phrase", "input", ({ labelled, name }) => `<input type="search" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter a library search phrase."],
+    ["field-followup-text", "Market pitch", "Market pitch", "Trader name", "trader-name", "input", ({ labelled, name }) => `<input type="text" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the trader name."],
+    ["field-followup-text-reference", "Housing repair", "Housing repair", "Repair reference", "repair-reference", "input", ({ labelled, name }) => `<input type="text" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the repair reference."],
+    ["field-followup-date-departure", "Ferry departure", "Ferry departure", "Departure date", "departure-date", "input", ({ labelled, name }) => `<input type="date" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the departure date."],
+    ["field-followup-select-language", "Museum tour", "Museum tour", "Tour language", "tour-language", "select", ({ labelled, name }) => `<select ${labelled ? `id="${name}"` : ""} name="${name}"><option>English</option><option>Welsh</option></select>`, "Choose the tour language."],
+    ["field-followup-textarea-message", "Contact office", "Contact office", "Message", "message", "textarea", ({ labelled, name }) => `<textarea ${labelled ? `id="${name}"` : ""} name="${name}"></textarea>`, "Write a message to the office."],
+    ["field-followup-number-group", "Workshop booking", "Workshop booking", "Group size", "group-size", "input", ({ labelled, name }) => `<input type="number" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the workshop group size."],
+  ].map(([id, title, heading, label, name, selector, control, task]) => labelledControlVariant({ id, title, heading, label, name, selector, control, task })),
+];
+
+cases.push(...TARGETED_CASES);
 
 export const CASES = Object.freeze(cases);
 
@@ -730,6 +1165,7 @@ function stateChangeIsSilent(capture, signal) {
 function formActivationIsSilent(capture, signal) {
   const changes = capture.interaction?.formChanges || [];
   const target = changes.filter(({ control }) => control.toLowerCase().includes(signal.control.toLowerCase()));
+  if (signal.expected) return target.length === 0 || target.every(({ after }) => !after.includes(signal.expected));
   return target.length === 0 || target.every(({ after }) => after.trim() === "");
 }
 
