@@ -12,9 +12,13 @@ in the bad NVDA capture and absent from the good capture. This prevents a
 known HTML mutation from being treated as evidence when NVDA did not actually
 announce it.
 
-The current matrix contains 800 pairs across image, link, heading, landmark,
+The current matrix contains 1,061 pairs across image, link, heading, landmark,
 form, control, dynamic-feedback, and table families: 45 seed pairs, 128
-initial independent variants, and 627 bulk variants.
+initial independent variants, 627 bulk variants, 36 targeted follow-ups, and
+225 targeted calibration variants. The exporter deliberately excludes the
+observable `1.3.1:missing-landmark` pairs from the local scorer: the expected
+landmark is a structural expectation, not a reliably inferable screen-reader
+announcement. Those cases remain available to the signal/static layer.
 Family metadata is preserved in the manifest and provenance so train/test
 splits can keep near-duplicate mutations together.
 
@@ -67,7 +71,7 @@ DATASET_BASE_URL still wins if you set it, but a `localhost` value is rewritten
 to the host's address on the VM's subnet, because `localhost` inside the guest
 is the guest.
 
-A full run is ~1600 NVDA captures over several hours, so it publishes its state instead
+A full matrix run is ~2122 NVDA captures, so it publishes its state instead
 of expecting you to watch a log:
 
 ~~~sh
@@ -76,7 +80,7 @@ npm run training:status
 
 ~~~
 run:      started 2026-07-26T08:20:19.822Z
-progress: 800/800 cases  (627 captured, 0 failed, 173 skipped)
+progress: 836/836 cases  (106 captured, 0 failed, 730 skipped)
 worker:   http://192.168.64.4:8765
 pages:    http://192.168.64.1:5050
 current:  finished
@@ -149,15 +153,31 @@ written. Without the second, a stray server holding port 5050 produced
 `Capture complete: 3/3 cases` while every transcript read `Error code: 404` --
 mislabelled training data that looks entirely plausible downstream.
 
-The capture step is serialized because NVDA is a single shared resource. It
-writes raw captures under runs/screenreader-dataset/captures/. A failed case
-does not discard completed captures.
+Each worker serializes its own NVDA resource; the local pool runs one case per
+worker concurrently. The capture step writes raw captures under
+runs/screenreader-dataset/captures/. A failed case does not discard completed
+captures.
 
 Finally export the model dataset:
 
 ~~~sh
 npm run training:export
 ~~~
+
+Calibration failures are written alongside the normal held-out error report;
+the report includes the exact NVDA-only evidence for every grouped out-of-fold
+false positive and false negative. The new acceptance set is separate from the
+training manifest and is evaluated only after capture:
+
+~~~sh
+npm run training:generate-acceptance
+npm run training:preflight-acceptance
+npm run training:evaluate-acceptance
+~~~
+
+The acceptance evaluator requires disjoint case families, minimum per-criterion
+coverage, zero acceptance false positives and false negatives, and repeated
+capture stability. It never fits the model or thresholds.
 
 The JSONL output is
 runs/screenreader-dataset/screenreader-evidence.jsonl. Each row has an input

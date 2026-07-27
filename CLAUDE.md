@@ -66,8 +66,19 @@ which reads like a broken install and is not one. Run captures through a schedul
 
 ```bash
 npm run doctor                  # can I run right now? every check names its own fix
-npm run doctor -- --json        # same, machine-readable
+npm run doctor -- --json        # same, machine-readable, with a next_command field
 ```
+
+**Read `next_command` and do that.** `doctor` exits 0 when a run can proceed, which is not the
+same as everything already running:
+
+> **Stopped worker VMs are the correct resting state.** A run starts what it needs and releases
+> it afterwards. `all stopped` is a READY state, not a fault. Do not go looking for another
+> worker, and do not open the UTM GUI — just run the capture.
+
+The only worker states that are actually broken are: a VM **running but not answering**
+`/health` (restart `a11ysrv` on that guest), and **no VM registered at all** (build or clone
+one). If `doctor` says READY, the environment is fine.
 
 It answers VM state, worker health, page server, judge backend and whether a previous run
 was left mid-flight — the last one being the difference between `capture` and

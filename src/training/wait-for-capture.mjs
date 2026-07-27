@@ -19,7 +19,7 @@ import { watch } from "node:fs";
 import { resolve } from "node:path";
 import { isStale, readProgress, tally } from "./capture-progress.mjs";
 
-const ROOT = resolve(process.cwd(), "runs/screenreader-dataset");
+const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
 const JSON_OUT = process.argv.includes("--json");
 
 // A backstop, not the mechanism. fs.watch is the thing that wakes us; this only guards

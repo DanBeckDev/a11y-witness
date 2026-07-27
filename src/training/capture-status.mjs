@@ -14,7 +14,7 @@
 import { resolve } from "node:path";
 import { inFlight, isStale, readProgress, stalenessMs, tally } from "./capture-progress.mjs";
 
-const ROOT = resolve(process.cwd(), "runs/screenreader-dataset");
+const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
 const HEALTH_TIMEOUT_MS = 5_000;
 const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;

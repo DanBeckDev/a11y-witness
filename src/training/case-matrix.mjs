@@ -38,6 +38,21 @@ function page({ title, heading, body, script = "", landmark = true }) {
     + "</body></html>";
 }
 
+function defaultSubtype({ id, criterion, badSignal }) {
+  if (criterion === "1.1.1") {
+    if (id.includes("missing")) return "missing-alt";
+    if (id.includes("generic")) return "generic-alt";
+    if (id.includes("filename")) return "filename-alt";
+  }
+  if (criterion === "1.3.1") {
+    if (badSignal.type === "structure-empty") return "missing-landmark";
+    if (badSignal.type === "missing-heading") return "fake-heading";
+    if (badSignal.type === "table-unassociated") return "unassociated-table";
+  }
+  if (criterion === "3.3.2" && id.includes("placeholder")) return "placeholder-only";
+  return badSignal.type;
+}
+
 function pair({
   id,
   criterion,
@@ -49,8 +64,21 @@ function pair({
   bad,
   probeForms = false,
   family = id,
+  subtype = null,
 }) {
-  return { id, family, criterion, task, source, mutation, badSignal, probeForms, good, bad };
+  return {
+    id,
+    family,
+    criterion,
+    subtype: subtype || defaultSubtype({ id, criterion, badSignal }),
+    task,
+    source,
+    mutation,
+    badSignal,
+    probeForms,
+    good,
+    bad,
+  };
 }
 
 // What NVDA announces for an image it cannot name, across versions: older builds emit the
@@ -433,6 +461,27 @@ function vagueHeadingVariant({ id, title, heading, vague, descriptive, task }) {
   });
 }
 
+function fakeHeadingVariant({ id, title, heading, label, task }) {
+  return pair({
+    id,
+    criterion: "1.3.1",
+    task,
+    source: "Practical Web Accessibility, chapter 4; Web Accessibility Cookbook, chapter 22",
+    mutation: "Visible section text is styled as a heading but has no heading role.",
+    badSignal: { type: "missing-heading", text: label },
+    good: page({
+      title,
+      heading,
+      body: "<h2>" + label + "</h2><p>The section contains useful guidance.</p>",
+    }),
+    bad: page({
+      title,
+      heading,
+      body: "<div class=\"fake-heading\">" + label + "</div><p>The section contains useful guidance.</p>",
+    }),
+  });
+}
+
 function landmarkVariant({ id, title, heading, label, text, task }) {
   return pair({
     id,
@@ -475,6 +524,30 @@ function unlabelledFieldVariant({ id, title, heading, label, name, task }) {
       title,
       heading,
       body: "<form><span>" + label + "</span><input name=\"" + name + "\"></form>",
+      script: "document.querySelector('input').focus();",
+    }),
+    probeForms: true,
+  });
+}
+
+function placeholderOnlyVariant({ id, title, heading, label, name, task }) {
+  return pair({
+    id,
+    criterion: "3.3.2",
+    task,
+    source: "Practical Web Accessibility, chapter 6",
+    mutation: "The field relies on a placeholder instead of a persistent label.",
+    badSignal: { type: "regex", pattern: "(?:edit text|edit)[, ]*(?:\\ufffc)?\\s*$", flags: "im" },
+    good: page({
+      title,
+      heading,
+      body: "<form><label for=\"" + name + "\">" + label + "</label><input id=\"" + name + "\" name=\"" + name + "\" placeholder=\"Example value\"></form>",
+      script: "document.querySelector('input').focus();",
+    }),
+    bad: page({
+      title,
+      heading,
+      body: "<form><input name=\"" + name + "\" placeholder=\"Example value\"></form>",
       script: "document.querySelector('input').focus();",
     }),
     probeForms: true,
@@ -1059,26 +1132,153 @@ const TARGETED_CASES = [
     ["landmark-followup-energy", "Energy advice", "Energy advice", "Home energy", "Advice is available for insulation and heating.", "Jump to home energy advice."],
   ].map(([id, title, heading, label, text, task]) => independent(landmarkVariant({ id, title, heading, label, text, task }))),
   ...[
-    ["field-followup-date", "Garden booking", "Garden booking", "Visit date", "visit-date", "input", ({ labelled, name }) => `<input type="date" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the date for the garden visit."],
-    ["field-followup-number", "Sports booking", "Sports booking", "Number of visitors", "visitor-count", "input", ({ labelled, name }) => `<input type="number" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the number of visitors."],
+    // Native date/number/time inputs are announced by NVDA as composite spin-button and
+    // picker widgets. Their labelled and unlabelled forms can collapse to the same output,
+    // which makes the unnamed-field signal blind. Keep the input vocabulary varied while
+    // using stable text-entry roles for this contrast.
+    ["field-followup-date", "Garden booking", "Garden booking", "Visit date", "visit-date", "input", ({ labelled, name }) => `<input type="text" inputmode="numeric" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the date for the garden visit."],
+    ["field-followup-number", "Sports booking", "Sports booking", "Number of visitors", "visitor-count", "input", ({ labelled, name }) => `<input type="text" inputmode="numeric" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the number of visitors."],
     ["field-followup-email", "Archive contact", "Archive contact", "Contact email", "contact-email", "input", ({ labelled, name }) => `<input type="email" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the archive contact email."],
     ["field-followup-select", "Ferry booking", "Ferry booking", "Passenger type", "passenger-type", "select", ({ labelled, name }) => `<select ${labelled ? `id="${name}"` : ""} name="${name}"><option>Adult</option><option>Child</option></select>`, "Choose the passenger type."],
     ["field-followup-select-route", "Travel booking", "Travel booking", "Route preference", "route", "select", ({ labelled, name }) => `<select ${labelled ? `id="${name}"` : ""} name="${name}"><option>Step-free route</option><option>Fastest route</option></select>`, "Choose a route preference."],
     ["field-followup-textarea", "Volunteer details", "Volunteer details", "Relevant experience", "experience", "textarea", ({ labelled, name }) => `<textarea ${labelled ? `id="${name}"` : ""} name="${name}"></textarea>`, "Describe the relevant experience."],
     ["field-followup-textarea-notes", "Clinic booking", "Clinic booking", "Appointment notes", "notes", "textarea", ({ labelled, name }) => `<textarea ${labelled ? `id="${name}"` : ""} name="${name}"></textarea>`, "Enter appointment notes."],
-    ["field-followup-time", "Class booking", "Class booking", "Preferred start time", "start-time", "input", ({ labelled, name }) => `<input type="time" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Choose the preferred start time."],
+    ["field-followup-time", "Class booking", "Class booking", "Preferred start time", "start-time", "input", ({ labelled, name }) => `<input type="text" inputmode="numeric" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Choose the preferred start time."],
     ["field-followup-tel", "Support request", "Support request", "Telephone number", "telephone", "input", ({ labelled, name }) => `<input type="tel" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the telephone number."],
     ["field-followup-search", "Library search", "Library search", "Search phrase", "search-phrase", "input", ({ labelled, name }) => `<input type="search" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter a library search phrase."],
     ["field-followup-text", "Market pitch", "Market pitch", "Trader name", "trader-name", "input", ({ labelled, name }) => `<input type="text" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the trader name."],
     ["field-followup-text-reference", "Housing repair", "Housing repair", "Repair reference", "repair-reference", "input", ({ labelled, name }) => `<input type="text" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the repair reference."],
-    ["field-followup-date-departure", "Ferry departure", "Ferry departure", "Departure date", "departure-date", "input", ({ labelled, name }) => `<input type="date" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the departure date."],
+    ["field-followup-date-departure", "Ferry departure", "Ferry departure", "Departure date", "departure-date", "input", ({ labelled, name }) => `<input type="text" inputmode="numeric" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the departure date."],
     ["field-followup-select-language", "Museum tour", "Museum tour", "Tour language", "tour-language", "select", ({ labelled, name }) => `<select ${labelled ? `id="${name}"` : ""} name="${name}"><option>English</option><option>Welsh</option></select>`, "Choose the tour language."],
     ["field-followup-textarea-message", "Contact office", "Contact office", "Message", "message", "textarea", ({ labelled, name }) => `<textarea ${labelled ? `id="${name}"` : ""} name="${name}"></textarea>`, "Write a message to the office."],
-    ["field-followup-number-group", "Workshop booking", "Workshop booking", "Group size", "group-size", "input", ({ labelled, name }) => `<input type="number" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the workshop group size."],
+    ["field-followup-number-group", "Workshop booking", "Workshop booking", "Group size", "group-size", "input", ({ labelled, name }) => `<input type="text" inputmode="numeric" ${labelled ? `id="${name}"` : ""} name="${name}">`, "Enter the workshop group size."],
   ].map(([id, title, heading, label, name, selector, control, task]) => labelledControlVariant({ id, title, heading, label, name, selector, control, task })),
 ];
 
 cases.push(...TARGETED_CASES);
+
+const CALIBRATION_TOPICS = [
+  "aquarium", "meadow", "harbour", "museum", "station", "playground", "civic-hall", "wetland", "gallery", "food-co-op",
+  "health-centre", "town-square", "bus-depot", "railway", "ferry-terminal", "concert-hall", "learning-centre", "repair-cafe", "energy-park", "river-walk",
+  "hill-farm", "marina", "stadium", "greenhouse", "bookshop",
+];
+
+const CALIBRATION_CASES = [
+  ...CALIBRATION_TOPICS.map((topic, index) => {
+    const code = String(index + 1).padStart(3, "0");
+    const place = topic.replaceAll("-", " ");
+    const name = "calibration-" + topic + "-" + code;
+    return independent(imageVariant({
+      id: "image-generic-" + name,
+      title: place + " image",
+      heading: place + " image",
+      description: "The latest update explains what visitors can expect at the " + place + ".",
+      file: name + ".jpg",
+      goodAlt: "Photograph of the " + place + " visitor area",
+      badAlt: ["image", "photo", "picture", "graphic"][index % 4],
+      task: "Understand what the " + place + " visitor area looks like.",
+    }));
+  }),
+  ...CALIBRATION_TOPICS.map((topic, index) => {
+    const code = String(index + 1).padStart(3, "0");
+    const place = topic.replaceAll("-", " ");
+    const name = "calibration-" + topic + "-" + code;
+    const badAlt = name + "-final.jpg";
+    return independent(imageVariant({
+      id: "image-filename-" + name,
+      title: place + " exhibit",
+      heading: place + " exhibit",
+      description: "The exhibit explains the history of the " + place + ".",
+      file: badAlt,
+      goodAlt: "Historical photograph of the " + place,
+      badAlt,
+      task: "Read the description of the " + place + " exhibit.",
+    }));
+  }),
+  ...CALIBRATION_TOPICS.map((topic, index) => {
+    const code = String(index + 1).padStart(3, "0");
+    const place = topic.replaceAll("-", " ");
+    return independent(fakeHeadingVariant({
+      id: "headings-fake-calibration-" + topic + "-" + code,
+      title: place + " guide",
+      heading: place + " guide",
+      label: "Visitor requirements",
+      task: "Find the visitor requirements for the " + place + ".",
+    }));
+  }),
+  ...CALIBRATION_TOPICS.map((topic, index) => {
+    const code = String(index + 1).padStart(3, "0");
+    const place = topic.replaceAll("-", " ");
+    return independent(placeholderOnlyVariant({
+      id: "form-placeholder-calibration-" + topic + "-" + code,
+      title: place + " booking",
+      heading: place + " booking",
+      label: "Booking reference",
+      name: "booking-reference-" + code,
+      task: "Enter the booking reference for the " + place + ".",
+    }));
+  }),
+  ...CALIBRATION_TOPICS.map((topic, index) => {
+    const code = String(index + 1).padStart(3, "0");
+    const place = topic.replaceAll("-", " ");
+    return independent(unnamedIconVariant({
+      id: "icon-button-calibration-" + topic + "-" + code,
+      title: place + " controls",
+      heading: place + " controls",
+      name: "Open " + place + " controls",
+      task: "Open the " + place + " controls.",
+    }));
+  }),
+  ...CALIBRATION_TOPICS.map((topic, index) => {
+    const code = String(index + 1).padStart(3, "0");
+    const place = topic.replaceAll("-", " ");
+    return independent(errorVariant({
+      id: "form-error-calibration-" + topic + "-" + code,
+      title: place + " request",
+      heading: place + " request",
+      field: "Reference number",
+      submit: "Submit " + place + " request",
+      message: "Enter the reference number before submitting.",
+      task: "Submit the " + place + " request without a reference number.",
+    }));
+  }),
+  ...CALIBRATION_TOPICS.map((topic, index) => {
+    const code = String(index + 1).padStart(3, "0");
+    const place = topic.replaceAll("-", " ");
+    return independent(statusVariant({
+      id: "filter-status-calibration-" + topic + "-" + code,
+      title: place + " catalogue",
+      heading: place + " catalogue",
+      control: "Show " + place + " items",
+      task: "Show " + place + " items and notice the result count.",
+    }));
+  }),
+  ...CALIBRATION_TOPICS.map((topic, index) => {
+    const code = String(index + 1).padStart(3, "0");
+    const place = topic.replaceAll("-", " ");
+    return independent(customControlVariant({
+      id: "custom-control-calibration-" + topic + "-" + code,
+      title: place + " controls",
+      heading: place + " controls",
+      label: "Open " + place + " details",
+      task: "Open the " + place + " details.",
+    }));
+  }),
+  ...CALIBRATION_TOPICS.map((topic, index) => {
+    const code = String(index + 1).padStart(3, "0");
+    const place = topic.replaceAll("-", " ");
+    return independent(disclosureVariant({
+      id: "disclosure-state-calibration-" + topic + "-" + code,
+      title: place + " advice",
+      heading: place + " advice",
+      control: place + " rules",
+      content: "Visitors should follow the published rules.",
+      task: "Open the " + place + " rules.",
+    }));
+  }),
+];
+
+cases.push(...CALIBRATION_CASES);
 
 export const CASES = Object.freeze(cases);
 
@@ -1179,10 +1379,17 @@ const ANNOUNCED_ERROR = /invalid|\berror\b/i;
 // deliberate re-read of durable field state -- persistent state over transient speech, which
 // is the lesson the NVDA correctness audit already drew (its Root 2).
 function validationErrorIsSilent(capture, signal) {
-  const submitted = (capture.interaction?.formChanges || [])
-    .some(({ control }) => control.toLowerCase().includes(signal.control.toLowerCase()));
+  const changes = capture.interaction?.formChanges || [];
+  const submitted = changes.some(({ control }) => control.toLowerCase().includes(signal.control.toLowerCase()));
   if (!submitted) return true; // the submit never happened, so nothing could be announced
-  return !(capture.interaction?.postSubmitFields || []).some((field) => ANNOUNCED_ERROR.test(field));
+  // NVDA versions place the durable invalid-field announcement in either the post-submit
+  // structural sweep or the activation change's `after` value. Both are screen-reader
+  // evidence; relying on only one made a correctly announced error look silent.
+  const announcedEvidence = [
+    ...(capture.interaction?.postSubmitFields || []),
+    ...changes.map(({ after }) => after),
+  ];
+  return !announcedEvidence.some((field) => ANNOUNCED_ERROR.test(field));
 }
 
 // A data cell in a properly-marked-up table is announced with its header

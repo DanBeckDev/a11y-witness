@@ -1,8 +1,10 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { CASES } from "./case-matrix.mjs";
+import { ACCEPTANCE_CASES } from "./acceptance-matrix.mjs";
 
-const ROOT = resolve(process.cwd(), "runs/screenreader-dataset");
+const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
+const EXPECTED_CASES = process.env.DATASET_KIND === "acceptance" ? ACCEPTANCE_CASES : CASES;
 const MANIFEST_PATH = resolve(ROOT, "manifest.json");
 const REPORT_PATH = resolve(ROOT, "preflight.json");
 const REQUIRED_HTML = "<!doctype html>";
@@ -57,7 +59,7 @@ function countBy(values) {
 }
 
 function buildReport(manifest) {
-  const results = CASES.map((testCase) => ({
+  const results = EXPECTED_CASES.map((testCase) => ({
     id: testCase.id,
     errors: assertCase(testCase, manifest.cases.find(({ id }) => id === testCase.id)),
   }));
@@ -67,11 +69,11 @@ function buildReport(manifest) {
     generatedAt: new Date().toISOString(),
     status: errors.length ? "failed" : "ready-for-NVDA-capture",
     note: "This report validates page instruments and metadata only; it is not screen-reader evidence.",
-    cases: CASES.length,
-    families: countBy(CASES.map(({ family }) => family)),
-    criteria: countBy(CASES.map(({ criterion }) => criterion)),
-    signalTypes: countBy(CASES.map(({ badSignal }) => badSignal.type)),
-    probes: countBy(CASES.map(({ probeForms }) => (probeForms ? "interaction-probe" : "read-through-only"))),
+    cases: EXPECTED_CASES.length,
+    families: countBy(EXPECTED_CASES.map(({ family }) => family)),
+    criteria: countBy(EXPECTED_CASES.map(({ criterion }) => criterion)),
+    signalTypes: countBy(EXPECTED_CASES.map(({ badSignal }) => badSignal.type)),
+    probes: countBy(EXPECTED_CASES.map(({ probeForms }) => (probeForms ? "interaction-probe" : "read-through-only"))),
     errors,
   };
 }
@@ -81,7 +83,7 @@ function main() {
     throw new Error("Missing " + MANIFEST_PATH + ". Run npm run training:generate first.");
   }
   const manifest = readJson(MANIFEST_PATH);
-  if (!Array.isArray(manifest.cases) || manifest.cases.length !== CASES.length) {
+  if (!Array.isArray(manifest.cases) || manifest.cases.length !== EXPECTED_CASES.length) {
     throw new Error("Manifest case count does not match the source case matrix.");
   }
   const report = buildReport(manifest);

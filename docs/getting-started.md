@@ -123,6 +123,10 @@ for a working example to copy.
 npm run doctor
 ```
 
+**A stopped worker is not a problem.** Runs start what they need and stop it again, so
+`doctor` reporting `3 worker(s), all stopped` is a READY state. Follow its `next` line rather
+than trying to get everything running first.
+
 One command for the whole prerequisite chain — VM, worker, page server, judge backend, and
 any run left mid-flight. Anything failing prints the exact command that fixes it. Run this
 before anything else when something looks wrong; it is faster than reasoning from symptoms,

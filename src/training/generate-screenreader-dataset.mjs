@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { CASES } from "./case-matrix.mjs";
 
-const ROOT = resolve(process.cwd(), "runs/screenreader-dataset");
+const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
 const PAGE_ROOT = resolve(ROOT, "pages");
 
 function writeCasePages(testCase) {
@@ -25,6 +25,7 @@ function buildManifest() {
       id: testCase.id,
       family: testCase.family,
       criterion: testCase.criterion,
+      subtype: testCase.subtype,
       task: testCase.task,
       probeForms: testCase.probeForms,
       source: testCase.source,
