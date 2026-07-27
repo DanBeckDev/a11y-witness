@@ -238,7 +238,18 @@ if ($elevated) {
       Set-ItemProperty $contentDelivery -Name $n -Value 0 -Type DWord -ErrorAction SilentlyContinue
     }
   }
-  OK 'notifications, OneDrive prompts and suggestion popups disabled'
+  # The policy stops OneDrive starting again; it does not remove the per-user Run entry that
+  # relaunches it at logon, and it does not dismiss a toast already on screen. Observed: the
+  # policy applied cleanly and the "Turn On Windows Backup" prompt was still sitting over the
+  # desktop. Remove it properly.
+  Get-Process OneDrive -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  foreach ($n in @('OneDrive', 'OneDriveSetup')) {
+    Remove-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name $n -ErrorAction SilentlyContinue
+  }
+  $odSetup = "$env:SystemRoot\SysWOW64\OneDriveSetup.exe"
+  if (-not (Test-Path $odSetup)) { $odSetup = "$env:SystemRoot\System32\OneDriveSetup.exe" }
+  if (Test-Path $odSetup) { Start-Process $odSetup -ArgumentList '/uninstall' -Wait -ErrorAction SilentlyContinue }
+  OK 'notifications, suggestion popups and OneDrive removed'
 
   $auKey = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
   New-Item -Path $auKey -Force | Out-Null
