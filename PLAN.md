@@ -300,10 +300,33 @@ Measured: 50s per capture, of which only 13s is work (`readThrough` + `structura
 
   So four workers is ~16 GB of a 36 GB host, not the ~24 GB I projected.
 
-- [ ] **A third and fourth worker**, if 3.9h is still too long. Untested past two. Memory is
-  no longer the constraint at 4 GB each (~1.5 GB resident apiece in practice); 14 cores and
-  4 vCPU per VM is what will bite first, so the next thing to test is fewer vCPUs rather than
-  less RAM.
+- [x] **2 vCPU per worker: no cost at all.** Same 10 cases on a two-worker pool, 4 vCPU each
+  then 2 vCPU each: **165s vs 166s**, evidence identical. A capture is not CPU-bound any more
+  than it is memory-bound -- it spends its time waiting on NVDA round trips. 2 vCPU is now the
+  default, which halves the core budget per worker.
+
+- [x] **Third worker: 2.36x, and the returns have started to bend.** Same 10 cases:
+
+  | workers | wall | speedup | per-worker per-case | efficiency |
+  |---|---|---|---|---|
+  | 1 | 318s | 1.00x | 31.8s | 100% |
+  | 2 | 165s | 1.93x | 33.0s | 96% |
+  | 3 | 135s | 2.36x | 40.5s | 79% |
+
+  Evidence identical at every step. The third worker costs 23% per-case efficiency where the
+  second cost 4%, and the queue distributed 5/4/4 cases -- with only 10 cases the tail is
+  lumpy, so some of the loss is granularity rather than contention.
+
+  **836-case run: 7.4h -> 3.8h -> 3.1h.**
+
+  Host cost of three: **69% of 1400% CPU and 2.3 GB of 36 GB**. Neither is the limit, which
+  says the bottleneck is inside the guest -- NVDA and Edge serialising per capture -- not the
+  host. That is why per-case time rises while the host stays idle, and why a fourth worker is
+  worth trying but unlikely to be linear.
+
+- [ ] **A fourth worker.** Cheap to test now (clone-worker.sh, ~4 GB, 2 vCPU). Expect ~2.7x
+  rather than 3.2x on this trend. Worth it only if 3.1h is still too slow, since each worker
+  adds a Windows guest to keep patched and provisioned.
 
 - [ ] **Then** consider a second worker VM (~5 GB, host has headroom). Needs a dispatcher
   across a pool, which nothing implements yet. Deliberately after the above: parallelism
