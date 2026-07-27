@@ -285,8 +285,22 @@ case "$CMD" in
     body="$(health "$UUID" || true)"
     healthy=false; [ -n "$body" ] && healthy=true
     busy=false; if echo "$body" | grep -q '"busy":true'; then busy=true; fi
-    printf '{"uuid":"%s","name":"%s","state":"%s","ip":"%s","port":%s,"healthy":%s,"busy":%s}\n' \
-      "$UUID" "$VM_NAME" "$(vm_state "$UUID")" "${ip:-}" "$PORT" "$healthy" "$busy"
+    state="$(vm_state "$UUID")"
+
+    # `means` carries no information the other fields lack; it exists because they were being
+    # read wrong. `healthy:false` says "not answering right now", but three of those in a row
+    # looks like a broken pool -- and since a run starts its own workers, stopped is the normal
+    # resting state. An agent read exactly this output, concluded the environment was down, and
+    # went hunting for a worker that had been decommissioned. So the JSON now says what it means.
+    if [ "$healthy" = true ]; then
+      means="ready"; [ "$busy" = true ] && means="ready, busy with a capture"
+    elif [ "$state" = "started" ]; then
+      means="running but not answering /health -- this one IS a fault"
+    else
+      means="$state -- normal at rest; a run starts it and stops it again"
+    fi
+    printf '{"uuid":"%s","name":"%s","state":"%s","ip":"%s","port":%s,"healthy":%s,"busy":%s,"means":"%s"}\n' \
+      "$UUID" "$VM_NAME" "$state" "${ip:-}" "$PORT" "$healthy" "$busy" "$means"
     ;;
 
   pool-stop|pool-pause)
