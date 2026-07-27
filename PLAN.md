@@ -172,7 +172,22 @@ Current cost per capture is ~13-19s: `structural` 4.8s, the readiness gate 4.5s,
 `readThrough` 1.6-3.6s, the rest setup and teardown. Ideas below are ordered by expected
 value, each with the reason it is still open — so nobody re-derives the analysis.
 
+- [x] **Removed a redundant anchor: 15.8s -> 13.4s per capture.** Measuring before optimising
+  corrected my own claim that the time was mostly browser setup. On a typical page with NVDA
+  reused it was: structural 4.7s, documentReady 3.9s, afterStart 3.0s, windowsActivate 2.2s,
+  readThrough 1.6s. `anchorToTop` (Escape + Ctrl+Home + a settle) was running THREE times per
+  capture at ~2-3s each, and only two are needed. The one before the readiness gate was left
+  over from when the read-through followed immediately; the gate is position-independent and
+  the anchor after it re-establishes the state anyway. `documentReady` 3.9s -> 1.7s, wall
+  15.8s -> 13.4s, with fidelity byte-identical (29 phrases, 23 role words, 8 heading-levels
+  across 6 pages — the same numbers as before) and capture-check green on all 7 pages.
+
 - [ ] **Reuse one Edge window across captures instead of launching a new one each time.**
+  Re-costed after the above, and it is worth less than I first said: with `windowsActivate`
+  at 1.9s and `browserClosed` at 0.3s, removing the per-capture browser launch buys ~2s of
+  13.4s, not the majority. Still the right fix for the `viogpudo` crash, since window churn is
+  what stressed that driver, but the efficiency case alone no longer justifies the risk to the
+  `--app` isolation that keeps NVDA out of browser chrome.
   The biggest remaining win, and it is *two* wins: it removes the per-capture browser launch
   and foreground fight (a large slice of the remaining time), and it directly targets the
   crash. `viogpudo.sys` faulted in `dwm.exe` while we created and destroyed 90 windows in a
