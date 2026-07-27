@@ -22,9 +22,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { signalMatches } from "./case-matrix.mjs";
 
-const ROOT = resolve(process.cwd(), "runs/screenreader-dataset");
+const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
 const MANIFEST_PATH = resolve(ROOT, "manifest.json");
-const CAPTURE_ROOT = resolve(ROOT, "captures");
+const CAPTURE_ROOT = resolve(ROOT, process.env.DATASET_CAPTURE_ROOT || "captures");
 const ONLY = process.argv.find((a) => a.startsWith("--only="))?.slice("--only=".length);
 const EVIDENCE_LINES = 4;
 

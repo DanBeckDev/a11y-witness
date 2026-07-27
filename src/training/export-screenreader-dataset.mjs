@@ -6,19 +6,21 @@ import {
   signalMatches,
 } from "./case-matrix.mjs";
 
-const ROOT = resolve(process.cwd(), "runs/screenreader-dataset");
+const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
 const MANIFEST_PATH = resolve(ROOT, "manifest.json");
+const CAPTURE_ROOT = resolve(ROOT, process.env.DATASET_CAPTURE_ROOT || "captures");
 const DEFAULT_OUTPUT = resolve(ROOT, "screenreader-evidence.jsonl");
 const outputArg = process.argv.find((arg) => arg.startsWith("--out="));
 const OUTPUT_PATH = resolve(process.cwd(), outputArg?.slice("--out=".length) || DEFAULT_OUTPUT);
 const FORBIDDEN_INPUT_KEYS = ["url", "task", "html", "dom", "css", "axe", "diagnostics"];
+const MODEL_EXCLUDED_SUBTYPES = new Set(["1.3.1:missing-landmark"]);
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
 function capturePath(testCase, variant) {
-  return resolve(ROOT, "captures", testCase.id + "." + variant + ".json");
+  return resolve(CAPTURE_ROOT, testCase.id + "." + variant + ".json");
 }
 
 function readCapture(testCase, variant) {
@@ -59,6 +61,7 @@ function assertModelBoundary(input, caseId) {
 
 function record(testCase, variant, capture) {
   const isBad = variant === "bad";
+  const subtype = testCase.subtype || testCase.badSignal.type;
   const input = modelInput(capture);
   assertModelBoundary(input, testCase.id);
   return {
@@ -66,10 +69,12 @@ function record(testCase, variant, capture) {
     target: {
       label: isBad ? "violation" : "clean",
       criteria: isBad ? [testCase.criterion] : [],
+      subtypes: isBad ? [testCase.criterion + ":" + subtype] : [],
     },
     provenance: {
       caseId: testCase.id,
       family: testCase.family || testCase.id,
+      subtype,
       variant,
       source: testCase.source,
       mutation: testCase.mutation,
@@ -80,7 +85,7 @@ function record(testCase, variant, capture) {
 
 function exportCases(manifest) {
   const records = [];
-  const summary = { observed: 0, skipped: 0, invalid: 0, records: 0, reasons: {} };
+  const summary = { observed: 0, skipped: 0, invalid: 0, excluded: 0, records: 0, reasons: {} };
   for (const testCase of manifest.cases) {
     const good = readCapture(testCase, "good");
     const bad = readCapture(testCase, "bad");
@@ -89,6 +94,14 @@ function exportCases(manifest) {
     if (result.reason) summary.reasons[result.reason] = (summary.reasons[result.reason] || 0) + 1;
     if (result.status !== "observed") {
       console.log(testCase.id + ": " + result.status + " (" + result.reason + ")");
+      continue;
+    }
+    const subtype = testCase.criterion + ":" + (testCase.subtype || testCase.badSignal.type);
+    if (MODEL_EXCLUDED_SUBTYPES.has(subtype)) {
+      summary.excluded++;
+      summary.reasons["not inferable from screen-reader output alone"] =
+        (summary.reasons["not inferable from screen-reader output alone"] || 0) + 1;
+      console.log(testCase.id + ": excluded from model (" + subtype + ")");
       continue;
     }
     records.push(JSON.stringify(record(testCase, "good", good)));
@@ -109,7 +122,7 @@ function main() {
   const summaryPath = OUTPUT_PATH.replace(/\.jsonl$/i, ".summary.json");
   writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + "\n", "utf8");
   console.log("Exported " + summary.records + " records to " + OUTPUT_PATH);
-  console.log("Summary: " + summary.observed + " observed, " + summary.skipped + " skipped, " + summary.invalid + " invalid.");
+  console.log("Summary: " + summary.observed + " observed, " + summary.skipped + " skipped, " + summary.invalid + " invalid, " + summary.excluded + " excluded from model.");
 }
 
 main();

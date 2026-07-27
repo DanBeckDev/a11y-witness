@@ -39,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split", choices=("train", "validation", "test", "all"), default="test")
     parser.add_argument("--criterion", action="append", help="limit analysis to one or more criteria")
     parser.add_argument("--max-length", type=int, default=256)
+    parser.add_argument("--epochs", type=int, default=250)
     return parser.parse_args()
 
 
@@ -68,6 +69,37 @@ def diagnosis(record: dict[str, Any], score: float, threshold: float, expected: 
     }
 
 
+def criterion_scores(training: Any, criterion_report: dict[str, Any], features: Any, weights: Any) -> Any:
+    import torch
+
+    subtype_scores = []
+    for subtype_details in criterion_report["subtypes"].values():
+        weight = weights[subtype_details["head"] + ".weight"]
+        bias = weights[subtype_details["head"] + ".bias"]
+        subtype_scores.append(training.score_head(features, weight, bias))
+    return torch.stack(subtype_scores).amax(dim=0)
+
+
+def record_errors(
+    records: list[dict[str, Any]],
+    indices: list[int],
+    scores: Any,
+    labels: Any,
+    threshold: float,
+    error_context: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    false_positives = []
+    false_negatives = []
+    for index in indices:
+        expected = "violation" if labels[index] else "clean"
+        predicted = bool(scores[index] >= threshold)
+        if predicted and expected == "clean":
+            false_positives.append(diagnosis(records[index], float(scores[index]), threshold, expected, error_context + "FalsePositive"))
+        elif not predicted and expected == "violation":
+            false_negatives.append(diagnosis(records[index], float(scores[index]), threshold, expected, error_context + "FalseNegative"))
+    return false_positives, false_negatives
+
+
 def main() -> None:
     args = parse_args()
     training = load_training_module()
@@ -79,7 +111,7 @@ def main() -> None:
     from safetensors.torch import load_file
 
     split_for_family = training.assign_splits(records)
-    features, _ = training.encode_records(records, args.encoder, args.max_length)
+    features, _, _ = training.encode_records(records, args.encoder, args.max_length)
     weights = load_file(str(args.model))
     selected_splits = ("train", "validation", "test") if args.split == "all" else (args.split,)
     criteria = sorted(report.get("criteria", {}))
@@ -102,22 +134,18 @@ def main() -> None:
 
     for criterion in criteria:
         threshold = float(report["criteria"][criterion]["threshold"])
-        weight = weights[f"{criterion}.weight"]
-        bias = weights[f"{criterion}.bias"]
-        logits = features @ weight.t() + bias
-        scores = torch.sigmoid(logits[:, 0])
-        false_positives = []
-        false_negatives = []
-        for index, record in enumerate(records):
-            split = split_for_family[record["provenance"]["family"]]
-            if split not in selected_splits:
-                continue
-            expected = "violation" if criterion in record["target"].get("criteria", []) else "clean"
-            predicted = bool(scores[index] >= threshold)
-            if predicted and expected == "clean":
-                false_positives.append(diagnosis(record, float(scores[index]), threshold, expected, "falsePositive"))
-            elif not predicted and expected == "violation":
-                false_negatives.append(diagnosis(record, float(scores[index]), threshold, expected, "falseNegative"))
+        labels = torch.tensor(
+            [int(criterion in record["target"].get("criteria", [])) for record in records],
+            dtype=torch.bool,
+        )
+        scores = criterion_scores(training, report["criteria"][criterion], features, weights)
+        selected_indices = [
+            index for index, record in enumerate(records)
+            if split_for_family[record["provenance"]["family"]] in selected_splits
+        ]
+        false_positives, false_negatives = record_errors(
+            records, selected_indices, scores, labels, threshold, ""
+        )
         result["criteria"][criterion] = {
             "threshold": threshold,
             "falsePositiveCount": len(false_positives),
@@ -130,11 +158,59 @@ def main() -> None:
         if false_positives or false_negatives:
             result["summary"]["criteriaWithErrors"] += 1
 
+    development_indices = [
+        index for index, record in enumerate(records)
+        if split_for_family[record["provenance"]["family"]] in {"train", "validation"}
+    ]
+    calibration_result: dict[str, Any] = {
+        "method": "grouped-out-of-fold-threshold-calibration",
+        "records": len(development_indices),
+        "criteria": {},
+        "summary": {"falsePositives": 0, "falseNegatives": 0, "criteriaWithErrors": 0},
+    }
+    for criterion in criteria:
+        criterion_report = report["criteria"][criterion]
+        labels = torch.tensor(
+            [int(criterion in record["target"].get("criteria", [])) for record in records],
+            dtype=torch.float32,
+        )
+        subtype_scores = []
+        for subtype in criterion_report["subtypes"]:
+            subtype_labels = torch.tensor(
+                [int(subtype in record["target"].get("subtypes", [])) for record in records],
+                dtype=torch.float32,
+            )
+            subtype_scores.append(training.out_of_fold_scores(
+                features, subtype_labels, records, development_indices, args.epochs
+            ))
+        calibration_scores = torch.stack(subtype_scores).amax(dim=0)
+        false_positives, false_negatives = record_errors(
+            records,
+            development_indices,
+            calibration_scores,
+            labels.bool(),
+            float(criterion_report["threshold"]),
+            "calibration",
+        )
+        calibration_result["criteria"][criterion] = {
+            "threshold": criterion_report["threshold"],
+            "falsePositiveCount": len(false_positives),
+            "falseNegativeCount": len(false_negatives),
+            "falsePositives": false_positives,
+            "falseNegatives": false_negatives,
+        }
+        calibration_result["summary"]["falsePositives"] += len(false_positives)
+        calibration_result["summary"]["falseNegatives"] += len(false_negatives)
+        if false_positives or false_negatives:
+            calibration_result["summary"]["criteriaWithErrors"] += 1
+    result["calibration"] = calibration_result
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result["summary"], indent=2))
     for criterion, details in result["criteria"].items():
         print(f"{criterion}: {details['falsePositiveCount']} false positives, {details['falseNegativeCount']} false negatives")
+    print("calibration:", json.dumps(calibration_result["summary"]))
 
 
 if __name__ == "__main__":

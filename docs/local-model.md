@@ -37,7 +37,10 @@ the current `applyGate` seam in `src/spike/verify-gate.ts`.
 
 The first local experiment should use
 [`sentence-transformers/all-MiniLM-L6-v2`](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)
-as a frozen text encoder, followed by one binary head per observable criterion.
+as a frozen text encoder, followed by one binary head per observable violation
+subtype. Subtype scores are max-pooled into criterion scores, so a generic
+missing-alt example does not have to share a decision boundary with a
+filename-only or decorative-image example.
 Its Hugging Face model page lists Apache-2.0 licensing, a 384-dimensional
 embedding, and a `model.safetensors` file of about 90.9 MB. It also has ONNX
 artifacts, which are a better inference format for this Node project than a
@@ -49,6 +52,14 @@ The classifier input should be short evidence units rather than an entire page:
 - one structural entry, such as a heading or form field;
 - one interaction result, such as `control -> after`;
 - the surrounding context needed for link purpose or heading quality.
+
+The trained head receives two views of those units: the MiniLM embedding is
+channel-tagged (`transcript`, `form-navigation`, `state-change`, and so on),
+and a small fixed vector records relationships that are explicit in NVDA's
+output. Examples include whether a field has a name before its role, whether a
+data row includes a header before its column position, and whether an
+interaction's announced state changed. These features never inspect HTML,
+DOM, CSS, axe results, URL, or task text.
 
 The model produces criterion scores. Rules, thresholds, and provenance produce
 the final finding. A local generative model can remain an optional explainer,
@@ -108,7 +119,8 @@ paraphrases separate from the hand-authored and standards-derived capture set.
 
 The repository includes a deliberately small training path. It uses the pinned
 `sentence-transformers/all-MiniLM-L6-v2` encoder as a frozen feature extractor
-and trains one binary head per observable criterion. Both the base encoder and
+and trains one binary head per observable violation subtype. The subtype scores
+are max-pooled to produce each criterion score. Both the base encoder and
 the learned heads are handled as safetensors; the fetcher rejects pickle-style
 checkpoint files and verifies the encoder SHA-256 before training.
 
@@ -127,38 +139,74 @@ node scripts/verify-safetensors.mjs models/screenreader-scorer
 The learned artifact is `models/screenreader-scorer/model.safetensors` and its
 metrics/provenance are in `training-report.json`. The runner splits by page
 family, never by transcript row, and rejects forbidden page-level fields. The
-current expanded run contains 1,600 records from 800 good/bad pairs and has
-100 controlled positive pairs per criterion. It passes the data-volume
-guardrail (`releaseEligible: true`), but it is not integrated: held-out test
-results still include false positives on clean paired pages, including test
-precision of 0.615 for 1.3.1 and 0.600 for 3.3.2. The scorer therefore remains
-an independently measured opt-in artifact until it meets the zero-false-
-positive acceptance bar.
+current exported run contains 1,556 records from 778 model-eligible good/bad
+pairs. The source matrix now contains 1,061 pairs, including 225 targeted
+calibration pairs that still need capture. The scorer
+combines channel-tagged evidence-unit embeddings with 26 structured features
+derived only from the screen-reader output: named versus unnamed fields,
+associated versus position-only table cells, announced state changes, and
+other presence or relationship facts. It trains subtype heads and chooses
+criterion thresholds from grouped out-of-fold predictions over the development
+families; the outer test families remain untouched. On the current grouped
+held-out test split it has zero false positives and zero false negatives across
+all eight model criteria. The report is nevertheless `releaseEligible: false`:
+grouped calibration has 10 false negatives, several subtype heads have fewer than
+20 positive development records, and the new calibration pairs are not yet
+captured. The `1.3.1:missing-landmark` cases remain in the structural/signal
+layer rather than this scorer: an expected landmark is not reliably inferable
+from screen-reader output alone. It remains an
+independently measured opt-in artifact until those gaps are addressed and it
+also passes an independent acceptance set and test-retest stability checks.
 
 The repeatable collection path is implemented in src/training/. npm run
-training:generate creates 800 controlled good/bad page pairs across independent
-content families (45 seed pairs, 128 initial independent variants, and 627 bulk
-variants).
+training:generate creates 1,061 controlled good/bad page pairs across independent
+content families (45 seed pairs, 128 initial independent variants, 627 bulk
+variants, 36 targeted follow-ups, and 225 calibration variants).
 npm run training:capture sends each pair through the existing interactive NVDA
 worker, and npm run training:export emits JSONL only for pairs whose expected
 contrast was actually heard by NVDA. The exporter keeps the page source as an
 instrument and provenance, never as model input. It stops rather than
 fabricating transcripts when no Windows/NVDA worker is available.
-`npm run training:analyze-errors` then writes a per-case report for the selected
-held-out split, joining each scorer error to its NVDA transcript, structured
-screen-reader evidence, and capture provenance. This report is for diagnosis;
-it is not fed back into training as a label.
+`npm run training:analyze-errors` then writes per-case reports for the selected
+held-out split and grouped out-of-fold calibration, joining each scorer error to
+its NVDA transcript, structured screen-reader evidence, and capture provenance.
+This report is for diagnosis; it is not fed back into training as a label.
+
+The untouched acceptance set is generated separately:
+
+~~~sh
+npm run training:generate-acceptance
+npm run training:preflight-acceptance
+DATASET_ROOT=runs/screenreader-acceptance npx serve runs/screenreader-acceptance/pages -l 5051
+DATASET_ROOT=runs/screenreader-acceptance DATASET_BASE_URL=http://localhost:5051 npm run training:capture
+DATASET_ROOT=runs/screenreader-acceptance npm run training:check-signals
+DATASET_ROOT=runs/screenreader-acceptance npm run training:export -- --out=runs/screenreader-acceptance/screenreader-evidence.jsonl
+npm run training:evaluate-acceptance
+~~~
+
+For capture-to-capture stability, repeat the acceptance capture into separate
+namespaces and pass every exported JSONL file to the evaluator:
+
+~~~sh
+DATASET_ROOT=runs/screenreader-acceptance DATASET_BASE_URL=http://localhost:5051 DATASET_CAPTURE_ROOT=captures/repeat-1 npm run training:capture
+DATASET_ROOT=runs/screenreader-acceptance DATASET_BASE_URL=http://localhost:5051 DATASET_CAPTURE_ROOT=captures/repeat-2 npm run training:capture
+DATASET_ROOT=runs/screenreader-acceptance DATASET_CAPTURE_ROOT=captures/repeat-1 npm run training:export -- --out=runs/screenreader-acceptance/repeat-1.jsonl
+DATASET_ROOT=runs/screenreader-acceptance DATASET_CAPTURE_ROOT=captures/repeat-2 npm run training:export -- --out=runs/screenreader-acceptance/repeat-2.jsonl
+.venv/bin/python scripts/evaluate-screenreader-acceptance.py --data runs/screenreader-acceptance/repeat-1.jsonl --data runs/screenreader-acceptance/repeat-2.jsonl
+~~~
 
 ## How much data is enough?
 
 There is no responsible fixed number. The target depends on whether the model
 is a frozen text encoder with a small classifier head, how many WCAG criteria
 have separate heads, and how many independent page families are represented.
-The current 800 pairs are enough to evaluate a first candidate, but not enough
-to release it. The current test F1 ranges from 0.696 to 0.973, and every
-criterion still has at least one false positive on held-out clean records. The
-largest precision problems are 1.3.1 at 0.615 and 3.3.2 at 0.600. These are
-useful diagnostic results, not a reason to wire the scorer into `applyGate`.
+The current 961-pair source matrix is enough to evaluate a first candidate, but
+not enough to release it. The current grouped held-out test has 0 false positives
+and 0 false negatives, but grouped out-of-fold calibration still has 10 false
+negatives. These are useful diagnostic results, not a reason to wire
+the scorer into `applyGate`: the holdout is still controlled and small, several
+subtypes have very few positive examples, and the model has not yet been tested
+for capture-to-capture stability or on an untouched external acceptance set.
 
 Use these planning bands for the proposed frozen-encoder classifier:
 

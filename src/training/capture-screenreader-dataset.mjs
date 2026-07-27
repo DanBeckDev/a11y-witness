@@ -9,9 +9,9 @@ import { leaseWorker, leaseWorkerPool, guestReachableUrl, isAfterRun } from "../
 import { captureMentionsTitle, titleOf } from "../capture/verify.js";
 import { beginRun, readProgress } from "./capture-progress.mjs";
 
-const ROOT = resolve(process.cwd(), "runs/screenreader-dataset");
+const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
 const MANIFEST_PATH = resolve(ROOT, "manifest.json");
-const CAPTURE_ROOT = resolve(ROOT, "captures");
+const CAPTURE_ROOT = resolve(ROOT, process.env.DATASET_CAPTURE_ROOT || "captures");
 const REJECTED_ROOT = resolve(CAPTURE_ROOT, "rejected");
 const DEFAULT_BASE_URL = "http://localhost:5050";
 const STEPS = Number(process.env.DATASET_CAPTURE_STEPS || 150);

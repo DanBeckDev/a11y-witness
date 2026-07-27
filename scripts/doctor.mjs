@@ -53,8 +53,15 @@ async function checkJudge() {
   }
 }
 
-// The worker is the only hard prerequisite, and the one that breaks. Report the VM and the
-// worker separately: "guest up, worker down" and "no VM at all" need different fixes.
+// Workers, as a POOL, and with the right idea of what "ready" means.
+//
+// This check used to look at one VM and fail if it was not started. That was true before runs
+// managed the VM themselves; now a stopped worker is the correct resting state -- a run starts
+// what it needs and puts it back afterwards -- so reporting it as FAIL told an agent the
+// environment was broken when it was idle. One did exactly that: it went hunting for a
+// decommissioned worker on another host and then reached for the UTM GUI.
+//
+// Ready means "a run can proceed", not "everything is already running".
 async function checkWorker() {
   if (WORKER_ENV) {
     try {
@@ -62,29 +69,43 @@ async function checkWorker() {
       return add("worker", health.screenReader === "NVDA", `A11Y_WORKER ${WORKER_ENV} — ${JSON.stringify(health)}`);
     } catch (e) {
       return add("worker", false, `A11Y_WORKER ${WORKER_ENV} unreachable (${e.message})`,
-        "check that machine is up and its a11ysrv task is running");
+        "check that machine is up and its a11ysrv task is running; or unset A11Y_WORKER to use the local pool");
     }
   }
   if (process.platform !== "darwin" || !existsSync(CTL)) {
     return add("worker", false, "no A11Y_WORKER set and no local VM tooling here",
       "set A11Y_WORKER=http://host:8765, or see docs/getting-started.md");
   }
-  let vm;
+
+  let pool;
   try {
-    vm = JSON.parse(await shell(CTL, ["json"], 60000));
+    pool = JSON.parse(await shell(CTL, ["pool"], 90000));
   } catch (e) {
-    return add("worker", false, `could not query the local VM (${e.message.split("\n")[0]})`,
-      `${CTL} status`);
+    return add("worker", false, `could not query the local pool (${e.message.split("\n")[0]})`,
+      `${CTL} pool   # launches UTM if it is not running`);
   }
-  add("vm", vm.state === "started", `local VM '${vm.name}' is ${vm.state}`,
-    vm.state === "started" ? null : `${CTL} up`);
-  if (!vm.healthy) {
-    return add("worker", false, vm.ip ? `guest is up at ${vm.ip} but the worker is not answering` : "guest has no IP yet",
-      vm.ip ? "Start-ScheduledTask -TaskName a11ysrv on the guest" : `${CTL} up`);
+  if (!pool.length) {
+    return add("worker", false, "no worker VM registered",
+      "build one: docs/getting-started.md, or clone: scripts/local-worker/clone-worker.sh");
   }
-  add("worker", true, `http://${vm.ip}:${vm.port} — NVDA ready${vm.busy ? ", BUSY with a capture" : ""}`);
-  if (vm.busy) {
-    add("contention", false, "a capture is in flight — another shell or agent is using this worker",
+
+  const running = pool.filter((vm) => vm.state === "started");
+  const healthy = pool.filter((vm) => vm.healthy);
+  const brokenlyRunning = running.filter((vm) => !vm.healthy);
+  const summary = pool.map((vm) => `${vm.name}=${vm.healthy ? vm.ip : vm.state}`).join(" ");
+
+  // A VM that is RUNNING but not answering is a genuine fault. One that is stopped is not.
+  if (brokenlyRunning.length) {
+    add("worker", false, `${summary} — ${brokenlyRunning.map((v) => v.name).join(", ")} running but not answering`,
+      "Start-ScheduledTask -TaskName a11ysrv on that guest, or " + `${CTL} stop && ${CTL} up`);
+  } else if (healthy.length) {
+    add("worker", true, `${healthy.length}/${pool.length} ready — ${summary}`);
+  } else {
+    add("worker", true, `${pool.length} worker(s), all stopped — a run starts them automatically (${summary})`);
+  }
+  const busy = pool.filter((vm) => vm.busy);
+  if (busy.length) {
+    add("contention", false, `${busy.map((v) => v.name).join(", ")} busy with a capture — another shell or agent is using the pool`,
       "wait for it, or you will both see the other's restarts as breakage");
   }
 }
@@ -129,13 +150,24 @@ await checkDatasetPages();
 checkRunState();
 
 const ready = checks.every((c) => c.ok);
+
+// The single most useful line for anything automated: what to run next. A list of green ticks
+// still leaves a caller deciding, and deciding is where they go wrong.
+function nextCommand() {
+  const broken = checks.find((c) => !c.ok);
+  if (!broken) return "npm run training:capture        # starts any stopped worker and releases it after";
+  if (broken.name === "contention") return "wait — the pool is busy with another run";
+  return broken.fix ?? "see the failing check above";
+}
+
 if (JSON_OUT) {
-  console.log(JSON.stringify({ ready, checks }, null, 2));
+  console.log(JSON.stringify({ ready, next_command: nextCommand(), checks }, null, 2));
 } else {
   for (const c of checks) {
     console.log(`${c.ok ? "OK  " : "FAIL"}  ${c.name.padEnd(11)} ${c.detail}`);
     if (!c.ok && c.fix) console.log(`        fix: ${c.fix}`);
   }
   console.log(`\n${ready ? "READY" : "NOT READY — see the fixes above"}`);
+  console.log(`next: ${nextCommand()}`);
 }
 process.exit(ready ? 0 : 1);
