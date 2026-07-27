@@ -1,7 +1,7 @@
 /**
  * Progress state for dataset capture.
  *
- * A full capture run is ~90 NVDA captures over roughly an hour, unattended. Watching a log
+ * A full capture run is ~346 NVDA captures over several hours, unattended. Watching a log
  * scroll is not observability: you cannot tell finished from wedged, you cannot tell which
  * cases failed without re-reading everything, and nothing else can consume it. So the run
  * publishes its state to one JSON file after every step, and `npm run training:status`

@@ -67,7 +67,7 @@ const EDGE_PROFILE_DIR =
 
 // Submit-like button names. Used only when probing forms, because activating a
 // submit button has side effects and must be opt-in.
-const SUBMIT_RE = /\b(submit|sign ?up|sign ?in|log ?in|send|search|continue|save|register|join|subscribe)\b/i;
+const SUBMIT_RE = /\b(submit|sign ?up|sign ?in|log ?in|send|search|continue|save|register|join|subscribe|book|reserve|request|hire)\b/i;
 
 // Role/state words to ignore when matching a control's NAME against the task, so
 // a button is only activated when its actual label appears in the user's task.

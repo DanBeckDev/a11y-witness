@@ -104,22 +104,61 @@ the resulting failure because the mutation is known. An unconstrained model
 generating an entire page does not provide a reliable label. Keep generated
 paraphrases separate from the hand-authored and standards-derived capture set.
 
+## First local training run
+
+The repository includes a deliberately small training path. It uses the pinned
+`sentence-transformers/all-MiniLM-L6-v2` encoder as a frozen feature extractor
+and trains one binary head per observable criterion. Both the base encoder and
+the learned heads are handled as safetensors; the fetcher rejects pickle-style
+checkpoint files and verifies the encoder SHA-256 before training.
+
+Set up the optional Python environment on the Mac, then fetch the allowlisted
+checkpoint and train from the exported screen-reader-only JSONL:
+
+~~~sh
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements-local-model.txt
+npm run training:fetch-encoder
+npm run training:train
+node scripts/verify-safetensors.mjs models/encoders/all-MiniLM-L6-v2
+node scripts/verify-safetensors.mjs models/screenreader-scorer
+~~~
+
+The learned artifact is `models/screenreader-scorer/model.safetensors` and its
+metrics/provenance are in `training-report.json`. The runner splits by page
+family, never by transcript row, and rejects forbidden page-level fields. The
+current expanded run contains 1,600 records from 800 good/bad pairs and has
+100 controlled positive pairs per criterion. It passes the data-volume
+guardrail (`releaseEligible: true`), but it is not integrated: held-out test
+results still include false positives on clean paired pages, including test
+precision of 0.615 for 1.3.1 and 0.600 for 3.3.2. The scorer therefore remains
+an independently measured opt-in artifact until it meets the zero-false-
+positive acceptance bar.
+
 The repeatable collection path is implemented in src/training/. npm run
-training:generate creates 45 controlled good/bad page pairs across independent
-content families.
+training:generate creates 800 controlled good/bad page pairs across independent
+content families (45 seed pairs, 128 initial independent variants, and 627 bulk
+variants).
 npm run training:capture sends each pair through the existing interactive NVDA
 worker, and npm run training:export emits JSONL only for pairs whose expected
 contrast was actually heard by NVDA. The exporter keeps the page source as an
 instrument and provenance, never as model input. It stops rather than
 fabricating transcripts when no Windows/NVDA worker is available.
+`npm run training:analyze-errors` then writes a per-case report for the selected
+held-out split, joining each scorer error to its NVDA transcript, structured
+screen-reader evidence, and capture provenance. This report is for diagnosis;
+it is not fed back into training as a label.
 
 ## How much data is enough?
 
 There is no responsible fixed number. The target depends on whether the model
 is a frozen text encoder with a small classifier head, how many WCAG criteria
 have separate heads, and how many independent page families are represented.
-The current 45 pairs are a pipeline seed and coverage smoke test, not enough
-to train or release the model.
+The current 800 pairs are enough to evaluate a first candidate, but not enough
+to release it. The current test F1 ranges from 0.696 to 0.973, and every
+criterion still has at least one false positive on held-out clean records. The
+largest precision problems are 1.3.1 at 0.615 and 3.3.2 at 0.600. These are
+useful diagnostic results, not a reason to wire the scorer into `applyGate`.
 
 Use these planning bands for the proposed frozen-encoder classifier:
 

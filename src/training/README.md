@@ -12,8 +12,9 @@ in the bad NVDA capture and absent from the good capture. This prevents a
 known HTML mutation from being treated as evidence when NVDA did not actually
 announce it.
 
-The current matrix contains 45 pairs across image, link, heading, landmark,
-form, control, dynamic-feedback, and table families.
+The current matrix contains 800 pairs across image, link, heading, landmark,
+form, control, dynamic-feedback, and table families: 45 seed pairs, 128
+initial independent variants, and 627 bulk variants.
 Family metadata is preserved in the manifest and provenance so train/test
 splits can keep near-duplicate mutations together.
 
@@ -66,7 +67,7 @@ DATASET_BASE_URL still wins if you set it, but a `localhost` value is rewritten
 to the host's address on the VM's subnet, because `localhost` inside the guest
 is the guest.
 
-A full run is ~90 NVDA captures over roughly an hour, so it publishes its state instead
+A full run is ~1600 NVDA captures over several hours, so it publishes its state instead
 of expecting you to watch a log:
 
 ~~~sh
@@ -75,12 +76,12 @@ npm run training:status
 
 ~~~
 run:      started 2026-07-26T08:20:19.822Z
-progress: 12/45 cases  (11 captured, 1 failed, 0 skipped)
+progress: 800/800 cases  (627 captured, 0 failed, 173 skipped)
 worker:   http://192.168.64.4:8765
 pages:    http://192.168.64.1:5050
-current:  form-unlabelled-phone (bad), 0.4 min so far
-last update: 0.4 min ago
-worker now: capturing now
+current:  finished
+last update: recently
+worker now: idle
 ~~~
 
 It reads `runs/screenreader-dataset/capture-progress.json`, which the run rewrites

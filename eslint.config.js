@@ -16,6 +16,7 @@ export default tseslint.config(
   {
     ignores: [
       "node_modules/**",
+      ".venv/**",
       "dist/**",
       "**/*.json",
       "src/eval/fixtures/**", // captured transcripts, not source

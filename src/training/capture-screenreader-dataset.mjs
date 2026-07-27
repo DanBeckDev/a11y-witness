@@ -142,13 +142,17 @@ const WORKER_POLL_MS = 10000;
 // because a connection error failed each case outright, one recoverable outage cascaded into
 // four permanent failures -- while the worker itself came back on its own via auto-logon and
 // the at-logon task. The run just was not patient.
-const TRANSIENT = /fetch failed|ECONNREFUSED|ECONNRESET|socket hang up|timed out|aborted/i;
+const TRANSIENT = /fetch failed|ECONNREFUSED|ECONNRESET|socket hang up|timed out|aborted|HTTP 429.*capture is already in progress/i;
 
 async function waitForWorker(worker) {
   const deadline = Date.now() + WORKER_WAIT_MS;
   while (Date.now() < deadline) {
     try {
-      await fetchJson(worker + "/health", {}, WORKER_POLL_MS);
+      const health = await fetchJson(worker + "/health", {}, WORKER_POLL_MS);
+      if (health.busy) {
+        await sleep(WORKER_POLL_MS);
+        continue;
+      }
       const waited = Math.round((WORKER_WAIT_MS - (deadline - Date.now())) / 1000);
       console.log("    worker is back after " + waited + "s");
       return;
@@ -228,19 +232,37 @@ async function captureCase(ctx, testCase) {
 }
 
 // A run interrupted an hour in should not start over. Must be read BEFORE beginRun, which
-// replaces the progress file with a fresh all-pending one.
+// replaces the progress file with a fresh all-pending one. Targeted repair runs also replace
+// that file, so a complete, non-empty NVDA pair on disk is a safe fallback when its progress
+// entry belongs to an earlier full run.
 //
 // A case counts as done only if the previous run recorded it captured AND both files are
 // still on disk: the progress file and the captures can be deleted independently, and
 // trusting either alone silently skips work that no longer exists.
-function previouslyCaptured() {
+function hasUsableCaptureFiles(id) {
+  return ["good", "bad"].every((variant) => {
+    try {
+      const capture = JSON.parse(readFileSync(resolve(CAPTURE_ROOT, id + "." + variant + ".json"), "utf8"));
+      return capture.screenReader === "NVDA" && Array.isArray(capture.transcript) && capture.transcript.length > 0;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function previouslyCaptured(cases) {
   if (!RESUME) return new Set();
-  const cases = readProgress(ROOT)?.cases ?? {};
-  const done = Object.entries(cases)
-    .filter(([id, entry]) => entry.status === "captured" &&
-      ["good", "bad"].every((v) => existsSync(resolve(CAPTURE_ROOT, id + "." + v + ".json"))))
-    .map(([id]) => id);
-  return new Set(done);
+  const previous = readProgress(ROOT)?.cases ?? {};
+  const done = new Set(Object.entries(previous)
+    .filter(([id, entry]) =>
+      (entry.status === "captured" || entry.status === "skipped" ||
+        (entry.status === "failed" && /HTTP 429.*capture is already in progress/i.test(entry.reason || ""))) &&
+      hasUsableCaptureFiles(id))
+    .map(([id]) => id));
+  for (const { id } of cases) {
+    if (hasUsableCaptureFiles(id)) done.add(id);
+  }
+  return done;
 }
 
 function afterRun() {
@@ -284,7 +306,7 @@ async function main() {
   // Same lease as the witness CLI: an explicit A11Y_WORKER is used untouched, otherwise a
   // local VM is started on demand and put back as it was found. Dataset capture is the run
   // that benefits most -- it is long, unattended, and used to leave the guest running after.
-  const done = previouslyCaptured();
+  const done = previouslyCaptured(cases);
   if (done.size) console.log("Resuming: " + done.size + " case(s) already captured.");
 
   const lease = await leaseWorker({ worker: process.env.A11Y_WORKER ?? null, after: afterRun() });
