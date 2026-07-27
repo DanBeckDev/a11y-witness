@@ -311,3 +311,28 @@ Three windows where it IS legitimately unavailable, none of them a fault:
 reporting unreachable, and when it does fail it distinguishes "the guest is up, the WORKER is
 not answering" from "no guest IP at all, the VM is not ready". If you are polling `/health`
 yourself, do the same — one timed-out request is not evidence of a dead worker.
+
+## The guest's console window is blank / the worker looks hung
+
+It is not hung, and the window is no longer blank — but if you are on an older worker, this is
+why. `run-server.cmd` used to redirect everything to `server.log`, so the console on the guest
+showed nothing at all. A capture takes ~12s, during which a working worker and a wedged one
+look identical from the screen.
+
+Measured, in case the suspicion returns: back-to-back captures have a **0-1 ms** gap between
+them. There is no dead time between captures; the worker is busy the whole time. If it looks
+idle, it is mid-capture.
+
+`server.mjs` now writes each line to **both** the console and `server.log`. Deliberately
+in-process rather than piping the launcher through PowerShell's `Tee-Object`, which on Windows
+PowerShell 5.1 has no `-Encoding` parameter and writes UTF-16 — that changed the log's encoding
+partway through the file and broke every reader of it.
+
+Reading the log from the host: **copy it first.** The live file is held open by the worker and
+`utmctl file pull` returns nothing for a locked file, silently:
+
+```bash
+utmctl exec "$UUID" --cmd powershell.exe -NoProfile -Command \
+  'Copy-Item C:\Users\witness\a11y-witness\server.log C:\Users\witness\log-copy.txt -Force'
+utmctl file pull "$UUID" 'C:\Users\witness\log-copy.txt'
+```

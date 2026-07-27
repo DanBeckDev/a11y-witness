@@ -4,9 +4,30 @@
 //   GET  /health                           -> { ok, screenReader, busy }
 // NVDA is a single shared resource, so captures are serialized.
 import { createServer } from "node:http";
+import { appendFileSync } from "node:fs";
 import { captureWithNvda, shutdownScreenReader } from "./capture-core.mjs";
 
 const PORT = Number(process.env.A11Y_PORT || 8765);
+const LOG_PATH = process.env.A11Y_SERVER_LOG || "server.log";
+
+// Log to the console AND the file, from here rather than by redirecting the launcher.
+//
+// The launcher used to send everything to server.log, which left the VM's console window
+// blank: a worker mid-capture and a wedged worker look identical if neither prints anything,
+// and a capture takes ~12s, which reads as a hang to anyone watching the guest.
+//
+// Doing it in-process rather than piping through PowerShell's Tee-Object, which on Windows
+// PowerShell 5.1 has no -Encoding parameter and writes UTF-16 -- that changed the log's
+// encoding mid-file and broke every existing reader of it.
+function log(line) {
+  const stamped = `${line}\n`;
+  process.stdout.write(stamped);
+  try {
+    appendFileSync(LOG_PATH, stamped, "utf8");
+  } catch {
+    // Console output is the fallback; a failed append must not take the worker down.
+  }
+}
 let busy = false;
 
 // Keep NVDA running between captures. Starting it costs ~5s, and this process serves many
@@ -52,17 +73,17 @@ const server = createServer((req, res) => {
       if (!url) return send(res, 400, { error: "url is required" });
       busy = true;
       const startedAt = new Date().toISOString();
-      console.log(`[${startedAt}] capture ${url} (nav=${nav || "object"}, probeForms=${probeForms})`);
+      log(`[${startedAt}] capture ${url} (nav=${nav || "object"}, probeForms=${probeForms})`);
       try {
         const result = await captureWithNvda(url, { steps, nav, probeForms, task, reuseScreenReader: REUSE_NVDA });
         const after = (result.diagnostics || []).find((e) => e.event === "afterStart");
-        console.log(`  -> ${result.transcript.length} phrases; afterStart.lastSpoken=${JSON.stringify(after && after.lastSpoken)}`);
+        log(`  -> ${result.transcript.length} phrases; afterStart.lastSpoken=${JSON.stringify(after && after.lastSpoken)}`);
         if (result.transcript.length === 0) {
-          console.log("  WARNING: 0 phrases. If afterStart.lastSpoken is empty, NVDA is running but not speaking — restart/reboot the worker.");
+          log("  WARNING: 0 phrases. If afterStart.lastSpoken is empty, NVDA is running but not speaking — restart/reboot the worker.");
         }
         send(res, 200, { ...result, task });
       } catch (e) {
-        console.error("  capture failed:", (e && e.stack) || e);
+        log("  capture failed: " + ((e && e.stack) || e));
         send(res, 500, { error: String((e && e.message) || e) });
       } finally {
         busy = false;
@@ -73,9 +94,7 @@ const server = createServer((req, res) => {
   send(res, 404, { error: "not found" });
 });
 
-server.listen(PORT, () =>
-  console.log(`a11y-witness NVDA worker listening on :${PORT} (reuse NVDA: ${REUSE_NVDA})`)
-);
+server.listen(PORT, () => log(`a11y-witness NVDA worker listening on :${PORT} (reuse NVDA: ${REUSE_NVDA})`));
 
 // An NVDA socket error arrives asynchronously, outside the request handler that caused it,
 // so it lands here as an uncaught exception. Without this the worker dies with a bare stack
@@ -87,8 +106,8 @@ server.listen(PORT, () =>
 // worse than one that is honestly gone. The scheduled task is configured to restart it.
 for (const fatal of ["uncaughtException", "unhandledRejection"]) {
   process.on(fatal, (error) => {
-    console.error(`${fatal}: ${(error && error.stack) || error}`);
-    console.error("exiting so the scheduled task can restart a clean worker");
+    log(`${fatal}: ${(error && error.stack) || error}`);
+    log("exiting so the scheduled task can restart a clean worker");
     process.exit(1);
   });
 }
@@ -98,7 +117,7 @@ for (const fatal of ["uncaughtException", "unhandledRejection"]) {
 // already has a screen reader running, which is how the speech channel destabilises.
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, async () => {
-    console.log(`${signal}: stopping NVDA before exit`);
+    log(`${signal}: stopping NVDA before exit`);
     await shutdownScreenReader();
     process.exit(0);
   });
