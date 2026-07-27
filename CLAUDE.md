@@ -62,6 +62,30 @@ interactive desktop and reports its absence as `nvda.start failed: NVDA is not s
 which reads like a broken install and is not one. Run captures through a scheduled task with
 `LogonType Interactive` — see the runbook.
 
+## If you are an agent, start with these
+
+```bash
+npm run doctor                  # can I run right now? every check names its own fix
+npm run doctor -- --json        # same, machine-readable
+```
+
+It answers VM state, worker health, page server, judge backend and whether a previous run
+was left mid-flight — the last one being the difference between `capture` and
+`capture -- --resume`, which is hours either way if you guess wrong.
+
+For long runs, do not poll:
+
+```bash
+npm run training:wait           # blocks until the run finishes, exits with its outcome
+npm run training:wait -- --json
+npm run training:status -- --json   # a snapshot, with eta_minutes and next_command
+```
+
+`wait` is event-driven (it watches the progress file) and cannot hang on a dead run: if
+updates go cold past one capture timeout it exits 3 rather than waiting forever. Exit codes
+are the contract — **0** clean, **1** finished with failures, **2** no run, **3** wedged —
+and both commands emit a `next_command` field so you do not have to infer the next step.
+
 ## Verifying changes (there are no unit tests)
 
 Verification is layered; pick the layers your change touches:

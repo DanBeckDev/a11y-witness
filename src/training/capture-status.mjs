@@ -20,6 +20,7 @@ const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
 
 const EXIT = { ok: 0, failures: 1, noRun: 2, stale: 3 };
+const JSON_OUT = process.argv.includes("--json");
 
 function minutes(ms) {
   return (ms / MS_PER_SECOND / SECONDS_PER_MINUTE).toFixed(1) + " min";
@@ -46,6 +47,15 @@ function printFailures(progress) {
   for (const [id, entry] of failed) console.log("  " + id + ": " + entry.reason);
 }
 
+// Remaining time from observed throughput. Deliberately derived from THIS run rather than a
+// stored average: capture cost varies with page size and with what else the host is doing.
+function etaMinutes(progress, counts, now) {
+  const done = counts.captured + counts.failed + counts.skipped;
+  if (!done || progress.finishedAt) return null;
+  const perCase = (now - Date.parse(progress.startedAt)) / done;
+  return +(((progress.total - done) * perCase) / 60000).toFixed(1);
+}
+
 function printProgressLines(progress, counts, now) {
   const done = counts.captured + counts.failed + counts.skipped;
   console.log("run:      started " + progress.startedAt + (progress.finishedAt ? ", finished " + progress.finishedAt : ""));
@@ -59,6 +69,13 @@ function printProgressLines(progress, counts, now) {
   }
   const quiet = stalenessMs(progress, now);
   if (quiet !== null) console.log("last update: " + minutes(quiet) + " ago");
+  const eta = etaMinutes(progress, counts, now);
+  if (eta !== null) console.log("eta:      ~" + eta + " min at the rate so far");
+}
+
+function outcomeExitQuiet(progress, counts, now) {
+  if (progress.finishedAt) return counts.failed ? EXIT.failures : EXIT.ok;
+  return isStale(progress, now) ? EXIT.stale : EXIT.ok;
 }
 
 function outcomeExit(progress, counts, now) {
@@ -81,6 +98,30 @@ async function main() {
   }
   const now = Date.now();
   const counts = tally(progress);
+  if (JSON_OUT) {
+    const verdict = outcomeExitQuiet(progress, counts, now);
+    console.log(JSON.stringify({
+      running: !progress.finishedAt,
+      total: progress.total,
+      captured: counts.captured,
+      failed: counts.failed,
+      skipped: counts.skipped,
+      current: progress.current ?? null,
+      eta_minutes: etaMinutes(progress, counts, now),
+      worker: progress.worker,
+      last_update_ms_ago: stalenessMs(progress, now),
+      outcome: progress.outcome ?? null,
+      failures: Object.entries(progress.cases ?? {}).filter(([, c]) => c.status === "failed")
+        .map(([id, c]) => ({ id, reason: c.reason })),
+      verdict,
+      next_command: verdict === EXIT.failures ? "npm run training:capture -- --resume"
+        : verdict === EXIT.stale ? "npm run doctor && npm run training:capture -- --resume"
+        : progress.finishedAt ? "npm run training:check-signals && npm run training:export"
+        : "npm run training:wait",
+    }, null, 2));
+    process.exitCode = verdict;
+    return;
+  }
   printProgressLines(progress, counts, now);
   console.log("worker now: " + (await workerState(progress.worker)));
   printFailures(progress);
