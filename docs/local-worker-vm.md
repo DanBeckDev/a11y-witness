@@ -339,12 +339,25 @@ wraps the lifecycle:
 
 ```bash
 ./scripts/local-worker/worker-ctl.sh up        # start or resume, then wait for /health
+./scripts/local-worker/worker-ctl.sh pool      # every a11y-worker* VM, as JSON
+./scripts/local-worker/worker-ctl.sh pool-up   # start them all
+./scripts/local-worker/worker-ctl.sh pool-stop # release them all (~13 s for three)
 ./scripts/local-worker/worker-ctl.sh pause     # ~0.6% CPU, resume under a second
 ./scripts/local-worker/worker-ctl.sh stop      # nothing held, ~15 s to come back
 ./scripts/local-worker/worker-ctl.sh idle-pause 15   # pause after 15 min with no capture
 ```
 
 `idle-*` polls the worker's own `busy` flag, so a capture in flight resets the clock.
+
+**With more than one worker you should not need any of this.** A dataset run with neither
+`A11Y_WORKER` nor `A11Y_WORKERS` set discovers every local worker, starts what is stopped,
+spreads cases across them, and **puts each one back as it found it** — stopped stays stopped,
+and a VM you had already started is left running. It also checks each VM's `busy` flag before
+releasing it, so a run never shuts down a worker another run has picked up. The `pool-*`
+commands are for when you want to do it by hand.
+
+That release used to be missing on the pooled path: the single-worker lease restored state,
+the pool handed back a no-op, and a pooled run left every guest running indefinitely.
 Measured figures and their caveats are in the script header; the two that matter:
 
 - "Idle" CPU readings swing between 2% and 86% — Windows background work. Sample once and
