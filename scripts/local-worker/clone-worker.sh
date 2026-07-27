@@ -56,6 +56,24 @@ NEW_UUID="$(uuid_of "$NEW_NAME")"
 CONFIG="$DOCS/$NEW_NAME.utm/config.plist"
 [ -f "$CONFIG" ] || die "cloned bundle has no config.plist at $CONFIG"
 
+# Every VM must be stopped before UTM is quit, not just the one being cloned.
+#
+# Quitting UTM tries to SUSPEND anything still running, and suspend fails outright with an
+# emulated NVMe disk — which ours is. The result is a modal dialog ("Failed to save suspend
+# state ... Quitting UTM will kill all running VMs") that blocks the script and, if dismissed
+# with OK, takes down every running worker. Found by running this script while a second worker
+# was serving.
+say "stopping every running VM before quitting UTM (suspend fails on NVMe, and quitting kills running VMs)"
+for uuid in $(utmctl list | awk 'NR > 1 && $2 != "stopped" { print $1 }'); do
+  utmctl stop "$uuid" --request >/dev/null 2>&1 || true
+done
+for _ in $(seq 1 40); do pgrep -f QEMULauncher >/dev/null || break; sleep 3; done
+for uuid in $(utmctl list | awk 'NR > 1 && $2 != "stopped" { print $1 }'); do
+  utmctl stop "$uuid" >/dev/null 2>&1 || true
+done
+for _ in $(seq 1 10); do pgrep -f QEMULauncher >/dev/null || break; sleep 2; done
+pgrep -f QEMULauncher >/dev/null && die "a VM is still running; stop it by hand before re-running"
+
 say "quitting UTM so the config edit is not overwritten from its cache"
 osascript -e 'tell application "UTM" to quit' 2>/dev/null || true
 for _ in $(seq 1 10); do pgrep -x UTM >/dev/null || break; sleep 2; done
@@ -77,7 +95,7 @@ for _ in $(seq 1 15); do sleep 2; utmctl list >/dev/null 2>&1 && break; done
 
 # Start the source first. Both guests carry the same Windows machine identity, and letting one
 # settle before the other avoids two identical hostnames racing for the same DHCP server.
-for name in "$SOURCE_NAME" "$NEW_NAME"; do
+for name in $(utmctl list | awk -v n="$SOURCE_NAME" 'NR > 1 && $3 ~ "^"n { print $3 }' | sort -u); do
   uuid="$(uuid_of "$name")"
   say "starting '$name'"
   utmctl start "$uuid" >/dev/null
