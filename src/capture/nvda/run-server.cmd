@@ -23,4 +23,9 @@ if exist "scripts\apply-foreground-lock-timeout.ps1" (
 set "NODE_EXE=%ProgramFiles%\nodejs\node.exe"
 if not exist "%NODE_EXE%" set "NODE_EXE=node"
 
-"%NODE_EXE%" src\capture\nvda\server.mjs >> server.log 2>&1
+rem No redirect: server.mjs writes to BOTH the console and server.log itself.
+rem
+rem This window is the only thing an operator sees on the guest, and it used to be blank --
+rem everything went to the log, so a worker mid-capture and a wedged one looked identical.
+rem A capture takes ~12s, which reads as a hang.
+"%NODE_EXE%" src\capture\nvda\server.mjs
