@@ -197,7 +197,38 @@ value, each with the reason it is still open — so nobody re-derives the analys
   `--remote-debugging-port`, which also gives a real `Page.loadEventFired` to replace part of
   the readiness gate. Non-trivial, and the `--app` isolation that keeps NVDA out of browser
   chrome must survive it (that was Root 1 of the correctness audit).
-- [ ] **Halve the structural sweep's round trips.** Each step is two calls: `perform(move)`
+- [x] **Found the real cost, and it was not the sweeps: `anchorToTop` at ~3s a call.**
+  Instrumented every sweep with timing and round-trip counts before optimising, which was the
+  right call because the intuition was wrong. All six structural sweeps together cost **1.7s**
+  across 18 round trips at ~95ms each. The phase around them cost 4.7s. The difference was
+  `anchorToTop` -- two `nvda.press` calls at roughly 1.3s each plus a 400ms settle -- and it
+  ran twice per capture, so ~6s of a 13.4s capture.
+
+  The one before the structural sweep is redundant by construction: `collectByType` sweeps
+  BOTH directions precisely so it reaches every element regardless of the starting position,
+  which is the job the anchor was doing. Removed. A/B on the same page, same config, one
+  worker changed and one untouched as a control:
+
+  | | wall | first sweep |
+  |---|---|---|
+  | anchor present (control) | 17.1s | 4.7s |
+  | anchor removed | 13.5s | 2.0s |
+
+  **21% faster, identical output (12 phrases both).** capture-check green on all 7 pages
+  including probe values.
+
+  It also surfaced a dedup flaw worth keeping. Reaching an element from a different direction
+  makes NVDA prefix the container it just entered -- `"main landmark, Children's story time,
+  heading, level 3"` versus `"Children's story time, heading, level 3"` -- and the raw prefix
+  key treated those as two elements, so heading and landmark counts went 4 -> 5. Harmless to
+  the assertions, but noise in the evidence. Dedup now strips a leading container prefix, and
+  the counts are back to 4/4.
+
+- [ ] **Halve the structural sweep's round trips.** Much less attractive now that the sweeps
+  are measured at 1.7s of a ~13s capture. The remaining `anchorToTop` (after the readiness
+  gate, ~3s) is the biggest single item left, and it is NOT removable the same way: it is what
+  puts the first line back as the last-spoken phrase, without which the read-through captures
+  the document title instead of the h1. Each step is two calls: `perform(move)`
   then `lastSpokenPhrase()`. Issuing several moves and reading `spokenPhraseLog()` once would
   roughly halve them on the largest remaining phase. The catch is the no-movement guard, which
   is per-step today and is what stops phantom elements being recorded — a batched version has

@@ -504,13 +504,24 @@ async function navigateByStructure({ deadline, diag, probeForms, task }) {
   const interaction = { stateChanges: [], formChanges: [], sweepLog: [] };
   const onFormField = (phrase) => operateControl(phrase, { probeForms, deadline, interaction, task });
 
+  const trips = { count: 0 };
   const structure = { headings: [], landmarks: [], formFields: [] };
-  await anchorToTop(); // browse mode + document top before the structural sweep
+  // No anchor here, deliberately. Measured: anchorToTop costs ~3s -- two nvda.press calls at
+  // roughly 1.3s each plus the settle -- making it the single largest item in a 13.4s capture,
+  // where all six structural sweeps together cost 1.7s.
+  //
+  // It is redundant by construction: collectByType sweeps BOTH directions precisely so it
+  // reaches every element regardless of where the cursor starts, which is the job this anchor
+  // was doing. The read-through leaves the cursor at the bottom, and the backward sweep starts
+  // from there and walks up.
+  //
+  // If this regresses, the symptom is missing headings or landmarks on pages where the
+  // read-through ended somewhere awkward -- capture-check asserts those counts on all 7 pages.
   try {
     structure.headings = await collectByType(
-      { prev: K.moveToPreviousHeading, next: K.moveToNextHeading }, { label: "heading", onItem: null, deadline });
+      { prev: K.moveToPreviousHeading, next: K.moveToNextHeading }, { label: "heading", onItem: null, deadline, diag, trips });
     structure.landmarks = await collectByType(
-      { prev: K.moveToPreviousLandmark, next: K.moveToNextLandmark }, { label: "landmark", onItem: null, deadline });
+      { prev: K.moveToPreviousLandmark, next: K.moveToNextLandmark }, { label: "landmark", onItem: null, deadline, diag, trips });
     // Enumerate interactive controls with the form-field command ("F"), which
     // covers buttons, edits, checkboxes, combos and radios in one pass. (The NVDA
     // guide lists "F" and "B" as distinct co-equal commands; in our testing the
@@ -518,8 +529,8 @@ async function navigateByStructure({ deadline, diag, probeForms, task }) {
     // reached, but that's a build-specific observation, not documented behaviour.)
     // This sweep also drives the disclosure and (opt-in) form-submit probes in place.
     structure.formFields = await collectByType(
-      { prev: K.moveToPreviousFormField, next: K.moveToNextFormField }, { label: "formField", onItem: onFormField, deadline });
-    diag.mark("structural", { headings: structure.headings.length, landmarks: structure.landmarks.length, formFields: structure.formFields.length });
+      { prev: K.moveToPreviousFormField, next: K.moveToNextFormField }, { label: "formField", onItem: onFormField, deadline, diag, trips });
+    diag.mark("structural", { headings: structure.headings.length, landmarks: structure.landmarks.length, formFields: structure.formFields.length, roundTrips: trips.count });
   } catch (e) {
     diag.mark("structural", { error: errMsg(e) });
   }
@@ -589,31 +600,62 @@ async function anchorToTop() {
 async function collectByType(commands, ctx) {
   const out = [], seenKeys = new Set();
   const sweepCtx = { ...ctx, out, seenKeys };
+  // Per-sweep timing and round-trip counts. `structural` is the largest remaining phase and
+  // the aggregate hides which of the six sweeps costs what -- a page with one heading and no
+  // landmarks still spends ~4.7s here, which points at fixed per-sweep cost rather than
+  // per-element cost. Optimising without this is guesswork.
+  const startedAt = Date.now();
+  const before = ctx.trips.count;
   await sweepInDirection(commands.prev, sweepCtx);
+  const afterPrev = Date.now(), tripsPrev = ctx.trips.count - before;
   await sweepInDirection(commands.next, sweepCtx);
+  ctx.diag.mark("sweep", {
+    type: ctx.label,
+    found: out.length,
+    prevMs: afterPrev - startedAt,
+    nextMs: Date.now() - afterPrev,
+    prevTrips: tripsPrev,
+    nextTrips: ctx.trips.count - before - tripsPrev,
+  });
   return out;
 }
 
 // Walk one direction with a single quick-nav command until it runs out, the cap
 // is hit, or the deadline passes, appending each new element to `out`.
-async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline }) {
+// NVDA prefixes an announcement with the container it just entered, so the SAME element is
+// announced two different ways depending on which direction you reach it from:
+//
+//   "Children's story time, heading, level 3"
+//   "main landmark, Children's story time, heading, level 3"
+//
+// A raw prefix key treats those as two elements. It shows up as a phantom extra heading --
+// harmless to the assertions, but it is noise in the evidence, and it got worse once the
+// sweep stopped starting from a fixed position. Strip a leading container announcement before
+// keying.
+const CONTAINER_PREFIX = /^(?:\w[\w\s'-]*\s)?(?:landmark|region|banner|navigation|main|complementary|content info|form|article),\s*/i;
+
+const dedupeKey = (phrase) => phrase.replace(CONTAINER_PREFIX, "").slice(0, DEDUPE_KEY_LEN);
+
+async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline, trips }) {
   // Seed with what is currently spoken. If a quick-nav jump leaves the spoken
   // phrase UNCHANGED, NVDA did not move (no element of this type in that
   // direction) and lastSpokenPhrase is just echoing a stale phrase — stop
   // rather than record it as a phantom element. More robust than matching
   // NVDA's "no next/previous heading" wording, which varies by version.
+  trips.count += 1;
   let prev = (await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, label).catch(() => "") || "").trim();
   for (let i = 0; i < MAX_SWEEP_STEPS; i++) {
     if (Date.now() > deadline) break;
     let phrase;
     try {
+      trips.count += 2;
       await withTimeout(nvda.perform(cmd), NAV_TIMEOUT_MS, label);
       phrase = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, label)) || "").trim();
     } catch { break; }
     if (!phrase || /\bno (next|previous|more)\b/i.test(phrase) || phrase === prev) break;
     prev = phrase;
     if (phrase.length < MIN_CONTROL_NAME_LEN) continue; // stray key echo, not a control
-    const key = phrase.slice(0, DEDUPE_KEY_LEN);
+    const key = dedupeKey(phrase);
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
     out.push(phrase);
