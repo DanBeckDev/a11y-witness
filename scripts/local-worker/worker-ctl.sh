@@ -9,6 +9,8 @@
 #   ./scripts/local-worker/worker-ctl.sh json          # the same, machine-readable (used by the CLI)
 #   ./scripts/local-worker/worker-ctl.sh pool          # every a11y-worker* VM, as JSON
 #   ./scripts/local-worker/worker-ctl.sh pool-up       # start them all, wait for health
+#   ./scripts/local-worker/worker-ctl.sh pool-stop     # shut the whole pool down
+#   ./scripts/local-worker/worker-ctl.sh pool-pause    # freeze the whole pool
 #
 # One VM serves one capture at a time, so throughput comes from more VMs. `pool` reports the
 # lot; add one with clone-worker.sh (which handles the duplicate-MAC trap).
@@ -158,9 +160,11 @@ wait_healthy() {
   return 1
 }
 
+# This VM's own process, matched on its UUID in the qemu command line. Reporting whichever
+# qemu process came first described a different worker as soon as there was a pool.
 qemu_usage() {
-  local pid; pid="$(pgrep -f QEMULauncher | head -1 || true)"
-  if [ -z "$pid" ]; then echo "no qemu process (RAM released)"; return; fi
+  local pid; pid="$(pgrep -f "uuid $UUID" | head -1 || true)"
+  if [ -z "$pid" ]; then echo "not running (RAM released)"; return; fi
   ps -o pcpu=,rss= -p "$pid" | awk '{printf "cpu=%s%% rss=%.1fGB", $1, $2/1048576}'
 }
 
@@ -203,20 +207,48 @@ case "$CMD" in
       echo "resuming briefly so the guest can shut down cleanly"
       utmctl start "$UUID" >/dev/null; sleep 5
     fi
-    # --request, NOT the default. `utmctl stop` defaults to --force, which is a power-off
-    # event: from Windows' point of view the plug was pulled, so every stop leaves a dirty
-    # volume and the next boot can burn time on "Windows did not shut down properly" and a
-    # chkdsk. --request sends ACPI shutdown and lets the guest flush.
-    utmctl stop "$UUID" --request >/dev/null
+    # Ask Windows directly through the guest agent, rather than relying on ACPI.
+    #
+    # `utmctl stop --request` sends an ACPI power-button event, and this guest ignores it: every
+    # stop sat out the full 120s grace and then force-stopped, so every "clean" shutdown was
+    # actually a power cut. Setting AutoEndTasks and the kill timeouts did not help, which
+    # points at the guest's power-button action rather than at apps refusing to close.
+    #
+    # `shutdown /s /t 0` over the guest agent needs no network and no ACPI, and Windows flushes
+    # properly. ACPI stays as the fallback, and force as the last resort.
+    if utmctl exec "$UUID" --cmd shutdown.exe /s /t 0 >/dev/null 2>&1; then
+      echo "  asked Windows to shut down (guest agent)"
+    else
+      echo "  guest agent unavailable; falling back to ACPI"
+      utmctl stop "$UUID" --request >/dev/null 2>&1 || true
+    fi
+    # Wait on THIS VM's state, not on the absence of qemu processes.
+    #
+    # The old loop broke only when no QEMULauncher process existed anywhere, which is true with
+    # one VM and false with a pool: the other workers' processes kept it spinning for the full
+    # grace period, so every stop reported "guest ignored ACPI shutdown" and force-stopped a VM
+    # that had already shut down cleanly -- the giveaway being the force-stop then failing with
+    # "The virtual machine is not running". Two and a half minutes per stop, and every "clean"
+    # shutdown recorded as a power cut, all from a check that could not tell our VM from anyone
+    # else's.
+    # Poll THIS VM's own qemu process, by UUID. Two wrong turns got here:
+    #
+    #   `pgrep -f QEMULauncher`  breaks only when NO vm is running anywhere, so with a pool the
+    #                            other workers kept it spinning the full grace period and every
+    #                            clean shutdown was recorded as ignored, then force-stopped.
+    #   `utmctl status`          per-VM and correct, but slow enough that forty iterations took
+    #                            464s of wall clock while `waited` only counted the sleeps.
+    #
+    # pgrep on the UUID is both: specific to this VM, and cheap enough to poll.
     waited=0
     while [ "$waited" -lt "$SHUTDOWN_GRACE_S" ]; do
-      pgrep -f QEMULauncher >/dev/null || break
+      pgrep -f "uuid $UUID" >/dev/null || break
       sleep 3; waited=$((waited + 3))
     done
-    if pgrep -f QEMULauncher >/dev/null; then
+    if pgrep -f "uuid $UUID" >/dev/null; then
       echo "  guest ignored ACPI shutdown after ${waited}s -- forcing"
       utmctl stop "$UUID" >/dev/null
-      for _ in $(seq 1 10); do pgrep -f QEMULauncher >/dev/null || break; sleep 3; done
+      for _ in $(seq 1 10); do pgrep -f "uuid $UUID" >/dev/null || break; sleep 3; done
     fi
     echo "stopped after ${waited}s ($(qemu_usage))"
     ;;
@@ -255,6 +287,17 @@ case "$CMD" in
     busy=false; if echo "$body" | grep -q '"busy":true'; then busy=true; fi
     printf '{"uuid":"%s","name":"%s","state":"%s","ip":"%s","port":%s,"healthy":%s,"busy":%s}\n' \
       "$UUID" "$VM_NAME" "$(vm_state "$UUID")" "${ip:-}" "$PORT" "$healthy" "$busy"
+    ;;
+
+  pool-stop|pool-pause)
+    # Stop or pause every worker in one go, for when a run has finished and you want the
+    # resources back. `idle-stop`/`idle-pause` do this automatically for a single VM; this is
+    # the manual, whole-pool version.
+    action="${CMD#pool-}"
+    for n in $(utmctl list | awk -v n="$VM_NAME" '$3 ~ "^"n { print $3 }' | sort -u); do
+      echo "--- $n ---"
+      A11Y_VM_NAME="$n" "$0" "$action" || echo "  '$n' did not $action"
+    done
     ;;
 
   pool|pool-up)
@@ -309,5 +352,5 @@ case "$CMD" in
     done
     ;;
 
-  *) die "unknown command '$CMD' (up | pause | stop | status | json | pool | pool-up | idle-pause [min] | idle-stop [min])";;
+  *) die "unknown command '$CMD' (up | pause | stop | status | json | pool | pool-up | pool-stop | pool-pause | idle-pause [min] | idle-stop [min])";;
 esac

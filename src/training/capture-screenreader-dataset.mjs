@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { leaseWorker, guestReachableUrl, isAfterRun } from "../capture/local-vm.js";
+import { leaseWorker, leaseWorkerPool, guestReachableUrl, isAfterRun } from "../capture/local-vm.js";
 import { captureMentionsTitle, titleOf } from "../capture/verify.js";
 import { beginRun, readProgress } from "./capture-progress.mjs";
 
@@ -347,11 +347,24 @@ async function main() {
   const done = previouslyCaptured(cases);
   if (done.size) console.log("Resuming: " + done.size + " case(s) already captured.");
 
-  // An explicit pool short-circuits the lease: those workers are someone else's to manage.
-  const pool = WORKERS_ENV ? WORKERS_ENV.split(",").map((w) => w.trim().replace(/\/$/, "")).filter(Boolean) : null;
-  const lease = pool
-    ? { worker: pool[0], source: "explicit", hostAddress: undefined, release: async () => {} }
-    : await leaseWorker({ worker: process.env.A11Y_WORKER ?? null, after: afterRun() });
+  // Three ways to get workers, in priority order:
+  //   A11Y_WORKERS  an explicit pool -- someone else's to manage, so no lifecycle handling
+  //   two or more local VMs  leased as a pool AND put back afterwards
+  //   otherwise     the single-worker lease, as before
+  //
+  // The middle case is the point: pooling used to hand back a no-op release, so a pooled run
+  // left every VM running indefinitely. That is the exact cost the single-worker lease exists
+  // to avoid, and it came back the moment pooling became the normal way to run.
+  const explicitPool = WORKERS_ENV
+    ? WORKERS_ENV.split(",").map((w) => w.trim().replace(/\/$/, "")).filter(Boolean)
+    : null;
+  const localPool = explicitPool || process.env.A11Y_WORKER ? null : await leaseWorkerPool(afterRun());
+  const pool = explicitPool ?? localPool?.workers ?? null;
+  const lease = localPool
+    ? { worker: localPool.workers[0], source: "local-vm", hostAddress: localPool.hostAddress, release: localPool.release }
+    : explicitPool
+      ? { worker: explicitPool[0], source: "explicit", hostAddress: undefined, release: async () => {} }
+      : await leaseWorker({ worker: process.env.A11Y_WORKER ?? null, after: afterRun() });
   try {
     if (pool) {
       // Check every one of them before starting: discovering a dead worker an hour in wastes

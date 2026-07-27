@@ -100,8 +100,9 @@ function hostAddressFor(guestIp: string): string | undefined {
   return undefined;
 }
 
-async function ctl(args: string[], timeoutMs: number): Promise<string> {
-  const { stdout } = await execFileAsync(CTL, args, { timeout: timeoutMs, encoding: "utf8" });
+async function ctl(args: string[], timeoutMs: number, vmName?: string): Promise<string> {
+  const env = vmName ? { ...process.env, A11Y_VM_NAME: vmName } : process.env;
+  const { stdout } = await execFileAsync(CTL, args, { timeout: timeoutMs, encoding: "utf8", env });
   return stdout;
 }
 
@@ -247,4 +248,72 @@ export function guestReachableUrl(baseUrl: string, lease: WorkerLease): string {
   if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") return baseUrl;
   parsed.hostname = hostAddress;
   return parsed.toString().replace(/\/$/, "");
+}
+
+/** Several workers, and the cleanup that puts every one of them back as it was found. */
+export interface PoolLease {
+  workers: string[];
+  hostAddress?: string;
+  release: () => Promise<void>;
+}
+
+/** Every local worker VM, whatever state each is in. */
+async function findLocalPool(): Promise<VmStatus[]> {
+  if (process.platform !== "darwin") return [];
+  try {
+    return JSON.parse(await ctl(["pool"], STATUS_TIMEOUT_MS)) as VmStatus[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Lease every local worker VM: start what is not running, and put each one back afterwards.
+ *
+ * This exists because the pool path used to hand back a no-op release, so a pooled run left
+ * every VM running indefinitely — which is precisely the cost the single-worker lease was
+ * written to avoid, reintroduced the moment pooling became the normal way to run.
+ *
+ * Per-VM restore, not a blanket stop: a VM you had already started stays started, exactly as
+ * in the single-worker case. A long dataset run must not shut down a worker somebody else is
+ * using, and with a pool that is likelier, not less.
+ */
+export async function leaseWorkerPool(after: AfterRun): Promise<PoolLease | null> {
+  const pool = await findLocalPool();
+  if (pool.length < 2) return null; // one VM is the single-worker path's job
+
+  const before = new Map(pool.map((vm) => [vm.name, vm.state]));
+  for (const vm of pool) {
+    if (vm.state === "started" && vm.healthy) continue;
+    process.stderr.write(`Local worker '${vm.name}' is ${vm.state}; bringing it up ...\n`);
+    await ctl(["up"], LIFECYCLE_TIMEOUT_MS, vm.name);
+  }
+
+  const ready = (await findLocalPool()).filter((vm) => vm.healthy && vm.ip);
+  if (!ready.length) throw new Error("no local worker became healthy; check: worker-ctl.sh pool");
+  process.stderr.write(`Pool of ${ready.length}: ${ready.map((v) => v.name).join(", ")}\n`);
+
+  return {
+    workers: ready.map((vm) => `http://${vm.ip}:${vm.port}`),
+    hostAddress: hostAddressFor(ready[0].ip),
+    release: async () => {
+      for (const vm of ready) {
+        const action = after === "restore" ? restoreAction(before.get(vm.name) ?? "stopped") : after;
+        if (action === "leave") continue;
+        try {
+          // Check per VM: another run may have picked this one up while ours was finishing.
+          const now = (await findLocalPool()).find((v) => v.name === vm.name);
+          if (now?.busy) {
+            process.stderr.write(`'${vm.name}' is busy with another capture; leaving it ${now.state}\n`);
+            continue;
+          }
+          process.stderr.write(`${action === "pause" ? "Pausing" : "Shutting down"} '${vm.name}' ...\n`);
+          await ctl([action], LIFECYCLE_TIMEOUT_MS, vm.name);
+        } catch (e) {
+          // One VM failing to stop must not strand the others.
+          process.stderr.write(`WARNING: could not ${action} '${vm.name}': ${(e as Error).message}\n`);
+        }
+      }
+    },
+  };
 }
