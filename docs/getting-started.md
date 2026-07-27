@@ -117,7 +117,18 @@ Real NVDA runs on a GitHub-hosted Windows runner. See
 [`.github/workflows/capture-regression.yml`](../.github/workflows/capture-regression.yml)
 for a working example to copy.
 
-## 4. Your first report
+## 4. Check you are ready
+
+```bash
+npm run doctor
+```
+
+One command for the whole prerequisite chain — VM, worker, page server, judge backend, and
+any run left mid-flight. Anything failing prints the exact command that fixes it. Run this
+before anything else when something looks wrong; it is faster than reasoning from symptoms,
+and the symptoms mislead (see the table below).
+
+## 5. Your first report
 
 ```bash
 npm run witness -- https://example.com --task "Read and understand this page"
@@ -151,7 +162,7 @@ Task completable: yes (overall confidence 0.96)
 
 That is a working install. `--json` gives you the full transcript alongside the findings.
 
-## 5. When the first run does not work
+## 6. When the first run does not work
 
 | what you see | what it means |
 |---|---|
