@@ -2,10 +2,11 @@
 // MUST run in an interactive desktop session (see run-server.cmd + the README).
 //   POST /capture  { url, task?, steps?, probeForms?, probeFocus? }
 //                                          -> { url, screenReader, transcript, task }
-//   GET  /health                           -> { ok, screenReader, busy }
+//   GET  /health                           -> { ok, screenReader, busy, code }
 // NVDA is a single shared resource, so captures are serialized.
 import { createServer } from "node:http";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { captureWithNvda, shutdownScreenReader } from "./capture-core.mjs";
 
 const PORT = Number(process.env.A11Y_PORT || 8765);
@@ -56,6 +57,35 @@ const REUSE_NVDA = process.env.A11Y_REUSE_NVDA !== "0";
 // Every probe is opt-in over the wire and defaults to off, so an old client keeps the old
 // behaviour and no capture pays for a probe it did not ask for. Extracted from the handler
 // because each default is a branch and the handler sat at the complexity ceiling.
+// What code is this worker actually running?
+//
+// Deploying is push-then-restart, and both halves can fail silently. `utmctl exec` returns
+// success and no output whether or not it ran anything -- measured: on two cloned guests the
+// restart never happened, the workers served the previous process for another hour, and the
+// hash check meant to catch that ALSO goes through exec, so it came back empty instead of
+// mismatched. A verification that shares a failure mode with the action verifies nothing.
+//
+// So the worker reports its own code over the channel it serves on. `/health` is reachable
+// exactly when the worker is usable, needs no guest agent, and a mismatch against the host's
+// hash is unambiguous. Compare with: npm run worker:code
+function codeVersion() {
+  try {
+    const hash = createHash("sha256");
+    // Order matters and must match the host side: capture behaviour, then the wire contract.
+    for (const file of ["capture-core.mjs", "server.mjs"]) {
+      hash.update(readFileSync(new URL(file, import.meta.url)));
+    }
+    return hash.digest("hex").slice(0, 16);
+  } catch (e) {
+    // Never fatal: a worker that cannot hash itself can still capture, and saying so beats
+    // refusing to start.
+    log(`could not compute code version: ${e.message}`);
+    return "unknown";
+  }
+}
+
+const CODE_VERSION = codeVersion();
+
 function captureOptions(parsed) {
   return {
     steps: parsed.steps,
@@ -74,7 +104,7 @@ function send(res, code, obj) {
 
 const server = createServer((req, res) => {
   if (req.method === "GET" && req.url === "/health") {
-    return send(res, 200, { ok: true, screenReader: "NVDA", busy });
+    return send(res, 200, { ok: true, screenReader: "NVDA", busy, code: CODE_VERSION });
   }
   if (req.method === "POST" && req.url === "/capture") {
     if (busy) return send(res, 429, { error: "a capture is already in progress" });
