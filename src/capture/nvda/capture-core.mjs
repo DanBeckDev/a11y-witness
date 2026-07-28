@@ -107,13 +107,38 @@ function createDiagnostics() {
  *   diagnostics:object[]}>}
  */
 export async function captureWithNvda(url, opts = {}) {
+  const diag = createDiagnostics();
+  const browser = launchBrowser(url, diag);
+  let succeeded = false;
+  try {
+    const result = await runCapturePhases(url, opts, diag);
+    succeeded = true;
+    return result;
+  } finally {
+    // Cleanup MUST be unconditional, and it was not.
+    //
+    // Edge is launched before NVDA is started, and every phase in between can throw. When
+    // `nvda.start` timed out, the throw skipped the cleanup call entirely and left the browser
+    // running -- so each failed capture leaked one Edge. Measured on a stuck worker: EIGHT
+    // orphaned msedge processes in the logged-on session, on a 4 GB guest, which is exactly
+    // the load that makes the NEXT nvda.start time out. Failures compounded until the worker
+    // could not capture at all, and all three workers reached that state.
+    //
+    // On failure the screen reader is NOT kept, whatever the reuse setting says: a capture that
+    // died mid-flight can leave NVDA running but unresponsive, and reusing that is how one bad
+    // capture poisons every capture after it.
+    await stopAndCleanup(diag, browser, { keepScreenReader: !!opts.reuseScreenReader && succeeded })
+      .catch((e) => diag.mark("cleanupFailed", { error: errMsg(e) }));
+  }
+}
+
+// The capture proper. Split out so captureWithNvda is nothing but "launch, run, always clean
+// up" -- the guarantee is the point, and it should be readable at a glance.
+async function runCapturePhases(url, opts, diag) {
   const steps = Number(opts.steps || DEFAULT_STEPS);
   const browserWaitMs = Number(opts.browserWaitMs || DEFAULT_BROWSER_WAIT_MS);
   const navStrategy = opts.nav === "object" ? "object" : "line";
   const maxMs = Number(opts.maxMs || DEFAULT_BUDGET_MS);
-  const diag = createDiagnostics();
-
-  const browser = launchBrowser(url, diag);
 
   await focusBrowserWindow(browserWaitMs, diag);
   const coldStart = await startScreenReader(diag, { reuse: !!opts.reuseScreenReader });
@@ -151,10 +176,11 @@ export async function captureWithNvda(url, opts = {}) {
   await recordStartupHealth(diag);
   const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
   const { structure, interaction } = await navigateByStructure({
-    deadline, diag, probeForms: !!opts.probeForms, probeFocus: !!opts.probeFocus, task: opts.task,
+    deadline, diag,
+    probeForms: !!opts.probeForms, probeFocus: !!opts.probeFocus, probeTables: !!opts.probeTables,
+    task: opts.task,
   });
 
-  await stopAndCleanup(diag, browser, { keepScreenReader: !!opts.reuseScreenReader });
   diag.mark("done", { transcript: transcript.length });
   return {
     url,
@@ -425,6 +451,21 @@ async function stopScreenReader(diag) {
 
 /** Stop the shared screen reader. The HTTP worker calls this on shutdown; without it a
  * reused NVDA would outlive the process that started it. */
+// Forget the reused NVDA without touching the process.
+//
+// Guidepup's NVDA client reports a dropped speech channel by emitting on its TLS socket, which
+// surfaces as an UNHANDLED rejection ("Cannot connect to NVDA / ECONNREFUSED 127.0.0.1:6837")
+// outside any await we control. The worker used to exit on that and rely on the scheduled task
+// for a clean restart -- but the task demonstrably does NOT always restart it: one worker sat
+// dead for over three minutes with its VM up and RestartCount 5 configured, and stayed dead.
+//
+// A worker that stays up and cold-starts NVDA on the next capture beats one that exits hoping
+// for a babysitter. This just clears the belief that NVDA is reusable; startFreshScreenReader
+// already knows how to clear a leftover instance out of the way.
+export function forgetScreenReader() {
+  screenReader = { running: false, captures: 0 };
+}
+
 export async function shutdownScreenReader() {
   const diag = createDiagnostics();
   await stopScreenReader(diag);
@@ -502,7 +543,7 @@ async function advanceAndRead(navStrategy) {
 // quick-nav, and — while a control is under the cursor — operate it to capture
 // the announcements only interaction reveals. Returns the structure model and
 // the interaction model.
-async function navigateByStructure({ deadline, diag, probeForms, probeFocus, task }) {
+async function navigateByStructure({ deadline, diag, probeForms, probeFocus, probeTables, task }) {
   const K = nvda.keyboardCommands;
   const interaction = { stateChanges: [], formChanges: [], sweepLog: [] };
   const onFormField = (phrase) => operateControl(phrase, { probeForms, deadline, interaction, task });
@@ -539,7 +580,19 @@ async function navigateByStructure({ deadline, diag, probeForms, probeFocus, tas
     // Additive: graphics, links and lists by quick-nav, then a table walked cell by cell.
     // These fields are new, so no existing signal reads them and none can be broken by them.
     Object.assign(structure, await sweepExtraTypes({ deadline, diag, trips }));
-    structure.tableCells = await probeTableCells({ deadline, diag });
+    // Table cells are OPT-IN, unlike the sweeps above, because they are not yet deterministic.
+    //
+    // Measured over 18 captures of one unchanged page across three workers: 4, 2, 4, 4, 1, 4, 4
+    // cells and worse before the settle. The quick-nav sweeps in the same captures were rock
+    // steady (graphics, links, lists, landmarks and formFields identical every time), so this is
+    // specific to Ctrl+Alt+Arrow grid navigation and NVDA's speech log, not to the capture.
+    // Priming into the grid, tolerating silence, and a 500 ms settle each helped and none of
+    // them fixed it.
+    //
+    // A field that varies with timing is indistinguishable from a page that differs, which is
+    // precisely the contamination this project exists to avoid -- so it stays off unless asked
+    // for, and `docs/screenreader-coverage.md` says not to use it as dataset evidence yet.
+    if (probeTables) structure.tableCells = await probeTableCells({ deadline, diag });
   } catch (e) {
     diag.mark("structural", { error: errMsg(e) });
   }
@@ -710,12 +763,22 @@ async function sweepExtraTypes(ctx) {
 // where header association shows up; not so far that a wide table dominates the capture.
 const MAX_TABLE_STEPS = 6;
 
+// Table navigation needs a settle between the keystroke and reading the speech log, exactly as
+// the control probes do (STATE_SETTLE_MS) and the anchor does (ANCHOR_SETTLE_MS). Without one,
+// nine captures of the SAME page returned 4, 4, 1, 4, 2, 3, 0 and one error's worth of cells --
+// evidence that varied purely with timing, which is indistinguishable from a page that differs.
+// Quick-nav sweeps get away with no settle because each jump is slower; a Ctrl+Alt+Arrow within
+// an already-rendered grid returns faster than NVDA updates lastSpokenPhrase.
+const TABLE_SETTLE_MS = 500;
+
 // One dud step is tolerated before giving up. Guidepup's own description is "WHEN WITHIN A
 // TABLE, moves the system caret to the next column" -- and jumping to a table with T lands on
 // its caption, which is not within the grid. So the first Ctrl+Alt+Arrow announces nothing and
 // a walk that stopped at the first unchanged phrase collected only the table's entry line.
 // Measured: tableCells was 1 on a 2x3 table before this.
-const MAX_TABLE_MISSES = 2;
+// Three, not two, because silence now counts as a miss and a slow speech log can swallow one
+// step without the walk being over.
+const MAX_TABLE_MISSES = 3;
 
 // Walk one direction inside a table, appending each newly announced cell.
 // `step` is a thunk so the caller chooses HOW the keystroke is sent: nvda.perform(command) and
@@ -730,11 +793,17 @@ async function walkTable(step, { out, deadline, label, trace }) {
     try {
       await withTimeout(step(), NAV_TIMEOUT_MS, label);
     } catch (e) { trace.push(`${label} threw ${errMsg(e)}`); break; }
+    await sleep(TABLE_SETTLE_MS);
     const phrase = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, label).catch(() => "")) || "").trim();
     trace.push(`${label}[${i}] ${phrase.slice(0, 60) || "(silence)"}`);
-    // "edge of table" is NVDA's boundary wording; an unchanged phrase means it did not move.
-    if (!phrase || /\bedge of table\b|\bnot in a table\b/i.test(phrase)) break;
-    if (phrase === prev) {
+    // Only NVDA's own boundary wording ends the walk.
+    if (/\bedge of table\b|\bnot in a table\b/i.test(phrase)) break;
+    // Silence is NOT the end, and treating it as the end cost real evidence: one capture's
+    // column walk stopped dead on a single silent step and returned 2 cells where the same page
+    // on the same worker had yielded 4 a minute earlier -- the difference being a reused NVDA
+    // whose speech log lagged one keystroke. Identical pages must not produce different
+    // evidence depending on timing, so a silent or unchanged step is retried, not fatal.
+    if (!phrase || phrase === prev) {
       misses += 1;
       if (misses >= MAX_TABLE_MISSES) break;
       continue;
@@ -797,6 +866,7 @@ const MAX_CELL_PRIMES = 3;
 async function enterFirstCell(K, { trace }) {
   for (let i = 0; i < MAX_CELL_PRIMES; i += 1) {
     await withTimeout(nvda.perform(K.moveToNextRow), NAV_TIMEOUT_MS, "prime").catch(() => undefined);
+    await sleep(TABLE_SETTLE_MS);
     const phrase = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "prime").catch(() => "")) || "").trim();
     trace.push(`prime[${i}] ${phrase.slice(0, 60) || "(silence)"}`);
     if (phrase && !/not in a table cell/i.test(phrase)) return phrase;

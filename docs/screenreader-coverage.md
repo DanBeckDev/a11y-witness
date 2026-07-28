@@ -21,11 +21,34 @@ is real.
 | Find the images | `G` / `Shift+G` | `structure.graphics` | 1.1.1 |
 | Hear link text out of context | `K` / `Shift+K` | `structure.links` | 2.4.4, 2.4.9 |
 | Meet a list | `L` / `Shift+L` | `structure.lists` | 1.3.1 |
-| Read a table cell by cell | `T`, then `Ctrl+Alt+Arrow` | `structure.tableCells` | 1.3.1 |
+| Read a table cell by cell | `T`, then `Ctrl+Alt+Arrow` (**opt-in, see caveat**) | `structure.tableCells` | 1.3.1 |
 | Tab through the page | `Tab` + report focus (**opt-in**) | `interaction.focusOrder` | 2.1.2, 2.4.3 |
 
-Everything except the last is on by default; the default set costs ~15–17 s per capture.
-`focusOrder` adds ~8 s, so it is requested per case with `"probeFocus": true`.
+The first nine are on by default and cost ~15–17 s per capture. The last two are opt-in per
+capture — `"probeFocus": true` (adds ~8 s) and `"probeTables": true` (see the caveat below).
+
+### Caveat: table cells are not dataset-grade yet
+
+`tableCells` works and it discriminates — a table with `<th>` announces `"Departs, column 2,
+09:15"` where one without says `"column 2, 09:15"`, which is the 1.3.1 evidence nothing else
+gives us. But it is **not yet deterministic**, so it is off by default and **must not be used as
+dataset evidence**.
+
+Measured over 18 captures of one unchanged page across three workers: 4, 2, 4, 4, 1, 4, 4 cells,
+and worse before the settle was added. In the same captures the quick-nav sweeps were rock steady
+— `graphics`, `links`, `lists`, `landmarks` and `formFields` identical every time — so this is
+specific to `Ctrl+Alt+Arrow` grid navigation and how fast NVDA updates its speech log, not to the
+capture as a whole.
+
+Three fixes each helped and none cured it: priming the caret into the grid (`T` lands on the
+caption, so the first cell move answers `"Not in a table cell"`), treating a silent step as
+retryable rather than final, and a 500 ms settle between keystroke and read. A field that varies
+with timing is indistinguishable from a page that genuinely differs, which is exactly the
+contamination this project exists to avoid.
+
+Next thing to try: read the `spokenPhraseLog` delta rather than `lastSpokenPhrase`, as
+`activateAndCaptureDelta` does — a delta cannot miss an announcement that arrives late, whereas
+a single "what was last said" read can.
 
 ## Not driven yet
 
@@ -65,10 +88,12 @@ problem — both returned NVDA's identical "Not in a table cell". Do not spend t
    silently blinds signals that read it (this has happened, to 8 cases at once).
 2. Prove it **discriminates** — run it on a good page and a bad page and check the two differ.
    Identical output on both means you have built instrumentation that measures nothing.
-3. Default it **off** if it costs real time. `captureOptions` in `server.mjs` is where that
-   contract lives.
+3. Default it **off** if it costs real time **or if it is not yet deterministic**. Run it 5+
+   times on ONE unchanged page and require identical output; `tableCells` failed that and is
+   therefore opt-in. `captureOptions` in `server.mjs` is where that contract lives.
 4. Compare against a previous capture's **evidence**, not its counts. A readiness gate once
    deleted every `"heading, level N"` announcement in the corpus while every count-based check
    stayed green.
-5. It only runs against NVDA on the Windows worker. Deploy, restart `a11ysrv`, capture a real
-   page, and read the diagnostics — there is no local test.
+5. It only runs against NVDA on the Windows worker, and there is no local test. Deploy, **reboot
+   the guest** (a `utmctl exec` restart silently does nothing when the guest agent is not ready),
+   confirm with `npm run worker:code`, then capture a real page and read the diagnostics.
