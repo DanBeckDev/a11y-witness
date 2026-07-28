@@ -115,6 +115,16 @@ updates go cold past one capture timeout it exits 3 rather than waiting forever.
 are the contract — **0** clean, **1** finished with failures, **2** no run, **3** wedged —
 and both commands emit a `next_command` field so you do not have to infer the next step.
 
+## What the screen reader drives
+
+`docs/screenreader-coverage.md` is the map: every user behaviour we drive, the field it lands
+in, and — the part that matters — **what we do not drive yet**, with the guidepup command for
+each. Read it before adding a probe, and update it when you do. A behaviour missing from that
+table is not a missing feature; it is a claim this project cannot currently make.
+
+Probes beyond the default set are opt-in over the wire (`probeForms`, `probeFocus`) so a capture
+never pays for evidence nobody asked for. `focusOrder` costs ~8 s on top of a ~15 s capture.
+
 ## Verifying changes (there are no unit tests)
 
 Verification is layered; pick the layers your change touches:
