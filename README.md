@@ -78,10 +78,17 @@ Capture is operating-system-bound, so it is split from everything else:
  ┌──────────────────────────┐                 ┌────────────────────────────┐
  │ witness CLI              │  POST /capture  │ NVDA + Edge                │
  │  ├─ axe-core (optional)  │ ──────────────► │  browse-mode read-through  │
- │  └─ AI judge             │ ◄────────────── │  heading/landmark quick-nav│
+ │  └─ AI judge             │ ◄────────────── │  quick-nav by element type │
  │      rules + gate        │   transcript    │  operate controls          │
  └──────────────────────────┘                 └────────────────────────────┘
 ```
+
+The worker quick-navigates the way a screen-reader user does — headings, landmarks, form
+fields, images, links and lists — then operates the controls it finds, because a state change
+only exists once something is activated. Tab-order traversal and cell-by-cell table reading are
+opt-in per capture. **[`docs/screenreader-coverage.md`](./docs/screenreader-coverage.md) is the
+map of what we drive and what we do not** — a behaviour missing from that table is not a missing
+feature, it is a claim this project cannot yet make.
 
 - **Capture worker** (Windows): drives **NVDA** via [Guidepup](https://github.com/guidepup/guidepup) through real navigation and returns the announcement transcript over HTTP. Speech is read over NVDA's Remote Access channel, not audio, so the machine needs no sound device. See [`src/capture/nvda/`](./src/capture/nvda/).
 - **Control plane** (anywhere): the `witness` CLI runs the capture and — if the optional axe layer is installed — axe-core concurrently, then judges the transcript and prints the report. Architecture rationale: [`docs/adr/0001-capture-architecture.md`](./docs/adr/0001-capture-architecture.md) and [`0002-layered-coverage.md`](./docs/adr/0002-layered-coverage.md).
@@ -207,7 +214,10 @@ When a worker breaks, the error messages lie — `"NVDA not installed"` usually 
 
 ## How we know it works
 
-There are no unit tests; verification is layered, and each layer tests something the others cannot.
+Verification is layered, and each layer tests something the others cannot. There are unit tests
+(`npm test`, 22 of them) for the pure functions — the deterministic rules, the judge layers, eval
+fitness — and CI gates on them; everything below exists because most of this system cannot be
+unit-tested, since a real screen reader on a real desktop is the thing under test.
 
 | command | what it checks |
 |---|---|

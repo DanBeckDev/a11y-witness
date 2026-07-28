@@ -411,6 +411,45 @@ time, which is 15s and not on any critical path.
   across a pool, which nothing implements yet. Deliberately after the above: parallelism
   multiplies whatever the per-capture cost is.
 
+## Worker reliability pass (2026-07-28)
+
+Three workers looked intermittently broken all day. Almost all of it was one thing.
+
+**Root cause: the first capture after a VM boots fails `nvda.start`; every one after it works.**
+Windows is still settling after auto-logon. Because whichever VM had been up longest worked, the
+fault appeared to move between guests, and it was successively misdiagnosed as a bad clone, a stub
+NVDA install, and a wedged worker. Fixed by retrying the start once after 8 s.
+
+Found while chasing it:
+
+- **Failed captures leaked Edge.** No `try/finally` around the capture, so a thrown `nvda.start`
+  skipped cleanup. Eight orphaned `msedge` processes were measured on one 4 GB guest — which is
+  the load that makes the *next* start time out. Failures compounded. Cleanup is unconditional now.
+- **A dropped NVDA speech channel killed the worker.** It arrives as an async unhandled rejection
+  and the handler exited(1), trusting the scheduled task to restart a clean worker. It does not:
+  a worker sat dead for three minutes with `RestartCount 5` set. It now forgets the stale NVDA and
+  keeps serving.
+- **Deploy verification was blind.** `utmctl exec` returns success and no output whether or not it
+  ran, and the hash check meant to catch a stale deploy *also* went through `exec` — so it returned
+  empty, not mismatched, and two workers served old code for an hour. Workers now report a code
+  hash on `/health`; `npm run worker:code` compares it and shares no failure mode with the deploy.
+
+### Open
+
+- **`tableCells` is not deterministic — currently opt-in and not dataset-grade.** 18 captures of
+  one unchanged page returned 4, 2, 4, 4, 1, 4, 4 cells. Priming into the grid, tolerating a silent
+  step and a 500 ms settle each helped, none cured it; the quick-nav sweeps in the same captures
+  were identical every time. **Next: read the `spokenPhraseLog` delta instead of
+  `lastSpokenPhrase`**, as `activateAndCaptureDelta` does — a delta cannot miss a late
+  announcement. Until then it must not be used as dataset evidence.
+- **Empty-capture flake (~1–3%).** A capture occasionally returns 0 phrases (the documented
+  ForegroundLockTimeout/foreground symptom). It is *contained*, not fixed: `captureMentionsTitle`
+  rejects it and the dataset retries 3x then writes it to `captures/rejected` rather than
+  recording nothing as something — verified on a real pooled run (78 captured, 1 rejected of 79).
+- Nine screen-reader behaviours are still not driven at all; see `docs/screenreader-coverage.md`.
+  The highest-value are status messages/live regions (4.1.3), dialogs and focus return, and
+  arrow-key widgets.
+
 ## Milestones
 
 ### M0 — Spike: is the core bet real? (now)
