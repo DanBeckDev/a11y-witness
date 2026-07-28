@@ -364,7 +364,7 @@ async function startScreenReader(diag, { reuse }) {
     await stopScreenReader(diag);
   }
   try {
-    await startFreshScreenReader(diag);
+    await startFreshWithRetry(diag);
     screenReader = { running: true, captures: 1 };
     return true;
   } catch (e) {
@@ -372,6 +372,32 @@ async function startScreenReader(diag, { reuse }) {
     diag.mark("nvdaStart", { ok: false, error: errMsg(e) });
     throw new Error("nvda.start failed: " + errMsg(e), { cause: e });
   }
+}
+
+// The FIRST capture after a guest boots very often fails with "Timed out waiting for NVDA to be
+// running", and every capture after it succeeds. This was the dominant failure mode on this pool
+// and it kept being misread as a broken worker: whichever VM had been up longest worked, freshly
+// booted ones did not, so the fault appeared to move between guests. Windows is still settling
+// after auto-logon -- the same reason `utmctl exec` does nothing for the first minute or two.
+//
+// One capture that takes eight seconds longer beats a run that loses its first case per worker,
+// so a failed start is retried once before it becomes an error.
+const NVDA_START_ATTEMPTS = 2;
+const NVDA_RETRY_DELAY_MS = 8_000;
+
+async function startFreshWithRetry(diag) {
+  let lastError;
+  for (let attempt = 1; attempt <= NVDA_START_ATTEMPTS; attempt += 1) {
+    try {
+      await startFreshScreenReader(diag);
+      return;
+    } catch (e) {
+      lastError = e;
+      diag.mark("nvdaStartAttempt", { attempt, error: errMsg(e) });
+      if (attempt < NVDA_START_ATTEMPTS) await sleep(NVDA_RETRY_DELAY_MS);
+    }
+  }
+  throw lastError;
 }
 
 // Start NVDA, clearing a leftover instance out of the way if one is blocking us.
