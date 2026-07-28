@@ -138,8 +138,41 @@ curl -X POST http://<worker>:8765/capture -H 'content-type: application/json' \
 
 # 3. full capture regression (6 real captures, ~5 min).
 #    MUST run in the console session -- via a scheduled task, not bare SSH.
+#    There is now a task and a launcher for exactly this; see below.
 node src/capture/nvda/capture-check.mjs
 ```
+
+### Running the gate for real
+
+`Stop-ScheduledTask -TaskName a11ysrv` **is not enough on its own.** The worker task carries
+`RestartCount 5`, so Task Scheduler brings it straight back and `capture-check` still refuses on
+`A capture worker is already serving on this machine`. Disable it, then re-enable it afterwards
+-- forgetting the second step leaves a worker that will not come back at the next logon.
+
+```bash
+UUID=$(utmctl list | awk '$3=="a11y-worker-3"{print $1}')
+
+# stop the worker and KEEP it stopped
+utmctl exec "$UUID" --cmd powershell.exe -NoProfile -Command \
+  'Disable-ScheduledTask -TaskName a11ysrv; Stop-ScheduledTask -TaskName a11ysrv; Start-Sleep 2;
+   Get-Process node -EA SilentlyContinue | Stop-Process -Force'
+curl -s -m 4 http://<guest>:8765/health && echo "still serving - the check will refuse"
+
+# run the gate in the interactive session (a11ycheck is registered by provisioning)
+utmctl exec "$UUID" --cmd powershell.exe -NoProfile -Command 'Start-ScheduledTask -TaskName a11ycheck'
+
+# read the log. Copy first: `utmctl file pull` returns NOTHING for a file still held open.
+utmctl exec "$UUID" --cmd powershell.exe -NoProfile -Command \
+  'Copy-Item C:\Users\witness\a11y-witness\capture-check.log C:\Users\witness\cc.log -Force'
+utmctl file pull "$UUID" 'C:\Users\witness\cc.log' | tr -d '\r' | tail -40
+
+# PUT THE WORKER BACK
+utmctl exec "$UUID" --cmd powershell.exe -NoProfile -Command \
+  'Enable-ScheduledTask -TaskName a11ysrv; Start-ScheduledTask -TaskName a11ysrv'
+```
+
+`utmctl exec` returns no stdout here, so anything you want to read has to be written to a file
+and pulled. The gate's verdict is its last line (`ALL CAPTURE CHECKS PASSED`) and its exit code.
 
 `capture-check` asserts that probes **fired**, not what they heard, so it can pass
 while the evidence is garbage. Always eyeball the probe values too — this is the
