@@ -316,6 +316,25 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal
 $task = Get-ScheduledTask -TaskName $TaskName
 OK "registered: logon=$($task.Principal.LogonType) runLevel=$($task.Principal.RunLevel) triggers=$(($task.Triggers | Measure-Object).Count) restarts=$($task.Settings.RestartCount)"
 
+# The capture-regression gate needs the same interactive desktop the worker does, so it needs
+# its own task -- `utmctl exec` and SSH land in session 0 and Guidepup reports that as
+# "NVDA is not supported", which reads like a broken install. Registering it here means every
+# worker can run the gate; it was previously reconstructed by hand each time.
+#
+# No trigger: this one is started on demand, never at logon. ExecutionTimeLimit is 30 minutes
+# rather than unlimited, because unlike the worker it IS a batch job and a wedged check should
+# not sit there forever.
+$checkCmd = Join-Path $RepoPath 'src\capture\nvda\run-capture-check.cmd'
+if (Test-Path $checkCmd) {
+  $checkSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+  Register-ScheduledTask -TaskName 'a11ycheck' `
+    -Action (New-ScheduledTaskAction -Execute $checkCmd) `
+    -Principal $principal -Settings $checkSettings -Force | Out-Null
+  OK "registered 'a11ycheck' (on-demand capture-regression gate)"
+} else {
+  Warn "no run-capture-check.cmd at $checkCmd -- skipping the a11ycheck task"
+}
+
 # ---------------------------------------------------------------------------
 Step 9 'Start and verify'
 
