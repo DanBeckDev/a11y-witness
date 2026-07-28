@@ -40,16 +40,31 @@ found it** — so a VM you started yourself is left running. `--after stop|pause
 overrides. `--no-axe` skips the optional rule layer; `--axe-results file.json` imports one you
 already ran.
 
-**Changing `capture-core.mjs` means deploying to the guest.** Push, verify the hash, restart:
+**Changing `capture-core.mjs` or `server.mjs` means deploying to the guest.** Push, then
+**reboot the guest**, then verify over HTTP:
 
 ```bash
 UUID=$(utmctl list | awk '$3=="a11y-worker"{print $1}')
 utmctl file push "$UUID" 'C:\Users\witness\a11y-witness\src\capture\nvda\capture-core.mjs' < src/capture/nvda/capture-core.mjs
-utmctl exec "$UUID" --cmd powershell.exe -NoProfile -Command 'Stop-ScheduledTask -TaskName a11ysrv; Get-Process node -EA SilentlyContinue | Stop-Process -Force; Start-Sleep 2; Start-ScheduledTask -TaskName a11ysrv'
+./scripts/local-worker/worker-ctl.sh stop && ./scripts/local-worker/worker-ctl.sh up
+npm run worker:code      # every worker's /health.code vs this checkout; exits 1 if any is stale
 ```
 
-Always hash-check both sides. A stale worker running old code looks exactly like a logic bug
-and will waste an hour.
+**Do not restart with `utmctl exec` and believe it.** `Stop-ScheduledTask` + `Start-ScheduledTask`
+silently did nothing on two cloned guests: they served the previous node process — and therefore
+the previous code — for another hour. `exec` returns success and no output whether or not it ran.
+Rebooting the guest always picks up a pushed file. Also note `utmctl stop --request` is sometimes
+ignored outright; `worker-ctl.sh stop` uses a guest-agent shutdown and waits for it.
+
+**Verify through `/health`, not through `exec`.** The old advice was "hash-check both sides", but
+reading the guest's hash goes through `exec` too — so when `exec` is broken the check returns
+*empty*, not *mismatched*, and empty reads as a flaky tool rather than a failed deploy. A
+verification that shares a failure mode with the action verifies nothing. `npm run worker:code`
+asks each worker over the channel it serves on, which is reachable exactly when it is usable.
+
+**This shell is zsh.** `for U in $UUIDS` does **not** word-split a scalar — it iterates once with
+the whole string, and `utmctl` answers `Virtual machine not found`, which reads like a
+deregistered VM. Use literal word lists or an array.
 
 **`utmctl` needs the UTM app running.** With UTM closed, a perfectly healthy VM reports its
 state as `unknown` and the worker looks unreachable — the bundle being present makes it read
