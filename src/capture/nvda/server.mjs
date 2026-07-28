@@ -1,13 +1,13 @@
 // server.mjs — NVDA capture worker as an HTTP service.
 // MUST run in an interactive desktop session (see run-server.cmd + the README).
-//   POST /capture  { url, task?, steps?, probeForms?, probeFocus? }
+//   POST /capture  { url, task?, steps?, probeForms?, probeFocus?, probeTables? }
 //                                          -> { url, screenReader, transcript, task }
 //   GET  /health                           -> { ok, screenReader, busy, code }
 // NVDA is a single shared resource, so captures are serialized.
 import { createServer } from "node:http";
 import { appendFileSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { captureWithNvda, shutdownScreenReader } from "./capture-core.mjs";
+import { captureWithNvda, forgetScreenReader, shutdownScreenReader } from "./capture-core.mjs";
 
 const PORT = Number(process.env.A11Y_PORT || 8765);
 const LOG_PATH = process.env.A11Y_SERVER_LOG || "server.log";
@@ -93,6 +93,7 @@ function captureOptions(parsed) {
     task: parsed.task ?? null,
     probeForms: parsed.probeForms ?? false,
     probeFocus: parsed.probeFocus ?? false,
+    probeTables: parsed.probeTables ?? false,
     reuseScreenReader: REUSE_NVDA,
   };
 }
@@ -150,9 +151,27 @@ server.listen(PORT, () => log(`a11y-witness NVDA worker listening on :${PORT} (r
 // Exit deliberately non-zero rather than trying to soldier on: the screen reader's state is
 // unknown at this point, and a worker that keeps answering /health while unable to capture is
 // worse than one that is honestly gone. The scheduled task is configured to restart it.
+// A dropped NVDA speech channel is RECOVERABLE and must not kill the worker.
+//
+// Guidepup reports it asynchronously on its own socket, so it arrives as an unhandled
+// rejection: "Cannot connect to NVDA", "connect ECONNREFUSED 127.0.0.1:6837". This used to
+// exit(1) on the theory that the scheduled task would restart a clean worker. It does not
+// reliably do that -- observed: a worker exited on exactly this error and was still dead three
+// minutes later with its VM up and RestartCount 5 configured, and only came back when restarted
+// by hand. Exiting therefore traded a recoverable fault for a dead worker.
+//
+// Now the worker forgets the reused NVDA and keeps serving; the next capture cold-starts one.
+const RECOVERABLE = /Cannot connect to NVDA|ECONNREFUSED[\s\S]*6837/i;
+
 for (const fatal of ["uncaughtException", "unhandledRejection"]) {
   process.on(fatal, (error) => {
-    log(`${fatal}: ${(error && error.stack) || error}`);
+    const detail = (error && error.stack) || String(error);
+    log(`${fatal}: ${detail}`);
+    if (RECOVERABLE.test(detail)) {
+      forgetScreenReader();
+      log("NVDA speech channel lost — forgetting it and staying up; the next capture cold-starts NVDA");
+      return;
+    }
     log("exiting so the scheduled task can restart a clean worker");
     process.exit(1);
   });
