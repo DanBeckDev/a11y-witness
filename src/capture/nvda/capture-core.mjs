@@ -100,9 +100,10 @@ function createDiagnostics() {
 
 /**
  * @returns {Promise<{url:string,screenReader:string,capturedAt:string,
- *   transcript:string[], structure:{headings:string[],landmarks:string[],formFields:string[]},
+ *   transcript:string[], structure:{headings:string[],landmarks:string[],formFields:string[],
+ *     graphics:string[],links:string[],lists:string[],tableCells:string[]},
  *   interaction:{controls:string[],stateChanges:{control:string,after:string}[],
- *     formChanges:{control:string,after:string}[], postSubmitFields:string[]},
+ *     formChanges:{control:string,after:string}[], postSubmitFields:string[],focusOrder:string[]},
  *   diagnostics:object[]}>}
  */
 export async function captureWithNvda(url, opts = {}) {
@@ -149,7 +150,9 @@ export async function captureWithNvda(url, opts = {}) {
   await anchorToTop();
   await recordStartupHealth(diag);
   const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
-  const { structure, interaction } = await navigateByStructure({ deadline, diag, probeForms: !!opts.probeForms, task: opts.task });
+  const { structure, interaction } = await navigateByStructure({
+    deadline, diag, probeForms: !!opts.probeForms, probeFocus: !!opts.probeFocus, task: opts.task,
+  });
 
   await stopAndCleanup(diag, browser, { keepScreenReader: !!opts.reuseScreenReader });
   diag.mark("done", { transcript: transcript.length });
@@ -499,13 +502,15 @@ async function advanceAndRead(navStrategy) {
 // quick-nav, and — while a control is under the cursor — operate it to capture
 // the announcements only interaction reveals. Returns the structure model and
 // the interaction model.
-async function navigateByStructure({ deadline, diag, probeForms, task }) {
+async function navigateByStructure({ deadline, diag, probeForms, probeFocus, task }) {
   const K = nvda.keyboardCommands;
   const interaction = { stateChanges: [], formChanges: [], sweepLog: [] };
   const onFormField = (phrase) => operateControl(phrase, { probeForms, deadline, interaction, task });
 
   const trips = { count: 0 };
-  const structure = { headings: [], landmarks: [], formFields: [] };
+  const structure = {
+    headings: [], landmarks: [], formFields: [], graphics: [], links: [], lists: [], tableCells: [],
+  };
   // No anchor here, deliberately. Measured: anchorToTop costs ~3s -- two nvda.press calls at
   // roughly 1.3s each plus the settle -- making it the single largest item in a 13.4s capture,
   // where all six structural sweeps together cost 1.7s.
@@ -531,6 +536,10 @@ async function navigateByStructure({ deadline, diag, probeForms, task }) {
     structure.formFields = await collectByType(
       { prev: K.moveToPreviousFormField, next: K.moveToNextFormField }, { label: "formField", onItem: onFormField, deadline, diag, trips });
     diag.mark("structural", { headings: structure.headings.length, landmarks: structure.landmarks.length, formFields: structure.formFields.length, roundTrips: trips.count });
+    // Additive: graphics, links and lists by quick-nav, then a table walked cell by cell.
+    // These fields are new, so no existing signal reads them and none can be broken by them.
+    Object.assign(structure, await sweepExtraTypes({ deadline, diag, trips }));
+    structure.tableCells = await probeTableCells({ deadline, diag });
   } catch (e) {
     diag.mark("structural", { error: errMsg(e) });
   }
@@ -564,11 +573,16 @@ async function navigateByStructure({ deadline, diag, probeForms, task }) {
 
   // Interactive controls = the form-field controls found above; the state and
   // form changes were captured inline during that sweep.
+  // Last, because it re-anchors and leaves the cursor in focus mode -- anything position
+  // dependent has to have run already.
+  const focusOrder = probeFocus ? await probeFocusOrder({ deadline, diag }) : [];
+
   const result = {
     controls: structure.formFields,
     stateChanges: interaction.stateChanges,
     formChanges: interaction.formChanges,
     postSubmitFields,
+    focusOrder,
   };
   diag.mark("interaction", {
     controls: result.controls.length,
@@ -661,6 +675,183 @@ async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline, t
     out.push(phrase);
     if (onItem) await onItem(phrase);
   }
+}
+
+// Element types a screen-reader user quick-navigates by, beyond the three we already sweep.
+// Each one was previously evidence we got only by ACCIDENT -- if the line-by-line read-through
+// happened to pass over the element -- which is not the same as having looked:
+//
+//   graphic  "graphic, Ada Lovelace portrait" vs a bare "graphic". This is 1.1.1, and it is
+//            what the image-missing-alt / generic-alt / filename-alt cases are about; they were
+//            being judged on whatever the read-through picked up.
+//   link     link text OUT OF CONTEXT, which is precisely what 2.4.4/2.4.9 asks about and what
+//            a real user sees in NVDA's elements list. "read more" is only a failure when
+//            isolated from its paragraph -- so isolating it is the test.
+//   list     "list with 4 items" and nesting depth: 1.3.1.
+//
+// Cheap enough to be on by default: the three existing sweeps cost 1.7s for six directions,
+// so each direction is ~0.28s.
+const EXTRA_SWEEPS = [
+  { key: "graphics", label: "graphic", prev: "moveToPreviousGraphic", next: "moveToNextGraphic" },
+  { key: "links", label: "link", prev: "moveToPreviousLink", next: "moveToNextLink" },
+  { key: "lists", label: "list", prev: "moveToPreviousList", next: "moveToNextList" },
+];
+
+async function sweepExtraTypes(ctx) {
+  const K = nvda.keyboardCommands;
+  const found = {};
+  for (const { key, label, prev, next } of EXTRA_SWEEPS) {
+    found[key] = await collectByType({ prev: K[prev], next: K[next] }, { ...ctx, label, onItem: null });
+  }
+  return found;
+}
+
+// How far to walk a table. Enough to cross a header row and enter the data below it, which is
+// where header association shows up; not so far that a wide table dominates the capture.
+const MAX_TABLE_STEPS = 6;
+
+// One dud step is tolerated before giving up. Guidepup's own description is "WHEN WITHIN A
+// TABLE, moves the system caret to the next column" -- and jumping to a table with T lands on
+// its caption, which is not within the grid. So the first Ctrl+Alt+Arrow announces nothing and
+// a walk that stopped at the first unchanged phrase collected only the table's entry line.
+// Measured: tableCells was 1 on a 2x3 table before this.
+const MAX_TABLE_MISSES = 2;
+
+// Walk one direction inside a table, appending each newly announced cell.
+// `step` is a thunk so the caller chooses HOW the keystroke is sent: nvda.perform(command) and
+// nvda.press("Control+Alt+...") are not equivalent in this codebase -- every quick-nav command
+// that works today is a bare letter, and the only modifier combos we send successfully
+// (Escape, Control+Home) go through press.
+async function walkTable(step, { out, deadline, label, trace }) {
+  let prev = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, label).catch(() => "")) || "").trim();
+  let misses = 0;
+  for (let i = 0; i < MAX_TABLE_STEPS; i += 1) {
+    if (Date.now() > deadline) break;
+    try {
+      await withTimeout(step(), NAV_TIMEOUT_MS, label);
+    } catch (e) { trace.push(`${label} threw ${errMsg(e)}`); break; }
+    const phrase = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, label).catch(() => "")) || "").trim();
+    trace.push(`${label}[${i}] ${phrase.slice(0, 60) || "(silence)"}`);
+    // "edge of table" is NVDA's boundary wording; an unchanged phrase means it did not move.
+    if (!phrase || /\bedge of table\b|\bnot in a table\b/i.test(phrase)) break;
+    if (phrase === prev) {
+      misses += 1;
+      if (misses >= MAX_TABLE_MISSES) break;
+      continue;
+    }
+    misses = 0;
+    prev = phrase;
+    if (!out.includes(phrase)) out.push(phrase);
+  }
+}
+
+// Navigate a table CELL BY CELL, which is the only way to see whether headers are associated.
+//
+// A properly marked-up table announces the header as you enter each cell -- "Price, £4.99" --
+// while a layout table or one with unassociated <td> headers gives you coordinates only:
+// "row 3, column 2, £4.99". The dataset already has a POSITION_ONLY_CELL signal looking for
+// exactly that, but nothing was ever driving the cell navigation that produces it: the
+// row/column text in existing captures is incidental, from the read-through crossing a table.
+//
+// Both directions are tried before giving up, because the cursor sits at the END of the
+// document after the structural sweeps -- "next table" from there finds nothing on a page
+// whose only table is above. Cheaper than a ~3s anchorToTop.
+async function probeTableCells({ deadline, diag }) {
+  const K = nvda.keyboardCommands;
+  const cells = [];
+  const trace = [];
+  let note = null;
+  try {
+    const entry = await enterFirstTable(K);
+    if (!entry) note = "no table on the page";
+    else {
+      cells.push(entry);
+      const first = await enterFirstCell(K, { trace });
+      if (!first) note = "table found but no navigable cell";
+      else {
+        cells.push(first);
+        await walkTable(() => nvda.perform(K.moveToNextColumn), { out: cells, deadline, label: "col", trace });
+        await walkTable(() => nvda.perform(K.moveToNextRow), { out: cells, deadline, label: "row", trace });
+      }
+    }
+  } catch (e) {
+    note = errMsg(e);
+  }
+  diag.mark("tableCells", { found: cells.length, note, trace });
+  return cells;
+}
+
+// Get the caret INTO the grid.
+//
+// Jumping to a table with T lands on its <caption>, which is inside the table element but
+// outside the grid, and NVDA answers every Ctrl+Alt+Arrow from there with "Not in a table
+// cell". Measured before this existed: tableCells held only the table's summary line and read
+// IDENTICALLY on the good and bad pages -- a probe that could not discriminate, which is worse
+// than no probe because it looks like evidence.
+//
+// So: attempt a cell move, and if NVDA says we are not in a cell, step the browse-mode caret
+// down one line and try again. Both keystroke routes were checked first -- perform(command) and
+// press("Control+Alt+ArrowDown") returned the same message, so delivery was never the problem.
+const MAX_CELL_PRIMES = 3;
+
+async function enterFirstCell(K, { trace }) {
+  for (let i = 0; i < MAX_CELL_PRIMES; i += 1) {
+    await withTimeout(nvda.perform(K.moveToNextRow), NAV_TIMEOUT_MS, "prime").catch(() => undefined);
+    const phrase = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "prime").catch(() => "")) || "").trim();
+    trace.push(`prime[${i}] ${phrase.slice(0, 60) || "(silence)"}`);
+    if (phrase && !/not in a table cell/i.test(phrase)) return phrase;
+    await withTimeout(nvda.press("ArrowDown"), NAV_TIMEOUT_MS, "prime").catch(() => undefined);
+  }
+  return "";
+}
+
+// Land on a table in either direction; "" when the page has none.
+async function enterFirstTable(K) {
+  for (const cmd of [K.moveToNextTable, K.moveToPreviousTable]) {
+    await withTimeout(nvda.perform(cmd), NAV_TIMEOUT_MS, "table").catch(() => undefined);
+    const phrase = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "table").catch(() => "")) || "").trim();
+    if (phrase && !/\bno (next|previous) table\b/i.test(phrase)) return phrase;
+  }
+  return "";
+}
+
+// What a KEYBOARD user meets, in order, by pressing Tab.
+//
+// Everything else here runs in browse mode, where NVDA's quick-nav reaches elements by reading
+// the accessibility tree. Tab is a different question: it follows the real focus order. An
+// element can be perfectly announced in browse mode and be unreachable by keyboard, and a
+// focus trap is invisible to every other probe we have. That covers 2.1.2 (No Keyboard Trap),
+// 2.4.3 (Focus Order) and skip links (2.4.1).
+//
+// OPT-IN, because it is the expensive probe: a press plus a focus report is ~2s per stop, so
+// twelve stops roughly doubles a 13s capture. The cheap sweeps above are on by default; this
+// one is requested per case.
+const MAX_TAB_STOPS = 12;
+const TRAP_REPEATS = 2;
+
+async function probeFocusOrder({ deadline, diag }) {
+  await anchorToTop();
+  const stops = [];
+  let repeats = 0;
+  for (let i = 0; i < MAX_TAB_STOPS; i += 1) {
+    if (Date.now() > deadline) break;
+    await withTimeout(nvda.press("Tab"), NAV_TIMEOUT_MS, "tab").catch(() => undefined);
+    const phrase = await reportFocusedControl();
+    if (!phrase) break;
+    // The same control twice running means Tab stopped moving: either the end of the document
+    // or a focus trap. Which one it is, is the judge's call -- record it, do not decide it.
+    if (stops.length && phrase === stops[stops.length - 1]) repeats += 1;
+    else repeats = 0;
+    stops.push(phrase);
+    if (repeats >= TRAP_REPEATS) break;
+  }
+  // Never a silent cap: a truncated focus order looks identical to a short one.
+  diag.mark("focusOrder", {
+    stops: stops.length,
+    truncated: stops.length >= MAX_TAB_STOPS,
+    stalled: repeats >= TRAP_REPEATS,
+  });
+  return stops;
 }
 
 // Operate the control under the cursor and record what the screen reader says —

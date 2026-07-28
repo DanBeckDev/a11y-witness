@@ -1,6 +1,7 @@
 // server.mjs — NVDA capture worker as an HTTP service.
 // MUST run in an interactive desktop session (see run-server.cmd + the README).
-//   POST /capture  { url, task?, steps? }  -> { url, screenReader, transcript, task }
+//   POST /capture  { url, task?, steps?, probeForms?, probeFocus? }
+//                                          -> { url, screenReader, transcript, task }
 //   GET  /health                           -> { ok, screenReader, busy }
 // NVDA is a single shared resource, so captures are serialized.
 import { createServer } from "node:http";
@@ -52,6 +53,20 @@ let busy = false;
 // to try if captures start behaving differently as a run progresses.
 const REUSE_NVDA = process.env.A11Y_REUSE_NVDA !== "0";
 
+// Every probe is opt-in over the wire and defaults to off, so an old client keeps the old
+// behaviour and no capture pays for a probe it did not ask for. Extracted from the handler
+// because each default is a branch and the handler sat at the complexity ceiling.
+function captureOptions(parsed) {
+  return {
+    steps: parsed.steps,
+    nav: parsed.nav,
+    task: parsed.task ?? null,
+    probeForms: parsed.probeForms ?? false,
+    probeFocus: parsed.probeFocus ?? false,
+    reuseScreenReader: REUSE_NVDA,
+  };
+}
+
 function send(res, code, obj) {
   res.writeHead(code, { "content-type": "application/json" });
   res.end(JSON.stringify(obj));
@@ -69,19 +84,20 @@ const server = createServer((req, res) => {
       let parsed;
       try { parsed = JSON.parse(body || "{}"); }
       catch { return send(res, 400, { error: "invalid JSON body" }); }
-      const { url, task = null, steps, nav, probeForms = false } = parsed;
+      const { url } = parsed;
       if (!url) return send(res, 400, { error: "url is required" });
+      const opts = captureOptions(parsed);
       busy = true;
       const startedAt = new Date().toISOString();
-      log(`[${startedAt}] capture ${url} (nav=${nav || "object"}, probeForms=${probeForms})`);
+      log(`[${startedAt}] capture ${url} (nav=${opts.nav || "object"}, probeForms=${opts.probeForms}, probeFocus=${opts.probeFocus})`);
       try {
-        const result = await captureWithNvda(url, { steps, nav, probeForms, task, reuseScreenReader: REUSE_NVDA });
+        const result = await captureWithNvda(url, opts);
         const after = (result.diagnostics || []).find((e) => e.event === "afterStart");
         log(`  -> ${result.transcript.length} phrases; afterStart.lastSpoken=${JSON.stringify(after && after.lastSpoken)}`);
         if (result.transcript.length === 0) {
           log("  WARNING: 0 phrases. If afterStart.lastSpoken is empty, NVDA is running but not speaking — restart/reboot the worker.");
         }
-        send(res, 200, { ...result, task });
+        send(res, 200, { ...result, task: opts.task });
       } catch (e) {
         log("  capture failed: " + ((e && e.stack) || e));
         send(res, 500, { error: String((e && e.message) || e) });
