@@ -130,6 +130,23 @@ updates go cold past one capture timeout it exits 3 rather than waiting forever.
 are the contract — **0** clean, **1** finished with failures, **2** no run, **3** wedged —
 and both commands emit a `next_command` field so you do not have to infer the next step.
 
+## You may be sharing this checkout
+
+More than one agent works in this repo, on the same branch, at the same time. A commit of mine
+once swept up 19 files, 16 of them another agent's half-finished work, and pushed it.
+
+- **Commit explicit paths.** `git add -A` cannot tell your edits from someone else's.
+- A **pre-commit hook** (`scripts/git-hooks/pre-commit`, wired via `core.hooksPath`) refuses a
+  commit containing files nobody has touched in 30 minutes, or more than 12 files at once, and
+  names the offenders with their ages. In a shared tree, an 8-hour-old staged file is someone
+  else's work.
+- If the block is a false positive — long debugging session, files genuinely yours — check
+  `git diff --cached` first, then `A11Y_COMMIT_ALL=1 git commit ...`.
+- To commit **part** of a file another agent is also editing, stage just your hunk:
+  `git apply --cached your.patch`, then `git commit` with **no path arguments** (a path argument
+  makes git commit the working tree, not your staged hunk).
+- `git status` before you start. Files already modified are not yours to commit.
+
 ## What the screen reader drives
 
 `docs/screenreader-coverage.md` is the map: every user behaviour we drive, the field it lands
@@ -140,10 +157,15 @@ table is not a missing feature; it is a claim this project cannot currently make
 Probes beyond the default set are opt-in over the wire (`probeForms`, `probeFocus`) so a capture
 never pays for evidence nobody asked for. `focusOrder` costs ~8 s on top of a ~15 s capture.
 
-## Verifying changes (there are no unit tests)
+## Verifying changes
 
 Verification is layered; pick the layers your change touches:
-- `npm run lint` and `npm run typecheck` — must pass. **CI gates on both.**
+- `npm run lint` and `npm run typecheck` — must pass. **CI gates on both**, and on `npm test`
+  (`.github/workflows/lint.yml`).
+- `npm test` — 22 unit tests (`src/**/*.test.ts`) covering the deterministic rules, the judge
+  layers and eval fitness. Fast (~0.1 s) and runs anywhere, so there is no reason to skip it.
+  Most of this codebase genuinely cannot be unit-tested — capture needs real NVDA on Windows —
+  but the pure functions can be, and these are them. Add to them when you touch a pure function.
 - `npm run eval [-- <substring>]` — judge quality against 34 labelled fixtures. Needs a local Codex login, so it **cannot run in CI**; run it when you touch the judge, prompts, criteria, or fixtures. Do **not** quote its numbers as a headline: `docs/METHODOLOGY.md` records that the guards were tuned against these cases, scoring is single-run, and there is no expert baseline yet. Report with those caveats or not at all.
 - **`src/capture/nvda/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test. After changing it, deploy (above) and run `src/capture/nvda/capture-check.mjs` **in the interactive session**, then `scripts/bench-capture.mjs` if you touched timing. capture-check refuses to run while the worker is serving, because NVDA is one machine-wide resource and two drivers stop each other's screen reader; stop the worker first and **restart it afterwards**. The VM capture is its test; the book's own rule is "refactor under test."
 - **Count-based checks cannot see content rot — assert what was heard, not how much.** capture-check now gates on probe *values* (`disclosure-good` must reach `expanded`, `disclosure-bad` must stay `collapsed`) and on the read-through still carrying roles, because both lessons were learned the hard way. A readiness gate once overwrote the first line of every page with the document title, deleting the h1's `"heading, level 1, ..."` announcement everywhere: `"heading, level N"` phrases fell from 105 to 15 across 90 captures and **every check stayed green**, because the phrase count had not moved. If you change capture, compare evidence quality against a previous run, not just line counts.

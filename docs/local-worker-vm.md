@@ -378,7 +378,7 @@ manages the VM itself:
 ```bash
 npm run witness -- https://example.com --task "Find the contact details"
 # Local worker VM 'a11y-worker' is stopped; bringing it up ...
-#   ready after 12s: {"ok":true,"screenReader":"NVDA","busy":false}
+#   ready after 12s: {"ok":true,"screenReader":"NVDA","busy":false,"code":"<deployed code hash>"}
 # ... report ...
 # Shutting down the local worker VM ...
 ```
@@ -517,6 +517,10 @@ file and restart the worker than to commit and pull:
 
 ```bash
 scp src/capture/nvda/capture-core.mjs user@vm:C:/Users/user/a11y-witness/src/capture/nvda/
+# Prefer a REBOOT over a task restart. Stop/Start-ScheduledTask silently fails to replace the
+# running process when the guest agent is not ready, and two workers once served stale code for
+# an hour that way. `worker-ctl.sh stop && up` always picks up a pushed file, and
+# `npm run worker:code` proves it did.
 ssh user@vm "powershell -NoProfile -Command \"Stop-ScheduledTask -TaskName a11ysrv; Get-Process node -EA SilentlyContinue | Stop-Process -Force; Start-ScheduledTask -TaskName a11ysrv\""
 ```
 

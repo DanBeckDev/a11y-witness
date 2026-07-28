@@ -84,7 +84,7 @@ It installs Windows, logs in, installs NVDA and starts the worker with no clicki
 
 ```bash
 ./scripts/local-worker/worker-ctl.sh status
-# health:  {"ok":true,"screenReader":"NVDA","busy":false}
+# health:  {"ok":true,"screenReader":"NVDA","busy":false,"code":"<hash of the deployed code>"}
 ```
 
 Full walkthrough, including what to do when a step fails:
@@ -126,6 +126,18 @@ npm run doctor
 **A stopped worker is not a problem.** Runs start what they need and stop it again, so
 `doctor` reporting `3 worker(s), all stopped` is a READY state. Follow its `next` line rather
 than trying to get everything running first.
+
+**If you changed anything under `src/capture/nvda/`, check the workers are running it:**
+
+```bash
+npm run worker:code    # each worker's /health.code vs this checkout; exits 1 if any is stale
+```
+
+Deploying is push-then-restart and both halves can fail silently — a `utmctl exec` restart does
+nothing while the guest agent is still settling, and two workers once served old code for an hour
+that way. Push, **reboot the guest** (`worker-ctl.sh stop && up`), then run the check above. It
+asks over HTTP, so unlike reading the guest's file hash it shares no failure mode with the
+deploy.
 
 One command for the whole prerequisite chain — VM, worker, page server, judge backend, and
 any run left mid-flight. Anything failing prints the exact command that fixes it. Run this

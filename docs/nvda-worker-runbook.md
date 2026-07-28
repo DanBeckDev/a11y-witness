@@ -130,7 +130,9 @@ Cheapest first — stop at the first failure.
 
 ```bash
 # 1. is it up?
-curl http://<worker>:8765/health              # -> {"ok":true,"screenReader":"NVDA","busy":false}
+curl http://<worker>:8765/health   # -> {"ok":true,"screenReader":"NVDA","busy":false,"code":"<hash>"}
+#   `code` identifies the DEPLOYED code. `npm run worker:code` compares it against your checkout
+#   and exits 1 on a mismatch — the only deploy check that does not go through `utmctl exec`.
 
 # 2. can it capture at all?
 curl -X POST http://<worker>:8765/capture -H 'content-type: application/json' \
@@ -199,7 +201,9 @@ The error text is often actively misleading. This table is the shortcut.
 
 | What you see | What it actually means | Fix |
 |---|---|---|
-| `Timed out waiting for NVDA to be running`, and **no `nvda.log` anywhere** | the install is a stub — payload deleted, `nvda.exe` launches and dies | reinstall NVDA (Layer 4) |
+| `Timed out waiting for NVDA to be running` **on the first capture after a boot** | nothing is wrong. Windows is still settling after auto-logon. This was the pool's DOMINANT failure and it got misdiagnosed as a bad clone, a stub install and a wedged worker, because whichever VM had been up longest worked and freshly booted ones did not — so the fault looked like it moved between guests | already handled: the start is retried once after 8 s. If you see it in a capture's diagnostics as `nvdaStartAttempt`, the retry did its job |
+| `Timed out waiting for NVDA to be running`, **repeatedly, and no `nvda.log` anywhere** | the install is a stub — payload deleted, `nvda.exe` launches and dies | reinstall NVDA (Layer 4). Check `nvda.log` under `C:\Users\witness\AppData\Local\Temp` **with an explicit path**: `$env:LOCALAPPDATA` under `utmctl exec` resolves to SYSTEM's profile, not the worker's |
+| `Cannot connect to NVDA` / `ECONNREFUSED 127.0.0.1:6837` **in server.log** | the speech channel dropped mid-capture | nothing to do — the worker forgets the reused NVDA and stays up; the next capture cold-starts one. It used to exit(1) here and the scheduled task did **not** reliably restart it |
 | `NVDA not installed` | **rarely** a missing install. Thrown by `NVDAClient.connect` when the speech-channel cert is absent — usually guidepup too old for this NVDA | upgrade guidepup ≥0.29.2 |
 | `NVDA is not supported` | `getNVDAInstallationPath()` found nothing at guidepup's cache path | `npx @guidepup/setup install nvda` from the repo |
 | 0 phrases, `afterStart.lastSpoken` empty, no error | Three candidates, in order of likelihood: **`ForegroundLockTimeout` is not 0 in the live session** (Edge cannot take focus, so there is nothing to read); no interactive desktop; or a modal dialog freezing the session | run `scripts/apply-foreground-lock-timeout.ps1` **in the interactive session** and re-capture; otherwise log in at the console and dismiss the dialog *there* — it never surfaces over SSH |
