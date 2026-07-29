@@ -298,73 +298,80 @@ async function warmUp(reason) {
   }
 }
 
-// Retry warm-up when asked whether we are ready -- but NOT on every poll.
+// Warm up ONCE, and never again while idle.
 //
-// Without any retry, a worker that failed to warm at boot reports not-ready forever and `up` calls
-// a recoverable guest broken. With a retry on every poll, the opposite: /health is polled every few
-// seconds by `up`, the dispatcher and doctor, and each attempt starts NVDA. This codebase's own
-// warning is that cycling NVDA destabilises the speech-capture channel, so an unbounded retry is a
-// way to turn a slow boot into a broken worker.
+// The aggressive version of this was actively destructive, and the guest console showed it:
 //
-// So: at most one attempt per cooldown, and stop after a few. A guest that cannot warm up in three
-// tries over a minute and a half needs looking at, not another restart -- and it now says so
-// instead of thrashing.
-const WARM_RETRY_COOLDOWN_MS = 30_000;
+//     NVDA is up and answering; the worker is ready
+//     warming up NVDA (retry 1/3 while not ready)
+//     NVDA is up and answering; the worker is ready
+//     warming up NVDA (retry 1/3 while not ready)      <- forever, always "1/3"
+//
+// Always 1/3 because a success reset the attempt budget, so the cap never accumulated -- the
+// cooldown limited the RATE of NVDA restarts, not the fact of them. And restarting NVDA repeatedly
+// makes it put up a MODAL dialog on the guest desktop ("nvdaHelperRemote (injection_terminate):
+// Error waiting for local thread to die"), which blocks input. That is what hung captures, which is
+// what wedged `busy`, which is what made workers look dead. One VM took QEMU down with it.
+//
+// The deeper error was treating a live NVDA as a PRECONDITION. It is not: startScreenReader already
+// probes NVDA and cold-starts a fresh one when it has gone (the `nvdaGone` path), so a capture
+// succeeds whether or not NVDA is up right now. Warming at boot only moves that cost off the first
+// capture -- a nicety, not a requirement -- so it is done once, with a bounded retry, and then the
+// worker leaves NVDA alone. Idle workers must not touch the screen reader.
 const MAX_WARM_ATTEMPTS = 3;
+const WARM_RETRY_COOLDOWN_MS = 30_000;
 let warmAttempts = 0;
 let lastWarmAttempt = 0;
 
-function reWarmIfNeeded() {
-  if (warm.ok || warming) return;
-  if (warmAttempts >= MAX_WARM_ATTEMPTS) return;
+function warmUpOnceIfNeeded() {
+  if (warm.ok || warming) return;                                 // already warm, or in flight
+  if (warmAttempts >= MAX_WARM_ATTEMPTS) return;                  // gave up; say so, do not thrash
   if (Date.now() - lastWarmAttempt < WARM_RETRY_COOLDOWN_MS) return;
   lastWarmAttempt = Date.now();
   warmAttempts += 1;
-  warmUp(`retry ${warmAttempts}/${MAX_WARM_ATTEMPTS} while not ready`)
-    .catch((e) => log("re-warm threw: " + e.message));
+  warmUp(`boot warm-up ${warmAttempts}/${MAX_WARM_ATTEMPTS}`)
+    .catch((e) => log("warm-up threw: " + e.message));
 }
 
-/**
- * Can this worker actually take a capture right now?
- *
- * Every check here is one that has silently failed in production. A worker answering `ok: true`
- * while NVDA could not start is what made the pool look like it had a moving fault: whichever VM
- * had been up longest worked, freshly booted ones did not.
- */
 async function readiness() {
-  const screenReader = await screenReaderReady();
-  // The LIVE probe is the truth; `warm.ok` is only a memory of a past success. Observed on a real
-  // worker: `warmedUp: true` beside `screenReader: false` -- NVDA had started and then died, and
-  // because the recovery path only triggered when warm.ok was false, nothing retried. The worker sat
-  // reporting not-ready with no way back. So a screen reader that has stopped answering invalidates
-  // the memory, which re-arms the (still bounded) retry.
-  if (!screenReader && warm.ok) {
-    warm = { ok: false, error: "NVDA stopped answering after a successful warm-up", at: new Date().toISOString() };
-    warmAttempts = 0;
-    lastWarmAttempt = 0;
-  }
-  reWarmIfNeeded();
+  warmUpOnceIfNeeded();
   const checks = {
-    screenReader,
+    // REPORTED, not gated on. A capture cold-starts NVDA when it has gone, so an idle worker with
+    // no NVDA is still able to take work -- and gating on it caused the restart loop above.
+    screenReader: await screenReaderReady(),
     browser: browserAvailable(),
     // Applied per session by run-server.cmd. Left non-zero, Edge is refused the foreground and
     // every capture returns 0 phrases with NO error at all -- the worst failure mode we have.
     foregroundLockTimeout: foregroundLockTimeout(),
     warmedUp: warm.ok,
   };
+  // What actually PREVENTS a capture.
+  //
+  // Nothing about NVDA gates readiness. Both `screenReader` and `warmedUp` are REPORTED, because a
+  // capture starts its own screen reader (with its own retry) and succeeds whether or not one is up
+  // beforehand. Gating on them produced the two worst behaviours of this worker: a restart loop that
+  // put modal dialogs on the guest desktop, and -- once warm-up gave up -- a healthy guest sidelined
+  // for the rest of the session over an optimisation it did not need.
+  //
+  // Readiness is about the ENVIRONMENT: is there a browser, can it take the foreground, are we free.
   const failed = Object.entries(checks)
-    // foregroundLockTimeout is a number: 0 is good, non-zero is bad, null is unreadable and is
-    // deliberately not a failure (see foregroundLockTimeout()).
-    .filter(([name, value]) => (name === "foregroundLockTimeout"
-      ? typeof value === "number" && value !== 0
-      : !value))
+    .filter(([name, value]) => {
+      if (name === "screenReader" || name === "warmedUp") return false;
+      // A number: 0 is good, non-zero is bad, null is unreadable and deliberately not a failure
+      // (a broken diagnostic must not take a worker offline -- see foregroundLockTimeout()).
+      if (name === "foregroundLockTimeout") return typeof value === "number" && value !== 0;
+      return !value;
+    })
     .map(([name]) => name);
   return {
     ready: failed.length === 0 && !busy,
     checks,
     // Not an error when it is merely busy: a worker mid-capture is healthy, just not free.
-    reason: failed.length ? `not ready: ${failed.join(", ")}${warm.error ? ` (${warm.error})` : ""}`
-      : busy ? "busy with a capture" : null,
+    // Warm-up trouble is worth surfacing even when it does not block work: a worker capturing
+    // without a warm NVDA is slower on its first case, and that is useful to know.
+    reason: failed.length ? `not ready: ${failed.join(", ")}`
+      : busy ? "busy with a capture"
+        : warm.ok ? null : `ready, but not warmed up (${warm.error})`,
   };
 }
 
@@ -416,10 +423,10 @@ const server = createServer((req, res) => {
         send(res, 500, { error: String((e && e.message) || e) });
         // A capture that died may have left NVDA unusable. Stop claiming readiness and try to get
         // back to it, rather than accepting the next case and failing that one too.
-        warm = { ok: false, error: "last capture failed: " + String((e && e.message) || e), at: new Date().toISOString() };
-        warmAttempts = 0;
-        lastWarmAttempt = Date.now();
-        warmUp("after a failed capture").catch((err) => log("re-warm failed: " + err.message));
+        // Deliberately NOT re-warmed here. The next capture's startScreenReader probes NVDA and
+        // cold-starts a fresh one if needed, which is the same work at a safer moment; warming now
+        // would restart NVDA while the guest may still have a modal dialog up from the failure.
+        forgetScreenReader();
       } finally {
         busy = false;
       }
