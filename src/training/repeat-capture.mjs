@@ -85,22 +85,32 @@ for (let n = 1; n <= TIMES; n += 1) {
   if (n < TIMES) await sleep(BETWEEN_MS);
 }
 
-if (runs.length < 2) {
-  console.error(`\nOnly ${runs.length} capture(s) succeeded; nothing to compare.`);
+// A capture with no phrases heard nothing at all -- the known ForegroundLockTimeout/foreground
+// flake. It is a failure, and it is a DIFFERENT failure from a probe that varies. Comparing it
+// against real captures would report every field as unstable and bury the question being asked.
+// So it is excluded from the comparison and named loudly, never quietly dropped.
+const empty = runs.filter((r) => r.transcript.length === 0);
+const usable = runs.filter((r) => r.transcript.length > 0);
+
+if (usable.length < 2) {
+  console.error(`\nOnly ${usable.length} usable capture(s); nothing to compare.`);
+  if (empty.length) console.error(`  ${empty.length} returned 0 phrases (the foreground flake)`);
   for (const e of errors) console.error("  " + e);
   process.exit(1);
 }
 
-console.log(`\n${runs.length}/${TIMES} captured` + (errors.length ? `, ${errors.length} failed` : "") +
+console.log(`\n${usable.length}/${TIMES} usable` +
+  (empty.length ? `, ${empty.length} empty` : "") +
+  (errors.length ? `, ${errors.length} failed` : "") +
   ` (${REUSE ? "reused" : "fresh"} NVDA each time)\n`);
 
 let unstable = 0;
-for (const field of Object.keys(runs[0])) {
-  const shapes = runs.map((r) => JSON.stringify(r[field]));
+for (const field of Object.keys(usable[0])) {
+  const shapes = usable.map((r) => JSON.stringify(r[field]));
   const distinct = new Set(shapes);
-  const counts = runs.map((r) => r[field].length).join(",");
+  const counts = usable.map((r) => r[field].length).join(",");
   if (distinct.size === 1) {
-    console.log(`  STABLE    ${field.padEnd(13)} ${runs[0][field].length} item(s), identical every time`);
+    console.log(`  STABLE    ${field.padEnd(13)} ${usable[0][field].length} item(s), identical every time`);
     continue;
   }
   unstable += 1;
@@ -114,6 +124,11 @@ for (const field of Object.keys(runs[0])) {
 }
 
 for (const e of errors) console.log(`  FAILED    ${e}`);
+if (empty.length) {
+  console.log(`  EMPTY     ${empty.length} capture(s) heard nothing at all — the foreground flake, ` +
+    "excluded from the comparison above because it would mark every field unstable");
+}
 console.log(`\n${unstable === 0 ? "All compared fields are stable." : `${unstable} field(s) vary on an unchanged page.`}`);
-// A varying field is a failure: it means evidence depends on timing, not on the page.
-process.exit(unstable === 0 && errors.length === 0 ? 0 : 1);
+// A varying field is a failure: evidence that depends on timing rather than on the page. An empty
+// capture or an error is a failure too, just a different one -- so all three fail the run.
+process.exit(unstable === 0 && errors.length === 0 && empty.length === 0 ? 0 : 1);
