@@ -78,7 +78,7 @@ export function cacheKey({ caseId, pageHash, options, environment }) {
 }
 
 /** Attach the key and the environment that produced this capture, so the next run can compare. */
-export function stampProvenance(capture, { key, options, environment, worker }) {
+export function stampProvenance(capture, { key, options, environment, worker = null }) {
   return {
     ...capture,
     provenance: {
@@ -87,7 +87,7 @@ export function stampProvenance(capture, { key, options, environment, worker }) 
       // Which guest produced this. Not part of the key -- workers are meant to be
       // interchangeable, and keying on it would stop the pool sharing evidence -- but without it
       // a slow phase cannot be attributed to a machine after the fact.
-      worker: worker ?? null,
+      worker,
       options,
       // The code hash is recorded but NOT part of the key -- see the header.
       workerCode: environment?.workerCode ?? "unknown",
