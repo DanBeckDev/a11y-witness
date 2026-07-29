@@ -436,12 +436,21 @@ Found while chasing it:
 
 ### Open
 
-- **`tableCells` is not deterministic — currently opt-in and not dataset-grade.** 18 captures of
-  one unchanged page returned 4, 2, 4, 4, 1, 4, 4 cells. Priming into the grid, tolerating a silent
-  step and a 500 ms settle each helped, none cured it; the quick-nav sweeps in the same captures
-  were identical every time. **Next: read the `spokenPhraseLog` delta instead of
-  `lastSpokenPhrase`**, as `activateAndCaptureDelta` does — a delta cannot miss a late
-  announcement. Until then it must not be used as dataset evidence.
+- **`tableCells` — the delta fix is in, verification pending.** 18 captures of one unchanged page
+  returned 4, 2, 4, 4, 1, 4, 4 cells. `walkTable` now reads a `spokenPhraseLog` delta instead of
+  `lastSpokenPhrase`, which was the wrong read all along: a single sample returns the *previous*
+  phrase when the announcement has not landed (indistinguishable from "did not move") or nothing
+  (which the walk took for the end of the table). Priming, silence tolerance and the settle were all
+  compensating for that. Confirm with `npm run training:repeat -- --times=5 --probe-tables` before
+  trusting it; until that passes it stays opt-in and out of the dataset.
+
+- **Worker stability is not root-caused.** Workers repeatedly went unreachable during this work —
+  "started" VMs not answering `/health`, and `utmctl exec` unavailable so their logs could not be
+  retrieved. A contributing cause was mine and is fixed: warm-up retried on every `/health` poll,
+  and each attempt starts NVDA, which this repo's own notes say destabilises the speech channel.
+  Retries are now capped at 3, 30 s apart. Whether that was the whole story is **unknown**. The next
+  step is a pool cycle followed by `bench-capture --from-disk` and the guest's `server.log`, kept
+  from a run where a worker dies.
 - **Empty-capture flake (~1–3%).** A capture occasionally returns 0 phrases (the documented
   ForegroundLockTimeout/foreground symptom). It is *contained*, not fixed: `captureMentionsTitle`
   rejects it and the dataset retries 3x then writes it to `captures/rejected` rather than

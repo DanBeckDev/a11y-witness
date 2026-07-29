@@ -46,9 +46,21 @@ retryable rather than final, and a 500 ms settle between keystroke and read. A f
 with timing is indistinguishable from a page that genuinely differs, which is exactly the
 contamination this project exists to avoid.
 
-Next thing to try: read the `spokenPhraseLog` delta rather than `lastSpokenPhrase`, as
-`activateAndCaptureDelta` does — a delta cannot miss an announcement that arrives late, whereas
-a single "what was last said" read can.
+**The delta fix is now implemented, and needs verifying.** `walkTable` reads a `spokenPhraseLog`
+delta rather than `lastSpokenPhrase`. That was the wrong read all along: a single sample of a moving
+target returns the *previous* phrase when the announcement has not landed (indistinguishable from
+"did not move") or nothing (which the walk took for the end of the table). Priming, silence
+tolerance and the settle were each compensating for that, which is why all three helped and none
+cured it.
+
+Confirm with five identical runs before trusting it — and the harness for that now exists:
+
+```bash
+npm run training:repeat -- --url=http://<host>:5050/<table-case>/good --times=5 --probe-tables
+```
+
+It exits non-zero if any field varies. Until that passes, `tableCells` stays opt-in and out of the
+dataset.
 
 ## Not driven yet
 
