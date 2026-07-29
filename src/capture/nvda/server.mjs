@@ -301,9 +301,20 @@ function reWarmIfNeeded() {
  * had been up longest worked, freshly booted ones did not.
  */
 async function readiness() {
+  const screenReader = await screenReaderReady();
+  // The LIVE probe is the truth; `warm.ok` is only a memory of a past success. Observed on a real
+  // worker: `warmedUp: true` beside `screenReader: false` -- NVDA had started and then died, and
+  // because the recovery path only triggered when warm.ok was false, nothing retried. The worker sat
+  // reporting not-ready with no way back. So a screen reader that has stopped answering invalidates
+  // the memory, which re-arms the (still bounded) retry.
+  if (!screenReader && warm.ok) {
+    warm = { ok: false, error: "NVDA stopped answering after a successful warm-up", at: new Date().toISOString() };
+    warmAttempts = 0;
+    lastWarmAttempt = 0;
+  }
   reWarmIfNeeded();
   const checks = {
-    screenReader: await screenReaderReady(),
+    screenReader,
     browser: browserAvailable(),
     // Applied per session by run-server.cmd. Left non-zero, Edge is refused the foreground and
     // every capture returns 0 phrases with NO error at all -- the worst failure mode we have.
