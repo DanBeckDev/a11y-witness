@@ -13,8 +13,9 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 const [worker, page, countArg] = process.argv.slice(2);
-if (!worker || !page) {
-  console.error("usage: node scripts/bench-capture.mjs <worker-url> <page-url> [count]");
+if (!process.argv.includes("--from-disk") && (!worker || !page)) {
+  console.error("usage: node scripts/bench-capture.mjs <worker-url> <page-url> [count]\n" +
+    "   or: node scripts/bench-capture.mjs --from-disk [--dir=<captures dir>]");
   process.exit(1);
 }
 const COUNT = Number(countArg || 3);
@@ -73,6 +74,89 @@ function report(runs) {
   if (empty) console.log(`  WARNING: ${empty} capture(s) returned NOTHING — faster but broken`);
   const reused = runs.filter((r) => r.reused).length;
   console.log(`NVDA reused on ${reused}/${runs.length} captures`);
+}
+
+// --- from-disk mode -------------------------------------------------------
+//
+// The same summariser, over captures already on disk. A live benchmark tells you what a capture
+// costs NOW on one worker; this tells you what a whole run cost across the pool, which is the
+// question when a run was slower than usual and the workers have since been shut down.
+//
+// Nothing new is instrumented: every capture already carries per-phase diagnostics. This only
+// aggregates them, and reports p50/p95 rather than a mean because the tail is where a wedged
+// guest shows up -- a mean hides one 60-second capture among fifty good ones.
+async function fromDisk(root) {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const { resolve } = await import("node:path");
+  const files = readdirSync(root).filter((f) => f.endsWith(".json") && f !== "manifest.json");
+  const runs = [];
+  for (const file of files) {
+    let capture;
+    try {
+      capture = JSON.parse(readFileSync(resolve(root, file), "utf8"));
+    } catch { continue; } // a partial write is not a data point
+    if (!Array.isArray(capture.diagnostics)) continue;
+    const done = capture.diagnostics.filter((e) => typeof e.atMs === "number").at(-1);
+    const start = capture.diagnostics.find((e) => e.event === "nvdaStart");
+    runs.push({
+      // No client-side timing on disk, so the last diagnostic's atMs is the in-capture duration.
+      // Labelled WALL(in-capture) rather than WALL so nobody compares it with the live number.
+      wallMs: done?.atMs ?? 0,
+      costs: phaseCosts(capture.diagnostics),
+      phrases: (capture.transcript ?? []).length,
+      reused: !!start?.reused,
+      worker: capture.provenance?.worker ?? "unrecorded",
+    });
+  }
+  return runs;
+}
+
+function percentile(values, p) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
+}
+
+function reportFromDisk(runs) {
+  const phases = {};
+  for (const run of runs) {
+    for (const [phase, ms] of Object.entries(run.costs)) (phases[phase] ??= []).push(ms);
+  }
+  console.log(`\nphase cost across ${runs.length} captures on disk (p50 / p95, seconds):`);
+  for (const [phase, values] of Object.entries(phases)
+    .sort((a, b) => percentile(b[1], 50) - percentile(a[1], 50))) {
+    const p50 = (percentile(values, 50) / 1000).toFixed(1);
+    const p95 = (percentile(values, 95) / 1000).toFixed(1);
+    console.log(`  ${phase.padEnd(18)}${p50.padStart(6)}s  ${p95.padStart(6)}s  ${"#".repeat(Math.round(+p50))}`);
+  }
+  const walls = runs.map((r) => r.wallMs);
+  console.log(`  ${"WALL(in-capture)".padEnd(18)}${(percentile(walls, 50) / 1000).toFixed(1).padStart(6)}s  ` +
+    `${(percentile(walls, 95) / 1000).toFixed(1).padStart(6)}s`);
+
+  const empty = runs.filter((r) => r.phrases === 0).length;
+  if (empty) console.log(`\nWARNING: ${empty}/${runs.length} captures on disk have NO phrases`);
+
+  // Per worker, because "the run was slow" is only actionable once it names a guest.
+  const byWorker = {};
+  for (const run of runs) (byWorker[run.worker] ??= []).push(run.wallMs);
+  if (Object.keys(byWorker).length > 1 || !byWorker.unrecorded) {
+    console.log("\nper worker (p50 / p95 in-capture seconds, count):");
+    for (const [worker, walls2] of Object.entries(byWorker)) {
+      console.log(`  ${worker.padEnd(28)}${(percentile(walls2, 50) / 1000).toFixed(1).padStart(6)}s  ` +
+        `${(percentile(walls2, 95) / 1000).toFixed(1).padStart(6)}s  n=${walls2.length}`);
+    }
+  }
+}
+
+if (process.argv.includes("--from-disk")) {
+  const dir = process.argv.find((a) => a.startsWith("--dir="))?.slice("--dir=".length)
+    ?? "runs/screenreader-dataset/captures";
+  const runs = await fromDisk(dir);
+  if (!runs.length) {
+    console.error(`No captures with diagnostics under ${dir}`);
+    process.exit(1);
+  }
+  reportFromDisk(runs);
+  process.exit(0);
 }
 
 const runs = [];

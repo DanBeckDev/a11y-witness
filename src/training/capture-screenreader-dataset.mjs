@@ -267,6 +267,7 @@ function provenanceFor(ctx, testCase) {
     key: cacheKey({ caseId: testCase.id, pageHash: hashPageDir(pageDir), options, environment }),
     options,
     environment,
+    worker: ctx.worker ?? null,
   };
 }
 
