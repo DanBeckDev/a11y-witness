@@ -15,6 +15,8 @@
 // Fresh NVDA per capture by default (`reuseScreenReader: false`): a repeatability test that
 // reuses one screen reader is measuring a single NVDA session, not the pipeline. `--reuse` opts
 // back in when you specifically want to know whether reuse is what drifts.
+import { mkdirSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 const arg = (name, fallback = null) => {
@@ -29,6 +31,11 @@ const STEPS = Number(arg("steps", "10"));
 const PROBE_TABLES = process.argv.includes("--probe-tables");
 const REUSE = process.argv.includes("--reuse");
 const CAPTURE_TIMEOUT_MS = 300_000;
+// Every capture is kept, not just summarised. The first real run of this harness found two degenerate
+// captures and I could not say WHY, because the diagnostics -- stopReason, documentReady,
+// readThroughRetry -- had been thrown away with the response. A harness that reports instability
+// without keeping the evidence makes you run it twice.
+const OUT_DIR = resolve(arg("out", "runs/repeat-captures"));
 const BETWEEN_MS = 2_000; // let the guest settle, as a real run would between cases
 
 if (!URL_ARG || !WORKER) {
@@ -70,6 +77,7 @@ async function captureOnce() {
   return body;
 }
 
+mkdirSync(OUT_DIR, { recursive: true });
 const runs = [];
 const errors = [];
 for (let n = 1; n <= TIMES; n += 1) {
@@ -77,7 +85,9 @@ for (let n = 1; n <= TIMES; n += 1) {
   try {
     const capture = await captureOnce();
     runs.push(comparable(capture));
-    console.log(`${capture.transcript.length} phrases`);
+    writeFileSync(resolve(OUT_DIR, `capture-${n}.json`), JSON.stringify(capture, null, 2) + "\n", "utf8");
+    const retried = (capture.diagnostics ?? []).some((e) => e.event === "readThroughRetry");
+    console.log(`${capture.transcript.length} phrases${retried ? " (read-through retried)" : ""}`);
   } catch (e) {
     errors.push(`${n}: ${e.message}`);
     console.log(`FAILED ${e.message}`);
@@ -128,7 +138,8 @@ if (empty.length) {
   console.log(`  EMPTY     ${empty.length} capture(s) heard nothing at all — the foreground flake, ` +
     "excluded from the comparison above because it would mark every field unstable");
 }
-console.log(`\n${unstable === 0 ? "All compared fields are stable." : `${unstable} field(s) vary on an unchanged page.`}`);
+console.log(`\nraw captures kept in ${OUT_DIR} (diagnostics included)`);
+console.log(`${unstable === 0 ? "All compared fields are stable." : `${unstable} field(s) vary on an unchanged page.`}`);
 // A varying field is a failure: evidence that depends on timing rather than on the page. An empty
 // capture or an error is a failure too, just a different one -- so all three fail the run.
 process.exit(unstable === 0 && errors.length === 0 && empty.length === 0 ? 0 : 1);
