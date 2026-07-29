@@ -2,12 +2,18 @@
 // MUST run in an interactive desktop session (see run-server.cmd + the README).
 //   POST /capture  { url, task?, steps?, probeForms?, probeFocus?, probeTables? }
 //                                          -> { url, screenReader, transcript, task }
-//   GET  /health                           -> { ok, screenReader, busy, code }
+//   GET  /health                           -> { ok, screenReader, busy, code, environment }
 // NVDA is a single shared resource, so captures are serialized.
 import { createServer } from "node:http";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { captureWithNvda, forgetScreenReader, shutdownScreenReader } from "./capture-core.mjs";
+import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import {
+  browserAvailable, CAPTURE_PROTOCOL_VERSION, captureWithNvda, forgetScreenReader,
+  screenReaderReady, shutdownScreenReader, warmUpScreenReader,
+} from "./capture-core.mjs";
 
 const PORT = Number(process.env.A11Y_PORT || 8765);
 const LOG_PATH = process.env.A11Y_SERVER_LOG || "server.log";
@@ -53,6 +59,7 @@ let busy = false;
 // captures. Set A11Y_REUSE_NVDA=0 for a fresh NVDA per capture, which remains the first thing
 // to try if captures start behaving differently as a run progresses.
 const REUSE_NVDA = process.env.A11Y_REUSE_NVDA !== "0";
+const ENVIRONMENT_CACHE_MS = 5_000;
 
 // Every probe is opt-in over the wire and defaults to off, so an old client keeps the old
 // behaviour and no capture pays for a probe it did not ask for. Extracted from the handler
@@ -86,6 +93,105 @@ function codeVersion() {
 
 const CODE_VERSION = codeVersion();
 
+const EDGE_EXES = [
+  `${process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)"}\\Microsoft\\Edge\\Application\\msedge.exe`,
+  `${process.env.ProgramFiles || "C:\\Program Files"}\\Microsoft\\Edge\\Application\\msedge.exe`,
+];
+
+function powershellValue(script) {
+  if (process.platform !== "win32") return "unknown";
+  try {
+    const value = execFileSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-Command", script,
+    ], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return value || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function fileProductVersion(path) {
+  const escaped = path.replace(/'/g, "''");
+  return powershellValue(`(Get-Item -LiteralPath '${escaped}').VersionInfo.ProductVersion`);
+}
+
+function findFile(root, wanted, depth = 0) {
+  if (!root || depth > 5 || !existsSync(root)) return null;
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    const path = join(root, entry.name);
+    if (entry.isFile() && entry.name.toLowerCase() === wanted) return path;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+    const found = findFile(join(root, entry.name), wanted, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+function packageVersion(name) {
+  try {
+    const require = createRequire(import.meta.url);
+    const packagePath = require.resolve(`${name}/package.json`);
+    return JSON.parse(readFileSync(packagePath, "utf8")).version || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function runtimeEnvironment() {
+  const guidepupRoot = process.env.GUIDEPUP_SCREEN_READERS_PATH ||
+    (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "guidepup") : "");
+  const nvdaPath = findFile(join(guidepupRoot, "nvda"), "nvda.exe");
+  const edgePath = EDGE_EXES.find((path) => existsSync(path));
+  return {
+    measuredAt: new Date().toISOString(),
+    screenReader: "NVDA",
+    screenReaderVersion: nvdaPath ? fileProductVersion(nvdaPath) : "unknown",
+    browser: "Microsoft Edge",
+    browserVersion: edgePath ? fileProductVersion(edgePath) : "unknown",
+    guidepupVersion: packageVersion("@guidepup/guidepup"),
+    nodeVersion: process.version,
+    windowsVersion: powershellValue("$os = Get-CimInstance Win32_OperatingSystem; \"$($os.Caption) $($os.Version)\""),
+    workerCode: CODE_VERSION,
+    // What the evidence means, and what the host's capture cache keys on. See capture-core.mjs.
+    captureProtocol: CAPTURE_PROTOCOL_VERSION,
+    // Which provisioning built this guest. Written by provision-nvda-worker.ps1 rather than
+    // hashed on the host, so it describes what the guest ACTUALLY has -- provisioning changes
+    // NVDA's config, Edge's policies and ForegroundLockTimeout, all of which change the evidence.
+    provisionRevision: provisionRevision(),
+  };
+}
+
+const PROVISION_STAMP = "C:\\Users\\witness\\a11y-witness\\provision-revision.txt";
+
+function provisionRevision() {
+  try {
+    return readFileSync(PROVISION_STAMP, "utf8").trim() || "unstamped";
+  } catch {
+    // A guest provisioned before the stamp existed. Named rather than blank so a cache miss
+    // caused by re-provisioning is explainable after the fact.
+    return "unstamped";
+  }
+}
+
+let environmentCache = null;
+let environmentMeasuredAt = 0;
+
+function currentEnvironment() {
+  if (!environmentCache || Date.now() - environmentMeasuredAt > ENVIRONMENT_CACHE_MS) {
+    environmentCache = runtimeEnvironment();
+    environmentMeasuredAt = Date.now();
+  }
+  return environmentCache;
+}
+
 function captureOptions(parsed) {
   return {
     steps: parsed.steps,
@@ -94,7 +200,13 @@ function captureOptions(parsed) {
     probeForms: parsed.probeForms ?? false,
     probeFocus: parsed.probeFocus ?? false,
     probeTables: parsed.probeTables ?? false,
-    reuseScreenReader: REUSE_NVDA,
+    // The worker default is deliberately fast, but callers running a provenance or
+    // repeatability pass may require a fresh NVDA lifecycle for every capture. Keep this
+    // opt-in at the request boundary so the host's environment cannot be mistaken for the
+    // guest's process environment (A11Y_REUSE_NVDA on the host never reaches this process).
+    reuseScreenReader: typeof parsed.reuseScreenReader === "boolean"
+      ? parsed.reuseScreenReader
+      : REUSE_NVDA,
   };
 }
 
@@ -103,9 +215,114 @@ function send(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// ForegroundLockTimeout, read ONCE.
+//
+// Two reasons for the cache: PowerShell startup is ~0.5 s and /health is polled, and the value
+// cannot change under us -- run-server.cmd applies it to this session before node starts and
+// nothing else touches it for the worker's lifetime.
+//
+// It has to be read with SystemParametersInfo, not from the registry: the registry value is not
+// what the session uses (that is the whole reason apply-foreground-lock-timeout.ps1 exists). Left
+// non-zero, Edge is refused the foreground and every capture returns 0 phrases with no error.
+const FLT_GET = 0x2000; // SPI_GETFOREGROUNDLOCKTIMEOUT
+let fltCache;
+
+function foregroundLockTimeout() {
+  if (fltCache !== undefined) return fltCache;
+  const raw = powershellValue(`
+    Add-Type -Namespace W -Name Spi -MemberDefinition '
+      [DllImport("user32.dll", SetLastError=true)]
+      public static extern bool SystemParametersInfo(uint a, uint b, ref uint c, uint d);' | Out-Null
+    $v = 0
+    if ([W.Spi]::SystemParametersInfo(${FLT_GET}, 0, [ref]$v, 0)) { $v } else { "unknown" }`);
+  const parsed = Number.parseInt(raw, 10);
+  // null means "could not read", which must NOT block the worker: a broken diagnostic taking the
+  // whole pool offline is worse than the fault it looks for. A value we DID read and dislike does
+  // block.
+  fltCache = Number.isFinite(parsed) ? parsed : null;
+  return fltCache;
+}
+
+// Warm-up state. `error` is kept so a not-ready worker says WHY, which is the difference between
+// "give it a moment" and "this guest is broken".
+let warm = { ok: false, error: "not warmed up yet", at: null };
+let warming = false;
+
+async function warmUp(reason) {
+  // One at a time. Readiness polling drives re-warms, and two concurrent NVDA starts would fight
+  // over a single machine-wide screen reader.
+  if (warming) return;
+  warming = true;
+  try {
+    log(`warming up NVDA (${reason})`);
+    const result = await warmUpScreenReader();
+    warm = { ok: result.ok, error: result.error, at: new Date().toISOString() };
+    log(result.ok
+      ? "warm: NVDA is up and answering; the worker is ready"
+      : `warm FAILED: ${result.error} — reporting not ready`);
+  } finally {
+    warming = false;
+  }
+}
+
+// Retry warm-up whenever someone asks whether we are ready.
+//
+// Without this, a worker that failed to warm at boot reports not-ready FOREVER: nothing else
+// retries, and `worker-ctl.sh up` would wait its whole timeout and call a recoverable guest
+// broken. Since the dispatcher and `up` both poll /health, letting the poll drive recovery makes
+// the worker self-healing at no extra machinery -- and Windows settling after auto-logon, which is
+// the usual reason warm-up fails, resolves on exactly that timescale.
+function reWarmIfNeeded() {
+  if (!warm.ok && !warming) warmUp("retry while not ready").catch((e) => log("re-warm threw: " + e.message));
+}
+
+/**
+ * Can this worker actually take a capture right now?
+ *
+ * Every check here is one that has silently failed in production. A worker answering `ok: true`
+ * while NVDA could not start is what made the pool look like it had a moving fault: whichever VM
+ * had been up longest worked, freshly booted ones did not.
+ */
+async function readiness() {
+  reWarmIfNeeded();
+  const checks = {
+    screenReader: await screenReaderReady(),
+    browser: browserAvailable(),
+    // Applied per session by run-server.cmd. Left non-zero, Edge is refused the foreground and
+    // every capture returns 0 phrases with NO error at all -- the worst failure mode we have.
+    foregroundLockTimeout: foregroundLockTimeout(),
+    warmedUp: warm.ok,
+  };
+  const failed = Object.entries(checks)
+    // foregroundLockTimeout is a number: 0 is good, non-zero is bad, null is unreadable and is
+    // deliberately not a failure (see foregroundLockTimeout()).
+    .filter(([name, value]) => (name === "foregroundLockTimeout"
+      ? typeof value === "number" && value !== 0
+      : !value))
+    .map(([name]) => name);
+  return {
+    ready: failed.length === 0 && !busy,
+    checks,
+    // Not an error when it is merely busy: a worker mid-capture is healthy, just not free.
+    reason: failed.length ? `not ready: ${failed.join(", ")}${warm.error ? ` (${warm.error})` : ""}`
+      : busy ? "busy with a capture" : null,
+  };
+}
+
 const server = createServer((req, res) => {
   if (req.method === "GET" && req.url === "/health") {
-    return send(res, 200, { ok: true, screenReader: "NVDA", busy, code: CODE_VERSION });
+    const environment = currentEnvironment();
+    // `ok` is kept for older callers and still means "the HTTP server is answering". `ready` is
+    // the one to dispatch on -- see readiness().
+    return readiness().then((state) => send(res, 200, {
+      ok: true,
+      ready: state.ready,
+      readiness: state,
+      screenReader: environment.screenReader,
+      busy,
+      code: CODE_VERSION,
+      environment,
+    })).catch((e) => send(res, 500, { error: String((e && e.message) || e) }));
   }
   if (req.method === "POST" && req.url === "/capture") {
     if (busy) return send(res, 429, { error: "a capture is already in progress" });
@@ -123,15 +340,25 @@ const server = createServer((req, res) => {
       log(`[${startedAt}] capture ${url} (nav=${opts.nav || "object"}, probeForms=${opts.probeForms}, probeFocus=${opts.probeFocus})`);
       try {
         const result = await captureWithNvda(url, opts);
+        const environment = currentEnvironment();
         const after = (result.diagnostics || []).find((e) => e.event === "afterStart");
         log(`  -> ${result.transcript.length} phrases; afterStart.lastSpoken=${JSON.stringify(after && after.lastSpoken)}`);
         if (result.transcript.length === 0) {
           log("  WARNING: 0 phrases. If afterStart.lastSpoken is empty, NVDA is running but not speaking — restart/reboot the worker.");
         }
-        send(res, 200, { ...result, task: opts.task });
+        send(res, 200, {
+          ...result,
+          screenReader: environment.screenReader,
+          task: opts.task,
+          environment,
+        });
       } catch (e) {
         log("  capture failed: " + ((e && e.stack) || e));
         send(res, 500, { error: String((e && e.message) || e) });
+        // A capture that died may have left NVDA unusable. Stop claiming readiness and try to get
+        // back to it, rather than accepting the next case and failing that one too.
+        warm = { ok: false, error: "last capture failed: " + String((e && e.message) || e), at: new Date().toISOString() };
+        warmUp("after a failed capture").catch((err) => log("re-warm failed: " + err.message));
       } finally {
         busy = false;
       }
@@ -141,7 +368,12 @@ const server = createServer((req, res) => {
   send(res, 404, { error: "not found" });
 });
 
-server.listen(PORT, () => log(`a11y-witness NVDA worker listening on :${PORT} (reuse NVDA: ${REUSE_NVDA})`));
+server.listen(PORT, () => {
+  log(`a11y-witness NVDA worker listening on :${PORT} (reuse NVDA: ${REUSE_NVDA})`);
+  // Deliberately not awaited: the port must answer immediately so callers can see "not ready yet"
+  // instead of a connection refusal, which reads as a dead worker.
+  warmUp("worker start").catch((e) => log("warm-up threw: " + e.message));
+});
 
 // An NVDA socket error arrives asynchronously, outside the request handler that caused it,
 // so it lands here as an uncaught exception. Without this the worker dies with a bare stack

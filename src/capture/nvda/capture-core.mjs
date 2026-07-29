@@ -24,6 +24,18 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 // --- Tunables. Named so the timing/limits can be reasoned about and adjusted
 // in one place rather than hunting for bare numbers in the control flow. ---
+// What the captured evidence MEANS. Bump this by hand when a change alters the shape or
+// semantics of the output -- a new field that a signal reads, a probe that announces differently,
+// a navigation change that reorders what is heard.
+//
+// Deliberately separate from the worker's code hash (`/health.code`), which changes on every edit
+// including comments. The hash is right for "is this worker running my code"; it is wrong for the
+// capture cache, where it would invalidate all 1,061 pairs because someone reworded a comment.
+// This constant is what the cache keys on, so it must move only when the evidence really changes.
+//
+// Bumping it forces a full recapture. That is the point.
+export const CAPTURE_PROTOCOL_VERSION = 1;
+
 const DEFAULT_STEPS = 150; // read-through line count cap
 const DEFAULT_BROWSER_WAIT_MS = 12_000; // UPPER BOUND on waiting for Edge, not a fixed sleep
 const DEFAULT_BUDGET_MS = 120_000; // overall wall-clock budget for one capture
@@ -112,7 +124,15 @@ export async function captureWithNvda(url, opts = {}) {
   let succeeded = false;
   try {
     const result = await runCapturePhases(url, opts, diag);
-    succeeded = true;
+    // A request can complete without throwing while NVDA is silent or still attached to a
+    // blank document. Never preserve that state for the next capture: reusing it turns one
+    // transient readiness failure into a whole run of confident empty captures. The host-side
+    // title verifier will reject the result, but cleanup must make the worker recoverable
+    // before that verifier gets a chance to retry.
+    const documentReady = (result.diagnostics || []).some(
+      (event) => event.event === "documentReady" && event.ok === true,
+    );
+    succeeded = documentReady && Array.isArray(result.transcript) && result.transcript.length > 0;
     return result;
   } finally {
     // Cleanup MUST be unconditional, and it was not.
@@ -488,6 +508,43 @@ async function stopScreenReader(diag) {
 // A worker that stays up and cold-starts NVDA on the next capture beats one that exits hoping
 // for a babysitter. This just clears the belief that NVDA is reusable; startFreshScreenReader
 // already knows how to clear a leftover instance out of the way.
+// --- Readiness ------------------------------------------------------------
+//
+// `/health` used to answer `ok: true` unconditionally, which is exactly how the worst failure of
+// this pool hid: a worker answered health while NVDA could not start, so the dispatcher handed it
+// the first case and the capture died on `nvda.start`.
+//
+// Readiness is deliberately NOT a bag of proxies for "Windows looks settled". NVDA is normally
+// started BY a capture, so probing port 6837 on a fresh worker would report not-ready forever.
+// Instead the worker starts NVDA once at boot and readiness means the real thing: NVDA is up and
+// answering. That makes the signal truthful, moves the cold start off the first capture's critical
+// path, and turns "Windows is still settling" from a failed case into a worker that has simply not
+// said ready yet.
+
+/** Is the screen reader up and answering on its speech channel? */
+export function screenReaderReady() {
+  return screenReaderResponds();
+}
+
+/** Is there a browser to drive at all? Cheap, and a missing Edge is otherwise a mid-capture error. */
+export function browserAvailable() {
+  return EDGE_EXES.some((exe) => existsSync(exe));
+}
+
+/**
+ * Start NVDA before any capture asks for it, so the first capture reuses a warm one.
+ * Never throws: a worker that cannot warm up must report why, not crash on boot.
+ */
+export async function warmUpScreenReader() {
+  const diag = createDiagnostics();
+  try {
+    await startScreenReader(diag, { reuse: true });
+    return { ok: true, error: null, diagnostics: diag.entries };
+  } catch (e) {
+    return { ok: false, error: errMsg(e), diagnostics: diag.entries };
+  }
+}
+
 export function forgetScreenReader() {
   screenReader = { running: false, captures: 0 };
 }
@@ -549,7 +606,19 @@ async function readPageInOrder({ steps, navStrategy, deadline, diag }) {
 // or the top line (often the first heading) is skipped.
 async function readFirstItem(diag) {
   try {
-    return ((await nvda.itemText()) || "").trim();
+    const item = ((await nvda.itemText()) || "").trim();
+    if (item) return item;
+
+    // On a loaded Edge document NVDA can know the title while the virtual cursor has not
+    // exposed an item to Guidepup's itemText() yet. Treating that as an empty page loses the
+    // whole transcript, and waiting longer is not a state check. Ask NVDA to read the current
+    // line explicitly; this is the user-visible operation we need and gives the virtual cursor
+    // one more chance to materialise the first item after the anchor.
+    await withTimeout(nvda.perform(nvda.keyboardCommands.readLine), NAV_TIMEOUT_MS, "readLine");
+    await sleep(ANCHOR_SETTLE_MS);
+    const line = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "readLine")) || "").trim();
+    diag.mark("readFirstItemFallback", { phrase: line });
+    return line;
   } catch (e) {
     diag.mark("itemText", { error: errMsg(e) });
     return "";
