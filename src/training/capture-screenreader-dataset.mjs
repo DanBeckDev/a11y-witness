@@ -8,19 +8,30 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { leaseWorker, leaseWorkerPool, guestReachableUrl, isAfterRun } from "../capture/local-vm.js";
 import { captureMentionsTitle, titleOf } from "../capture/verify.js";
 import { beginRun, readProgress } from "./capture-progress.mjs";
+import { cacheDecision, cacheKey, hashPageDir, stampProvenance } from "./capture-cache.mjs";
 
 const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
 const MANIFEST_PATH = resolve(ROOT, "manifest.json");
 const CAPTURE_ROOT = resolve(ROOT, process.env.DATASET_CAPTURE_ROOT || "captures");
+const PAGE_ROOT = resolve(ROOT, "pages");
 const REJECTED_ROOT = resolve(CAPTURE_ROOT, "rejected");
 const DEFAULT_BASE_URL = "http://localhost:5050";
 const STEPS = Number(process.env.DATASET_CAPTURE_STEPS || 150);
 const ONLY = process.argv.find((arg) => arg.startsWith("--only="))?.slice("--only=".length);
 const RESUME = process.argv.includes("--resume");
+// Caching is refused for acceptance runs, whatever the flags say: those runs exist to test whether
+// NVDA's output is still stable, and reusing evidence would make them pass by construction.
+// `--no-cache` forces a recapture anywhere.
+const KIND = process.env.DATASET_KIND || "training";
+const CACHE = !process.argv.includes("--no-cache") && KIND !== "acceptance";
 // A comma-separated list of worker URLs runs cases across them concurrently. Get one from
 // `scripts/local-worker/worker-ctl.sh pool`. Unset keeps the single-worker behaviour.
 const WORKERS_ENV = process.env.A11Y_WORKERS ?? null;
 const CAPTURE_TIMEOUT_MS = Number(process.env.DATASET_CAPTURE_TIMEOUT_MS || 300000);
+// This is sent over the wire because NVDA lives in the Windows worker process. Setting
+// A11Y_REUSE_NVDA on the host only changes a host process and cannot affect that worker.
+// Keep reuse on for the normal pooled run; acceptance/repeat runs can set this to 0.
+const REUSE_NVDA = process.env.DATASET_REUSE_NVDA !== "0";
 
 async function fetchJson(url, options = {}, timeoutMs = 30000) {
   const response = await fetch(url, {
@@ -89,13 +100,20 @@ function captureUrl(baseUrl, testCase, variant) {
   return baseUrl + "/" + testCase.id + "/" + variant + ".html";
 }
 
-async function captureOne(ctx, testCase, url) {
-  const body = {
-    url,
+// Exactly what shapes the evidence, defined once. The cache keys on this and the worker receives
+// it, so the two cannot drift -- a key that ignored an option we actually send would reuse evidence
+// captured a different way.
+function captureOptions(testCase) {
+  return {
     task: testCase.task,
     steps: STEPS,
     probeForms: testCase.probeForms,
+    reuseScreenReader: REUSE_NVDA,
   };
+}
+
+async function captureOne(ctx, testCase, url) {
+  const body = { url, ...captureOptions(testCase) };
   return fetchJson(ctx.worker + "/capture", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -103,8 +121,9 @@ async function captureOne(ctx, testCase, url) {
   }, CAPTURE_TIMEOUT_MS);
 }
 
-function writeCapture(testCase, variant, capture) {
+function writeCapture(testCase, variant, capture, provenance) {
   mkdirSync(CAPTURE_ROOT, { recursive: true });
+  if (provenance) capture = stampProvenance(capture, provenance);
   const path = resolve(CAPTURE_ROOT, testCase.id + "." + variant + ".json");
   writeFileSync(path, JSON.stringify(capture, null, 2) + "\n", "utf8");
   return path;
@@ -152,7 +171,14 @@ async function waitForWorker(worker) {
   while (Date.now() < deadline) {
     try {
       const health = await fetchJson(worker + "/health", {}, WORKER_POLL_MS);
-      if (health.busy) {
+      // Answering is not the same as able to capture. A worker reports `ready: false` while NVDA
+      // is still warming up after a boot -- which is when the first capture used to fail on
+      // `nvda.start` and be recorded as a broken case. Waiting here turns that into patience.
+      //
+      // `ready !== false` rather than `=== true` on purpose: a worker predating this field is
+      // treated as ready, so an un-redeployed guest keeps working instead of stalling the run.
+      // Staleness has its own detector (npm run worker:code).
+      if (health.busy || health.ready === false) {
         await sleep(WORKER_POLL_MS);
         continue;
       }
@@ -219,8 +245,50 @@ async function captureVerified(ctx, testCase, { url, title, variant }) {
     "the rejected captures are in " + REJECTED_ROOT + " for diagnosis.");
 }
 
+/** The worker's own account of what it is, which the cache key depends on. */
+async function workerEnvironment(worker) {
+  try {
+    return (await fetchJson(worker + "/health", {}, 15000)).environment ?? {};
+  } catch {
+    // An unreachable worker is handled by waitForWorker; keying on {} here just means its captures
+    // will not match cached ones, which is the safe direction.
+    return {};
+  }
+}
+
+function provenanceFor(ctx, testCase) {
+  const pageDir = resolve(PAGE_ROOT, testCase.id);
+  const options = captureOptions(testCase);
+  const environment = ctx.environment ?? {};
+  return {
+    key: cacheKey({ caseId: testCase.id, pageHash: hashPageDir(pageDir), options, environment }),
+    options,
+    environment,
+  };
+}
+
+/**
+ * Reuse the pair on disk when nothing that shapes it has changed, otherwise capture it.
+ *
+ * @returns {Promise<{cached: boolean, phrases?: object, reason?: string}>}
+ */
+async function cachedOrCapture(ctx, testCase) {
+  if (!CACHE) return { cached: false, phrases: await captureCase(ctx, testCase) };
+  const { key } = provenanceFor(ctx, testCase);
+  const decision = cacheDecision({ captureRoot: CAPTURE_ROOT, caseId: testCase.id, key });
+  if (!decision.reuse) return { cached: false, phrases: await captureCase(ctx, testCase) };
+  // Worth saying out loud: the evidence is valid by protocol version, but it was produced by
+  // different capture code. Silently reusing it is how you lose track of what made your dataset.
+  if (decision.staleCode && decision.staleCode !== ctx.environment?.workerCode) {
+    console.log("  " + testCase.id + ": reusing evidence produced by different capture code (" +
+      decision.staleCode + " vs " + (ctx.environment?.workerCode ?? "unknown") + ")");
+  }
+  return { cached: true, reason: decision.reason };
+}
+
 async function captureCase(ctx, testCase) {
   const phrases = {};
+  ctx = { ...ctx, provenance: provenanceFor(ctx, testCase) };
   for (const variant of ["good", "bad"]) {
     const url = captureUrl(ctx.baseUrl, testCase, variant);
     const title = await pageTitle(url);
@@ -228,7 +296,7 @@ async function captureCase(ctx, testCase) {
     console.log("Capturing " + testCase.id + " (" + variant + ")" +
       (ctx.poolSize > 1 ? " on " + ctx.worker : ""));
     const capture = await captureVerified(ctx, testCase, { url, title, variant });
-    const path = writeCapture(testCase, variant, capture);
+    const path = writeCapture(testCase, variant, capture, ctx.provenance);
     console.log("  " + capture.transcript.length + " transcript phrases -> " + path);
     phrases[variant] = capture.transcript.length;
   }
@@ -289,8 +357,11 @@ async function captureAcrossPool(ctxBase, cases, done, workers) {
   const queue = [...cases];
   const failures = [];
   const skipped = [];
+  const cachedIds = [];
   await Promise.all(workers.map(async (worker) => {
-    const ctx = { ...ctxBase, worker };
+    // Once per worker: the cache key depends on this guest's NVDA, Edge, protocol and provisioning,
+    // and a pool member that differs must not reuse another's evidence.
+    const ctx = { ...ctxBase, worker, environment: await workerEnvironment(worker) };
     while (queue.length) {
       const testCase = queue.shift();
       if (done.has(testCase.id)) {
@@ -299,7 +370,13 @@ async function captureAcrossPool(ctxBase, cases, done, workers) {
         continue;
       }
       try {
-        ctx.progress.captured(testCase.id, await captureCase(ctx, testCase));
+        const result = await cachedOrCapture(ctx, testCase);
+        if (result.cached) {
+          ctx.progress.skipped(testCase.id, "cached: " + result.reason);
+          cachedIds.push(testCase.id);
+          continue;
+        }
+        ctx.progress.captured(testCase.id, result.phrases);
       } catch (error) {
         failures.push(testCase.id + ": " + error.message);
         ctx.progress.failed(testCase.id, error.message);
@@ -307,11 +384,17 @@ async function captureAcrossPool(ctxBase, cases, done, workers) {
       }
     }
   }));
-  return { failures, skippedCount: skipped.length };
+  if (cachedIds.length) {
+    console.log("Reused cached evidence for " + cachedIds.length + " case(s); " +
+      (queue.length === 0 ? "" : "") + "no worker time spent on them.");
+  }
+  return { failures, skippedCount: skipped.length + cachedIds.length, cachedCount: cachedIds.length };
 }
 
-async function captureAll(ctx, cases, done) {
+async function captureAll(ctxBase, cases, done) {
   const failures = [];
+  const ctx = { ...ctxBase, environment: await workerEnvironment(ctxBase.worker) };
+  let cached = 0;
   for (const testCase of cases) {
     if (done.has(testCase.id)) {
       ctx.progress.skipped(testCase.id, "already captured (--resume)");
@@ -319,15 +402,25 @@ async function captureAll(ctx, cases, done) {
       continue;
     }
     try {
-      ctx.progress.captured(testCase.id, await captureCase(ctx, testCase));
+      const result = await cachedOrCapture(ctx, testCase);
+      if (result.cached) {
+        ctx.progress.skipped(testCase.id, "cached: " + result.reason);
+        console.log("Reusing " + testCase.id + " (cached: " + result.reason + ")");
+        cached += 1;
+        continue;
+      }
+      ctx.progress.captured(testCase.id, result.phrases);
     } catch (error) {
       failures.push(testCase.id + ": " + error.message);
       ctx.progress.failed(testCase.id, error.message);
       console.error("  CAPTURE_FAILED " + failures.at(-1));
     }
   }
-  const outcome = (cases.length - failures.length - done.size) + " captured, " +
-    failures.length + " failed, " + done.size + " skipped, of " + cases.length + " cases";
+  // Cached cases are skipped, not captured -- counting them as captured would report worker time
+  // that was never spent, which is the one number this whole feature exists to change.
+  const outcome = (cases.length - failures.length - done.size - cached) + " captured, " +
+    failures.length + " failed, " + (done.size + cached) + " skipped" +
+    (cached ? " (" + cached + " cached)" : "") + ", of " + cases.length + " cases";
   ctx.progress.finish(outcome);
   console.log("Capture complete: " + outcome + ".");
   if (failures.length) {
@@ -336,17 +429,10 @@ async function captureAll(ctx, cases, done) {
   }
 }
 
-async function main() {
-  const manifest = readManifest();
-  const cases = ONLY ? manifest.cases.filter(({ id }) => id.includes(ONLY)) : manifest.cases;
-  if (!cases.length) throw new Error("No generated case matches --only=" + ONLY);
-
+async function acquireDatasetWorkers() {
   // Same lease as the witness CLI: an explicit A11Y_WORKER is used untouched, otherwise a
   // local VM is started on demand and put back as it was found. Dataset capture is the run
   // that benefits most -- it is long, unattended, and used to leave the guest running after.
-  const done = previouslyCaptured(cases);
-  if (done.size) console.log("Resuming: " + done.size + " case(s) already captured.");
-
   // Three ways to get workers, in priority order:
   //   A11Y_WORKERS  an explicit pool -- someone else's to manage, so no lifecycle handling
   //   two or more local VMs  leased as a pool AND put back afterwards
@@ -358,50 +444,87 @@ async function main() {
   const explicitPool = WORKERS_ENV
     ? WORKERS_ENV.split(",").map((w) => w.trim().replace(/\/$/, "")).filter(Boolean)
     : null;
-  const localPool = explicitPool || process.env.A11Y_WORKER ? null : await leaseWorkerPool(afterRun());
-  const pool = explicitPool ?? localPool?.workers ?? null;
-  const lease = localPool
-    ? { worker: localPool.workers[0], source: "local-vm", hostAddress: localPool.hostAddress, release: localPool.release }
-    : explicitPool
-      ? { worker: explicitPool[0], source: "explicit", hostAddress: undefined, release: async () => {} }
-      : await leaseWorker({ worker: process.env.A11Y_WORKER ?? null, after: afterRun() });
+  if (explicitPool) {
+    return {
+      pool: explicitPool,
+      lease: { worker: explicitPool[0], source: "explicit", hostAddress: undefined, release: async () => {} },
+    };
+  }
+  if (!process.env.A11Y_WORKER) {
+    const localPool = await leaseWorkerPool(afterRun());
+    return {
+      pool: localPool.workers,
+      lease: { worker: localPool.workers[0], source: "local-vm", hostAddress: localPool.hostAddress, release: localPool.release },
+    };
+  }
+  return { pool: null, lease: await leaseWorker({ worker: process.env.A11Y_WORKER, after: afterRun() }) };
+}
+
+async function checkDatasetWorkers(pool, lease) {
+  if (pool) {
+    // Check every one of them before starting: discovering a dead worker an hour in wastes
+    // the hour, and the pool driver would keep handing it cases.
+    for (const worker of pool) await checkWorker({ worker, source: "explicit" });
+    console.log(`Pool of ${pool.length}: ${pool.join(", ")}`);
+    return;
+  }
+  await checkWorker(lease);
+}
+
+function captureProgress(cases, lease, pool, baseUrl) {
+  const progress = beginRun({
+    root: ROOT,
+    worker: lease.worker,
+    baseUrl,
+    cases,
+    captureTimeoutMs: CAPTURE_TIMEOUT_MS,
+  });
+  progress.setWorkers(pool ?? [lease.worker]);
+  console.log("Progress: " + progress.path + " (watch it: npm run training:status, or block: npm run training:wait)");
+  return progress;
+}
+
+async function captureWithPool({ baseUrl, progress, pool }, cases, done) {
+  const { failures, skippedCount, cachedCount } = await captureAcrossPool(
+    { baseUrl, progress, poolSize: pool.length }, cases, done, pool);
+  const captured = cases.length - failures.length - skippedCount;
+  const outcome = `${captured} captured, ${failures.length} failed, ${skippedCount} skipped` +
+    (cachedCount ? ` (${cachedCount} cached)` : "") +
+    `, of ${cases.length} cases across ${pool.length} workers`;
+  progress.finish(outcome);
+  console.log("Capture complete: " + outcome + ".");
+  if (failures.length) {
+    throw new Error(failures.length + " case(s) failed. The completed captures were kept; " +
+      "see npm run training:status, and re-run with --resume to retry only what is missing.");
+  }
+}
+
+async function captureDataset(cases, done, pool, lease) {
+  const baseUrl = resolveBaseUrl(lease);
+  // Prove the pages are served before capturing anything. captureAll treats a bad page as
+  // a per-case failure, so without this a wrong base URL reports the same error 45 times
+  // over -- and each one costs a full NVDA capture first.
+  await pageTitle(captureUrl(baseUrl, cases[0], "good"));
+  const progress = captureProgress(cases, lease, pool, baseUrl);
+  if (pool && pool.length > 1) {
+    await captureWithPool({ baseUrl, progress, pool }, cases, done);
+    return;
+  }
+  await captureAll({ worker: lease.worker, baseUrl, progress, poolSize: 1 }, cases, done);
+}
+
+async function main() {
+  const manifest = readManifest();
+  const cases = ONLY ? manifest.cases.filter(({ id }) => id.includes(ONLY)) : manifest.cases;
+  if (!cases.length) throw new Error("No generated case matches --only=" + ONLY);
+
+  const done = previouslyCaptured(cases);
+  if (done.size) console.log("Resuming: " + done.size + " case(s) already captured.");
+
+  const { pool, lease } = await acquireDatasetWorkers();
   try {
-    if (pool) {
-      // Check every one of them before starting: discovering a dead worker an hour in wastes
-      // the hour, and the pool driver would keep handing it cases.
-      for (const worker of pool) await checkWorker({ worker, source: "explicit" });
-      console.log(`Pool of ${pool.length}: ${pool.join(", ")}`);
-    } else {
-      await checkWorker(lease);
-    }
-    const baseUrl = resolveBaseUrl(lease);
-    // Prove the pages are served before capturing anything. captureAll treats a bad page as
-    // a per-case failure, so without this a wrong base URL reports the same error 45 times
-    // over -- and each one costs a full NVDA capture first.
-    await pageTitle(captureUrl(baseUrl, cases[0], "good"));
-    const progress = beginRun({
-      root: ROOT,
-      worker: lease.worker,
-      baseUrl,
-      cases,
-      captureTimeoutMs: CAPTURE_TIMEOUT_MS,
-    });
-    progress.setWorkers(pool ?? [lease.worker]);
-    console.log("Progress: " + progress.path + " (watch it: npm run training:status, or block: npm run training:wait)");
-    if (pool && pool.length > 1) {
-      const { failures, skippedCount } = await captureAcrossPool(
-        { baseUrl, progress, poolSize: pool.length }, cases, done, pool);
-      const captured = cases.length - failures.length - skippedCount;
-      const outcome = `${captured} captured, ${failures.length} failed, ${skippedCount} skipped, of ${cases.length} cases across ${pool.length} workers`;
-      progress.finish(outcome);
-      console.log("Capture complete: " + outcome + ".");
-      if (failures.length) {
-        throw new Error(failures.length + " case(s) failed. The completed captures were kept; " +
-          "see npm run training:status, and re-run with --resume to retry only what is missing.");
-      }
-    } else {
-      await captureAll({ worker: lease.worker, baseUrl, progress, poolSize: 1 }, cases, done);
-    }
+    await checkDatasetWorkers(pool, lease);
+    await captureDataset(cases, done, pool, lease);
   } finally {
     await lease.release();
   }

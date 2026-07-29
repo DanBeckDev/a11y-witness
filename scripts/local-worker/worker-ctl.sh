@@ -146,13 +146,26 @@ health() {
   return 1
 }
 
+# Waits for READY, not merely for an answer.
+#
+# This used to return the moment /health responded, which is precisely when the first capture
+# failed: the port answers well before NVDA can start, so `up` reported success and the run
+# immediately lost its first case to `nvda.start failed: Timed out waiting for NVDA to be
+# running`. The worker now warms NVDA at boot and reports `ready:false` until it is answering,
+# so waiting for that makes `up` mean what it says.
+#
+# A worker predating the field returns no `ready`, and is accepted as before.
 wait_healthy() {
   local uuid="$1" limit="${2:-180}" waited=0 body
   while [ "$waited" -lt "$limit" ]; do
     body="$(health_once "$uuid" || true)"
     if [ -n "$body" ]; then
-      echo "  ready after ${waited}s: $body"
-      return 0
+      if ! echo "$body" | grep -q '"ready":false'; then
+        echo "  ready after ${waited}s: $body"
+        return 0
+      fi
+      # Answering but still warming up. Say so, because silence here looks like a hang.
+      [ $((waited % 15)) -eq 0 ] && echo "  answering, NVDA still warming up (${waited}s)"
     fi
     sleep 3; waited=$((waited + 3))
   done
@@ -285,6 +298,9 @@ case "$CMD" in
     body="$(health "$UUID" || true)"
     healthy=false; [ -n "$body" ] && healthy=true
     busy=false; if echo "$body" | grep -q '"busy":true'; then busy=true; fi
+    # A worker can answer /health while NVDA cannot start. `ready:false` says so explicitly;
+    # a worker predating the field reports nothing, and is treated as ready.
+    ready=true; if echo "$body" | grep -q '"ready":false'; then ready=false; fi
     state="$(vm_state "$UUID")"
 
     # `means` carries no information the other fields lack; it exists because they were being
@@ -292,15 +308,17 @@ case "$CMD" in
     # looks like a broken pool -- and since a run starts its own workers, stopped is the normal
     # resting state. An agent read exactly this output, concluded the environment was down, and
     # went hunting for a worker that had been decommissioned. So the JSON now says what it means.
-    if [ "$healthy" = true ]; then
+    if [ "$healthy" = true ] && [ "$ready" = false ]; then
+      means="answering but NOT ready -- NVDA still warming up, or it failed to start"
+    elif [ "$healthy" = true ]; then
       means="ready"; [ "$busy" = true ] && means="ready, busy with a capture"
     elif [ "$state" = "started" ]; then
       means="running but not answering /health -- this one IS a fault"
     else
       means="$state -- normal at rest; a run starts it and stops it again"
     fi
-    printf '{"uuid":"%s","name":"%s","state":"%s","ip":"%s","port":%s,"healthy":%s,"busy":%s,"means":"%s"}\n' \
-      "$UUID" "$VM_NAME" "$state" "${ip:-}" "$PORT" "$healthy" "$busy" "$means"
+    printf '{"uuid":"%s","name":"%s","state":"%s","ip":"%s","port":%s,"healthy":%s,"ready":%s,"busy":%s,"means":"%s"}\n' \
+      "$UUID" "$VM_NAME" "$state" "${ip:-}" "$PORT" "$healthy" "$ready" "$busy" "$means"
     ;;
 
   pool-stop|pool-pause)

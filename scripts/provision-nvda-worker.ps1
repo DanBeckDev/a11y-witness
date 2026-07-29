@@ -336,6 +336,32 @@ if (Test-Path $checkCmd) {
 }
 
 # ---------------------------------------------------------------------------
+# Stamp WHAT provisioned this guest, so the host's capture cache can tell when the
+# environment behind the evidence changed.
+#
+# Provisioning is not cosmetic: it sets NVDA's configuration, Edge's policies and
+# ForegroundLockTimeout, each of which changes what a capture hears. Two guests running identical
+# capture code can therefore produce different evidence, and without this the cache would reuse
+# one guest's captures for another's environment.
+#
+# Written by the guest rather than hashed on the host on purpose -- this records what the guest
+# ACTUALLY has, which is the only thing worth keying on. A host-side hash would describe the
+# script we intended to run.
+$stampPath = Join-Path $RepoPath 'provision-revision.txt'
+$scriptHashes = @('scripts\provision-nvda-worker.ps1', 'src\capture\nvda\run-server.cmd',
+                  'scripts\apply-foreground-lock-timeout.ps1') |
+  ForEach-Object { Join-Path $RepoPath $_ } |
+  Where-Object { Test-Path $_ } |
+  ForEach-Object { (Get-FileHash $_ -Algorithm SHA256).Hash }
+$combined = if ($scriptHashes) {
+  $bytes = [Text.Encoding]::UTF8.GetBytes(($scriptHashes -join ''))
+  ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)) -replace '-','').Substring(0,16).ToLower()
+} else { 'unknown' }
+$gitSha = try { (git -C $RepoPath rev-parse --short HEAD 2>$null) } catch { $null }
+"$(if ($gitSha) { $gitSha } else { 'nogit' })-$combined" | Out-File $stampPath -Encoding ascii -NoNewline
+OK "provision revision stamped: $(Get-Content $stampPath)"
+
+# ---------------------------------------------------------------------------
 Step 9 'Start and verify'
 
 Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
