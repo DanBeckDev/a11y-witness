@@ -194,6 +194,22 @@ cycling NVDA destabilises the speech channel.
 A worker that fails three captures in a row is **evicted** from the pool and everything it failed goes
 back to the queue; the run summary names it.
 
+### "The worker is dead" is usually a wedge, not a death
+
+If `/health` answers but **every capture returns 429 `a capture is already in progress`**, the worker
+is *wedged*, not dead: a previous capture hung, so `busy` was never released. This cost two days of
+misdiagnosis — bad clones, a stub NVDA install, guest-agent failures — because from outside it is
+indistinguishable from a dead machine. A hard capture timeout now abandons the hung capture, releases
+`busy`, and cold-starts NVDA, so it recovers on its own.
+
+Two related facts worth not rediscovering:
+
+- **`utmctl exec` and `file pull` need the guest's logged-on session.** They fail before auto-logon
+  completes and work afterwards, which is one cause for two symptoms — not a broken guest agent. If
+  `exec` is silent, the guest has not finished logging on; wait rather than diagnose.
+- **`server.log` persists on the guest.** You cannot pull it while the worker is down (see above), so
+  read it *after* it recovers — the record of the death is still there.
+
 ## Verifying changes
 
 Verification is layered; pick the layers your change touches:
