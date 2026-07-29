@@ -70,6 +70,37 @@ export function captureMentionsTitle(capture: CapturedAnnouncements, title: stri
   return words.some((w) => haystack.includes(w));
 }
 
+/**
+ * Did we hear the PAGE, or only its title?
+ *
+ * `captureMentionsTitle` asks "is this the right page" and cannot answer this one -- worse, it is
+ * satisfied by exactly the artefact that means failure. A degenerate capture's whole transcript is
+ * the document title, so the title check passes trivially and the capture is accepted as evidence.
+ * Measured on a real worker: 2 of 5 captures of one page returned transcript
+ * `["Aquarium 001 schedule"]`, no headings and no table cells, and would have been written to the
+ * dataset as though NVDA had read the page.
+ *
+ * The cause is known and documented in capture-core: `waitForDocument` asks NVDA to report the
+ * document title, which leaves the title as the last spoken phrase, and a read-through that begins
+ * before the anchor takes effect records that instead of the page's first line.
+ *
+ * Substance means anything beyond the title: a second announced phrase, or a single structural or
+ * interaction element. A page whose only evidence is its own title has not been read.
+ */
+export function captureHasSubstance(capture: CapturedAnnouncements, title: string): boolean {
+  const s = capture.structure;
+  const it = capture.interaction;
+  const structural = [
+    s?.headings, s?.landmarks, s?.formFields, it?.controls, it?.stateChanges, it?.postSubmitFields,
+  ].some((list) => (list?.length ?? 0) > 0);
+  if (structural) return true;
+
+  const normalise = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
+  const wanted = normalise(title);
+  // Nothing but the title (however many times it was said) is not evidence of a page.
+  return capture.transcript.some((phrase) => normalise(phrase) !== wanted && normalise(phrase) !== "");
+}
+
 /** The <title> of a served page, or "" if it has none. */
 export function titleOf(html: string): string {
   return html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1].trim() ?? "";

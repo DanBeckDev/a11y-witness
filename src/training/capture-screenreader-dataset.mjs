@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { leaseWorker, leaseWorkerPool, guestReachableUrl, isAfterRun } from "../capture/local-vm.js";
-import { captureMentionsTitle, titleOf } from "../capture/verify.js";
+import { captureHasSubstance, captureMentionsTitle, titleOf } from "../capture/verify.js";
 import { beginRun, readProgress } from "./capture-progress.mjs";
 import { cacheDecision, cacheKey, hashPageDir, stampProvenance } from "./capture-cache.mjs";
 
@@ -238,8 +238,15 @@ async function captureVerified(ctx, testCase, { url, title, variant }) {
   let wrong = "";
   for (let attempt = 1; attempt <= CAPTURE_ATTEMPTS; attempt++) {
     const capture = await captureTolerantly(ctx, testCase, url);
-    if (captureMentionsTitle(capture, title)) return capture;
-    wrong = describeWrongPage(capture, { title, url });
+    // Both questions, because the title check alone cannot answer the second and is in fact
+    // SATISFIED by the failure: a degenerate capture's whole transcript is the document title.
+    // Measured on a live worker -- 2 of 5 captures returned transcript ["<page title>"] with no
+    // headings and no cells, and would have been written to the dataset as read evidence.
+    if (captureMentionsTitle(capture, title) && captureHasSubstance(capture, title)) return capture;
+    wrong = captureHasSubstance(capture, title)
+      ? describeWrongPage(capture, { title, url })
+      : `the screen reader announced nothing beyond the page title at ${url} ` +
+        `(${capture.transcript.length} phrase(s), no structure) — the page was not read`;
     const kept = writeRejected(testCase, variant, capture, attempt);
     console.log("  attempt " + attempt + "/" + CAPTURE_ATTEMPTS + ": " + wrong);
     console.log("    diagnostics kept: " + kept);
