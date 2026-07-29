@@ -202,6 +202,13 @@ misdiagnosis — bad clones, a stub NVDA install, guest-agent failures — becau
 indistinguishable from a dead machine. A hard capture timeout now abandons the hung capture, releases
 `busy`, and cold-starts NVDA, so it recovers on its own.
 
+**What put it there: restarting NVDA repeatedly.** NVDA responds to that with a modal dialog on the
+guest desktop — `nvdaHelperRemote (injection_terminate): Error waiting for local thread to die` — and
+a modal dialog blocks input, so the next capture hangs. One guest took QEMU down with it. Hence the
+rule: **nothing may restart NVDA while a worker is idle.** Warm-up happens once at boot; after that
+NVDA is the capture's business, and `startScreenReader` already cold-starts a dead one. If you find
+yourself adding a health-driven NVDA restart, this is the loop you are rebuilding.
+
 Two related facts worth not rediscovering:
 
 - **`utmctl exec` and `file pull` need the guest's logged-on session.** They fail before auto-logon
