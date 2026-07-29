@@ -157,6 +157,43 @@ table is not a missing feature; it is a claim this project cannot currently make
 Probes beyond the default set are opt-in over the wire (`probeForms`, `probeFocus`) so a capture
 never pays for evidence nobody asked for. `focusOrder` costs ~8 s on top of a ~15 s capture.
 
+## Captures are cached — and the cache is keyed on more than the page
+
+A full run is 1,061 pairs, so `npm run training:capture` reuses evidence on disk when nothing that
+shapes it has changed. The key covers the page directory (every file), the capture options,
+NVDA and Edge versions, the provisioning revision, and `CAPTURE_PROTOCOL_VERSION`.
+
+- **Bump `CAPTURE_PROTOCOL_VERSION`** (`src/capture/nvda/capture-core.mjs`) when a change alters what
+  the evidence *means* — a new field a signal reads, a probe that announces differently. It forces a
+  full recapture; that is the point. Do **not** reach for it on a refactor.
+- The worker's code hash is deliberately **not** in the key. It changes when a comment changes, and
+  invalidating 1,061 pairs over a reworded comment is how a cache gets switched off. A cache hit whose
+  code hash differs is logged, not hidden.
+- Reuse is **per case, never per variant**: a pair is only comparable if both halves came from the
+  same worker.
+- **Acceptance and repeatability runs never cache.** `DATASET_KIND=acceptance` refuses it outright,
+  because those runs exist to test whether NVDA's output is still stable. `--no-cache` anywhere else.
+
+```bash
+npm run training:repeat -- --url=<page> --times=5 [--probe-tables]   # is a field stable at all?
+node scripts/bench-capture.mjs --from-disk                          # p50/p95 per phase, per worker
+```
+
+## Readiness: `ready`, not `ok`
+
+`/health` reports `ready` alongside `ok`. **Dispatch on `ready`.** `ok` only ever meant "the HTTP
+server is answering", and a worker answered it while NVDA could not start — which is how the pool's
+dominant failure hid for a day. The worker now warms NVDA at boot, so `ready` means NVDA is up and
+answering, Edge is resolvable, and `ForegroundLockTimeout` is 0.
+
+`ready:false` right after a boot is **normal and self-correcting** — it means "not yet", not
+"broken". `worker-ctl.sh up` waits for it, and each pool worker waits for its own before taking work.
+Warm-up retries are capped (3 attempts, 30 s apart) because retrying on every poll cycles NVDA, and
+cycling NVDA destabilises the speech channel.
+
+A worker that fails three captures in a row is **evicted** from the pool and everything it failed goes
+back to the queue; the run summary names it.
+
 ## Verifying changes
 
 Verification is layered; pick the layers your change touches:
