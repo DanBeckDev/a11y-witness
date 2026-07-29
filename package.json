@@ -30,7 +30,8 @@
     "training:fetch-encoder": ".venv/bin/python scripts/fetch-screenreader-encoder.py",
     "training:train": ".venv/bin/python scripts/train-screenreader-model.py",
     "doctor": "node scripts/doctor.mjs",
-    "worker:code": "node scripts/check-worker-code.mjs"
+    "worker:code": "node scripts/check-worker-code.mjs",
+    "training:repeat": "node src/training/repeat-capture.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
