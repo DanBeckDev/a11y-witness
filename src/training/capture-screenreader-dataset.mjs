@@ -183,7 +183,10 @@ async function waitForWorker(worker) {
         continue;
       }
       const waited = Math.round((WORKER_WAIT_MS - (deadline - Date.now())) / 1000);
-      console.log("    worker is back after " + waited + "s");
+      // Silent when there was nothing to wait for. This is now called once per worker before it
+      // takes any work, so announcing "back after 0s" for a healthy pool was three lines of noise
+      // per run, and "back" is wrong for a worker that never went away.
+      if (waited > 0) console.log("    worker ready after " + waited + "s: " + worker);
       return;
     } catch {
       // Expected while it is down -- the whole point is to keep asking. The loop's own
@@ -353,15 +356,50 @@ function afterRun() {
 //
 // A queue rather than a static split, so a slow case does not leave a worker idle while
 // another still has a backlog.
+// A worker that has failed this many cases in a row is not having bad luck.
+//
+// Failures are caught per case, so a dead worker used to keep pulling from the queue and failing
+// everything it touched -- one broken guest could turn a whole run into failures while two healthy
+// ones sat idle. Evicting it hands the work back to the pool.
+const MAX_CONSECUTIVE_WORKER_FAILURES = 3;
+
+// Hand a broken worker's cases back to the pool: the one in hand plus everything it already
+// failed, since those failures were the worker's fault rather than the cases'. A progress entry
+// recorded as failed is overwritten when another worker captures it.
+function requeueFrom({ queue, failures, testCase, failedHere }) {
+  queue.push(testCase, ...failedHere.map((f) => f.testCase));
+  for (const { id } of failedHere) {
+    const at = failures.findIndex((f) => f.startsWith(id + ": "));
+    if (at !== -1) failures.splice(at, 1);
+  }
+  return failedHere.length + 1;
+}
+
 async function captureAcrossPool(ctxBase, cases, done, workers) {
   const queue = [...cases];
   const failures = [];
   const skipped = [];
+  const evicted = [];
   const cachedIds = [];
   await Promise.all(workers.map(async (worker) => {
     // Once per worker: the cache key depends on this guest's NVDA, Edge, protocol and provisioning,
     // and a pool member that differs must not reuse another's evidence.
+    // Wait for THIS worker to be ready before it takes any work. Readiness was previously only
+    // consulted after a failure, so a freshly booted worker still got handed the first case and
+    // still lost it to `nvda.start` -- the exact failure the readiness gate exists to prevent.
+    // A worker that never becomes ready simply takes no cases; the others drain the queue.
+    try {
+      await waitForWorker(worker);
+    } catch (error) {
+      console.error("  worker never became ready, skipping it: " + worker + " (" + error.message + ")");
+      return;
+    }
     const ctx = { ...ctxBase, worker, environment: await workerEnvironment(worker) };
+    let consecutiveFailures = 0;
+    // What this worker failed. If it turns out to be the worker rather than the cases, all of it
+    // goes back to the pool -- otherwise a broken guest still costs two permanently failed cases
+    // before the threshold trips, and those are cases a healthy worker could have captured.
+    const failedHere = [];
     while (queue.length) {
       const testCase = queue.shift();
       if (done.has(testCase.id)) {
@@ -377,7 +415,23 @@ async function captureAcrossPool(ctxBase, cases, done, workers) {
           continue;
         }
         ctx.progress.captured(testCase.id, result.phrases);
+        // A success clears the streak AND the blame: these cases were fine, so they must not be
+        // handed back if this worker dies later.
+        consecutiveFailures = 0;
+        failedHere.length = 0;
       } catch (error) {
+        consecutiveFailures += 1;
+        // Evict, but never the last worker standing: with nothing left to hand the work to,
+        // recording the failures is more useful than abandoning the run quietly.
+        if (consecutiveFailures >= MAX_CONSECUTIVE_WORKER_FAILURES && workers.length - evicted.length > 1) {
+          const handedBack = requeueFrom({ queue, failures, testCase, failedHere });
+          evicted.push(worker);
+          console.error("  EVICTING " + worker + " after " + consecutiveFailures +
+            " consecutive failures; " + handedBack +
+            " case(s) go back to the queue. Last error: " + error.message);
+          return;
+        }
+        failedHere.push({ id: testCase.id, testCase });
         failures.push(testCase.id + ": " + error.message);
         ctx.progress.failed(testCase.id, error.message);
         console.error("  CAPTURE_FAILED " + failures.at(-1));
@@ -385,10 +439,16 @@ async function captureAcrossPool(ctxBase, cases, done, workers) {
     }
   }));
   if (cachedIds.length) {
-    console.log("Reused cached evidence for " + cachedIds.length + " case(s); " +
-      (queue.length === 0 ? "" : "") + "no worker time spent on them.");
+    console.log("Reused cached evidence for " + cachedIds.length + " case(s); no worker time spent on them.");
   }
-  return { failures, skippedCount: skipped.length + cachedIds.length, cachedCount: cachedIds.length };
+  // Never silent: a run that finished on two of three workers must say so, or the next person
+  // wonders why it took longer and finds nothing.
+  if (evicted.length) console.error("Evicted " + evicted.length + " worker(s): " + evicted.join(", "));
+  return {
+    failures, evicted,
+    skippedCount: skipped.length + cachedIds.length,
+    cachedCount: cachedIds.length,
+  };
 }
 
 async function captureAll(ctxBase, cases, done) {
@@ -485,12 +545,13 @@ function captureProgress(cases, lease, pool, baseUrl) {
 }
 
 async function captureWithPool({ baseUrl, progress, pool }, cases, done) {
-  const { failures, skippedCount, cachedCount } = await captureAcrossPool(
+  const { failures, skippedCount, cachedCount, evicted } = await captureAcrossPool(
     { baseUrl, progress, poolSize: pool.length }, cases, done, pool);
   const captured = cases.length - failures.length - skippedCount;
   const outcome = `${captured} captured, ${failures.length} failed, ${skippedCount} skipped` +
     (cachedCount ? ` (${cachedCount} cached)` : "") +
-    `, of ${cases.length} cases across ${pool.length} workers`;
+    `, of ${cases.length} cases across ${pool.length} workers` +
+    (evicted.length ? `, ${evicted.length} evicted (${evicted.join(", ")})` : "");
   progress.finish(outcome);
   console.log("Capture complete: " + outcome + ".");
   if (failures.length) {

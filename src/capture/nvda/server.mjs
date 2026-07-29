@@ -257,6 +257,8 @@ async function warmUp(reason) {
     log(`warming up NVDA (${reason})`);
     const result = await warmUpScreenReader();
     warm = { ok: result.ok, error: result.error, at: new Date().toISOString() };
+    // A success re-arms the budget: the next fault deserves its own three attempts.
+    if (result.ok) warmAttempts = 0;
     log(result.ok
       ? "warm: NVDA is up and answering; the worker is ready"
       : `warm FAILED: ${result.error} — reporting not ready`);
@@ -265,15 +267,30 @@ async function warmUp(reason) {
   }
 }
 
-// Retry warm-up whenever someone asks whether we are ready.
+// Retry warm-up when asked whether we are ready -- but NOT on every poll.
 //
-// Without this, a worker that failed to warm at boot reports not-ready FOREVER: nothing else
-// retries, and `worker-ctl.sh up` would wait its whole timeout and call a recoverable guest
-// broken. Since the dispatcher and `up` both poll /health, letting the poll drive recovery makes
-// the worker self-healing at no extra machinery -- and Windows settling after auto-logon, which is
-// the usual reason warm-up fails, resolves on exactly that timescale.
+// Without any retry, a worker that failed to warm at boot reports not-ready forever and `up` calls
+// a recoverable guest broken. With a retry on every poll, the opposite: /health is polled every few
+// seconds by `up`, the dispatcher and doctor, and each attempt starts NVDA. This codebase's own
+// warning is that cycling NVDA destabilises the speech-capture channel, so an unbounded retry is a
+// way to turn a slow boot into a broken worker.
+//
+// So: at most one attempt per cooldown, and stop after a few. A guest that cannot warm up in three
+// tries over a minute and a half needs looking at, not another restart -- and it now says so
+// instead of thrashing.
+const WARM_RETRY_COOLDOWN_MS = 30_000;
+const MAX_WARM_ATTEMPTS = 3;
+let warmAttempts = 0;
+let lastWarmAttempt = 0;
+
 function reWarmIfNeeded() {
-  if (!warm.ok && !warming) warmUp("retry while not ready").catch((e) => log("re-warm threw: " + e.message));
+  if (warm.ok || warming) return;
+  if (warmAttempts >= MAX_WARM_ATTEMPTS) return;
+  if (Date.now() - lastWarmAttempt < WARM_RETRY_COOLDOWN_MS) return;
+  lastWarmAttempt = Date.now();
+  warmAttempts += 1;
+  warmUp(`retry ${warmAttempts}/${MAX_WARM_ATTEMPTS} while not ready`)
+    .catch((e) => log("re-warm threw: " + e.message));
 }
 
 /**
@@ -358,6 +375,8 @@ const server = createServer((req, res) => {
         // A capture that died may have left NVDA unusable. Stop claiming readiness and try to get
         // back to it, rather than accepting the next case and failing that one too.
         warm = { ok: false, error: "last capture failed: " + String((e && e.message) || e), at: new Date().toISOString() };
+        warmAttempts = 0;
+        lastWarmAttempt = Date.now();
         warmUp("after a failed capture").catch((err) => log("re-warm failed: " + err.message));
       } finally {
         busy = false;

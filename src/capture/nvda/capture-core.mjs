@@ -875,36 +875,50 @@ const TABLE_SETTLE_MS = 500;
 // step without the walk being over.
 const MAX_TABLE_MISSES = 3;
 
+// What NVDA said in response to one keystroke, as a DELTA of the spoken-phrase log.
+//
+// This replaces reading lastSpokenPhrase, and it is the fix for the defect that made tableCells
+// unusable: 18 captures of one unchanged page returned 4, 2, 4, 4, 1, 4, 4 cells. "What was last
+// said" is a single sample of a moving target -- if the announcement had not landed yet the read
+// returned the PREVIOUS phrase (indistinguishable from "did not move") or nothing (which the walk
+// took for the end of the table). Priming, silence tolerance and a 500 ms settle each helped and
+// none of them fixed it, because all three were compensating for the wrong read.
+//
+// A delta cannot miss a late announcement: whatever arrived during the settle is in the log, and
+// an empty delta means NVDA genuinely said nothing. Same idiom as activateAndCaptureDelta, which
+// exists because a live-region status can be followed by a focus move that overwrites
+// lastSpokenPhrase.
+async function speechDelta(step, label) {
+  const before = ((await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, label).catch(() => [])) || []).length;
+  await withTimeout(step(), NAV_TIMEOUT_MS, label);
+  await sleep(TABLE_SETTLE_MS);
+  const log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, label).catch(() => [])) || [];
+  // Joined rather than reduced to one entry: a cell whose announcement arrives as two utterances
+  // is still one cell, and dropping either half would be losing evidence.
+  return log.slice(before).map((phrase) => String(phrase).trim()).filter(Boolean).join(", ");
+}
+
 // Walk one direction inside a table, appending each newly announced cell.
-// `step` is a thunk so the caller chooses HOW the keystroke is sent: nvda.perform(command) and
-// nvda.press("Control+Alt+...") are not equivalent in this codebase -- every quick-nav command
-// that works today is a bare letter, and the only modifier combos we send successfully
-// (Escape, Control+Home) go through press.
 async function walkTable(step, { out, deadline, label, trace }) {
-  let prev = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, label).catch(() => "")) || "").trim();
   let misses = 0;
   for (let i = 0; i < MAX_TABLE_STEPS; i += 1) {
     if (Date.now() > deadline) break;
+    let phrase;
     try {
-      await withTimeout(step(), NAV_TIMEOUT_MS, label);
+      phrase = await speechDelta(step, label);
     } catch (e) { trace.push(`${label} threw ${errMsg(e)}`); break; }
-    await sleep(TABLE_SETTLE_MS);
-    const phrase = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, label).catch(() => "")) || "").trim();
     trace.push(`${label}[${i}] ${phrase.slice(0, 60) || "(silence)"}`);
     // Only NVDA's own boundary wording ends the walk.
     if (/\bedge of table\b|\bnot in a table\b/i.test(phrase)) break;
-    // Silence is NOT the end, and treating it as the end cost real evidence: one capture's
-    // column walk stopped dead on a single silent step and returned 2 cells where the same page
-    // on the same worker had yielded 4 a minute earlier -- the difference being a reused NVDA
-    // whose speech log lagged one keystroke. Identical pages must not produce different
-    // evidence depending on timing, so a silent or unchanged step is retried, not fatal.
-    if (!phrase || phrase === prev) {
+    // Silence is still retried rather than treated as the end -- but with a delta it now means
+    // NVDA really said nothing, not that the read was early. There is no "unchanged phrase" case
+    // any more: a delta is new speech by construction.
+    if (!phrase) {
       misses += 1;
       if (misses >= MAX_TABLE_MISSES) break;
       continue;
     }
     misses = 0;
-    prev = phrase;
     if (!out.includes(phrase)) out.push(phrase);
   }
 }
@@ -960,9 +974,7 @@ const MAX_CELL_PRIMES = 3;
 
 async function enterFirstCell(K, { trace }) {
   for (let i = 0; i < MAX_CELL_PRIMES; i += 1) {
-    await withTimeout(nvda.perform(K.moveToNextRow), NAV_TIMEOUT_MS, "prime").catch(() => undefined);
-    await sleep(TABLE_SETTLE_MS);
-    const phrase = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "prime").catch(() => "")) || "").trim();
+    const phrase = await speechDelta(() => nvda.perform(K.moveToNextRow), "prime").catch(() => "");
     trace.push(`prime[${i}] ${phrase.slice(0, 60) || "(silence)"}`);
     if (phrase && !/not in a table cell/i.test(phrase)) return phrase;
     await withTimeout(nvda.press("ArrowDown"), NAV_TIMEOUT_MS, "prime").catch(() => undefined);
