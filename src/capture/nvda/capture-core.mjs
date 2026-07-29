@@ -866,6 +866,12 @@ const MAX_TABLE_STEPS = 6;
 // an already-rendered grid returns faster than NVDA updates lastSpokenPhrase.
 const TABLE_SETTLE_MS = 500;
 
+// NVDA's own words for "there is no cell here". Shared, because only walkTable checked for them and
+// enterFirstCell did not -- so a table walked from its caption recorded "Edge of table" AS A CELL and
+// the evidence contained a boundary message dressed up as content. Measured: tableCells[1] was
+// "Edge of table" on a 2x3 table.
+const TABLE_BOUNDARY = /\bedge of table\b|\bnot in a table\b/i;
+
 // One dud step is tolerated before giving up. Guidepup's own description is "WHEN WITHIN A
 // TABLE, moves the system caret to the next column" -- and jumping to a table with T lands on
 // its caption, which is not within the grid. So the first Ctrl+Alt+Arrow announces nothing and
@@ -909,7 +915,7 @@ async function walkTable(step, { out, deadline, label, trace }) {
     } catch (e) { trace.push(`${label} threw ${errMsg(e)}`); break; }
     trace.push(`${label}[${i}] ${phrase.slice(0, 60) || "(silence)"}`);
     // Only NVDA's own boundary wording ends the walk.
-    if (/\bedge of table\b|\bnot in a table\b/i.test(phrase)) break;
+    if (TABLE_BOUNDARY.test(phrase)) break;
     // Silence is still retried rather than treated as the end -- but with a delta it now means
     // NVDA really said nothing, not that the read was early. There is no "unchanged phrase" case
     // any more: a delta is new speech by construction.
@@ -976,7 +982,9 @@ async function enterFirstCell(K, { trace }) {
   for (let i = 0; i < MAX_CELL_PRIMES; i += 1) {
     const phrase = await speechDelta(() => nvda.perform(K.moveToNextRow), "prime").catch(() => "");
     trace.push(`prime[${i}] ${phrase.slice(0, 60) || "(silence)"}`);
-    if (phrase && !/not in a table cell/i.test(phrase)) return phrase;
+    // A boundary message is not a cell. Returning one made the first "cell" in the evidence a
+    // message about there being no cell.
+    if (phrase && !TABLE_BOUNDARY.test(phrase)) return phrase;
     await withTimeout(nvda.press("ArrowDown"), NAV_TIMEOUT_MS, "prime").catch(() => undefined);
   }
   return "";
