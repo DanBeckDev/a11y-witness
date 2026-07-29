@@ -46,14 +46,32 @@ retryable rather than final, and a 500 ms settle between keystroke and read. A f
 with timing is indistinguishable from a page that genuinely differs, which is exactly the
 contamination this project exists to avoid.
 
-**The delta fix is now implemented, and needs verifying.** `walkTable` reads a `spokenPhraseLog`
+**Update: the determinism test now passes on one page.** Five captures of the aquarium table pair,
+one worker, all ten compared fields identical every time — `tableCells` 4 cells on all five. The same
+test before the fixes gave transcript 1/9/9/9/1 and tableCells 0/4/4/4/0.
+
+That met the criterion set here, so the probe is no longer suspected of being timing-dependent. It
+stays **opt-in** anyway, because five runs on ONE page with ONE worker is not the corpus: promoting it
+to dataset evidence wants the same test across several table shapes and more than one guest. That is
+the remaining step, not a fresh doubt.
+
+Two fixes were needed, not one, and the second mattered more than the delta:
+
+**The delta read.** `walkTable` reads a `spokenPhraseLog`
 delta rather than `lastSpokenPhrase`. That was the wrong read all along: a single sample of a moving
 target returns the *previous* phrase when the announcement has not landed (indistinguishable from
 "did not move") or nothing (which the walk took for the end of the table). Priming, silence
 tolerance and the settle were each compensating for that, which is why all three helped and none
 cured it.
 
-Confirm with five identical runs before trusting it — and the harness for that now exists:
+**And the degenerate capture.** The apparent instability was mostly not the table probe at all: two of
+five captures had a transcript of exactly `["<document title>"]` with no headings and no cells, so
+every field "varied" because the whole capture had failed. The caret was never in the document.
+`readWithRetry` re-anchors and reads again when that happens, and `captureHasSubstance` refuses the
+result if it still has nothing but the title. Once those landed, the table probe was identical on every
+run — the delta read had already fixed it, and the noise was coming from somewhere else.
+
+The lesson is the familiar one: three fields varying together was one fault, not three. Reproduce with:
 
 ```bash
 npm run training:repeat -- --url=http://<host>:5050/<table-case>/good --times=5 --probe-tables
