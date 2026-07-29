@@ -180,7 +180,7 @@ async function runCapturePhases(url, opts, diag) {
   // position-independent -- and the anchor below re-establishes browse mode and the top
   // regardless, so the earlier one was pure cost: measured at ~3s of a 15.8s capture, since
   // each anchorToTop is two keystroke round trips plus a settle.
-  await waitForDocument(diag);
+  const documentTitle = await waitForDocument(diag);
   // Anchor AFTER the gate. waitForDocument asks NVDA to report the document title, which
   // leaves that title as `lastSpokenPhrase` -- and the read-through deliberately reads the
   // current line in place before its first move, so it captured the TITLE instead of the
@@ -194,7 +194,7 @@ async function runCapturePhases(url, opts, diag) {
   // neither the benchmark nor capture-check saw it.
   await anchorToTop();
   await recordStartupHealth(diag);
-  const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
+  const transcript = await readWithRetry({ steps, navStrategy, deadline, diag, title: documentTitle });
   const { structure, interaction } = await navigateByStructure({
     deadline, diag,
     probeForms: !!opts.probeForms, probeFocus: !!opts.probeFocus, probeTables: !!opts.probeTables,
@@ -299,7 +299,7 @@ async function waitForDocument(diag) {
     const title = await reportedTitle(diag);
     if (title && title.toLowerCase() !== "blank") {
       diag.mark("documentReady", { ok: true, title, attempt });
-      return;
+      return title;
     }
     diag.mark("documentReady", { ok: false, title, attempt });
     try {
@@ -630,6 +630,31 @@ async function advanceAndRead(navStrategy) {
   if (navStrategy === "object") await withTimeout(nvda.perform(nvda.keyboardCommands.moveToNextObject), ADVANCE_TIMEOUT_MS, "advance");
   else await withTimeout(nvda.next(), ADVANCE_TIMEOUT_MS, "advance");
   return ((await withTimeout(nvda.lastSpokenPhrase(), READ_TIMEOUT_MS, "read")) || "").trim();
+}
+
+// Read the page, and if all we heard was its title, anchor again and read once more.
+//
+// A degenerate capture -- transcript exactly `["<document title>"]`, no headings, no cells -- means
+// the browse-mode caret was never in the document: `waitForDocument` leaves the title as the last
+// spoken phrase, and a read-through that begins before the anchor takes effect reads that instead of
+// the page's first line, then has nowhere to advance to. Measured on a live worker: 2 of 5 captures
+// of one page.
+//
+// The verification layer now rejects these (captureHasSubstance), but rejecting costs the whole
+// capture. A second anchor is ~3 s and usually recovers it, so it is worth trying before giving up.
+// Only ONE retry: if re-anchoring did not put the caret in the document, something else is wrong and
+// the capture should fail honestly rather than loop.
+async function readWithRetry({ steps, navStrategy, deadline, diag, title }) {
+  const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
+  const heardOnlyTitle = title && transcript.length <= 1 &&
+    transcript.every((phrase) => phrase.trim().toLowerCase() === title.trim().toLowerCase());
+  if (!heardOnlyTitle) return transcript;
+
+  diag.mark("readThroughRetry", { reason: "heard only the document title", title });
+  await anchorToTop();
+  const second = await readPageInOrder({ steps, navStrategy, deadline, diag });
+  diag.mark("readThroughRetry", { recovered: second.length > transcript.length, count: second.length });
+  return second.length > transcript.length ? second : transcript;
 }
 
 // --- Structural navigation + interaction phase ----------------------------
