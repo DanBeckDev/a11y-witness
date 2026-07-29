@@ -243,6 +243,37 @@ function foregroundLockTimeout() {
   return fltCache;
 }
 
+// A capture that HANGS must not wedge the worker forever.
+//
+// This is the fault that made workers look dead for two days. `busy` is cleared in a `finally`,
+// which only runs if the capture returns or throws -- so when one hung, `busy` stayed true and every
+// later request got 429 "a capture is already in progress". From outside that is indistinguishable
+// from a dead worker: /health answers, captures are all refused. Observed exactly:
+//
+//   capture 2/5 ... FAILED The operation was aborted due to timeout   <- client gave up
+//   capture 3/5 ... FAILED a capture is already in progress           <- server never finished
+//   capture 4/5 ... FAILED a capture is already in progress
+//
+// capture-core has its own budget (DEFAULT_BUDGET_MS) but it is checked BETWEEN phases, so a single
+// guidepup call that never returns is unbounded. This is the backstop: above that budget, so the
+// internal deadline still wins in the normal case.
+//
+// The abandoned capture cannot be killed -- it may still be waiting on NVDA -- so the screen reader
+// is treated as untrustworthy afterwards and the next capture cold-starts one.
+// startFreshScreenReader already knows how to clear a leftover instance out of the way.
+const CAPTURE_HARD_TIMEOUT_MS = Number(process.env.A11Y_CAPTURE_HARD_TIMEOUT_MS || 240_000);
+
+function withHardTimeout(promise) {
+  let timer;
+  const abandon = new Promise((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`capture exceeded the hard timeout of ${CAPTURE_HARD_TIMEOUT_MS} ms and was abandoned`)),
+      CAPTURE_HARD_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([promise, abandon]).finally(() => clearTimeout(timer));
+}
+
 // Warm-up state. `error` is kept so a not-ready worker says WHY, which is the difference between
 // "give it a moment" and "this guest is broken".
 let warm = { ok: false, error: "not warmed up yet", at: null };
@@ -367,7 +398,7 @@ const server = createServer((req, res) => {
       const startedAt = new Date().toISOString();
       log(`[${startedAt}] capture ${url} (nav=${opts.nav || "object"}, probeForms=${opts.probeForms}, probeFocus=${opts.probeFocus})`);
       try {
-        const result = await captureWithNvda(url, opts);
+        const result = await withHardTimeout(captureWithNvda(url, opts));
         const environment = currentEnvironment();
         const after = (result.diagnostics || []).find((e) => e.event === "afterStart");
         log(`  -> ${result.transcript.length} phrases; afterStart.lastSpoken=${JSON.stringify(after && after.lastSpoken)}`);
