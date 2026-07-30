@@ -7,7 +7,8 @@ import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { leaseWorker, leaseWorkerPool, guestReachableUrl, isAfterRun } from "../capture/local-vm.js";
 import {
-  captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle, titleOf,
+  captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle, captureRanRequestedProbes,
+  titleOf,
 } from "../capture/verify.js";
 import { beginRun, readProgress } from "./capture-progress.mjs";
 import { cacheDecision, cacheKey, hashPageDir, stampProvenance } from "./capture-cache.mjs";
@@ -251,7 +252,11 @@ function writeRejected(testCase, variant, capture, attempt) {
 // Why this capture is not evidence. Three different faults, three different fixes, so they must not
 // collapse into one message: the wrong page, a page that was never read, and a capture whose two
 // halves disagree.
-function describeRejection(capture, { title, url }) {
+function describeRejection(capture, { title, url, testCase }) {
+  if (!captureRanRequestedProbes(capture, { probeForms: testCase?.probeForms })) {
+    return `the form probe found no controls at ${url} — this case's evidence is what submitting ` +
+      "announces, so a capture without controls is incomplete however well the page read";
+  }
   if (!captureIsSelfConsistent(capture)) {
     return `the capture contradicts itself at ${url}: the read-through announced a heading but the ` +
       `heading sweep found none (${capture.transcript.length} phrase(s)) — the page was not traversed`;
@@ -272,10 +277,11 @@ async function captureVerified(ctx, testCase, { url, title, variant }) {
     // Measured on a live worker -- 2 of 5 captures returned transcript ["<page title>"] with no
     // headings and no cells, and would have been written to the dataset as read evidence.
     if (captureMentionsTitle(capture, title) && captureHasSubstance(capture, title) &&
-        captureIsSelfConsistent(capture)) {
+        captureIsSelfConsistent(capture) &&
+        captureRanRequestedProbes(capture, { probeForms: testCase.probeForms })) {
       return capture;
     }
-    wrong = describeRejection(capture, { title, url });
+    wrong = describeRejection(capture, { title, url, testCase });
     const kept = writeRejected(testCase, variant, capture, attempt);
     console.log("  attempt " + attempt + "/" + CAPTURE_ATTEMPTS + ": " + wrong);
     console.log("    diagnostics kept: " + kept);
