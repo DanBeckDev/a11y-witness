@@ -46,9 +46,13 @@ retryable rather than final, and a 500 ms settle between keystroke and read. A f
 with timing is indistinguishable from a page that genuinely differs, which is exactly the
 contamination this project exists to avoid.
 
-**Update: the determinism test now passes on one page.** Five captures of the aquarium table pair,
-one worker, all ten compared fields identical every time — `tableCells` 4 cells on all five. The same
-test before the fixes gave transcript 1/9/9/9/1 and tableCells 0/4/4/4/0.
+**Update: `tableCells` is deterministic.** Across two separate sessions on one worker, every capture
+that produced a working read gave **4 cells, identical** — 5/5 in the first session and 7/7 in an
+eight-run session. Before the fixes the same test gave tableCells 0/4/4/4/0.
+
+The residual variation is not the probe. Roughly 1 capture in 8 fails outright on a quiet host, and
+when it does, `transcript`, `headings` and `tableCells` all collapse together — one fault presenting as
+three. Those captures are refused by the dataset (see below), so they cost a retry, never evidence.
 
 That met the criterion set here, so the probe is no longer suspected of being timing-dependent. It
 stays **opt-in** anyway, because five runs on ONE page with ONE worker is not the corpus: promoting it
@@ -67,8 +71,19 @@ cured it.
 **And the degenerate capture.** The apparent instability was mostly not the table probe at all: two of
 five captures had a transcript of exactly `["<document title>"]` with no headings and no cells, so
 every field "varied" because the whole capture had failed. The caret was never in the document.
-`readWithRetry` re-anchors and reads again when that happens, and `captureHasSubstance` refuses the
-result if it still has nothing but the title. Once those landed, the table probe was identical on every
+`readWithRetry` re-anchors and reads again when that happens. It is worth knowing what that did and did
+not achieve, because the diagnostics were unambiguous: the retry fires (proven — it had silently never
+fired when its condition tested for the bare title, and the real shape was the h1 announcement), but it
+does **not** recover the common case. `afterStart.lastSpoken: ""` with every sweep reporting `found: 0`
+after three round trips means NVDA answered every keystroke and never spoke — a mute screen reader,
+which reading harder cannot fix. That is now detected and failed immediately, so the worker cold-starts
+a fresh NVDA for the next capture instead of sweeping a silent one for ~45 s.
+
+Two guards refuse what gets through, and they catch different shapes: `captureHasSubstance` for a
+transcript that is only the title, and `captureIsSelfConsistent` for the nastier one — a transcript
+announcing `heading, level 1` while the heading sweep found none. The second shape passes both the
+title and substance checks, so without it a capture that never traversed the page would have been
+written as evidence. Once those landed, the table probe was identical on every
 run — the delta read had already fixed it, and the noise was coming from somewhere else.
 
 The lesson is the familiar one: three fields varying together was one fault, not three. Reproduce with:
