@@ -1,7 +1,9 @@
 // The verification layer's job is to refuse evidence that only looks like evidence.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle } from "./verify.js";
+import {
+  captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle, captureRanRequestedProbes,
+} from "./verify.js";
 
 const TITLE = "Aquarium 001 schedule";
 const empty = { headings: [], landmarks: [], formFields: [] };
@@ -92,4 +94,34 @@ test("\"blank\" among real content is fine", () => {
   // Pages legitimately contain empty lines; only a transcript that is ENTIRELY blank is the fault.
   const mixed = { transcript: ["blank", "heading, level 1, Aquarium"], structure: { headings: [], landmarks: [], formFields: [] } };
   assert.equal(captureHasSubstance(mixed, TITLE), true);
+});
+
+test("a requested form probe that found no controls is an incomplete capture", () => {
+  // Measured: a healthy 3-phrase transcript with controls: 0 and formProbe activated: 0. Every
+  // transcript-based guard passes it, and the case's entire signal is about what submitting announces.
+  // Faithful to the real capture: headings ARE populated, so nothing contradicts itself and every
+  // transcript-based guard is satisfied. This is the only check that sees the fault.
+  const noControls = {
+    transcript: ["heading, level 1, Health pavilion 042 booking", "form, Health pavilion contact"],
+    structure: { headings: ["Health pavilion 042 booking, heading, level 1"], landmarks: [], formFields: [] },
+    interaction: { controls: [], stateChanges: [] },
+  };
+  assert.equal(captureHasSubstance(noControls, TITLE), true, "substance check cannot see this");
+  assert.equal(captureIsSelfConsistent(noControls), true, "consistency check cannot see it either");
+  assert.equal(captureRanRequestedProbes(noControls, { probeForms: true }), false);
+});
+
+test("no form probe requested means no controls is fine", () => {
+  const noControls = { transcript: ["text"], structure: { headings: [], landmarks: [], formFields: [] } };
+  assert.equal(captureRanRequestedProbes(noControls, { probeForms: false }), true);
+  assert.equal(captureRanRequestedProbes(noControls, {}), true);
+});
+
+test("a form probe that found controls passes", () => {
+  const withControls = {
+    transcript: ["text"],
+    structure: { headings: [], landmarks: [], formFields: [] },
+    interaction: { controls: ["Submit, button"], stateChanges: [] },
+  };
+  assert.equal(captureRanRequestedProbes(withControls, { probeForms: true }), true);
 });

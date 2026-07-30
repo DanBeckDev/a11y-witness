@@ -134,6 +134,27 @@ export function captureIsSelfConsistent(capture: CapturedAnnouncements): boolean
   return !heardAHeading || sweptAHeading;
 }
 
+/**
+ * Did the probes we ASKED for actually produce anything?
+ *
+ * The read-through guards above all inspect the transcript, so a capture can read the page perfectly
+ * and still be useless for its case: the evidence that case depends on lives in the interaction
+ * probes. Measured on the full recapture -- `form-error-silent-bulk-health-pavilion-042.bad` came back
+ * with a healthy 3-phrase transcript, `controls: 0` and `formProbe activated: 0`. The form-field sweep
+ * found nothing, so the submit probe never ran, and the case's whole signal is about what submitting
+ * announces. Every earlier guard passed it.
+ *
+ * Only asked-for probes are checked. A page with no form legitimately has no controls; the fault is
+ * requesting a form probe and getting silence.
+ */
+export function captureRanRequestedProbes(
+  capture: CapturedAnnouncements,
+  requested: { probeForms?: boolean },
+): boolean {
+  if (!requested.probeForms) return true;
+  return (capture.interaction?.controls.length ?? 0) > 0;
+}
+
 /** The <title> of a served page, or "" if it has none. */
 export function titleOf(html: string): string {
   return html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1].trim() ?? "";
