@@ -46,13 +46,22 @@ retryable rather than final, and a 500 ms settle between keystroke and read. A f
 with timing is indistinguishable from a page that genuinely differs, which is exactly the
 contamination this project exists to avoid.
 
-**Update: `tableCells` is deterministic.** Across two separate sessions on one worker, every capture
-that produced a working read gave **4 cells, identical** — 5/5 in the first session and 7/7 in an
-eight-run session. Before the fixes the same test gave tableCells 0/4/4/4/0.
+**Update: much improved, but NOT deterministic — and I overclaimed this once.** Two eight-run sessions
+gave 4 cells identically (7/7 and 5/5), which I recorded as "deterministic". A third session then gave
+**3, 4, 4, 4** among captures that all read the page correctly, so that claim was wrong.
 
-The residual variation is not the probe. Roughly 1 capture in 8 fails outright on a quiet host, and
-when it does, `transcript`, `headings` and `tableCells` all collapse together — one fault presenting as
-three. Those captures are refused by the dataset (see below), so they cost a retry, never evidence.
+The cause is visible in the transcripts: NVDA sometimes announces the table's `caption` and sometimes
+does not, and the cell walk inherits that. Two distinct 9-phrase transcripts appear for the same page.
+So the variation is in **NVDA's announcement**, not in the probe or its timing — a different and much
+smaller problem than the 4/2/4/4/1/4/4 spread it started with, but not zero.
+
+That is why it stays opt-in. A signal keyed on cell COUNT would be unreliable; one keyed on whether a
+header word precedes the coordinates would not be, since that difference held in every capture.
+
+Separately, roughly 1 capture in 8 (up to 3 in 8 in one session) fails outright even on a quiet host.
+When it does, `transcript`, `headings` and `tableCells` collapse together — one fault presenting as
+three, which is what made the probe look flaky in the first place. Those are refused by the dataset, so
+they cost a retry and never become evidence.
 
 That met the criterion set here, so the probe is no longer suspected of being timing-dependent. It
 stays **opt-in** anyway, because five runs on ONE page with ONE worker is not the corpus: promoting it

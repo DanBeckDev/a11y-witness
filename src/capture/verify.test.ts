@@ -72,3 +72,24 @@ test("a consistent capture passes", () => {
   };
   assert.equal(captureIsSelfConsistent(good), true);
 });
+
+test("a transcript of only NVDA's \"blank\" has no substance", () => {
+  // Measured shape: `["blank","blank"]` -- NVDA reading an empty document.
+  //
+  // The title check ALREADY rejects this one, which is worth asserting so nobody assumes the substance
+  // check is load-bearing here. It becomes load-bearing when a page's title is made of common words,
+  // where captureMentionsTitle is deliberately lenient and returns true.
+  const blank = { transcript: ["blank", "blank"], structure: { headings: [], landmarks: [], formFields: [] } };
+  assert.equal(captureMentionsTitle(blank, TITLE), false, "the title check catches this one");
+  assert.equal(captureIsSelfConsistent(blank), true, "the consistency check cannot see it");
+  assert.equal(captureHasSubstance(blank, TITLE), false);
+  // The case the substance check is actually needed for: a title with no distinctive words.
+  assert.equal(captureMentionsTitle(blank, "Home page"), true, "lenient by design");
+  assert.equal(captureHasSubstance(blank, "Home page"), false);
+});
+
+test("\"blank\" among real content is fine", () => {
+  // Pages legitimately contain empty lines; only a transcript that is ENTIRELY blank is the fault.
+  const mixed = { transcript: ["blank", "heading, level 1, Aquarium"], structure: { headings: [], landmarks: [], formFields: [] } };
+  assert.equal(captureHasSubstance(mixed, TITLE), true);
+});
