@@ -467,6 +467,40 @@ Found while chasing it:
   The highest-value are status messages/live regions (4.1.3), dialogs and focus return, and
   arrow-key widgets.
 
+## Worker scaling, measured properly (2026-07-30)
+
+The question was whether more workers help, and whether a 2 GB guest lets us run more of them.
+
+**Method matters here, and my first attempt was wrong.** Single timed runs gave 214 s and then 145 s for
+the *same* six-worker configuration — a 48% swing — so every conclusion drawn from single runs was
+noise, including "2 GB is 22% slower" and "the curve turns over at six workers". Both withdrawn.
+
+The cause was specific rather than inherent: a **freshly cloned VM is still settling**, and I measured
+immediately after adding one every time. With a settled pool, three runs of one configuration agree to
+±4%. Benchmark a settled pool, or do not bother.
+
+Alternating 3-worker and 6-worker runs, three each, 25 cases (50 captures) per run, all clean:
+
+| pool | runs | median | per case | spread |
+|---|---|---|---|---|
+| 3 workers | 223, 232, 224 s | **224 s** | 9.0 s | 4% |
+| 6 workers | 133, 138, 168 s | **138 s** | 5.5 s | 25% |
+
+**Six workers is 1.62x three** — a full 1,061-pair recapture drops from ~2.6 h to ~1.6 h. More workers
+also means more variance (25% vs 4%), since one slow guest drags a run.
+
+**2 GB is not the lever, and the tiny11 premise is dead twice over.** The earlier "2 GB is free"
+measurement predates the graphics/links/lists sweeps, so it no longer describes this capture; the one
+re-test suggested 2 GB was slower, but it was a single run and is not trustworthy either. What IS clear
+is that host RSS did not track configured guest RAM at all (10.4 GB for three 2 GB guests, 10.7 GB for
+four 4 GB guests), so RAM is not what constrains worker count. A slim image can only help with something
+that is not binding.
+
+**Workers 4-6 were deleted after measuring**, on the reasoning that ~1 h saved per full recapture does
+not pay for three more Windows guests to patch, provision and keep in sync — and full recaptures are now
+rare because the cache makes incremental runs nearly free. Re-clone with
+`scripts/local-worker/clone-worker.sh` if a big run is coming: the numbers above say what it buys.
+
 ## Milestones
 
 ### M0 — Spike: is the core bet real? (now)
