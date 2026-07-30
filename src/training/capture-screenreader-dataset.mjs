@@ -166,7 +166,19 @@ const WORKER_POLL_MS = 10000;
 // because a connection error failed each case outright, one recoverable outage cascaded into
 // four permanent failures -- while the worker itself came back on its own via auto-logon and
 // the at-logon task. The run just was not patient.
-const TRANSIENT = /fetch failed|ECONNREFUSED|ECONNRESET|socket hang up|timed out|aborted|HTTP 429.*capture is already in progress/i;
+// The two newest entries are recoverable BY DESIGN, and leaving them out cost a case immediately.
+//
+// A mute NVDA ("running but not speaking") and an abandoned capture ("hard timeout") both make the
+// worker stop its screen reader, so the NEXT capture cold-starts a fresh one -- which is exactly the
+// recovery this retry provides. Observed on the very run that validated the new guards: one case failed
+// outright on the mute error while the following capture on the same worker succeeded, because the
+// runner had classified a self-healing fault as fatal.
+const TRANSIENT = new RegExp([
+  "fetch failed", "ECONNREFUSED", "ECONNRESET", "socket hang up", "timed out", "aborted",
+  "HTTP 429.*capture is already in progress",
+  "running but not speaking",
+  "hard timeout",
+].join("|"), "i");
 
 async function waitForWorker(worker) {
   const deadline = Date.now() + WORKER_WAIT_MS;
