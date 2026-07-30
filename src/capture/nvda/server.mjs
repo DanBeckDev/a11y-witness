@@ -243,6 +243,22 @@ function foregroundLockTimeout() {
   return fltCache;
 }
 
+// Put the worker back in a usable state after a failed capture.
+//
+// An ABANDONED capture keeps running -- there is no way to kill it -- and it goes on driving NVDA and
+// competing for the foreground. Measured: after two abandonments, the next captures on that worker
+// hung in turn, on a host that was NOT CPU-saturated (493% of 1400% used). Stopping the screen reader
+// is the one piece of the orphan we can reach; the next capture then cold-starts a clean one.
+//
+// Extracted from the request handler because the handler was at the complexity ceiling, and because
+// "what we do after a failure" deserves a name.
+async function recoverFromFailure(error) {
+  forgetScreenReader();
+  if (!/hard timeout/.test(String((error && error.message) || error))) return;
+  log("abandoned capture may still be driving NVDA — stopping it so the next capture starts clean");
+  await shutdownScreenReader().catch((e) => log("could not stop NVDA after abandonment: " + e.message));
+}
+
 // A capture that HANGS must not wedge the worker forever.
 //
 // This is the fault that made workers look dead for two days. `busy` is cleared in a `finally`,
@@ -426,7 +442,7 @@ const server = createServer((req, res) => {
         // Deliberately NOT re-warmed here. The next capture's startScreenReader probes NVDA and
         // cold-starts a fresh one if needed, which is the same work at a safer moment; warming now
         // would restart NVDA while the guest may still have a modal dialog up from the failure.
-        forgetScreenReader();
+        await recoverFromFailure(e);
       } finally {
         busy = false;
       }

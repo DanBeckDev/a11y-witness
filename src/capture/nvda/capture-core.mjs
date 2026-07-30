@@ -646,11 +646,16 @@ async function advanceAndRead(navStrategy) {
 // the capture should fail honestly rather than loop.
 async function readWithRetry({ steps, navStrategy, deadline, diag, title }) {
   const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
-  const heardOnlyTitle = title && transcript.length <= 1 &&
-    transcript.every((phrase) => phrase.trim().toLowerCase() === title.trim().toLowerCase());
-  if (!heardOnlyTitle) return transcript;
+  // ONE phrase means the read never advanced, whatever that phrase was.
+  //
+  // The first version of this required the phrase to EQUAL the document title, and so it never fired
+  // -- the kept captures proved it. The real degenerate shape was
+  // `["heading, level 1, Aquarium 001 schedule"]`: the h1 announcement, not the bare title, with
+  // stopReason `maxSteps`, meaning every advance produced nothing and the loop simply ran out. The
+  // content of the one phrase was never the point; the failure to move was.
+  if (transcript.length > 1) return transcript;
 
-  diag.mark("readThroughRetry", { reason: "heard only the document title", title });
+  diag.mark("readThroughRetry", { reason: "read-through produced one phrase", got: transcript[0] ?? null, title });
   await anchorToTop();
   const second = await readPageInOrder({ steps, navStrategy, deadline, diag });
   diag.mark("readThroughRetry", { recovered: second.length > transcript.length, count: second.length });

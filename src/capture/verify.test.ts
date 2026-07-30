@@ -1,7 +1,7 @@
 // The verification layer's job is to refuse evidence that only looks like evidence.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { captureHasSubstance, captureMentionsTitle } from "./verify.js";
+import { captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle } from "./verify.js";
 
 const TITLE = "Aquarium 001 schedule";
 const empty = { headings: [], landmarks: [], formFields: [] };
@@ -41,4 +41,34 @@ test("an interaction result alone is substance", () => {
 
 test("a wholly empty capture has no substance", () => {
   assert.equal(captureHasSubstance({ transcript: [], structure: empty }, TITLE), false);
+});
+
+test("a capture that heard a heading but swept none contradicts itself", () => {
+  // The real shape, from a live worker: the read-through announced the h1 and then advanced nowhere,
+  // and the heading sweep found nothing. Both other checks pass on it.
+  const degenerate = {
+    transcript: ["heading, level 1, Aquarium 001 schedule"],
+    structure: { headings: [], landmarks: [], formFields: [] },
+  };
+  assert.equal(captureMentionsTitle(degenerate, TITLE), true, "title check cannot catch this");
+  assert.equal(captureHasSubstance(degenerate, TITLE), true, "substance check cannot catch this either");
+  assert.equal(captureIsSelfConsistent(degenerate), false);
+});
+
+test("headings swept but none in the transcript is normal", () => {
+  // The read-through is capped by `steps` and may stop before reaching a heading. Only the reverse
+  // is a contradiction.
+  const fine = {
+    transcript: ["some body text"],
+    structure: { headings: ["Aquarium, heading, level 1"], landmarks: [], formFields: [] },
+  };
+  assert.equal(captureIsSelfConsistent(fine), true);
+});
+
+test("a consistent capture passes", () => {
+  const good = {
+    transcript: ["heading, level 1, Aquarium 001 schedule", "table, with 2 rows"],
+    structure: { headings: ["Aquarium 001 schedule, heading, level 1"], landmarks: [], formFields: [] },
+  };
+  assert.equal(captureIsSelfConsistent(good), true);
 });
