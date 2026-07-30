@@ -444,13 +444,21 @@ Found while chasing it:
   compensating for that. Confirm with `npm run training:repeat -- --times=5 --probe-tables` before
   trusting it; until that passes it stays opt-in and out of the dataset.
 
-- **Worker stability is not root-caused.** Workers repeatedly went unreachable during this work —
-  "started" VMs not answering `/health`, and `utmctl exec` unavailable so their logs could not be
-  retrieved. A contributing cause was mine and is fixed: warm-up retried on every `/health` poll,
-  and each attempt starts NVDA, which this repo's own notes say destabilises the speech channel.
-  Retries are now capped at 3, 30 s apart. Whether that was the whole story is **unknown**. The next
-  step is a pool cycle followed by `bench-capture --from-disk` and the guest's `server.log`, kept
-  from a run where a worker dies.
+- **Worker stability: root-caused and fixed.** The chain, end to end: my warm-up retried on every
+  `/health` poll → each attempt restarts NVDA → NVDA raises a modal dialog on the guest desktop
+  (`nvdaHelperRemote (injection_terminate)`) → the dialog blocks input → the next capture HANGS →
+  `busy` is never released → every later request gets 429 → the worker looks dead. One guest took
+  QEMU down with it. Two fixes: warm once at boot and never touch NVDA while idle, and a hard capture
+  timeout as the backstop.
+
+  **The wedge fix is proven end to end**, not merely deployed. With the timeout forced to 8 s via
+  `A11Y_CAPTURE_HARD_TIMEOUT_MS`, a ~13 s capture was abandoned
+  (`capture exceeded the hard timeout of 8000 ms`), health immediately reported `busy=false
+  ready=true`, and the NEXT capture was accepted rather than refused with 429. The override was
+  reverted and a normal capture confirmed at 9 phrases.
+
+  Still unexplained: worker-3's `QEMU exited from an error`. It happened while the restart loop was
+  running, so the loop is the obvious suspect, but that is inference — it has not recurred since.
 - **Empty-capture flake (~1–3%).** A capture occasionally returns 0 phrases (the documented
   ForegroundLockTimeout/foreground symptom). It is *contained*, not fixed: `captureMentionsTitle`
   rejects it and the dataset retries 3x then writes it to `captures/rejected` rather than
