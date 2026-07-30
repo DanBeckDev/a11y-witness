@@ -101,6 +101,30 @@ export function captureHasSubstance(capture: CapturedAnnouncements, title: strin
   return capture.transcript.some((phrase) => normalise(phrase) !== wanted && normalise(phrase) !== "");
 }
 
+/**
+ * Does the capture contradict itself?
+ *
+ * The strongest check available, because it needs no knowledge of the page. If the read-through
+ * announced a heading, then the page HAS a heading, so a heading sweep that found none did not run
+ * properly -- the two halves of the same capture disagree, and one of them is wrong.
+ *
+ * This catches a degenerate shape that both other checks miss. Measured:
+ *
+ *   transcript: ["heading, level 1, Aquarium 001 schedule"]   headings: []   tableCells: []
+ *
+ * `captureMentionsTitle` passes (the title is in there), and `captureHasSubstance` passes too (the
+ * phrase is not merely the title) -- yet the page was never traversed. That shape is worse than an
+ * empty capture, because a role-bearing phrase looks like real evidence.
+ *
+ * Deliberately one-directional: headings in the sweep with none in the transcript is NORMAL, since
+ * the read-through is capped by `steps` and may stop before reaching them.
+ */
+export function captureIsSelfConsistent(capture: CapturedAnnouncements): boolean {
+  const heardAHeading = capture.transcript.some((phrase) => /\bheading, level \d/i.test(phrase));
+  const sweptAHeading = (capture.structure?.headings.length ?? 0) > 0;
+  return !heardAHeading || sweptAHeading;
+}
+
 /** The <title> of a served page, or "" if it has none. */
 export function titleOf(html: string): string {
   return html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1].trim() ?? "";
