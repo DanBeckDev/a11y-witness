@@ -97,8 +97,17 @@ export function captureHasSubstance(capture: CapturedAnnouncements, title: strin
 
   const normalise = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
   const wanted = normalise(title);
-  // Nothing but the title (however many times it was said) is not evidence of a page.
-  return capture.transcript.some((phrase) => normalise(phrase) !== wanted && normalise(phrase) !== "");
+  // "blank" is NVDA's word for an empty line, so a transcript of nothing but "blank" means it read an
+  // empty document. Measured: a capture returned `["blank","blank"]`.
+  //
+  // captureMentionsTitle already rejects that one -- no significant title word appears in it -- so this
+  // is belt and braces rather than a hole being closed. It matters for a page whose title happens to be
+  // a common word, where the title check is deliberately lenient and would let it through.
+  const isNothing = (phrase: string) => {
+    const text = normalise(phrase);
+    return text === "" || text === wanted || text === "blank";
+  };
+  return capture.transcript.some((phrase) => !isNothing(phrase));
 }
 
 /**
