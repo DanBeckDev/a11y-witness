@@ -195,6 +195,7 @@ async function runCapturePhases(url, opts, diag) {
   await anchorToTop();
   await recordStartupHealth(diag);
   const transcript = await readWithRetry({ steps, navStrategy, deadline, diag, title: documentTitle });
+  failIfScreenReaderIsMute(transcript, diag);
   const { structure, interaction } = await navigateByStructure({
     deadline, diag,
     probeForms: !!opts.probeForms, probeFocus: !!opts.probeFocus, probeTables: !!opts.probeTables,
@@ -630,6 +631,31 @@ async function advanceAndRead(navStrategy) {
   if (navStrategy === "object") await withTimeout(nvda.perform(nvda.keyboardCommands.moveToNextObject), ADVANCE_TIMEOUT_MS, "advance");
   else await withTimeout(nvda.next(), ADVANCE_TIMEOUT_MS, "advance");
   return ((await withTimeout(nvda.lastSpokenPhrase(), READ_TIMEOUT_MS, "read")) || "").trim();
+}
+
+// A mute NVDA cannot be fixed by reading harder -- stop and say so.
+//
+// The diagnostics of a degenerate capture name this exactly: `documentReady ok=true` (NVDA answered
+// with the title), `afterStart lastSpoken=""` (it has said NOTHING), a read-through of one phrase, and
+// then every sweep reporting `found: 0` after three round trips each. NVDA responded to every
+// keystroke and never spoke. The runbook already names this state: "NVDA is running but not speaking".
+//
+// Re-anchoring cannot help, so the retry above wastes a second read, and the sweeps then spend ~45 s
+// producing nothing -- 96 s in total for a capture that was never going to yield evidence.
+//
+// Failing here is also the SAFE way to recover. A failed capture is cleaned up with
+// keepScreenReader:false, which stops NVDA, so the next capture cold-starts a fresh one. That reuses
+// the existing path rather than adding another place that restarts NVDA -- which is precisely the loop
+// that put modal dialogs on the guest desktop and made workers look dead.
+function failIfScreenReaderIsMute(transcript, diag) {
+  if (transcript.length > 1) return;
+  const afterStart = diag.entries.filter((e) => e.event === "afterStart").at(-1);
+  if (afterStart?.lastSpoken !== "") return; // absent or non-empty: something else is wrong
+  diag.mark("screenReaderMute", { transcript: transcript.length });
+  throw new Error(
+    "NVDA is running but not speaking (afterStart.lastSpoken was empty and the read-through " +
+    "produced " + transcript.length + " phrase(s)). Failing now so the worker cold-starts a fresh " +
+    "screen reader for the next capture, rather than sweeping a silent one.");
 }
 
 // Read the page, and if all we heard was its title, anchor again and read once more.
