@@ -19,7 +19,7 @@
  * somebody is actually diagnosing something.
  */
 import { execFileSync } from "node:child_process";
-import { readdirSync, statfsSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statfsSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /** Stop walking a runaway tree. An Edge profile is large but not unbounded. */
@@ -164,6 +164,85 @@ export function edgePolicy() {
   return { StartupBoostEnabled: read("StartupBoostEnabled"), BackgroundModeEnabled: read("BackgroundModeEnabled") };
 }
 
+/** Tail of a text file, or null. Reading a log must never be able to break the endpoint. */
+function tail(path, lines) {
+  try {
+    const all = readFileSync(path, "utf8").split(/\r?\n/);
+    return { path, lines: all.length, tail: all.slice(-lines) };
+  } catch {
+    return null;
+  }
+}
+
+/** The settings that decide whether NVDA can speak at all. Null when the file cannot be read. */
+function readNvdaConfig(path) {
+  try {
+    const body = readFileSync(path, "utf8");
+    return {
+      path,
+      synth: /^\s*synth\s*=\s*(.+)$/mi.exec(body)?.[1]?.trim() ?? null,
+      speechViewer: /showSpeechViewerAtStartup\s*=\s*(\w+)/i.exec(body)?.[1] ?? null,
+      outputDevice: /^\s*outputDevice\s*=\s*(.+)$/mi.exec(body)?.[1]?.trim() ?? null,
+      bytes: body.length,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * NVDA's own account of itself: its log and its configuration.
+ *
+ * The fault this is for: one guest's NVDA goes mute on every capture while its clones are fine, and
+ * "mute" has several possible causes that look identical from outside — a broken speech synthesiser, an
+ * add-on failing to load, a config that reset, a stub install. NVDA writes all of them to its log, and
+ * nothing here could read it: `nvda.log` lives in the worker's own `%TEMP%`, and `utmctl exec` resolves
+ * `$env:LOCALAPPDATA` to SYSTEM's profile, not the worker's — the runbook has a warning about exactly
+ * that. Serving it over HTTP sidesteps the whole problem.
+ *
+ * `synth` is the first thing to compare between a healthy guest and a mute one: NVDA with a broken or
+ * silenced synthesiser runs perfectly, answers every keystroke, and says nothing.
+ */
+export function screenReaderState({ nvdaRoot, tempDir, tailLines = 80 }) {
+  const log = tail(join(tempDir, "nvda.log"), tailLines);
+  // NVDA rotates its log on every start, so the CURRENT one is always the healthy instance that
+  // replaced the broken one. The session that actually went mute is in `nvda-old.log`, and that is the
+  // only place its dying words exist.
+  const previous = tail(join(tempDir, "nvda-old.log"), tailLines);
+  const configs = [];
+  const findIni = (dir, depth) => {
+    if (depth > 6) return;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory() && !entry.isSymbolicLink()) findIni(path, depth + 1);
+      else if (entry.name.toLowerCase() === "nvda.ini") {
+        const parsed = readNvdaConfig(path);
+        if (parsed) configs.push(parsed);
+      }
+    }
+  };
+  if (nvdaRoot) findIni(nvdaRoot, 0);
+  // Errors and warnings are counted as well as shown: a log whose tail looks calm can still be full of
+  // them further up, and the count is what makes two guests comparable at a glance.
+  const body = log?.tail?.join("\n") ?? "";
+  const previousBody = previous?.tail?.join("\n") ?? "";
+  return {
+    config: configs,
+    log: log && { path: log.path, lines: log.lines, tail: log.tail },
+    logErrors: (body.match(/^ERROR/gmi) ?? []).length,
+    logWarnings: (body.match(/^WARNING/gmi) ?? []).length,
+    previousLog: previous && { path: previous.path, lines: previous.lines, tail: previous.tail },
+    previousLogErrors: (previousBody.match(/^ERROR/gmi) ?? []).length,
+    previousLogWarnings: (previousBody.match(/^WARNING/gmi) ?? []).length,
+  };
+}
+
 export function guestDiagnostics({ edgeProfile, logPath }) {
   return {
     measuredAt: new Date().toISOString(),
@@ -178,5 +257,10 @@ export function guestDiagnostics({ edgeProfile, logPath }) {
     disk: diskSpace(edgeProfile),
     serverLog: treeSize(logPath),
     processes: processCounts(WATCHED_PROCESSES),
+    screenReader: screenReaderState({
+      nvdaRoot: process.env.GUIDEPUP_SCREEN_READERS_PATH ||
+        (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "guidepup") : null),
+      tempDir: process.env.TEMP || process.env.TMP || ".",
+    }),
   };
 }

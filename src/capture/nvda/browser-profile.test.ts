@@ -3,7 +3,7 @@
 // So the decision of WHAT to remove is a pure function, and these are its boundaries.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { prunablePaths } from "./browser-profile.mjs";
+import { prunablePaths, reportBrowserPolicyDrift } from "./browser-profile.mjs";
 
 const ROOT = "C:\\Users\\witness\\AppData\\Local\\a11y-witness\\edge-profile";
 const everythingExists = () => true;
@@ -70,4 +70,30 @@ test("only BrowserMetrics is pruned unconditionally — nothing irreplaceable", 
   const paths = prunablePaths({ megabytes: 100, root: ROOT, exists: everythingExists });
   assert.equal(paths.length, 1, `unconditional prune list must stay at one entry, got: ${paths}`);
   assert.ok(paths[0].endsWith("BrowserMetrics"));
+});
+
+test("policy drift is reported once, naming the fix — not attempted and failed", () => {
+  // This replaced a boot-time `reg add HKLM\...` that could never succeed (the worker task is not
+  // elevated) and printed two "Command failed" lines above a healthy "worker is ready" on every boot.
+  const lines: string[] = [];
+  const drifted = reportBrowserPolicyDrift({ StartupBoostEnabled: 1, BackgroundModeEnabled: 0 }, (l) => lines.push(l));
+  assert.deepEqual(drifted, ["StartupBoostEnabled"]);
+  assert.equal(lines.length, 1, "one line, not one per setting");
+  assert.match(lines[0], /StartupBoostEnabled=1 \(want 0\)/);
+  assert.match(lines[0], /provision-nvda-worker\.ps1/, "must name what actually fixes it");
+});
+
+test("a compliant guest logs nothing at all", () => {
+  // Boot output is read by humans watching a VM console; silence is the correct output for "fine".
+  const lines: string[] = [];
+  reportBrowserPolicyDrift({ StartupBoostEnabled: 0, BackgroundModeEnabled: 0 }, (l) => lines.push(l));
+  assert.deepEqual(lines, []);
+});
+
+test("an unreadable policy is not reported as drift", () => {
+  // null means "could not read", which must not be dressed up as a finding.
+  const lines: string[] = [];
+  assert.deepEqual(reportBrowserPolicyDrift(null, (l) => lines.push(l)), []);
+  assert.deepEqual(reportBrowserPolicyDrift({ StartupBoostEnabled: null, BackgroundModeEnabled: null }, (l) => lines.push(l)), []);
+  assert.deepEqual(lines, []);
 });
