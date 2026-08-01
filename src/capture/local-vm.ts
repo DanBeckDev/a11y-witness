@@ -286,11 +286,28 @@ export async function leaseWorkerPool(after: AfterRun): Promise<PoolLease | null
   for (const vm of pool) {
     if (vm.state === "started" && vm.healthy) continue;
     process.stderr.write(`Local worker '${vm.name}' is ${vm.state}; bringing it up ...\n`);
-    await ctl(["up"], LIFECYCLE_TIMEOUT_MS, vm.name);
+    try {
+      await ctl(["up"], LIFECYCLE_TIMEOUT_MS, vm.name);
+    } catch (error) {
+      // One sick VM must not cancel the run. This threw and killed a resume outright while two other
+      // workers sat ready: a guest wedged in "stopping" failed `up`, the exception escaped the lease,
+      // and 1,000 cases went nowhere. Bringing up a pool is best-effort per member -- the readiness
+      // filter below is what decides who actually takes work, and it already fails loudly if nobody
+      // does.
+      process.stderr.write(
+        `Local worker '${vm.name}' would not come up (${(error as Error).message.split("\n")[0]}); ` +
+        "continuing without it\n",
+      );
+    }
   }
 
   const ready = (await findLocalPool()).filter((vm) => vm.healthy && vm.ip);
   if (!ready.length) throw new Error("no local worker became healthy; check: worker-ctl.sh pool");
+  const missing = pool.length - ready.length;
+  if (missing > 0) {
+    // Never silent: a run that quietly used two of three workers looks like an unexplained slowdown.
+    process.stderr.write(`${missing} of ${pool.length} local workers are unavailable; running on the rest\n`);
+  }
   process.stderr.write(`Pool of ${ready.length}: ${ready.map((v) => v.name).join(", ")}\n`);
 
   return {
