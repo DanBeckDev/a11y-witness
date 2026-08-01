@@ -66,8 +66,19 @@ const REGENERABLE = [
   "GrShaderCache", "ShaderCache", "component_crx_cache", "GraphiteDawnCache",
 ];
 
-/** Above this, the profile is costing more startup time than the cache is saving. */
-const PRUNE_ABOVE_MB = 200;
+/**
+ * A last-resort valve, not routine maintenance — and set high because pruning caches did measurable
+ * HARM at 200 MB.
+ *
+ * The evidence: a guest with a 261 MB profile was running 11-12 s captures perfectly happily. Dropping
+ * its caches at a 200 MB threshold pushed it to 63 s and it was still only back to ~28 s eight captures
+ * later, because Chromium had to rebuild everything. The cache was doing its job.
+ *
+ * The bulk problem was never the cache — it was 348 MB of `BrowserMetrics`, which is in the always-list
+ * above. With that gone, Chromium caps its own cache, so this threshold should never be reached; it
+ * exists only so a genuinely runaway profile is not left alone forever.
+ */
+const PRUNE_ABOVE_MB = 800;
 
 /**
  * Which regenerable paths exist and should go, given a profile size.
