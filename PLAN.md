@@ -176,7 +176,8 @@ dilates, so quote the host state alongside any figure here.
 Two costs have since been characterised and are worth reading before optimising anything else:
 **`windowsActivate` is now the largest single phase at ~10s**, and it is Edge cold-starting on
 every capture because Edge is launched and quit each time (`waitedMs: 10784` against an 800ms
-settle). And a **mute NVDA every ~5 captures** used to cost ~184s each; the read now stops after
+settle). And a **mute NVDA** (stochastic; ~55% of instances die before their 25-capture recycle) used to
+cost ~184s each to recover; the read now stops after
 8 silent advances, bringing that to ~86s. Both are detailed in `CLAUDE.md`.
 
 Ideas below are ordered by expected value, each with the reason it is still open — so nobody

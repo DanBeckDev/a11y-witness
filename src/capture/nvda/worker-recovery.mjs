@@ -6,9 +6,11 @@
 // longer beats a run that loses its first case per worker".
 //
 // The MUTE case was left out of that bargain, so the first capture after a boot failed, and so did
-// roughly every fifth capture after it: measured over 30 back-to-back captures, NVDA went mute five
-// times (lifespans 6, 5, 5, 9, 1). Confirmed causal -- with `reuseScreenReader:false`, 8 of 8 captures
-// ran clean. Before this retry existed, an identical 30-capture run died at capture 19.
+// some proportion of the captures after it. The rate is stochastic and load-dependent: in a tight loop
+// on a memory-pressured host, 5 of 30 captures went mute (lifespans 6, 5, 5, 9, 1), while across the
+// corpus ~45% of NVDA instances survive all 25 reuses. Do not size anything on the 5-in-30 figure --
+// it is the low tail. Confirmed causal either way: with `reuseScreenReader:false`, 8 of 8 ran clean.
+// Before this retry existed, an identical 30-capture run died outright at capture 19.
 //
 // Why retrying here is not the loop that broke the pool: that loop restarted NVDA on a TIMER, while
 // idle, with nothing wrong, at an unbounded rate, and NVDA answered by putting a modal dialog on the
