@@ -40,15 +40,27 @@ found it** — so a VM you started yourself is left running. `--after stop|pause
 overrides. `--no-axe` skips the optional rule layer; `--axe-results file.json` imports one you
 already ran.
 
-**Changing `capture-core.mjs` or `server.mjs` means deploying to the guest.** Push, then
-**reboot the guest**, then verify over HTTP:
+**Changing any worker file means deploying to the guests. One command:**
 
 ```bash
-UUID=$(utmctl list | awk '$3=="a11y-worker"{print $1}')
-utmctl file push "$UUID" 'C:\Users\witness\a11y-witness\src\capture\nvda\capture-core.mjs' < src/capture/nvda/capture-core.mjs
-./scripts/local-worker/worker-ctl.sh stop && ./scripts/local-worker/worker-ctl.sh up
-npm run worker:code      # every worker's /health.code vs this checkout; exits 1 if any is stale
+npm run worker:deploy                     # every local worker, one at a time
+npm run worker:deploy -- --vm=a11y-worker-2
+npm run worker:code                       # each worker's /health.code vs this checkout
 ```
+
+It pushes **every hashed file** (seven of them now, not two), reboots each guest — mandatory, because
+`utmctl exec` cannot be trusted to restart the worker — and verifies `/health.code` over HTTP, which
+shares no failure mode with the push. Then it puts each VM back in the state it found it.
+
+Doing this by hand is how two guests once served stale code for an hour, and pushing a subset leaves a
+guest running a mix with no clue which file is wrong. **Roll back** by checking out the ref you want and
+running it again; git is the source of truth, so there is no bespoke backup to go stale.
+
+> **`worker:deploy` refuses a `CAPTURE_PROTOCOL_VERSION` change** unless you pass
+> `--allow-protocol-change`. That value is a capture-cache key: deploying a bump invalidates all 2,122
+> cached captures and forces a full recapture. Note the trap it guards — an *uncommitted* bump makes
+> `worker:code` report every worker STALE because the LOCAL hash moved, and "redeploy" would then ship
+> the bump and wipe the cache for no reason. `worker:code` says so when it applies.
 
 **Do not restart with `utmctl exec` and believe it.** `Stop-ScheduledTask` + `Start-ScheduledTask`
 silently did nothing on two cloned guests: they served the previous node process — and therefore
@@ -435,6 +447,43 @@ predicate over every capture on disk and asserts none is rejected. The corpus is
 `check-signals` scores it 1061/0/0, so a rejection is a false positive by construction. It runs in a
 second. Six cases is an anecdote; 2,122 is a test.
 
+## Diagnosing a guest without `utmctl exec`
+
+`utmctl exec` wraps QEMU's `guest-exec`, which is **known-unreliable on Windows** — upstream reports
+qemu-ga stopping at random and failing to open its own channel. Observed here in one session on one
+guest: it worked, silently wrote nothing, returned OSStatus -2700, then worked again. Do not build a
+diagnosis on it.
+
+Everything you would have reached for it is served over HTTP instead:
+
+```bash
+curl -s http://<guest-ip>:8765/diagnostics | jq .
+```
+
+- `edgeProfile` + `edgeProfileBreakdown` — the per-subtree sizes that found 348 MB of `BrowserMetrics`
+- `processes` — orphaned `msedge` counts, the load that used to make the next `nvda.start` time out
+- `edgePolicy` — drift from what provisioning set, reported rather than silently re-applied
+- `screenReader` — NVDA's config (synth, Speech Viewer) plus its log **and `previousLog`**; NVDA rotates
+  on every start, so a session that went mute only exists in the old file
+- `disk`, `serverLog`
+
+`/health` stays cheap because it is polled; `/diagnostics` walks directories and shells out, so it is
+on-demand only.
+
+**NVDA records almost nothing by default** — a whole session log is seven lines, identical on a healthy
+guest and a failing one. `A11Y_NVDA_LOG_LEVEL=DEBUG` raises it (applied to `nvda.ini` at boot, no
+elevation needed). Opt-in, because NVDA writes a great deal at DEBUG and this pipeline measures
+per-capture timing.
+
+**Comparing two guests:** `npm run worker:compare -- <page> <worker> <worker> [--rounds=7]`. Interleaved
+round-robin with medians and IQRs, and it refuses to declare a difference the samples do not support.
+Use it instead of reading two `bench-capture` printouts — that is how a 2x difference got attributed to
+the wrong phase for hours.
+
+**Backing up the corpus:** `npm run corpus:snapshot`. `runs/` is gitignored, so 2,122 captures worth
+hours of worker time exist in one place. It writes a timestamped archive; syncing it somewhere durable
+is deliberately your call.
+
 ## Housekeeping is automated — do not do it by hand
 
 Anything a human has to remember is something that does not happen. What runs itself now:
@@ -488,10 +537,12 @@ Verification is layered; pick the layers your change touches:
 - Don't manually `taskkill nvda.exe` — let Guidepup own NVDA's lifecycle, or the speech-capture channel destabilises. Killing the worker with `Stop-Process` orphans its NVDA (still holding port 6837); the next cold start recovers, but expect to see it.
 - The worker keeps NVDA alive between captures (recycled every 25). `A11Y_REUSE_NVDA=0` reverts to a fresh NVDA per capture — the first thing to try if captures drift as a run progresses.
 - The guest is provisioned as an **appliance**: Windows Update may install but not reboot, and Edge's background mode, startup boost and auto-updater are off. It used to reboot itself mid-run and leak Edge processes.
-- A capture is ~13–19 s **on an unloaded host**; measured at **27 s with one guest up and 45 s with
-  three** on a busy 36 GB Mac. Quote the host state with the number or the number means nothing. A
-  full 45-pair dataset run is ~25 min. If it is much slower, check `scripts/bench-capture.mjs` phase
-  timings before optimising anything.
+- **A capture is ~12.4 s**, measured across all three guests over 7 interleaved rounds each (medians
+  12.4 / 12.4 / 12.3, IQR ≤ 0.6, statistically indistinguishable). That is *after* the speech-channel
+  probe; before it the same pool measured 36.7 / 42.0 / 93.7 s with IQRs up to 20.7. If you see anything
+  like the older numbers, check `/health.vitals.recoveries` first — that is the fault returning, not the
+  host being busy. Historic figures in this repo of "13–19 s", "27 s", and "45 s" all predate the fix.
+- Quote the host state with any timing number. Your own `npm test` or a browser competes with the guests.
 - **The largest single phase is `windowsActivate`, at ~10 s, and it is Edge starting.** Edge is
   launched *and quit* for every capture, so its cold start is on the critical path every time —
   `waitedMs: 10784` against an 800 ms settle. That is ~37% of a capture, and it is the biggest

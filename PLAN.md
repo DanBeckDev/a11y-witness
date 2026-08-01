@@ -168,7 +168,9 @@ never assert that a *signal* can tell good from bad.
 
 ### Efficiency and reliability backlog — identified, measured where possible, NOT done
 
-Current cost per capture is ~13-19s **on a quiet host**: `structural` 4.8s, the readiness gate
+Current cost per capture is **~12.4s**, measured across three guests over 7 interleaved rounds each
+(medians 12.4 / 12.4 / 12.3, IQR <= 0.6). The breakdown below predates the speech-channel probe, when
+the same pool ran 36.7 / 42.0 / 93.7s; the phase SHARES still hold, the absolute numbers do not: `structural` 4.8s, the readiness gate
 4.5s, `readThrough` 1.6-3.6s, the rest setup and teardown. Re-measured later on a busy 36 GB Mac
 it is ~27s with one guest up and ~45s with three — the phase shares hold, everything just
 dilates, so quote the host state alongside any figure here.
