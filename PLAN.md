@@ -457,7 +457,15 @@ Found while chasing it:
   ready=true`, and the NEXT capture was accepted rather than refused with 429. The override was
   reverted and a normal capture confirmed at 9 phrases.
 
-  Still unexplained: worker-3's `QEMU exited from an error`. It happened while the restart loop was
+  **Root-caused (2026-08-01).** A guest sat wedged in UTM state `stopping` with a QEMU process that
+  had been alive for over a day and would not respond to `utmctl stop`. `kill -9` on that process
+  cleared it and the VM came back READY in 45 s. UTM surfaces the hard kill as
+  `QEMU exited from an error: Unknown`, which is cosmetic -- utmctl stayed responsive, the other VMs
+  kept serving, and an in-flight run kept capturing throughout. So the dialog is a SYMPTOM of a
+  killed process, not a fault in itself, and the real failure is a QEMU process outliving its VM.
+  Check `ps -o etime` on the qemu process before believing UTM's state.
+
+  Still unexplained: worker-3's earlier `QEMU exited from an error`. It happened while the restart loop was
   running, so the loop is the obvious suspect, but that is inference — it has not recurred since.
 - **Empty-capture flake (~1–3%).** A capture occasionally returns 0 phrases (the documented
   ForegroundLockTimeout/foreground symptom). It is *contained*, not fixed: `captureMentionsTitle`
