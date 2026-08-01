@@ -169,6 +169,9 @@ async function runCapturePhases(url, opts, diag) {
   // The settle is for NVDA's own startup, so it is dead time when NVDA was already
   // running. waitForDocument below is what actually establishes readiness either way.
   if (coldStart) await sleep(NVDA_SETTLE_MS);
+  // Before anything expensive: prove speech actually comes back. A dead channel discovered here costs one
+  // round trip; discovered after the read-through it costs the whole capture and a retry.
+  await ensureSpeechChannel(diag);
   await resetSpeechLogs(diag);
 
   const deadline = Date.now() + maxMs;
@@ -469,6 +472,61 @@ async function startFreshScreenReader(diag) {
 //
 // Run unconditionally, not only when reusing: a reused capture should begin in exactly the
 // state a cold one does, or the dataset quietly depends on which it got.
+/**
+ * Is the SPEECH CHANNEL alive, as opposed to NVDA merely being alive?
+ *
+ * These are different questions and the difference is this pipeline's most expensive fault. Guidepup
+ * reaches NVDA over a TLS socket to NVDA Remote on 127.0.0.1:6837, and speech is **pushed** back over
+ * that socket. Keystrokes are writes; speech is a read. So when the socket goes half-open, every
+ * `nvda.next()` still succeeds — the write is accepted — while nothing is ever spoken back. NVDA looks
+ * perfectly healthy and says nothing.
+ *
+ * Guidepup cannot notice: it only reconnects on a socket `error` event, and a half-open TCP connection
+ * raises none. There is no keepalive, no read timeout and no heartbeat in its client (checked in
+ * 0.29.2), and no `reconnect()` on its public API — so the only way to rebuild the channel is to restart
+ * NVDA entirely.
+ *
+ * Hence probing, cheaply, BEFORE committing a capture to it. One round trip against ~86 s for a capture
+ * that was never going to produce evidence.
+ */
+async function screenReaderIsSpeaking(diag) {
+  try {
+    await withTimeout(nvda.clearSpokenPhraseLog(), QUERY_TIMEOUT_MS, "livenessClear");
+    // Reading the current line is the cheapest command that MUST produce speech: no navigation, no
+    // side effects on the page, and it works wherever the cursor happens to be.
+    await withTimeout(nvda.perform(nvda.keyboardCommands.readLine), NAV_TIMEOUT_MS, "livenessRead");
+    await sleep(ANCHOR_SETTLE_MS);
+    const heard = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "livenessHeard")) || "").trim();
+    diag.mark("speechChannel", { alive: !!heard, heard: heard.slice(0, 60) });
+    return !!heard;
+  } catch (e) {
+    // A throwing probe means the channel is not usable either, which is the same answer.
+    diag.mark("speechChannel", { alive: false, error: errMsg(e) });
+    return false;
+  }
+}
+
+/**
+ * Make sure we are about to capture through a channel that can actually carry speech.
+ *
+ * A restart here is bounded (one) and evidence-triggered, which is what separates it from the idle
+ * warm-up loop that put modal dialogs on guest desktops: that one restarted NVDA on a timer with nothing
+ * wrong. This restarts it only when the channel has been *measured* dead, during a capture, which
+ * capture-core already treats as its own business.
+ */
+async function ensureSpeechChannel(diag) {
+  if (await screenReaderIsSpeaking(diag)) return;
+  diag.mark("speechChannelRestart", { reason: "no speech on a live-looking connection" });
+  await stopScreenReader(diag);
+  await startFreshWithRetry(diag);
+  screenReader = { running: true, captures: 1 };
+  await sleep(NVDA_SETTLE_MS);
+  if (await screenReaderIsSpeaking(diag)) return;
+  throw captureFault(FAULT.SCREEN_READER_MUTE,
+    "NVDA is running but not speaking: the speech channel produced nothing before this capture, and a " +
+    "fresh screen reader did not fix it. Failing now rather than capturing an empty page.");
+}
+
 async function resetSpeechLogs(diag) {
   try {
     await withTimeout(nvda.clearSpokenPhraseLog(), QUERY_TIMEOUT_MS, "clearSpeechLog");
