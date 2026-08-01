@@ -163,6 +163,13 @@ A full run is 1,061 pairs, so `npm run training:capture` reuses evidence on disk
 shapes it has changed. The key covers the page directory (every file), the capture options,
 NVDA and Edge versions, the provisioning revision, and `CAPTURE_PROTOCOL_VERSION`.
 
+- **`provisionRevision` reads `"unstamped"` on every current capture, and that is correct, not a
+  hole.** Provisioning writes the stamp and no guest has been re-provisioned since it was added.
+  `"unstamped"` is a real key value: the first guest to report a real revision changes every key it
+  produces and invalidates its cache — the behaviour you want, and unit-tested. The thing to know is
+  that two guests provisioned *differently* would both say `"unstamped"` and collide. Not a risk
+  while they are clones of one image, but the reason to re-provision the pool together rather than
+  one at a time.
 - **Bump `CAPTURE_PROTOCOL_VERSION`** (`src/capture/nvda/capture-core.mjs`) when a change alters what
   the evidence *means* — a new field a signal reads, a probe that announces differently. It forces a
   full recapture; that is the point. Do **not** reach for it on a refactor.
