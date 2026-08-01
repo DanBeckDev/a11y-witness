@@ -6,9 +6,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { leaseWorker, leaseWorkerPool, guestReachableUrl, isAfterRun } from "../capture/local-vm.js";
+import { titleOf } from "../capture/verify.js";
 import {
-  captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle, titleOf,
-} from "../capture/verify.js";
+  isEvidence, isTransient, rejectionReason, runOutcome, shouldEvictWorker,
+} from "./capture-decisions.mjs";
 import { beginRun, readProgress } from "./capture-progress.mjs";
 import { cacheDecision, cacheKey, hashPageDir, stampProvenance } from "./capture-cache.mjs";
 
@@ -156,30 +157,9 @@ async function pageTitle(url) {
   return titleOf(await response.text());
 }
 
-const REJECTED_PREVIEW_PHRASES = 3;
 const CAPTURE_ATTEMPTS = 3;
 const WORKER_WAIT_MS = Number(process.env.DATASET_WORKER_WAIT_MS || 600000);
 const WORKER_POLL_MS = 10000;
-
-// A worker that vanishes mid-run is recoverable; treating it as a failed case is not.
-//
-// The first full run lost its last 4 cases this way. The guest bugchecked at 10:10, and
-// because a connection error failed each case outright, one recoverable outage cascaded into
-// four permanent failures -- while the worker itself came back on its own via auto-logon and
-// the at-logon task. The run just was not patient.
-// The two newest entries are recoverable BY DESIGN, and leaving them out cost a case immediately.
-//
-// A mute NVDA ("running but not speaking") and an abandoned capture ("hard timeout") both make the
-// worker stop its screen reader, so the NEXT capture cold-starts a fresh one -- which is exactly the
-// recovery this retry provides. Observed on the very run that validated the new guards: one case failed
-// outright on the mute error while the following capture on the same worker succeeded, because the
-// runner had classified a self-healing fault as fatal.
-const TRANSIENT = new RegExp([
-  "fetch failed", "ECONNREFUSED", "ECONNRESET", "socket hang up", "timed out", "aborted",
-  "HTTP 429.*capture is already in progress",
-  "running but not speaking",
-  "hard timeout",
-].join("|"), "i");
 
 async function waitForWorker(worker) {
   const deadline = Date.now() + WORKER_WAIT_MS;
@@ -217,51 +197,18 @@ async function captureTolerantly(ctx, testCase, url) {
   try {
     return await captureOne(ctx, testCase, url);
   } catch (error) {
-    if (!TRANSIENT.test(error.message)) throw error;
+    if (!isTransient(error)) throw error;
     console.log("    worker unreachable (" + error.message + "); waiting for it to come back");
     await waitForWorker(ctx.worker);
     return captureOne(ctx, testCase, url);
   }
 }
 
-function describeWrongPage(capture, { title, url }) {
-  const preview = capture.transcript.slice(0, REJECTED_PREVIEW_PHRASES).map((p) => JSON.stringify(p)).join(", ");
-  return 'the screen reader did not read "' + title + '" at ' + url +
-    " (announced: " + (preview || "nothing") + ")";
-}
-
-// NVDA capture is racy: a page that reads correctly one minute comes back as two "blank"
-// phrases the next, when Edge has not taken the foreground in time. The witness CLI already
-// retries for exactly this reason. Without the same here, an hour-long unattended run
-// silently loses cases to flake -- observed immediately: image-missing-alt-building failed
-// this way on its first full run, and captured fine on a retry.
-//
-// A capture that read the wrong page is still never written: mislabelled training data is
-// worse than a gap, because nothing downstream can tell it apart from real evidence.
-// Keep a rejected capture instead of dropping it. Learned the hard way: a dataset run hit a
-// 25% rejection rate, and because every rejected capture was discarded, the worker's own
-// diagnostics recorded nothing but success and the only trace was one line in a host log.
-// The evidence for diagnosing this class of failure has to survive it.
 function writeRejected(testCase, variant, capture, attempt) {
   mkdirSync(REJECTED_ROOT, { recursive: true });
   const path = resolve(REJECTED_ROOT, testCase.id + "." + variant + ".attempt" + attempt + ".json");
   writeFileSync(path, JSON.stringify(capture, null, 2) + "\n", "utf8");
   return path;
-}
-
-// Why this capture is not evidence. Three different faults, three different fixes, so they must not
-// collapse into one message: the wrong page, a page that was never read, and a capture whose two
-// halves disagree.
-function describeRejection(capture, { title, url }) {
-  if (!captureIsSelfConsistent(capture)) {
-    return `the capture contradicts itself at ${url}: the read-through announced a heading but the ` +
-      `heading sweep found none (${capture.transcript.length} phrase(s)) — the page was not traversed`;
-  }
-  if (!captureHasSubstance(capture, title)) {
-    return `the screen reader announced nothing beyond the page title at ${url} ` +
-      `(${capture.transcript.length} phrase(s), no structure) — the page was not read`;
-  }
-  return describeWrongPage(capture, { title, url });
 }
 
 async function captureVerified(ctx, testCase, { url, title, variant }) {
@@ -282,11 +229,8 @@ async function captureVerified(ctx, testCase, { url, title, variant }) {
     // demonstrated. Whether absence is evidence or malfunction depends on the CASE DEFINITION, which
     // check-signals can see and this layer cannot -- and check-signals already reports it, as BLIND or
     // CONTAMINATED. captureRanRequestedProbes is kept for diagnostics; it must never gate.
-    if (captureMentionsTitle(capture, title) && captureHasSubstance(capture, title) &&
-        captureIsSelfConsistent(capture)) {
-      return capture;
-    }
-    wrong = describeRejection(capture, { title, url });
+    if (isEvidence(capture, title)) return capture;
+    wrong = rejectionReason(capture, { title, url });
     const kept = writeRejected(testCase, variant, capture, attempt);
     console.log("  attempt " + attempt + "/" + CAPTURE_ATTEMPTS + ": " + wrong);
     console.log("    diagnostics kept: " + kept);
@@ -411,7 +355,6 @@ function afterRun() {
 // Failures are caught per case, so a dead worker used to keep pulling from the queue and failing
 // everything it touched -- one broken guest could turn a whole run into failures while two healthy
 // ones sat idle. Evicting it hands the work back to the pool.
-const MAX_CONSECUTIVE_WORKER_FAILURES = 3;
 
 // Hand a broken worker's cases back to the pool: the one in hand plus everything it already
 // failed, since those failures were the worker's fault rather than the cases'. A progress entry
@@ -473,7 +416,9 @@ async function captureAcrossPool(ctxBase, cases, done, workers) {
         consecutiveFailures += 1;
         // Evict, but never the last worker standing: with nothing left to hand the work to,
         // recording the failures is more useful than abandoning the run quietly.
-        if (consecutiveFailures >= MAX_CONSECUTIVE_WORKER_FAILURES && workers.length - evicted.length > 1) {
+        if (shouldEvictWorker({
+          consecutiveFailures, poolSize: workers.length, evictedCount: evicted.length,
+        })) {
           const handedBack = requeueFrom({ queue, failures, testCase, failedHere });
           evicted.push(worker);
           console.error("  EVICTING " + worker + " after " + consecutiveFailures +
@@ -528,9 +473,9 @@ async function captureAll(ctxBase, cases, done) {
   }
   // Cached cases are skipped, not captured -- counting them as captured would report worker time
   // that was never spent, which is the one number this whole feature exists to change.
-  const outcome = (cases.length - failures.length - done.size - cached) + " captured, " +
-    failures.length + " failed, " + (done.size + cached) + " skipped" +
-    (cached ? " (" + cached + " cached)" : "") + ", of " + cases.length + " cases";
+  const outcome = runOutcome({
+    total: cases.length, failures: failures.length, skipped: done.size + cached, cached, poolSize: 1,
+  });
   ctx.progress.finish(outcome);
   console.log("Capture complete: " + outcome + ".");
   if (failures.length) {
@@ -561,11 +506,21 @@ async function acquireDatasetWorkers() {
     };
   }
   if (!process.env.A11Y_WORKER) {
+    // leaseWorkerPool returns NULL when it finds fewer than two local VMs -- one VM is the
+    // single-worker path's job. That contract was documented and unhandled: a resume crashed with
+    // "Cannot read properties of null (reading 'workers')" the moment the pool query came back short.
+    // TypeScript declares the nullable return, but this file is .mjs so nothing checked the caller.
     const localPool = await leaseWorkerPool(afterRun());
-    return {
-      pool: localPool.workers,
-      lease: { worker: localPool.workers[0], source: "local-vm", hostAddress: localPool.hostAddress, release: localPool.release },
-    };
+    if (localPool) {
+      return {
+        pool: localPool.workers,
+        lease: {
+          worker: localPool.workers[0], source: "local-vm",
+          hostAddress: localPool.hostAddress, release: localPool.release,
+        },
+      };
+    }
+    // Fall through to the single-worker lease, which starts and restores one VM on its own.
   }
   return { pool: null, lease: await leaseWorker({ worker: process.env.A11Y_WORKER, after: afterRun() }) };
 }
@@ -597,11 +552,10 @@ function captureProgress(cases, lease, pool, baseUrl) {
 async function captureWithPool({ baseUrl, progress, pool }, cases, done) {
   const { failures, skippedCount, cachedCount, evicted } = await captureAcrossPool(
     { baseUrl, progress, poolSize: pool.length }, cases, done, pool);
-  const captured = cases.length - failures.length - skippedCount;
-  const outcome = `${captured} captured, ${failures.length} failed, ${skippedCount} skipped` +
-    (cachedCount ? ` (${cachedCount} cached)` : "") +
-    `, of ${cases.length} cases across ${pool.length} workers` +
-    (evicted.length ? `, ${evicted.length} evicted (${evicted.join(", ")})` : "");
+  const outcome = runOutcome({
+    total: cases.length, failures: failures.length, skipped: skippedCount,
+    cached: cachedCount, poolSize: pool.length, evicted,
+  });
   progress.finish(outcome);
   console.log("Capture complete: " + outcome + ".");
   if (failures.length) {
