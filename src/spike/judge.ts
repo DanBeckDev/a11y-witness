@@ -350,6 +350,33 @@ async function askOpenAICompatible(label: string, prompt: string, schema?: unkno
 }
 
 /** "1.1.1 Non-text Content (A)" -> "1.1.1" */
+/** Every criterion this tool is allowed to cite, as bare numbers. */
+const REAL_CRITERIA = new Set(WCAG_22_AA.map((c) => c.num));
+
+/**
+ * Drop findings that do not cite a real WCAG 2.2 A/AA criterion.
+ *
+ * The previous check tested only the SHAPE of the number, `/\d+\.\d+\.\d+/`, so a model that
+ * invented "9.9.9 Totally Invented Criterion" passed it and the citation reached the user's report.
+ * The authoritative list was already imported to build the prompt; it just never checked the answer,
+ * which made "cites only from this list" a promise the prompt made and nothing enforced.
+ *
+ * Dropped findings are reported, not swallowed: a model inventing criteria is a signal about the
+ * model, and silently discarding it hides the thing you would want to know.
+ */
+function keepRealCriteria(findings: Finding[]): Finding[] {
+  const kept = findings.filter((f) => REAL_CRITERIA.has(criterionOf(f.wcag ?? "")));
+  const dropped = findings.length - kept.length;
+  if (dropped > 0) {
+    const invented = findings
+      .filter((f) => !REAL_CRITERIA.has(criterionOf(f.wcag ?? "")))
+      .map((f) => JSON.stringify(f.wcag ?? ""))
+      .join(", ");
+    process.stderr.write(`Dropped ${dropped} finding(s) citing no real WCAG 2.2 A/AA criterion: ${invented}\n`);
+  }
+  return kept;
+}
+
 function criterionOf(wcag: string): string {
   const m = wcag.match(/(\d+\.\d+\.\d+)/);
   return m ? m[1] : wcag.trim();
@@ -371,10 +398,7 @@ async function judgeOnce(input: JudgeInput): Promise<Judgment> {
   process.stderr.write(`Recall pass surfaced ${candidates.length} candidate issues.\n`);
   const verdict = await ask("verify", buildVerifyPrompt(input, candidates), VERIFY_SCHEMA);
   const judged = JSON.parse(extractJson(verdict)) as Judgment;
-  // Drop findings with no parseable WCAG criterion. Constrained decoding lets the
-  // model emit a finding with an empty/garbage `wcag`, which otherwise surfaces as
-  // a phantom false positive; a finding without a criterion is not actionable.
-  judged.findings = (judged.findings ?? []).filter((f) => /\d+\.\d+\.\d+/.test(f.wcag ?? ""));
+  judged.findings = keepRealCriteria(judged.findings ?? []);
   return judged;
 }
 
