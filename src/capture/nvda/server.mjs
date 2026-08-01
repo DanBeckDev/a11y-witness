@@ -5,7 +5,7 @@
 //   GET  /health                           -> { ok, screenReader, busy, code, environment }
 // NVDA is a single shared resource, so captures are serialized.
 import { createServer } from "node:http";
-import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -37,6 +37,30 @@ function log(line) {
     appendFileSync(LOG_PATH, stamped, "utf8");
   } catch {
     // Console output is the fallback; a failed append must not take the worker down.
+  }
+}
+
+/** One generation kept. Enough to read the death of the previous worker, not enough to fill a disk. */
+const MAX_LOG_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Roll `server.log` over at boot if it has grown too big.
+ *
+ * The log never rotated. It is appended to for the life of a guest, survives reboots by design (the
+ * record of a worker's death is in the previous run's lines), and the guests have a 64 GB disk they
+ * never otherwise fill — so this was a slow-motion outage nobody would notice until a capture failed
+ * for a reason unrelated to accessibility.
+ *
+ * Done at BOOT and nowhere else, so it can never interleave with a capture's own logging.
+ */
+function rotateLogIfLarge() {
+  try {
+    if (statSync(LOG_PATH, { throwIfNoEntry: false })?.size <= MAX_LOG_BYTES) return;
+    renameSync(LOG_PATH, `${LOG_PATH}.1`); // replaces any previous generation
+    log(`rotated ${LOG_PATH} (over ${MAX_LOG_BYTES} bytes); previous generation is ${LOG_PATH}.1`);
+  } catch (error) {
+    // A worker that cannot rotate its log must still serve. Say so and carry on.
+    log(`could not rotate ${LOG_PATH}: ${error.message}`);
   }
 }
 let busy = false;
@@ -508,6 +532,7 @@ const server = createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
+  rotateLogIfLarge();
   log(`a11y-witness NVDA worker listening on :${PORT} (reuse NVDA: ${REUSE_NVDA})`);
   // Deliberately not awaited: the port must answer immediately so callers can see "not ready yet"
   // instead of a connection refusal, which reads as a dead worker.
