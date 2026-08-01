@@ -234,6 +234,41 @@ cycling NVDA destabilises the speech channel.
 A worker that fails three captures in a row is **evicted** from the pool and everything it failed goes
 back to the queue; the run summary names it.
 
+### The speech channel is a socket, and a dead one looks exactly like a healthy NVDA
+
+This is the root cause of the pool's most expensive fault, and the fix is one round trip.
+
+Guidepup reaches NVDA over a **TLS socket to NVDA Remote on 127.0.0.1:6837**, and speech is *pushed*
+back over it. Keystrokes are writes; speech is a read. So when that socket goes half-open:
+
+- `nvda.next()` still succeeds — the write is accepted
+- nothing is ever spoken back
+- NVDA looks completely healthy and says nothing
+
+Guidepup cannot notice. Checked in 0.29.2: it reconnects only on a socket `error` event, a half-open
+TCP connection raises none, and there is **no keepalive, no read timeout and no heartbeat** in its
+client. There is also **no `reconnect()`** on its public API and `NVDAClient` is not exported, so the
+only way to rebuild the channel is `stop()` + `start()` — which is why a mute used to cost ~86 s.
+(Guidepup also has **no debug mode**: two env vars, no logging. Its config was identical on healthy and
+failing guests, so misconfiguration was never the cause.)
+
+So `ensureSpeechChannel` probes it *before* committing a capture: clear the log, `readLine`, check a
+phrase came back. Measured across all three guests, 7 interleaved rounds each, same page, same tool:
+
+| | median | IQR | recoveries |
+|---|---|---|---|
+| before | 36.7 / 42.0 / **93.7 s** | 9.1 / 9.0 / 20.7 | 0/7 / 1/7 / **5/7** |
+| after | **12.4 / 12.4 / 12.3 s** | **0.1 / 0.6 / 0.3** | **0/7 all three** |
+
+The probe costs 0.7 s and **never had to restart NVDA once** — so the gain is not from proactive
+restarts, it is that exercising the channel early stops the bad state arising. `windowsActivate` also
+fell 12.8 s → 2.1 s, which suggests a half-dead NVDA was contending for the foreground and slowing
+Edge's grab for it.
+
+Two caveats worth keeping: the mechanism is inferred rather than proven, and 21 captures cannot prove an
+intermittent fault is *eliminated* — only that it did not occur once across a pool that was averaging
+6 of 21 before. Watch `/health.vitals.recoveries`; if it climbs again, the theory is wrong.
+
 ### A guest whose NVDA is broken looks perfectly healthy — watch `recoveries`
 
 The worst worker fault this pool has had produced **zero failures**. One guest's NVDA went mute on

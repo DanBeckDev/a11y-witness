@@ -113,8 +113,11 @@ export function compareWorkers(samplesByWorker) {
  * questions and a fast worker can be the unreliable one.
  *
  * @param {Record<string, {recoveries: number, captures: number}>} deltas
+ * @returns {Record<string, number | null>} null where the worker captured nothing — "no idea", which
+ *   must not be confused with a rate of zero ("perfectly reliable").
  */
 export function recoveryRates(deltas) {
+  /** @type {Record<string, number | null>} */
   const rates = {};
   for (const [worker, d] of Object.entries(deltas)) {
     rates[worker] = d.captures > 0 ? d.recoveries / d.captures : null;
