@@ -18,7 +18,7 @@ import {
 import { isLocallyRecoverable } from "./worker-recovery.mjs";
 import { faultCode } from "./capture-faults.mjs";
 import { guestDiagnostics, processCounts, treeSize } from "./diagnostics.mjs";
-import { killStrayBrowsers, pruneEdgeProfile } from "./browser-profile.mjs";
+import { enforceBrowserPolicy, killStrayBrowsers, pruneEdgeProfile } from "./browser-profile.mjs";
 
 const PORT = Number(process.env.A11Y_PORT || 8765);
 const LOG_PATH = process.env.A11Y_SERVER_LOG || "server.log";
@@ -64,6 +64,7 @@ const MAX_LOG_BYTES = 16 * 1024 * 1024;
  */
 function tidyBrowserAtBoot() {
   try {
+    enforceBrowserPolicy(log);
     const strays = processCounts(["msedge"])?.msedge ?? 0;
     killStrayBrowsers(strays, log);
     pruneEdgeProfile(EDGE_PROFILE_DIR, treeSize(EDGE_PROFILE_DIR)?.megabytes ?? null, log);

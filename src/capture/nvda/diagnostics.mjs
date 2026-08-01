@@ -147,9 +147,27 @@ export function largestSubtrees(root, limit = 8) {
   return sized.sort((a, b) => b.megabytes - a.megabytes).slice(0, limit);
 }
 
+/** The Edge policy values the worker depends on, read back so drift is visible over HTTP. */
+export function edgePolicy() {
+  if (process.platform !== "win32") return null;
+  const read = (name) => {
+    try {
+      const out = execFileSync("reg",
+        ["query", "HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge", "/v", name],
+        { encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"] });
+      const hex = /REG_DWORD\s+0x([0-9a-f]+)/i.exec(out)?.[1];
+      return hex === undefined ? null : Number.parseInt(hex, 16);
+    } catch {
+      return null; // absent, which for a policy means "not set"
+    }
+  };
+  return { StartupBoostEnabled: read("StartupBoostEnabled"), BackgroundModeEnabled: read("BackgroundModeEnabled") };
+}
+
 export function guestDiagnostics({ edgeProfile, logPath }) {
   return {
     measuredAt: new Date().toISOString(),
+    edgePolicy: edgePolicy(),
     edgeProfileBreakdown: largestSubtrees(edgeProfile),
     edgeProfileDefaultBreakdown: largestSubtrees(join(edgeProfile, "Default")),
     // The leading suspect for a slow worker: Edge is launched per capture, so its cold start is on the

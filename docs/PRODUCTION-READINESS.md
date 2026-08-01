@@ -31,30 +31,43 @@ as skipped rather than silently omitted, which is the whole point.
 | 14 | Documentation | **Done** | `CLAUDE.md` (operational, with the failures behind each rule), `docs/nvda-worker-runbook.md` (error string → real cause → fix), `docs/getting-started.md`, ADRs, `docs/METHODOLOGY.md` for the claims we will and will not make. |
 | 15 | Tests | **Done, with honest limits** | 125 unit tests, the corpus gate over all 2,122 captures, `check-signals`, `capture-check` on the VM, `evidence:check` for capture changes, and `eval` for judge quality. **Two cannot run in CI** — `eval` needs a local Codex login and the corpus gate needs `runs/` — and that is stated rather than papered over. |
 
-## Measured, unexplained: worker 1 is ~2x slower than its own clones
+## Solved: worker 1 was ~2x slower, and it was unbounded Edge telemetry
 
-Tested one worker at a time so host contention could not confound it, same page, all within fifteen
-minutes:
+One guest ran ~21 s per capture while its two clones ran ~11 s, on byte-identical VM configs. Chased
+with `/diagnostics`, which exists because `utmctl exec` could not be relied on to answer.
 
-| worker | display in UTM | state | capture times |
-|---|---|---|---|
-| `a11y-worker` | visible | 51 min uptime, 55 captures | 20, 20, 21 s |
-| `a11y-worker` | visible | **freshly rebooted** | 58 s (cold), then 21, 23, 21 s |
-| `a11y-worker-2` | grey | fresh | 18, 11, 12 s |
-| `a11y-worker-3` | grey | fresh | 18, 11, 12, 12 s |
+**Root cause.** Edge writes a histogram file into `BrowserMetrics` **per launch**, and this worker
+launches Edge once per capture. On the busiest guest that was **348 MB of a 448 MB profile** — hundreds
+of files Edge deals with at startup, and `windowsActivate` (Edge launching) is the largest phase of a
+capture. It survives reboots because it is on disk, which is why restarting never helped.
 
-All produced identical correct evidence (2 phrases, 1 heading, 1 control), so this is throughput, not
-quality. Three hypotheses were tested and **all three are wrong**:
+**Fix.** `browser-profile.mjs` drops `BrowserMetrics` and Edge's unused component payloads at every
+boot, unconditionally; genuine caches only above 200 MB, because a warm cache does help. Result:
 
-- *The grey display indicates a sick guest.* Inverted — the grey workers are the fast ones. Their
-  displays have simply blanked (`VIDEOIDLE` is 300 s), which costs nothing.
-- *Guest state accumulates.* A freshly rebooted worker 1 still runs at ~21 s, not ~11 s.
-- *Worker 1 does more background work.* Idle QEMU CPU is 20–28% on worker 1 and 22–160% (spiky) on
-  worker 2 — if anything the reverse.
+| | profile | capture time |
+|---|---|---|
+| before | 448–511 MB | 20, 20, 21 s |
+| immediately after the first purge | 30 MB | 91, 51, 105, 24, 22 s — Edge rebuilding the caches |
+| settled, pruning every boot | 36 MB | **13, 11, 12, 12, 12, 11 s** |
 
-VM configs are byte-identical (4096 MB, 2 vCPUs, no JIT cache) and disk sizes are within 1 GB. **The
-cause is unknown and is written down rather than guessed at.** Practical impact: prefer the clones for
-long runs, and if worker 1's throughput matters, rebuild it from a clone rather than debugging it.
+That middle row is worth keeping: measuring straight after a cache purge said "the fix did not work",
+and it took a second look to see it was the rebuild. **Do not judge a profile change on the first few
+captures after it.**
+
+Three hypotheses were tested and killed on the way, all of which had looked obvious:
+
+- *The grey UTM display means a sick guest.* Inverted — the grey workers were the fast ones. Their
+  displays had simply blanked after the 300 s `VIDEOIDLE` timeout, which costs nothing.
+- *In-guest state accumulates.* A freshly rebooted worker 1 was still ~21 s. True accumulation, wrong
+  location: it was on disk, not in memory.
+- *Worker 1 does more background work.* Idle QEMU CPU was 20–28% on worker 1 against 22–160% on
+  worker 2.
+
+**One loose end, self-inflicted.** Worker 1 still reports `StartupBoostEnabled: 1` — an experiment of
+mine that appeared to fail but actually applied, so it has a resident Edge (5 processes) its clones do
+not. It is demonstrably *not* what caused the slowness (11 s captures with it still set), and the boot
+policy enforcement cannot correct it because the worker task is not elevated. Re-provisioning that guest
+resets it; until then it is a known, harmless difference.
 
 ## The gates, and what they are for
 
