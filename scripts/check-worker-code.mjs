@@ -23,6 +23,29 @@ const NVDA_DIR = resolve("src/capture/nvda");
 const HEALTH_TIMEOUT_MS = 15000;
 
 // Must match server.mjs codeVersion() exactly: same files, same order.
+/**
+ * A STALE report is usually a real stale guest — but not when the working tree carries an uncommitted
+ * CAPTURE_PROTOCOL_VERSION bump. Then every worker reports stale because the LOCAL hash moved, and the
+ * obvious remedy (redeploy) would ship the bump and invalidate all 2,122 cached captures.
+ *
+ * Saying so here costs one line and saves someone an unexplained full recapture.
+ */
+function protocolBumpNote() {
+  try {
+    const inTree = /CAPTURE_PROTOCOL_VERSION = (\d+)/.exec(
+      readFileSync(resolve(NVDA_DIR, "capture-core.mjs"), "utf8"))?.[1];
+    const committed = /CAPTURE_PROTOCOL_VERSION = (\d+)/.exec(
+      execFileSync("git", ["show", "HEAD:src/capture/nvda/capture-core.mjs"], { encoding: "utf8" }))?.[1];
+    if (inTree && committed && inTree !== committed) {
+      return `\nNOTE: your working tree has CAPTURE_PROTOCOL_VERSION = ${inTree} but HEAD has ${committed}.\n` +
+        "That alone changes the local hash, so the guests may not be stale at all. Deploying it would\n" +
+        "invalidate every cached capture — `npm run worker:deploy` refuses unless you pass\n" +
+        "--allow-protocol-change.\n";
+    }
+  } catch { /* not a git checkout; nothing to add */ }
+  return "";
+}
+
 function localVersion() {
   const hash = createHash("sha256");
   for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs", "nvda-logging.mjs"]) {
@@ -71,5 +94,8 @@ if (stale) {
   console.log(`\n${stale} stale worker(s). A restart via \`utmctl exec\` silently does nothing on`);
   console.log("some guests; rebooting the VM always picks up a pushed file:");
   console.log("  utmctl stop <uuid> --request && utmctl start <uuid>");
+    console.log("  ...or simply: npm run worker:deploy");
+    const note = protocolBumpNote();
+    if (note) console.log(note);
 }
 process.exit(stale ? 1 : 0);
