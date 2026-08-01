@@ -31,6 +31,31 @@ as skipped rather than silently omitted, which is the whole point.
 | 14 | Documentation | **Done** | `CLAUDE.md` (operational, with the failures behind each rule), `docs/nvda-worker-runbook.md` (error string → real cause → fix), `docs/getting-started.md`, ADRs, `docs/METHODOLOGY.md` for the claims we will and will not make. |
 | 15 | Tests | **Done, with honest limits** | 125 unit tests, the corpus gate over all 2,122 captures, `check-signals`, `capture-check` on the VM, `evidence:check` for capture changes, and `eval` for judge quality. **Two cannot run in CI** — `eval` needs a local Codex login and the corpus gate needs `runs/` — and that is stated rather than papered over. |
 
+## Measured, unexplained: worker 1 is ~2x slower than its own clones
+
+Tested one worker at a time so host contention could not confound it, same page, all within fifteen
+minutes:
+
+| worker | display in UTM | state | capture times |
+|---|---|---|---|
+| `a11y-worker` | visible | 51 min uptime, 55 captures | 20, 20, 21 s |
+| `a11y-worker` | visible | **freshly rebooted** | 58 s (cold), then 21, 23, 21 s |
+| `a11y-worker-2` | grey | fresh | 18, 11, 12 s |
+| `a11y-worker-3` | grey | fresh | 18, 11, 12, 12 s |
+
+All produced identical correct evidence (2 phrases, 1 heading, 1 control), so this is throughput, not
+quality. Three hypotheses were tested and **all three are wrong**:
+
+- *The grey display indicates a sick guest.* Inverted — the grey workers are the fast ones. Their
+  displays have simply blanked (`VIDEOIDLE` is 300 s), which costs nothing.
+- *Guest state accumulates.* A freshly rebooted worker 1 still runs at ~21 s, not ~11 s.
+- *Worker 1 does more background work.* Idle QEMU CPU is 20–28% on worker 1 and 22–160% (spiky) on
+  worker 2 — if anything the reverse.
+
+VM configs are byte-identical (4096 MB, 2 vCPUs, no JIT cache) and disk sizes are within 1 GB. **The
+cause is unknown and is written down rather than guessed at.** Practical impact: prefer the clones for
+long runs, and if worker 1's throughput matters, rebuild it from a clone rather than debugging it.
+
 ## The gates, and what they are for
 
 Layered, because they answer different questions. Run the ones your change touches.
