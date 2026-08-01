@@ -366,6 +366,25 @@ predicate over every capture on disk and asserts none is rejected. The corpus is
 `check-signals` scores it 1061/0/0, so a rejection is a false positive by construction. It runs in a
 second. Six cases is an anecdote; 2,122 is a test.
 
+## Housekeeping is automated — do not do it by hand
+
+Anything a human has to remember is something that does not happen. What runs itself now:
+
+- **Worker VMs** — a run starts what it needs and puts each back as it found it. Stopped is the
+  correct resting state.
+- **The dataset page server** — leased the same way (`src/training/page-server.mjs`). A run starts it
+  if missing and stops it afterwards, including on SIGINT; a server somebody else started is used and
+  left alone. This replaced a manual `npx serve` that had leaked four processes onto this host, one of
+  which was a stray that could 404 an entire run while it reported success.
+- **NVDA** — the worker cold-starts it when it has gone and recycles it every 25 captures; a failed
+  capture always stops it. Nothing may restart it while a worker is *idle* (see above for why).
+- **Edge** — `captureWithNvda`'s `finally` closes it unconditionally, which is what stopped failed
+  captures leaking eight orphaned processes onto a 4 GB guest.
+
+`npm run doctor` reports what it cannot fix: strays on the pages port, a VM running but not
+answering, a run left mid-flight. It is read-only by design — it never kills anything — so the one
+manual step left is acting on what it tells you.
+
 ## Verifying changes
 
 Verification is layered; pick the layers your change touches:
@@ -386,6 +405,10 @@ Verification is layered; pick the layers your change touches:
 - `npm run eval [-- <substring>]` — judge quality against 34 labelled fixtures. Needs a local Codex login, so it **cannot run in CI**; run it when you touch the judge, prompts, criteria, or fixtures. Do **not** quote its numbers as a headline: `docs/METHODOLOGY.md` records that the guards were tuned against these cases, scoring is single-run, and there is no expert baseline yet. Report with those caveats or not at all.
 - **`src/capture/nvda/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test. After changing it, deploy (above) and run `src/capture/nvda/capture-check.mjs` **in the interactive session**, then `scripts/bench-capture.mjs` if you touched timing. capture-check refuses to run while the worker is serving, because NVDA is one machine-wide resource and two drivers stop each other's screen reader; stop the worker first and **restart it afterwards**. The VM capture is its test; the book's own rule is "refactor under test."
 - **Count-based checks cannot see content rot — assert what was heard, not how much.** capture-check now gates on probe *values* (`disclosure-good` must reach `expanded`, `disclosure-bad` must stay `collapsed`) and on the read-through still carrying roles, because both lessons were learned the hard way. A readiness gate once overwrote the first line of every page with the document title, deleting the h1's `"heading, level 1, ..."` announcement everywhere: `"heading, level N"` phrases fell from 105 to 15 across 90 captures and **every check stayed green**, because the phrase count had not moved. If you change capture, compare evidence quality against a previous run, not just line counts.
+- `npm run evidence:check <worker>` — after ANY change to the capture pipeline, asks whether the
+  evidence moved rather than whether the timing did. Exit 0 = ship without invalidating the cache,
+  1 = evidence CHANGED, bump `CAPTURE_PROTOCOL_VERSION` and recapture. This is what makes a capture
+  optimisation affordable to evaluate; before it, every one "cost a full recapture" to find out.
 - `npm run training:check-signals` — proves every dataset `badSignal` fires on the bad page and stays silent on the good one, against captures already on disk (no worker needed). Run it after ANY change to a probe's output shape: a probe and its signal are coupled, and 8 cases once went silently blind when a probe changed. `npm run training:status` reports a long capture run; `--resume` picks up where one stopped.
 - **Worker broken? Don't debug from first principles** — `docs/nvda-worker-runbook.md` has the error-string → real-cause table (the messages are misleading: `"NVDA not installed"` usually means a version mismatch, not a missing install), and `scripts/diagnose-nvda-worker.ps1` applies it automatically. `scripts/provision-nvda-worker.ps1` is the idempotent repair.
 - **No worker to hand?** Build one: `docs/getting-started.md` (~1.5–2 h, almost all of it downloading Windows). Validating capture changes through CI is a ~10-minute loop and should be the fallback, not the habit.
@@ -402,11 +425,26 @@ Verification is layered; pick the layers your change touches:
   timings before optimising anything.
 - **The largest single phase is `windowsActivate`, at ~10 s, and it is Edge starting.** Edge is
   launched *and quit* for every capture, so its cold start is on the critical path every time —
-  `waitedMs: 10784` against an 800 ms settle, i.e. ~10 s waiting for a window to exist. That is ~37%
-  of a capture. Two things would remove it, and **both force a full recapture**, so neither is a
-  casual change: keeping Edge alive between captures (changes how the page is navigated, so it changes
-  what is announced — needs a `CAPTURE_PROTOCOL_VERSION` bump), or re-enabling Edge's startup boost
-  (needs re-provisioning, which stamps `provisionRevision` and invalidates every cache key). Startup
-  boost was disabled because failed captures leaked Edge processes; unconditional cleanup in
-  `captureWithNvda`'s `finally` has since fixed that leak, so the original reason may no longer hold —
-  measure it before deciding.
+  `waitedMs: 10784` against an 800 ms settle. That is ~37% of a capture, and it is the biggest
+  remaining cost. Three routes were evaluated; **two of them are dead ends, and the analysis is worth
+  keeping so nobody re-derives it.**
+
+  | route | verdict |
+  |---|---|
+  | Overlap NVDA's start with the wait for Edge's window | **worthless.** `nvdaStart` is ~0 s on a warm capture, and ~83% of captures reuse NVDA. There is nothing to overlap on the path that matters. |
+  | Re-enable Edge's startup boost | **cannot work alone.** Cleanup calls `windowsQuit("msedge.exe")` with a `taskkill /im msedge.exe /f` fallback, so it kills Edge *by image name* — including the pre-warmed background process. The next capture cold-starts anyway. |
+  | Keep Edge alive between captures | **the only real option**, and it subsumes startup boost. |
+
+  The third needs care, not courage. Do **not** navigate an existing window via the address bar:
+  captures run `--app`, which has no address bar, and abandoning `--app` resurfaces the browser chrome
+  that `"Welcome to Microsoft Edge"` phantoms came from. The shape that should work is *keep the Edge
+  process, open a fresh `--app` window per capture, and close only that window* — Chromium reuses the
+  process, so the window appears fast and the announcements stay identical. It touches window focus,
+  which this project's own notes call "the #1 flakiness fix", and it is testable only on the VM.
+
+  **Mitigating the recapture cost.** This is why `npm run evidence:check` exists: it compares evidence
+  field by field on a stratified sample and says whether the change is evidence-neutral. If it reports
+  SAME, the change ships without invalidating the cache — the key is a proxy, the diff is the direct
+  measurement. If it reports CHANGED, the recapture is genuinely required, and the cheap moment to pay
+  it is **bundled with any other pending `CAPTURE_PROTOCOL_VERSION` bump**, so 2,122 captures are
+  recaptured once rather than twice.
