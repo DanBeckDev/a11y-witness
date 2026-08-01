@@ -18,6 +18,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { networkInterfaces } from "node:os";
+import { availableHostMemoryMb, capacityReason, workersHostCanRun } from "./host-capacity.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -267,6 +268,33 @@ async function findLocalPool(): Promise<VmStatus[]> {
   }
 }
 
+/** A11Y_MAX_WORKERS wins over the measurement: the operator may know something we cannot measure. */
+function configuredWorkerLimit(): number | null {
+  const configured = Number(process.env.A11Y_MAX_WORKERS);
+  return Number.isFinite(configured) && configured > 0 ? configured : null;
+}
+
+/**
+ * Which registered VMs should actually be running for this run?
+ *
+ * The pool used to start all of them. Three guests on a 36 GB host made every capture 1.6x slower
+ * than one, and caused mute-NVDA failures, because the guests were swapped out from under NVDA — so
+ * "how many VMs exist" was the wrong question and "how much memory is there" is the right one.
+ *
+ * Already-running VMs are preferred over stopped ones: starting a guest in order to leave a running
+ * one idle is pure churn. Note that a VM someone else has already started is never stopped here — it
+ * is simply not used — because a run must not shut down a worker it did not start.
+ */
+function chooseRunnableWorkers(pool: VmStatus[]): { chosen: VmStatus[]; note: string | null } {
+  const availableMb = availableHostMemoryMb();
+  const running = pool.filter((vm) => vm.state === "started");
+  const limit = configuredWorkerLimit()
+    ?? workersHostCanRun({ availableMb, alreadyRunning: running.length });
+  if (limit >= pool.length) return { chosen: pool, note: null };
+  const chosen = [...running, ...pool.filter((vm) => vm.state !== "started")].slice(0, limit);
+  return { chosen, note: capacityReason({ limit, wanted: pool.length, availableMb }) };
+}
+
 /**
  * Lease every local worker VM: start what is not running, and put each one back afterwards.
  *
@@ -282,8 +310,12 @@ export async function leaseWorkerPool(after: AfterRun): Promise<PoolLease | null
   const pool = await findLocalPool();
   if (pool.length < 2) return null; // one VM is the single-worker path's job
 
+  const { chosen, note } = chooseRunnableWorkers(pool);
+  if (note) process.stderr.write(note + "\n");
+  const chosenNames = new Set(chosen.map((vm) => vm.name));
+
   const before = new Map(pool.map((vm) => [vm.name, vm.state]));
-  for (const vm of pool) {
+  for (const vm of chosen) {
     if (vm.state === "started" && vm.healthy) continue;
     process.stderr.write(`Local worker '${vm.name}' is ${vm.state}; bringing it up ...\n`);
     try {
@@ -301,12 +333,14 @@ export async function leaseWorkerPool(after: AfterRun): Promise<PoolLease | null
     }
   }
 
-  const ready = (await findLocalPool()).filter((vm) => vm.healthy && vm.ip);
+  // Only workers we CHOSE, even if a VM we declined is up and healthy: taking work to a guest the
+  // capacity check excluded would defeat the check, and it may belong to somebody else's run.
+  const ready = (await findLocalPool()).filter((vm) => vm.healthy && vm.ip && chosenNames.has(vm.name));
   if (!ready.length) throw new Error("no local worker became healthy; check: worker-ctl.sh pool");
-  const missing = pool.length - ready.length;
+  const missing = chosen.length - ready.length;
   if (missing > 0) {
     // Never silent: a run that quietly used two of three workers looks like an unexplained slowdown.
-    process.stderr.write(`${missing} of ${pool.length} local workers are unavailable; running on the rest\n`);
+    process.stderr.write(`${missing} of ${chosen.length} local workers are unavailable; running on the rest\n`);
   }
   process.stderr.write(`Pool of ${ready.length}: ${ready.map((v) => v.name).join(", ")}\n`);
 

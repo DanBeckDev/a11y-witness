@@ -14,6 +14,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { availableHostMemoryMb, workersHostCanRun } from "../src/capture/host-capacity.mjs";
 
 const run = promisify(execFile);
 const JSON_OUT = process.argv.includes("--json");
@@ -103,6 +104,7 @@ async function checkWorker() {
   } else {
     add("worker", true, `${pool.length} worker(s), all stopped — a run starts them automatically (${summary})`);
   }
+  checkHostCapacity(pool);
   const busy = pool.filter((vm) => vm.busy);
   if (busy.length) {
     add("contention", false, `${busy.map((v) => v.name).join(", ")} busy with a capture — another shell or agent is using the pool`,
@@ -110,16 +112,51 @@ async function checkWorker() {
   }
 }
 
+// Can this host actually hold the pool it has registered?
+//
+// Not a fault, and never a FAIL: a capped pool runs fine, just narrower. It is reported because the
+// alternative is invisible. Three guests on this 36 GB Mac made every capture 1.6x slower than one
+// and produced mute-NVDA failures, and from outside that reads as "the workers are degrading" rather
+// than "the host is out of memory" — which is exactly how it was misread for a day.
+function checkHostCapacity(pool) {
+  const availableMb = availableHostMemoryMb();
+  if (availableMb === null || !pool.length) return;
+  // Guests already up have paid for their memory and are not counted in `availableMb`, so they are
+  // added back — otherwise a running worker makes the host look smaller than it is.
+  const running = pool.filter((vm) => vm.state === "started").length;
+  const poolSize = pool.length;
+  const limit = workersHostCanRun({ availableMb, alreadyRunning: running });
+  const detail = `~${availableMb} MB available — room for ${Math.min(limit, poolSize)} of ${poolSize} worker(s)`;
+  add("host memory", true, limit >= poolSize
+    ? detail
+    : `${detail}; the rest stay stopped so the run does not swap (override: A11Y_MAX_WORKERS)`);
+}
+
 // Dataset capture needs the pages served, and the guest must be able to reach them — the
 // host's localhost is not reachable from inside the VM.
 async function checkDatasetPages() {
-  if (!existsSync(resolve(DATASET, "manifest.json"))) {
+  const manifestPath = resolve(DATASET, "manifest.json");
+  if (!existsSync(manifestPath)) {
     return add("dataset", false, "no manifest — the dataset has not been generated",
       "npm run training:generate");
   }
+  // Ask for a REAL page, not `/`.
+  //
+  // "Something answers on :5050" is not the same as "our pages are being served", and the difference
+  // has already cost a dataset: a stray server on that port reported "Capture complete: 3/3 cases"
+  // while every transcript read "Error code: 404". A leftover `npx serve` from another directory
+  // answers the root happily and 404s every case. Four of them were running on this host today, which
+  // is how likely that is.
+  const sample = JSON.parse(readFileSync(manifestPath, "utf8")).cases?.[0]?.id;
+  const probe = sample ? `${sample}/good.html` : "";
   try {
-    await fetch(`http://localhost:${PAGES_PORT}/`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
-    add("pages", true, `served on :${PAGES_PORT}`);
+    const response = await fetch(`http://localhost:${PAGES_PORT}/${probe}`,
+      { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+    if (!response.ok) {
+      return add("pages", false, `:${PAGES_PORT} answers but returns HTTP ${response.status} for ${probe} — wrong directory`,
+        `something else holds the port. Stop it, then: npx serve ${DATASET}/pages -l ${PAGES_PORT}`);
+    }
+    add("pages", true, `serving the dataset on :${PAGES_PORT} (verified ${probe || "/"})`);
   } catch {
     add("pages", false, `nothing serving on :${PAGES_PORT}`,
       `npx serve ${DATASET}/pages -l ${PAGES_PORT}`);
