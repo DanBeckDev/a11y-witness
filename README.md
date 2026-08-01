@@ -200,9 +200,18 @@ npm run training:capture                        # uses them all, then puts them 
 ./scripts/local-worker/worker-ctl.sh pool-stop  # or release them yourself
 ```
 
-Measured: **1.90x on two workers, 2.36x on three**, with byte-identical evidence at each step.
-The returns bend because the bottleneck is inside each guest — NVDA answers one request at a
-time — not on the host, which sits at under 70% of its CPU with three running.
+Measured: **1.90x on two workers, 2.36x on three**, with byte-identical evidence at each step —
+on a quiet host. Treat those as a ceiling, not a promise.
+
+The returns bend because of **host memory**, and this was originally recorded the other way round:
+"not on the host, which sits at under 70% of its CPU with three running". The CPU reading was
+correct and the conclusion drawn from it was wrong. A worker VM costs the host ~7 GB, not the
+4096 MB it is configured with, so three guests is ~21 GB on a 36 GB machine that is also somebody's
+desktop. Over-committed, the guests get swapped out from under NVDA: the same page on the same
+worker took **44.5 s with three up against 27.4 s with one**, and the swapped-out guests also
+produced mute-NVDA failures. Ruling the host out because it had CPU to spare cost a day of
+diagnosis, so the pool now sizes itself from `vm_stat`, `npm run doctor` prints what will fit, and
+`A11Y_MAX_WORKERS=N` overrides it.
 
 **A worker serves one capture at a time.** One machine has one desktop, one foreground window
 and one NVDA, so captures are serialised by design — the worker returns `429` while busy.

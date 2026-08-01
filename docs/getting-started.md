@@ -206,5 +206,8 @@ enough that the table is faster than reasoning from first principles.
   automatically.
 - **Making it faster** — add a second worker with
   `./scripts/local-worker/clone-worker.sh`, then just run as normal: with no `A11Y_WORKER` set,
-  a run uses every local worker and puts each one back afterwards. Measured 1.90x on two
-  workers, 2.36x on three. See [`local-worker-vm.md`](./local-worker-vm.md).
+  a run uses as many local workers as the host can hold and puts each one back afterwards.
+  Measured 1.90x on two workers, 2.36x on three *on a quiet host* — but a worker VM costs ~7 GB
+  of host memory, so three do not fit on a 36 GB Mac that is also your desktop, and
+  over-committing causes failed captures rather than just slow ones. `npm run doctor` prints how
+  many will fit. See [`local-worker-vm.md`](./local-worker-vm.md).

@@ -102,7 +102,8 @@ was left mid-flight — the last one being the difference between `capture` and
 For a long run, use more than one worker. **Set nothing** — with neither `A11Y_WORKER` nor
 `A11Y_WORKERS` set, a run finds every local worker VM, starts what is stopped, dispatches
 cases across them, and **puts each one back as it found it**: stopped stays stopped, and a VM
-you had already started is left running. Measured 1.90x on two, 2.36x on three.
+you had already started is left running. Measured 1.90x on two, 2.36x on three — on a quiet host,
+and **how many actually start is capped by host memory** (next section).
 
 ```bash
 npm run training:capture                            # uses every local worker, releases them after
