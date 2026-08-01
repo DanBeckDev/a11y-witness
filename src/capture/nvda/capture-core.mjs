@@ -35,7 +35,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 // This constant is what the cache keys on, so it must move only when the evidence really changes.
 //
 // Bumping it forces a full recapture. That is the point.
-export const CAPTURE_PROTOCOL_VERSION = 1;
+export const CAPTURE_PROTOCOL_VERSION = 2;
 
 const DEFAULT_STEPS = 150; // read-through line count cap
 const DEFAULT_BROWSER_WAIT_MS = 12_000; // UPPER BOUND on waiting for Edge, not a fixed sleep
