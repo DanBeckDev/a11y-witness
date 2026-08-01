@@ -12,6 +12,7 @@ import {
 } from "./capture-decisions.mjs";
 import { beginRun, readProgress } from "./capture-progress.mjs";
 import { cacheDecision, cacheKey, hashPageDir, stampProvenance } from "./capture-cache.mjs";
+import { leasePageServer } from "./page-server.mjs";
 
 const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
 const MANIFEST_PATH = resolve(ROOT, "manifest.json");
@@ -19,6 +20,7 @@ const CAPTURE_ROOT = resolve(ROOT, process.env.DATASET_CAPTURE_ROOT || "captures
 const PAGE_ROOT = resolve(ROOT, "pages");
 const REJECTED_ROOT = resolve(CAPTURE_ROOT, "rejected");
 const DEFAULT_BASE_URL = "http://localhost:5050";
+const PAGES_PORT = Number(process.env.DATASET_PAGES_PORT || new URL(DEFAULT_BASE_URL).port);
 const STEPS = Number(process.env.DATASET_CAPTURE_STEPS || 150);
 const ONLY = process.argv.find((arg) => arg.startsWith("--only="))?.slice("--only=".length);
 const RESUME = process.argv.includes("--resume");
@@ -591,12 +593,23 @@ async function main() {
   const done = previouslyCaptured(cases);
   if (done.size) console.log("Resuming: " + done.size + " case(s) already captured.");
 
+  // The pages are leased like the workers are: started if missing, put back as found. Serving them
+  // was a manual step nobody owned, which leaked four `serve` processes onto this host and, worse,
+  // let a stray server from another directory 404 an entire run while it reported success.
+  const pages = await leasePageServer({
+    root: PAGE_ROOT,
+    port: PAGES_PORT,
+    probePath: `${cases[0].id}/good.html`,
+  });
   const { pool, lease } = await acquireDatasetWorkers();
   try {
     await checkDatasetWorkers(pool, lease);
     await captureDataset(cases, done, pool, lease);
   } finally {
-    await lease.release();
+    // Workers first: they are the expensive resource, and the page server costs nothing to hold for
+    // the extra second. Both run even if the other throws.
+    await lease.release().catch((e) => console.error("worker release failed: " + e.message));
+    await pages.release();
   }
 }
 
