@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  isEvidence, isTransient, rejectionReason, runOutcome, shouldEvictWorker,
+  isEvidence, isTransient, rejectionReason, runOutcome, shouldEvictWorker, shouldRetireWorker,
 } from "./capture-decisions.mjs";
 
 const TITLE = "Aquarium 001 schedule";
@@ -107,4 +107,34 @@ test("a fault code from the worker is transient without matching any message tex
 test("an unknown fault code falls through to the message rules", () => {
   const error = Object.assign(new Error("something we have never seen"), { code: "who-knows" });
   assert.equal(isTransient(error), false);
+});
+
+test("a worker recovering on every capture is retired, even with zero failures", () => {
+  // The real case: 4 of 4 captures needed a screen-reader recovery, so consecutiveFailures never left
+  // zero and eviction could never fire, while that guest ran at 122.9s against a peer's 40.6s.
+  const { retire, reason } = shouldRetireWorker({
+    vitals: { captures: 4, recoveries: 4, failures: 0 }, poolSize: 3, retiredCount: 0,
+  });
+  assert.equal(retire, true);
+  assert.match(reason!, /4 of 4 captures needed a screen-reader recovery/);
+});
+
+test("a healthy worker is never retired", () => {
+  assert.equal(shouldRetireWorker({
+    vitals: { captures: 20, recoveries: 0, failures: 0 }, poolSize: 3, retiredCount: 0,
+  }).retire, false);
+});
+
+test("the last worker standing is never retired, however degraded", () => {
+  // A slow run beats no run — the same rule eviction follows.
+  assert.equal(shouldRetireWorker({
+    vitals: { captures: 8, recoveries: 8, failures: 0 }, poolSize: 3, retiredCount: 2,
+  }).retire, false);
+});
+
+test("retired workers are named in the run outcome", () => {
+  const outcome = runOutcome({
+    total: 10, failures: 0, skipped: 0, cached: 0, poolSize: 3, retired: ["http://w1:8765"],
+  });
+  assert.match(outcome, /1 retired as degraded \(http:\/\/w1:8765\)/);
 });

@@ -234,6 +234,40 @@ cycling NVDA destabilises the speech channel.
 A worker that fails three captures in a row is **evicted** from the pool and everything it failed goes
 back to the queue; the run summary names it.
 
+### A guest whose NVDA is broken looks perfectly healthy — watch `recoveries`
+
+The worst worker fault this pool has had produced **zero failures**. One guest's NVDA went mute on
+**4 of 4 captures**; the worker's retry absorbed every one, so every capture succeeded, `failures`
+stayed at 0, and the eviction rule (three consecutive *failures*) could never fire. The only symptom
+was that it ran at **122.9 s per capture against a healthy peer's 40.6 s**, and wall-clock time says
+"slower" without saying where.
+
+**`npm run worker:compare <page> <worker> <worker>`** is how you find it. It puts the phases side by
+side, which took the diagnosis from hours to one command:
+
+```
+phase              w1      w2   spread
+nvdaStart        19.1     0.0     19.1   <- the whole gap. 0 = NVDA reused; 19s = cold-started every time
+windowsActivate  11.6    14.4      2.8
+sweep             6.3     6.6      0.3   <- identical
+```
+
+Before that tool existed I attributed this to Edge's launch, then the Edge profile, then the sweep — all
+three wrong, because `bench-capture` prints one worker at a time and I compared wall times. It also shows
+the per-sweep detail capture-core already recorded and nothing displayed: **ms up with round-trips flat
+means each trip is slower; trips up means the sweep is walking more.** Different causes.
+
+The signal is now acted on, not just printed:
+
+- `/health.vitals.recoveries` — faults the worker papered over. The one number that rises while
+  everything still appears to work.
+- `npm run doctor` reports `DEGRADED` with the repair command.
+- **A run retires a degraded worker automatically** (`shouldRetireWorker`): it stops taking cases, nothing
+  is requeued (its captures were fine), and the run summary names it. Never the last worker standing —
+  a slow run beats no run.
+
+The repair for a guest in this state is `provision-nvda-worker.ps1`, which reinstalls NVDA.
+
 ### A freshly booted worker used to fail its first capture, every time
 
 Reproduced on two guests in one session: cold boot, capture 1 fails `NVDA is running but not speaking`,

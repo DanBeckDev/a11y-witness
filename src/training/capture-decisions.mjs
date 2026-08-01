@@ -11,6 +11,7 @@
 // They are pure functions of their inputs, so they can be tested without a worker, a VM or a
 // network — which is the whole point of moving them out of a 650-line orchestrator.
 import { captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle } from "../capture/verify.js";
+import { assessWorker } from "../capture/worker-health.mjs";
 
 /** How much of a rejected transcript to quote back. Enough to recognise the wrong page, not a dump. */
 const REJECTED_PREVIEW_PHRASES = 2;
@@ -104,10 +105,10 @@ export function shouldEvictWorker({ consecutiveFailures, poolSize, evictedCount 
  * never spent, which is the one number the cache exists to change.
  *
  * @param {{ total: number, failures: number, skipped: number, cached: number,
- *           poolSize: number, evicted?: string[] }} counts
+ *           poolSize: number, evicted?: string[], retired?: string[] }} counts
  * @returns {string}
  */
-export function runOutcome({ total, failures, skipped, cached, poolSize, evicted = [] }) {
+export function runOutcome({ total, failures, skipped, cached, poolSize, evicted = [], retired = [] }) {
   const captured = total - failures - skipped;
   // "across N workers" hangs off the case count without a comma, because that is how it reads aloud:
   // "of 25 cases across 3 workers". The evicted clause is a separate thought and keeps its comma.
@@ -119,5 +120,35 @@ export function runOutcome({ total, failures, skipped, cached, poolSize, evicted
     scope,
   ];
   if (evicted.length) parts.push(`${evicted.length} evicted (${evicted.join(", ")})`);
+  // Retired workers are named too: a run that quietly used two of three workers looks like an
+  // unexplained slowdown, which is the whole failure this signal exists to end.
+  if (retired.length) parts.push(`${retired.length} retired as degraded (${retired.join(", ")})`);
   return parts.join(", ");
+}
+
+/**
+ * Take a silently-degraded worker out of the rotation.
+ *
+ * Separate from `shouldEvictWorker` because the two faults look nothing alike. Eviction answers "this
+ * worker is FAILING": three consecutive failures, and its cases go back to the queue. This answers "this
+ * worker is WORKING, and costing four times what it should" — every capture succeeds, nothing is requeued,
+ * and the run is simply better off not sending it more.
+ *
+ * That gap was real and unreachable by the eviction rule. A guest whose NVDA went mute on 4 of 4 captures
+ * produced **zero failures**, because the worker's own retry absorbed every one, so `consecutiveFailures`
+ * never left zero while that worker ran at 122.9 s per capture against a healthy peer's 40.6 s. Nothing
+ * could ever have evicted it.
+ *
+ * Never the last worker standing, for the same reason eviction is not: a slow run beats no run.
+ *
+ * @param {{ vitals: object | null | undefined, poolSize: number, retiredCount: number }} state
+ * @returns {{ retire: boolean, reason: string | null }}
+ */
+export function shouldRetireWorker({ vitals, poolSize, retiredCount }) {
+  const { degraded, reason } = assessWorker(vitals);
+  if (!degraded) return { retire: false, reason: null };
+  if (poolSize - retiredCount <= 1) {
+    return { retire: false, reason: null }; // last one standing: keep using it, however slow
+  }
+  return { retire: true, reason };
 }
