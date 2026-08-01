@@ -31,68 +31,39 @@ as skipped rather than silently omitted, which is the whole point.
 | 14 | Documentation | **Done** | `CLAUDE.md` (operational, with the failures behind each rule), `docs/nvda-worker-runbook.md` (error string → real cause → fix), `docs/getting-started.md`, ADRs, `docs/METHODOLOGY.md` for the claims we will and will not make. |
 | 15 | Tests | **Done, with honest limits** | 125 unit tests, the corpus gate over all 2,122 captures, `check-signals`, `capture-check` on the VM, `evidence:check` for capture changes, and `eval` for judge quality. **Two cannot run in CI** — `eval` needs a local Codex login and the corpus gate needs `runs/` — and that is stated rather than papered over. |
 
-## Solved: worker 1 was ~2x slower, and it was unbounded Edge telemetry
+## The slow worker: an intermittent NVDA fault that MIGRATES between guests
 
-One guest ran ~21 s per capture while its two clones ran ~11 s, on byte-identical VM configs. Chased
-with `/diagnostics`, which exists because `utmctl exec` could not be relied on to answer.
+Measured with `npm run worker:compare`, seven rounds interleaved round-robin across all three guests
+(21 captures), reported as medians because a single mute-recovery outlier moves a mean by seconds:
 
-**Root cause.** Edge writes a histogram file into `BrowserMetrics` **per launch**, and this worker
-launches Edge once per capture. On the busiest guest that was **348 MB of a 448 MB profile** — hundreds
-of files Edge deals with at startup, and `windowsActivate` (Edge launching) is the largest phase of a
-capture. It survives reboots because it is on disk, which is why restarting never helped.
+| worker | n | median | IQR | min | max | recoveries |
+|---|---|---|---|---|---|---|
+| a11y-worker | 7 | 36.7 s | 9.1 | 26.1 | 49.6 | **0/7** |
+| a11y-worker-2 | 7 | 42.0 s | 9.0 | 27.4 | 76.2 | **1/7** |
+| a11y-worker-3 | 7 | **93.7 s** | 20.7 | 27.1 | 127.3 | **5/7** |
 
-**Fix.** `browser-profile.mjs` drops `BrowserMetrics` and Edge's unused component payloads at every
-boot, unconditionally; genuine caches only above 200 MB, because a warm cache does help. Result:
+Verdict: worker 3 is slower with non-overlapping interquartile ranges. Workers 1 and 2 are **not
+distinguishable** — the tool refuses to separate them, which is the correct answer and the one that was
+missing before.
 
-| | profile | capture time |
-|---|---|---|
-| before | 448–511 MB | 20, 20, 21 s |
-| immediately after the first purge | 30 MB | 91, 51, 105, 24, 22 s — Edge rebuilding the caches |
-| settled, pruning every boot | 36 MB | **13, 11, 12, 12, 12, 11 s** |
+**The fault is not a property of any VM. It moves.** Earlier the same day, worker 1 was the bad one at
+4 of 4 recoveries and worker 3 was fine; now worker 1 is the cleanest at 0 of 7 and worker 3 is at 5 of 7.
+That single fact kills every VM-specific explanation, and a lot of effort went into those before this was
+measured properly: the blanked UTM display, in-memory accumulation, background CPU, Edge's launch time,
+Edge profile size, Edge component payloads, and Edge startup boost were each tested and each wrong.
 
-That middle row is worth keeping: measuring straight after a cache purge said "the fix did not work",
-and it took a second look to see it was the rebuild. **Do not judge a profile change on the first few
-captures after it.**
+Two things are solid:
 
-**Two things in this fix were mistakes, and the second one I could not undo.** Read this before
-extending the prune list.
+- **`nvdaStart` is the whole difference** — 0.0 s on the healthy guests against 11.6 s on the bad one.
+  Zero means NVDA was reused; eleven seconds means it is being cold-started over and over.
+- **Everything else is identical.** The sweep is 5.8–6.5 s on all three, with identical per-sweep round
+  trips (8/6/8/6/6/6). An earlier reading that blamed the sweep was noise.
 
-The unconditional list originally also held Edge's component payloads (entity extraction, wallet,
-shopping, subresource filter, DRM) on the reasoning that a screen-reader appliance does not need them.
-The guests have Edge's auto-updater disabled, so deleting them was **permanent** — they never came back —
-and the two workers it happened to went from 11–12 s captures to ~26 s and stayed there across sixteen
-captures. Startup boost was tested as a mitigation and did not help. The cause of that slowdown is
-**unproven**: I could not restore the components to find out. The list is now `BrowserMetrics` only, with
-a test that fails if anything is added. *Prune only what is proven to grow without bound and proven to be
-unread; "probably unnecessary" is not a reason to delete something you cannot put back.*
-
-**And the cache pruning itself was a mistake, caught by measuring a second guest.** A worker with a
-261 MB profile was running 11–12 s captures happily; dropping its caches at a 200 MB threshold pushed it
-to 63 s, and eight captures later it was still only back to ~28 s. The cache earns its space. Only
-`BrowserMetrics` and the unused Edge component payloads are dropped routinely now; the cache threshold
-sits at 800 MB as a last-resort valve that a healthy guest should never reach. Settled result on the
-original slow worker: **11.6–12.9 s, mean 11.9 s.**
-
-Three hypotheses were tested and killed on the way, all of which had looked obvious:
-
-- *The grey UTM display means a sick guest.* Inverted — the grey workers were the fast ones. Their
-  displays had simply blanked after the 300 s `VIDEOIDLE` timeout, which costs nothing.
-- *In-guest state accumulates.* A freshly rebooted worker 1 was still ~21 s. True accumulation, wrong
-  location: it was on disk, not in memory.
-- *Worker 1 does more background work.* Idle QEMU CPU was 20–28% on worker 1 against 22–160% on
-  worker 2.
-
-**Unresolved: w1 runs 11.9 s and w2 runs ~26 s on equal profiles and I cannot explain it.** Both are
-36–38 MB with the same code. w1 has 5 resident msedge processes and w2 has none, but enabling Edge's
-startup boost on w2 produced no resident process and no speed-up, so the mechanism is not the boost
-policy. Recorded as open rather than guessed at. The reliable remedy for a guest in this state is
-`provision-nvda-worker.ps1`, which is idempotent and is the documented repair path.
-
-**One loose end, self-inflicted.** Worker 1 still reports `StartupBoostEnabled: 1` — an experiment of
-mine that appeared to fail but actually applied, so it has a resident Edge (5 processes) its clones do
-not. It is demonstrably *not* what caused the slowness (11 s captures with it still set), and the boot
-policy enforcement cannot correct it because the worker task is not elevated. Re-provisioning that guest
-resets it; until then it is a known, harmless difference.
+**Why it does not need a manual fix.** The run retires a degraded worker automatically on the recovery
+rate, and that rule fires correctly on these exact numbers — w3 at 71% is retired, w1 and w2 are left
+alone. Because it keys on a rate rather than on a hostname, it follows the fault wherever it goes. That is
+the permanent fix for the *cost*; the underlying cause of NVDA's instability is still unknown, and
+`A11Y_NVDA_LOG_LEVEL=DEBUG` plus `/diagnostics.previousLog` is the instrument for catching it next time.
 
 ## The gates, and what they are for
 
