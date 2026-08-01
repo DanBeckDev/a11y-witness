@@ -54,6 +54,18 @@ That middle row is worth keeping: measuring straight after a cache purge said "t
 and it took a second look to see it was the rebuild. **Do not judge a profile change on the first few
 captures after it.**
 
+**Two things in this fix were mistakes, and the second one I could not undo.** Read this before
+extending the prune list.
+
+The unconditional list originally also held Edge's component payloads (entity extraction, wallet,
+shopping, subresource filter, DRM) on the reasoning that a screen-reader appliance does not need them.
+The guests have Edge's auto-updater disabled, so deleting them was **permanent** — they never came back —
+and the two workers it happened to went from 11–12 s captures to ~26 s and stayed there across sixteen
+captures. Startup boost was tested as a mitigation and did not help. The cause of that slowdown is
+**unproven**: I could not restore the components to find out. The list is now `BrowserMetrics` only, with
+a test that fails if anything is added. *Prune only what is proven to grow without bound and proven to be
+unread; "probably unnecessary" is not a reason to delete something you cannot put back.*
+
 **And the cache pruning itself was a mistake, caught by measuring a second guest.** A worker with a
 261 MB profile was running 11–12 s captures happily; dropping its caches at a 200 MB threshold pushed it
 to 63 s, and eight captures later it was still only back to ~28 s. The cache earns its space. Only
@@ -69,6 +81,12 @@ Three hypotheses were tested and killed on the way, all of which had looked obvi
   location: it was on disk, not in memory.
 - *Worker 1 does more background work.* Idle QEMU CPU was 20–28% on worker 1 against 22–160% on
   worker 2.
+
+**Unresolved: w1 runs 11.9 s and w2 runs ~26 s on equal profiles and I cannot explain it.** Both are
+36–38 MB with the same code. w1 has 5 resident msedge processes and w2 has none, but enabling Edge's
+startup boost on w2 produced no resident process and no speed-up, so the mechanism is not the boost
+policy. Recorded as open rather than guessed at. The reliable remedy for a guest in this state is
+`provision-nvda-worker.ps1`, which is idempotent and is the documented repair path.
 
 **One loose end, self-inflicted.** Worker 1 still reports `StartupBoostEnabled: 1` — an experiment of
 mine that appeared to fail but actually applied, so it has a resident Edge (5 processes) its clones do
