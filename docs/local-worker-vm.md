@@ -350,11 +350,39 @@ wraps the lifecycle:
 `idle-*` polls the worker's own `busy` flag, so a capture in flight resets the clock.
 
 **With more than one worker you should not need any of this.** A dataset run with neither
-`A11Y_WORKER` nor `A11Y_WORKERS` set discovers every local worker, starts what is stopped,
-spreads cases across them, and **puts each one back as it found it** — stopped stays stopped,
-and a VM you had already started is left running. It also checks each VM's `busy` flag before
-releasing it, so a run never shuts down a worker another run has picked up. The `pool-*`
+`A11Y_WORKER` nor `A11Y_WORKERS` set discovers every local worker, starts **as many as the host
+can hold**, spreads cases across them, and **puts each one back as it found it** — stopped stays
+stopped, and a VM you had already started is left running. It also checks each VM's `busy` flag
+before releasing it, so a run never shuts down a worker another run has picked up. The `pool-*`
 commands are for when you want to do it by hand.
+
+### The pool is capped by host memory, not by how many VMs are registered
+
+A worker VM costs the host **~7 GB, not the 4096 MB it is configured with** (`top -o mem`, which
+agrees with `phys_footprint`). The extra is QEMU's own overhead on top of guest RAM that Windows
+dirties and never gives back — there is no balloon driver. It is not accumulation: a VM sits at
+6.8 GB ten minutes after boot and creeps only to ~7.6 GB over nearly two hours.
+
+Over-committing does not merely slow a run, it **breaks captures**. With three guests up on a
+36 GB Mac, the same page on the same worker took **44.5 s; with one guest, 27.4 s** — and the
+swapped-out guests also produced `NVDA is running but not speaking` failures and `/health`
+blackouts, a pattern that reads as the workers dying.
+
+So the lease reads available memory and starts only what fits, leaving the rest stopped (their
+correct resting state anyway). `npm run doctor` shows the verdict before you start:
+
+```
+OK  host memory  ~12185 MB available — room for 2 of 3 worker(s)
+```
+
+- `A11Y_MAX_WORKERS=N` overrides the cap when you know something the measurement does not.
+- Availability is read from `vm_stat`, **never `os.freemem()`** — that reported 402 MB on a host
+  with ~12 GB to give, because macOS counts compressed and inactive pages as used.
+- If it cannot read the host it does not constrain the run: a broken diagnostic must not be the
+  thing that shrinks the pool.
+- The reading is noisy just after a VM shuts down, because macOS reclaims lazily — it can
+  under-report for a minute or two, which costs parallelism but never correctness.
+- **Your own tooling is on the same host.** A `npm test` or a browser competes with the guests.
 
 That release used to be missing on the pooled path: the single-worker lease restored state,
 the pool handed back a no-op, and a pooled run left every guest running indefinitely.

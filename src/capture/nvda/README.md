@@ -107,6 +107,17 @@ Then collect `transcript.json` and feed it to the judge on the control plane:
 - **Do not manually `taskkill nvda.exe`.** Let Guidepup own NVDA's lifecycle via
   `nvda.start()` / `nvda.stop()`; killing it out from under Guidepup destabilises
   the speech-capture channel.
+- **A reused NVDA goes mute after about 5 captures, and that is the normal case.**
+  It keeps answering keystrokes and simply stops speaking. Measured lifespans over
+  30 back-to-back captures: 6, 5, 5, 9, 1 — so `MAX_CAPTURES_PER_NVDA = 25` never
+  fires, and the failure path cold-started NVDA silently, which is how the
+  regression from the 25 that constant assumes went unnoticed. Reuse is causal:
+  with `reuseScreenReader:false`, 8 of 8 captures ran clean at ~48s each against
+  ~25s reused. The worker retries once on a fresh NVDA before answering, so a
+  caller never sees it — but if you are changing this file, know that a mute is
+  expected, not exceptional, and that `failIfScreenReaderIsMute` needs **two**
+  signals (nothing spoken at startup *and* nothing heard in the read) because an
+  empty read alone is not proof.
 - **Suppress Edge's first-run experience on a fresh profile.** A brand-new Edge
   profile shows a welcome/sign-in surface despite `--no-first-run`. On a page
   with no headings (or no controls), NVDA quick-nav escapes the empty document

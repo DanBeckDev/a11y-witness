@@ -168,9 +168,19 @@ never assert that a *signal* can tell good from bad.
 
 ### Efficiency and reliability backlog — identified, measured where possible, NOT done
 
-Current cost per capture is ~13-19s: `structural` 4.8s, the readiness gate 4.5s,
-`readThrough` 1.6-3.6s, the rest setup and teardown. Ideas below are ordered by expected
-value, each with the reason it is still open — so nobody re-derives the analysis.
+Current cost per capture is ~13-19s **on a quiet host**: `structural` 4.8s, the readiness gate
+4.5s, `readThrough` 1.6-3.6s, the rest setup and teardown. Re-measured later on a busy 36 GB Mac
+it is ~27s with one guest up and ~45s with three — the phase shares hold, everything just
+dilates, so quote the host state alongside any figure here.
+
+Two costs have since been characterised and are worth reading before optimising anything else:
+**`windowsActivate` is now the largest single phase at ~10s**, and it is Edge cold-starting on
+every capture because Edge is launched and quit each time (`waitedMs: 10784` against an 800ms
+settle). And a **mute NVDA every ~5 captures** used to cost ~184s each; the read now stops after
+8 silent advances, bringing that to ~86s. Both are detailed in `CLAUDE.md`.
+
+Ideas below are ordered by expected value, each with the reason it is still open — so nobody
+re-derives the analysis.
 
 - [x] **Removed a redundant anchor: 15.8s -> 13.4s per capture.** Measuring before optimising
   corrected my own claim that the time was mostly browser setup. On a typical page with NVDA
@@ -347,6 +357,13 @@ Measured: 50s per capture, of which only 13s is work (`readThrough` + `structura
   Evidence identical at every step. The third worker costs 23% per-case efficiency where the
   second cost 4%, and the queue distributed 5/4/4 cases -- with only 10 cases the tail is
   lumpy, so some of the loss is granularity rather than contention.
+
+  **Later finding: the 23% was host memory, and it gets worse than this table shows.** A worker
+  VM costs the host ~7 GB, not its configured 4096 MB, so three is ~21 GB on a 36 GB machine.
+  Measured again on a busier host, the same page on the same worker took 44.5s with three guests
+  up against 27.4s with one, and the over-committed guests also produced mute-NVDA failures --
+  so the third worker was costing reliability, not just efficiency. The pool now sizes itself
+  from available memory (`A11Y_MAX_WORKERS` overrides), which on that host allows two.
 
   **836-case run: 7.4h -> 3.8h -> 3.1h.**
 
