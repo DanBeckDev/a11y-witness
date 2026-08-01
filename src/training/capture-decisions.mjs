@@ -96,13 +96,15 @@ export function shouldEvictWorker({ consecutiveFailures, poolSize, evictedCount 
  */
 export function runOutcome({ total, failures, skipped, cached, poolSize, evicted = [] }) {
   const captured = total - failures - skipped;
+  // "across N workers" hangs off the case count without a comma, because that is how it reads aloud:
+  // "of 25 cases across 3 workers". The evicted clause is a separate thought and keeps its comma.
+  const scope = poolSize > 1 ? `of ${total} cases across ${poolSize} workers` : `of ${total} cases`;
   const parts = [
     `${captured} captured`,
     `${failures} failed`,
     `${skipped} skipped${cached ? ` (${cached} cached)` : ""}`,
-    `of ${total} cases`,
+    scope,
   ];
-  if (poolSize > 1) parts.push(`across ${poolSize} workers`);
   if (evicted.length) parts.push(`${evicted.length} evicted (${evicted.join(", ")})`);
   return parts.join(", ");
 }
