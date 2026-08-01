@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { availableHostMemoryMb, workersHostCanRun } from "../src/capture/host-capacity.mjs";
+import { assessWorker } from "../src/capture/worker-health.mjs";
 
 const run = promisify(execFile);
 const JSON_OUT = process.argv.includes("--json");
@@ -104,11 +105,34 @@ async function checkWorker() {
   } else {
     add("worker", true, `${pool.length} worker(s), all stopped — a run starts them automatically (${summary})`);
   }
+  await checkDegradedWorkers(pool);
   checkHostCapacity(pool);
   const busy = pool.filter((vm) => vm.busy);
   if (busy.length) {
     add("contention", false, `${busy.map((v) => v.name).join(", ")} busy with a capture — another shell or agent is using the pool`,
       "wait for it, or you will both see the other's restarts as breakage");
+  }
+}
+
+// A guest whose NVDA fails on every capture keeps serving and keeps passing — it just costs 4x.
+//
+// The run's eviction rule needs three consecutive FAILURES, and the worker's own retry means there are
+// none, so this never surfaced anywhere. Measured on this pool: one worker needed a recovery on 4 of 4
+// captures (nvdaStart 19.1s each, WALL 122.9s) beside one that needed none (WALL 40.6s). Reported, not
+// failed: a degraded worker is slow, not broken, and pulling it costs more throughput than it saves.
+async function checkDegradedWorkers(pool) {
+  for (const vm of pool.filter((v) => v.healthy && v.ip)) {
+    let health;
+    try {
+      health = await httpJson(`http://${vm.ip}:${vm.port}/health`);
+    } catch {
+      continue; // unreachable is already the worker check's business
+    }
+    const { degraded, reason } = assessWorker(health.vitals);
+    if (degraded) {
+      add(`worker ${vm.name}`, true, `DEGRADED — ${reason}`,
+        `powershell -File scripts/provision-nvda-worker.ps1   # on ${vm.name}, in the interactive session`);
+    }
   }
 }
 
