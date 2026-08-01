@@ -75,19 +75,26 @@ test("a consistent capture passes", () => {
   assert.equal(captureIsSelfConsistent(good), true);
 });
 
+// Measured shape: `["blank","blank"]` -- NVDA reading an empty document.
+const BLANK_CAPTURE = {
+  transcript: ["blank", "blank"],
+  structure: { headings: [], landmarks: [], formFields: [] },
+};
+
 test("a transcript of only NVDA's \"blank\" has no substance", () => {
-  // Measured shape: `["blank","blank"]` -- NVDA reading an empty document.
-  //
-  // The title check ALREADY rejects this one, which is worth asserting so nobody assumes the substance
-  // check is load-bearing here. It becomes load-bearing when a page's title is made of common words,
-  // where captureMentionsTitle is deliberately lenient and returns true.
-  const blank = { transcript: ["blank", "blank"], structure: { headings: [], landmarks: [], formFields: [] } };
-  assert.equal(captureMentionsTitle(blank, TITLE), false, "the title check catches this one");
-  assert.equal(captureIsSelfConsistent(blank), true, "the consistency check cannot see it");
-  assert.equal(captureHasSubstance(blank, TITLE), false);
-  // The case the substance check is actually needed for: a title with no distinctive words.
-  assert.equal(captureMentionsTitle(blank, "Home page"), true, "lenient by design");
-  assert.equal(captureHasSubstance(blank, "Home page"), false);
+  assert.equal(captureHasSubstance(BLANK_CAPTURE, TITLE), false);
+});
+
+test("a distinctive title catches the blank capture before substance has to", () => {
+  // Worth stating so nobody assumes the substance check is load-bearing for every blank capture.
+  assert.equal(captureMentionsTitle(BLANK_CAPTURE, TITLE), false);
+});
+
+test("a title of common words is where the substance check earns its place", () => {
+  // captureMentionsTitle is lenient by design: "Home page" has no distinctive word to look for, so it
+  // passes anything. Substance is the only check left standing.
+  assert.equal(captureMentionsTitle(BLANK_CAPTURE, "Home page"), true);
+  assert.equal(captureHasSubstance(BLANK_CAPTURE, "Home page"), false);
 });
 
 test("\"blank\" among real content is fine", () => {
@@ -96,32 +103,19 @@ test("\"blank\" among real content is fine", () => {
   assert.equal(captureHasSubstance(mixed, TITLE), true);
 });
 
-test("a requested form probe that found no controls is an incomplete capture", () => {
-  // Measured: a healthy 3-phrase transcript with controls: 0 and formProbe activated: 0. Every
-  // transcript-based guard passes it, and the case's entire signal is about what submitting announces.
-  // Faithful to the real capture: headings ARE populated, so nothing contradicts itself and every
-  // transcript-based guard is satisfied. This is the only check that sees the fault.
-  const noControls = {
-    transcript: ["heading, level 1, Health pavilion 042 booking", "form, Health pavilion contact"],
-    structure: { headings: ["Health pavilion 042 booking, heading, level 1"], landmarks: [], formFields: [] },
-    interaction: { controls: [], stateChanges: [] },
+test("a requested table probe that found no cells is incomplete", () => {
+  const noCells = {
+    transcript: ["heading, level 1, Train timetable", "table, with 2 rows and 3 columns"],
+    structure: { headings: ["Train timetable, heading, level 1"], landmarks: [], formFields: [], tableCells: [] },
   };
-  assert.equal(captureHasSubstance(noControls, TITLE), true, "substance check cannot see this");
-  assert.equal(captureIsSelfConsistent(noControls), true, "consistency check cannot see it either");
-  assert.equal(captureRanRequestedProbes(noControls, { probeForms: true }), false);
+  assert.equal(captureRanRequestedProbes(noCells, { probeTables: true }), false);
+  assert.equal(captureRanRequestedProbes(noCells, { probeTables: false }), true);
 });
 
-test("no form probe requested means no controls is fine", () => {
-  const noControls = { transcript: ["text"], structure: { headings: [], landmarks: [], formFields: [] } };
-  assert.equal(captureRanRequestedProbes(noControls, { probeForms: false }), true);
-  assert.equal(captureRanRequestedProbes(noControls, {}), true);
-});
-
-test("a form probe that found controls passes", () => {
-  const withControls = {
-    transcript: ["text"],
-    structure: { headings: [], landmarks: [], formFields: [] },
-    interaction: { controls: ["Submit, button"], stateChanges: [] },
+test("a table probe that found cells passes", () => {
+  const withCells = {
+    transcript: ["heading, level 1, Train timetable"],
+    structure: { headings: [], landmarks: [], formFields: [], tableCells: ["column 2, 09:15"] },
   };
-  assert.equal(captureRanRequestedProbes(withControls, { probeForms: true }), true);
+  assert.equal(captureRanRequestedProbes(withCells, { probeTables: true }), true);
 });
