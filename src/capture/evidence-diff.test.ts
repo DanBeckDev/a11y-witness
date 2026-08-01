@@ -73,7 +73,7 @@ test("one CHANGED capture forces a recapture, however many were SAME", () => {
   ];
   const summary = summarise(results);
   assert.equal(summary.evidenceChanged, true);
-  assert.match(summary.recommendation, /Bump CAPTURE_PROTOCOL_VERSION and recapture/);
+  assert.match(summary.recommendation, /bump CAPTURE_PROTOCOL_VERSION and recapture/i);
 });
 
 test("an all-SAME sample clears the change to ship without invalidating the cache", () => {
@@ -90,4 +90,27 @@ test("widespread drift is not waved through as NVDA variance", () => {
   assert.equal(summary.evidenceChanged, false, "drift is not a field change");
   assert.equal(summary.driftIsWidespread, true);
   assert.match(summary.recommendation, /re-run to separate NVDA variance/);
+});
+
+test("a capture the pipeline would reject is excluded, not counted as a change", () => {
+  // Diffing a capture a real run would throw away blames the change for a bad guest. The run answers
+  // a rejected capture by retrying; this tool answers it by not drawing a conclusion.
+  const results = [
+    { comparison: compareCapture(capture(), capture()) },
+    { comparison: { verdict: "REJECTED", changes: [], phrases: null } as never },
+  ];
+  const summary = summarise(results);
+  assert.equal(summary.evidenceChanged, false);
+  assert.equal(summary.compared, 1, "rejected captures must leave the denominator");
+  assert.match(summary.recommendation, /1 capture\(s\) were rejected/);
+});
+
+test("rejected captures do not drag the drift share around", () => {
+  // One drift out of one comparison is widespread; three rejects alongside it must not dilute that.
+  const drifted = capture({ transcript: ["heading, level 1, Museum 004 controls"] });
+  const results = [
+    { comparison: compareCapture(capture(), drifted) },
+    ...[1, 2, 3].map(() => ({ comparison: { verdict: "REJECTED", changes: [], phrases: null } as never })),
+  ];
+  assert.equal(summarise(results).driftIsWidespread, true);
 });
