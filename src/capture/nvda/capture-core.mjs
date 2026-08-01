@@ -18,6 +18,7 @@
 import { nvda, windowsActivate, windowsQuit } from "@guidepup/guidepup";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { captureFault, FAULT } from "./capture-faults.mjs";
 import { connect } from "node:net";
 import { existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -66,6 +67,9 @@ const MAX_SWEEP_STEPS = 40; // per-direction cap on a quick-nav sweep
 const MAX_REPEATED_PHRASES = 3; // identical lines in a row => bottom of page
 const MAX_WRAP_REPEATS = 4; // already-seen substantial lines in a row => wrapped around
 const SUBSTANTIAL_PHRASE_LEN = 20; // a phrase longer than this is worth deduping on
+// Consecutive silent advances that end a read-through NVDA was never going to speak into.
+// Only ever consulted when NVDA was ALSO silent at startup -- see readPageInOrder.
+const MAX_SILENT_STEPS = 8;
 const MIN_CONTROL_NAME_LEN = 3; // shorter is a stray key echo ("f"), not a control name
 const DEDUPE_KEY_LEN = 80; // prefix length used to dedupe announcements
 
@@ -194,7 +198,11 @@ async function runCapturePhases(url, opts, diag) {
   // neither the benchmark nor capture-check saw it.
   await anchorToTop();
   await recordStartupHealth(diag);
-  const transcript = await readWithRetry({ steps, navStrategy, deadline, diag, title: documentTitle });
+  const transcript = await readWithRetry({
+    steps, navStrategy, deadline, diag,
+    title: documentTitle,
+    silentAtStart: screenReaderWasSilentAtStart(diag),
+  });
   failIfScreenReaderIsMute(transcript, diag);
   const { structure, interaction } = await navigateByStructure({
     deadline, diag,
@@ -391,7 +399,7 @@ async function startScreenReader(diag, { reuse }) {
   } catch (e) {
     screenReader = { running: false, captures: 0 };
     diag.mark("nvdaStart", { ok: false, error: errMsg(e) });
-    throw new Error("nvda.start failed: " + errMsg(e), { cause: e });
+    throw captureFault(FAULT.SCREEN_READER_START_FAILED, "nvda.start failed: " + errMsg(e), { cause: e });
   }
 }
 
@@ -573,13 +581,55 @@ async function recordStartupHealth(diag) {
 // Read the page line by line in document order (browse mode), returning the
 // ordered transcript. Stops at the page bottom (repeated lines), on a wrap-around
 // (a run of already-seen lines), at the step cap, or at the deadline.
-async function readPageInOrder({ steps, navStrategy, deadline, diag }) {
+/**
+ * What to do with the phrase just heard: `"keep"` it, `"skip"` it, or a stop reason to end the read.
+ *
+ * Split out of the read loop because that loop was doing two jobs — walking the page, and deciding when
+ * the walk is over — and all the subtlety is in the second. Bottom-of-page, wrap-around and silence
+ * each look like an ordinary line until you count how many times in a row they happen, so the counters
+ * and the rules that read them belong together.
+ *
+ * `tracker` is mutated: it is the running state of one read-through.
+ *
+ * **Silence.** An empty read is unremarkable on its own, so this needs TWO signals before concluding
+ * NVDA is mute: it said nothing at startup (`silentAtStart`) AND nothing substantive has been heard
+ * since. That is the same conjunction `failIfScreenReaderIsMute` uses; this only reaches the conclusion
+ * sooner, which is worth ~2 minutes because a mute NVDA otherwise answers all 150 advances with
+ * silence and then the read is retried in full.
+ *
+ * The care is because the cost of being wrong is asymmetric: stopping early on a page that WAS being
+ * read would silently shorten a transcript, and short transcripts are exactly the evidence rot this
+ * project has been bitten by. When NVDA spoke at startup, the silence branch is unreachable and a
+ * read-through behaves precisely as it did before.
+ */
+export function phraseAction(phrase, heard, tracker) {
+  if (!phrase) {
+    tracker.silentRun += 1;
+    const mute = tracker.silentAtStart && heard <= 1 && tracker.silentRun >= MAX_SILENT_STEPS;
+    return mute ? "silent" : "skip";
+  }
+  tracker.silentRun = 0;
+  if (phrase === tracker.previous) {
+    return ++tracker.repeated >= MAX_REPEATED_PHRASES ? "repeatBottom" : "skip";
+  }
+  tracker.repeated = 0;
+  tracker.previous = phrase;
+  const substantial = phrase.length > SUBSTANTIAL_PHRASE_LEN;
+  if (substantial && tracker.seen.has(phrase)) {
+    return ++tracker.wrapRun >= MAX_WRAP_REPEATS ? "wrap" : "skip";
+  }
+  tracker.wrapRun = 0;
+  if (substantial) tracker.seen.add(phrase);
+  return "keep";
+}
+
+async function readPageInOrder({ steps, navStrategy, deadline, diag, silentAtStart = false }) {
   const transcript = [];
   const firstItem = await readFirstItem(diag);
   if (firstItem) transcript.push(firstItem);
 
-  const seen = new Set();
-  let previous = null, repeated = 0, wrapRun = 0, stopReason = "maxSteps", firstStepError = null;
+  const tracker = { seen: new Set(), previous: null, repeated: 0, wrapRun: 0, silentRun: 0, silentAtStart };
+  let stopReason = "maxSteps", firstStepError = null;
   for (let i = 0; i < steps; i++) {
     if (Date.now() > deadline) { stopReason = "deadline"; break; }
     let phrase;
@@ -590,14 +640,9 @@ async function readPageInOrder({ steps, navStrategy, deadline, diag }) {
       stopReason = "stepError";
       break;
     }
-    if (!phrase) continue;
-    if (phrase === previous) { if (++repeated >= MAX_REPEATED_PHRASES) { stopReason = "repeatBottom"; break; } continue; }
-    repeated = 0; previous = phrase;
-    const substantial = phrase.length > SUBSTANTIAL_PHRASE_LEN;
-    if (substantial && seen.has(phrase)) { if (++wrapRun >= MAX_WRAP_REPEATS) { stopReason = "wrap"; break; } continue; }
-    wrapRun = 0;
-    if (substantial) seen.add(phrase);
-    transcript.push(phrase);
+    const action = phraseAction(phrase, transcript.length, tracker);
+    if (action === "keep") transcript.push(phrase);
+    else if (action !== "skip") { stopReason = action; break; }
   }
   diag.mark("readThrough", { count: transcript.length, stopReason, firstStepError });
   return transcript;
@@ -647,15 +692,32 @@ async function advanceAndRead(navStrategy) {
 // keepScreenReader:false, which stops NVDA, so the next capture cold-starts a fresh one. That reuses
 // the existing path rather than adding another place that restarts NVDA -- which is precisely the loop
 // that put modal dialogs on the guest desktop and made workers look dead.
-function failIfScreenReaderIsMute(transcript, diag) {
+// Exported so the gate itself can be tested. It is a pure function of (transcript, diagnostics), and
+// the fault code it throws is what the worker's retry keys on — a coupling worth a test rather than a
+// comment, because when it breaks nothing fails loudly: the worker just quietly stops recovering.
+export function failIfScreenReaderIsMute(transcript, diag) {
   if (transcript.length > 1) return;
-  const afterStart = diag.entries.filter((e) => e.event === "afterStart").at(-1);
-  if (afterStart?.lastSpoken !== "") return; // absent or non-empty: something else is wrong
+  if (!screenReaderWasSilentAtStart(diag)) return; // absent or non-empty: something else is wrong
   diag.mark("screenReaderMute", { transcript: transcript.length });
-  throw new Error(
+  throw captureFault(FAULT.SCREEN_READER_MUTE,
     "NVDA is running but not speaking (afterStart.lastSpoken was empty and the read-through " +
     "produced " + transcript.length + " phrase(s)). Failing now so the worker cold-starts a fresh " +
     "screen reader for the next capture, rather than sweeping a silent one.");
+}
+
+/** The most recent diagnostic for an event, or undefined. */
+function lastMark(diag, event) {
+  return diag.entries.filter((entry) => entry.event === event).at(-1);
+}
+
+/**
+ * Did NVDA say nothing at all when it started?
+ *
+ * On its own this is NOT proof of a mute screen reader -- see the warning at the top of this file --
+ * which is why both callers pair it with "and the read-through heard nothing either".
+ */
+function screenReaderWasSilentAtStart(diag) {
+  return lastMark(diag, "afterStart")?.lastSpoken === "";
 }
 
 // Read the page, and if all we heard was its title, anchor again and read once more.
@@ -670,8 +732,8 @@ function failIfScreenReaderIsMute(transcript, diag) {
 // capture. A second anchor is ~3 s and usually recovers it, so it is worth trying before giving up.
 // Only ONE retry: if re-anchoring did not put the caret in the document, something else is wrong and
 // the capture should fail honestly rather than loop.
-async function readWithRetry({ steps, navStrategy, deadline, diag, title }) {
-  const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag });
+async function readWithRetry({ steps, navStrategy, deadline, diag, title, silentAtStart = false }) {
+  const transcript = await readPageInOrder({ steps, navStrategy, deadline, diag, silentAtStart });
   // ONE phrase means the read never advanced, whatever that phrase was.
   //
   // The first version of this required the phrase to EQUAL the document title, and so it never fired
@@ -680,6 +742,17 @@ async function readWithRetry({ steps, navStrategy, deadline, diag, title }) {
   // stopReason `maxSteps`, meaning every advance produced nothing and the loop simply ran out. The
   // content of the one phrase was never the point; the failure to move was.
   if (transcript.length > 1) return transcript;
+
+  // Do not re-read a screen reader that has already been established as silent.
+  //
+  // The retry below exists for a caret that never entered the document, which re-anchoring fixes. It
+  // cannot fix a mute NVDA -- and measured, the wasted second read-through was most of the ~150 s a
+  // mute capture cost, because every one of its 150 advances answers with silence. failIfScreenReaderIsMute
+  // is about to throw on exactly this state, so returning now loses nothing and saves the whole pass.
+  if (lastMark(diag, "readThrough")?.stopReason === "silent") {
+    diag.mark("readThroughRetry", { skipped: "screen reader is silent; re-anchoring cannot help" });
+    return transcript;
+  }
 
   diag.mark("readThroughRetry", { reason: "read-through produced one phrase", got: transcript[0] ?? null, title });
   await anchorToTop();

@@ -96,3 +96,15 @@ test("an evicted worker is named in the outcome", () => {
   });
   assert.match(outcome, /1 evicted \(http:\/\/w2:8765\)/);
 });
+
+test("a fault code from the worker is transient without matching any message text", () => {
+  // The point of the code: this error's message says nothing a regex would recognise.
+  const error = Object.assign(new Error("HTTP 500 from http://w:8765/capture: {...}"),
+    { code: "screen-reader-mute" });
+  assert.equal(isTransient(error), true);
+});
+
+test("an unknown fault code falls through to the message rules", () => {
+  const error = Object.assign(new Error("something we have never seen"), { code: "who-knows" });
+  assert.equal(isTransient(error), false);
+});

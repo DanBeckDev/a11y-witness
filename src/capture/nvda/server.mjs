@@ -9,11 +9,14 @@ import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { freemem, totalmem, uptime as osUptime } from "node:os";
 import { join } from "node:path";
 import {
   browserAvailable, CAPTURE_PROTOCOL_VERSION, captureWithNvda, forgetScreenReader,
   screenReaderReady, shutdownScreenReader, warmUpScreenReader,
 } from "./capture-core.mjs";
+import { isLocallyRecoverable } from "./worker-recovery.mjs";
+import { faultCode } from "./capture-faults.mjs";
 
 const PORT = Number(process.env.A11Y_PORT || 8765);
 const LOG_PATH = process.env.A11Y_SERVER_LOG || "server.log";
@@ -79,7 +82,7 @@ function codeVersion() {
   try {
     const hash = createHash("sha256");
     // Order matters and must match the host side: capture behaviour, then the wire contract.
-    for (const file of ["capture-core.mjs", "server.mjs"]) {
+    for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs"]) {
       hash.update(readFileSync(new URL(file, import.meta.url)));
     }
     return hash.digest("hex").slice(0, 16);
@@ -215,6 +218,30 @@ function send(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// What this guest has done, and what it has left.
+//
+// "The workers degrade over time" was a hunch nobody could check, because /health described the
+// ENVIRONMENT -- versions, NVDA up, lock timeout -- and said nothing about how hard the guest had been
+// worked. A pool cannot manage a lifecycle it cannot measure, and every recycling threshold written
+// without these numbers would be a guess.
+//
+// `recoveries` is the one to watch: it counts faults the worker papered over for the caller, so a
+// worker whose recoveries climb is degrading even while every capture still succeeds. That is exactly
+// the failure this pool has hidden before.
+const worked = { captures: 0, failures: 0, recoveries: 0 };
+
+const MB = 1024 * 1024;
+
+// os.freemem/os.uptime are syscalls, so this needs none of the caching foregroundLockTimeout() does.
+function vitals() {
+  return {
+    uptimeMinutes: Math.round(osUptime() / 60),
+    freeMemoryMb: Math.round(freemem() / MB),
+    totalMemoryMb: Math.round(totalmem() / MB),
+    ...worked,
+  };
+}
+
 // ForegroundLockTimeout, read ONCE.
 //
 // Two reasons for the cache: PowerShell startup is ~0.5 s and /health is polled, and the value
@@ -278,6 +305,29 @@ async function recoverFromFailure(error) {
 // is treated as untrustworthy afterwards and the next capture cold-starts one.
 // startFreshScreenReader already knows how to clear a leftover instance out of the way.
 const CAPTURE_HARD_TIMEOUT_MS = Number(process.env.A11Y_CAPTURE_HARD_TIMEOUT_MS || 240_000);
+
+// One capture, plus one local recovery if the fault is one this worker can clear.
+//
+// The retry happens BEFORE the response, so a caller never sees a fault the guest could have fixed
+// itself. capture-core stops the screen reader on any failure (`keepScreenReader` is false unless the
+// capture succeeded), so the second attempt necessarily cold-starts a fresh NVDA -- which is precisely
+// what made the next capture succeed when this was diagnosed by hand on two guests.
+//
+// See worker-recovery.mjs for why this is bounded at one attempt and why the hard timeout is excluded.
+async function captureWithLocalRecovery(url, opts) {
+  try {
+    return await withHardTimeout(captureWithNvda(url, opts));
+  } catch (error) {
+    if (!isLocallyRecoverable(error)) throw error;
+    log(`  recoverable fault: ${(error && error.message) || error}`);
+    log("  retrying once on a fresh screen reader rather than failing the caller's case");
+    await recoverFromFailure(error);
+    const result = await withHardTimeout(captureWithNvda(url, opts));
+    worked.recoveries += 1;
+    log(`  retry succeeded (${worked.recoveries} recovered on this guest)`);
+    return result;
+  }
+}
 
 function withHardTimeout(promise) {
   let timer;
@@ -399,6 +449,7 @@ const server = createServer((req, res) => {
     return readiness().then((state) => send(res, 200, {
       ok: true,
       ready: state.ready,
+      vitals: vitals(),
       readiness: state,
       screenReader: environment.screenReader,
       busy,
@@ -421,13 +472,14 @@ const server = createServer((req, res) => {
       const startedAt = new Date().toISOString();
       log(`[${startedAt}] capture ${url} (nav=${opts.nav || "object"}, probeForms=${opts.probeForms}, probeFocus=${opts.probeFocus})`);
       try {
-        const result = await withHardTimeout(captureWithNvda(url, opts));
+        const result = await captureWithLocalRecovery(url, opts);
         const environment = currentEnvironment();
         const after = (result.diagnostics || []).find((e) => e.event === "afterStart");
         log(`  -> ${result.transcript.length} phrases; afterStart.lastSpoken=${JSON.stringify(after && after.lastSpoken)}`);
         if (result.transcript.length === 0) {
           log("  WARNING: 0 phrases. If afterStart.lastSpoken is empty, NVDA is running but not speaking — restart/reboot the worker.");
         }
+        worked.captures += 1;
         send(res, 200, {
           ...result,
           screenReader: environment.screenReader,
@@ -435,8 +487,11 @@ const server = createServer((req, res) => {
           environment,
         });
       } catch (e) {
+        worked.failures += 1;
         log("  capture failed: " + ((e && e.stack) || e));
-        send(res, 500, { error: String((e && e.message) || e) });
+        // `fault` is additive on the wire: an older host ignores it and keeps matching on `error`,
+        // a newer one can classify without parsing prose. See capture-faults.mjs for why that matters.
+        send(res, 500, { error: String((e && e.message) || e), fault: faultCode(e) });
         // A capture that died may have left NVDA unusable. Stop claiming readiness and try to get
         // back to it, rather than accepting the next case and failing that one too.
         // Deliberately NOT re-warmed here. The next capture's startScreenReader probes NVDA and
