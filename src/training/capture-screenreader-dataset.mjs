@@ -49,7 +49,12 @@ async function fetchJson(url, options = {}, timeoutMs = 30000) {
     body = { raw: text };
   }
   if (!response.ok) {
-    throw new Error("HTTP " + response.status + " from " + url + ": " + JSON.stringify(body));
+    const failed = new Error("HTTP " + response.status + " from " + url + ": " + JSON.stringify(body));
+    // Carry the worker's fault code across the wire so retry decisions can key on it instead of on the
+    // wording of a message that crossed two processes. Absent from older workers, which is why
+    // isTransient still falls back to matching the text.
+    if (body?.fault) failed.code = body.fault;
+    throw failed;
   }
   return body;
 }

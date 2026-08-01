@@ -17,12 +17,15 @@ import { resolve } from "node:path";
 
 const CTL = resolve("scripts/local-worker/worker-ctl.sh");
 const NVDA_DIR = resolve("src/capture/nvda");
-const HEALTH_TIMEOUT_MS = 4000;
+// /health now reports installed runtime versions as well as the code hash. The first
+// request after a Windows boot may need PowerShell file-version discovery, so four seconds
+// was too tight and made a healthy worker look unreachable.
+const HEALTH_TIMEOUT_MS = 15000;
 
 // Must match server.mjs codeVersion() exactly: same files, same order.
 function localVersion() {
   const hash = createHash("sha256");
-  for (const file of ["capture-core.mjs", "server.mjs"]) {
+  for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs"]) {
     hash.update(readFileSync(resolve(NVDA_DIR, file)));
   }
   return hash.digest("hex").slice(0, 16);

@@ -36,7 +36,20 @@ const TRANSIENT = new RegExp([
   "hard timeout",
 ].join("|"), "i");
 
+/**
+ * Faults the WORKER named for us, which never need matching against prose.
+ *
+ * Both self-heal: the worker stops NVDA on any failed capture, so the next attempt cold-starts a clean
+ * one. The worker now retries these itself before answering, so seeing one here means even its retry
+ * did not clear it — still worth reissuing the case rather than recording a permanent failure.
+ */
+const TRANSIENT_FAULTS = new Set(["screen-reader-mute", "screen-reader-start-failed"]);
+
 export function isTransient(error) {
+  // Prefer the code. The regex below is the fallback for older workers and for host-side failures
+  // (a dropped socket has no fault code), but a message is prose and prose gets reworded — see
+  // src/capture/nvda/capture-faults.mjs for what that cost.
+  if (TRANSIENT_FAULTS.has(error?.code)) return true;
   return TRANSIENT.test(String(error?.message ?? error ?? ""));
 }
 
