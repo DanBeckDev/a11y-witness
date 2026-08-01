@@ -82,7 +82,7 @@ test("the last worker standing is never evicted", () => {
 test("cached cases count as skipped, never as captured", () => {
   // Counting them as captured would report worker time that was never spent.
   const outcome = runOutcome({ total: 10, failures: 0, skipped: 6, cached: 6, poolSize: 3 });
-  assert.match(outcome, /^4 captured, 0 failed, 6 skipped \(6 cached\), of 10 cases/);
+  assert.equal(outcome, "4 captured, 0 failed, 6 skipped (6 cached), of 10 cases across 3 workers");
 });
 
 test("a single-worker run does not claim a pool", () => {
