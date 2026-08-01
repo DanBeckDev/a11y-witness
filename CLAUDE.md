@@ -117,6 +117,33 @@ A11Y_WORKERS=url1,url2 npm run training:capture     # explicit pool: yours to ma
 them, so nothing is started or stopped for you. `--after stop|pause|leave` overrides the
 restore behaviour.
 
+### How many workers actually fit — the host is the constraint, not the VM count
+
+**A worker VM costs the host ~7 GB, not the 4096 MB it is configured with.** Measured with
+`top -o mem`, which agrees with `phys_footprint`: 7.0–7.6 GB per guest. The gap is QEMU's own
+overhead on top of guest RAM that Windows dirties and never gives back (no balloon driver). It is
+**not** accumulation — a VM sits at 6.8 GB ten minutes after boot and creeps only to ~7.6 GB over
+nearly two hours.
+
+So the pool is capped by **measured host memory**. `doctor` says so before you start:
+
+```
+OK  host memory  ~12185 MB available — room for 2 of 3 worker(s)
+```
+
+Over-committing does not merely slow a run, it **breaks captures**. With three guests up, the same
+page on the same worker took **44.5 s; with one guest up, 27.4 s** — and the swapped-out guests also
+produced "NVDA is running but not speaking" failures and `/health` blackouts. From outside, that reads
+as *the workers are degrading*, which is exactly how it was misdiagnosed for a day. The "2.36x on
+three" above was measured on a quieter host; treat it as a ceiling, not a promise.
+
+- `A11Y_MAX_WORKERS=N` overrides the cap when you know something the measurement does not.
+- Capacity is read from `vm_stat`, **never `os.freemem()`** — that reported 402 MB on a host with
+  ~12 GB to give, because macOS counts compressed and inactive pages as used.
+- **Your own tooling is on the same host.** `npm test`, a build, or a browser competes with the
+  guests: in one 18-capture run the spikes tracked host activity, not worker age. Measure worker
+  performance when you are not also doing something else, or you will diagnose the wrong machine.
+
 For long runs, do not poll:
 
 ```bash
@@ -190,8 +217,13 @@ node scripts/bench-capture.mjs --from-disk                          # p50/p95 pe
 
 `/health` reports `ready` alongside `ok`. **Dispatch on `ready`.** `ok` only ever meant "the HTTP
 server is answering", and a worker answered it while NVDA could not start — which is how the pool's
-dominant failure hid for a day. The worker now warms NVDA at boot, so `ready` means NVDA is up and
-answering, Edge is resolvable, and `ForegroundLockTimeout` is 0.
+dominant failure hid for a day.
+
+**`ready` is about the ENVIRONMENT, not the screen reader**: Edge is resolvable,
+`ForegroundLockTimeout` is 0, and the worker is free. `screenReader` and `warmedUp` are **reported
+and deliberately not gated on** — gating on them is what produced the NVDA restart loop that put
+modal dialogs on guest desktops. (This paragraph used to claim `ready` meant "NVDA is up and
+answering". It never did, and believing it is why the cold-start failure below went unnoticed.)
 
 `ready:false` right after a boot is **normal and self-correcting** — it means "not yet", not
 "broken". `worker-ctl.sh up` waits for it, and each pool worker waits for its own before taking work.
@@ -200,6 +232,79 @@ cycling NVDA destabilises the speech channel.
 
 A worker that fails three captures in a row is **evicted** from the pool and everything it failed goes
 back to the queue; the run summary names it.
+
+### A freshly booted worker used to fail its first capture, every time
+
+Reproduced on two guests in one session: cold boot, capture 1 fails `NVDA is running but not speaking`,
+capture 2 succeeds. Since a run **starts the workers it needs**, that cost one case per worker on most
+runs — and it was invisible because the run classified it transient and quietly retried.
+
+The worker now **retries once itself**, on a fresh screen reader, before answering the caller
+(`worker-recovery.mjs`). capture-core already stops NVDA on any failure, so the retry necessarily
+cold-starts a clean one — the same work it was going to do on the next request; the only change is who
+pays for it. It is bounded at one extra attempt and only ever follows a real fault, which is what
+separates it from the idle warm-up loop that broke the pool. The hard timeout is excluded: it has
+already spent its whole budget, so the run reissues that one instead.
+
+`/health.vitals` now reports `uptimeMinutes`, `freeMemoryMb`, `captures`, `failures` and
+**`recoveries`**. Watch `recoveries`: it counts faults the worker papered over, so a guest that is
+degrading shows up there while every capture still succeeds.
+
+### What actually degrades is NVDA, not the VM — and it dies about every 5 captures
+
+Measured over 30 back-to-back captures of one page on one worker, reading the cold-start markers:
+
+```
+1 2 3 4 5 [6] 7 8 9 10 [11] 12 13 14 15 [16] ... [25] [26] ...
+lifespans:  6, 5, 5, 9, 1        30/30 succeeded, 5 recoveries, 0 failures
+```
+
+Each `[n]` is NVDA's speech channel dying and being cold-started. **`MAX_CAPTURES_PER_NVDA = 25`
+therefore never fires** — NVDA breaks four or five times before reaching it. The constant's own comment
+records the recycle "firing 3 times across 90 captures", so NVDA used to survive 25; its lifespan has
+regressed to ~5 and nobody noticed, because the failure path silently cold-started it.
+
+Two things follow, and the second is why the constant was left alone:
+
+- Reuse causes it. With `reuseScreenReader:false`, **8 of 8 captures ran clean with no mute at all** —
+  but a fresh NVDA per capture costs ~48 s against ~25 s reused, because stopping and starting NVDA is
+  most of the difference.
+- It is **stochastic, not a counter**. One fresh NVDA went mute on its very next capture (lifespan 1).
+  So lowering `MAX_CAPTURES_PER_NVDA` would prevent most mutes, not all — worth ~9 s per capture on
+  these numbers, but it is tuning, and the retry above is what makes it *correct*.
+
+A mute **used** to cost ~150 s to recover, because a silent NVDA answers all 150 advances with nothing
+and the read-through was then retried in full — 300 wasted round trips before
+`failIfScreenReaderIsMute` even ran. The read now stops after `MAX_SILENT_STEPS` (8) consecutive silent
+advances, and `readWithRetry` refuses to re-read a screen reader already found silent.
+
+**That rule needs two signals, and the reason is asymmetry.** An empty read is unremarkable on its own
+(the warning at the top of capture-core says so), so silence only ends a read when NVDA *also* said
+nothing at startup AND nothing substantive has been heard yet. When NVDA spoke at startup the branch is
+unreachable and a read-through behaves exactly as before. Getting this wrong would silently *shorten*
+transcripts, which is the evidence rot that once deleted the h1 announcement from 90 captures while
+every check stayed green — hence `read-through.test.ts`, whose first assertion is that 40 consecutive
+empty reads on a healthy capture change nothing.
+
+### Recovery is keyed on fault CODES, never on message text
+
+`capture-faults.mjs` defines `FAULT.SCREEN_READER_MUTE` and `FAULT.SCREEN_READER_START_FAILED`;
+`captureFault()` attaches one to the thrown Error, the worker returns it as `fault` in the 500 body, and
+both `worker-recovery.mjs` (guest) and `capture-decisions.mjs` (host) match on it.
+
+This replaced a regex over `error.message`, which was a check that could not discriminate: reword the
+message in capture-core and recovery stops working in production, while the unit tests keep passing
+because the string they assert on lives in the test file rather than at the throw site. The tests now
+drive the real gate — `failIfScreenReaderIsMute` is exported for exactly that.
+
+Two references argue the same point, and they are worth reading before adding another string match:
+*Secure by Design* §9.2.2 ("Designing for failures") — model expected domain failures as explicit
+results, not exceptions to be parsed; and *The Product-Minded Engineer* ("Repackage Errors") — make
+errors programmable through specific types and structured metadata "rather than forcing callers to
+parse messages". A mute NVDA every fifth capture is an expected domain failure, not an exception.
+
+`fault` on the wire is **additive**: an older host ignores it and keeps matching text, so the host and
+guest can be deployed independently.
 
 ### "The worker is dead" is usually a wedge, not a death
 
@@ -273,4 +378,17 @@ Verification is layered; pick the layers your change touches:
 - Don't manually `taskkill nvda.exe` — let Guidepup own NVDA's lifecycle, or the speech-capture channel destabilises. Killing the worker with `Stop-Process` orphans its NVDA (still holding port 6837); the next cold start recovers, but expect to see it.
 - The worker keeps NVDA alive between captures (recycled every 25). `A11Y_REUSE_NVDA=0` reverts to a fresh NVDA per capture — the first thing to try if captures drift as a run progresses.
 - The guest is provisioned as an **appliance**: Windows Update may install but not reboot, and Edge's background mode, startup boost and auto-updater are off. It used to reboot itself mid-run and leak Edge processes.
-- A capture is ~13–19 s. A full 45-pair dataset run is ~25 min. If it is much slower, something is wrong — check `scripts/bench-capture.mjs` phase timings before optimising anything.
+- A capture is ~13–19 s **on an unloaded host**; measured at **27 s with one guest up and 45 s with
+  three** on a busy 36 GB Mac. Quote the host state with the number or the number means nothing. A
+  full 45-pair dataset run is ~25 min. If it is much slower, check `scripts/bench-capture.mjs` phase
+  timings before optimising anything.
+- **The largest single phase is `windowsActivate`, at ~10 s, and it is Edge starting.** Edge is
+  launched *and quit* for every capture, so its cold start is on the critical path every time —
+  `waitedMs: 10784` against an 800 ms settle, i.e. ~10 s waiting for a window to exist. That is ~37%
+  of a capture. Two things would remove it, and **both force a full recapture**, so neither is a
+  casual change: keeping Edge alive between captures (changes how the page is navigated, so it changes
+  what is announced — needs a `CAPTURE_PROTOCOL_VERSION` bump), or re-enabling Edge's startup boost
+  (needs re-provisioning, which stamps `provisionRevision` and invalidates every cache key). Startup
+  boost was disabled because failed captures leaked Edge processes; unconditional cleanup in
+  `captureWithNvda`'s `finally` has since fixed that leak, so the original reason may no longer hold —
+  measure it before deciding.
