@@ -251,28 +251,44 @@ already spent its whole budget, so the run reissues that one instead.
 **`recoveries`**. Watch `recoveries`: it counts faults the worker papered over, so a guest that is
 degrading shows up there while every capture still succeeds.
 
-### What actually degrades is NVDA, not the VM — and it dies about every 5 captures
+### What degrades is NVDA's speech channel, not the VM — and it fails on a survival curve
 
-Measured over 30 back-to-back captures of one page on one worker, reading the cold-start markers:
+NVDA can stop speaking while still answering keystrokes. It is **stochastic, not a counter**, and the
+rate depends on how loaded the host is. Two datasets, and the difference between them is the point.
+
+**The corpus — 1,939 captures carrying a reuse counter, across real dataset runs:**
 
 ```
-1 2 3 4 5 [6] 7 8 9 10 [11] 12 13 14 15 [16] ... [25] [26] ...
-lifespans:  6, 5, 5, 9, 1        30/30 succeeded, 5 recoveries, 0 failures
+reuse count:  2-5   6-10  11-15  16-20  21-24   25
+captures:     480   460    382    321    242    54     nvdaRecycle fired 51 times
 ```
 
-Each `[n]` is NVDA's speech channel dying and being cold-started. **`MAX_CAPTURES_PER_NVDA = 25`
-therefore never fires** — NVDA breaks four or five times before reaching it. The constant's own comment
-records the recycle "firing 3 times across 90 captures", so NVDA used to survive 25; its lifespan has
-regressed to ~5 and nobody noticed, because the failure path silently cold-started it.
+That is a survival curve — about 120 NVDA instances per count early on, ~54 reaching 25 — so roughly
+**45% of instances do survive to the `MAX_CAPTURES_PER_NVDA = 25` recycle**, and the recycle is live
+code, not dead. (`screenReaderMute` appears in 0 captures on disk because a mute *throws*, so it is
+never written. Absence there is not evidence.)
 
-Two things follow, and the second is why the constant was left alone:
+**A tight loop on a memory-pressured host — 30 back-to-back captures of one page:**
 
-- Reuse causes it. With `reuseScreenReader:false`, **8 of 8 captures ran clean with no mute at all** —
-  but a fresh NVDA per capture costs ~48 s against ~25 s reused, because stopping and starting NVDA is
-  most of the difference.
-- It is **stochastic, not a counter**. One fresh NVDA went mute on its very next capture (lifespan 1).
-  So lowering `MAX_CAPTURES_PER_NVDA` would prevent most mutes, not all — worth ~9 s per capture on
-  these numbers, but it is tuning, and the retry above is what makes it *correct*.
+```
+1 2 3 4 5 [6] 7 8 9 10 [11] 12 13 14 15 [16] ... [25] [26]
+lifespans: 6, 5, 5, 9, 1     30/30 succeeded, 5 recoveries, 0 failures
+```
+
+**Do not generalise from the second dataset — an earlier version of this section did, claiming NVDA
+"dies about every 5 captures" and that the 25-recycle "never fires". The corpus refutes both.** Those
+lifespans are the low tail, measured while the host was swapping and one page was being hammered at
+maximum rate. The plausible reading — consistent with both datasets but **not proven** — is that a
+short NVDA lifespan is itself a *symptom* of host memory pressure, which would mean the capacity cap
+above reduces mute frequency as a side effect. Worth testing on a quiet host before anyone relies on it.
+
+What follows for the constant: **leave `MAX_CAPTURES_PER_NVDA` at 25.** Lowering it to ~4 would force a
+~23 s recycle on the ~45% of instances that would otherwise run to 25 — a net loss. The earlier estimate
+that this was "worth ~9 s per capture" came from the unrepresentative loop.
+
+Reuse is nonetheless causal: with `reuseScreenReader:false`, **8 of 8 captures ran clean with no mute at
+all** — but a fresh NVDA per capture costs ~48 s against ~25 s reused, because stopping and starting
+NVDA is most of the difference. So reuse stays, and the retry below is what makes it *correct*.
 
 A mute **used** to cost ~150 s to recover, because a silent NVDA answers all 150 advances with nothing
 and the read-through was then retried in full — 300 wasted round trips before
@@ -302,7 +318,8 @@ Two references argue the same point, and they are worth reading before adding an
 *Secure by Design* §9.2.2 ("Designing for failures") — model expected domain failures as explicit
 results, not exceptions to be parsed; and *The Product-Minded Engineer* ("Repackage Errors") — make
 errors programmable through specific types and structured metadata "rather than forcing callers to
-parse messages". A mute NVDA every fifth capture is an expected domain failure, not an exception.
+parse messages". A mute NVDA recurs often enough across a run — ~55% of NVDA instances die before
+their recycle — to be an expected domain failure rather than an exception.
 
 `fault` on the wire is **additive**: an older host ignores it and keeps matching text, so the host and
 guest can be deployed independently.

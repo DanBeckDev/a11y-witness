@@ -12,8 +12,9 @@
 // Errors") is more direct: make runtime errors programmable by using specific error types and
 // attaching structured metadata "rather than forcing callers to parse messages".
 //
-// A mute screen reader is not exceptional here -- it happens roughly every fifth capture -- so it is
-// exactly the "expected domain failure" both books describe.
+// A mute screen reader is not exceptional here -- it recurs often enough across a run that the corpus
+// shows ~55% of NVDA instances dying before their 25-capture recycle -- so it is exactly the "expected
+// domain failure" both books describe, rather than something to model as an exception.
 export const FAULT = {
   /** NVDA is running and answering keystrokes, but has stopped speaking. Clears on a fresh NVDA. */
   SCREEN_READER_MUTE: "screen-reader-mute",
