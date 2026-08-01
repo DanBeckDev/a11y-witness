@@ -1,6 +1,6 @@
 // Why is one worker slower than another? Run the same page on each and diff every phase.
 //
-//   node scripts/compare-workers.mjs <page-url> <worker-url> <worker-url> [...] [--runs=5]
+//   npm run worker:compare -- <page-url> <worker-url> <worker-url> [...] [--rounds=6]
 //
 // This exists because I spent hours attributing a 2x difference between two guests to the wrong phase.
 // `bench-capture.mjs` gives a phase table for ONE worker, so comparing two meant eyeballing two
@@ -13,9 +13,18 @@
 // and the aggregate hid all of it. Six sweeps collapsed into one number cannot tell you whether a worker
 // is doing MORE round trips or SLOWER ones — and those have different causes.
 //
-// Runs workers strictly one at a time. Two guests capturing at once compete for host memory, and that
-// contention is large enough to swamp what is being measured.
+// Samples are INTERLEAVED round-robin and reported as medians with an interquartile range, never as
+// means. Both choices are corrections to how this went wrong before:
+//
+//   - Sequential sampling (all of worker A, then all of worker B) charges any drift in the host during
+//     those minutes to the difference between the workers. Round-robin makes drift common to all of them.
+//   - A single mute-recovery outlier (~86s against a normal ~12s) moves a mean by 5s and makes a healthy
+//     worker look broken. The median and IQR do not move.
+//
+// It also refuses to declare a difference the samples do not support -- see src/capture/worker-stats.mjs.
+// "Not distinguishable" is a real answer, and it is the one that was missing.
 import { writeFileSync, mkdirSync } from "node:fs";
+import { compareWorkers, describe as summarise, recoveryRates } from "../src/capture/worker-stats.mjs";
 import { resolve } from "node:path";
 
 const CAPTURE_TIMEOUT_MS = 300_000;
@@ -23,10 +32,11 @@ const OUT = resolve(process.cwd(), "runs/worker-compare");
 const MS_PER_S = 1000;
 
 const args = process.argv.slice(2);
-const runs = Number(args.find((a) => a.startsWith("--runs="))?.slice("--runs=".length) ?? 5);
+const runs = Number(args.find((a) => a.startsWith("--rounds="))?.slice("--rounds=".length)
+  ?? args.find((a) => a.startsWith("--runs="))?.slice("--runs=".length) ?? 6);
 const [page, ...workers] = args.filter((a) => !a.startsWith("--"));
 if (!page || workers.length < 2) {
-  process.stderr.write("usage: node scripts/compare-workers.mjs <page-url> <worker> <worker> [--runs=5]\n");
+  process.stderr.write("usage: npm run worker:compare -- <page-url> <worker> <worker> [--rounds=6]\n");
   process.exit(2);
 }
 
@@ -85,51 +95,84 @@ function sweepDetail(entries) {
   return byType;
 }
 
-const mean = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
+const results = Object.fromEntries(workers.map((w) => [w, { phases: [], sweeps: [], walls: [], diagnostics: null }]));
+const vitalsBefore = {}, vitalsAfter = {};
 
-const results = {};
-for (const worker of workers) {
-  process.stdout.write(`\n=== ${worker} (${runs} run(s)) ===\n`);
-  const phases = [], sweeps = [], walls = [];
-  for (let i = 0; i < runs; i++) {
+async function vitals(worker) {
+  try {
+    const response = await fetch(`${worker.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(20_000) });
+    return response.ok ? (await response.json()).vitals ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
+for (const worker of workers) vitalsBefore[worker] = await vitals(worker);
+
+// INTERLEAVED, round-robin. Measuring one worker for five minutes and then the next attributes any drift
+// in the host during those ten minutes to the difference between the workers -- which is how a shared
+// Mac running builds and browsers produces a confident wrong answer. Round-robin makes drift common.
+process.stdout.write(`\nInterleaving ${runs} round(s) across ${workers.length} worker(s)\n`);
+for (let round = 1; round <= runs; round++) {
+  for (const worker of workers) {
     try {
       const started = Date.now();
       const result = await capture(worker);
-      walls.push(Date.now() - started);
-      phases.push(phaseCosts(result.diagnostics));
-      sweeps.push(sweepDetail(result.diagnostics));
-      process.stdout.write(`  run ${i + 1}: ${((Date.now() - started) / MS_PER_S).toFixed(1)}s, ` +
+      const wall = Date.now() - started;
+      results[worker].walls.push(wall);
+      results[worker].phases.push(phaseCosts(result.diagnostics));
+      results[worker].sweeps.push(sweepDetail(result.diagnostics));
+      process.stdout.write(`  round ${round} ${short(worker)}: ${(wall / MS_PER_S).toFixed(1)}s ` +
         `${result.transcript?.length ?? 0} phrases\n`);
     } catch (error) {
-      process.stdout.write(`  run ${i + 1}: FAILED ${error.message}\n`);
+      process.stdout.write(`  round ${round} ${short(worker)}: FAILED ${error.message}\n`);
     }
   }
-  results[worker] = { phases, sweeps, walls, diagnostics: await diagnostics(worker) };
+}
+for (const worker of workers) {
+  vitalsAfter[worker] = await vitals(worker);
+  results[worker].diagnostics = await diagnostics(worker);
 }
 
 // --- the comparison ---------------------------------------------------------
 
 const allPhases = [...new Set(Object.values(results).flatMap((r) => r.phases.flatMap(Object.keys)))];
-const phaseMean = (worker, phase) => mean(results[worker].phases.map((p) => p[phase] ?? 0)) / MS_PER_S;
+const phaseSamples = (worker, phase) => results[worker].phases.map((p) => (p[phase] ?? 0) / MS_PER_S);
 
-process.stdout.write(`\n\nPHASE MEANS (seconds), ${runs} run(s) each\n`);
+// Wall time first, with the verdict, because that is the question being asked.
+const wallSeconds = Object.fromEntries(workers.map((w) => [short(w), results[w].walls.map((v) => v / MS_PER_S)]));
+const verdict = compareWorkers(wallSeconds);
+
+process.stdout.write(`\n\nWALL TIME (seconds), ${runs} interleaved round(s)\n`);
+process.stdout.write(`  ${"worker".padEnd(10)}${"n".padStart(4)}${"median".padStart(9)}${"IQR".padStart(9)}` +
+  `${"min".padStart(8)}${"max".padStart(8)}   recoveries\n`);
+const deltas = Object.fromEntries(workers.map((w) => [short(w), {
+  recoveries: (vitalsAfter[w]?.recoveries ?? 0) - (vitalsBefore[w]?.recoveries ?? 0),
+  captures: (vitalsAfter[w]?.captures ?? 0) - (vitalsBefore[w]?.captures ?? 0),
+}]));
+const rates = recoveryRates(deltas);
+for (const w of workers) {
+  const name = short(w), d = summarise(wallSeconds[name]);
+  if (!d) continue;
+  const rate = rates[name] === null ? "n/a" : `${deltas[name].recoveries}/${deltas[name].captures}`;
+  process.stdout.write(`  ${name.padEnd(10)}${String(d.n).padStart(4)}${d.median.toFixed(1).padStart(9)}` +
+    `${d.iqr.toFixed(1).padStart(9)}${d.min.toFixed(1).padStart(8)}${d.max.toFixed(1).padStart(8)}   ${rate}\n`);
+}
+process.stdout.write(`\n  ${verdict.verdict}\n`);
+
+// Per-phase medians, so a real difference can be located rather than guessed at.
+process.stdout.write(`\nPHASE MEDIANS (seconds)\n`);
 process.stdout.write(`  ${"phase".padEnd(20)}${workers.map((w) => short(w).padStart(9)).join("")}    spread\n`);
-
 const rows = allPhases
   .map((phase) => {
-    const values = workers.map((w) => phaseMean(w, phase));
-    return { phase, values, spread: Math.max(...values) - Math.min(...values) };
+    const medians = workers.map((w) => summarise(phaseSamples(w, phase))?.median ?? 0);
+    return { phase, medians, spread: Math.max(...medians) - Math.min(...medians) };
   })
-  .filter((row) => row.values.some((v) => v >= 0.05))
+  .filter((row) => row.medians.some((v) => v >= 0.05))
   .sort((a, b) => b.spread - a.spread);
-
-for (const { phase, values, spread } of rows) {
-  const flag = spread >= 1 ? "  <-- diverges" : "";
-  process.stdout.write(`  ${phase.padEnd(20)}${values.map((v) => v.toFixed(1).padStart(9)).join("")}` +
-    `${spread.toFixed(1).padStart(10)}${flag}\n`);
-}
-for (const w of workers) {
-  process.stdout.write(`  ${"WALL".padEnd(20)}${short(w)}: ${(mean(results[w].walls) / MS_PER_S).toFixed(1)}s\n`);
+for (const { phase, medians, spread } of rows) {
+  process.stdout.write(`  ${phase.padEnd(20)}${medians.map((v) => v.toFixed(1).padStart(9)).join("")}` +
+    `${spread.toFixed(1).padStart(10)}${spread >= 1 ? "  <-- diverges" : ""}\n`);
 }
 
 // The per-sweep view. `found` and `trips` separate "doing more work" from "doing work more slowly",
@@ -141,9 +184,10 @@ if (sweepTypes.length) {
     process.stdout.write(`  ${type.padEnd(14)}`);
     for (const w of workers) {
       const runsWith = results[w].sweeps.map((s) => s[type]).filter(Boolean);
-      const ms = mean(runsWith.map((s) => s.ms)).toFixed(0);
-      const trips = mean(runsWith.map((s) => s.trips)).toFixed(1);
-      const found = mean(runsWith.map((s) => s.found)).toFixed(1);
+      // Medians here too: one mute recovery inside a sweep skews a mean the same way it skews wall time.
+      const ms = (summarise(runsWith.map((x) => x.ms))?.median ?? 0).toFixed(0);
+      const trips = (summarise(runsWith.map((x) => x.trips))?.median ?? 0).toFixed(1);
+      const found = (summarise(runsWith.map((x) => x.found))?.median ?? 0).toFixed(1);
       process.stdout.write(`${short(w)}: ${ms}ms/${trips}t/${found}f   `);
     }
     process.stdout.write("\n");
@@ -160,5 +204,6 @@ for (const w of workers) {
 }
 
 mkdirSync(OUT, { recursive: true });
-writeFileSync(resolve(OUT, "compare.json"), JSON.stringify({ page, runs, results }, null, 2) + "\n", "utf8");
+writeFileSync(resolve(OUT, "compare.json"),
+  JSON.stringify({ page, rounds: runs, results, verdict, recoveryDeltas: deltas }, null, 2) + "\n", "utf8");
 process.stdout.write(`\nReport: ${resolve(OUT, "compare.json")}\n`);
