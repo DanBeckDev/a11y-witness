@@ -1,6 +1,9 @@
 // Re-capture a sample of the dataset and ask whether a pipeline change altered the EVIDENCE.
 //
-//   node scripts/evidence-check.mjs <worker-url> [--sample=24] [--only=family]
+//   npm run evidence:check -- <worker-url> [--sample=24] [--only=family]
+//
+// Runs under tsx, not plain node: it applies the pipeline's own verification gates, which live in
+// TypeScript (src/capture/verify.ts). Same reason capture-screenreader-dataset.mjs does.
 //
 // Prints a per-case verdict and one recommendation: ship without invalidating the cache, or bump
 // CAPTURE_PROTOCOL_VERSION and recapture. See src/capture/evidence-diff.mjs for why this exists --
@@ -30,7 +33,7 @@ const flag = (name, fallback) => {
   return found ? found.slice(name.length + 3) : fallback;
 };
 if (!worker) {
-  process.stderr.write("usage: node scripts/evidence-check.mjs <worker-url> [--sample=24] [--only=family]\n");
+  process.stderr.write("usage: npm run evidence:check -- <worker-url> [--sample=24] [--only=family]\n");
   process.exit(2);
 }
 const sampleSize = Number(flag("sample", DEFAULT_SAMPLE));
