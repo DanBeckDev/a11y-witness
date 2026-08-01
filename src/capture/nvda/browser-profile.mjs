@@ -113,6 +113,52 @@ export function pruneEdgeProfile(root, megabytes, log) {
 }
 
 /**
+ * Edge policies this worker depends on, re-asserted at every boot.
+ *
+ * Provisioning sets these, but provisioning runs once and policies drift — mine drifted because I set
+ * `StartupBoostEnabled=1` on a guest to test an optimisation and could not verify whether it applied
+ * (`utmctl exec` is unreliable in both directions, so "it seemed to fail" is not evidence it did). The
+ * result was one guest carrying a resident Edge that its clones did not have.
+ *
+ * Enforcing them here makes the state self-healing rather than a thing somebody has to remember, and it
+ * uses the only channel to these guests that actually works: push a file, reboot, verify over HTTP.
+ *
+ * `startup boost` keeps a browser process resident so launches feel fast; `background mode` does the
+ * same for extensions. Both are wrong here — a capture spawns Edge, drives it, and quits it, and a
+ * resident process only competes with that on a 2-vCPU guest.
+ */
+const REQUIRED_EDGE_POLICY = {
+  StartupBoostEnabled: 0,
+  BackgroundModeEnabled: 0,
+};
+
+const EDGE_POLICY_KEY = "HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge";
+
+/**
+ * Re-assert the Edge policies. Needs an elevated worker; reports rather than throws when it is not.
+ *
+ * @param {(line: string) => void} log
+ * @returns {Record<string, boolean>} which values were written
+ */
+export function enforceBrowserPolicy(log) {
+  if (process.platform !== "win32") return {};
+  const written = {};
+  for (const [name, value] of Object.entries(REQUIRED_EDGE_POLICY)) {
+    try {
+      execFileSync("reg", ["add", EDGE_POLICY_KEY, "/v", name, "/t", "REG_DWORD", "/d", String(value), "/f"],
+        { stdio: "ignore", timeout: 15_000 });
+      written[name] = true;
+    } catch (error) {
+      // Almost always "the worker is not elevated". Worth saying out loud: it means the guest can drift
+      // and only re-provisioning will correct it.
+      written[name] = false;
+      log(`could not enforce Edge policy ${name}=${value} (needs an elevated worker): ${error.message}`);
+    }
+  }
+  return written;
+}
+
+/**
  * Kill Edge processes left over from a previous worker.
  *
  * Safe **only** at boot. `captureWithNvda` closes Edge in a `finally`, so a stray at boot means the

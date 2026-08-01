@@ -31,6 +31,9 @@ const NVDA_DIR = resolve("src/capture/nvda");
 const GUEST_DIR = "C:\\Users\\witness\\a11y-witness\\src\\capture\\nvda";
 const CTL = resolve("scripts/local-worker/worker-ctl.sh");
 const LIFECYCLE_TIMEOUT_MS = 420_000;
+// `pool` launches UTM if it is closed and polls every VM's /health. 90s was too short: it timed out
+// mid-deploy while three guests were transitioning, and the whole run died with a bare SIGTERM.
+const POOL_TIMEOUT_MS = 240_000;
 const HEALTH_TIMEOUT_MS = 20_000;
 
 const only = process.argv.find((a) => a.startsWith("--vm="))?.slice("--vm=".length);
@@ -56,7 +59,7 @@ function localVersion(files) {
 }
 
 async function pool() {
-  const { stdout } = await run(CTL, ["pool"], { timeout: 90_000, encoding: "utf8" });
+  const { stdout } = await run(CTL, ["pool"], { timeout: POOL_TIMEOUT_MS, encoding: "utf8" });
   const all = JSON.parse(stdout);
   return only ? all.filter((vm) => vm.name === only) : all;
 }
