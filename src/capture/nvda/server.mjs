@@ -12,11 +12,13 @@ import { createRequire } from "node:module";
 import { freemem, totalmem, uptime as osUptime } from "node:os";
 import { join } from "node:path";
 import {
-  browserAvailable, CAPTURE_PROTOCOL_VERSION, captureWithNvda, forgetScreenReader,
+  browserAvailable, CAPTURE_PROTOCOL_VERSION, captureWithNvda, EDGE_PROFILE_DIR, forgetScreenReader,
   screenReaderReady, shutdownScreenReader, warmUpScreenReader,
 } from "./capture-core.mjs";
 import { isLocallyRecoverable } from "./worker-recovery.mjs";
 import { faultCode } from "./capture-faults.mjs";
+import { guestDiagnostics, processCounts, treeSize } from "./diagnostics.mjs";
+import { killStrayBrowsers, pruneEdgeProfile } from "./browser-profile.mjs";
 
 const PORT = Number(process.env.A11Y_PORT || 8765);
 const LOG_PATH = process.env.A11Y_SERVER_LOG || "server.log";
@@ -53,6 +55,24 @@ const MAX_LOG_BYTES = 16 * 1024 * 1024;
  *
  * Done at BOOT and nowhere else, so it can never interleave with a capture's own logging.
  */
+/**
+ * Boot-time hygiene: bound the Edge profile and clear strays from a previous worker.
+ *
+ * At boot and nowhere else, because a capture owns Edge for its whole duration -- see
+ * browser-profile.mjs for the measurements that made this necessary (a 511 MB profile and 5 orphaned
+ * Edge processes on the slowest of three otherwise identical guests).
+ */
+function tidyBrowserAtBoot() {
+  try {
+    const strays = processCounts(["msedge"])?.msedge ?? 0;
+    killStrayBrowsers(strays, log);
+    pruneEdgeProfile(EDGE_PROFILE_DIR, treeSize(EDGE_PROFILE_DIR)?.megabytes ?? null, log);
+  } catch (error) {
+    // Hygiene is not a precondition for serving. Say what went wrong and carry on.
+    log(`browser tidy-up at boot failed: ${error.message}`);
+  }
+}
+
 function rotateLogIfLarge() {
   try {
     if (statSync(LOG_PATH, { throwIfNoEntry: false })?.size <= MAX_LOG_BYTES) return;
@@ -106,7 +126,7 @@ function codeVersion() {
   try {
     const hash = createHash("sha256");
     // Order matters and must match the host side: capture behaviour, then the wire contract.
-    for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs"]) {
+    for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs"]) {
       hash.update(readFileSync(new URL(file, import.meta.url)));
     }
     return hash.digest("hex").slice(0, 16);
@@ -481,6 +501,16 @@ const server = createServer((req, res) => {
       environment,
     })).catch((e) => send(res, 500, { error: String((e && e.message) || e) }));
   }
+  // On-demand guest facts. Deliberately not part of /health, which is polled and must stay cheap:
+  // this one walks the Edge profile and shells out to tasklist. See diagnostics.mjs for why it exists
+  // at all -- the guest agent that used to answer these questions cannot be relied on.
+  if (req.method === "GET" && req.url === "/diagnostics") {
+    try {
+      return send(res, 200, guestDiagnostics({ edgeProfile: EDGE_PROFILE_DIR, logPath: LOG_PATH }));
+    } catch (e) {
+      return send(res, 500, { error: String((e && e.message) || e) });
+    }
+  }
   if (req.method === "POST" && req.url === "/capture") {
     if (busy) return send(res, 429, { error: "a capture is already in progress" });
     let body = "";
@@ -533,6 +563,7 @@ const server = createServer((req, res) => {
 
 server.listen(PORT, () => {
   rotateLogIfLarge();
+  tidyBrowserAtBoot();
   log(`a11y-witness NVDA worker listening on :${PORT} (reuse NVDA: ${REUSE_NVDA})`);
   // Deliberately not awaited: the port must answer immediately so callers can see "not ready yet"
   // instead of a connection refusal, which reads as a dead worker.
