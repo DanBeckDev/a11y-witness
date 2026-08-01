@@ -31,7 +31,9 @@
     "training:train": ".venv/bin/python scripts/train-screenreader-model.py",
     "doctor": "node scripts/doctor.mjs",
     "worker:code": "node scripts/check-worker-code.mjs",
+    "worker:deploy": "node scripts/deploy-worker.mjs",
     "evidence:check": "node scripts/evidence-check.mjs",
+    "corpus:snapshot": "node scripts/corpus-snapshot.mjs",
     "training:repeat": "node src/training/repeat-capture.mjs"
   },
   "dependencies": {
