@@ -217,15 +217,42 @@ Two related facts worth not rediscovering:
 - **`server.log` persists on the guest.** You cannot pull it while the worker is down (see above), so
   read it *after* it recovers — the record of the death is still there.
 
+## The rule that cost the most to learn
+
+**A check must never reject evidence whose absence is the finding.**
+
+The worked example: `custom-control` bad pages are div-based fake buttons with no `<button>`, so NVDA
+finds no form controls. That absence *is* the 4.1.2 failure the case demonstrates. A guard that
+rejected captures whose requested probe produced nothing therefore threw away the evidence, failed 44
+cases in a live run, and added hours to it — after being validated on six hand-picked cases, none of
+them from that family.
+
+Whether an empty probe is malfunction or evidence depends on the **case definition**, which
+`check-signals` can see and the capture layer cannot. So gating belongs there, and it already reports
+it better: BLIND when a signal cannot fire, CONTAMINATED when it fires on both variants.
+
+**Prove it before you ship it.** `npm test` includes `verify.corpus.test.ts`, which runs every gating
+predicate over every capture on disk and asserts none is rejected. The corpus is free ground truth —
+`check-signals` scores it 1061/0/0, so a rejection is a false positive by construction. It runs in a
+second. Six cases is an anecdote; 2,122 is a test.
+
 ## Verifying changes
 
 Verification is layered; pick the layers your change touches:
 - `npm run lint` and `npm run typecheck` — must pass. **CI gates on both**, and on `npm test`
   (`.github/workflows/lint.yml`).
-- `npm test` — 22 unit tests (`src/**/*.test.ts`) covering the deterministic rules, the judge
-  layers and eval fitness. Fast (~0.1 s) and runs anywhere, so there is no reason to skip it.
+- `npm test` — unit tests (`src/**/*.test.ts`) covering the deterministic rules, the judge layers,
+  eval fitness, the capture cache, the run's accept/reject/retry decisions, and the WCAG criteria
+  list. Fast and runs anywhere, so there is no reason to skip it.
+  - `verify.corpus.test.ts` needs `runs/` and **skips honestly in CI**, which cannot see it —
+    the same limitation `npm run eval` has. Run it locally before shipping a change to any gate.
   Most of this codebase genuinely cannot be unit-tested — capture needs real NVDA on Windows —
   but the pure functions can be, and these are them. Add to them when you touch a pure function.
+- **Pre-release, and not covered by CI:** `npm run eval:gate` for judge quality, and
+  `verify.corpus.test.ts` for the capture gates. Neither can run in CI — eval needs a local Codex
+  login, the corpus test needs `runs/`. Note also that `capture-regression.yml` is path-filtered to
+  `src/capture/**`, so it does **not** fire for changes under `src/training/**` — which is exactly
+  where the guard bug above lived.
 - `npm run eval [-- <substring>]` — judge quality against 34 labelled fixtures. Needs a local Codex login, so it **cannot run in CI**; run it when you touch the judge, prompts, criteria, or fixtures. Do **not** quote its numbers as a headline: `docs/METHODOLOGY.md` records that the guards were tuned against these cases, scoring is single-run, and there is no expert baseline yet. Report with those caveats or not at all.
 - **`src/capture/nvda/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test. After changing it, deploy (above) and run `src/capture/nvda/capture-check.mjs` **in the interactive session**, then `scripts/bench-capture.mjs` if you touched timing. capture-check refuses to run while the worker is serving, because NVDA is one machine-wide resource and two drivers stop each other's screen reader; stop the worker first and **restart it afterwards**. The VM capture is its test; the book's own rule is "refactor under test."
 - **Count-based checks cannot see content rot — assert what was heard, not how much.** capture-check now gates on probe *values* (`disclosure-good` must reach `expanded`, `disclosure-bad` must stay `collapsed`) and on the read-through still carrying roles, because both lessons were learned the hard way. A readiness gate once overwrote the first line of every page with the document title, deleting the h1's `"heading, level 1, ..."` announcement everywhere: `"heading, level N"` phrases fell from 105 to 15 across 90 captures and **every check stayed green**, because the phrase count had not moved. If you change capture, compare evidence quality against a previous run, not just line counts.
