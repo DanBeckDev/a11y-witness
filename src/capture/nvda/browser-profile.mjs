@@ -43,18 +43,23 @@ import { join } from "node:path";
  * Always dropped, whatever the profile size, because they have no function for a capture worker and at
  * least one of them grows without bound.
  *
- * `BrowserMetrics` is the one that mattered: Edge writes a histogram file there **per launch**, and this
- * worker launches Edge once per capture. Measured on the busiest guest it was **348 MB of a 448 MB
- * profile** — hundreds of files Edge has to deal with at startup, which is why the slow worker stayed
- * slow across reboots. It is write-only telemetry that nothing here ever reads.
+ * `BrowserMetrics` is the ONLY entry, and the list is deliberately this short. Edge writes a histogram
+ * file there **per launch**, this worker launches Edge once per capture, and on the busiest guest it had
+ * reached **348 MB of a 448 MB profile**. It is write-only telemetry nothing here reads, it grows without
+ * bound, and it is on disk — which is why the guest carrying it stayed slow across reboots.
  *
- * The rest are Edge component payloads (wallet, shopping, entity extraction, DRM) that a machine whose
- * only job is reading pages to a screen reader does not need. They do not grow per launch, so they are
- * cleanliness rather than a fix.
+ * **Everything else was removed from this list after it did harm.** It also held Edge's component
+ * payloads (entity extraction, wallet, shopping, subresource filter, DRM) on the reasoning that a
+ * screen-reader appliance does not need them. That reasoning was wrong in a way I could not undo: the
+ * guests have Edge's auto-updater disabled, so once deleted those components **never came back**, and the
+ * two guests I pruned went from 11-12 s captures to ~26 s and stayed there across sixteen captures. I
+ * could not prove the components caused it and could not restore them to find out.
+ *
+ * The lesson is the list, not the comment: prune only what is proven to grow without bound and proven to
+ * be unread. "Probably unnecessary" is not a reason to delete something you cannot put back.
  */
 const ALWAYS_REGENERABLE = [
   "BrowserMetrics",
-  "Edge Entity Extraction", "Edge Wallet", "Edge Shopping", "Subresource Filter", "WidevineCdm",
 ];
 
 const REGENERABLE = [

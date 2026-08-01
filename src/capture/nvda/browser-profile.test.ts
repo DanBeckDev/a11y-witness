@@ -62,3 +62,12 @@ test("an unreadable profile size never prunes the size-gated caches", () => {
   const paths = prunablePaths({ megabytes: null, root: ROOT, exists: everythingExists });
   assert.ok(!paths.some((p) => p.endsWith("Cache")));
 });
+
+test("only BrowserMetrics is pruned unconditionally — nothing irreplaceable", () => {
+  // Guard against re-adding "probably unnecessary" paths. Edge's component payloads were once on the
+  // unconditional list; the guests have the auto-updater disabled, so deleting them was permanent, and
+  // the two workers it happened to went from 11-12s captures to ~26s with no way back.
+  const paths = prunablePaths({ megabytes: 100, root: ROOT, exists: everythingExists });
+  assert.equal(paths.length, 1, `unconditional prune list must stay at one entry, got: ${paths}`);
+  assert.ok(paths[0].endsWith("BrowserMetrics"));
+});
