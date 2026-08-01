@@ -15,7 +15,12 @@
 /** Whatever a capture backend returned; only the announcement fields matter here. */
 export interface CapturedAnnouncements {
   transcript: string[];
-  structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
+  structure?: {
+    headings: string[];
+    landmarks: string[];
+    formFields: string[];
+    tableCells?: string[];
+  };
   interaction?: {
     controls: string[];
     stateChanges: { control: string; after: string }[];
@@ -135,24 +140,32 @@ export function captureIsSelfConsistent(capture: CapturedAnnouncements): boolean
 }
 
 /**
- * Did the probes we ASKED for actually produce anything?
+ * Did the probes we asked for produce anything?
  *
- * The read-through guards above all inspect the transcript, so a capture can read the page perfectly
- * and still be useless for its case: the evidence that case depends on lives in the interaction
- * probes. Measured on the full recapture -- `form-error-silent-bulk-health-pavilion-042.bad` came back
- * with a healthy 3-phrase transcript, `controls: 0` and `formProbe activated: 0`. The form-field sweep
- * found nothing, so the submit probe never ran, and the case's whole signal is about what submitting
- * announces. Every earlier guard passed it.
+ * **DIAGNOSTIC ONLY. NEVER USE THIS TO REJECT A CAPTURE.** I did, and it was wrong: run against the
+ * whole corpus it rejects 100 of 2,122 captures, every one of them half of a pair that
+ * `check-signals` scores as discriminating. In a live run it failed 44 cases and added hours.
  *
- * Only asked-for probes are checked. A page with no form legitimately has no controls; the fault is
- * requesting a form probe and getting silence.
+ * The `custom-control` family shows why. Its bad pages are div-based fake buttons with no <button>
+ * element, so NVDA finds no form controls and announces "Print this report" as plain text. THAT IS
+ * THE FINDING -- the 4.1.2 failure the case exists to prove:
+ *
+ *   custom-control-print.bad   formFields []                          <- the evidence
+ *   custom-control-print.good  formFields ["Print this report, button"]
+ *
+ * No version of this can be safe, because "the probe failed" and "absence is the evidence" are
+ * distinguished by the CASE DEFINITION, which the capture layer cannot see. `check-signals` can, and
+ * already reports it better: BLIND when a signal cannot fire, CONTAMINATED when it fires on both.
+ *
+ * Kept because it is a reasonable thing to want in diagnostics — just not in a gate.
  */
 export function captureRanRequestedProbes(
   capture: CapturedAnnouncements,
-  requested: { probeForms?: boolean },
+  requested: { probeForms?: boolean; probeTables?: boolean },
 ): boolean {
-  if (!requested.probeForms) return true;
-  return (capture.interaction?.controls.length ?? 0) > 0;
+  if (requested.probeForms && (capture.interaction?.controls.length ?? 0) === 0) return false;
+  if (requested.probeTables && (capture.structure?.tableCells?.length ?? 0) === 0) return false;
+  return true;
 }
 
 /** The <title> of a served page, or "" if it has none. */

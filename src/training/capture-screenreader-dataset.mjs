@@ -7,8 +7,7 @@ import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { leaseWorker, leaseWorkerPool, guestReachableUrl, isAfterRun } from "../capture/local-vm.js";
 import {
-  captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle, captureRanRequestedProbes,
-  titleOf,
+  captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle, titleOf,
 } from "../capture/verify.js";
 import { beginRun, readProgress } from "./capture-progress.mjs";
 import { cacheDecision, cacheKey, hashPageDir, stampProvenance } from "./capture-cache.mjs";
@@ -111,6 +110,7 @@ function captureOptions(testCase) {
     task: testCase.task,
     steps: STEPS,
     probeForms: testCase.probeForms,
+    probeTables: testCase.probeTables,
     reuseScreenReader: REUSE_NVDA,
   };
 }
@@ -252,11 +252,7 @@ function writeRejected(testCase, variant, capture, attempt) {
 // Why this capture is not evidence. Three different faults, three different fixes, so they must not
 // collapse into one message: the wrong page, a page that was never read, and a capture whose two
 // halves disagree.
-function describeRejection(capture, { title, url, testCase }) {
-  if (!captureRanRequestedProbes(capture, { probeForms: testCase?.probeForms })) {
-    return `the form probe found no controls at ${url} — this case's evidence is what submitting ` +
-      "announces, so a capture without controls is incomplete however well the page read";
-  }
+function describeRejection(capture, { title, url }) {
   if (!captureIsSelfConsistent(capture)) {
     return `the capture contradicts itself at ${url}: the read-through announced a heading but the ` +
       `heading sweep found none (${capture.transcript.length} phrase(s)) — the page was not traversed`;
@@ -276,12 +272,21 @@ async function captureVerified(ctx, testCase, { url, title, variant }) {
     // SATISFIED by the failure: a degenerate capture's whole transcript is the document title.
     // Measured on a live worker -- 2 of 5 captures returned transcript ["<page title>"] with no
     // headings and no cells, and would have been written to the dataset as read evidence.
+    // Three questions, all answerable from the capture alone: is this the right page, was anything
+    // read at all, and does the capture agree with itself.
+    //
+    // Deliberately NOT "did the probes we asked for produce anything". That gate rejected 100 of the
+    // 2,122 captures in a corpus check-signals scores as fully discriminating, and failed 44 cases in
+    // a live run. For the custom-control family an empty form probe IS the finding: its bad pages are
+    // div-based fake buttons, so NVDA finds no controls and that absence is the 4.1.2 failure being
+    // demonstrated. Whether absence is evidence or malfunction depends on the CASE DEFINITION, which
+    // check-signals can see and this layer cannot -- and check-signals already reports it, as BLIND or
+    // CONTAMINATED. captureRanRequestedProbes is kept for diagnostics; it must never gate.
     if (captureMentionsTitle(capture, title) && captureHasSubstance(capture, title) &&
-        captureIsSelfConsistent(capture) &&
-        captureRanRequestedProbes(capture, { probeForms: testCase.probeForms })) {
+        captureIsSelfConsistent(capture)) {
       return capture;
     }
-    wrong = describeRejection(capture, { title, url, testCase });
+    wrong = describeRejection(capture, { title, url });
     const kept = writeRejected(testCase, variant, capture, attempt);
     console.log("  attempt " + attempt + "/" + CAPTURE_ATTEMPTS + ": " + wrong);
     console.log("    diagnostics kept: " + kept);
@@ -350,9 +355,11 @@ async function captureCase(ctx, testCase) {
 }
 
 // A run interrupted an hour in should not start over. Must be read BEFORE beginRun, which
-// replaces the progress file with a fresh all-pending one. Targeted repair runs also replace
-// that file, so a complete, non-empty NVDA pair on disk is a safe fallback when its progress
-// entry belongs to an earlier full run.
+// replaces the progress file with a fresh all-pending one. Cache-enabled training runs do not
+// use filenames as a completion signal: a file can be complete yet stale after a protocol, page,
+// option, or worker-runtime change. cachedOrCapture must see every case so the cache key gets the
+// final say. Acceptance runs deliberately disable caching, so they may use the previous progress
+// record to skip cases completed in the same acceptance run.
 //
 // A case counts as done only if the previous run recorded it captured AND both files are
 // still on disk: the progress file and the captures can be deleted independently, and
@@ -370,16 +377,16 @@ function hasUsableCaptureFiles(id) {
 
 function previouslyCaptured(cases) {
   if (!RESUME) return new Set();
+  if (CACHE) return new Set();
   const previous = readProgress(ROOT)?.cases ?? {};
+  const allowed = new Set(cases.map(({ id }) => id));
   const done = new Set(Object.entries(previous)
     .filter(([id, entry]) =>
+      allowed.has(id) &&
       (entry.status === "captured" || entry.status === "skipped" ||
         (entry.status === "failed" && /HTTP 429.*capture is already in progress/i.test(entry.reason || ""))) &&
       hasUsableCaptureFiles(id))
     .map(([id]) => id));
-  for (const { id } of cases) {
-    if (hasUsableCaptureFiles(id)) done.add(id);
-  }
   return done;
 }
 
