@@ -15,6 +15,8 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { compareCapture, readCapture, summarise } from "../src/capture/evidence-diff.mjs";
+import { isEvidence } from "../src/training/capture-decisions.mjs";
+import { titleOf } from "../src/capture/verify.js";
 
 const DATASET = resolve(process.cwd(), "runs/screenreader-dataset");
 const BASELINE = resolve(DATASET, "captures");
@@ -72,6 +74,18 @@ async function capture(testCase, variant) {
 const hostPages = process.env.DATASET_BASE_URL
   ?? `http://${new URL(worker).hostname.replace(/\.\d+$/, ".1")}:${process.env.DATASET_PAGES_PORT || 5050}`;
 
+/** The page's own title, so the verification gates can check the capture against it. */
+async function pageTitle(testCase, variant) {
+  try {
+    const response = await fetch(`${hostPages}/${testCase.id}/${variant}.html`,
+      { signal: AbortSignal.timeout(15_000) });
+    if (!response.ok) return null;
+    return titleOf(await response.text());
+  } catch {
+    return null; // cannot read the page: skip the gate rather than reject on a network blip
+  }
+}
+
 const selected = stratify(manifestCases(), sampleSize);
 process.stdout.write(`Evidence check: ${selected.length} case(s), both variants, against ${worker}\n`);
 process.stdout.write(`Pages: ${hostPages}\nBaseline: ${BASELINE}\n\n`);
@@ -91,6 +105,14 @@ for (const testCase of selected) {
       process.stdout.write(`  FAILED      ${testCase.id}.${variant}: ${error.message}\n`);
       continue;
     }
+    // Apply the pipeline's OWN gates before comparing. A capture a real run would reject and retry is
+    // not evidence, so diffing it produces a false CHANGED and blames the change for a bad capture.
+    const title = await pageTitle(testCase, variant);
+    if (title !== null && !isEvidence(candidate, title)) {
+      results.push({ id: testCase.id, variant, comparison: { verdict: "REJECTED", changes: [], phrases: null } });
+      process.stdout.write(`  REJECTED    ${testCase.id}.${variant}  the pipeline would reject this capture; excluded\n`);
+      continue;
+    }
     const comparison = compareCapture(baseline, candidate);
     results.push({ id: testCase.id, variant, comparison });
     const detail = comparison.verdict === "CHANGED"
@@ -107,8 +129,9 @@ const summary = summarise(results);
 mkdirSync(OUT, { recursive: true });
 writeFileSync(resolve(OUT, "report.json"), JSON.stringify({ worker, results, summary }, null, 2) + "\n", "utf8");
 
-process.stdout.write(`\n${results.length} compared: ` +
-  `${summary.counts.SAME} same, ${summary.counts.DRIFT} drift, ${summary.counts.CHANGED} changed\n`);
+process.stdout.write(`\n${summary.compared} compared: ` +
+  `${summary.counts.SAME} same, ${summary.counts.DRIFT} drift, ${summary.counts.CHANGED} changed` +
+  (summary.counts.REJECTED ? `, ${summary.counts.REJECTED} rejected (excluded)` : "") + "\n");
 process.stdout.write(`${summary.recommendation}\n`);
 process.stdout.write(`Report: ${resolve(OUT, "report.json")}\n`);
 // Exit code is the contract, same as the other gates: 0 safe to ship, 1 evidence changed.

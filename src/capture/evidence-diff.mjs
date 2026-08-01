@@ -103,20 +103,27 @@ export function compareCapture(baseline, candidate) {
  * with its scale rather than waved through.
  */
 export function summarise(results) {
-  const counts = { SAME: 0, DRIFT: 0, CHANGED: 0 };
+  const counts = { SAME: 0, DRIFT: 0, CHANGED: 0, REJECTED: 0 };
   for (const { comparison } of results) counts[comparison.verdict] += 1;
-  const total = results.length || 1;
-  const driftShare = counts.DRIFT / total;
+  // REJECTED captures are excluded from the denominator, not counted against the change. A capture the
+  // pipeline itself would throw away says nothing about whether the evidence moved -- it says the
+  // capture failed, which a real run answers by retrying. Including them would let a flaky worker
+  // masquerade as an evidence change, and that is how a good optimisation gets blamed for a bad guest.
+  const compared = counts.SAME + counts.DRIFT + counts.CHANGED;
+  const driftShare = counts.DRIFT / (compared || 1);
+  const rejectedNote = counts.REJECTED
+    ? ` ${counts.REJECTED} capture(s) were rejected by the pipeline's own gates and excluded; re-run if that is most of the sample.`
+    : "";
   return {
-    counts,
+    counts, compared,
     evidenceChanged: counts.CHANGED > 0,
     // Named threshold rather than a bare number: below this, drift is NVDA being NVDA.
     driftIsWidespread: driftShare > WIDESPREAD_DRIFT_SHARE,
-    recommendation: counts.CHANGED > 0
-      ? "evidence CHANGED — this optimisation alters what a signal reads. Bump CAPTURE_PROTOCOL_VERSION and recapture."
+    recommendation: (counts.CHANGED > 0
+      ? "evidence CHANGED — triage each one: a field a signal reads may have moved. If real, bump CAPTURE_PROTOCOL_VERSION and recapture."
       : driftShare > WIDESPREAD_DRIFT_SHARE
         ? "no field changed, but most of the sample drifted — re-run to separate NVDA variance from a real effect before trusting this."
-        : "evidence unchanged — safe to ship WITHOUT invalidating the cache.",
+        : "evidence unchanged — safe to ship WITHOUT invalidating the cache.") + rejectedNote,
   };
 }
 
