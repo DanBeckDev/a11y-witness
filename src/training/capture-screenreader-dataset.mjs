@@ -8,7 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { leaseWorker, leaseWorkerPool, guestReachableUrl, isAfterRun } from "../capture/local-vm.js";
 import { titleOf } from "../capture/verify.js";
 import {
-  isEvidence, isTransient, rejectionReason, runOutcome, shouldEvictWorker,
+  isEvidence, isTransient, rejectionReason, runOutcome, shouldEvictWorker, shouldRetireWorker,
 } from "./capture-decisions.mjs";
 import { beginRun, readProgress } from "./capture-progress.mjs";
 import { cacheDecision, cacheKey, hashPageDir, stampProvenance } from "./capture-cache.mjs";
@@ -167,6 +167,41 @@ async function pageTitle(url) {
 const CAPTURE_ATTEMPTS = 3;
 const WORKER_WAIT_MS = Number(process.env.DATASET_WORKER_WAIT_MS || 600000);
 const WORKER_POLL_MS = 10000;
+
+/**
+ * The worker's own vitals, or null.
+ *
+ * Null on any error on purpose: a health probe that failed must never be the thing that retires a
+ * worker. `shouldRetireWorker` treats absent vitals as healthy, so an older worker that reports none
+ * keeps working exactly as before.
+ */
+async function workerVitals(worker) {
+  try {
+    return (await fetchJson(worker + "/health", {}, 15000)).vitals ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stop sending work to a worker that is quietly costing four times what it should.
+ *
+ * Checked after a SUCCESS, because success is the state this fault hides in: a guest whose NVDA goes
+ * mute on every capture still returns evidence and still records zero failures, so the eviction rule --
+ * three consecutive failures -- can never reach it. Nothing is requeued; the cases it captured are fine.
+ * It simply stops taking more.
+ *
+ * @returns {Promise<boolean>} true when the caller should stop using this worker
+ */
+async function retireIfDegraded({ worker, poolSize, retired }) {
+  const { retire, reason } = shouldRetireWorker({
+    vitals: await workerVitals(worker), poolSize, retiredCount: retired.length,
+  });
+  if (!retire) return false;
+  retired.push(worker);
+  console.error("  RETIRING " + worker + " — " + reason);
+  return true;
+}
 
 async function waitForWorker(worker) {
   const deadline = Date.now() + WORKER_WAIT_MS;
@@ -379,7 +414,7 @@ async function captureAcrossPool(ctxBase, cases, done, workers) {
   const queue = [...cases];
   const failures = [];
   const skipped = [];
-  const evicted = [];
+  const evicted = [], retired = [];
   const cachedIds = [];
   await Promise.all(workers.map(async (worker) => {
     // Once per worker: the cache key depends on this guest's NVDA, Edge, protocol and provisioning,
@@ -419,6 +454,7 @@ async function captureAcrossPool(ctxBase, cases, done, workers) {
         // handed back if this worker dies later.
         consecutiveFailures = 0;
         failedHere.length = 0;
+        if (await retireIfDegraded({ worker, poolSize: workers.length, retired })) return;
       } catch (error) {
         consecutiveFailures += 1;
         // Evict, but never the last worker standing: with nothing left to hand the work to,
@@ -446,8 +482,9 @@ async function captureAcrossPool(ctxBase, cases, done, workers) {
   // Never silent: a run that finished on two of three workers must say so, or the next person
   // wonders why it took longer and finds nothing.
   if (evicted.length) console.error("Evicted " + evicted.length + " worker(s): " + evicted.join(", "));
+  if (retired.length) console.error("Retired " + retired.length + " degraded worker(s): " + retired.join(", "));
   return {
-    failures, evicted,
+    failures, evicted, retired,
     skippedCount: skipped.length + cachedIds.length,
     cachedCount: cachedIds.length,
   };
