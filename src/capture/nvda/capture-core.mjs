@@ -78,7 +78,7 @@ const DEDUPE_KEY_LEN = 80; // prefix length used to dedupe announcements
 // reverts Edge to its first-run state, whose welcome/sign-in surface NVDA records
 // as phantom elements on pages with no headings — the first-run gotcha in the
 // README. LOCALAPPDATA survives cleanup.
-const EDGE_PROFILE_DIR =
+export const EDGE_PROFILE_DIR =
   process.env.A11Y_EDGE_PROFILE ||
   `${process.env.LOCALAPPDATA || process.env.TEMP}\\a11y-witness\\edge-profile`;
 
