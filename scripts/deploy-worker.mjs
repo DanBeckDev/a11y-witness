@@ -20,7 +20,7 @@
 // Deploys the WORKING TREE, deliberately: that is what you are testing. Roll back by checking out the
 // ref you want and running this again — git is the source of truth for "the previous version", so there
 // is no bespoke backup to go stale.
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream, readFileSync } from "node:fs";
 import { promisify } from "node:util";
@@ -111,6 +111,46 @@ async function deployTo(vm, files, expected) {
   if (vm.state !== "started") await ctl("stop", vm.name);
   return ok;
 }
+
+/**
+ * Refuse to deploy a CAPTURE_PROTOCOL_VERSION change unless it is asked for explicitly.
+ *
+ * This deploys the WORKING TREE, which is right for testing a change and dangerous for one specific
+ * change: the protocol version is a capture-cache key input, so shipping a bump invalidates every capture
+ * on disk — 2,122 of them — and forces a full recapture that takes hours.
+ *
+ * The trap is real and was live in this repo. An uncommitted bump in a shared checkout makes
+ * `npm run worker:code` report every worker STALE, and the remedy it prints is "redeploy" — which would
+ * deploy the bump, wipe the cache, and give no clue why the next run recaptured everything.
+ */
+function guardProtocolChange() {
+  const inTree = /CAPTURE_PROTOCOL_VERSION = (\d+)/.exec(
+    readFileSync(resolve(NVDA_DIR, "capture-core.mjs"), "utf8"))?.[1];
+  let committed;
+  try {
+    committed = /CAPTURE_PROTOCOL_VERSION = (\d+)/.exec(
+      execFileSync("git", ["show", "HEAD:src/capture/nvda/capture-core.mjs"], { encoding: "utf8" }))?.[1];
+  } catch {
+    return; // not a git checkout, or no HEAD yet: nothing to compare against
+  }
+  if (!inTree || !committed || inTree === committed) return;
+  if (process.argv.includes("--allow-protocol-change")) {
+    process.stdout.write(`\nDeploying CAPTURE_PROTOCOL_VERSION ${committed} -> ${inTree} as requested. ` +
+      "Every cached capture is now invalid and the next run will recapture all of them.\n");
+    return;
+  }
+  process.stderr.write(
+    `\nREFUSING TO DEPLOY: the working tree has CAPTURE_PROTOCOL_VERSION = ${inTree}, but HEAD has ` +
+    `${committed}.\n\n` +
+    "That value is a capture-cache key, so deploying it invalidates all cached captures and forces a\n" +
+    "full recapture (2,122 captures, hours). If a `worker:code` STALE report sent you here, the stale\n" +
+    "hash is probably caused by this uncommitted bump rather than by the guests being out of date.\n\n" +
+    "  git stash                            # deploy without the bump, or\n" +
+    "  npm run worker:deploy -- --allow-protocol-change   # deploy it deliberately\n");
+  process.exit(3);
+}
+
+guardProtocolChange();
 
 const files = hashedFiles();
 const expected = localVersion(files);
