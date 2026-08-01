@@ -11,12 +11,17 @@
  *
  * With neither set, the run manages a local UTM worker VM on demand: it starts one if
  * needed and puts it back how it found it afterwards. See leaseWorker in capture/local-vm.
+ * Set A11Y_SHADOW_MODEL=1 to run the verified local screen-reader scorer beside the existing
+ * judge. Shadow output is log-only and never changes findings.
  */
-import { judge, type Judgment } from "./spike/judge.js";
+import { spawn } from "node:child_process";
+import { resolve } from "node:path";
+import { judge } from "./spike/judge.js";
 import { scanWithAxe, axeAvailable, type AxeFinding } from "./scan/axe.js";
 import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
-import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "./spike/layers.js";
+import { layerOf } from "./spike/layers.js";
+import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "./capture/local-vm.js";
 import { captureMentionsTitle } from "./capture/verify.js";
 
@@ -109,10 +114,13 @@ interface CaptureResponse {
     formChanges?: { control: string; after: string }[];
     postSubmitFields?: string[];
   };
+  environment?: Record<string, string>;
   diagnostics?: unknown[];
 }
 
 const MAX_CAPTURE_ATTEMPTS = 3;
+const SHADOW_PYTHON = process.env.A11Y_SHADOW_PYTHON ?? resolve(process.cwd(), ".venv/bin/python");
+const SHADOW_SCORER = resolve(process.cwd(), "scripts/score-screenreader-model.py");
 
 async function main(): Promise<void> {
   const args = parseArgs();
@@ -128,6 +136,44 @@ async function main(): Promise<void> {
 }
 
 type RunOptions = Omit<Args, "worker"> & { worker: string };
+
+interface ShadowReport {
+  mode?: string;
+  decisionAction?: string;
+  predictedPositiveCounts?: Record<string, number>;
+}
+
+/** Run the local scorer beside the existing judge without changing findings. */
+async function shadowScreenReaderCapture(capture: CaptureResponse): Promise<void> {
+  if (process.env.A11Y_SHADOW_MODEL !== "1") return;
+  try {
+    const child = spawn(SHADOW_PYTHON, [SHADOW_SCORER, "--shadow", "--stdin"], {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+    child.stdin.end(JSON.stringify(capture));
+    const exitCode = await new Promise<number>((resolveExit, reject) => {
+      child.once("error", reject);
+      child.once("close", (code) => resolveExit(code ?? 1));
+    });
+    if (exitCode !== 0) {
+      process.stderr.write(`Shadow scorer unavailable; existing judge unchanged. ${stderr.trim()}\n`);
+      return;
+    }
+    const report = JSON.parse(stdout) as ShadowReport;
+    process.stderr.write(
+      `Shadow scorer (${report.mode ?? "unknown"}, ${report.decisionAction ?? "unknown"}): ` +
+        JSON.stringify(report.predictedPositiveCounts ?? {}) + "\n",
+    );
+  } catch (error) {
+    process.stderr.write(`Shadow scorer failed; existing judge unchanged. ${String(error)}\n`);
+  }
+}
 
 async function runWitness({ url, task, worker, json, debug, probeForms, axe: wantAxe, axeResults }: RunOptions): Promise<void> {
   const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults });
@@ -165,6 +211,7 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
     );
   }
   process.stderr.write(`Captured ${cap.transcript.length} announcements; judging ...\n`);
+  await shadowScreenReaderCapture(cap);
   const verdict = await judge({
     url: cap.url,
     task,
@@ -233,60 +280,8 @@ async function captureViaWorker(url: string, { task, worker, probeForms }: Captu
   return (await res.json()) as CaptureResponse;
 }
 
-interface Report {
-  url: string;
-  task: string;
-  screenReader: string;
-  announcements: number;
-  verdict: Judgment;
-  /** null when the rule-based layer did not run — distinct from "ran and found nothing". */
-  axe: AxeFinding[] | null;
-}
-
-function printReport({ url, task, screenReader, announcements, verdict, axe }: Report): void {
-  const lines: string[] = [
-    "",
-    "a11y-witness report",
-    "===================",
-    `URL:   ${url}`,
-    `Task:  ${task}`,
-    "",
-    "-- Rule-based layer (axe-core): contrast, colour, ARIA, parsing --",
-    axe === null
-      ? "not run. Visual criteria are unchecked, not clean."
-      : `${axe.length} violation(s):`,
-  ];
-  for (const f of axe ?? []) {
-    lines.push(`  [${f.impact}] ${f.wcag.join(", ") || "(no SC)"}  ${f.rule}: ${f.help}`);
-    if (f.nodes[0]) lines.push(`     evidence: ${f.nodes[0].html.slice(0, 100)}`);
-  }
-  lines.push(
-    "",
-    `-- Lived-experience layer (${screenReader} + AI judge): ${announcements} announcements --`,
-    `Task completable: ${verdict.taskCompletable ? "yes" : "no"} (overall confidence ${verdict.confidence})`,
-    verdict.summary,
-    `${verdict.findings.length} finding(s):`
-  );
-  // Group findings by the Perceive -> Navigate -> Interact waterfall (most
-  // fundamental first), with a heading per layer.
-  let currentLayer: ExperienceLayer | "" = "";
-  for (const f of orderByLayer(verdict.findings)) {
-    const layer = layerOf(f.wcag);
-    if (layer !== currentLayer) {
-      currentLayer = layer;
-      lines.push(`  ${LAYER_LABEL[layer]}`);
-    }
-    lines.push(`    [${f.severity.toUpperCase()}] ${f.wcag}  (confidence ${f.confidence})`);
-    lines.push(`       ${f.issue}`);
-    lines.push(`       evidence: ${f.evidence}`);
-  }
-  lines.push(
-    "",
-    "Note: visual issues (contrast, colour, target size) come from the rule-based layer;",
-    "a screen reader cannot perceive them. Some criteria still need human review.",
-    ""
-  );
-  console.log(lines.join("\n"));
+function printReport(report: Report): void {
+  console.log(reportLines(report).join("\n"));
 }
 
 main().catch((err) => {
