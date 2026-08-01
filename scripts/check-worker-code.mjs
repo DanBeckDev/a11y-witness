@@ -25,7 +25,7 @@ const HEALTH_TIMEOUT_MS = 15000;
 // Must match server.mjs codeVersion() exactly: same files, same order.
 function localVersion() {
   const hash = createHash("sha256");
-  for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs"]) {
+  for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs", "nvda-logging.mjs"]) {
     hash.update(readFileSync(resolve(NVDA_DIR, file)));
   }
   return hash.digest("hex").slice(0, 16);

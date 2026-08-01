@@ -148,30 +148,32 @@ const REQUIRED_EDGE_POLICY = {
   BackgroundModeEnabled: 0,
 };
 
-const EDGE_POLICY_KEY = "HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge";
-
 /**
- * Re-assert the Edge policies. Needs an elevated worker; reports rather than throws when it is not.
+ * Report Edge policy drift. Does **not** try to correct it.
  *
+ * It used to try, and printed two `Command failed: reg add HKLM\\...` lines on every single boot,
+ * because the worker task is not elevated and `HKLM\\SOFTWARE\\Policies` needs admin. The write could
+ * never succeed, so all it produced was two alarming red lines above a perfectly healthy
+ * "the worker is ready" — and a console that cries wolf at every boot is a console people stop reading.
+ *
+ * Attempting an action you know you cannot perform is not robustness. Reporting the drift is: the value
+ * is already served by `/diagnostics.edgePolicy`, `doctor` can compare it, and the thing that actually
+ * fixes it — `provision-nvda-worker.ps1`, which runs elevated — is named in the message.
+ *
+ * @param {Record<string, number | null> | null} actual from diagnostics.edgePolicy()
  * @param {(line: string) => void} log
- * @returns {Record<string, boolean>} which values were written
+ * @returns {string[]} names of the settings that have drifted
  */
-export function enforceBrowserPolicy(log) {
-  if (process.platform !== "win32") return {};
-  const written = {};
-  for (const [name, value] of Object.entries(REQUIRED_EDGE_POLICY)) {
-    try {
-      execFileSync("reg", ["add", EDGE_POLICY_KEY, "/v", name, "/t", "REG_DWORD", "/d", String(value), "/f"],
-        { stdio: "ignore", timeout: 15_000 });
-      written[name] = true;
-    } catch (error) {
-      // Almost always "the worker is not elevated". Worth saying out loud: it means the guest can drift
-      // and only re-provisioning will correct it.
-      written[name] = false;
-      log(`could not enforce Edge policy ${name}=${value} (needs an elevated worker): ${error.message}`);
-    }
+export function reportBrowserPolicyDrift(actual, log) {
+  if (!actual) return [];
+  const drifted = Object.entries(REQUIRED_EDGE_POLICY)
+    .filter(([name, want]) => actual[name] !== null && actual[name] !== want)
+    .map(([name]) => name);
+  if (drifted.length) {
+    log(`Edge policy drift: ${drifted.map((n) => `${n}=${actual[n]} (want ${REQUIRED_EDGE_POLICY[n]})`).join(", ")}` +
+      " — re-run scripts/provision-nvda-worker.ps1 on this guest to correct it (needs elevation).");
   }
-  return written;
+  return drifted;
 }
 
 /**

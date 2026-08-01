@@ -17,8 +17,9 @@ import {
 } from "./capture-core.mjs";
 import { isLocallyRecoverable } from "./worker-recovery.mjs";
 import { faultCode } from "./capture-faults.mjs";
-import { guestDiagnostics, processCounts, treeSize } from "./diagnostics.mjs";
-import { enforceBrowserPolicy, killStrayBrowsers, pruneEdgeProfile } from "./browser-profile.mjs";
+import { edgePolicy, guestDiagnostics, processCounts, screenReaderState, treeSize } from "./diagnostics.mjs";
+import { killStrayBrowsers, pruneEdgeProfile, reportBrowserPolicyDrift } from "./browser-profile.mjs";
+import { applyRequestedLogLevel } from "./nvda-logging.mjs";
 
 const PORT = Number(process.env.A11Y_PORT || 8765);
 const LOG_PATH = process.env.A11Y_SERVER_LOG || "server.log";
@@ -64,7 +65,16 @@ const MAX_LOG_BYTES = 16 * 1024 * 1024;
  */
 function tidyBrowserAtBoot() {
   try {
-    enforceBrowserPolicy(log);
+    reportBrowserPolicyDrift(edgePolicy(), log);
+    // Opt-in, and at boot so it is in force before NVDA warms up. Unset by default: NVDA writes a lot at
+    // DEBUG and this pipeline measures per-capture timing.
+    applyRequestedLogLevel(
+      (screenReaderState({
+        nvdaRoot: process.env.GUIDEPUP_SCREEN_READERS_PATH ||
+          (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "guidepup") : null),
+        tempDir: process.env.TEMP || process.env.TMP || ".",
+        tailLines: 1,
+      }).config ?? []).map((c) => c.path), log);
     const strays = processCounts(["msedge"])?.msedge ?? 0;
     killStrayBrowsers(strays, log);
     pruneEdgeProfile(EDGE_PROFILE_DIR, treeSize(EDGE_PROFILE_DIR)?.megabytes ?? null, log);
@@ -127,7 +137,7 @@ function codeVersion() {
   try {
     const hash = createHash("sha256");
     // Order matters and must match the host side: capture behaviour, then the wire contract.
-    for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs"]) {
+    for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs", "nvda-logging.mjs"]) {
       hash.update(readFileSync(new URL(file, import.meta.url)));
     }
     return hash.digest("hex").slice(0, 16);
