@@ -8,10 +8,11 @@ import { prunablePaths } from "./browser-profile.mjs";
 const ROOT = "C:\\Users\\witness\\AppData\\Local\\a11y-witness\\edge-profile";
 const everythingExists = () => true;
 
-test("a small profile keeps its caches but still loses BrowserMetrics", () => {
-  // The cache is size-gated because a warm cache genuinely helps. BrowserMetrics is not: it grows one
-  // file per Edge launch — 348 MB of a 448 MB profile on the busiest guest — and nothing reads it.
-  const paths = prunablePaths({ megabytes: 170, root: ROOT, exists: everythingExists });
+test("a healthy profile keeps its caches but still loses BrowserMetrics", () => {
+  // 261 MB was measured running 11-12s captures; dropping its caches pushed it to 63s and it was still
+  // only back to ~28s eight captures later. The cache earns its space. BrowserMetrics does not: one file
+  // per Edge launch, 348 MB of a 448 MB profile on the busiest guest, and nothing ever reads it.
+  const paths = prunablePaths({ megabytes: 261, root: ROOT, exists: everythingExists });
   assert.ok(paths.some((p) => p.endsWith("BrowserMetrics")), "telemetry must go regardless of size");
   assert.ok(!paths.some((p) => p.endsWith("Cache")), "a small profile keeps its warm cache");
 });
@@ -22,8 +23,10 @@ test("BrowserMetrics is dropped even when the profile size cannot be read", () =
   assert.ok(paths.some((p) => p.endsWith("BrowserMetrics")));
 });
 
-test("an oversized profile gives up its caches", () => {
-  const paths = prunablePaths({ megabytes: 511, root: ROOT, exists: everythingExists });
+test("only a genuinely runaway profile gives up its caches", () => {
+  // Deliberately far above anything a healthy guest reaches, because the 200 MB version of this
+  // threshold made a working worker 5x slower.
+  const paths = prunablePaths({ megabytes: 1_200, root: ROOT, exists: everythingExists });
   assert.ok(paths.length > 0);
   assert.ok(paths.some((p) => p.endsWith("Cache")), "the HTTP cache is the point of this");
 });
@@ -46,12 +49,12 @@ test("the profile root itself is never a target", () => {
 
 test("session-restore records are removed, so Edge cannot reopen a previous window", () => {
   // A restored window both slows startup and risks restoring page content into a capture.
-  const paths = prunablePaths({ megabytes: 511, root: ROOT, exists: everythingExists });
+  const paths = prunablePaths({ megabytes: 1_200, root: ROOT, exists: everythingExists });
   assert.ok(paths.some((p) => p.endsWith("Sessions")), "Sessions drives restore-on-launch");
 });
 
 test("paths that do not exist are not offered for deletion", () => {
-  assert.deepEqual(prunablePaths({ megabytes: 511, root: ROOT, exists: () => false }), []);
+  assert.deepEqual(prunablePaths({ megabytes: 1_200, root: ROOT, exists: () => false }), []);
 });
 
 test("an unreadable profile size never prunes the size-gated caches", () => {

@@ -54,6 +54,13 @@ That middle row is worth keeping: measuring straight after a cache purge said "t
 and it took a second look to see it was the rebuild. **Do not judge a profile change on the first few
 captures after it.**
 
+**And the cache pruning itself was a mistake, caught by measuring a second guest.** A worker with a
+261 MB profile was running 11–12 s captures happily; dropping its caches at a 200 MB threshold pushed it
+to 63 s, and eight captures later it was still only back to ~28 s. The cache earns its space. Only
+`BrowserMetrics` and the unused Edge component payloads are dropped routinely now; the cache threshold
+sits at 800 MB as a last-resort valve that a healthy guest should never reach. Settled result on the
+original slow worker: **11.6–12.9 s, mean 11.9 s.**
+
 Three hypotheses were tested and killed on the way, all of which had looked obvious:
 
 - *The grey UTM display means a sick guest.* Inverted — the grey workers were the fast ones. Their
