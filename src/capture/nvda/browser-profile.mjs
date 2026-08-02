@@ -62,6 +62,36 @@ const ALWAYS_REGENERABLE = [
   "BrowserMetrics",
 ];
 
+/**
+ * Chromium's stored form data, dropped at every boot.
+ *
+ * This is where autofill keeps what it has learned. `probeForms` submits forms, so the profile is
+ * TAUGHT by the very act of capturing, and a taught profile then draws a suggestion affordance inside
+ * recognised inputs -- which NVDA announces as an embedded object appended to the field:
+ *
+ *     "Recipient name, edit, \ufffc"     instead of     "Recipient name, edit"
+ *
+ * So the same unchanged page announces differently depending on how many form pages were captured
+ * before it. Measured rising from 3% to 31% of affected captures over the corpus's life, with 26
+ * good/bad pairs disagreeing -- a comparison polluted by evidence that has nothing to do with
+ * accessibility.
+ *
+ * **Command-line flags alone were not enough, and finding that out cost a re-run.**
+ * `--disable-features=AutofillServerCommunication,AutofillAddressProfileSavePrompt` stops Edge SAVING
+ * new entries and querying the server, but it happily offers entries the profile already holds. One
+ * guest measured 0 of 12 and another still varied, purely because their profiles had learned different
+ * amounts. Deleting the store is what makes it deterministic.
+ *
+ * Not size-gated: correctness, not housekeeping. `Web Data` is small, Chromium recreates it on demand,
+ * and nothing a capture needs lives in it.
+ */
+const FORM_DATA_STORES = [
+  "Default/Web Data",
+  "Default/Web Data-journal",
+  "Default/Login Data",
+  "Default/Login Data-journal",
+];
+
 const REGENERABLE = [
   "Default/Cache", "Default/Code Cache", "Default/GPUCache", "Default/DawnCache",
   "Default/DawnGraphiteCache", "Default/DawnWebGPUCache", "Default/GrShaderCache",
@@ -96,7 +126,7 @@ const PRUNE_ABOVE_MB = 800;
  */
 export function prunablePaths({ megabytes, root, exists }) {
   const absolute = (relative) => join(root, ...relative.split("/"));
-  const always = ALWAYS_REGENERABLE.map(absolute).filter(exists);
+  const always = [...ALWAYS_REGENERABLE, ...FORM_DATA_STORES].map(absolute).filter(exists);
   // The cache list is size-gated because a warm cache genuinely speeds Edge up; the always-list is not,
   // because none of it helps and BrowserMetrics actively hurts.
   if (megabytes === null || megabytes <= PRUNE_ABOVE_MB) return always;
