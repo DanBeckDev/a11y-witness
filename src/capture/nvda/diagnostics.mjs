@@ -342,6 +342,44 @@ export function serverLogTail(logPath, lines = 40) {
   }
 }
 
+/**
+ * Who this process is and what UAC would let it become.
+ *
+ * The trim needs elevation and the worker has none, and the interesting question is whether that is a
+ * hard wall or a solvable one. It turns entirely on facts that were being assumed:
+ *
+ *   - `isAdmin` -- is the account in Administrators at all? If not, nothing below matters.
+ *   - `enableLUA` -- with UAC off, an admin's processes are already elevated and the trim would simply
+ *     have worked, so its failure proves UAC is on OR the account is not an admin.
+ *   - `consentPromptBehaviorAdmin` -- 0 means "elevate without prompting", in which case
+ *     `Start-Process -Verb RunAs` elevates silently and a headless guest can self-elevate.
+ *   - `promptOnSecureDesktop` -- a prompt here lands where nothing automated can answer it.
+ *
+ * Read-only. It reports what the machine is configured to allow; it does not change anything.
+ */
+export function privilegeState() {
+  if (process.platform !== "win32") return null;
+  try {
+    const raw = execFileSync("powershell", ["-NoProfile", "-NonInteractive", "-Command",
+      "$id=[Security.Principal.WindowsIdentity]::GetCurrent();" +
+      "$p=New-Object Security.Principal.WindowsPrincipal($id);" +
+      "$sys='HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System';" +
+      "$u=Get-ItemProperty $sys -ErrorAction SilentlyContinue;" +
+      "$admins=try{(Get-LocalGroupMember -Group Administrators -ErrorAction Stop|" +
+      "ForEach-Object{$_.Name}) -join ';'}catch{'unknown'};" +
+      "[pscustomobject]@{user=$id.Name;" +
+      "isElevated=$p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);" +
+      "administrators=$admins;enableLUA=$u.EnableLUA;" +
+      "consentPromptBehaviorAdmin=$u.ConsentPromptBehaviorAdmin;" +
+      "promptOnSecureDesktop=$u.PromptOnSecureDesktop;" +
+      "filterAdministratorToken=$u.FilterAdministratorToken}|ConvertTo-Json -Compress"],
+      { encoding: "utf8", timeout: 60_000 });
+    return parsePowerShellJson(raw)[0] ?? null;
+  } catch (error) {
+    return probeError(error);
+  }
+}
+
 export function largestSubtrees(root, limit = 8) {
   let entries;
   try {
@@ -479,6 +517,7 @@ export function guestDiagnostics({ edgeProfile, logPath }) {
     windowsTrim: windowsTrimReport(),
     windowsTrimLog: serverLogTail(resolve(process.cwd(), ".windows-trimmed.log"), 30),
     defender: defenderState(),
+    privileges: privilegeState(),
     services: serviceStates(),
     screenReader: screenReaderState({
       nvdaRoot: process.env.GUIDEPUP_SCREEN_READERS_PATH ||
