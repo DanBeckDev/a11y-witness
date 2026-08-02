@@ -780,6 +780,31 @@ export async function warmUpScreenReader() {
   }
 }
 
+/**
+ * NVDA's effective configuration, as guidepup reports it.
+ *
+ * Recorded, deliberately NOT changed. `virtualBuffers.useScreenLayout` is the obvious candidate to
+ * tweak -- it is what places a field, an embedded object and a button on one line, and turning it off
+ * would tidy the transcript. But it is NVDA's DEFAULT, and this project exists to capture the lived
+ * assistive-technology experience: configuring NVDA away from its defaults makes the evidence less
+ * representative of what a user actually hears, not more. Tidier transcripts are not the goal.
+ *
+ * What the configuration IS worth doing is documenting. Two guests with different NVDA settings produce
+ * different evidence for the same page, exactly as two different guidepup versions did, and until now
+ * nothing recorded or compared it.
+ *
+ * Available from guidepup 0.30.0 (`getSettings`); returns null on anything older, which is a real
+ * answer rather than an error.
+ */
+export function screenReaderSettings() {
+  try {
+    return typeof nvda.getSettings === "function" ? nvda.getSettings() : null;
+  } catch (error) {
+    // Reading configuration must never be able to fail a capture or the diagnostics endpoint.
+    return { error: String(error?.message ?? error).split("\n")[0].slice(0, 200) };
+  }
+}
+
 export function forgetScreenReader() {
   screenReader = { running: false, captures: 0 };
 }
