@@ -30,6 +30,8 @@
 export const MUST_MATCH = [
   { path: "browserVersion", why: "Edge renders and announces differently across releases; it is in the cache key" },
   { path: "screenReaderVersion", why: "NVDA's wording changes between releases; it is in the cache key" },
+  { path: "guidepupVersion", why: "guidepup parses NVDA's speech before we see it — 0.29.2 emitted an " +
+      "intermittent U+FFFC where 0.31.0 emits a consistent empty segment, for the same page" },
   { path: "windowsVersion", why: "a second OS image would blend two corpora into one" },
   { path: "architecture", why: "ARM64 and x64 guests are not interchangeable evidence" },
   { path: "captureProtocol", why: "a guest on an older protocol produces evidence that means something else" },

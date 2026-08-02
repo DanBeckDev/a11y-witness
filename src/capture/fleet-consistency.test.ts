@@ -11,6 +11,7 @@ const guest = (worker: string, over = {}) => ({
   environment: {
     browserVersion: "151.0.4129.59", screenReaderVersion: "2026.1.1",
     windowsVersion: "Microsoft Windows 11 Pro 10.0.22621", architecture: "arm64", captureProtocol: 2,
+    guidepupVersion: "0.31.0",
     ...over,
   },
   policy: { StartupBoostEnabled: 0, BackgroundModeEnabled: 0 },
@@ -85,4 +86,16 @@ test("every mismatch explains why it matters", () => {
   for (const line of describeMismatches(r.mismatches)) {
     assert.match(line, / — .{10,}/, `no explanation in: ${line}`);
   }
+});
+
+test("a guidepup version split is caught", () => {
+  // The driver parses NVDA's speech before this project sees it. 0.29.2 emitted an intermittent
+  // U+FFFC where 0.31.0 emits a consistent empty segment — same NVDA, same page, different evidence.
+  // During the upgrade the fleet was deliberately split for a while; nothing would have noticed.
+  const r = fleetConsistency([
+    guest("http://a:8765", { guidepupVersion: "0.31.0" }),
+    guest("http://b:8765", { guidepupVersion: "0.29.2" }),
+  ]);
+  assert.equal(r.consistent, false);
+  assert.ok(r.mismatches.some((m) => m.field === "guidepupVersion"));
 });
