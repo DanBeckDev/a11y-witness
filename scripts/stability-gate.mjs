@@ -91,14 +91,35 @@ for (const { path, reason } of CANARIES) {
       process.stdout.write(`  STABLE — ${usable} usable, all fields identical\n`);
     }
   } catch (error) {
-    results.push({ path, ok: false, detail: error.message.split("\n")[0] });
-    process.stdout.write(`  FAILED — ${error.message.split("\n")[0]}\n`);
+    // repeat-capture exits non-zero for THREE different reasons -- a field varies, a capture errored,
+    // or a capture came back empty -- and they need different responses. Collapsing them into
+    // "Command failed" made a transient capture error read exactly like genuine instability, and cost
+    // a re-run to discover the page was fine. Its output is on stdout even when it exits 1, so keep it.
+    const out = String(error.stdout ?? "");
+    const varies = out.split("\n").filter((l) => l.includes("VARIES")).map((l) => l.trim());
+    const empty = /(\d+) capture\(s\) heard nothing/.exec(out)?.[1];
+    const failedRuns = out.split("\n").filter((l) => l.trim().startsWith("FAILED")).map((l) => l.trim());
+    const detail = varies.length ? `UNSTABLE: ${varies.join("; ")}`
+      : empty ? `${empty} empty capture(s) — the foreground flake, not instability`
+      : failedRuns.length ? `${failedRuns.length} capture(s) errored: ${failedRuns[0]}`
+      : error.message.split("\n")[0];
+    // Only a VARIES is evidence the pipeline is nondeterministic. An errored or empty capture is a
+    // flake in the run, so it is reported and retried rather than treated as a verdict.
+    results.push({ path, ok: false, unstable: varies.length > 0, detail });
+    process.stdout.write(`  ${varies.length ? "UNSTABLE" : "INCONCLUSIVE"} — ${detail}\n`);
   }
 }
 
 const failed = results.filter((r) => !r.ok);
 process.stdout.write(`\n${results.length - failed.length}/${results.length} canaries stable\n`);
 for (const f of failed) process.stdout.write(`  ${f.path}: ${f.detail}\n`);
+const unstable = failed.filter((f) => f.unstable);
+if (failed.length && !unstable.length) {
+  process.stdout.write("\nNo canary was UNSTABLE, but some could not be judged (errored or empty " +
+    "captures). Re-run the gate; if the same canary keeps failing to complete, that is a worker " +
+    "problem rather than a determinism one.\n");
+  process.exit(2);
+}
 if (failed.length) {
   process.stdout.write("\nDo NOT start a corpus run. Evidence that varies for the same unchanged page " +
     "is indistinguishable from evidence that differs because the page differs, which is the one defect " +
