@@ -196,9 +196,18 @@ async function runCapturePhases(url, opts, diag) {
 
   await focusBrowserWindow(browserWaitMs, diag);
   const coldStart = await startScreenReader(diag, { reuse: !!opts.reuseScreenReader });
-  // The settle is for NVDA's own startup, so it is dead time when NVDA was already
-  // running. waitForDocument below is what actually establishes readiness either way.
-  if (coldStart) await sleep(NVDA_SETTLE_MS);
+  // Wait for NVDA to answer, rather than for a fixed three seconds.
+  //
+  // This was `sleep(NVDA_SETTLE_MS)` and its own comment conceded the point: "dead time when NVDA was
+  // already running... waitForDocument below is what actually establishes readiness either way." A
+  // fixed sleep is the wrong shape in both directions -- it burns the full 3s when NVDA answers in 200ms,
+  // and it still expires too early when NVDA is genuinely slow.
+  //
+  // It cannot simply be deleted, which is the trap: `ensureSpeechChannel` runs next and treats an
+  // unresponsive NVDA as a dead channel, so removing the wait would turn a slow start into a spurious
+  // ~23s screen-reader restart. Polling keeps the protection and stops paying for it when it is not
+  // needed. The old constant becomes the deadline.
+  if (coldStart) await waitForScreenReader(NVDA_SETTLE_MS, diag);
   // Before anything expensive: prove speech actually comes back. A dead channel discovered here costs one
   // round trip; discovered after the read-through it costs the whole capture and a retry.
   await ensureSpeechChannel(diag);
@@ -523,6 +532,28 @@ function screenReaderResponds() {
     socket.on("connect", () => settle(true));
     socket.on("error", () => settle(false));
   });
+}
+
+/**
+ * Poll until NVDA's Remote port answers, up to a deadline.
+ *
+ * Same probe `startScreenReader` uses to decide whether a reused NVDA is still alive, so this adds no
+ * new failure mode -- it just stops guessing how long a cold start takes.
+ */
+async function waitForScreenReader(deadlineMs, diag) {
+  const deadline = Date.now() + deadlineMs;
+  const startedAt = Date.now();
+  while (Date.now() < deadline) {
+    if (await screenReaderResponds()) {
+      diag.mark("nvdaReady", { waitedMs: Date.now() - startedAt });
+      return true;
+    }
+    await sleep(STATE_POLL_MS);
+  }
+  // Not fatal: ensureSpeechChannel is the real gate and runs next. Recorded so a guest that is
+  // consistently slow to start is visible rather than merely slow.
+  diag.mark("nvdaReady", { waitedMs: Date.now() - startedAt, timedOut: true });
+  return false;
 }
 
 async function startScreenReader(diag, { reuse }) {
