@@ -27,6 +27,9 @@
     "training:export": "node src/training/export-screenreader-dataset.mjs",
     "training:analyze-errors": ".venv/bin/python scripts/report-screenreader-errors.py",
     "training:evaluate-acceptance": ".venv/bin/python scripts/evaluate-screenreader-acceptance.py",
+    "training:score": ".venv/bin/python scripts/score-screenreader-model.py",
+    "training:shadow": ".venv/bin/python scripts/score-screenreader-model.py --shadow",
+    "training:hardening": ".venv/bin/python scripts/check-screenreader-hardening.py",
     "training:fetch-encoder": ".venv/bin/python scripts/fetch-screenreader-encoder.py",
     "training:train": ".venv/bin/python scripts/train-screenreader-model.py",
     "doctor": "node scripts/doctor.mjs",
@@ -34,6 +37,8 @@
     "worker:deploy": "node scripts/deploy-worker.mjs",
     "worker:compare": "node scripts/compare-workers.mjs",
     "evidence:check": "tsx scripts/evidence-check.mjs",
+    "guest:run": "node scripts/guest-run.mjs",
+    "fleet:normalise": "node scripts/normalise-fleet.mjs",
     "corpus:snapshot": "node scripts/corpus-snapshot.mjs",
     "training:repeat": "node src/training/repeat-capture.mjs"
   },
