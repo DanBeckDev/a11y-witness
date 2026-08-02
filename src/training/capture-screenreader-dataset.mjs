@@ -169,33 +169,49 @@ const WORKER_WAIT_MS = Number(process.env.DATASET_WORKER_WAIT_MS || 600000);
 const WORKER_POLL_MS = 10000;
 
 /**
- * The worker's own vitals, or null.
+ * The worker's own vitals, and whether it answered at all.
  *
- * Null on any error on purpose: a health probe that failed must never be the thing that retires a
- * worker. `shouldRetireWorker` treats absent vitals as healthy, so an older worker that reports none
- * keeps working exactly as before.
+ * These are two different facts and collapsing them into one null hid a whole failure mode. "Answered
+ * but reports no vitals" is an older worker, and must keep working exactly as before. "Did not answer"
+ * is a worker that may be wedged — and a wedged guest does not merely stop contributing, it spins and
+ * degrades its neighbours. A single silence is still not evidence: `shouldRetireWorker` requires a
+ * streak, so a flaky probe on a loaded host costs nothing.
+ *
+ * @returns {Promise<{ reachable: boolean, vitals: object | null }>}
  */
 async function workerVitals(worker) {
   try {
-    return (await fetchJson(worker + "/health", {}, 15000)).vitals ?? null;
+    return { reachable: true, vitals: (await fetchJson(worker + "/health", {}, 15000)).vitals ?? null };
   } catch {
-    return null;
+    return { reachable: false, vitals: null };
   }
 }
 
+/** Consecutive silent /health probes per worker, so one blip cannot retire anybody. */
+const unreachableStreaks = new Map();
+
 /**
- * Stop sending work to a worker that is quietly costing four times what it should.
+ * Stop sending work to a worker that is quietly costing four times what it should, or that has stopped
+ * answering altogether.
  *
- * Checked after a SUCCESS, because success is the state this fault hides in: a guest whose NVDA goes
- * mute on every capture still returns evidence and still records zero failures, so the eviction rule --
- * three consecutive failures -- can never reach it. Nothing is requeued; the cases it captured are fine.
- * It simply stops taking more.
+ * Checked after a success, because that is the state the degradation fault hides in: a guest whose NVDA
+ * goes mute on every capture still returns evidence and still records zero failures, so the eviction
+ * rule -- three consecutive failures -- can never reach it. Nothing is requeued; the cases it captured
+ * are fine. It simply stops taking more.
+ *
+ * Also checked after a FAILURE, which it was not, and that omission is why a wedged guest survived. It
+ * never succeeded, so this function was never called for it; it never returned a clean failure either,
+ * so eviction never reached it. It sat in the rotation for twelve minutes spinning at 178% CPU while
+ * its neighbour's mute rate went from 0/10 to 6/18.
  *
  * @returns {Promise<boolean>} true when the caller should stop using this worker
  */
 async function retireIfDegraded({ worker, poolSize, retired }) {
+  const { reachable, vitals } = await workerVitals(worker);
+  const streak = reachable ? 0 : (unreachableStreaks.get(worker) ?? 0) + 1;
+  unreachableStreaks.set(worker, streak);
   const { retire, reason } = shouldRetireWorker({
-    vitals: await workerVitals(worker), poolSize, retiredCount: retired.length,
+    vitals, unreachableStreak: streak, poolSize, retiredCount: retired.length,
   });
   if (!retire) return false;
   retired.push(worker);
@@ -467,6 +483,15 @@ async function captureAcrossPool(ctxBase, cases, done, workers) {
           console.error("  EVICTING " + worker + " after " + consecutiveFailures +
             " consecutive failures; " + handedBack +
             " case(s) go back to the queue. Last error: " + error.message);
+          return;
+        }
+        // A failure is also the moment to ask whether the worker is answering at all. The wedge never
+        // succeeds, so the success-path check can never see it, and it never fails cleanly enough to
+        // reach the eviction threshold either. Its cases go back like an eviction's, because unlike a
+        // degraded-but-working guest, this one genuinely did not capture them.
+        if (await retireIfDegraded({ worker, poolSize: workers.length, retired })) {
+          console.error("  " + requeueFrom({ queue, failures, testCase, failedHere }) +
+            " case(s) go back to the queue");
           return;
         }
         failedHere.push({ id: testCase.id, testCase });
