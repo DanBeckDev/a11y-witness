@@ -1510,8 +1510,10 @@ async function probeDisclosure(phrase, { interaction }) {
   try {
     const before = ((await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, "disclosure")) || []).length;
     await withTimeout(nvda.act(), ACT_TIMEOUT_MS, "disclosure"); // Enter on the control under the cursor
-    await sleep(STATE_SETTLE_MS);
-    const log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, "disclosure")) || [];
+    // Wait for what was announced, rather than 1.2s regardless. Same reasoning as the other activation
+    // probes: a fixed sleep is too long when the page answers immediately and too short in the tail,
+    // and here the tail is what matters -- this is the probe whose timeout got recorded as silence.
+    const log = await waitForAnnouncement(before, "disclosure");
     const announced = log.slice(before).map((s) => String(s).trim()).filter(Boolean).join(" | ");
     const after = await reportFocusedControlWithRetry(interaction);
     interaction.sweepLog.push(
@@ -1561,8 +1563,22 @@ async function reportFocusedControl() {
   await withTimeout(
     nvda.perform(nvda.keyboardCommands.reportCurrentFocus), NAV_TIMEOUT_MS, "reportFocus"
   );
-  await sleep(STATE_SETTLE_MS);
-  return ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "reportFocus")) || "").trim();
+  // Read as soon as there is something to read, rather than 1.2s later regardless.
+  //
+  // `nvda.perform` already resolves event-driven: guidepup's enqueueAndTap waits for a quiet period on
+  // the speech channel before returning (SPEAK_DEBOUNCE_TIMEOUT, 1000ms in NVDAClient.js). Sleeping a
+  // further 1.2s on top of that was waiting twice for the same thing, on the hottest path in the
+  // disclosure probe.
+  //
+  // An empty phrase is still possible for a beat, so this polls rather than assuming -- with a
+  // deadline, because a control that announces nothing must remain an observable outcome rather than
+  // becoming a hang.
+  const deadline = Date.now() + STATE_WAIT_MS;
+  for (;;) {
+    const phrase = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "reportFocus")) || "").trim();
+    if (phrase || Date.now() >= deadline) return phrase;
+    await sleep(STATE_POLL_MS);
+  }
 }
 
 // Activate the control under the cursor and capture EVERY phrase announced
