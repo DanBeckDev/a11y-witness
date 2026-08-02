@@ -39,7 +39,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -255,9 +255,25 @@ function installedProvisionedPackages() {
  */
 const SELF_PATH = fileURLToPath(import.meta.url);
 
+/**
+ * Has the trim actually finished, as opposed to merely having been attempted?
+ *
+ * A marker saying "skipped: needs elevation" is a record of *not* having run, and treating its mere
+ * existence as completion is what stopped the escalation path from ever being tried: the first
+ * unelevated attempt wrote a marker, and every boot afterwards read that marker and returned early.
+ * "Attempted" and "done" have to read differently here for the same reason they do in `trimSummary`.
+ */
+export function trimAlreadyDone(markerPath) {
+  try {
+    return !/needs elevation/i.test(readFileSync(markerPath, "utf8"));
+  } catch {
+    return false; // no marker at all means not done
+  }
+}
+
 export function applyWindowsTrim({ markerPath, log = () => {} }) {
   const result = { removed: [], disabled: [], failed: [], skipped: false, needsElevation: false };
-  if (process.platform !== "win32" || existsSync(markerPath)) {
+  if (process.platform !== "win32" || trimAlreadyDone(markerPath)) {
     result.skipped = true;
     return result;
   }

@@ -4,8 +4,11 @@
 // So the keep-list precedence is asserted first and hardest.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import {
-  packagesToRemove, trimSummary, REMOVABLE_APPX, KEEP_PATTERNS, DISABLEABLE_SERVICES,
+  packagesToRemove, trimSummary, trimAlreadyDone, REMOVABLE_APPX, KEEP_PATTERNS, DISABLEABLE_SERVICES,
 } from "./windows-trim.mjs";
 
 test("the keep-list beats the removable list, always", () => {
@@ -106,4 +109,24 @@ test("a summary says so when the trim could not run for want of elevation", () =
   // and "skipped because it is not allowed to run" are different facts and must read differently.
   assert.match(trimSummary({ needsElevation: true }), /needs elevation/);
   assert.notEqual(trimSummary({ needsElevation: true }), trimSummary({ skipped: true }));
+});
+
+test("a marker recording 'needs elevation' does not count as done", () => {
+  // The bug this fixes: the first unelevated attempt wrote a marker, and every boot afterwards saw a
+  // marker and returned early — so the escalation path added later could never run. "Attempted" and
+  // "done" must read differently here, exactly as they do in trimSummary.
+  const dir = mkdtempSync(resolve(tmpdir(), "a11y-trim-"));
+  try {
+    const m = resolve(dir, "marker");
+    writeFileSync(m, "2026-08-02T00:00:00Z skipped: needs elevation — could not register\n");
+    assert.equal(trimAlreadyDone(m), false);
+    writeFileSync(m, "2026-08-02T00:00:00Z 12 app(s) removed, 11 service(s) disabled\n");
+    assert.equal(trimAlreadyDone(m), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("no marker at all is not done", () => {
+  assert.equal(trimAlreadyDone(resolve(tmpdir(), "definitely-not-here-a11y")), false);
 });
