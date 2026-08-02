@@ -14,19 +14,33 @@
  * capture-decisions.mjs is .mjs.
  */
 import { execFileSync } from "node:child_process";
+import { totalmem } from "node:os";
 
 /**
  * What one worker VM costs the host.
  *
- * Measured with `top -o mem`, which agrees with phys_footprint: ~7.0–7.6 GB for a guest configured
- * with 4096 MB. The gap is QEMU's own overhead on top of guest RAM that Windows dirties and never
- * gives back (there is no balloon driver). It is NOT accumulation: a VM sits at 6.8 GB within ten
- * minutes of booting and creeps only to ~7.6 GB over nearly two hours.
+ * Measured with `top -o mem`, which agrees with phys_footprint: a guest configured with 4096 MB costs
+ * the host **8,048–8,127 MB**. The gap is QEMU's own overhead on top of guest RAM that Windows dirties
+ * and never gives back (there is no balloon driver). It is NOT accumulation: a VM sits at 6.8 GB within
+ * ten minutes of booting and creeps to ~8.1 GB over roughly two hours.
  *
- * Deliberately the high end of that range. Under-committing costs a little parallelism; over-committing
+ * This was 7,600 and that was an underestimate taken from a shorter sample. Three guests at the real
+ * figure are 24.3 GB, which is why they did not fit in 36 GB alongside an ordinary desktop.
+ *
+ * Deliberately the high end of the range. Under-committing costs a little parallelism; over-committing
  * costs correctness, because a swapped-out guest fails captures rather than merely slowing them.
  */
-const MEMORY_PER_WORKER_MB = 7_600;
+const MEMORY_PER_WORKER_MB = 8_100;
+
+/**
+ * What the host's own software needs, beyond the run.
+ *
+ * Measured on this Mac while it was doing nothing unusual: Wispr Flow 2.3 GB, tessl 2.0 GB, stable
+ * 1.3 GB, mds_stores 1.1 GB, WindowServer 1.1 GB, Codex 0.9 GB and the rest — about 11 GB before a
+ * single guest starts. This module only ever runs on macOS (see availableHostMemoryMb), so it is
+ * always somebody's desktop, never a dedicated hypervisor.
+ */
+const HOST_APPS_RESERVE_MB = 12_000;
 
 /**
  * Memory left for the host itself.
@@ -63,24 +77,52 @@ export function availableHostMemoryMb() {
   }
 }
 
+/** Physical RAM in MB. Unlike `os.freemem()` this cannot lie — it is a property of the machine. */
+export function totalHostMemoryMb() {
+  return Math.round(totalmem() / (1024 * 1024));
+}
+
+/**
+ * The most workers this machine can EVER hold, from physical RAM alone.
+ *
+ * This exists because the dynamic estimate below is computed from `vm_stat`, and `vm_stat` is
+ * distorted by exactly the situation it needs to detect. Once guests are swapped out, their pages are
+ * counted as compressed/inactive — which `availableHostMemoryMb` reports as *available* — so a host
+ * three guests deep in swap advertised 13.7 GB free while two of the three could not answer an HTTP
+ * health check within 75 seconds. Total RAM is immune to that feedback loop.
+ *
+ * @returns {number} workers, from physical memory
+ */
+export function workerCeilingFromTotalRam(totalMb = totalHostMemoryMb()) {
+  return Math.floor((totalMb - HOST_APPS_RESERVE_MB - HOST_HEADROOM_MB) / MEMORY_PER_WORKER_MB);
+}
+
 /**
  * How many workers may be RUNNING at once, given what the host has spare.
  *
- * Workers already up have paid for their memory and are counted in neither the budget nor the
- * headroom — `availableMb` is what is left after them — so they are added back at the end.
+ * **A running worker is not automatically an affordable one.** This used to return
+ * `alreadyRunning + canStart` on the reasoning that guests already up had "paid for" their memory and
+ * `availableMb` was what remained after them. That is true of a healthy host and false of the one case
+ * that matters: when the host is in swap, the running guests are being paid for out of disk, and adding
+ * their count back ratifies the very over-commitment that is breaking the run. The result could never
+ * be lower than the number of VMs already up, so the cap was structurally unable to hold back a pool
+ * somebody had already started — which is how three guests came to share a 36 GB Mac, drive 6.6 GB of
+ * swap, and black out two of the three workers mid-run.
  *
- * Never returns less than one running worker: a run with no workers is a worse outcome than a slow
- * one, and refusing to start the only guest available would turn a tight host into an outage.
- */
-/**
- * @param {{ availableMb: number | null, alreadyRunning: number }} host
+ * So the answer is the lower of the dynamic estimate and the physical-RAM ceiling, and it is allowed to
+ * come out below `alreadyRunning`. The run then dispatches to fewer workers than are up, which is the
+ * conservative direction: the extra guest wastes memory but no longer takes work.
+ *
+ * Never returns less than one: a run with no workers is a worse outcome than a slow one.
+ *
+ * @param {{ availableMb: number | null, alreadyRunning: number, totalMb?: number }} host
  * @returns {number}
  */
-export function workersHostCanRun({ availableMb, alreadyRunning }) {
+export function workersHostCanRun({ availableMb, alreadyRunning, totalMb = totalHostMemoryMb() }) {
   if (availableMb === null) return Number.POSITIVE_INFINITY; // unreadable: do not constrain the run
   const spareMb = availableMb - HOST_HEADROOM_MB;
-  const canStart = Math.max(0, Math.floor(spareMb / MEMORY_PER_WORKER_MB));
-  return Math.max(1, alreadyRunning + canStart);
+  const dynamic = alreadyRunning + Math.max(0, Math.floor(spareMb / MEMORY_PER_WORKER_MB));
+  return Math.max(1, Math.min(dynamic, workerCeilingFromTotalRam(totalMb)));
 }
 
 /**
@@ -91,8 +133,9 @@ export function workersHostCanRun({ availableMb, alreadyRunning }) {
  */
 export function capacityReason({ limit, wanted, availableMb }) {
   if (!Number.isFinite(limit) || limit >= wanted) return null;
-  return `host has ~${availableMb} MB available and each worker needs ~${MEMORY_PER_WORKER_MB} MB, ` +
-    `so ${limit} of ${wanted} local workers will be used; the rest stay stopped. ` +
-    "Measured: an over-committed host made every capture 1.6x slower and caused mute-NVDA failures. " +
+  return `host has ${totalHostMemoryMb()} MB of RAM and ~${availableMb} MB available, and each worker ` +
+    `costs ~${MEMORY_PER_WORKER_MB} MB, so ${limit} of ${wanted} local workers will be used. ` +
+    "Measured: an over-committed host made every capture 1.6x slower, caused mute-NVDA failures, and " +
+    "once starved two of three guests until they stopped answering /health at all. " +
     "Override with A11Y_MAX_WORKERS if you know better.";
 }
