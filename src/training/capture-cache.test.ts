@@ -152,7 +152,44 @@ test("an unreportable environment still keys consistently", () => {
   assert.deepEqual(environmentKey({}), {
     screenReader: "NVDA/unknown",
     browser: "unknown/unknown",
+    os: "unknown/unknown",
     captureProtocol: "unknown",
     provisionRevision: "unstamped",
   });
+});
+
+test("a different Windows build is a different environment", () => {
+  // Two images in one fleet must not share evidence. Whether NVDA announces identically across them is
+  // what evidence:check answers; until it has, the cache must not assume it.
+  const { root, pages } = sandbox();
+  try {
+    const base = { ...ENV, windowsVersion: "Microsoft Windows 11 Pro 10.0.22621", architecture: "arm64" };
+    const other = { ...base, windowsVersion: "Microsoft Windows 11 Pro 10.0.26100" };
+    assert.notEqual(keyFor(pages, { environment: base }), keyFor(pages, { environment: other }));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a different architecture is a different environment", () => {
+  // The concrete case: a developer's ARM64 Mac guest and an x64 server guest.
+  const { root, pages } = sandbox();
+  try {
+    const arm = { ...ENV, windowsVersion: "Microsoft Windows 11 Pro 10.0.22621", architecture: "arm64" };
+    const x64 = { ...arm, architecture: "x64" };
+    assert.notEqual(keyFor(pages, { environment: arm }), keyFor(pages, { environment: x64 }));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the same OS and architecture still share evidence", () => {
+  // The pool only works because interchangeable guests reuse each other's captures.
+  const { root, pages } = sandbox();
+  try {
+    const env = { ...ENV, windowsVersion: "Microsoft Windows 11 Pro 10.0.22621", architecture: "arm64" };
+    assert.equal(keyFor(pages, { environment: env }), keyFor(pages, { environment: { ...env } }));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

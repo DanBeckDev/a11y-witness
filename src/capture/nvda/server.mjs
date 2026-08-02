@@ -217,6 +217,10 @@ function runtimeEnvironment() {
     guidepupVersion: packageVersion("@guidepup/guidepup"),
     nodeVersion: process.version,
     windowsVersion: powershellValue("$os = Get-CimInstance Win32_OperatingSystem; \"$($os.Caption) $($os.Version)\""),
+    // The guest's architecture, from the worker process itself -- free, and no PowerShell round trip.
+    // Part of the capture cache key: an ARM64 guest and an x64 one are different environments, and
+    // without this the cache treats their evidence as interchangeable.
+    architecture: process.arch,
     workerCode: CODE_VERSION,
     // What the evidence means, and what the host's capture cache keys on. See capture-core.mjs.
     captureProtocol: CAPTURE_PROTOCOL_VERSION,
