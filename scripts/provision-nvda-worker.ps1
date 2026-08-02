@@ -273,7 +273,59 @@ Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name ScreenSaveTimeOut -Value '0
 OK 'screensaver disabled'
 
 # ---------------------------------------------------------------------------
-Step 7 'Durable Edge capture profile'
+Step 7 'Trim Windows background services and apps'
+
+# A capture guest runs a browser and a screen reader -- 425 MB of work -- inside ~1,850 MB of committed
+# memory. That matters because host cost scales at ~1.8-2.0x the guest's CONFIGURED RAM, so the ceiling
+# is the big lever: 4,096 MB costs the host ~8.1 GB, 2,560 MB costs ~4.7 GB. But the ceiling cannot go
+# below what Windows commits, and a stock guest at 2,560 MB was measured paging badly -- capture phases
+# went from ~20 s to a 36.6 s median with 4 recoveries in 10 captures. Trimming the OS is what makes a
+# lower ceiling reachable; it is not the prize itself.
+#
+# This lives here, and not in the worker, because every call below needs elevation and the worker task
+# is deliberately RunLevel Limited (see Step 8). The worker attempts the same trim at boot, detects it
+# is unelevated, and records `needsElevation` rather than failing silently -- which it did, on three
+# consecutive boots, before this existed.
+#
+# The list is nano11builder's technique with none of its choices: nano11 deletes Edge and
+# LanguageFeatures-Speech/-TextToSpeech (the browser we capture through and NVDA's `oneCore` synth), and
+# hardcodes amd64 package names while these guests are ARM64. So names are read from the guest, and
+# src/capture/nvda/windows-trim.mjs holds the authoritative allow/deny lists with the tests that keep
+# Edge and the speech stack out of the removal set.
+$trimScript = Join-Path $RepoPath 'src\capture\nvda\windows-trim.mjs'
+$trimMarker = Join-Path $RepoPath '.windows-trimmed'
+if (Test-Path $trimScript) {
+  if (Test-Path $trimMarker) {
+    OK "already trimmed ($((Get-Content $trimMarker -Raw).Trim()))"
+  } else {
+    # Elevated here, so DISM and sc.exe both work. Minutes, mostly Appx removal.
+    & node $trimScript $trimMarker 2>&1 | Select-Object -Last 6 | ForEach-Object { Write-Host "      $_" }
+    if (Test-Path $trimMarker) { OK "trimmed: $((Get-Content $trimMarker -Raw).Trim())" }
+    else { Warn 'trim produced no marker -- see .windows-trimmed.log' }
+  }
+} else {
+  Warn "trim script not found at $trimScript (deploy it first)"
+}
+
+# Defender is ~242 MB, the single largest removable item, and Tamper Protection blocks turning it off
+# from a running system -- confirmed on this fleet: Get-MpComputerStatus reports IsTamperProtected=True.
+# That is why tiny11 does it offline against a mounted image. Reported, not fought: if Defender is the
+# only thing that needs offline access, ~242 MB is the entire return on owning an ISO pipeline, and that
+# should be decided on the number rather than on enthusiasm.
+$tp = try { (Get-MpComputerStatus).IsTamperProtected } catch { $null }
+if ($tp -eq $true) {
+  Warn 'Defender stays (~242 MB): Tamper Protection is ON and blocks disabling it from the running OS. Turn it off in Windows Security, or remove Defender offline in an image build.'
+} elseif ($tp -eq $false) {
+  try {
+    Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop
+    OK 'Defender real-time protection disabled (Tamper Protection was off)'
+  } catch { Warn "Defender still on: $($_.Exception.Message)" }
+} else {
+  OK 'Defender not present or not queryable'
+}
+
+# ---------------------------------------------------------------------------
+Step 7b 'Durable Edge capture profile'
 
 # capture-core.mjs defaults this under %LOCALAPPDATA%; A11Y_EDGE_PROFILE overrides.
 # It must not sit in %TEMP%, for the same reason the NVDA install must not.
