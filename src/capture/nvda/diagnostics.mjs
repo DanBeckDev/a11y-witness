@@ -255,6 +255,22 @@ export function windowsTrimReport(markerPath = resolve(process.cwd(), ".windows-
  * @param {string} raw
  * @returns {object[]}
  */
+/**
+ * Everything a failed probe can tell us.
+ *
+ * `error.message` from execFileSync is just the command line; the actual complaint is on stderr, and
+ * dropping it turns "Get-Service could not find X" into an unhelpful "Command failed". Learned by
+ * losing a cycle to exactly that.
+ */
+export function probeError(error) {
+  const stderr = String(error?.stderr ?? "").trim().split(/\r?\n/).filter(Boolean).slice(0, 4);
+  return {
+    error: String(error?.message ?? "").split("\n")[0].slice(0, 200),
+    stderr: stderr.length ? stderr : undefined,
+    status: error?.status,
+  };
+}
+
 export function parsePowerShellJson(raw) {
   const text = String(raw).trim();
   if (!text) return [];
@@ -285,7 +301,7 @@ export function defenderState() {
     return parsePowerShellJson(raw)[0] ?? null;
   } catch (error) {
     // Defender absent or the cmdlet blocked are both real answers; report the reason, do not guess.
-    return { error: error.message.split("\n")[0].slice(0, 200) };
+    return probeError(error);
   }
 }
 
@@ -307,7 +323,7 @@ export function serviceStates(names = TRIMMED_SERVICES) {
   } catch (error) {
     // Reported, never swallowed. A null here previously meant "threw, reason discarded", which read as
     // "no services found" and cost a debugging cycle: the trim looked like it had silently done nothing.
-    return { error: error.message.split("\n")[0].slice(0, 300) };
+    return probeError(error);
   }
 }
 
@@ -461,6 +477,7 @@ export function guestDiagnostics({ edgeProfile, logPath }) {
     topProcesses: topProcessesByMemory(),
     committedMemory: committedMemory(),
     windowsTrim: windowsTrimReport(),
+    windowsTrimLog: serverLogTail(resolve(process.cwd(), ".windows-trimmed.log"), 30),
     defender: defenderState(),
     services: serviceStates(),
     screenReader: screenReaderState({
