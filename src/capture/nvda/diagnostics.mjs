@@ -20,7 +20,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statfsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 /** Stop walking a runaway tree. An Edge profile is large but not unbounded. */
 const MAX_WALK_ENTRIES = 200_000;
@@ -223,6 +223,25 @@ export function parseCommittedMemory(output) {
   };
 }
 
+/**
+ * What the one-shot Windows trim did, if it has run on this guest.
+ *
+ * Served over HTTP because that is the only channel into a guest that is reliable: `utmctl exec`
+ * returns success and no output whether or not it ran, and `file pull` needs a logged-on session. A
+ * result you cannot read is a result you do not have.
+ */
+export function windowsTrimReport(markerPath = resolve(process.cwd(), ".windows-trimmed")) {
+  for (const path of [`${markerPath}.json`, markerPath]) {
+    try {
+      const raw = readFileSync(path, "utf8");
+      return path.endsWith(".json") ? JSON.parse(raw) : { summary: raw.trim() };
+    } catch {
+      continue; // not written yet, or still running -- try the plainer marker, then report absence
+    }
+  }
+  return null;
+}
+
 export function largestSubtrees(root, limit = 8) {
   let entries;
   try {
@@ -356,6 +375,7 @@ export function guestDiagnostics({ edgeProfile, logPath }) {
     processes: processCounts(WATCHED_PROCESSES),
     topProcesses: topProcessesByMemory(),
     committedMemory: committedMemory(),
+    windowsTrim: windowsTrimReport(),
     screenReader: screenReaderState({
       nvdaRoot: process.env.GUIDEPUP_SCREEN_READERS_PATH ||
         (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "guidepup") : null),
