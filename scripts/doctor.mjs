@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { availableHostMemoryMb, workersHostCanRun } from "../src/capture/host-capacity.mjs";
+import { fleetConsistency, describeMismatches } from "../src/capture/fleet-consistency.mjs";
 import { assessWorker } from "../src/capture/worker-health.mjs";
 
 const run = promisify(execFile);
@@ -27,6 +28,22 @@ const PROBE_TIMEOUT_MS = 8000;
 
 const checks = [];
 const add = (name, ok, detail, fix = null) => checks.push({ name, ok, detail, fix });
+
+function commandError(error) {
+  const observed = [error?.stderr, error?.stdout, error?.message]
+    .map((value) => String(value ?? "").trim())
+    .find(Boolean) || "unknown command failure";
+  return observed.replace(/\s+/g, " ").slice(0, 400);
+}
+
+function workerControlFix(observed) {
+  if (/no VM named|no worker VM registered/i.test(observed)) {
+    return "UTM has no registered worker VM; re-register the existing a11y-worker*.utm bundles in UTM, then re-run " + `${CTL} pool`;
+  }
+  return existsSync("/Applications/UTM.app")
+    ? "unlock the Mac if it is locked, then re-run " + `${CTL} pool`
+    : `${CTL} pool   # launches UTM if it is installed`;
+}
 
 async function shell(cmd, args, timeout = 30000) {
   const { stdout } = await run(cmd, args, { timeout, encoding: "utf8" });
@@ -83,12 +100,12 @@ async function checkWorker() {
   try {
     pool = JSON.parse(await shell(CTL, ["pool"], 90000));
   } catch (e) {
-    return add("worker", false, `could not query the local pool (${e.message.split("\n")[0]})`,
-      `${CTL} pool   # launches UTM if it is not running`);
+    return add("worker", false, `could not query the local pool (${commandError(e)})`,
+      workerControlFix(commandError(e)));
   }
   if (!pool.length) {
     return add("worker", false, "no worker VM registered",
-      "build one: docs/getting-started.md, or clone: scripts/local-worker/clone-worker.sh");
+      "UTM has no registered worker VM; re-register an existing a11y-worker*.utm bundle, or build one from docs/getting-started.md");
   }
 
   const running = pool.filter((vm) => vm.state === "started");
@@ -106,6 +123,7 @@ async function checkWorker() {
     add("worker", true, `${pool.length} worker(s), all stopped — a run starts them automatically (${summary})`);
   }
   await checkDegradedWorkers(pool);
+  await checkFleetConsistency(pool);
   checkHostCapacity(pool);
   const busy = pool.filter((vm) => vm.busy);
   if (busy.length) {
@@ -136,6 +154,38 @@ async function checkDegradedWorkers(pool) {
   }
 }
 
+/**
+ * Are the guests interchangeable?
+ *
+ * The pool assumes so: cases go to whichever worker is free, the cache lets any guest reuse another's
+ * evidence, and a good/bad pair is only comparable because both halves came from equivalent machines.
+ * Two real divergences happened in one day -- Edge auto-updated on one guest while the others stayed
+ * behind, and StartupBoostEnabled read 1 on two guests and 0 on a third -- and BOTH were caught by a
+ * human reading a console by eye. That is not a detection mechanism.
+ *
+ * Never a FAIL. A run on slightly mismatched guests is worse than one on matched guests and far better
+ * than no run, and a diagnostic must not be the thing that takes the pool offline.
+ */
+async function checkFleetConsistency(pool) {
+  const guests = [];
+  for (const vm of pool.filter((v) => v.healthy && v.ip)) {
+    try {
+      const health = await httpJson(`http://${vm.ip}:${vm.port}/health`);
+      guests.push({ worker: `http://${vm.ip}:${vm.port}`, environment: health.environment, policy: null });
+    } catch {
+      continue; // unreachable is the worker check's business, not this one
+    }
+  }
+  const { consistent, mismatches } = fleetConsistency(guests);
+  if (guests.length < 2) return;
+  if (consistent) {
+    add("fleet", true, `${guests.length} guests agree on browser, screen reader, OS and protocol`);
+    return;
+  }
+  add("fleet", true, `INCONSISTENT — ${describeMismatches(mismatches).join("; ")}`,
+    "npm run fleet:normalise   # applies the baseline to every guest, elevated");
+}
+
 // Can this host actually hold the pool it has registered?
 //
 // Not a fault, and never a FAIL: a capped pool runs fine, just narrower. It is reported because the
@@ -157,7 +207,8 @@ function checkHostCapacity(pool) {
 }
 
 // Dataset capture needs the pages served, and the guest must be able to reach them — the
-// host's localhost is not reachable from inside the VM.
+// host's localhost is not reachable from inside the VM. The capture command leases the page
+// server for the run, so an idle host with no listener on this port is ready, not broken.
 async function checkDatasetPages() {
   const manifestPath = resolve(DATASET, "manifest.json");
   if (!existsSync(manifestPath)) {
@@ -178,12 +229,11 @@ async function checkDatasetPages() {
       { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
     if (!response.ok) {
       return add("pages", false, `:${PAGES_PORT} answers but returns HTTP ${response.status} for ${probe} — wrong directory`,
-        `something else holds the port. Stop it, then: npx serve ${DATASET}/pages -l ${PAGES_PORT}`);
+        `something else holds the port. Stop it; training:capture will lease the dataset server automatically`);
     }
     add("pages", true, `serving the dataset on :${PAGES_PORT} (verified ${probe || "/"})`);
   } catch {
-    add("pages", false, `nothing serving on :${PAGES_PORT}`,
-      `npx serve ${DATASET}/pages -l ${PAGES_PORT}`);
+    add("pages", true, `nothing serving on :${PAGES_PORT} — training:capture leases it automatically`);
   }
 }
 
@@ -196,11 +246,11 @@ function checkRunState() {
   if (!p.startedAt) return add("run", true, "no capture run recorded");
   if (!p.finishedAt) {
     return add("run", false, `a run is UNFINISHED (started ${p.startedAt})`,
-      "npm run training:wait, or npm run training:capture -- --resume");
+      "npm run training:wait, or npm run training:capture -- --resume --no-cache");
   }
   const failed = Object.values(p.cases ?? {}).filter((c) => c.status === "failed").length;
   add("run", failed === 0, `last run ${p.outcome ?? "finished"}`,
-    failed ? "npm run training:capture -- --resume" : null);
+    failed ? "npm run training:capture -- --resume --no-cache" : null);
 }
 
 // --- report ---------------------------------------------------------------
