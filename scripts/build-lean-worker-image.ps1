@@ -187,10 +187,38 @@ try {
     }
   }
 
-  # Defender's services, disabled in the offline SYSTEM hive. Tamper Protection is a runtime guard and
-  # there is no runtime here, which is the whole reason this step is in an image build and not in
-  # windows-trim.mjs.
-  Step 'Disabling Defender services in the offline registry'
+  # Defender, disabled in the offline hives. Tamper Protection is a runtime guard and there is no
+  # runtime here, which is the whole reason this step is in an image build and not in windows-trim.mjs.
+  #
+  # ORDER AND HIVE BOTH MATTER, and getting either wrong makes the whole step a no-op.
+  # Tamper Protection is itself a registry value, and it lives in SOFTWARE, not SYSTEM:
+  # `Microsoft\Windows Defender\Features\TamperProtection`. Disabling the services in SYSTEM while
+  # leaving that flag armed means the guest boots with Tamper Protection active and reverts them --
+  # which is exactly what happens on a live system, and would make this build look like it did nothing.
+  # Clear the flag first, then the services.
+  Step 'Disarming Tamper Protection in the offline SOFTWARE hive'
+  & reg load HKLM\zSOFTWARE "$mount\Windows\System32\config\SOFTWARE" | Out-Null
+  try {
+    $features = 'HKLM:\zSOFTWARE\Microsoft\Windows Defender\Features'
+    New-Item -Path $features -Force | Out-Null
+    Set-ItemProperty $features -Name TamperProtection -Value 0 -Type DWord
+    Set-ItemProperty $features -Name TamperProtectionSource -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    OK 'TamperProtection = 0'
+    $policy = 'HKLM:\zSOFTWARE\Policies\Microsoft\Windows Defender'
+    New-Item -Path $policy -Force | Out-Null
+    Set-ItemProperty $policy -Name DisableAntiSpyware -Value 1 -Type DWord
+    Set-ItemProperty $policy -Name DisableAntiVirus -Value 1 -Type DWord
+    New-Item -Path "$policy\Real-Time Protection" -Force | Out-Null
+    Set-ItemProperty "$policy\Real-Time Protection" -Name DisableRealtimeMonitoring -Value 1 -Type DWord
+    OK 'DisableAntiSpyware / DisableRealtimeMonitoring policies set'
+  } finally {
+    # The GC call is not superstition: PowerShell keeps hive handles open and `reg unload` fails with
+    # "Access is denied" while they live, leaving the image mounted with a loaded hive.
+    [gc]::Collect(); [gc]::WaitForPendingFinalizers()
+    & reg unload HKLM\zSOFTWARE | Out-Null
+  }
+
+  Step 'Disabling Defender services in the offline SYSTEM hive'
   & reg load HKLM\zSYSTEM "$mount\Windows\System32\config\SYSTEM" | Out-Null
   try {
     foreach ($svc in 'WinDefend', 'WdNisSvc', 'WdNisDrv', 'WdFilter', 'WdBoot', 'Sense') {
@@ -198,7 +226,7 @@ try {
       if (Test-Path $key) { Set-ItemProperty $key -Name Start -Value 4; OK "$svc disabled" }
     }
   } finally {
-    [gc]::Collect()
+    [gc]::Collect(); [gc]::WaitForPendingFinalizers()
     & reg unload HKLM\zSYSTEM | Out-Null
   }
 
