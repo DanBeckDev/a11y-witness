@@ -111,6 +111,59 @@ export function processCounts(names) {
   }
 }
 
+/**
+ * What is actually using the guest's memory, largest first.
+ *
+ * Debloating an image on spec is guesswork. The guests are configured with 4,096 MB and use ~2,157 MB
+ * mid-capture with Edge and NVDA up, and the question that decides whether a custom image is worth
+ * building is what that 2,157 MB *is*: Windows services and background apps that a leaner image would
+ * remove, or Edge and NVDA, which no image can remove because they are the job.
+ *
+ * One `tasklist` call, same as processCounts -- this endpoint is on-demand, so it can afford it.
+ *
+ * @param {number} limit how many processes to report
+ */
+export function topProcessesByMemory(limit = 15) {
+  if (process.platform !== "win32") return null;
+  try {
+    return parseTasklistMemory(execFileSync("tasklist", ["/fo", "csv", "/nh"], {
+      encoding: "utf8", timeout: 20_000, maxBuffer: 1 << 24,
+    }), limit);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Group `tasklist /fo csv /nh` output by image name, largest first.
+ *
+ * Pure so it can be tested off Windows, which is where this repo runs its tests. The parsing is the part
+ * that can quietly be wrong: the memory column is localised, thousands-separated and suffixed
+ * (`"1,234 K"`), and Chromium reports a dozen processes under one image name — summing them is the whole
+ * point, since "msedge = 900 MB across 9 processes" is the fact worth knowing.
+ *
+ * @param {string} csv
+ * @param {number} limit
+ */
+export function parseTasklistMemory(csv, limit = 15) {
+  /** @type {Record<string, {megabytes: number, count: number}>} */
+  const byImage = {};
+  for (const line of csv.split(/\r?\n/)) {
+    const cells = line.match(/"([^"]*)"/g);
+    if (!cells || cells.length < 5) continue;
+    const name = cells[0].replaceAll('"', "");
+    const kb = Number(cells[4].replaceAll(/[^\d]/g, ""));
+    if (!Number.isFinite(kb) || !name) continue;
+    const entry = byImage[name] ??= { megabytes: 0, count: 0 };
+    entry.megabytes += kb / 1024;
+    entry.count += 1;
+  }
+  return Object.entries(byImage)
+    .map(([name, v]) => ({ name, megabytes: Math.round(v.megabytes), count: v.count }))
+    .sort((a, b) => b.megabytes - a.megabytes)
+    .slice(0, limit);
+}
+
 /** Image names worth counting: the three that have each caused an outage by leaking or dying. */
 const WATCHED_PROCESSES = ["msedge", "nvda", "node"];
 
@@ -257,6 +310,7 @@ export function guestDiagnostics({ edgeProfile, logPath }) {
     disk: diskSpace(edgeProfile),
     serverLog: treeSize(logPath),
     processes: processCounts(WATCHED_PROCESSES),
+    topProcesses: topProcessesByMemory(),
     screenReader: screenReaderState({
       nvdaRoot: process.env.GUIDEPUP_SCREEN_READERS_PATH ||
         (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "guidepup") : null),
