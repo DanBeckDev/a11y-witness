@@ -20,6 +20,15 @@ const REJECTED_PREVIEW_PHRASES = 2;
 export const MAX_CONSECUTIVE_WORKER_FAILURES = 3;
 
 /**
+ * Consecutive silent `/health` probes before a worker is treated as wedged rather than briefly busy.
+ *
+ * Two, not one: a single timed-out probe happens on a loaded host and must never cost a worker. Two in
+ * a row, each taken after a capture on that worker finished, is the wedge — the guest that spun at 178%
+ * CPU answered nothing for twelve minutes, so it would have been caught on the second probe.
+ */
+export const UNREACHABLE_PROBES_BEFORE_RETIRE = 2;
+
+/**
  * Recoverable, or the end of this case?
  *
  * Everything here heals on its own, which is why waiting beats failing. The connection errors are
@@ -139,16 +148,38 @@ export function runOutcome({ total, failures, skipped, cached, poolSize, evicted
  * never left zero while that worker ran at 122.9 s per capture against a healthy peer's 40.6 s. Nothing
  * could ever have evicted it.
  *
+ * **A worker that answers nothing at all is the third fault, and it used to be invisible to both rules.**
+ * Eviction needs failures and this rule needed vitals, so a guest that stopped answering `/health`
+ * satisfied neither: `workerVitals` returned null, null was read as "no information", and no information
+ * was treated as healthy. Measured consequence — one guest wedged and spun at 178% CPU for twelve
+ * minutes while still in the rotation, and its healthy neighbour's mute rate went from 0/10 to 6/18
+ * because the spin stole the CPU that NVDA's speech timeouts depend on. The wedged guest was never the
+ * one that failed; it poisoned the other one.
+ *
+ * So unreachability is now evidence, but only in the plural. A single failed probe still must not retire
+ * anybody — that principle is why `workerVitals` swallows errors, and a transient blip on a busy host is
+ * common. `UNREACHABLE_PROBES_BEFORE_RETIRE` consecutive silences, each observed after a capture on that
+ * worker ended, is a wedge rather than a blip.
+ *
  * Never the last worker standing, for the same reason eviction is not: a slow run beats no run.
  *
- * @param {{ vitals: object | null | undefined, poolSize: number, retiredCount: number }} state
+ * @param {{ vitals: object | null | undefined, unreachableStreak?: number,
+ *           poolSize: number, retiredCount: number }} state
  * @returns {{ retire: boolean, reason: string | null }}
  */
-export function shouldRetireWorker({ vitals, poolSize, retiredCount }) {
+export function shouldRetireWorker({ vitals, unreachableStreak = 0, poolSize, retiredCount }) {
+  const wedged = unreachableStreak >= UNREACHABLE_PROBES_BEFORE_RETIRE;
   const { degraded, reason } = assessWorker(vitals);
-  if (!degraded) return { retire: false, reason: null };
+  if (!wedged && !degraded) return { retire: false, reason: null };
   if (poolSize - retiredCount <= 1) {
     return { retire: false, reason: null }; // last one standing: keep using it, however slow
+  }
+  if (wedged) {
+    return {
+      retire: true,
+      reason: `did not answer /health on ${unreachableStreak} consecutive probes — wedged, and a wedged ` +
+        "guest spins and degrades the workers beside it",
+    };
   }
   return { retire: true, reason };
 }

@@ -132,6 +132,42 @@ test("the last worker standing is never retired, however degraded", () => {
   }).retire, false);
 });
 
+test("a worker that stops answering /health is retired as wedged", () => {
+  // The measured incident: one guest wedged, spun at 178% CPU and answered nothing for twelve minutes
+  // while still taking work. It never succeeded, so the degradation check never ran on it; it never
+  // failed cleanly enough for eviction either. Meanwhile its healthy neighbour's mute rate went from
+  // 0/10 to 6/18, because the spin stole the CPU that NVDA's 1s speech timeouts depend on.
+  const { retire, reason } = shouldRetireWorker({
+    vitals: null, unreachableStreak: 2, poolSize: 2, retiredCount: 0,
+  });
+  assert.equal(retire, true);
+  assert.match(reason!, /did not answer \/health on 2 consecutive probes/);
+});
+
+test("one silent probe is a blip, not a wedge", () => {
+  // A health probe that failed must never be the thing that retires a worker — that principle is why
+  // workerVitals swallows errors, and a single timeout on a loaded host is ordinary.
+  assert.equal(shouldRetireWorker({
+    vitals: null, unreachableStreak: 1, poolSize: 3, retiredCount: 0,
+  }).retire, false);
+});
+
+test("a worker that answers but reports no vitals is still healthy", () => {
+  // An older worker predates the vitals field. Absent vitals must keep meaning "no information",
+  // which is why reachability had to become a separate fact rather than another null.
+  assert.equal(shouldRetireWorker({
+    vitals: null, unreachableStreak: 0, poolSize: 3, retiredCount: 0,
+  }).retire, false);
+});
+
+test("the last worker standing is not retired even when wedged", () => {
+  // Consistent with every other rule here: a slow run beats no run, and there is nowhere to hand the
+  // work to. The run reports it rather than abandoning the queue.
+  assert.equal(shouldRetireWorker({
+    vitals: null, unreachableStreak: 5, poolSize: 3, retiredCount: 2,
+  }).retire, false);
+});
+
 test("retired workers are named in the run outcome", () => {
   const outcome = runOutcome({
     total: 10, failures: 0, skipped: 0, cached: 0, poolSize: 3, retired: ["http://w1:8765"],
