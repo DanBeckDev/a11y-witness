@@ -57,11 +57,23 @@ export function hashPageDir(pageDir) {
  * The environment fields that change captured evidence, taken from the worker's own /health.
  * Missing values become "unknown", which still keys consistently -- two captures from an
  * unreportable worker match each other and nothing else.
+ *
+ * **The OS is part of this, and was not.** The key covered the screen reader, the browser, the protocol
+ * and the provisioning revision -- but not which Windows the guest was running, nor its architecture. A
+ * fleet with more than one image therefore wrote into one corpus indistinguishably: a capture from an
+ * ARM64 guest on a developer's Mac and one from an x64 guest on a server were, as far as the cache was
+ * concerned, the same evidence. Whether NVDA announces identically across those is exactly the question
+ * `npm run evidence:check` exists to answer -- and until it has been answered for a given pair of
+ * images, the cache must not assume it.
+ *
+ * `provisionRevision` was supposed to cover some of this and cannot: it reads `"unstamped"` on every
+ * guest, because provisioning writes the stamp and no guest has been re-provisioned since it was added.
  */
 export function environmentKey(environment = {}) {
   return {
     screenReader: `${environment.screenReader ?? "NVDA"}/${environment.screenReaderVersion ?? "unknown"}`,
     browser: `${environment.browser ?? "unknown"}/${environment.browserVersion ?? "unknown"}`,
+    os: `${environment.windowsVersion ?? "unknown"}/${environment.architecture ?? "unknown"}`,
     captureProtocol: environment.captureProtocol ?? "unknown",
     provisionRevision: environment.provisionRevision ?? "unstamped",
   };

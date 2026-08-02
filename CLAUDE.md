@@ -201,7 +201,19 @@ never pays for evidence nobody asked for. `focusOrder` costs ~8 s on top of a ~1
 
 A full run is 1,061 pairs, so `npm run training:capture` reuses evidence on disk when nothing that
 shapes it has changed. The key covers the page directory (every file), the capture options,
-NVDA and Edge versions, the provisioning revision, and `CAPTURE_PROTOCOL_VERSION`.
+NVDA and Edge versions, **the Windows build and architecture**, the provisioning revision, and
+`CAPTURE_PROTOCOL_VERSION`.
+
+- **The OS is in the key because a fleet can have more than one image.** Without it, a capture from an
+  ARM64 guest on a developer's Mac and one from an x64 guest on a server are, to the cache, the same
+  evidence — so the two blend into one corpus indistinguishably. Whether NVDA announces identically
+  across two images is exactly what `npm run evidence:check` answers, and until it has for a given
+  pair, the cache must not assume it. `provisionRevision` was supposed to cover this and cannot: it
+  reads `"unstamped"` everywhere.
+- **Adding `os` to the key invalidated every capture stamped before it**, because `provenance.cacheKey`
+  is compared literally. One full recapture pays that off, once; after that caching works normally.
+  That is the unavoidable cost of any key change — do them deliberately, and ideally alongside a
+  recapture that was happening anyway.
 
 - **`provisionRevision` reads `"unstamped"` on every current capture, and that is correct, not a
   hole.** Provisioning writes the stamp and no guest has been re-provisioned since it was added.
