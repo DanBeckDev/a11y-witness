@@ -68,7 +68,23 @@ const MAX_CAPTURES_PER_NVDA = 25;
 const NVDA_REMOTE_PORT = 6837;
 const REUSE_PROBE_MS = 2_000;
 const NVDA_EXIT_TIMEOUT_MS = 15_000; // for an old NVDA to release port 6837
-const STATE_SETTLE_MS = 1_200; // after activating a control, for a live region to announce
+const STATE_SETTLE_MS = 1_200; // after activating a control, before re-reading (reactivate/anchor paths)
+
+// After activating a control, how long to KEEP WAITING for an announcement that has not arrived yet.
+//
+// This was a flat `sleep(1200)` and it silently dropped evidence. Measured on
+// disclosure-state-silent/good over 20 captures: 19 recorded the state change, 1 recorded nothing --
+// so 1 in 20 captures of a CORRECTLY implemented disclosure looked exactly like the broken variant.
+// That is worse than noise; it deletes the finding, and it would teach a judge that a good page is bad.
+//
+// Generous on purpose. An empty delta is a legitimate result -- it is precisely what the bad variant
+// must produce -- so this deadline has to exceed the slowest honest announcement, or "silent" and
+// "we stopped listening" become the same observation.
+const STATE_WAIT_MS = 5_000;
+// Once something HAS been announced, how long to wait for the rest of it. Announcements arrive in
+// parts, and cutting after the first would truncate multi-phrase live regions.
+const STATE_QUIET_MS = 600;
+const STATE_POLL_MS = 100;
 const ANCHOR_SETTLE_MS = 400; // after Escape + Ctrl+Home, before re-reading fields
 
 const ADVANCE_TIMEOUT_MS = 8_000; // moving to the next line/object
@@ -1466,13 +1482,45 @@ async function probeDisclosure(phrase, { interaction }) {
     await sleep(STATE_SETTLE_MS);
     const log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, "disclosure")) || [];
     const announced = log.slice(before).map((s) => String(s).trim()).filter(Boolean).join(" | ");
-    const after = await reportFocusedControl();
+    const after = await reportFocusedControlWithRetry(interaction);
     interaction.sweepLog.push(
       `disclosure ${JSON.stringify(phrase.slice(0, 40))} announced=${JSON.stringify(announced)} state=${JSON.stringify(after)}`
     );
     interaction.stateChanges.push({ control: phrase, after });
   } catch (e) {
+    // **A failed measurement is not silence, and must never be recorded as one.**
+    //
+    // Measured on disclosure-state-silent/good over 20 captures: 19 recorded the state change and 1
+    // recorded nothing, because `reportFocus timed out after 6000ms` threw and this catch dropped the
+    // entry. An empty `stateChanges` is precisely the signature of the BAD variant -- a disclosure that
+    // never announces its state -- so 1 in 20 captures of a CORRECTLY implemented page was
+    // indistinguishable from a broken one. That does not add noise, it inverts the finding, and it
+    // would teach a judge that a conformant page fails 4.1.2.
+    //
+    // The entry is still recorded, carrying the error instead of a state. Downstream can then tell
+    // "we did not measure" from "there was nothing to hear" -- and `check-signals` sees a probe that
+    // errored rather than a page that was silent.
     interaction.sweepLog.push(`disclosure ERROR ${errMsg(e)}`);
+    interaction.stateChanges.push({ control: phrase, after: null, error: errMsg(e) });
+  }
+}
+
+/**
+ * Re-read the focused control, retrying a timeout.
+ *
+ * This is a pure read of the accessibility tree -- no side effects on the page -- so retrying is safe,
+ * and a timeout here is the difference between recording a state change and recording nothing at all.
+ * Measured failure rate before this: 1 in 20.
+ */
+async function reportFocusedControlWithRetry(interaction, attempts = 3) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await reportFocusedControl();
+    } catch (e) {
+      if (attempt >= attempts) throw e;
+      interaction.sweepLog.push(`disclosure reportFocus retry ${attempt}: ${errMsg(e)}`);
+      await sleep(STATE_POLL_MS);
+    }
   }
 }
 
@@ -1491,12 +1539,43 @@ async function reportFocusedControl() {
 // by a focus move or document re-announce that overwrites lastSpokenPhrase, so we
 // keep the spokenPhraseLog delta. An empty delta means the action conveyed
 // nothing to the screen reader.
+/**
+ * Wait for the announcement an activation produced, rather than guessing how long it takes.
+ *
+ * Poll until the spoken log grows, then keep polling until it goes quiet, then stop. Fast when the
+ * page announces promptly -- which is almost always -- and patient when it does not.
+ *
+ * The asymmetry is deliberate and is the whole point: a page that announces nothing must still be
+ * allowed to announce nothing. So this returns an empty delta only after STATE_WAIT_MS of genuine
+ * silence, never because a fixed sleep expired first.
+ *
+ * @returns {Promise<string[]>} the full spoken log, for the caller to slice from `before`
+ */
+async function waitForAnnouncement(before, kind) {
+  const deadline = Date.now() + STATE_WAIT_MS;
+  let log = [];
+  while (Date.now() < deadline) {
+    log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, kind)) || [];
+    if (log.length > before) break;
+    await sleep(STATE_POLL_MS);
+  }
+  if (log.length <= before) return log; // genuinely silent -- the finding, not a failure
+  // Something was said; let the rest of it arrive before reading the delta.
+  let settled = log.length;
+  const quietBy = () => Date.now() + STATE_QUIET_MS;
+  for (let quiet = quietBy(); Date.now() < quiet && Date.now() < deadline;) {
+    await sleep(STATE_POLL_MS);
+    log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, kind)) || [];
+    if (log.length > settled) { settled = log.length; quiet = quietBy(); }
+  }
+  return log;
+}
+
 async function activateAndCaptureDelta(phrase, interaction, kind) {
   try {
     const before = ((await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, kind)) || []).length;
     await withTimeout(nvda.act(), ACT_TIMEOUT_MS, kind); // Enter on the control under the cursor
-    await sleep(STATE_SETTLE_MS);
-    const log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, kind)) || [];
+    const log = await waitForAnnouncement(before, kind);
     const after = log.slice(before).map((s) => String(s).trim()).filter(Boolean).join(" | ");
     interaction.sweepLog.push(`${kind} ${JSON.stringify(phrase.slice(0, 40))} -> ${JSON.stringify(after)}`);
     interaction.formChanges.push({ control: phrase, after });
