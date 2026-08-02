@@ -170,7 +170,7 @@ function codeVersion() {
   try {
     const hash = createHash("sha256");
     // Order matters and must match the host side: capture behaviour, then the wire contract.
-    for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs", "nvda-logging.mjs", "speech-channel.mjs", "windows-trim.mjs"]) {
+    for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs", "nvda-logging.mjs", "speech-channel.mjs", "windows-trim.mjs", "browser-session.mjs"]) {
       hash.update(readFileSync(new URL(file, import.meta.url)));
     }
     return hash.digest("hex").slice(0, 16);
