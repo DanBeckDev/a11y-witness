@@ -13,6 +13,7 @@ import { freemem, totalmem, uptime as osUptime } from "node:os";
 import { join, resolve } from "node:path";
 import {
   browserAvailable, CAPTURE_PROTOCOL_VERSION, captureWithNvda, EDGE_PROFILE_DIR, forgetScreenReader,
+  screenReaderSettings,
   screenReaderReady, shutdownScreenReader, warmUpScreenReader,
 } from "./capture-core.mjs";
 import { isLocallyRecoverable } from "./worker-recovery.mjs";
@@ -558,7 +559,10 @@ const server = createServer((req, res) => {
   // at all -- the guest agent that used to answer these questions cannot be relied on.
   if (req.method === "GET" && req.url === "/diagnostics") {
     try {
-      return send(res, 200, guestDiagnostics({ edgeProfile: EDGE_PROFILE_DIR, logPath: LOG_PATH }));
+      return send(res, 200, {
+        ...guestDiagnostics({ edgeProfile: EDGE_PROFILE_DIR, logPath: LOG_PATH }),
+        screenReaderSettings: screenReaderSettings(),
+      });
     } catch (e) {
       return send(res, 500, { error: String((e && e.message) || e) });
     }
