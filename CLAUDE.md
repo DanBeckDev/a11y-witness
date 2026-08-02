@@ -366,6 +366,66 @@ cycling NVDA destabilises the speech channel.
 A worker that fails three captures in a row is **evicted** from the pool and everything it failed goes
 back to the queue; the run summary names it.
 
+### guidepup is pinned at 0.31.0, and the version is EVIDENCE
+
+`guidepup` parses NVDA's speech before this project ever sees it, so its version changes what a capture
+says. Upgrading 0.29.2 → 0.31.0 fixed an intermittent OBJECT REPLACEMENT CHARACTER (U+FFFC) that had
+been appended to form-field announcements at 3–31% of affected captures for weeks — measured 1 in 15
+before, **0 in 15 after**. See `docs/ufffc-investigation.md`, including the seven theories that were
+wrong so nobody re-runs them.
+
+Consequences, all of which are now enforced:
+
+- **`guidepupVersion` is in the cache key** (`capture-cache.mjs`) and in the fleet-consistency check
+  (`fleet-consistency.mjs`). Two guests on different versions produce different evidence and must never
+  share a cache entry. During the upgrade itself the fleet was briefly split, and nothing noticed.
+- **0.29 was hiding a bug.** 0.31 throws when `start()` is called on a live NVDA; 0.29 tolerated it. That
+  masked real state drift — `screenReader.running` disagrees with reality whenever
+  `screenReaderResponds()` misses the Remote port for an instant. A running NVDA is now *adopted*.
+- **0.30+ writes a SESSION config** (`sessionUserConfig/nvda.ini`) beside the base one. Anything that
+  assumes a single `nvda.ini` is wrong.
+- **0.30 added a settings API** — `start({settings})`, `getSettings()`, `getSetting('section.key')`.
+  `/diagnostics` reports the effective settings. **Record them; do not tune them.** NVDA's defaults are
+  what a real user experiences, so configuring away from them makes the evidence less representative.
+
+Upgrading guidepup is an evidence change: run `npm run evidence:check` and expect a recapture.
+
+### Wait for the condition, never `sleep` a duration
+
+The capture path had 18 bare `sleep()` calls against 3 polling loops, and one of them caused the worst
+defect this project has had: a fixed wait expired early, the probe timed out, and the miss was recorded
+as **"the page announced nothing"** — which is precisely the signature of a non-conformant disclosure. 1
+in 20 captures of a CORRECTLY implemented page was indistinguishable from a broken one. That does not
+add noise, it **inverts the finding**.
+
+A fixed sleep is wrong in both directions: too long in the common case, and too short in the tail where
+being wrong destroys evidence rather than merely costing time.
+
+**guidepup already waits.** `enqueueAndTap` resolves only after a quiet period on the speech channel
+(`SPEAK_DEBOUNCE_TIMEOUT`, 1000 ms in `NVDAClient.js`), so `nvda.perform()` returning already means
+speech has settled. Sleeping on top of that is waiting twice for the same event.
+
+Converted so far, ~5.4 s per capture:
+
+| site | was | now |
+|---|---|---|
+| cold-start readiness | 3000 ms | poll until NVDA's Remote port answers |
+| `probeDisclosure` after `act()` | 1200 ms | `waitForAnnouncement` — wait for speech, then quiet |
+| `reportFocusedControl` | 1200 ms | poll until a phrase exists |
+
+Still fixed: four `ANCHOR_SETTLE_MS` (400 ms) on the read-through path, plus `WINDOW_SETTLE_MS`,
+`TABLE_SETTLE_MS` and `SPEECH_RECONNECT_MS`. Same treatment, but the read-through path truncates
+transcripts when you get it wrong, so verify each against a canary.
+
+**Two traps when doing this.** A condition must be *sufficient*: `screenReaderResponds()` only proves
+the Remote port accepts a TCP connection, not that NVDA's virtual buffer is navigable. And the deadline
+must exceed the slowest honest answer, because silence is a legitimate finding — if a probe gives up
+early, "nothing was said" and "we stopped listening" become the same observation.
+
+**Verify by importing the module.** Removing a constant that three other call sites still used left
+`capture-core.mjs` throwing `ReferenceError` at import, and **neither `npm run lint` nor `tsc --noEmit`
+caught it**. For `.mjs`, `node -e "import('./path.mjs')"` is the only real check.
+
 ### The speech channel is a socket, and a dead one looks exactly like a healthy NVDA
 
 This is the root cause of the pool's most expensive fault, and the fix is one round trip.
