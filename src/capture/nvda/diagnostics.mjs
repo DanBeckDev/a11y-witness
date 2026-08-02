@@ -304,8 +304,25 @@ export function serviceStates(names = TRIMMED_SERVICES) {
       "Select-Object Name,Status,StartType | ConvertTo-Json -Compress"],
       { encoding: "utf8", timeout: 60_000 });
     return parsePowerShellJson(raw);
-  } catch {
-    return null;
+  } catch (error) {
+    // Reported, never swallowed. A null here previously meant "threw, reason discarded", which read as
+    // "no services found" and cost a debugging cycle: the trim looked like it had silently done nothing.
+    return { error: error.message.split("\n")[0].slice(0, 300) };
+  }
+}
+
+/**
+ * The tail of the worker's own log.
+ *
+ * The trim writes its progress here, and a detached child that failed to start leaves its only trace
+ * here too. `serverLog` already reported the file's SIZE, which answers "is it growing" and not "what
+ * does it say" -- and the second question is the one you have when something did not happen.
+ */
+export function serverLogTail(logPath, lines = 40) {
+  try {
+    return readFileSync(logPath, "utf8").split(/\r?\n/).filter(Boolean).slice(-lines);
+  } catch (error) {
+    return { error: error.message.split("\n")[0].slice(0, 200) };
   }
 }
 
@@ -439,6 +456,7 @@ export function guestDiagnostics({ edgeProfile, logPath }) {
     edgeProfile: treeSize(edgeProfile),
     disk: diskSpace(edgeProfile),
     serverLog: treeSize(logPath),
+    serverLogTail: serverLogTail(logPath),
     processes: processCounts(WATCHED_PROCESSES),
     topProcesses: topProcessesByMemory(),
     committedMemory: committedMemory(),
