@@ -19,18 +19,30 @@ import { totalmem } from "node:os";
 /**
  * What one worker VM costs the host.
  *
- * Measured with `top -o mem`, which agrees with phys_footprint: a guest configured with 4096 MB costs
- * the host **8,048–8,127 MB**. The gap is QEMU's own overhead on top of guest RAM that Windows dirties
- * and never gives back (there is no balloon driver). It is NOT accumulation: a VM sits at 6.8 GB within
- * ten minutes of booting and creeps to ~8.1 GB over roughly two hours.
+ * Measured with `top -o mem`, which agrees with phys_footprint. Host cost tracks the guest's CONFIGURED
+ * RAM at ~1.8x, not its usage:
  *
- * This was 7,600 and that was an underestimate taken from a shorter sample. Three guests at the real
- * figure are 24.3 GB, which is why they did not fit in 36 GB alongside an ordinary desktop.
+ *   4096 MB configured -> 8,048-8,127 MB host
+ *   3072 MB configured -> 5,494 MB host          <- what the guests now run at
+ *   2560 MB configured -> 4,952 MB host          <- measured, and too small: the guest pages
+ *
+ * 3072 MB is the setting because it is the smallest that does not page. The guest commits ~1,859 MB, so
+ * 2560 leaves too little above it: capture phases went from a 12.1 s median (IQR 0.4, 0 recoveries in
+ * 10) to 36.6 s (IQR 38, 4 recoveries in 10). Less RAM stopped being cheaper the moment Windows started
+ * swapping, and four cramped workers measured worse than three comfortable ones.
+ *
+ * The ~1.8x multiplier is QEMU's own overhead on top of guest RAM that Windows dirties and never gives
+ * back (there is no balloon driver). That is why the CONFIGURED size is the lever and the guest's usage
+ * is not: Windows expands to fill whatever ceiling it is given.
+ *
+ * This constant has been wrong twice, in the same direction. 7,600 was an underestimate from a short
+ * sample; 8,100 was right for 4096 MB guests and became wrong the moment they were re-sized. Re-measure
+ * it whenever guest RAM changes -- it is a property of the configuration, not of the software.
  *
  * Deliberately the high end of the range. Under-committing costs a little parallelism; over-committing
  * costs correctness, because a swapped-out guest fails captures rather than merely slowing them.
  */
-const MEMORY_PER_WORKER_MB = 8_100;
+const MEMORY_PER_WORKER_MB = 5_600;
 
 /**
  * What the host's own software needs, beyond the run.

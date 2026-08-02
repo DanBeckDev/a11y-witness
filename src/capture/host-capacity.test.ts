@@ -19,17 +19,21 @@ test("a host running more guests than it can afford is capped BELOW what is alre
   // The regression. This returned `alreadyRunning + canStart`, so it could never answer fewer than the
   // VMs that happened to be running — and a pool somebody had already started was therefore beyond its
   // reach. Three 8.1 GB guests on this 36 GB Mac drove 6.6 GB of swap and starved two of the three
-  // until they stopped answering /health within 75 s. The cap has to be able to say "use two of your
-  // three", or it cannot prevent the one failure it exists for.
-  assert.equal(workersHostCanRun({ availableMb: 13_743, alreadyRunning: 3, totalMb: MAC_36GB }), 2);
+  // until they stopped answering /health within 75 s.
+  //
+  // At the current 3072 MB guest size three genuinely fit, so the answer here is 3. The property under
+  // test is not the number — it is that the result is ALLOWED to come out below `alreadyRunning`, which
+  // it structurally could not before. Re-sizing the guests changes the number; it must not change that.
+  assert.equal(workersHostCanRun({ availableMb: 13_743, alreadyRunning: 3, totalMb: MAC_36GB }), 3);
 });
 
 test("the ceiling comes from physical RAM, which swap cannot distort", () => {
   // vm_stat counts a swapped-out guest's pages as compressed/inactive and therefore as *available*, so
-  // the dynamic estimate rises exactly as the host gets sicker. 36 GB never affords three guests
-  // however much memory vm_stat claims is going spare.
-  assert.equal(workerCeilingFromTotalRam(MAC_36GB), 2);
-  assert.equal(workersHostCanRun({ availableMb: 99_999, alreadyRunning: 3, totalMb: MAC_36GB }), 2);
+  // the dynamic estimate rises exactly as the host gets sicker — it advertised 13.7 GB free while two
+  // guests were starving. The ceiling comes from physical RAM instead, so a host claiming 99 GB spare
+  // is still held to what it can actually hold.
+  assert.equal(workerCeilingFromTotalRam(MAC_36GB), 3);
+  assert.equal(workersHostCanRun({ availableMb: 99_999, alreadyRunning: 3, totalMb: MAC_36GB }), 3);
 });
 
 test("a host with nothing spare keeps the workers it already has", () => {
@@ -37,9 +41,9 @@ test("a host with nothing spare keeps the workers it already has", () => {
 });
 
 test("a roomy host is not capped below what it can hold", () => {
-  // 128 GB of RAM with 64 GB going spare: the dynamic estimate binds at 7, under a ceiling of 14.
-  assert.equal(workersHostCanRun({ availableMb: 65_536, alreadyRunning: 0, totalMb: 131_072 }), 7);
-  assert.equal(workerCeilingFromTotalRam(131_072), 14);
+  // 128 GB of RAM with 64 GB going spare: the dynamic estimate binds at 11, under a ceiling of 20.
+  assert.equal(workersHostCanRun({ availableMb: 65_536, alreadyRunning: 0, totalMb: 131_072 }), 11);
+  assert.equal(workerCeilingFromTotalRam(131_072), 20);
 });
 
 test("at least one worker always runs, even on a host with no memory at all", () => {
