@@ -1,82 +1,85 @@
-# The U+FFFC artefact — what is known, and what is not
+# The U+FFFC artefact — RESOLVED, and the dead ends worth not re-running
 
-An OBJECT REPLACEMENT CHARACTER (U+FFFC, `￼`) intermittently appears appended to form-field
+An OBJECT REPLACEMENT CHARACTER (U+FFFC, `￼`) intermittently appeared appended to form-field
 announcements:
 
 ```
 "Postcode, edit, ￼, button, Book parcel"     instead of     "Postcode, edit, button, Book parcel"
 ```
 
-It is **pre-existing, not a regression** — present in the corpus for weeks at 3–31% of affected
-captures depending on environment, and in **26 good/bad pairs one variant carries it and the other does
-not**. That last point is why it matters: those pairs are compared across evidence differing for a
-reason unrelated to accessibility, which is the one defect this project cannot tolerate.
+It was in the corpus for weeks at 3–31% of affected captures depending on environment, with **26
+good/bad pairs where one variant carried it and the other did not** — so those pairs were compared
+across evidence that differed for a reason unrelated to accessibility. Roughly 1.7% of the corpus
+overall (36 of 2,122; 6.8% of the 532 form/field captures).
 
-Overall exposure is roughly **1.7% of the corpus** (36 of 2,122 captures; 6.8% of the 532 form/field
-captures).
+## Cause: guidepup's speech parsing. Fixed by upgrading 0.29.2 → 0.31.0
 
-## Reproduction — verified, use this
+Measured on the reproduction page:
 
-```bash
-# fires ~1 in 15. Any page whose label is personal-data-like: Postcode, Recipient name, Visit date.
-curl -s -X POST http://<worker>:8765/capture -H 'content-type: application/json' \
-  -d '{"url":"http://192.168.64.1:5050/form-error-silent-postcode/bad","probeForms":true}'
-```
+| guidepup | result |
+|---|---|
+| 0.29.2 | `"Postcode, edit, ￼, button, Book parcel"` — ~7%, 1 in 15 |
+| 0.31.0 | `"edit, , button, Book parcel"` — **15 of 15 identical, zero U+FFFC** |
 
-**Do not verify a fix on `form-error-silent/bad`.** Its label is "Reference number", it cannot express
-the fault, and it returns 15/15 clean regardless. Three separate "fixes" were declared working against
-pages incapable of failing — that is the single most expensive mistake in this investigation.
+The placeholder now renders as a consistent empty segment instead of surfacing intermittently. Still an
+artefact, but a **deterministic** one — and determinism was the whole point. The defect was never the
+character; it was that the same unchanged page announced differently from one capture to the next.
 
-## Ruled out, each with evidence
+`guidepupVersion` is now in the cache key (`capture-cache.mjs`) and in the fleet-consistency check
+(`fleet-consistency.mjs`), because the upgrade changed every form transcript. Two guests on different
+versions must never share a cache entry — and during the upgrade the fleet was briefly split, with
+nothing in place to notice.
+
+## Seven theories, all wrong — do not re-run these
+
+Every one was tested and killed. All were in the browser; the bug was in the library reading NVDA.
 
 | theory | how it died |
 |---|---|
-| Render race on `<input type="date">` picker | the fixture is `type="text"`; there is no picker |
+| Render race on `<input type="date">` picker | the fixture is `type="text"`; no picker exists |
 | Edge autofill learning from `probeForms` | reproduces on capture 1 of a fresh browser session |
 | Edge policy (`AutofillAddressEnabled=0`) | applied and verified live; still ~7% |
 | Launch flags (`AutofillServerCommunication`, …) | applied; still ~7% |
 | Deleting `Web Data`/`Login Data` at boot | applied; still ~7% |
-| Chromium's AX tree still settling | tree signature byte-identical from `loadEventFired` to +2000ms |
-| DOM mutation from the form submit | artefact is in the read-through, which runs BEFORE `formProbe` |
+| Chromium's AX tree still settling | tree byte-identical from `loadEventFired` to +2000ms |
+| DOM mutation from the form submit | the artefact is in the read-through, which runs BEFORE `formProbe` |
 
-## What that leaves
+The Edge flags and the autofill-store deletion were kept anyway — a form field's announcement should
+describe the page, not what the browser profile has memorised. They were simply not this bug.
 
-**Chromium is deterministic here.** Same page, same stable accessibility tree, every time — and NVDA's
-output still differs ~7%. The variance is inside **NVDA's virtual-buffer construction**.
+## The expensive mistake: verifying against a fixture that cannot fail
 
-Supporting detail from `Accessibility.getFullAXTree` on the failing page: the textbox always has a child
-`{role: generic, name: "", editable: plaintext}` — Chromium's inner editable div. It is present on every
-capture, including clean ones. NVDA sometimes collapses it into the edit field and sometimes emits the
-embedded-object placeholder for it.
+Three "fixes" were declared working against pages incapable of showing the fault.
 
-Consistent with nvaccess/nvda#11177, where NVDA's U+FFFC announcement rule was changed and the fix is
-noted to have "introduced other problems in Chromium-based browsers".
+- `form-error-silent/bad` — label is "Reference number", not personal data. **15/15 clean regardless.**
+- `field-followup-date/good` — does not auto-focus its input, so the affordance never appears.
+- `form-unlabelled/bad` — no date field at all.
 
-## Instruments — one is broken, one is untried
+**Reproduce the fault with your test before trusting the test's verdict.** Use
+`form-error-silent-postcode/bad` — label "Postcode", personal-data-like, fires reliably on 0.29.2.
 
-**`A11Y_NVDA_LOG_LEVEL=DEBUG` does not work.** `logLevel = DEBUG` is correctly written under `[general]`
-(verified by pulling the file off the guest), guidepup spawns NVDA with **no** arguments so nothing
-overrides it, and NVDA's own log confirms it loaded that exact config dir — yet the log stays at 7 INFO
-lines and records nothing during a capture. Also note the log file cannot be pulled from the host while
-NVDA holds it open; only the in-guest `/diagnostics` can read it.
+Two more instances of the same error, for calibration: a memory measurement compared a 4096 MB guest
+against a 3072 MB one and read the difference as a code change; and a confident "0 of 12, fixed" came
+from a page that could not express the fault, while the page that could was at **10 of 12**.
 
-**guidepup 0.30.0 added a settings API** — `start({ settings })`, `getSettings()`, `getSetting(key)`,
-keyed as `section.key` (their example: `virtualBuffers.autoSayAllOnPageLoad`). 0.31.0 adds
-`nvda.version`. We are on **0.29.2**. This is the supported way to set NVDA config, including
-`general.logLevel`, and 0.30+ writes a **session** config rather than the base `userConfig/nvda.ini`
-this repo currently patches.
+## What else came out of it
 
-`virtualBuffers.useScreenLayout` is worth investigating: it is what places the field, the object and the
-button on a single line, which is the shape the artefact appears in. Currently unset, so NVDA's default
-applies.
+**`A11Y_NVDA_LOG_LEVEL=DEBUG` does not work.** `logLevel = DEBUG` is correctly written under
+`[general]` (verified by pulling the file off the guest), guidepup spawns NVDA with no overriding
+arguments, and NVDA's log confirms it loaded that config dir — yet the log stays at 7 INFO lines and
+records nothing during a capture. The log file also cannot be pulled from the host while NVDA holds it
+open; only the in-guest `/diagnostics` can read it. Note guidepup 0.30+ writes a **session** config
+(`sessionUserConfig/nvda.ini`) alongside the base one, so anything assuming a single ini is wrong.
 
-## Next steps, in order
+**guidepup 0.29 was hiding a real bug.** 0.31 throws when `start()` is called on a live NVDA; 0.29
+tolerated it silently. That masked genuine state drift — `capture-core`'s `screenReader.running`
+disagrees with reality whenever `screenReaderResponds()` misses the Remote port for an instant, so NVDA
+was presumably being double-started for as long as that check has existed. A running NVDA is now
+adopted rather than treated as a failure, because NVDA being up is the desired end state and
+`ensureSpeechChannel` is the real gate one probe later.
 
-1. Upgrade guidepup 0.29.2 → 0.31.0 **on one guest only**. Note 0.29.0's breaking change: assets are
-   manifest-driven and need `@guidepup/setup` 0.24.0+.
-2. Use the settings API to set `general.logLevel = DEBUG`, reproduce, and read NVDA's own account of
-   what it did with that node. This is the first instrument that would show the cause rather than the
-   symptom.
-3. `npm run evidence:check` before the upgrade goes fleet-wide. guidepup drives every keystroke and
-   reads every phrase; an upgrade is an evidence change until proven otherwise.
-4. Only then attempt a fix, and verify it against the reproduction above.
+**NVDA settings are recorded, not tuned.** `virtualBuffers.useScreenLayout` is what puts a field, an
+embedded object and a button on one line, and turning it off would tidy the residual empty segment away.
+It is NVDA's default, and this project captures the lived experience — configuring NVDA away from its
+defaults makes the evidence less representative, not more. `/diagnostics` reports the effective settings
+so a corpus can state what produced it.
