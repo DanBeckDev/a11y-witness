@@ -56,6 +56,20 @@ test("an unchanged case is reused", () => {
   rmSync(root, { recursive: true, force: true });
 });
 
+test("new evidence records the page hash for resume validation", () => {
+  const { pages, root } = sandbox();
+  try {
+    const pageHash = hashPageDir(pages);
+    const capture = stampProvenance(
+      { screenReader: "NVDA", transcript: ["a phrase"] },
+      { key: "1234567890abcdef", pageHash, options: {}, environment: ENV },
+    );
+    assert.equal(capture.provenance?.pageHash, pageHash);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("changing a page byte invalidates the case", () => {
   const { pages, captures, root } = sandbox();
   writePair(captures, keyFor(pages));
@@ -153,6 +167,7 @@ test("an unreportable environment still keys consistently", () => {
     screenReader: "NVDA/unknown",
     browser: "unknown/unknown",
     os: "unknown/unknown",
+    driver: "guidepup/unknown",
     captureProtocol: "unknown",
     provisionRevision: "unstamped",
   });
@@ -189,6 +204,20 @@ test("the same OS and architecture still share evidence", () => {
   try {
     const env = { ...ENV, windowsVersion: "Microsoft Windows 11 Pro 10.0.22621", architecture: "arm64" };
     assert.equal(keyFor(pages, { environment: env }), keyFor(pages, { environment: { ...env } }));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a different guidepup version is a different environment", () => {
+  // guidepup parses NVDA's speech before this project sees it, and 0.29.2 -> 0.31.0 changed that
+  // parse: an object placeholder that intermittently appeared as U+FFFC now renders consistently as
+  // an empty segment. Same NVDA, same page, same browser, different evidence.
+  const { root, pages } = sandbox();
+  try {
+    const old = { ...ENV, guidepupVersion: "0.29.2" };
+    const now = { ...ENV, guidepupVersion: "0.31.0" };
+    assert.notEqual(keyFor(pages, { environment: old }), keyFor(pages, { environment: now }));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

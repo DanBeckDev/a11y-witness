@@ -530,6 +530,27 @@ async function startScreenReader(diag, { reuse }) {
     screenReader = { running: true, captures: 1 };
     return true;
   } catch (e) {
+    // **"Already running" is success, not failure.**
+    //
+    // guidepup 0.31 throws when `start()` is called on a live NVDA; 0.29 tolerated it silently. That
+    // tolerance was hiding a real drift: this module's `screenReader` state can legitimately disagree
+    // with reality -- the worker warms NVDA at boot, `screenReaderResponds()` can miss the Remote port
+    // for an instant and conclude it died, and anything outside this process can start or stop it. On
+    // 0.29 the redundant start was absorbed; on 0.31 it failed the capture outright.
+    //
+    // Adopting the running instance is the correct resolution because NVDA being up IS the desired end
+    // state, and because `ensureSpeechChannel` runs immediately afterwards and is the real gate -- an
+    // adopted-but-broken screen reader is caught there, one probe later.
+    //
+    // Matched on message text, reluctantly: guidepup attaches no code to this error, and there is no
+    // public API to ask whether NVDA is running (its own isRunning() is not exported). If a future
+    // release reworded it, the symptom is the pre-0.31 behaviour returning -- a failed capture rather
+    // than silent bad evidence -- which is the safe direction for this to break in.
+    if (/already running/i.test(errMsg(e))) {
+      screenReader = { running: true, captures: 1 };
+      diag.mark("nvdaStart", { ok: true, adopted: true, reason: "already running" });
+      return false;
+    }
     screenReader = { running: false, captures: 0 };
     diag.mark("nvdaStart", { ok: false, error: errMsg(e) });
     throw captureFault(FAULT.SCREEN_READER_START_FAILED, "nvda.start failed: " + errMsg(e), { cause: e });
