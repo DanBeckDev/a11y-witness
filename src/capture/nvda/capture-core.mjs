@@ -19,6 +19,7 @@ import { nvda, windowsActivate, windowsQuit } from "@guidepup/guidepup";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { captureFault, FAULT } from "./capture-faults.mjs";
+import { installSpeechChannelShim } from "./speech-channel.mjs";
 import { connect } from "node:net";
 import { existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -37,11 +38,21 @@ import { setTimeout as sleep } from "node:timers/promises";
 // Bumping it forces a full recapture. That is the point.
 export const CAPTURE_PROTOCOL_VERSION = 2;
 
+/**
+ * Installed at module load, before anything calls `nvda.start()`, so the very first connection to NVDA
+ * Remote is tracked. Idempotent, so importing this module twice is harmless.
+ */
+const speechChannel = installSpeechChannelShim();
+
 const DEFAULT_STEPS = 150; // read-through line count cap
 const DEFAULT_BROWSER_WAIT_MS = 12_000; // UPPER BOUND on waiting for Edge, not a fixed sleep
 const DEFAULT_BUDGET_MS = 120_000; // overall wall-clock budget for one capture
 const WINDOW_SETTLE_MS = 800; // after focusing the Edge window
 const NVDA_SETTLE_MS = 3_000; // after nvda.start() before reading
+// After destroying the speech socket, how long guidepup needs to reconnect and re-join the channel.
+// Its handler runs synchronously on the socket 'error' event and the connection is to localhost, so
+// this is a settle rather than a wait -- against ~23s for the NVDA restart it replaces.
+const SPEECH_RECONNECT_MS = 750;
 const WINDOW_POLL_MS = 400; // between attempts to activate the Edge window
 const READY_ATTEMPTS = 3; // re-activate + re-anchor tries before reading anyway
 const EDGE_EXIT_TIMEOUT_MS = 8_000; // wait for Edge to actually exit during cleanup
@@ -516,15 +527,32 @@ async function screenReaderIsSpeaking(diag) {
  */
 async function ensureSpeechChannel(diag) {
   if (await screenReaderIsSpeaking(diag)) return;
-  diag.mark("speechChannelRestart", { reason: "no speech on a live-looking connection" });
+
+  // Cheapest remedy first: rebuild the SOCKET, not the screen reader.
+  //
+  // A dead channel is a dead TLS connection to NVDA Remote far more often than it is a dead NVDA --
+  // NVDA's own log records nothing at all when this happens, 7 lines and zero errors, identical to a
+  // healthy session. Restarting NVDA costs ~23 s and, done repeatedly, is itself what produces the
+  // `nvdaHelperRemote (injection_terminate)` modal that wedges a guest. So the expensive remedy was
+  // feeding the fault. See speech-channel.mjs for why guidepup cannot do this itself.
+  if (speechChannel.reset("probe heard nothing before a capture")) {
+    await sleep(SPEECH_RECONNECT_MS);
+    if (await screenReaderIsSpeaking(diag)) {
+      diag.mark("speechChannelReconnected", { resets: speechChannel.state.resets });
+      return;
+    }
+  }
+
+  diag.mark("speechChannelRestart", { reason: "no speech, and a socket rebuild did not fix it" });
   await stopScreenReader(diag);
   await startFreshWithRetry(diag);
   screenReader = { running: true, captures: 1 };
   await sleep(NVDA_SETTLE_MS);
   if (await screenReaderIsSpeaking(diag)) return;
   throw captureFault(FAULT.SCREEN_READER_MUTE,
-    "NVDA is running but not speaking: the speech channel produced nothing before this capture, and a " +
-    "fresh screen reader did not fix it. Failing now rather than capturing an empty page.");
+    "NVDA is running but not speaking: the speech channel produced nothing before this capture, and " +
+    "neither a socket rebuild nor a fresh screen reader fixed it. Failing now rather than capturing " +
+    "an empty page.");
 }
 
 async function resetSpeechLogs(diag) {
