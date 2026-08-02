@@ -130,6 +130,53 @@ A11Y_WORKERS=url1,url2 npm run training:capture     # explicit pool: yours to ma
 them, so nothing is started or stopped for you. `--after stop|pause|leave` overrides the
 restore behaviour.
 
+### The pool scales NEGATIVELY, and the cause is disk, not memory
+
+Measured end to end on this Mac, same page, interleaved rounds:
+
+| workers | median per capture | throughput |
+|---|---|---|
+| 1 | 12.6 s | **0.079 captures/s** |
+| 2 | 26.3 s | 0.076 captures/s |
+| 3 | 41.5 s | 0.072 captures/s |
+
+**Adding workers made throughput worse.** The cause is visible in one phase: `windowsActivate` — really
+"wait for Edge to exist and take focus" — is 8.9 s of a 12.6 s capture with one guest, and inflated to
+~15.2 s on **all three guests uniformly** when three ran, including the two with zero recoveries.
+
+Uniform inflation across independent guests is the signature of a **shared resource**, and it is the
+SSD. Every capture spawned Edge with a dedicated `--user-data-dir`, so there was no instance to hand
+off to and that process *was* Chromium — a full cold start, every capture. Worse, each guest has its
+own 25 GB qcow2, so three guests read the *same* Chromium binaries from *three different files* and the
+host page cache cannot dedupe them.
+
+Two fixes, in order of value:
+
+- **Keep Edge alive and re-point it** (`A11Y_REUSE_BROWSER=1`, see `browser-session.mjs`). Navigates the
+  existing window over the DevTools Protocol. Measured `windowsActivate` 8.9 s → **3.6 s**. This removes
+  the reads rather than making them faster.
+- **A shared qcow2 backing file** — one read-only base plus copy-on-write overlays — so the host caches
+  the common bytes once. Structural, and only worth the risk if parallelism is still needed after reuse.
+
+**Do not reach for guest RAM to fix this.** An afternoon went into right-sizing memory before anyone
+measured the disk, and none of it addressed the bottleneck.
+
+### Measure the FOUNDATIONS, not just wall time
+
+`worker:compare` now reports load, disk MB/s and tps, guest **resident** memory, free vs compressed, and
+pageouts during the run. Use them. Every wrong turn in the day above came from a timing number with no
+foundation underneath it: the cause was attributed to memory, then to the guests, then to contention in
+the abstract, before anyone sampled the disk that was actually saturated.
+
+**`phys_footprint` and RSS agree when the host has room, and diverge exactly when you most need them.**
+A 3072 MB guest costs **~5.7 GB resident** unconstrained (RSS 5,734 MB vs footprint 5,705 MB — the same
+number). Run three, and RSS per guest falls to ~1.3 GB with 7.8 GB in the compressor. That low reading
+is **the symptom of over-commitment, not evidence that guests are cheap** — a mistake made here, acted
+on, and retracted. Take the per-guest figure with **one guest running**, or it will lie to you.
+
+Paging must be read as a **delta**: the counters are since-boot, so 6.6 GB of swap left from an incident
+hours earlier is indistinguishable from a host swapping right now.
+
 ### `pause` does not work on these guests, and quitting UTM kills them
 
 UTM refuses to suspend a VM with an emulated NVMe device, which is what these guests boot from:
