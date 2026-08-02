@@ -1,32 +1,60 @@
 // Host capacity decides how much parallelism a run gets. Getting it wrong in either direction is
 // expensive: too many workers made every capture 1.6x slower and produced mute-NVDA failures, too few
 // leaves the machine idle. These are the boundaries.
+//
+// `totalMb` is passed explicitly throughout. It defaults to this machine's real RAM, which would make
+// the expectations depend on whoever runs the suite.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { capacityReason, workersHostCanRun } from "./host-capacity.mjs";
+import { capacityReason, workerCeilingFromTotalRam, workersHostCanRun } from "./host-capacity.mjs";
+
+const MAC_36GB = 36_864;
 
 test("the measured case: 12.6 GB available with one worker up allows a second, not a third", () => {
   // The real reading from the host this was written on. Three workers is what the pool used to start.
-  assert.equal(workersHostCanRun({ availableMb: 12_654, alreadyRunning: 1 }), 2);
+  assert.equal(workersHostCanRun({ availableMb: 12_654, alreadyRunning: 1, totalMb: MAC_36GB }), 2);
+});
+
+test("a host running more guests than it can afford is capped BELOW what is already up", () => {
+  // The regression. This returned `alreadyRunning + canStart`, so it could never answer fewer than the
+  // VMs that happened to be running — and a pool somebody had already started was therefore beyond its
+  // reach. Three 8.1 GB guests on this 36 GB Mac drove 6.6 GB of swap and starved two of the three
+  // until they stopped answering /health within 75 s. The cap has to be able to say "use two of your
+  // three", or it cannot prevent the one failure it exists for.
+  assert.equal(workersHostCanRun({ availableMb: 13_743, alreadyRunning: 3, totalMb: MAC_36GB }), 2);
+});
+
+test("the ceiling comes from physical RAM, which swap cannot distort", () => {
+  // vm_stat counts a swapped-out guest's pages as compressed/inactive and therefore as *available*, so
+  // the dynamic estimate rises exactly as the host gets sicker. 36 GB never affords three guests
+  // however much memory vm_stat claims is going spare.
+  assert.equal(workerCeilingFromTotalRam(MAC_36GB), 2);
+  assert.equal(workersHostCanRun({ availableMb: 99_999, alreadyRunning: 3, totalMb: MAC_36GB }), 2);
 });
 
 test("a host with nothing spare keeps the workers it already has", () => {
-  assert.equal(workersHostCanRun({ availableMb: 1_000, alreadyRunning: 2 }), 2);
+  assert.equal(workersHostCanRun({ availableMb: 1_000, alreadyRunning: 2, totalMb: MAC_36GB }), 2);
 });
 
 test("a roomy host is not capped below what it can hold", () => {
-  // 64 GB free, headroom off the top, ~7.6 GB each.
-  assert.equal(workersHostCanRun({ availableMb: 65_536, alreadyRunning: 0 }), 8);
+  // 128 GB of RAM with 64 GB going spare: the dynamic estimate binds at 7, under a ceiling of 14.
+  assert.equal(workersHostCanRun({ availableMb: 65_536, alreadyRunning: 0, totalMb: 131_072 }), 7);
+  assert.equal(workerCeilingFromTotalRam(131_072), 14);
 });
 
 test("at least one worker always runs, even on a host with no memory at all", () => {
   // Refusing to start the only guest turns a tight host into an outage.
-  assert.equal(workersHostCanRun({ availableMb: 0, alreadyRunning: 0 }), 1);
+  assert.equal(workersHostCanRun({ availableMb: 0, alreadyRunning: 0, totalMb: MAC_36GB }), 1);
+  // Including a host too small to clear the reserve at all, where the ceiling itself goes negative.
+  assert.equal(workersHostCanRun({ availableMb: 8_000, alreadyRunning: 1, totalMb: 8_192 }), 1);
 });
 
 test("an unreadable host memory figure does not constrain the run", () => {
   // A diagnostic that cannot read the host must never be the thing that shrinks the pool.
-  assert.equal(workersHostCanRun({ availableMb: null, alreadyRunning: 3 }), Number.POSITIVE_INFINITY);
+  assert.equal(
+    workersHostCanRun({ availableMb: null, alreadyRunning: 3, totalMb: MAC_36GB }),
+    Number.POSITIVE_INFINITY,
+  );
 });
 
 test("a capped pool explains itself, naming the numbers and the override", () => {
