@@ -63,3 +63,25 @@ test("unparseable or zero-limit output is null, never a divide-by-zero", () => {
     assert.equal(parseCommittedMemory(bad), null, `expected null for ${JSON.stringify(bad)}`);
   }
 });
+
+// PowerShell's ConvertTo-Json emits a bare object for one result and an array for several. Reading a
+// service list that happens to have one entry must not silently become "no services".
+import { parsePowerShellJson } from "./diagnostics.mjs";
+
+test("a single PowerShell result is normalised to a one-element array", () => {
+  const one = parsePowerShellJson('{"Name":"WSearch","Status":4,"StartType":4}');
+  assert.equal(one.length, 1);
+  assert.equal((one[0] as { Name: string }).Name, "WSearch");
+});
+
+test("several results stay an array", () => {
+  const many = parsePowerShellJson('[{"Name":"WSearch"},{"Name":"DiagTrack"}]');
+  assert.equal(many.length, 2);
+});
+
+test("empty or non-JSON output is an empty list, never a throw", () => {
+  // Get-Service with -ErrorAction SilentlyContinue prints nothing when no service matches.
+  for (const bad of ["", "   ", "Get-Service : Cannot find any service"]) {
+    assert.deepEqual(parsePowerShellJson(bad), [], JSON.stringify(bad));
+  }
+});

@@ -167,6 +167,12 @@ export function parseTasklistMemory(csv, limit = 15) {
 /** Image names worth counting: the three that have each caused an outage by leaking or dying. */
 const WATCHED_PROCESSES = ["msedge", "nvda", "node"];
 
+/** The services the trim disables, plus Defender's, so their real state is visible after a trim. */
+const TRIMMED_SERVICES = [
+  "WSearch", "CrossDeviceService", "DiagTrack", "wuauserv", "UsoSvc", "WaaSMedicSVC",
+  "WinDefend", "WdNisSvc",
+];
+
 /**
  * Everything a human would otherwise reach for `utmctl exec` to find out.
  *
@@ -240,6 +246,67 @@ export function windowsTrimReport(markerPath = resolve(process.cwd(), ".windows-
     }
   }
   return null;
+}
+
+/**
+ * Normalise PowerShell's `ConvertTo-Json`, which emits a bare object for one result and an array for
+ * several. Pure, because that inconsistency is a classic source of "works with two, breaks with one".
+ *
+ * @param {string} raw
+ * @returns {object[]}
+ */
+export function parsePowerShellJson(raw) {
+  const text = String(raw).trim();
+  if (!text) return [];
+  try {
+    const value = JSON.parse(text);
+    return Array.isArray(value) ? value : [value];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Defender's actual state, including whether Tamper Protection is on.
+ *
+ * `IsTamperProtected` is the field that decides a real architectural question. Defender is ~242 MB —
+ * the largest single removable item on a capture guest — and if Tamper Protection is on, it cannot be
+ * turned off from the running system at all: that is why tiny11 does it offline against a mounted
+ * image. So this one boolean is the difference between "a registry write" and "own an ISO pipeline",
+ * and it was being assumed rather than read.
+ */
+export function defenderState() {
+  if (process.platform !== "win32") return null;
+  try {
+    const raw = execFileSync("powershell", ["-NoProfile", "-NonInteractive", "-Command",
+      "Get-MpComputerStatus | Select-Object IsTamperProtected,RealTimeProtectionEnabled," +
+      "AntivirusEnabled,AMRunningMode | ConvertTo-Json -Compress"],
+      { encoding: "utf8", timeout: 60_000 });
+    return parsePowerShellJson(raw)[0] ?? null;
+  } catch (error) {
+    // Defender absent or the cmdlet blocked are both real answers; report the reason, do not guess.
+    return { error: error.message.split("\n")[0].slice(0, 200) };
+  }
+}
+
+/**
+ * Status and start type of the services the trim disables.
+ *
+ * `sc.exe config start= disabled` does not stop a running service, so immediately after a trim these
+ * read Running/Disabled — the saving only lands at the next boot. Reporting both fields is what makes
+ * that distinction visible instead of looking like the trim silently failed.
+ */
+export function serviceStates(names = TRIMMED_SERVICES) {
+  if (process.platform !== "win32") return null;
+  try {
+    const raw = execFileSync("powershell", ["-NoProfile", "-NonInteractive", "-Command",
+      `Get-Service -Name ${names.join(",")} -ErrorAction SilentlyContinue | ` +
+      "Select-Object Name,Status,StartType | ConvertTo-Json -Compress"],
+      { encoding: "utf8", timeout: 60_000 });
+    return parsePowerShellJson(raw);
+  } catch {
+    return null;
+  }
 }
 
 export function largestSubtrees(root, limit = 8) {
@@ -376,6 +443,8 @@ export function guestDiagnostics({ edgeProfile, logPath }) {
     topProcesses: topProcessesByMemory(),
     committedMemory: committedMemory(),
     windowsTrim: windowsTrimReport(),
+    defender: defenderState(),
+    services: serviceStates(),
     screenReader: screenReaderState({
       nvdaRoot: process.env.GUIDEPUP_SCREEN_READERS_PATH ||
         (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "guidepup") : null),
