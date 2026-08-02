@@ -9,6 +9,17 @@ rem asserted here because provisioning needs a full run and this does not.
 >> %OUT% echo [edge policy]
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v StartupBoostEnabled /t REG_DWORD /d 0 /f >nul 2>&1
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v BackgroundModeEnabled /t REG_DWORD /d 0 /f >nul 2>&1
+rem Autofill draws a suggestion icon INSIDE recognised inputs (name="visit-date" is enough to trigger
+rem it), and NVDA announces that icon as an embedded object -- U+FFFC -- appended to the field:
+rem   "Visit date, edit, \ufffc"
+rem Whether it appears depends on what the durable Edge profile has learned, so it is nondeterministic
+rem and it GROWS over a run: measured at 3%, then 8%, then 31% of affected captures as the profile
+rem accumulated. 26 good/bad pairs in the corpus disagree about it, which pollutes the one comparison
+rem the whole method rests on. Turning autofill off makes the field announcement deterministic.
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v AutofillAddressEnabled /t REG_DWORD /d 0 /f >nul 2>&1
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v AutofillCreditCardEnabled /t REG_DWORD /d 0 /f >nul 2>&1
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v PasswordManagerEnabled /t REG_DWORD /d 0 /f >nul 2>&1
+reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v AutofillAddressEnabled >> %OUT% 2>&1
 reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v StartupBoostEnabled >> %OUT% 2>&1
 reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v BackgroundModeEnabled >> %OUT% 2>&1
 

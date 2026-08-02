@@ -202,6 +202,14 @@ if ($elevated) {
   # own setup.exe (EdgeInstallerError 0x220). Edge was updating itself underneath the run.
   Set-ItemProperty $edgeKey -Name 'BackgroundModeEnabled' -Value 0 -Type DWord
   Set-ItemProperty $edgeKey -Name 'StartupBoostEnabled' -Value 0 -Type DWord
+  # Autofill draws a suggestion icon inside recognised inputs, and NVDA announces it as an embedded
+  # object (U+FFFC) appended to the field announcement. Whether it appears depends on what the durable
+  # profile has learned, so the same page announces differently over the life of a run -- measured
+  # rising from 3% to 31% of affected captures as the profile accumulated, with 26 good/bad pairs in
+  # the corpus disagreeing about it. Off, so a form field announcement is a property of the PAGE.
+  Set-ItemProperty $edgeKey -Name 'AutofillAddressEnabled' -Value 0 -Type DWord
+  Set-ItemProperty $edgeKey -Name 'AutofillCreditCardEnabled' -Value 0 -Type DWord
+  Set-ItemProperty $edgeKey -Name 'PasswordManagerEnabled' -Value 0 -Type DWord
   OK 'Edge policies set (first-run suppressed, no background mode, no startup boost)'
 
   # Edge auto-update, off. On a workstation this is right; on a capture appliance it means an
