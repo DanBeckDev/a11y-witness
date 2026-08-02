@@ -156,9 +156,11 @@ export function packagesToRemove(installed) {
  * Reported rather than logged because the guest's own log is not reachable while it is down, and
  * because "did the trim actually run" has to be answerable through the channel that is always up.
  *
- * @param {{ removed?: string[], disabled?: string[], failed?: string[], skipped?: boolean }} result
+ * @param {{ removed?: string[], disabled?: string[], failed?: string[], skipped?: boolean,
+ *           needsElevation?: boolean }} result
  */
-export function trimSummary({ removed = [], disabled = [], failed = [], skipped = false }) {
+export function trimSummary({ removed = [], disabled = [], failed = [], skipped = false, needsElevation = false }) {
+  if (needsElevation) return "skipped: needs elevation (run provision-nvda-worker.ps1)";
   if (skipped) return "already trimmed";
   const parts = [`${removed.length} app(s) removed`, `${disabled.length} service(s) disabled`];
   if (failed.length) parts.push(`${failed.length} failed (${failed.slice(0, 3).join(", ")})`);
@@ -179,6 +181,29 @@ function powershell(command) {
     { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS });
 }
 
+/**
+ * Is this process elevated?
+ *
+ * Everything below needs it: `Get-AppxProvisionedPackage -Online`, `Remove-AppxProvisionedPackage` and
+ * `sc.exe config` all fail with "The requested operation requires elevation". The worker deliberately
+ * runs as a scheduled task with `RunLevel Limited` -- NVDA does not need elevation and an elevated
+ * interactive task is its own problem -- so the trim cannot run from there and must not pretend to try.
+ *
+ * Checked up front rather than discovered by a crash on the first DISM call, which is what happened:
+ * the child died on three consecutive boots and, with stdio ignored, left no trace at all.
+ */
+export function isElevated() {
+  if (process.platform !== "win32") return false;
+  try {
+    const out = powershell("([Security.Principal.WindowsPrincipal]" +
+      "[Security.Principal.WindowsIdentity]::GetCurrent())" +
+      ".IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)");
+    return out.trim().toLowerCase() === "true";
+  } catch {
+    return false; // cannot tell => assume not, because acting on a wrong "yes" is the costly direction
+  }
+}
+
 /** Provisioned Appx package names currently on the image. */
 function installedProvisionedPackages() {
   const out = powershell(
@@ -193,9 +218,19 @@ function installedProvisionedPackages() {
  * @returns {{ removed: string[], disabled: string[], failed: string[], skipped: boolean }}
  */
 export function applyWindowsTrim({ markerPath, log = () => {} }) {
-  const result = { removed: [], disabled: [], failed: [], skipped: false };
+  const result = { removed: [], disabled: [], failed: [], skipped: false, needsElevation: false };
   if (process.platform !== "win32" || existsSync(markerPath)) {
     result.skipped = true;
+    return result;
+  }
+  if (!isElevated()) {
+    // Recorded in the marker so it is visible over /diagnostics and does not retry on every boot. The
+    // trim belongs in provision-nvda-worker.ps1, which runs elevated; see that script.
+    result.needsElevation = true;
+    result.skipped = true;
+    log("trim: skipped — needs elevation, and the worker task runs as RunLevel Limited. " +
+        "Run scripts/provision-nvda-worker.ps1 on the guest instead.");
+    writeFileSync(markerPath, `${new Date().toISOString()} skipped: needs elevation\n`, "utf8");
     return result;
   }
   for (const pkg of packagesToRemove(installedProvisionedPackages())) {
