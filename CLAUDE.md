@@ -132,16 +132,21 @@ restore behaviour.
 
 ### How many workers actually fit — the host is the constraint, not the VM count
 
-**A worker VM costs the host ~7 GB, not the 4096 MB it is configured with.** Measured with
-`top -o mem`, which agrees with `phys_footprint`: 7.0–7.6 GB per guest. The gap is QEMU's own
+**A worker VM costs the host ~8 GB, not the 4096 MB it is configured with.** Measured with
+`top -o mem`, which agrees with `phys_footprint`: **8,048–8,127 MB** per guest. The gap is QEMU's own
 overhead on top of guest RAM that Windows dirties and never gives back (no balloon driver). It is
-**not** accumulation — a VM sits at 6.8 GB ten minutes after boot and creeps only to ~7.6 GB over
-nearly two hours.
+**not** accumulation — a VM sits at 6.8 GB ten minutes after boot and creeps to ~8.1 GB over roughly
+two hours.
+
+**Three guests do not fit on a 36 GB Mac.** 3 × 8.1 GB is 24.3 GB, and an ordinary desktop is already
+holding ~11 GB before a run starts. That is 35.3 GB of 36, which is not a tight fit, it is 6.6 GB of
+swap. (This section said "~7 GB" for a long time; 7,600 was an underestimate from a shorter sample,
+and it was the number the cap was computed from.)
 
 So the pool is capped by **measured host memory**. `doctor` says so before you start:
 
 ```
-OK  host memory  ~12185 MB available — room for 2 of 3 worker(s)
+OK  host memory  ~14157 MB available — room for 2 of 3 worker(s)
 ```
 
 Over-committing does not merely slow a run, it **breaks captures**. With three guests up, the same
@@ -150,9 +155,27 @@ produced "NVDA is running but not speaking" failures and `/health` blackouts. Fr
 as *the workers are degrading*, which is exactly how it was misdiagnosed for a day. The "2.36x on
 three" above was measured on a quieter host; treat it as a ceiling, not a promise.
 
+**A running worker is not automatically an affordable one, and the cap used to assume it was.**
+`workersHostCanRun` returned `alreadyRunning + canStart`, on the reasoning that a guest already up has
+paid for its memory and `availableMb` is what is left after it. True of a healthy host; false in the
+only case the cap exists for. The result could never be *lower* than the number of VMs already
+running, so a pool somebody had already started was structurally beyond its reach — which is how three
+guests came to share this Mac, drive 6.6 GB of swap, and starve two of the three until they stopped
+answering `/health` within 75 s while the third stayed perfectly healthy. **Two of three workers dead
+and one fine is the signature of host over-commitment, not of two broken guests.** The cap may now
+return fewer workers than are running; the run simply dispatches to a subset.
+
 - `A11Y_MAX_WORKERS=N` overrides the cap when you know something the measurement does not.
 - Capacity is read from `vm_stat`, **never `os.freemem()`** — that reported 402 MB on a host with
   ~12 GB to give, because macOS counts compressed and inactive pages as used.
+- **But `vm_stat` is distorted by exactly the condition it must detect,** so it is not trusted alone.
+  A swapped-out guest's pages are counted as compressed/inactive — which `availableHostMemoryMb`
+  reports as *available* — so the estimate rises as the host gets sicker: it advertised 13.7 GB free
+  while two guests were starving. The cap is therefore the lower of that estimate and a ceiling
+  derived from **physical RAM**, which no feedback loop can move.
+- **`top -o mem` and RSS disagree, and RSS is the one that lies.** A starved guest showed `rss=0.4GB`
+  while its `phys_footprint` was 8.1 GB, because its pages were in swap. Read the footprint, or you
+  will conclude a VM is idle when it is dying.
 - **Your own tooling is on the same host.** `npm test`, a build, or a browser competes with the
   guests: in one 18-capture run the spikes tracked host activity, not worker age. Measure worker
   performance when you are not also doing something else, or you will diagnose the wrong machine.
