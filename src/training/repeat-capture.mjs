@@ -18,6 +18,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { isTransient } from "./capture-decisions.mjs";
 
 const arg = (name, fallback = null) => {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -73,17 +74,74 @@ async function captureOnce() {
     signal: AbortSignal.timeout(CAPTURE_TIMEOUT_MS),
   });
   const body = await response.json();
-  if (!response.ok || body.error) throw new Error(body.error ?? `HTTP ${response.status}`);
+  if (!response.ok || body.error) {
+    // Carry the worker's fault CODE, not just its prose. `isTransient` matches on codes; matching on
+    // message text is the check that silently stops working when somebody rewords a throw site.
+    throw Object.assign(new Error(body.error ?? `HTTP ${response.status}`),
+      { code: body.fault, status: response.status });
+  }
   return body;
 }
 
+/**
+ * Wait until the worker will actually take work.
+ *
+ * This tool had neither a readiness wait nor a retry, while the dataset runner has both -- so the
+ * STABILITY GATE, which is the precondition for a corpus run, was going through the least robust
+ * client in the codebase. One capture errored during a gate run purely because it started moments
+ * after `worker:deploy` rebooted the guests, and the gate reported a perfectly stable page as failed.
+ *
+ * `ready` and not `ok`: `ok` only ever meant "the HTTP server is answering", and a worker answered it
+ * while NVDA could not start.
+ */
+async function waitForReady(deadlineMs = 300_000) {
+  const deadline = Date.now() + deadlineMs;
+  let announced = false;
+  while (Date.now() < deadline) {
+    try {
+      const health = await (await fetch(`${WORKER.replace(/\/$/, "")}/health`,
+        { signal: AbortSignal.timeout(15_000) })).json();
+      if (health.ready) return;
+      if (!announced) { console.log("  waiting for the worker to report ready ..."); announced = true; }
+    } catch {
+      if (!announced) { console.log("  waiting for the worker to answer ..."); announced = true; }
+    }
+    await sleep(5_000);
+  }
+  throw new Error(`worker never reported ready within ${deadlineMs / 1000}s`);
+}
+
+/**
+ * One capture, retrying only INFRASTRUCTURE failures.
+ *
+ * The distinction is the whole point of this tool: a transient fault (a worker still booting, a mute
+ * screen reader it recovered from, a wedged capture that timed out) says nothing about the page, so
+ * retrying it is correct. Differing CONTENT is never retried -- that is the signal being measured, and
+ * retrying it away would turn the gate into a rubber stamp.
+ */
+async function captureWithRetry(attempts = 3) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await captureOnce();
+    } catch (error) {
+      if (attempt >= attempts || !isTransient(error)) throw error;
+      console.log(`    transient (${error.code ?? error.message.slice(0, 40)}), retrying ${attempt}/${attempts - 1}`);
+      await waitForReady();
+    }
+  }
+}
+
 mkdirSync(OUT_DIR, { recursive: true });
+// Before the FIRST capture, not just between retries. The gate runs straight after `worker:deploy`
+// reboots the guests, and a capture issued into a still-booting worker is what made a stable page
+// report as failed.
+await waitForReady();
 const runs = [];
 const errors = [];
 for (let n = 1; n <= TIMES; n += 1) {
   process.stdout.write(`capture ${n}/${TIMES} ... `);
   try {
-    const capture = await captureOnce();
+    const capture = await captureWithRetry();
     runs.push(comparable(capture));
     writeFileSync(resolve(OUT_DIR, `capture-${n}.json`), JSON.stringify(capture, null, 2) + "\n", "utf8");
     const retried = (capture.diagnostics ?? []).some((e) => e.event === "readThroughRetry");
