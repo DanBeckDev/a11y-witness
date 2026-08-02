@@ -72,10 +72,14 @@ const results = [];
 for (const { path, reason } of CANARIES) {
   const url = `${BASE}/${path}`;
   process.stdout.write(`\n=== ${path} (${TIMES}x) ===\n    why: ${reason}\n`);
+  // tsx, not node: repeat-capture imports isTransient from capture-decisions.mjs, which imports the
+  // TypeScript verify.js. Under plain node that is ERR_MODULE_NOT_FOUND before a single line of output
+  // -- which is precisely how five canaries came back "Command failed" with nothing to read. The repo
+  // has hit this before with evidence-check.mjs; the fix there was the same.
   const args = ["src/training/repeat-capture.mjs", `--url=${url}`, `--times=${TIMES}`];
   if (WORKER) args.push(`--worker=${WORKER}`);
   try {
-    const { stdout } = await run("node", args, { maxBuffer: 1 << 24 });
+    const { stdout } = await run("npx", ["tsx", ...args], { maxBuffer: 1 << 24 });
     const varies = stdout.split("\n").filter((l) => l.includes("VARIES"));
     const usable = /(\d+)\/\d+ usable/.exec(stdout)?.[1];
     if (varies.length) {
@@ -99,6 +103,15 @@ for (const { path, reason } of CANARIES) {
     const varies = out.split("\n").filter((l) => l.includes("VARIES")).map((l) => l.trim());
     const empty = /(\d+) capture\(s\) heard nothing/.exec(out)?.[1];
     const failedRuns = out.split("\n").filter((l) => l.trim().startsWith("FAILED")).map((l) => l.trim());
+    // An empty stdout means the child never started -- a module resolution error, a missing file --
+    // and that is a broken harness, not an inconclusive measurement. Say so rather than advising a
+    // re-run that will fail identically.
+    if (!out.trim()) {
+      const detail = `harness did not start: ${String(error.stderr ?? error.message).split("\n").find((l) => l.includes("Error")) ?? error.message.split("\n")[0]}`;
+      results.push({ path, ok: false, unstable: false, detail });
+      process.stdout.write(`  BROKEN — ${detail}\n`);
+      continue;
+    }
     const detail = varies.length ? `UNSTABLE: ${varies.join("; ")}`
       : empty ? `${empty} empty capture(s) — the foreground flake, not instability`
       : failedRuns.length ? `${failedRuns.length} capture(s) errored: ${failedRuns[0]}`

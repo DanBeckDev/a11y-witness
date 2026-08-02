@@ -41,7 +41,7 @@
     "gate:stability": "node scripts/stability-gate.mjs",
     "fleet:normalise": "node scripts/normalise-fleet.mjs",
     "corpus:snapshot": "node scripts/corpus-snapshot.mjs",
-    "training:repeat": "node src/training/repeat-capture.mjs"
+    "training:repeat": "tsx src/training/repeat-capture.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
