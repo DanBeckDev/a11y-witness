@@ -176,6 +176,29 @@ return fewer workers than are running; the run simply dispatches to a subset.
 - **`top -o mem` and RSS disagree, and RSS is the one that lies.** A starved guest showed `rss=0.4GB`
   while its `phys_footprint` was 8.1 GB, because its pages were in swap. Read the footprint, or you
   will conclude a VM is idle when it is dying.
+
+### Memory is not the only reason to run fewer guests — a second guest costs reliability
+
+Measured with `worker:compare`, same guests, same page, on a 14-core M4 Max that was **not** swapping
+(`pageouts +0`) and **not** CPU-bound (load 8.4 of 14):
+
+| | median | IQR | max | recoveries |
+|---|---|---|---|---|
+| one guest running | **23.4 s** | **3.0** | 25.1 s | **0/10** |
+| two guests running | 35.1 / 35.3 s | 17.9 / 38.2 | 107 s | 3/14 |
+
+Both guests degrade about equally, so this is not one poisoning the other. And `compare-workers.mjs`
+captures **sequentially** — one capture in flight at a time — so it is not concurrent capture load
+either. The mere presence of a second running guest halves the reliability and adds 50% to the median.
+
+**Do not reach for host specs to explain this.** It is not RAM, not cores, not swap; that was checked
+first and each was ruled out by measurement. The likely mechanism is that guidepup's speech capture is
+governed by wall-clock timeouts — `SPEAK_DEBOUNCE_TIMEOUT` and `CANCEL_NOT_FIRE_TIMEOUT`, both
+**1000 ms** in `NVDAClient.js` — so a vCPU descheduled past one second loses the phrase, and a late
+phrase is indistinguishable from a dead channel. Inferred from the source, not proven.
+
+The consequence for throughput is smaller than it looks: two workers at a 35 s median beat one worker
+at 23 s only slightly, and they fail far more. If a run must be reliable, prefer one.
 - **Your own tooling is on the same host.** `npm test`, a build, or a browser competes with the
   guests: in one 18-capture run the spikes tracked host activity, not worker age. Measure worker
   performance when you are not also doing something else, or you will diagnose the wrong machine.
@@ -294,10 +317,29 @@ back over it. Keystrokes are writes; speech is a read. So when that socket goes 
 
 Guidepup cannot notice. Checked in 0.29.2: it reconnects only on a socket `error` event, a half-open
 TCP connection raises none, and there is **no keepalive, no read timeout and no heartbeat** in its
-client. There is also **no `reconnect()`** on its public API and `NVDAClient` is not exported, so the
-only way to rebuild the channel is `stop()` + `start()` — which is why a mute used to cost ~86 s.
-(Guidepup also has **no debug mode**: two env vars, no logging. Its config was identical on healthy and
-failing guests, so misconfiguration was never the cause.)
+client. (Guidepup also has **no debug mode**: two env vars, no logging. Its config was identical on
+healthy and failing guests, so misconfiguration was never the cause.)
+
+> **This section used to say the only way to rebuild the channel was `stop()` + `start()`, because
+> `NVDAClient` "is not exported". That is wrong and it cost real time.** `NVDAClient.js` ends with
+> `exports.NVDAClient = NVDAClient` — it is absent from the package *index*, not from the module. More
+> importantly, **guidepup's reconnect logic already works; it is starved of its trigger.** Lines 99-110
+> disconnect, reconnect, re-join the channel and reset the failure counter — all of it hanging off an
+> `error` event that a half-open socket never emits.
+>
+> So `speech-channel.mjs` hands it that event: `socket.destroy(err)` emits `'error'` and guidepup
+> recovers itself, in **under a second instead of ~23 s**, without touching NVDA. Note `destroy()` with
+> no argument emits only `'close'`, which guidepup ignores — that distinction is the whole trick and is
+> asserted in the tests. The socket is captured by wrapping `tls.connect`, because `NVDA#client` and
+> `NVDAClient#socket` are genuine `#private` fields and unreachable by reflection.
+>
+> This matters beyond speed: **repeated NVDA restarts are what produce the `nvdaHelperRemote
+> (injection_terminate)` modal that wedges a guest**, so the expensive remedy was feeding the fault it
+> was treating. `ensureSpeechChannel` now rebuilds the socket first and only restarts NVDA if the probe
+> still hears nothing.
+>
+> When reading a dependency's behaviour, read the dependency. Both wrong claims above came from its
+> public API surface rather than its source, which is in `node_modules` and is 316 lines.
 
 So `ensureSpeechChannel` probes it *before* committing a capture: clear the log, `readLine`, check a
 phrase came back. Measured across all three guests, 7 interleaved rounds each, same page, same tool:
