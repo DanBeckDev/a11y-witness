@@ -5,7 +5,7 @@
 //   GET  /health                           -> { ok, screenReader, busy, code, environment }
 // NVDA is a single shared resource, so captures are serialized.
 import { createServer } from "node:http";
-import { appendFileSync, existsSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, openSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
@@ -82,8 +82,11 @@ function trimWindowsAtBoot() {
   if (existsSync(TRIM_MARKER)) return;
   try {
     const script = fileURLToPath(new URL("./windows-trim.mjs", import.meta.url));
+    // Its output goes to a file, not /dev/null. A detached child with stdio "ignore" that dies on
+    // startup leaves no trace anywhere, which is exactly how this failed silently on three boots.
+    const out = openSync(`${TRIM_MARKER}.log`, "a");
     const child = spawn(process.execPath, [script, TRIM_MARKER],
-      { detached: true, stdio: "ignore" });
+      { detached: true, stdio: ["ignore", out, out] });
     child.unref();
     log("windows trim started in the background (once per guest; see .windows-trimmed.json)");
   } catch (error) {
@@ -260,7 +263,11 @@ function runtimeEnvironment() {
   };
 }
 
-const PROVISION_STAMP = "C:\\Users\\witness\\a11y-witness\\provision-revision.txt";
+// run-server.cmd changes into the checkout before starting Node, so resolve the stamp from the
+// actual checkout rather than assuming the account is named `witness`. Prebuilt VMs and a manual
+// bootstrap may use any Windows username; a hardcoded profile path silently turned every such
+// worker into an `unstamped` cache environment.
+const PROVISION_STAMP = resolve(process.cwd(), "provision-revision.txt");
 
 function provisionRevision() {
   try {
