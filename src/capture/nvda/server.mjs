@@ -20,6 +20,7 @@ import { faultCode } from "./capture-faults.mjs";
 import { edgePolicy, guestDiagnostics, processCounts, screenReaderState, treeSize } from "./diagnostics.mjs";
 import { killStrayBrowsers, pruneEdgeProfile, reportBrowserPolicyDrift } from "./browser-profile.mjs";
 import { applyRequestedLogLevel } from "./nvda-logging.mjs";
+import { trimAlreadyDone } from "./windows-trim.mjs";
 import { fileURLToPath } from "node:url";
 
 const PORT = Number(process.env.A11Y_PORT || 8765);
@@ -79,7 +80,7 @@ const TRIM_MARKER = resolve(process.cwd(), ".windows-trimmed");
  */
 function trimWindowsAtBoot() {
   if (process.platform !== "win32" || process.env.A11Y_SKIP_TRIM === "1") return;
-  if (existsSync(TRIM_MARKER)) return;
+  if (trimAlreadyDone(TRIM_MARKER)) return;
   try {
     const script = fileURLToPath(new URL("./windows-trim.mjs", import.meta.url));
     // Its output goes to a file, not /dev/null. A detached child with stdio "ignore" that dies on
