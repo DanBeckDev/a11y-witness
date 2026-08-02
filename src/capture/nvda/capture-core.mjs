@@ -39,6 +39,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 // Bumping it forces a full recapture. That is the point.
 export const CAPTURE_PROTOCOL_VERSION = 2;
 
+export { edgeArgs as edgeArgsForTest };
+
 /**
  * Installed at module load, before anything calls `nvda.start()`, so the very first connection to NVDA
  * Remote is tracked. Idempotent, so importing this module twice is harmless.
@@ -251,10 +253,39 @@ const EDGE_EXES = [
 // showing ONLY this URL, so NVDA's browse-mode quick-nav cannot wander out of our document
 // into browser UI (the Root-1 cause: captures that read Edge's image-viewer/"Close banner"
 // chrome or the MSN start page).
+/**
+ * Chromium features that must be off for a capture to describe the PAGE rather than the profile.
+ *
+ * Autofill is the one that cost real evidence. `probeForms` submits forms, Edge offers to remember
+ * what was typed, and the durable profile accumulates it -- so later pages get a suggestion icon
+ * drawn inside recognised inputs, which NVDA announces as an embedded object appended to the field:
+ *
+ *     "Recipient name, edit, \ufffc"
+ *
+ * The rate therefore RISES through a run as the profile learns. Measured across the corpus at 3%, then
+ * 8%, then 31% of affected captures, with 26 good/bad pairs disagreeing about it -- the same page
+ * announcing differently depending on what Edge had memorised from earlier pages.
+ *
+ * These are command-line flags rather than Edge policies ON PURPOSE. The equivalent registry policies
+ * were set by provisioning and had already drifted: StartupBoostEnabled read 1 on two guests and 0 on a
+ * third, and nothing noticed for weeks. A flag lives in git, is applied at every launch, and cannot
+ * differ between guests.
+ */
+const SUPPRESSED_FEATURES = [
+  "msEdgeWelcomePage",
+  "AutofillServerCommunication",       // no server-side suggestions
+  "AutofillAddressProfileSavePrompt",  // never offer to remember a submitted form
+  "AutofillEnableAccountWalletStorage",
+];
+
 function edgeArgs(url) {
   return [
     "--no-first-run", "--no-default-browser-check", "--start-maximized",
-    "--disable-session-crashed-bubble", "--disable-features=msEdgeWelcomePage",
+    "--disable-session-crashed-bubble",
+    `--disable-features=${SUPPRESSED_FEATURES.join(",")}`,
+    // Belt and braces alongside the feature flags: these are long-standing switches rather than
+    // feature names, so they do not depend on a feature surviving a Chromium rename.
+    "--disable-sync", "--disable-background-networking", "--disable-save-password-bubble",
     `--user-data-dir=${EDGE_PROFILE_DIR}`, `--app=${url}`,
   ];
 }
