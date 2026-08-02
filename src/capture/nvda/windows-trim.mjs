@@ -247,3 +247,26 @@ export function tryDisableDefender() {
     return { disabled: false, reason: `could not confirm: ${error.message.split("\n")[0]}` };
   }
 }
+
+/**
+ * Run as a detached one-shot: `node windows-trim.mjs <markerPath>`.
+ *
+ * A module and a CLI in one file so the trim ships through `worker:deploy` like everything else, with
+ * no extra file to add to the code hash and no second delivery mechanism to get wrong.
+ *
+ * Detached rather than inline at worker boot because the work is minutes of PowerShell, all of it
+ * synchronous, and the worker must keep answering `/health` throughout — `worker-ctl.sh up` and
+ * `worker:deploy` both gate on that endpoint, so a blocking trim would present as a failed deploy.
+ */
+if (process.argv[1]?.endsWith("windows-trim.mjs")) {
+  const marker = process.argv[2];
+  if (!marker) {
+    process.stderr.write("usage: node windows-trim.mjs <marker-path>\n");
+    process.exit(2);
+  }
+  const write = (line) => process.stdout.write(`${line}\n`);
+  const trim = applyWindowsTrim({ markerPath: marker, log: write });
+  const defender = tryDisableDefender();
+  write(`defender: ${defender.disabled ? "disabled" : "NOT disabled"} — ${defender.reason}`);
+  writeFileSync(`${marker}.json`, JSON.stringify({ ...trim, defender }, null, 2) + "\n", "utf8");
+}

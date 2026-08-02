@@ -7,10 +7,10 @@
 import { createServer } from "node:http";
 import { appendFileSync, existsSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { freemem, totalmem, uptime as osUptime } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   browserAvailable, CAPTURE_PROTOCOL_VERSION, captureWithNvda, EDGE_PROFILE_DIR, forgetScreenReader,
   screenReaderReady, shutdownScreenReader, warmUpScreenReader,
@@ -20,6 +20,7 @@ import { faultCode } from "./capture-faults.mjs";
 import { edgePolicy, guestDiagnostics, processCounts, screenReaderState, treeSize } from "./diagnostics.mjs";
 import { killStrayBrowsers, pruneEdgeProfile, reportBrowserPolicyDrift } from "./browser-profile.mjs";
 import { applyRequestedLogLevel } from "./nvda-logging.mjs";
+import { fileURLToPath } from "node:url";
 
 const PORT = Number(process.env.A11Y_PORT || 8765);
 const LOG_PATH = process.env.A11Y_SERVER_LOG || "server.log";
@@ -63,6 +64,34 @@ const MAX_LOG_BYTES = 16 * 1024 * 1024;
  * browser-profile.mjs for the measurements that made this necessary (a 511 MB profile and 5 orphaned
  * Edge processes on the slowest of three otherwise identical guests).
  */
+const TRIM_MARKER = resolve(process.cwd(), ".windows-trimmed");
+
+/**
+ * Strip Windows' background services and apps, once per guest.
+ *
+ * Detached and unawaited on purpose. The work is minutes of synchronous PowerShell, and this worker has
+ * to keep answering `/health` throughout -- `worker-ctl.sh up` and `worker:deploy` both gate on that
+ * endpoint, so a blocking trim would look exactly like a failed deploy. The child writes the marker
+ * itself, so an interrupted trim simply runs again next boot rather than half-recording success.
+ *
+ * Opt-out with A11Y_SKIP_TRIM=1 -- worth having on a guest being debugged, where an unattended process
+ * removing operating-system components is one variable too many.
+ */
+function trimWindowsAtBoot() {
+  if (process.platform !== "win32" || process.env.A11Y_SKIP_TRIM === "1") return;
+  if (existsSync(TRIM_MARKER)) return;
+  try {
+    const script = fileURLToPath(new URL("./windows-trim.mjs", import.meta.url));
+    const child = spawn(process.execPath, [script, TRIM_MARKER],
+      { detached: true, stdio: "ignore" });
+    child.unref();
+    log("windows trim started in the background (once per guest; see .windows-trimmed.json)");
+  } catch (error) {
+    // Trimming is an optimisation, never a precondition for serving captures.
+    log(`windows trim could not start: ${error.message}`);
+  }
+}
+
 function tidyBrowserAtBoot() {
   try {
     reportBrowserPolicyDrift(edgePolicy(), log);
@@ -137,7 +166,7 @@ function codeVersion() {
   try {
     const hash = createHash("sha256");
     // Order matters and must match the host side: capture behaviour, then the wire contract.
-    for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs", "nvda-logging.mjs", "speech-channel.mjs"]) {
+    for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs", "nvda-logging.mjs", "speech-channel.mjs", "windows-trim.mjs"]) {
       hash.update(readFileSync(new URL(file, import.meta.url)));
     }
     return hash.digest("hex").slice(0, 16);
@@ -579,6 +608,7 @@ const server = createServer((req, res) => {
 server.listen(PORT, () => {
   rotateLogIfLarge();
   tidyBrowserAtBoot();
+  trimWindowsAtBoot();
   log(`a11y-witness NVDA worker listening on :${PORT} (reuse NVDA: ${REUSE_NVDA})`);
   // Deliberately not awaited: the port must answer immediately so callers can see "not ready yet"
   // instead of a connection refusal, which reads as a dead worker.
