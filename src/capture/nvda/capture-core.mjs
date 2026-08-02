@@ -269,8 +269,24 @@ function edgeArgs(url) {
  */
 const REUSE_BROWSER = process.env.A11Y_REUSE_BROWSER === "1";
 
+/**
+ * Recycle the reused browser this often.
+ *
+ * Reuse trades a cold start for accumulated state, and accumulated state is an evidence risk, not just
+ * a memory one. Across 1,061 different pages one Edge builds up cookies, history and — the one that
+ * would actually corrupt a capture — **autofill**: a form page read after two hundred other form pages
+ * can be offered suggestions the first one never saw, and NVDA announces those. That is cross-page
+ * contamination, it only appears deep into a run, and it looks like a real difference between cases.
+ *
+ * The same reasoning and the same number as MAX_CAPTURES_PER_NVDA. Bounded reuse keeps nearly all of
+ * the saving — one cold start per 25 captures instead of per capture — while capping how far state can
+ * drift from a fresh profile.
+ */
+const MAX_CAPTURES_PER_BROWSER = 25;
+
 /** The live reusable browser, if we started one. Null when reuse is off or it has gone. */
 let reusableBrowser = null;
+let browserCaptures = 0;
 
 /**
  * Get a window showing `url`, by the cheapest route available.
@@ -280,10 +296,17 @@ let reusableBrowser = null;
  */
 async function openPage(url, diag) {
   if (!REUSE_BROWSER) return launchBrowser(url, diag);
-  if (await browserAlive()) {
+  if (reusableBrowser && browserCaptures >= MAX_CAPTURES_PER_BROWSER) {
+    diag.mark("browserRecycle", { after: browserCaptures });
+    await closeBrowser(diag, reusableBrowser);
+    reusableBrowser = null;
+    browserCaptures = 0;
+  }
+  if (reusableBrowser && await browserAlive()) {
     try {
       await navigateExisting(url);
-      diag.mark("browserReused", { url });
+      browserCaptures += 1;
+      diag.mark("browserReused", { url, captures: browserCaptures });
       return reusableBrowser;
     } catch (error) {
       // A reusable browser that will not navigate is worse than none: fall back to a clean one-shot
@@ -300,6 +323,7 @@ async function openPage(url, diag) {
     reusableBrowser = await launchReusable({
       exe, args: reusableArgs(url, edgeArgs(url)), onEvent: (e) => diag.mark(e.type, e),
     });
+    browserCaptures = 1;
     return reusableBrowser;
   } catch (error) {
     diag.mark("browserReuseLaunchFailed", { error: errMsg(error) });
