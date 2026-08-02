@@ -99,3 +99,11 @@ test("the summary states what happened, including failures", () => {
   assert.match(trimSummary({ removed: ["a", "b"], disabled: ["WSearch"] }), /2 app\(s\) removed/);
   assert.match(trimSummary({ removed: [], disabled: [], failed: ["WinDefend"] }), /1 failed \(WinDefend\)/);
 });
+
+test("a summary says so when the trim could not run for want of elevation", () => {
+  // The failure that actually happened: the worker task is RunLevel Limited, every DISM and sc.exe call
+  // needs elevation, and the child died on its first step for three boots with stdio ignored. "skipped"
+  // and "skipped because it is not allowed to run" are different facts and must read differently.
+  assert.match(trimSummary({ needsElevation: true }), /needs elevation/);
+  assert.notEqual(trimSummary({ needsElevation: true }), trimSummary({ skipped: true }));
+});
