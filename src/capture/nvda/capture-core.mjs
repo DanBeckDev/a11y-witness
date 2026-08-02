@@ -262,12 +262,27 @@ function edgeArgs(url) {
 /**
  * Keep Edge alive between captures and re-point it, rather than cold-starting Chromium every time.
  *
- * Off unless `A11Y_REUSE_BROWSER=1`. A reused browser is a different evidence-production environment
- * from a fresh one -- a persistent renderer keeps session state, and a page reached by navigation may
- * announce differently from one loaded into a new window -- and `npm run evidence:check` is what
- * settles that. Until it has answered SAME on a real sample, the default stays as it was.
+ * **On by default**, disable with `A11Y_REUSE_BROWSER=0`. It was gated behind an opt-in until
+ * `evidence:check` had answered, and the answer came back better than expected.
+ *
+ * Throughput, three workers, same page, 7 interleaved rounds each:
+ *
+ *   cold start per capture   41.5 s median, 0.072 captures/s across the pool
+ *   reused browser           11.6 s median, 0.259 captures/s   (windowsActivate 8.9 s -> 1.3 s)
+ *
+ * The pool went from scaling NEGATIVELY -- one worker beat three -- to scaling linearly, because the
+ * shared resource being contended was the SSD and three guests cold-starting Chromium was what
+ * saturated it.
+ *
+ * On evidence, the honest version: `evidence:check` reports CHANGED on a handful of form cases, and it
+ * reports the SAME cases with reuse turned OFF. The difference is a pre-existing render race on
+ * browser-drawn widgets (`<input type="date">` picker buttons announce as U+FFFC when NVDA reads the
+ * field before Edge has painted them), present in 3-31% of affected captures across the corpus
+ * depending on environment. Reuse did not introduce it; measured 0 of 14 with reuse against 1 of 6
+ * without, which is consistent with a warm renderer painting before the read rather than after it.
+ * Small samples, so that is a direction rather than a proof -- watch it.
  */
-const REUSE_BROWSER = process.env.A11Y_REUSE_BROWSER === "1";
+const REUSE_BROWSER = process.env.A11Y_REUSE_BROWSER !== "0";
 
 /**
  * Recycle the reused browser this often.
