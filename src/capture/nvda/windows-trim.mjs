@@ -83,6 +83,12 @@ export const REMOVABLE_APPX = [
   "Microsoft.Copilot",
   "Microsoft.OutlookForWindows",
   "Microsoft.549981C3F5F10",
+  // Found by enumerating a real ARM64 guest rather than copying nano11's list. This image ships with
+  // only three provisioned packages -- Edge, DevHome and CrossDevice -- and none of nano11's targets
+  // (Xbox, Teams, Bing, Zune, Solitaire) exist on it at all. The list above is therefore mostly inert
+  // here; it is kept because it costs nothing and a future x64 image will have them.
+  "Microsoft.Windows.DevHome",
+  "MicrosoftWindows.CrossDevice",
 ];
 
 /**
@@ -307,11 +313,22 @@ export function applyWindowsTrim({ markerPath, log = () => {} }) {
   }
   for (const { name } of DISABLEABLE_SERVICES) {
     try {
-      powershell(`sc.exe config ${name} start= disabled; sc.exe stop ${name}`);
+      // Two calls, not one compound command. PowerShell returns the LAST command's exit code, so
+      // `sc.exe stop` failing on an already-stopped service masked a `config` that had succeeded --
+      // reported as "8 failed" when five services were in fact disabled correctly.
+      powershell(`sc.exe config ${name} start= disabled`);
       result.disabled.push(name);
     } catch (error) {
       result.failed.push(name);
       log(`trim: could not disable ${name}: ${error.message.split("\n")[0]}`);
+      continue;
+    }
+    try {
+      powershell(`sc.exe stop ${name}`);
+    } catch {
+      // Already stopped, or not stoppable on demand. The disable is what matters and it is done;
+      // the service will not come back after a reboot.
+      log(`trim: ${name} disabled but not stopped now (it will not start again after a reboot)`);
     }
   }
   writeFileSync(markerPath, `${new Date().toISOString()} ${trimSummary(result)}\n`, "utf8");
