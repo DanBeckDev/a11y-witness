@@ -31,7 +31,7 @@ scripted local one — start here: **`docs/getting-started.md`**, details in
 ```bash
 ./scripts/local-worker/worker-ctl.sh up        # start/resume the VM, wait for /health
 ./scripts/local-worker/worker-ctl.sh status    # state, host cost, health
-./scripts/local-worker/worker-ctl.sh pause     # between runs; resume is under a second
+./scripts/local-worker/worker-ctl.sh pause     # see below: UTM cannot actually suspend these guests
 npm run witness -- https://example.com --task "..."   # no A11Y_WORKER needed
 ```
 
@@ -129,6 +129,21 @@ A11Y_WORKERS=url1,url2 npm run training:capture     # explicit pool: yours to ma
 `A11Y_WORKERS` is the escape hatch, not the normal path: naming workers means you are managing
 them, so nothing is started or stopped for you. `--after stop|pause|leave` overrides the
 restore behaviour.
+
+### `pause` does not work on these guests, and quitting UTM kills them
+
+UTM refuses to suspend a VM with an emulated NVMe device, which is what these guests boot from:
+
+> Failed to save VM snapshot. Usually this means at least one device does not support snapshots.
+> Suspend is not supported when an emulated NVMe device is active. **Quitting UTM will kill all
+> running VMs.**
+
+So `worker-ctl.sh pause` is not the cheap resume this file used to advertise — **stop/start is the only
+real lifecycle**, and a cold boot to `ready` is ~15-42 s, which is fine.
+
+The second sentence matters more. **Stop every running guest before quitting UTM**, which you must do to
+edit a VM's configuration since UTM caches configs in memory. Quitting with a guest up hard powers it
+off, and a dirty Windows guest is exactly the state that took an afternoon to recover from once already.
 
 ### How many workers actually fit — the host is the constraint, not the VM count
 
