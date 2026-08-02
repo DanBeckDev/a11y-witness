@@ -1,10 +1,11 @@
 // Should this case be captured again, or is the evidence on disk still valid?
 //
 // A full dataset run is 1,061 pairs and ~1.5 h across three workers, and almost all of it is
-// usually unchanged. `--resume` already skipped work, but on the weakest possible test: "both
-// files exist and have a non-empty transcript". That reuses evidence after the PAGE changed, after
-// the capture options changed, and after NVDA or Edge was updated underneath it — which is exactly
-// how a dataset quietly stops describing the thing it claims to describe.
+// usually unchanged. `--resume` now validates the pair against the current page hash (and, for
+// legacy captures, recomputes the old cache key from the stored worker environment and options).
+// That prevents evidence being reused after the PAGE changed, after the capture options changed,
+// or after NVDA or Edge was updated underneath it — which is exactly how a dataset quietly stops
+// describing the thing it claims to describe.
 //
 // So the decision is keyed on everything that can change what NVDA says:
 //
@@ -66,12 +67,20 @@ export function hashPageDir(pageDir) {
  * `npm run evidence:check` exists to answer -- and until it has been answered for a given pair of
  * images, the cache must not assume it.
  *
- * `provisionRevision` was supposed to cover some of this and cannot: it reads `"unstamped"` on every
- * guest, because provisioning writes the stamp and no guest has been re-provisioned since it was added.
+ * `provisionRevision` is an additional guard. Guests created before the stamp was introduced report
+ * `"unstamped"` until they are deliberately re-provisioned; current workers read the stamp from their
+ * actual checkout, so a later provisioning change invalidates the environment key.
  */
 export function environmentKey(environment = {}) {
   return {
     screenReader: `${environment.screenReader ?? "NVDA"}/${environment.screenReaderVersion ?? "unknown"}`,
+    // The DRIVER, not just the screen reader. guidepup parses NVDA's speech before we ever see it, and
+    // 0.29.2 -> 0.31.0 changed the parse: an object placeholder that intermittently surfaced as U+FFFC
+    // ("Postcode, edit, ￼") now renders consistently as an empty segment. Same NVDA, same page, same
+    // browser, different evidence -- so two guests on different guidepup versions must never share a
+    // cache entry. Found the hard way: the upgrade fixed a 7% nondeterminism and changed every form
+    // transcript while doing it.
+    driver: `guidepup/${environment.guidepupVersion ?? "unknown"}`,
     browser: `${environment.browser ?? "unknown"}/${environment.browserVersion ?? "unknown"}`,
     os: `${environment.windowsVersion ?? "unknown"}/${environment.architecture ?? "unknown"}`,
     captureProtocol: environment.captureProtocol ?? "unknown",
@@ -89,12 +98,18 @@ export function cacheKey({ caseId, pageHash, options, environment }) {
   }))).slice(0, KEY_LENGTH);
 }
 
-/** Attach the key and the environment that produced this capture, so the next run can compare. */
-export function stampProvenance(capture, { key, options, environment, worker = null }) {
+/**
+ * Attach the key and the environment that produced this capture, so the next run can compare.
+ *
+ * @param {object} capture
+ * @param {{ key: string, pageHash?: string|null, options: object, environment: object, worker?: string|null }} provenance
+ */
+export function stampProvenance(capture, { key, pageHash = null, options, environment, worker = null }) {
   return {
     ...capture,
     provenance: {
       cacheKey: key,
+      pageHash,
       capturedAt: capture.capturedAt,
       // Which guest produced this. Not part of the key -- workers are meant to be
       // interchangeable, and keying on it would stop the pool sharing evidence -- but without it

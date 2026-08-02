@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
-    "@guidepup/guidepup": "^0.29.2"
+    "@guidepup/guidepup": "^0.31.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -57,7 +57,7 @@
     "typescript-eslint": "^8.62.0"
   },
   "optionalDependencies": {
-    "playwright": "^1.61.1",
-    "@axe-core/playwright": "^4.12.1"
+    "@axe-core/playwright": "^4.12.1",
+    "playwright": "^1.61.1"
   }
 }
