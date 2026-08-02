@@ -40,3 +40,26 @@ test("junk lines are skipped rather than poisoning the totals", () => {
 test("empty output is an empty list, not a crash", () => {
   assert.deepEqual(parseTasklistMemory(""), []);
 });
+
+// Committed bytes is what a guest's RAM should be sized from. Working-set sums include the file
+// cache, which grows to fill whatever the guest is given — so reading this wrong sizes a VM from its
+// own cache. See create-utm-vm.sh: an 8 GB guest reported 3.5 GB "in use" and needed under half.
+import { parseCommittedMemory } from "./diagnostics.mjs";
+
+test("committed bytes and the commit limit are reported in MB with their ratio", () => {
+  // 2 GiB committed against a 6 GiB limit.
+  const m = parseCommittedMemory("2147483648 6442450944")!;
+  assert.equal(m.committedMb, 2048);
+  assert.equal(m.commitLimitMb, 6144);
+  assert.equal(m.usedShare, 0.33);
+});
+
+test("trailing newlines and CRLF from PowerShell do not break the parse", () => {
+  assert.equal(parseCommittedMemory("2147483648 6442450944\r\n")!.committedMb, 2048);
+});
+
+test("unparseable or zero-limit output is null, never a divide-by-zero", () => {
+  for (const bad of ["", "not numbers", "2147483648", "2147483648 0"]) {
+    assert.equal(parseCommittedMemory(bad), null, `expected null for ${JSON.stringify(bad)}`);
+  }
+});

@@ -179,6 +179,50 @@ const WATCHED_PROCESSES = ["msedge", "nvda", "node"];
  * cache directories on a 511 MB profile recovered only 52 MB, which is exactly the kind of guess this
  * breakdown exists to prevent.
  */
+/**
+ * Committed bytes — how much memory the guest has actually *promised*, as opposed to how much it is
+ * touching.
+ *
+ * This is the number that decides how much RAM a guest needs, and `topProcesses` is not. Summing
+ * process working sets produces a figure in the same family as Windows' "in use", which includes the
+ * file cache — and the file cache grows to fill whatever it is given. `create-utm-vm.sh` records the
+ * measurement that makes the point: an 8 GB guest reported 3.5 GB "in use" and needed less than half
+ * of it, while 4 GB and 8 GB guests produced byte-identical evidence at 165 s vs 167 s with zero
+ * pagefile use on either. Size a guest from committed bytes or you will size it from its own cache.
+ *
+ * `commitLimit` is included because committed alone cannot say whether the guest is near trouble: the
+ * limit is physical RAM plus the pagefile, and the ratio is the headroom.
+ */
+export function committedMemory() {
+  if (process.platform !== "win32") return null;
+  try {
+    const output = execFileSync("powershell", [
+      "-NoProfile", "-NonInteractive", "-Command",
+      "$m = Get-CimInstance Win32_PerfRawData_PerfOS_Memory; " +
+      "Write-Output \"$($m.CommittedBytes) $($m.CommitLimit)\"",
+    ], { encoding: "utf8", timeout: 30_000 });
+    return parseCommittedMemory(output);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse "<committedBytes> <commitLimit>" into MB. Pure, so it is testable off Windows.
+ *
+ * @param {string} output
+ */
+export function parseCommittedMemory(output) {
+  const [committed, limit] = String(output).trim().split(/\s+/).map(Number);
+  if (!Number.isFinite(committed) || !Number.isFinite(limit) || limit <= 0) return null;
+  const toMb = (bytes) => Math.round(bytes / (1024 * 1024));
+  return {
+    committedMb: toMb(committed),
+    commitLimitMb: toMb(limit),
+    usedShare: Math.round((committed / limit) * 100) / 100,
+  };
+}
+
 export function largestSubtrees(root, limit = 8) {
   let entries;
   try {
@@ -311,6 +355,7 @@ export function guestDiagnostics({ edgeProfile, logPath }) {
     serverLog: treeSize(logPath),
     processes: processCounts(WATCHED_PROCESSES),
     topProcesses: topProcessesByMemory(),
+    committedMemory: committedMemory(),
     screenReader: screenReaderState({
       nvdaRoot: process.env.GUIDEPUP_SCREEN_READERS_PATH ||
         (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "guidepup") : null),
