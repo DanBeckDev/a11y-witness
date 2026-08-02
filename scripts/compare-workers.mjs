@@ -25,6 +25,7 @@
 // "Not distinguishable" is a real answer, and it is the one that was missing.
 import { writeFileSync, mkdirSync } from "node:fs";
 import { compareWorkers, describe as summarise, recoveryRates } from "../src/capture/worker-stats.mjs";
+import { sampleHost, diffHost } from "../src/capture/host-metrics.mjs";
 import { resolve } from "node:path";
 
 const CAPTURE_TIMEOUT_MS = 300_000;
@@ -108,6 +109,11 @@ async function vitals(worker) {
 }
 
 for (const worker of workers) vitalsBefore[worker] = await vitals(worker);
+
+// The foundations, sampled around the run. Timings alone say something got slower; they never say
+// which resource ran out. Not sampling disk I/O is why three guests contending on one SSD was
+// misdiagnosed as a memory problem, then as a guest problem, before anyone looked at the disk.
+const hostBefore = sampleHost();
 
 // INTERLEAVED, round-robin. Measuring one worker for five minutes and then the next attributes any drift
 // in the host during those ten minutes to the difference between the workers -- which is how a shared
@@ -204,6 +210,23 @@ for (const w of workers) {
 }
 
 mkdirSync(OUT, { recursive: true });
+const hostAfter = sampleHost();
+const foundations = diffHost(hostBefore, hostAfter);
+
+process.stdout.write("\nFOUNDATIONS (the host, during this run)\n");
+process.stdout.write(`  load             ${hostAfter.load?.one ?? "?"} (1m), ` +
+  `${hostAfter.load?.five ?? "?"} (5m)\n`);
+const busiest = [...(hostAfter.disk ?? [])].sort((a, b) => b.mbPerSecond - a.mbPerSecond)[0];
+process.stdout.write(`  disk             ${busiest ? `${busiest.device} ${busiest.mbPerSecond} MB/s, ` +
+  `${busiest.transfersPerSecond} tps` : "unavailable"}\n`);
+process.stdout.write(`  guest resident   ${foundations.residentMbTotal} MB across ` +
+  `${hostAfter.processes.length} process(es)   <- RSS, not phys_footprint\n`);
+process.stdout.write(`  free / compressed ${foundations.freeMb} MB free, ` +
+  `${foundations.compressorMb} MB compressed\n`);
+process.stdout.write(`  paging           ${foundations.pageoutsDelta} pageouts during the run` +
+  `${foundations.swappingDuringRun ? "  <-- THE HOST WAS SWAPPING; these timings describe a constrained machine" : " (none)"}\n`);
+
 writeFileSync(resolve(OUT, "compare.json"),
-  JSON.stringify({ page, rounds: runs, results, verdict, recoveryDeltas: deltas }, null, 2) + "\n", "utf8");
+  JSON.stringify({ page, rounds: runs, results, verdict, recoveryDeltas: deltas,
+                   foundations, hostBefore, hostAfter }, null, 2) + "\n", "utf8");
 process.stdout.write(`\nReport: ${resolve(OUT, "compare.json")}\n`);
