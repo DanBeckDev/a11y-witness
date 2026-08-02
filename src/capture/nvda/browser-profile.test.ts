@@ -63,13 +63,44 @@ test("an unreadable profile size never prunes the size-gated caches", () => {
   assert.ok(!paths.some((p) => p.endsWith("Cache")));
 });
 
-test("only BrowserMetrics is pruned unconditionally — nothing irreplaceable", () => {
-  // Guard against re-adding "probably unnecessary" paths. Edge's component payloads were once on the
-  // unconditional list; the guests have the auto-updater disabled, so deleting them was permanent, and
-  // the two workers it happened to went from 11-12s captures to ~26s with no way back.
+test("the unconditional prune list contains only things Chromium recreates on demand", () => {
+  // Guard against re-adding "probably unnecessary" paths. Edge's component payloads were once on this
+  // list; the guests have the auto-updater disabled, so deleting them was permanent, and the two
+  // workers it happened to went from 11-12s captures to ~26s with no way back.
+  //
+  // The rule is not "keep it at one entry" — it is that every entry must be regenerable AND unneeded
+  // by a capture. An allow-list states that intent directly; a count only pretended to.
+  const REGENERABLE_AND_UNNEEDED = [
+    "BrowserMetrics",       // telemetry Edge writes and never reads back
+    "Web Data",             // autofill store — see below
+    "Web Data-journal",
+    "Login Data",           // saved credentials; a capture never signs in to anything
+    "Login Data-journal",
+  ];
   const paths = prunablePaths({ megabytes: 100, root: ROOT, exists: everythingExists });
-  assert.equal(paths.length, 1, `unconditional prune list must stay at one entry, got: ${paths}`);
-  assert.ok(paths[0].endsWith("BrowserMetrics"));
+  for (const path of paths) {
+    assert.ok(
+      REGENERABLE_AND_UNNEEDED.some((allowed) => path.endsWith(allowed)),
+      `${path} is pruned unconditionally but is not on the regenerable allow-list`,
+    );
+  }
+});
+
+test("the autofill store is dropped at EVERY boot, not only on an oversized profile", () => {
+  // Correctness, not housekeeping, so it must not be size-gated. probeForms submits forms, which
+  // TEACHES the profile; a taught profile then draws a suggestion affordance inside recognised inputs
+  // and NVDA announces it as an embedded object appended to the field:
+  //     "Recipient name, edit, ￼"   instead of   "Recipient name, edit"
+  // The same unchanged page therefore announces differently depending on how many form pages preceded
+  // it — measured rising from 3% to 31% over the corpus's life, with 26 good/bad pairs disagreeing.
+  //
+  // Command-line flags alone did NOT fix this: they stop Edge saving new entries, but it still offers
+  // entries the profile already holds. One guest measured 0 of 12 while another kept varying, purely
+  // because their profiles had learned different amounts.
+  const small = prunablePaths({ megabytes: 10, root: ROOT, exists: everythingExists });
+  assert.ok(small.some((p) => p.endsWith("Web Data")), "a small profile must still lose its form data");
+  const unknown = prunablePaths({ megabytes: null, root: ROOT, exists: everythingExists });
+  assert.ok(unknown.some((p) => p.endsWith("Web Data")), "an unreadable size must not skip it either");
 });
 
 test("policy drift is reported once, naming the fix — not attempted and failed", () => {
