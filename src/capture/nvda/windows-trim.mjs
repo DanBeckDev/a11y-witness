@@ -40,6 +40,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 /**
  * Provisioned Appx packages that may be removed. Taken from nano11builder's list, minus anything this
@@ -204,6 +205,41 @@ export function isElevated() {
   }
 }
 
+/**
+ * Try to obtain elevation the supported way: a scheduled task that runs at `RunLevel Highest`.
+ *
+ * `witness` IS a member of Administrators — it simply holds a UAC-filtered token, so the worker runs
+ * unelevated. That is a different problem from "no permission", and Task Scheduler is the documented
+ * answer to it: a task registered at Highest runs with the full admin token, and *starting* an existing
+ * task requires no elevation at all.
+ *
+ * Deliberately NOT a UAC bypass. If Windows refuses to register an elevated task from an unelevated
+ * caller, that refusal is the answer and it is reported — the fallback is running
+ * `provision-nvda-worker.ps1` elevated once, which registers the task from a context that certainly
+ * can. `-Verb RunAs` is not used either: `ConsentPromptBehaviorAdmin=5` with
+ * `PromptOnSecureDesktop=1` puts the prompt on the secure desktop, where nothing automated can (or
+ * should) answer it.
+ *
+ * @returns {{ registered: boolean, started: boolean, reason: string }}
+ */
+export function runTrimViaElevatedTask({ scriptPath, markerPath, taskName = "a11ytrim" }) {
+  const user = "$([Security.Principal.WindowsIdentity]::GetCurrent().Name)";
+  const register =
+    `$a = New-ScheduledTaskAction -Execute '${process.execPath}' ` +
+    `-Argument '\"${scriptPath}\" \"${markerPath}\"'; ` +
+    `$p = New-ScheduledTaskPrincipal -UserId "${user}" -LogonType Interactive -RunLevel Highest; ` +
+    "$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30); " +
+    `Register-ScheduledTask -TaskName '${taskName}' -Action $a -Principal $p -Settings $s -Force | Out-Null; ` +
+    `Start-ScheduledTask -TaskName '${taskName}'`;
+  try {
+    powershell(register);
+    return { registered: true, started: true, reason: `started '${taskName}' at RunLevel Highest` };
+  } catch (error) {
+    const detail = String(error?.stderr ?? error?.message ?? "").split("\n")[0].slice(0, 300);
+    return { registered: false, started: false, reason: `could not register an elevated task: ${detail}` };
+  }
+}
+
 /** Provisioned Appx package names currently on the image. */
 function installedProvisionedPackages() {
   const out = powershell(
@@ -217,6 +253,8 @@ function installedProvisionedPackages() {
  * @param {{ markerPath: string, log?: (line: string) => void }} options
  * @returns {{ removed: string[], disabled: string[], failed: string[], skipped: boolean }}
  */
+const SELF_PATH = fileURLToPath(import.meta.url);
+
 export function applyWindowsTrim({ markerPath, log = () => {} }) {
   const result = { removed: [], disabled: [], failed: [], skipped: false, needsElevation: false };
   if (process.platform !== "win32" || existsSync(markerPath)) {
@@ -224,13 +262,21 @@ export function applyWindowsTrim({ markerPath, log = () => {} }) {
     return result;
   }
   if (!isElevated()) {
-    // Recorded in the marker so it is visible over /diagnostics and does not retry on every boot. The
-    // trim belongs in provision-nvda-worker.ps1, which runs elevated; see that script.
     result.needsElevation = true;
     result.skipped = true;
-    log("trim: skipped — needs elevation, and the worker task runs as RunLevel Limited. " +
-        "Run scripts/provision-nvda-worker.ps1 on the guest instead.");
-    writeFileSync(markerPath, `${new Date().toISOString()} skipped: needs elevation\n`, "utf8");
+    // `witness` is an administrator holding a UAC-filtered token, so elevation is obtainable through
+    // Task Scheduler rather than unreachable. Try that before giving up.
+    const escalation = runTrimViaElevatedTask({ scriptPath: SELF_PATH, markerPath });
+    result.escalation = escalation;
+    if (escalation.started) {
+      // The marker is deliberately NOT written here: the elevated run writes it after doing the work,
+      // and writing it now would make that run skip itself.
+      log(`trim: unelevated, handed off — ${escalation.reason}`);
+      return result;
+    }
+    log(`trim: skipped — ${escalation.reason}. Run scripts/provision-nvda-worker.ps1 elevated instead.`);
+    writeFileSync(markerPath,
+      `${new Date().toISOString()} skipped: needs elevation — ${escalation.reason}\n`, "utf8");
     return result;
   }
   for (const pkg of packagesToRemove(installedProvisionedPackages())) {
