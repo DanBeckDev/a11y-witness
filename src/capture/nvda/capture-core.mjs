@@ -20,6 +20,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { captureFault, FAULT } from "./capture-faults.mjs";
 import { installSpeechChannelShim } from "./speech-channel.mjs";
+import { browserAlive, launchReusable, navigateExisting, reusableArgs } from "./browser-session.mjs";
 import { connect } from "node:net";
 import { existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -135,7 +136,7 @@ function createDiagnostics() {
  */
 export async function captureWithNvda(url, opts = {}) {
   const diag = createDiagnostics();
-  const browser = launchBrowser(url, diag);
+  const browser = await openPage(url, diag);
   let succeeded = false;
   try {
     const result = await runCapturePhases(url, opts, diag);
@@ -256,6 +257,54 @@ function edgeArgs(url) {
     "--disable-session-crashed-bubble", "--disable-features=msEdgeWelcomePage",
     `--user-data-dir=${EDGE_PROFILE_DIR}`, `--app=${url}`,
   ];
+}
+
+/**
+ * Keep Edge alive between captures and re-point it, rather than cold-starting Chromium every time.
+ *
+ * Off unless `A11Y_REUSE_BROWSER=1`. A reused browser is a different evidence-production environment
+ * from a fresh one -- a persistent renderer keeps session state, and a page reached by navigation may
+ * announce differently from one loaded into a new window -- and `npm run evidence:check` is what
+ * settles that. Until it has answered SAME on a real sample, the default stays as it was.
+ */
+const REUSE_BROWSER = process.env.A11Y_REUSE_BROWSER === "1";
+
+/** The live reusable browser, if we started one. Null when reuse is off or it has gone. */
+let reusableBrowser = null;
+
+/**
+ * Get a window showing `url`, by the cheapest route available.
+ *
+ * Three cases, in cost order: navigate a browser that is already up (~0 s), start a reusable one
+ * (a cold start, paid once per worker rather than once per capture), or the original one-shot launch.
+ */
+async function openPage(url, diag) {
+  if (!REUSE_BROWSER) return launchBrowser(url, diag);
+  if (await browserAlive()) {
+    try {
+      await navigateExisting(url);
+      diag.mark("browserReused", { url });
+      return reusableBrowser;
+    } catch (error) {
+      // A reusable browser that will not navigate is worse than none: fall back to a clean one-shot
+      // rather than capturing whatever page happened to be showing. Reading the PREVIOUS page while
+      // every check passes is the evidence-rot failure this project has already paid for once.
+      diag.mark("browserReuseFailed", { error: errMsg(error) });
+      await closeBrowser(diag, reusableBrowser);
+      reusableBrowser = null;
+    }
+  }
+  const exe = EDGE_EXES.find((p) => existsSync(p));
+  if (!exe) return launchBrowser(url, diag);
+  try {
+    reusableBrowser = await launchReusable({
+      exe, args: reusableArgs(url, edgeArgs(url)), onEvent: (e) => diag.mark(e.type, e),
+    });
+    return reusableBrowser;
+  } catch (error) {
+    diag.mark("browserReuseLaunchFailed", { error: errMsg(error) });
+    return launchBrowser(url, diag);
+  }
 }
 
 // Open the page in a fresh, maximized Edge window, returning the process when we own it.
@@ -1360,6 +1409,13 @@ async function probeTaskButton(phrase, { interaction }) {
 // Stop NVDA and close the browser so the next capture starts fresh.
 async function stopAndCleanup(diag, browser, { keepScreenReader }) {
   if (!keepScreenReader) await stopScreenReader(diag);
+  // Leaving Edge up is the entire point of reuse: closing it here would put the cold start back on
+  // every capture. It is still closed on a failed capture (see captureWithNvda's finally) and when the
+  // worker shuts down, so a wedged browser is never inherited indefinitely.
+  if (REUSE_BROWSER && browser && browser === reusableBrowser) {
+    diag.mark("browserKeptAlive", {});
+    return;
+  }
   await closeBrowser(diag, browser);
 }
 
