@@ -228,7 +228,16 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
 
   if (json) {
     const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
-    console.log(JSON.stringify({ url, task, screenReader: cap.screenReader, transcript: cap.transcript, ruleBased: ruleFindings, verdict: layered }, null, 2));
+    // `structure` and `interaction` are included deliberately. They were omitted, so the machine-readable
+    // output carried only the read-through and dropped every structural sweep and interaction probe --
+    // the evidence behind most findings. A consumer reading this JSON could not tell "this page has no
+    // links" from "links were never recorded", and the local judge's evidence guard, given exactly that,
+    // suppressed a correct 4.1.2 finding scored at 0.993.
+    console.log(JSON.stringify({
+      url, task, screenReader: cap.screenReader, transcript: cap.transcript,
+      structure: cap.structure, interaction: cap.interaction,
+      ruleBased: ruleFindings, verdict: layered,
+    }, null, 2));
   } else {
     printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: ruleFindings });
   }
