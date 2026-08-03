@@ -23,7 +23,7 @@ import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "./spike/layers.js";
 import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "./capture/local-vm.js";
-import { captureMentionsTitle } from "./capture/verify.js";
+import { captureDoubt, captureMentionsTitle, type CaptureDoubt } from "./capture/verify.js";
 
 interface Args {
   url: string;
@@ -141,6 +141,13 @@ interface ShadowReport {
   mode?: string;
   decisionAction?: string;
   predictedPositiveCounts?: Record<string, number>;
+  artifact?: {
+    screenReader?: string;
+    encoderSha256?: string;
+    modelSha256?: string;
+    reportSha256?: string;
+    trainingDatasetSha256?: string | null;
+  };
 }
 
 /** Run the local scorer beside the existing judge without changing findings. */
@@ -168,11 +175,29 @@ async function shadowScreenReaderCapture(capture: CaptureResponse): Promise<void
     const report = JSON.parse(stdout) as ShadowReport;
     process.stderr.write(
       `Shadow scorer (${report.mode ?? "unknown"}, ${report.decisionAction ?? "unknown"}): ` +
-        JSON.stringify(report.predictedPositiveCounts ?? {}) + "\n",
+        JSON.stringify({
+          predictedPositiveCounts: report.predictedPositiveCounts ?? {},
+          artifact: report.artifact ?? null,
+        }) + "\n",
     );
   } catch (error) {
     process.stderr.write(`Shadow scorer failed; existing judge unchanged. ${String(error)}\n`);
   }
+}
+
+/**
+ * Say which kind of doubt it is, in words that match the cause.
+ *
+ * Telling someone their page "read browser chrome" when a consent dialog held the screen reader inside
+ * their page sends them looking in the wrong place entirely.
+ */
+function warnUnverified(reason: CaptureDoubt, title: string | undefined): void {
+  if (reason === "wrong-content") {
+    process.stderr.write(`WARNING: after ${MAX_CAPTURE_ATTEMPTS} attempts the capture still doesn't match the page title "${title ?? ""}" — results may reflect browser chrome, not the page.\n`);
+    return;
+  }
+  process.stderr.write("WARNING: the screen reader reached almost none of this page — most likely held inside a "
+    + "modal such as a cookie or consent dialog. Reporting no findings rather than describing the dialog.\n");
 }
 
 async function runWitness({ url, task, worker, json, debug, probeForms, axe: wantAxe, axeResults }: RunOptions): Promise<void> {
@@ -209,10 +234,17 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
   // it were the site's fault. The check knew it had failed and the pipeline downstream could not tell.
   //
   // A stderr line is not a signal. Anything consuming the result has to be able to see this.
-  const captureVerified = !axe.title || captureMentionsTitle(cap, axe.title);
-  if (!captureVerified) {
-    process.stderr.write(`WARNING: after ${MAX_CAPTURE_ATTEMPTS} attempts the capture still doesn't match the page title "${axe.title}" — results may reflect browser chrome, not the page.\n`);
-  }
+  //
+  // Two independent ways a capture can fail to be about the page, and they need different words. Reading
+  // the WRONG thing (browser chrome, an interstitial) is caught by the title; reading only PART of the
+  // right thing is not caught by anything the title can see — on theregister.com the consent modal traps
+  // focus, so the URL, the title and a title word all check out while the sweep reached 1 of 463 headings.
+  //
+  // Reachability is deliberately NOT in the retry loop above. A consent wall is on every attempt, so
+  // retrying buys three captures and the same answer.
+  const unverifiedReason = captureDoubt(cap, axe.title) ?? undefined;
+  const captureVerified = unverifiedReason === undefined;
+  if (unverifiedReason) warnUnverified(unverifiedReason, axe.title);
 
   if (debug && cap.diagnostics) {
     process.stderr.write("-- capture diagnostics --\n");
@@ -249,6 +281,9 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
       // False when the capture could not be confirmed to have read the requested page. Findings from an
       // unverified capture may describe browser chrome, so a consumer must be able to refuse them.
       captureVerified,
+      // WHY it is unverified, because the two causes need different explanations to a reader: reading the
+      // wrong thing entirely, versus reading only a modal dialog that sat in front of the right page.
+      ...(unverifiedReason ? { captureUnverifiedReason: unverifiedReason } : {}),
     }, null, 2));
   } else {
     printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: ruleFindings });

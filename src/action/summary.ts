@@ -27,6 +27,12 @@ export interface RunResult {
    * they can blame a page for its browser — so they are not shown at all.
    */
   captureVerified?: boolean;
+  /**
+   * Why the capture is unverified: `"wrong-content"` (it read something else) or `"contained"` (it read
+   * only part of the right page, almost always a consent or cookie modal holding the screen reader).
+   * Absent on older results, which are explained with the original wrong-content wording.
+   */
+  captureUnverifiedReason?: "wrong-content" | "contained";
   url: string;
   task: string;
   screenReader: string;
@@ -153,13 +159,21 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
       "",
       `**Page:** ${result.url}`,
       "",
-      "The capture could not be confirmed to have read the requested page: what the screen reader "
-        + "announced did not contain the page's own title, after three attempts. That usually means it read "
-        + "browser chrome — an interstitial, a consent dialog, an image or PDF viewer — rather than your "
-        + "content.",
+      result.captureUnverifiedReason === "contained"
+        ? "The screen reader reached almost none of this page. The page itself exposes many headings and "
+          + "landmarks, and quick navigation could not get to them — the signature of a modal dialog holding "
+          + "the screen reader in place, most often a cookie or consent banner. A keyboard user meets the "
+          + "same wall, but what we captured describes the dialog, not your content."
+        : "The capture could not be confirmed to have read the requested page: what the screen reader "
+          + "announced did not contain the page's own title, after three attempts. That usually means it read "
+          + "browser chrome — an interstitial, a consent dialog, an image or PDF viewer — rather than your "
+          + "content.",
       "",
-      "**No findings are reported.** Any that were produced would describe the browser, not this page, "
-        + "and blaming a site for its browser is worse than saying nothing.",
+      result.captureUnverifiedReason === "contained"
+        ? "**No findings are reported.** Any that were produced would describe the consent dialog rather "
+          + "than your page, and a report about somebody else's cookie banner is worse than saying nothing."
+        : "**No findings are reported.** Any that were produced would describe the browser, not this page, "
+          + "and blaming a site for its browser is worse than saying nothing.",
       "",
       "<sub>The full capture is in the run artifact if you want to see what it did read.</sub>",
     );

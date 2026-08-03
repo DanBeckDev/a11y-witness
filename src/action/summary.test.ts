@@ -137,3 +137,28 @@ test("a verified capture is unaffected, and so is one that never reported verifi
   assert.match(renderSummary(result({ captureVerified: true })), /what a screen reader actually experienced/);
   assert.match(renderSummary(result()), /what a screen reader actually experienced/);
 });
+
+test("a capture held inside a consent modal is explained as such, not as browser chrome", () => {
+  // theregister.com: the page exposes 463 headings and the sweep reached 1, because the consent dialog
+  // traps focus. Telling that team their page "read browser chrome" sends them hunting in the wrong place
+  // — the cause is a modal inside their own page, and the fix is theirs.
+  const out = renderSummary(result({
+    captureVerified: false,
+    captureUnverifiedReason: "contained",
+    verdict: { taskCompletable: false, summary: "s", confidence: 0.9, findings: [finding("serious", "Accept-additional-cookies-button-unnamed")] },
+  }));
+  assert.match(out, /reached almost none of this page/i);
+  assert.match(out, /consent/i);
+  assert.doesNotMatch(out, /did not contain the page's own title/i, "that is the OTHER failure");
+  // A distinctive title, because the explanatory prose now legitimately contains the words "consent
+  // dialog" — asserting on those could not tell the finding from the explanation.
+  assert.doesNotMatch(out, /Accept-additional-cookies-button-unnamed/, "the finding itself must still not be shown");
+  assert.doesNotMatch(out, /lived-experience finding\(s\)/, "no findings table at all");
+});
+
+test("the original wrong-content wording survives for results that carry no reason", () => {
+  // Older results have no `captureUnverifiedReason`. They must keep the explanation they always had
+  // rather than silently acquiring the consent-dialog one.
+  const out = renderSummary(result({ captureVerified: false }));
+  assert.match(out, /did not contain the page's own title/i);
+});

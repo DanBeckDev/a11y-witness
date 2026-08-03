@@ -159,3 +159,103 @@ test("a form that NAVIGATED cannot evidence a silent validation error", () => {
   assert.equal(hasEvidenceFor("3.3.1", stayed), true);
   assert.equal(findingsFromScores({ "3.3.1": true }, { "3.3.1": 0.9 }, stayed).findings.length, 1);
 });
+
+// --- 3.3.1 and 4.1.3 after the keystroke-leak investigation ---
+//
+// These are the shapes measured on apache.org and on this project's own dataset. The apache.org one is
+// the reason the guard changed: the run reported "a form was submitted with invalid input and no error
+// was announced" about a site search that worked, returned a result, and owed no error at all.
+
+test("3.3.1 does not fire when a DISCLOSURE was opened rather than a form submitted", () => {
+  // apache.org: the probe activated `SEARCH, button`, which opened a search panel. `formChanges` was
+  // non-empty, and that alone used to count as "a form was submitted".
+  const openedSearch = {
+    transcript: ["main landmark, heading, level 1, Software For The Public Good"],
+    structure: { formFields: ["SEARCH, button"] },
+    interaction: {
+      controls: ["banner landmark, list, with 8 items, SEARCH, button"],
+      formChanges: [{ control: "SEARCH, button", kind: "disclosure", after: "search landmark" }],
+      postSubmitFields: ["SEARCH, button", "Clear, button"],
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", openedSearch), false);
+});
+
+test("3.3.1 fires when a submit showed an error the screen reader never spoke", () => {
+  // The dataset's `form-error-silent` bad page: the error is on screen and in the accessibility tree, and
+  // nothing announces it. This is the criterion, stated directly rather than inferred from silence.
+  const silentError = {
+    transcript: ["form, Plot preference, edit"],
+    structure: { formFields: ["Plot preference, edit", "Request plot, button"] },
+    interaction: {
+      controls: ["Request plot, button"],
+      formChanges: [{ control: "Request plot, button", kind: "submit", after: "" }],
+      postSubmitFields: ["form, Plot preference, edit", "Request plot, button"],
+      postSubmitNames: ["Plot preference", "Enter a plot preference before requesting.", "Request plot"],
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", silentError), true);
+});
+
+test("3.3.1 does NOT fire when the error WAS announced", () => {
+  // The accessible variant. The error text reaches the tree and the announcements, so there is nothing
+  // to report — and this is the assertion that stops the new oracle inventing findings on good pages.
+  const announcedError = {
+    transcript: ["form, Plot preference, edit"],
+    structure: { formFields: ["Plot preference, edit"] },
+    interaction: {
+      controls: ["Request plot, button"],
+      formChanges: [{ control: "Request plot, button", kind: "submit", after: "Enter a plot preference before requesting." }],
+      postSubmitFields: ["form, Plot preference, edit, invalid entry, Enter a plot preference before requesting."],
+      postSubmitNames: ["Plot preference", "Enter a plot preference before requesting.", "Request plot"],
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", announcedError), false);
+});
+
+test("3.3.1 still works on captures made before the oracle existed", () => {
+  // All 2,122 captures on disk and every eval fixture predate `postSubmitNames` and carry no `kind`.
+  // Requiring either outright would switch this criterion off for all of them with every test green —
+  // the exact shape of the regression that emptied `postSubmitFields` across the whole corpus.
+  const legacy = {
+    transcript: ["form, Plot preference, edit"],
+    structure: { formFields: ["Plot preference, edit"] },
+    interaction: {
+      controls: ["Request plot, button"],
+      formChanges: [{ control: "Request plot, button", after: "" }],
+      postSubmitFields: ["form, Plot preference, edit", "Request plot, button"],
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", legacy), true);
+});
+
+test("3.3.1 stays silent when submitting NAVIGATED, whatever else is present", () => {
+  // Wikipedia: the search submitted successfully and moved to another page, so the post-submit re-read
+  // described that page. No error is owed by a form that worked.
+  const navigated = {
+    transcript: ["x"],
+    interaction: {
+      controls: ["Search, button"],
+      formChanges: [{ control: "Search, button", kind: "submit", after: "" }],
+      postSubmitFields: ["a", "b"],
+      postSubmitNames: ["Error: something"],
+      navigatedOnSubmit: { from: "https://en.wikipedia.org/", to: "https://fr.wikipedia.org/" },
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", navigated), false);
+});
+
+test("4.1.3 can be evidenced by a result count the page showed and never announced", () => {
+  // WCAG's own worked example for Status Messages is a search result count. This channel is additive: it
+  // only ever makes the criterion reportable where it previously was not.
+  const silentCount = {
+    transcript: ["main landmark, heading, level 1, Search"],
+    interaction: { controls: [], postSubmitNames: ["1 result for widgets", "Clear"] },
+  };
+  assert.equal(hasEvidenceFor("4.1.3", silentCount), true);
+  const announcedCount = {
+    transcript: ["main landmark, heading, level 1, Search", "1 result for widgets"],
+    interaction: { controls: [], postSubmitNames: ["1 result for widgets", "Clear"] },
+  };
+  assert.equal(hasEvidenceFor("4.1.3", announcedCount), false);
+});

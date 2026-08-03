@@ -170,6 +170,57 @@ export function captureMentionsTitle(capture: CapturedAnnouncements, title: stri
   return announcedPageContent(capture);
 }
 
+/** The census mark itself, for the counts rather than the names. */
+function pageCensus(capture: CapturedAnnouncements): { heading?: number } | null {
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  for (const mark of marks) {
+    if (typeof mark !== "object" || mark === null) continue;
+    const record = mark as { event?: unknown; heading?: unknown; error?: unknown };
+    if (record.event !== "structureCensus" || record.error) continue;
+    return { heading: typeof record.heading === "number" ? record.heading : undefined };
+  }
+  return null;
+}
+
+/**
+ * A page big enough that reaching almost none of it cannot be explained by the page being small.
+ * Below this the comparison is noise: a page with three headings tells you nothing by missing two.
+ */
+const CENSUS_HEADINGS_TO_JUDGE = 20;
+
+/** Reaching under this share of a substantial page's headings means the screen reader was contained. */
+const MIN_HEADINGS_REACHED = 0.1;
+
+/**
+ * Was the screen reader able to REACH the page, or was it held somewhere inside it?
+ *
+ * The failure this exists for is a consent wall, and it is not a wrong-page failure — the URL is right,
+ * the title is right, and a title word appears in the dialog's own text, so every other gate passes. On
+ * theregister.com the modal traps focus and quick navigation cannot leave it:
+ *
+ *     census (the real page)   793 links   463 headings   13 landmarks
+ *     sweep  (what was reached)  0 links     1 heading     0 landmarks
+ *
+ * The run then reported "No lived-experience findings" for a page it had never seen, which is this
+ * project's one unforgivable output: silence rendered as a clean bill of health.
+ *
+ * **Headings only, deliberately.** The other three counts cannot carry a gate. Quick navigation cannot
+ * reach a landmark that CONTAINS the caret, so a `<main>` wrapping the page is missing from 2,063 of 2,064
+ * corpus captures. And `links` and `graphics` came back empty on a perfectly good gov.uk capture — 0 of a
+ * real 79 — for a reason that turned out to be a bug in this pipeline rather than anything about the page.
+ * A gate built on either would have fired constantly on healthy captures and been switched off. Headings
+ * are the one comparator measured as sound: 37 of 38 on that same capture.
+ */
+export function captureReachedThePage(capture: CapturedAnnouncements): boolean {
+  const census = pageCensus(capture);
+  const exposed = census?.heading;
+  // No census means no oracle, and no oracle means no verdict. Every capture taken before the census
+  // existed lands here and must be unaffected.
+  if (typeof exposed !== "number" || exposed < CENSUS_HEADINGS_TO_JUDGE) return true;
+  const reached = capture.structure?.headings.length ?? 0;
+  return reached >= exposed * MIN_HEADINGS_REACHED;
+}
+
 /**
  * Did we hear the PAGE, or only its title?
  *
@@ -261,6 +312,21 @@ export function captureRanRequestedProbes(
   if (requested.probeForms && (capture.interaction?.controls.length ?? 0) === 0) return false;
   if (requested.probeTables && (capture.structure?.tableCells?.length ?? 0) === 0) return false;
   return true;
+}
+
+/**
+ * Why a capture cannot be trusted to describe the requested page, or `null` when it can.
+ *
+ * One function because the two failures are mutually exclusive and a caller has to pick one message.
+ * `wrong-content` is "we read something else"; `contained` is "we read the right page but got almost none
+ * of it", which no title check can see because the title, the URL and the dialog's own words all agree.
+ */
+export type CaptureDoubt = "wrong-content" | "contained";
+
+export function captureDoubt(capture: CapturedAnnouncements, title: string | undefined): CaptureDoubt | null {
+  if (title && !captureMentionsTitle(capture, title)) return "wrong-content";
+  if (!captureReachedThePage(capture)) return "contained";
+  return null;
 }
 
 /** The <title> of a served page, or "" if it has none. */
