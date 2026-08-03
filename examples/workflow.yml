@@ -34,9 +34,13 @@ jobs:
         id: witness
         with:
           url: https://example.com/checkout
-          # Say what a USER is trying to do, not what you want tested. The judge decides whether the
-          # announced experience lets someone finish that task, which is a different and more useful
-          # question than whether the markup passes rules.
+          # Say what a USER is trying to do, not what you want tested.
+          #
+          # Know what it affects, though: with `probe-forms: true` it decides WHICH buttons get activated
+          # (a button sharing a meaningful word with the task), and with an LLM backend it drives the
+          # "could someone finish this?" verdict. The default `local` scorer never sees it. So with the
+          # settings below the task is currently inert — it appears in the report and becomes
+          # load-bearing as soon as you enable probe-forms or switch backend.
           task: Complete the checkout with a saved card
 
           # No key, no account, nothing leaves the runner. This is the project's own trained scorer:

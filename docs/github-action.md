@@ -138,6 +138,24 @@ Two rough edges found by doing this, both recorded rather than hidden:
   task completion. On that site that reads `No` off an unlabelled search box, though the stated task
   ("read the top story") does not need search. It is a coarse proxy and is documented as one.
 
+## What `task` actually does
+
+Less than its name suggests, and worth knowing before you agonise over the wording.
+
+| setting | does the task matter? |
+|---|---|
+| `probe-forms: true` | **Yes — it changes the capture.** A button whose announced name shares a meaningful word with the task is activated, and what the screen reader says next is recorded. The word match is the safety guard: "show only bags" activates a *Bags* button, never *Delete account*. |
+| `judge-backend: anthropic` / `openai` | **Yes — it changes the verdict.** The LLM reads it and answers "could a screen-reader user finish this?" |
+| `judge-backend: local` (default) | **No.** The scorer has no head for task completion and never sees the task — `docs/local-model.md` bars it as a model feature. `task-completable` is derived from whether anything scored as a blocker. |
+
+So on the defaults (`local`, `probe-forms: false`) the task string is carried through the pipeline and
+consumed by nothing. Verified: a run against `news.ycombinator.com` with the task "Read the top story"
+recorded `formChanges: []`, so no control was activated, and the scorer never received the text.
+
+It stays a required input because it belongs in the report, and because it becomes load-bearing the moment
+you enable `probe-forms` or switch backend. This entry exists because the input was previously documented
+as driving the judgement — which is true only for a backend that is no longer the default.
+
 ## Outputs
 
 | Output | Use |

@@ -18,9 +18,19 @@ inputs:
     required: true
   task:
     description: >-
-      What a user is trying to DO on this page, in plain words ("Complete the checkout"). The judge uses
-      it to decide whether the announced experience lets someone finish, which is a different question
-      from whether the markup passes rules.
+      What a user is trying to DO on this page, in plain words ("Complete the checkout").
+
+      Be aware of what this actually affects, because it is less than it looks. With `probe-forms: true`
+      it changes the CAPTURE: a button whose announced name shares a meaningful word with the task gets
+      activated, and whatever the screen reader says next is recorded. That word match is the safety
+      guard — "show only bags" activates a *Bags* button and never a *Delete account* one.
+
+      It does NOT affect the default `local` judge's assessment at all. That scorer has no head for task
+      completion and never sees the task; `task-completable` is derived from whether anything scored as a
+      blocker. Only the `anthropic`/`openai` backends read the task and answer "could someone finish
+      this?" So with the defaults (`local`, `probe-forms: false`) the task is currently inert — kept
+      required because it belongs in the report, and because it becomes load-bearing the moment you turn
+      either of those on.
     required: true
   judge-backend:
     description: >-
