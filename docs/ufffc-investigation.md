@@ -105,3 +105,30 @@ embedded object and a button on one line, and turning it off would tidy the resi
 It is NVDA's default, and this project captures the lived experience — configuring NVDA away from its
 defaults makes the evidence less representative, not more. `/diagnostics` reports the effective settings
 so a corpus can state what produced it.
+
+
+## Final status: residual, measured, and gated — not chased into NVDA's defaults
+
+Current corpus (1,061 complete pairs): **22 pairs disagree on the marker — 10 with it on the BAD half
+only, 12 on the GOOD half only.** The first group is signal, not noise: `rules.ts` uses `EMPTY_NAME` to
+detect an unnamed control, so `"button, ￼"` on an `icon-button-unnamed` bad page IS the 4.1.2 finding.
+The 12 good-half occurrences are named fields carrying a trailing empty segment, and they are the
+residue.
+
+Three things close this out rather than leaving it open:
+
+1. **There is no newer dependency to upgrade to.** `@guidepup/guidepup` 0.31.0 is the latest published
+   version (2026-08-02), and the 0.29.2 -> 0.31.0 upgrade is what took this from 36 occurrences to 25.
+2. **The residue is proven not to change any finding.** `npm run rules:gate` scores the deterministic
+   layer against real evidence: 1.1.1 and 4.1.2 at **100% precision over 1,003 conformant records, zero
+   false positives**. `hasEmptyName` requires the marker AND an empty accessible name, so a named field
+   with a trailing marker is not flagged. The hardening check asserts the same for the model
+   (`formFieldUnnamed 1.0`, `formFieldNamed 0.0`), and the acceptance gate passes with **0 unstable
+   groups** across two independent capture runs.
+3. **The remaining cause is an NVDA DEFAULT and must stay.** `virtualBuffers.useScreenLayout` is what
+   puts a field, an embedded object and a button on one line. Turning it off would tidy the segment away
+   and make the evidence less representative of what a real user hears, which is the opposite of this
+   project's purpose. Record, do not tune.
+
+So the open item is not "eliminate the character" but "notice if it ever starts changing a finding" —
+and that is exactly what `rules:gate` measures, on every release, against the whole corpus.

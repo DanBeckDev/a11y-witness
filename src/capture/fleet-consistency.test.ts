@@ -99,3 +99,27 @@ test("a guidepup version split is caught", () => {
   assert.equal(r.consistent, false);
   assert.ok(r.mismatches.some((m) => m.field === "guidepupVersion"));
 });
+
+test("a fleet split by provisioning is reported", () => {
+  // `provisionRevision` was a cache key WITHOUT being a consistency field. A guest re-provisioned on
+  // its own reports a real revision while the rest still report "unstamped", which produces two
+  // evidence populations -- and the only symptom was the cache quietly ceasing to hit, which looks
+  // like ordinary churn. Guests must be re-provisioned together, and now something says so.
+  const { consistent, mismatches } = fleetConsistency([
+    { worker: "http://192.168.64.4:8765", environment: { provisionRevision: "unstamped" } },
+    { worker: "http://192.168.64.5:8765", environment: { provisionRevision: "a1b2c3d-0f1e2d3c4b5a6978" } },
+  ]);
+  assert.equal(consistent, false);
+  assert.equal(mismatches.length, 1);
+  assert.equal(mismatches[0].field, "provisionRevision");
+});
+
+test("a uniformly unstamped fleet is consistent", () => {
+  // Uniform is the current real state of this pool: imprecise, but not a split, and reporting it as a
+  // mismatch would cry wolf on every run until a recapture happens to be worth doing.
+  const { consistent } = fleetConsistency([
+    { worker: "a", environment: { provisionRevision: "unstamped" } },
+    { worker: "b", environment: { provisionRevision: "unstamped" } },
+  ]);
+  assert.equal(consistent, true);
+});

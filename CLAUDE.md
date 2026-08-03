@@ -401,9 +401,30 @@ add noise, it **inverts the finding**.
 A fixed sleep is wrong in both directions: too long in the common case, and too short in the tail where
 being wrong destroys evidence rather than merely costing time.
 
-**guidepup already waits.** `enqueueAndTap` resolves only after a quiet period on the speech channel
-(`SPEAK_DEBOUNCE_TIMEOUT`, 1000 ms in `NVDAClient.js`), so `nvda.perform()` returning already means
-speech has settled. Sleeping on top of that is waiting twice for the same event.
+**guidepup does NOT wait for speech to settle, and this file said it did.** The claim used to be that
+`enqueueAndTap` resolves only after a quiet period, so `nvda.perform()` returning meant speech had
+settled and sleeping on top of it was waiting twice. That is true only for `{capture: true}`. This
+project calls `nvda.start()` with no options, so it gets `DEFAULT_CAPTURE = "initial"`, and in that mode
+`#processQueue` resolves on the FIRST spoken phrase:
+
+```js
+const speakHandler = (spokenPhrase) => {
+  spokenPhrases.push(spokenPhrase);
+  if ((options?.capture ?? this.#capture) === "initial") {
+    clearTimeout(timeoutId); speakPromiseResolver();      // <- returns on the first phrase
+  } else { timeoutId = setTimeout(timeoutHandler, SPEAK_DEBOUNCE_TIMEOUT); }
+};
+```
+
+So later utterances of the SAME announcement can still be in flight when a keystroke returns, and the
+settle sleeps were load-bearing rather than redundant — which is why deleting them broke things and why
+the wrong claim survived so long. guidepup's own docs say it: "By default the `capture` option is set to
+`"initial"` … for full capture set `{capture: true}`."
+
+`{capture: true}` is not a free upgrade: it changes every log entry from the first phrase to all phrases
+joined with ". ", which is an evidence change and a full recapture. So the fix is to wait for the real
+condition instead — `waitForSpeechQuiet` polls `spokenPhraseLog` until it has been unchanged for
+`SPEECH_QUIET_WINDOW_MS`, bounded by a budget, and reports `quiet: false` rather than pretending.
 
 Converted so far, ~5.4 s per capture:
 
@@ -413,9 +434,21 @@ Converted so far, ~5.4 s per capture:
 | `probeDisclosure` after `act()` | 1200 ms | `waitForAnnouncement` — wait for speech, then quiet |
 | `reportFocusedControl` | 1200 ms | poll until a phrase exists |
 
-Still fixed: four `ANCHOR_SETTLE_MS` (400 ms) on the read-through path, plus `WINDOW_SETTLE_MS`,
-`TABLE_SETTLE_MS` and `SPEECH_RECONNECT_MS`. Same treatment, but the read-through path truncates
-transcripts when you get it wrong, so verify each against a canary.
+**All of them are now conditions.** `ANCHOR_SETTLE_MS` (×4), `WINDOW_SETTLE_MS`, `TABLE_SETTLE_MS`,
+`STATE_SETTLE_MS`, `SPEECH_RECONNECT_MS` and `NVDA_SETTLE_MS` are gone. Every remaining `sleep()` in
+`capture-core.mjs` is a poll INTERVAL or a retry gap (`*_POLL_MS`, `NVDA_RETRY_DELAY_MS`), which is the
+correct use — the gap between two checks of a condition, not a substitute for one.
+
+Two of them were worse than wasteful, because a short guess did not merely cost time:
+
+- `SPEECH_RECONNECT_MS` (750 ms) slept once then probed ONCE. A reconnect taking 751 ms was reported as
+  a failed socket rebuild, and the remedy for that is restarting NVDA — the expensive action that
+  produces the `injection_terminate` modal which wedges a guest. It now polls to a 6 s budget.
+- `NVDA_SETTLE_MS` (3 s) slept then probed once, and the next line THROWS `SCREEN_READER_MUTE`. A screen
+  reader needing 3.1 s became a false capture failure that the run paid for with a whole retry. Now
+  polled to a 10 s budget; only then is silence a finding.
+
+Verified `evidence:check` 48/48 SAME, so no recapture, and canaries stable 3/3 per page.
 
 **Two traps when doing this.** A condition must be *sufficient*: `screenReaderResponds()` only proves
 the Remote port accepts a TCP connection, not that NVDA's virtual buffer is navigable. And the deadline

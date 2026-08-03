@@ -35,6 +35,15 @@ export const MUST_MATCH = [
   { path: "windowsVersion", why: "a second OS image would blend two corpora into one" },
   { path: "architecture", why: "ARM64 and x64 guests are not interchangeable evidence" },
   { path: "captureProtocol", why: "a guest on an older protocol produces evidence that means something else" },
+  // A CACHE KEY that was not a consistency field, which is the worst combination.
+  //
+  // `provisionRevision` records what the guest actually has -- NVDA's config, Edge's policies,
+  // ForegroundLockTimeout -- all of which change the evidence. It is already in the cache key
+  // (`capture-cache.mjs`), so a fleet where one guest has been re-provisioned and the others report
+  // `"unstamped"` produces two evidence populations. Nothing warned: the cache merely stopped hitting,
+  // which reads as ordinary churn rather than as a split fleet. Re-provision the pool together.
+  { path: "provisionRevision", why: "a re-provisioned guest has different NVDA/Edge configuration, and " +
+      "it is already a cache key -- a split fleet shows up only as unexplained cache misses" },
 ];
 
 /** Edge policy values every guest must agree on, checked separately because they come from /diagnostics. */
