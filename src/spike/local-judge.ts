@@ -1,0 +1,257 @@
+/**
+ * The judge with no rented expert: our own trained scorer, plus a deterministic evidence guard.
+ *
+ * ## Why this exists
+ *
+ * `judge.ts` is GENERATIVE — an LLM reads the transcript and both finds and describes problems. That
+ * needs an account and a network, so the GitHub Action was built around a hosted key. But
+ * `docs/local-model.md` describes an LLM-free path: the scorer answers "does this evidence support
+ * criterion X?", and "a report explanation can then be rendered from the captured evidence and a fixed
+ * WCAG template."
+ *
+ * The scorer takes a WHOLE capture and returns one score per criterion — it does not need candidate
+ * findings generated for it, which is what `score_records` does today and what
+ * `score-screenreader-model.py --stdin` already accepts. 87 MB encoder, 27 KB of heads, milliseconds.
+ *
+ * ## The guard is defence in depth, and the first diagnosis of WHY was wrong
+ *
+ * On a real capture of a page whose only fault was an unnamed icon button, the model predicted three
+ * criteria — 4.1.2 at 0.993 (correct), 3.3.2 at 0.495 and 2.4.4 at 0.190 on a page containing NO LINKS.
+ * I read that as threshold drift: calibration tuned for a paired dataset rather than for reporting on one
+ * page, and wrote this guard to remove it.
+ *
+ * That was the wrong cause. The capture was being fed to the model with `structure` and `interaction`
+ * MISSING, because the CLI's `--json` output dropped them — so 29 of the model's structured features read
+ * zero and its scores went noisy. The same page, captured completely:
+ *
+ *     with structure omitted:   2.4.4 0.190   3.3.2 0.495   4.1.2 0.993
+ *     with structure present:   2.4.4 0.000   3.3.2 0.114   4.1.2 0.998
+ *
+ * The model was starved, not miscalibrated. Fixed at source, and this is why it is worth chasing a cause
+ * rather than filtering a symptom: the guard would have shipped, looked like it worked, and left the
+ * model running on a third of its inputs.
+ *
+ * The guard stays, because it is independently right — a finding about link purpose on a page with no
+ * links is indefensible at any score, and the same rule holds everywhere in this project: never claim
+ * what the evidence cannot support. It is now a second line rather than the fix.
+ *
+ * On CONFORMANT pages the model is silent regardless: 0 findings across 150 conformant records.
+ */
+import { spawn } from "node:child_process";
+
+import { WCAG_22_AA } from "../wcag/criteria.js";
+import type { Judgment, Finding, Severity } from "./judge.js";
+
+/** Shape of what the scorer prints. */
+interface ScorerOutput {
+  records: { scores: Record<string, number>; predictions: Record<string, boolean> }[];
+}
+
+/** The evidence a capture must actually contain before a criterion may be reported. */
+export interface CaptureEvidence {
+  transcript?: string[];
+  structure?: {
+    headings?: string[]; landmarks?: string[]; formFields?: string[];
+    links?: string[]; lists?: string[]; graphics?: string[]; tableCells?: string[];
+  };
+  interaction?: {
+    controls?: string[]; stateChanges?: unknown[]; formChanges?: unknown[]; postSubmitFields?: string[];
+  };
+}
+
+const nonEmpty = (value: unknown): boolean => Array.isArray(value) && value.length > 0;
+
+/** NVDA announces an editable field with an `edit` role; a button is not a field needing a label. */
+const hasEditableField = (fields: string[] = []): boolean =>
+  fields.some((f) => /\bedit(\s+text)?\b|\bcombo\s*box\b|\bcheck\s*box\b|\bradio\b|\bspin\s*button\b/i.test(f));
+
+/**
+ * Which channel of the capture each criterion is ABOUT.
+ *
+ * Deliberately about the CHANNEL, not the verdict: it asks "is there anything of the right kind here to
+ * be right or wrong about?" A criterion whose channel is empty is unreportable, not passing — the
+ * distinction this project draws everywhere else between "clean" and "unchecked".
+ *
+ * A table rather than a branch chain: the chain put `hasEvidenceFor` at complexity 22 against a limit of
+ * 15, and naming each criterion's channel once reads better than restating it in `case` arms.
+ */
+const EVIDENCE_CHANNEL: Record<string, (c: CaptureEvidence) => boolean> = {
+  "1.1.1": (c) => nonEmpty(c.structure?.graphics)
+    || (c.transcript ?? []).some((p) => /\b(graphic|image)\b/i.test(p)),
+  // Link purpose needs links. This is the case that fired at 0.19 on a page containing none.
+  "2.4.4": (c) => nonEmpty(c.structure?.links),
+  "2.4.6": (c) => nonEmpty(c.structure?.headings) || nonEmpty(c.structure?.formFields),
+  "1.3.1": (c) => nonEmpty(c.structure?.headings) || nonEmpty(c.structure?.landmarks)
+    || nonEmpty(c.structure?.lists) || nonEmpty(c.structure?.tableCells),
+  // Labels or Instructions is about FIELDS. A page whose only control is a button cannot fail it.
+  "3.3.2": (c) => hasEditableField(c.structure?.formFields),
+  // Error identification requires a form to have been submitted at all.
+  "3.3.1": (c) => nonEmpty(c.interaction?.formChanges) || nonEmpty(c.interaction?.postSubmitFields),
+  "4.1.3": (c) => nonEmpty(c.interaction?.formChanges) || nonEmpty(c.interaction?.stateChanges),
+  "4.1.2": (c) => nonEmpty(c.structure?.formFields) || nonEmpty(c.interaction?.controls),
+};
+
+export function hasEvidenceFor(criterion: string, capture: CaptureEvidence): boolean {
+  // BLIND is not the same as EMPTY, and conflating them suppressed a correct finding.
+  //
+  // The first version checked only whether each channel was empty. Run against the CLI's `--json` output
+  // -- which omitted `structure` and `interaction` entirely -- every channel read empty, so it suppressed
+  // `4.1.2 @ 0.993`: the one true finding on the page, silently, while reporting no false positives. It
+  // looked exactly like the guard working perfectly.
+  //
+  // A guard that cannot see must not veto. With no structural or interaction data at all this cannot
+  // distinguish "the page has no links" from "links were never recorded", so it defers to the model
+  // rather than overruling it on absent information.
+  if (!capture.structure && !capture.interaction) return true;
+  // An unknown criterion is never reportable: the scorer has heads for eight, and inventing a finding for
+  // a ninth would claim coverage this layer does not have.
+  return EVIDENCE_CHANNEL[criterion]?.(capture) ?? false;
+}
+
+/**
+ * What the screen reader said that this criterion is about.
+ *
+ * Quoted from the capture, never composed: the whole value of this tool is that a finding can point at
+ * what a user would actually have heard. A criterion whose channel is empty returns "", and the caller
+ * has already refused to report it.
+ */
+export function evidenceFor(criterion: string, capture: CaptureEvidence): string {
+  const s = capture.structure ?? {};
+  const i = capture.interaction ?? {};
+  const first = (...groups: (string[] | undefined)[]): string => {
+    for (const g of groups) if (nonEmpty(g)) return g!.slice(0, 3).join(" · ");
+    return "";
+  };
+  switch (criterion) {
+    case "1.1.1": return first(s.graphics, (capture.transcript ?? []).filter((p) => /\b(graphic|image)\b/i.test(p)));
+    case "2.4.4": return first(s.links);
+    case "2.4.6": return first(s.headings, s.formFields);
+    case "1.3.1": return first(s.headings, s.landmarks, s.tableCells, s.lists);
+    case "3.3.2": return first(s.formFields);
+    // `postSubmitFields` is on `interaction`, not `structure` — the field re-read AFTER a submit is an
+    // interaction result, not page structure. Written as `s.postSubmitFields` first, which typecheck
+    // caught; left unchecked it would have quoted the wrong channel as this criterion's evidence.
+    case "3.3.1": return first(i.postSubmitFields, (i.formChanges ?? []).map((c) => JSON.stringify(c)));
+    case "4.1.3": return first((i.formChanges ?? []).map((c) => JSON.stringify(c)), (i.stateChanges ?? []).map((c) => JSON.stringify(c)));
+    case "4.1.2": return first(s.formFields, i.controls);
+    default: return "";
+  }
+}
+
+/**
+ * What the criterion means, in the words a developer needs.
+ *
+ * A fixed template rather than generated prose, exactly as the design doc specifies. It is less fluent
+ * than an LLM's sentence and it cannot be wrong, which is the trade this layer is making.
+ */
+const EXPLANATION: Record<string, string> = {
+  "1.1.1": "An image was announced without a useful text alternative, so its content is unavailable to a screen-reader user.",
+  "1.3.1": "Structure that is visible on screen was not announced with its role, so the page's organisation is unavailable non-visually.",
+  "2.4.4": "Link text does not convey where the link goes when heard out of its surrounding context.",
+  "2.4.6": "A heading or label does not describe what it labels, so it does not help a user orient.",
+  "3.3.1": "A form was submitted with invalid input and no error was announced, so the user is not told what went wrong.",
+  "3.3.2": "A form field was announced without a label or instructions, so its purpose has to be guessed.",
+  "4.1.2": "A control was announced by role alone, with no accessible name, so a user cannot tell what it does.",
+  "4.1.3": "Something changed on the page and nothing was announced, so the user is not told the result of their action.",
+};
+
+/** Severity by criterion. Conformance level is the honest proxy: A failures block more people than AA. */
+function severityFor(criterion: string, score: number): Severity {
+  const level = WCAG_22_AA.find((c) => c.num === criterion)?.level;
+  if (level === "A") return score >= 0.9 ? "blocker" : "serious";
+  return score >= 0.9 ? "serious" : "moderate";
+}
+
+const criterionLabel = (num: string): string => {
+  const found = WCAG_22_AA.find((c) => c.num === num);
+  return found ? `${num} ${found.name} (${found.level})` : num;
+};
+
+/**
+ * Turn the scorer's per-criterion predictions into findings.
+ *
+ * Pure, so the guard and the templating are testable without Python, a model, or a network.
+ */
+export function findingsFromScores(
+  predictions: Record<string, boolean>,
+  scores: Record<string, number>,
+  capture: CaptureEvidence,
+): { findings: Finding[]; suppressed: { criterion: string; score: number; reason: string }[] } {
+  const findings: Finding[] = [];
+  const suppressed: { criterion: string; score: number; reason: string }[] = [];
+  for (const [criterion, predicted] of Object.entries(predictions)) {
+    if (!predicted) continue;
+    const score = scores[criterion] ?? 0;
+    if (!hasEvidenceFor(criterion, capture)) {
+      // Recorded, not dropped silently. A suppressed prediction is information about the model's
+      // calibration, and hiding it would make this guard impossible to audit.
+      suppressed.push({ criterion, score, reason: "the capture contains no evidence of the kind this criterion is about" });
+      continue;
+    }
+    findings.push({
+      issue: EXPLANATION[criterion] ?? `Predicted failure of ${criterionLabel(criterion)}.`,
+      wcag: criterionLabel(criterion),
+      severity: severityFor(criterion, score),
+      evidence: evidenceFor(criterion, capture),
+      confidence: Number(score.toFixed(3)),
+    });
+  }
+  return { findings, suppressed };
+}
+
+/** Run the scorer over one raw witness capture. Separate so the pure logic above needs no subprocess. */
+export async function scoreCapture(capture: unknown, options: { python?: string; script?: string; timeoutMs?: number } = {}):
+Promise<ScorerOutput> {
+  const python = options.python ?? process.env.A11Y_PYTHON ?? ".venv/bin/python";
+  const script = options.script ?? "scripts/score-screenreader-model.py";
+  return new Promise((resolve, reject) => {
+    const child = spawn(python, [script, "--stdin"], { stdio: ["pipe", "pipe", "pipe"] });
+    let out = "", err = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`the local scorer did not finish within ${options.timeoutMs ?? 120_000}ms`));
+    }, options.timeoutMs ?? 120_000);
+    child.stdout.on("data", (d) => { out += d; });
+    child.stderr.on("data", (d) => { err += d; });
+    child.on("error", (e) => { clearTimeout(timer); reject(e); });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) return reject(new Error(`the local scorer exited ${code}: ${err.slice(0, 400)}`));
+      const start = out.indexOf("{");
+      if (start === -1) return reject(new Error(`the local scorer printed no JSON: ${out.slice(0, 200)}`));
+      try {
+        resolve(JSON.parse(out.slice(start)) as ScorerOutput);
+      } catch (e) {
+        reject(new Error(`could not parse the local scorer's output: ${(e as Error).message}`));
+      }
+    });
+    child.stdin.end(JSON.stringify(capture));
+  });
+}
+
+/**
+ * The local judge: scorer + guard + template, returning the SAME `Judgment` the LLM judge returns.
+ *
+ * Keeping the shape identical is the point — the CLI, the report and the Action all work unchanged, so
+ * choosing this layer is a backend decision rather than a rewrite.
+ */
+export async function judgeLocally(capture: CaptureEvidence & { task?: string }): Promise<Judgment & {
+  suppressed: { criterion: string; score: number; reason: string }[];
+}> {
+  const scored = await scoreCapture(capture);
+  const record = scored.records?.[0];
+  if (!record) throw new Error("the local scorer returned no record for this capture");
+  const { findings, suppressed } = findingsFromScores(record.predictions, record.scores, capture);
+  return {
+    // Not inferred. This layer scores WCAG criteria and has no head for "could someone finish the task",
+    // so claiming an answer would be inventing one. A blocking failure is the closest honest signal.
+    taskCompletable: !findings.some((f) => f.severity === "blocker"),
+    summary: findings.length === 0
+      ? "No failures were confirmed for the eight criteria this layer covers. Other criteria are unchecked, not clean."
+      : `${findings.length} confirmed failure(s) across the eight criteria this layer covers. Other criteria are unchecked, not clean.`,
+    findings,
+    // The layer's own confidence is the weakest finding's: a report is only as good as its shakiest claim.
+    confidence: findings.length === 0 ? 1 : Math.min(...findings.map((f) => f.confidence)),
+    suppressed,
+  };
+}
