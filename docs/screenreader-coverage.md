@@ -34,10 +34,17 @@ contains the caret**. NVDA's `browseMode.py` searches by START position — `_it
 "next"|"previous", info)` — and an enclosing item requires a third direction, `"up"`, which no quick-nav
 key uses. Its own docs say a landmark's name is spoken "when jumping inside from **outside**" it.
 
-So a `<main>` wrapping the entire page is invisible to the sweep, because every position the caret can
-occupy is inside it. Measured: **2,063 of 2,064 corpus captures whose page contains `<main>` never name
-it.** Anchoring does not help and makes things worse — `Ctrl+Home` is still inside a `<main>` that starts
-at document position 0, and adding an anchor before this sweep turned `["form, Hire duration"]` into `[]`.
+So a landmark wrapping the entire page with nothing outside it is invisible to the sweep, because every
+position the caret can occupy is inside it. Anchoring does not help and makes it worse — `Ctrl+Home` is
+still inside a `<main>` that starts at document position 0, and adding an anchor before this sweep turned
+`["form, Hire duration"]` into `[]`.
+
+**How often it actually bites is now measured per capture, and it is NOT most pages.** When a page has a
+`<nav>` or header OUTSIDE `main`, the caret can sit outside it and quick navigation enters it normally —
+and on entry NVDA announces the landmark's first content (`"Account help, heading, level 1"`), not the
+word "main". Counting captures whose landmark list lacks the literal string "main" therefore reports
+2,063 of 2,064, which is an over-count and was briefly recorded here as fact. Only pages where a landmark
+encloses everything truncate; `structureCrossCheck` names those individually.
 
 **What this does and does not affect, measured rather than assumed:**
 
@@ -52,11 +59,28 @@ at document position 0, and adding an anchor before this sweep turned `["form, H
 **Read an empty `landmarks` as "no landmark was reachable by quick navigation", never as "the page
 exposes none."** They are different claims, and only the first one is evidence.
 
-NVDA's Elements List (`NVDA+F7`) *is* authoritative here — it lists `main` — and is available as
-`"probeElementsList": true`, which also cross-checks the sweep counts (`structureCrossCheck`). It is
-opt-in because it costs **~11 s** per capture even when reading landmarks alone: every keystroke waits
-for guidepup's 1 s speech-quiet debounce, and the walk needs about ten. Reading all five types the
-dialog supports costs **~39 s** (20 s → 59 s measured), which no corpus run can afford.
+### The completeness oracle: ask Chromium, not the screen reader
+
+Every capture now records `structureCensus` — how many headings, landmarks, links and graphics the PAGE
+exposes, from `Accessibility.getFullAXTree` over the DevTools socket the capture already holds open — and
+`structureCrossCheck`, which names any disagreement `phantom` (sweep found more) or `truncated` (fewer).
+
+**It costs nothing.** Measured 22.0 s and 19.7 s against a 19–20 s baseline: one CDP call is
+milliseconds. Asking NVDA's own Elements List (`NVDA+F7`) for the same answer is authoritative and
+agrees exactly — both report 2 landmarks where the sweep reports 1 — but costs **~11 s** per capture for
+landmarks alone, and **~39 s** for all five types it supports (20 s → 59 s measured), because every
+keystroke waits on guidepup's 1 s speech-quiet debounce. That is the difference between a check that runs
+on every capture and one nobody can afford. `"probeElementsList": true` remains available as a
+second opinion on the oracle itself.
+
+**The census is an ORACLE, never evidence.** What the screen reader announced stays the evidence;
+`docs/local-model.md` bars the accessibility tree from being a model feature. Its only job is to make an
+under-reporting sweep distinguishable from a page that genuinely has nothing — which is the one thing no
+amount of screen-reader output can tell you on its own.
+
+It earned this immediately: it found a phantom heading (sweep 3, page 2) caused by `CONTAINER_PREFIX`
+matching only `"<name> region,"` and not `"<name>, region,"`. 58 captures carried a duplicate; all 58 are
+recaptured and every cross-checked capture now agrees.
 
 ### Caveat: table cells remain opt-in
 
