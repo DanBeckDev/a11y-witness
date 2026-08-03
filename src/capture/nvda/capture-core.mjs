@@ -50,12 +50,16 @@ const speechChannel = installSpeechChannelShim();
 const DEFAULT_STEPS = 150; // read-through line count cap
 const DEFAULT_BROWSER_WAIT_MS = 12_000; // UPPER BOUND on waiting for Edge, not a fixed sleep
 const DEFAULT_BUDGET_MS = 120_000; // overall wall-clock budget for one capture
-const WINDOW_SETTLE_MS = 800; // after focusing the Edge window
-const NVDA_SETTLE_MS = 3_000; // after nvda.start() before reading
+// Deadlines for POLLS, not durations to sleep. Named as budgets so the distinction survives: every
+// remaining wait in this file either checks a condition or is the interval between two such checks.
+const NVDA_READY_BUDGET_MS = 3_000;   // how long a cold NVDA gets to answer at all
+const NVDA_SPEECH_BUDGET_MS = 10_000; // how long a fresh NVDA gets to SPEAK before silence is a fault
 // After destroying the speech socket, how long guidepup needs to reconnect and re-join the channel.
 // Its handler runs synchronously on the socket 'error' event and the connection is to localhost, so
 // this is a settle rather than a wait -- against ~23s for the NVDA restart it replaces.
-const SPEECH_RECONNECT_MS = 750;
+// How long to keep asking whether the rebuilt channel speaks before giving up and restarting NVDA.
+// Generous on purpose: restarting NVDA is the harmful remedy, so the bar for reaching it must be high.
+const SPEECH_RECONNECT_BUDGET_MS = 6_000;
 const WINDOW_POLL_MS = 400; // between attempts to activate the Edge window
 const READY_ATTEMPTS = 3; // re-activate + re-anchor tries before reading anyway
 const EDGE_EXIT_TIMEOUT_MS = 8_000; // wait for Edge to actually exit during cleanup
@@ -68,7 +72,6 @@ const MAX_CAPTURES_PER_NVDA = 25;
 const NVDA_REMOTE_PORT = 6837;
 const REUSE_PROBE_MS = 2_000;
 const NVDA_EXIT_TIMEOUT_MS = 15_000; // for an old NVDA to release port 6837
-const STATE_SETTLE_MS = 1_200; // after activating a control, before re-reading (reactivate/anchor paths)
 
 // After activating a control, how long to KEEP WAITING for an announcement that has not arrived yet.
 //
@@ -85,7 +88,6 @@ const STATE_WAIT_MS = 5_000;
 // parts, and cutting after the first would truncate multi-phrase live regions.
 const STATE_QUIET_MS = 600;
 const STATE_POLL_MS = 100;
-const ANCHOR_SETTLE_MS = 400; // after Escape + Ctrl+Home, before re-reading fields
 
 const ADVANCE_TIMEOUT_MS = 8_000; // moving to the next line/object
 const READ_TIMEOUT_MS = 5_000; // reading the phrase after advancing
@@ -206,8 +208,8 @@ async function runCapturePhases(url, opts, diag) {
   // It cannot simply be deleted, which is the trap: `ensureSpeechChannel` runs next and treats an
   // unresponsive NVDA as a dead channel, so removing the wait would turn a slow start into a spurious
   // ~23s screen-reader restart. Polling keeps the protection and stops paying for it when it is not
-  // needed. The old constant becomes the deadline.
-  if (coldStart) await waitForScreenReader(NVDA_SETTLE_MS, diag);
+  // needed. The constant is the deadline, which is why it is named as a budget.
+  if (coldStart) await waitForScreenReader(NVDA_READY_BUDGET_MS, diag);
   // Before anything expensive: prove speech actually comes back. A dead channel discovered here costs one
   // round trip; discovered after the read-through it costs the whole capture and a retry.
   await ensureSpeechChannel(diag);
@@ -441,7 +443,11 @@ async function focusBrowserWindow(maxWaitMs, diag) {
   while (Date.now() < deadline) {
     try {
       await windowsActivate("msedge.exe", "Edge");
-      await sleep(WINDOW_SETTLE_MS);
+      // Activating a window makes NVDA announce the new foreground, so "speech has gone quiet" IS the
+      // condition that the transition finished -- and it is the screen reader's own view of it, which is
+      // the only view that matters for a screen-reader capture. This was a fixed 800ms; the enclosing
+      // loop was already converted to a condition and this sleep was left behind inside it.
+      await waitForSpeechQuiet("windowSettle");
       diag.mark("windowsActivate", { ok: true, waitedMs: Date.now() - startedAt });
       return;
     } catch (e) {
@@ -475,7 +481,9 @@ async function waitForDocument(diag) {
     } catch (e) {
       diag.mark("reactivate", { ok: false, error: errMsg(e), attempt });
     }
-    await sleep(STATE_SETTLE_MS);
+    // Same condition as the other windowsActivate site: wait for NVDA to finish announcing the
+    // foreground change rather than sleeping a guess before trying again.
+    await waitForSpeechQuiet("reactivateSettle");
     await anchorToTop();
   }
 }
@@ -487,7 +495,7 @@ async function waitForDocument(diag) {
 async function reportedTitle(diag) {
   try {
     await withTimeout(nvda.perform(nvda.keyboardCommands.reportTitle), NAV_TIMEOUT_MS, "reportTitle");
-    await sleep(ANCHOR_SETTLE_MS);
+    await waitForSpeechQuiet("anchorSettle");
     return ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "reportTitle")) || "").trim();
   } catch (e) {
     diag.mark("reportTitle", { error: errMsg(e) });
@@ -694,7 +702,7 @@ async function screenReaderIsSpeaking(diag) {
     // Reading the current line is the cheapest command that MUST produce speech: no navigation, no
     // side effects on the page, and it works wherever the cursor happens to be.
     await withTimeout(nvda.perform(nvda.keyboardCommands.readLine), NAV_TIMEOUT_MS, "livenessRead");
-    await sleep(ANCHOR_SETTLE_MS);
+    await waitForSpeechQuiet("anchorSettle");
     const heard = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "livenessHeard")) || "").trim();
     diag.mark("speechChannel", { alive: !!heard, heard: heard.slice(0, 60) });
     return !!heard;
@@ -724,10 +732,21 @@ async function ensureSpeechChannel(diag) {
   // `nvdaHelperRemote (injection_terminate)` modal that wedges a guest. So the expensive remedy was
   // feeding the fault. See speech-channel.mjs for why guidepup cannot do this itself.
   if (speechChannel.reset("probe heard nothing before a capture")) {
-    await sleep(SPEECH_RECONNECT_MS);
-    if (await screenReaderIsSpeaking(diag)) {
-      diag.mark("speechChannelReconnected", { resets: speechChannel.state.resets });
-      return;
+    // POLL the condition; do not sleep a guess and probe once.
+    //
+    // The failure mode of guessing short here is not a slow capture, it is an unnecessary NVDA restart --
+    // and repeated restarts are what produce the `nvdaHelperRemote (injection_terminate)` modal that
+    // wedges a guest, i.e. the expensive remedy feeding the fault it treats. Guidepup's reconnect takes
+    // as long as it takes; a fixed 750ms wait declared it failed whenever it took 751.
+    const deadline = Date.now() + SPEECH_RECONNECT_BUDGET_MS;
+    while (Date.now() < deadline) {
+      if (await screenReaderIsSpeaking(diag)) {
+        diag.mark("speechChannelReconnected", {
+          resets: speechChannel.state.resets,
+          waitedMs: Date.now() - (deadline - SPEECH_RECONNECT_BUDGET_MS),
+        });
+        return;
+      }
     }
   }
 
@@ -735,8 +754,14 @@ async function ensureSpeechChannel(diag) {
   await stopScreenReader(diag);
   await startFreshWithRetry(diag);
   screenReader = { running: true, captures: 1 };
-  await sleep(NVDA_SETTLE_MS);
-  if (await screenReaderIsSpeaking(diag)) return;
+  // POLL, because what follows is a thrown fault. A fixed 3s wait then ONE probe means a screen reader
+  // that needed 3.1s is reported as "running but not speaking" -- a false capture failure that the run
+  // classifies transient and pays for with a whole retry. Keep asking until the budget is spent; only
+  // then is silence a finding.
+  const freshDeadline = Date.now() + NVDA_SPEECH_BUDGET_MS;
+  while (Date.now() < freshDeadline) {
+    if (await screenReaderIsSpeaking(diag)) return;
+  }
   throw captureFault(FAULT.SCREEN_READER_MUTE,
     "NVDA is running but not speaking: the speech channel produced nothing before this capture, and " +
     "neither a socket rebuild nor a fresh screen reader fixed it. Failing now rather than capturing " +
@@ -960,7 +985,7 @@ async function readFirstItem(diag) {
     // line explicitly; this is the user-visible operation we need and gives the virtual cursor
     // one more chance to materialise the first item after the anchor.
     await withTimeout(nvda.perform(nvda.keyboardCommands.readLine), NAV_TIMEOUT_MS, "readLine");
-    await sleep(ANCHOR_SETTLE_MS);
+    await waitForSpeechQuiet("anchorSettle");
     const line = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, "readLine")) || "").trim();
     diag.mark("readFirstItemFallback", { phrase: line });
     return line;
@@ -1250,10 +1275,58 @@ async function navigateByStructure({ deadline, diag, probeForms, probeFocus, pro
 // browse mode passes through (not an NVDA command) to move to the document top.
 // Moving the caret also cancels NVDA's "Automatic say all on page load" (on by
 // default), so its auto-read can't race our line-stepping.
+// How long the speech log must stay UNCHANGED before NVDA counts as finished speaking, and how long we
+// are willing to wait for that.
+const SPEECH_QUIET_WINDOW_MS = 300;
+const SPEECH_QUIET_BUDGET_MS = 5_000;
+
+/**
+ * Wait until NVDA stops talking, rather than sleeping a guessed duration.
+ *
+ * The five call sites this replaces each slept a fixed 400-500ms after a keystroke, and the repo's own
+ * rule says a fixed sleep is wrong in both directions -- too long in the common case, and too short in
+ * the tail, where being wrong DESTROYS evidence rather than merely costing time.
+ *
+ * They were not redundant, and CLAUDE.md said they were. guidepup resolves `press`/`perform` on the
+ * FIRST spoken phrase, not after speech settles, because `DEFAULT_CAPTURE` is `"initial"`:
+ *
+ *     if ((options?.capture ?? this.#capture) === "initial") {
+ *         clearTimeout(timeoutId); speakPromiseResolver();   // resolves on the first phrase
+ *     } else { timeoutId = setTimeout(timeoutHandler, SPEAK_DEBOUNCE_TIMEOUT); }
+ *
+ * So later utterances of the same announcement can still be in flight when the call returns. The claim
+ * that "nvda.perform() returning already means speech has settled" holds only for `{capture: true}`,
+ * which this project does not use -- switching to it would change every log entry from the first phrase
+ * to all phrases joined, which is an evidence change and a full recapture.
+ *
+ * Polling is the only option: the client is request/response with no emitter to await.
+ *
+ * @returns {Promise<{quiet: boolean, waitedMs: number, reads: number}>} `quiet: false` means the budget
+ *   ran out with NVDA still talking -- recorded, never silently treated as settled.
+ */
+async function waitForSpeechQuiet(label) {
+  const startedAt = Date.now();
+  const deadline = startedAt + SPEECH_QUIET_BUDGET_MS;
+  let length = -1;
+  let lastChange = startedAt;
+  let reads = 0;
+  while (Date.now() < deadline) {
+    const now = ((await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, label).catch(() => [])) || []).length;
+    reads += 1;
+    if (now !== length) {
+      length = now;
+      lastChange = Date.now();
+    } else if (Date.now() - lastChange >= SPEECH_QUIET_WINDOW_MS) {
+      return { quiet: true, waitedMs: Date.now() - startedAt, reads };
+    }
+  }
+  return { quiet: false, waitedMs: Date.now() - startedAt, reads };
+}
+
 async function anchorToTop() {
   await withTimeout(nvda.press("Escape"), NAV_TIMEOUT_MS, "esc").catch(() => undefined);
   await withTimeout(nvda.press("Control+Home"), NAV_TIMEOUT_MS, "ctrlHome").catch(() => undefined);
-  await sleep(ANCHOR_SETTLE_MS);
+  await waitForSpeechQuiet("anchorSettle");
 }
 
 // Collect every element of one type, sweeping both directions (Guidepup has no
@@ -1420,13 +1493,13 @@ async function sweepExtraTypes(ctx) {
 // where header association shows up; not so far that a wide table dominates the capture.
 const MAX_TABLE_STEPS = 6;
 
-// Table navigation needs a settle between the keystroke and reading the speech log, exactly as
-// the control probes do (STATE_SETTLE_MS) and the anchor does (ANCHOR_SETTLE_MS). Without one,
+// Table navigation must not read the speech log until NVDA has finished talking. Without that wait,
 // nine captures of the SAME page returned 4, 4, 1, 4, 2, 3, 0 and one error's worth of cells --
 // evidence that varied purely with timing, which is indistinguishable from a page that differs.
-// Quick-nav sweeps get away with no settle because each jump is slower; a Ctrl+Alt+Arrow within
-// an already-rendered grid returns faster than NVDA updates lastSpokenPhrase.
-const TABLE_SETTLE_MS = 500;
+// Quick-nav sweeps tolerate less waiting because each jump is slower; a Ctrl+Alt+Arrow inside an
+// already-rendered grid returns faster than NVDA updates its log. This used to be a fixed 500ms;
+// `waitForSpeechQuiet` waits for the actual condition, which matters most in the tail where a fixed
+// wait expires early and a truncated walk is recorded as a page with fewer cells.
 
 // NVDA's own words for "there is no cell here". Shared, because only walkTable checked for them and
 // enterFirstCell did not -- so a table walked from its caption recorded "Edge of table" AS A CELL and
@@ -1459,8 +1532,17 @@ const MAX_TABLE_MISSES = 3;
 async function speechDelta(step, label) {
   const before = ((await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, label).catch(() => [])) || []).length;
   await withTimeout(step(), NAV_TIMEOUT_MS, label);
-  await sleep(TABLE_SETTLE_MS);
-  const log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, label).catch(() => [])) || [];
+  // `waitForAnnouncement`, NOT `waitForSpeechQuiet`, and the difference cost a table cell.
+  //
+  // `waitForSpeechQuiet` waits for the log to stop CHANGING. Here speech has usually not started yet --
+  // a Ctrl+Alt+Arrow inside an already-rendered grid returns faster than NVDA updates its log -- so an
+  // unchanged log satisfied "quiet" immediately, the delta came back empty, and the walk read that as a
+  // missing cell. `evidence:check` caught it as `tableCells: 5 -> 4` on both variants of
+  // `table-unassociated-headers`; a condition has to be SUFFICIENT, not merely true.
+  //
+  // `waitForAnnouncement` waits for the log to GROW first, treats never growing as a genuine silence
+  // (which is a finding here, not a failure), and only then waits for it to settle.
+  const log = await waitForAnnouncement(before, label);
   // Joined rather than reduced to one entry: a cell whose announcement arrives as two utterances
   // is still one cell, and dropping either half would be losing evidence.
   return log.slice(before).map((phrase) => String(phrase).trim()).filter(Boolean).join(", ");
