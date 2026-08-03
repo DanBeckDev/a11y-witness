@@ -18,6 +18,15 @@ export interface RunFinding {
 }
 
 export interface RunResult {
+  /**
+   * False when the capture could not be confirmed to have read the requested page.
+   *
+   * Not cosmetic. On gov.uk the capture read Edge's image-magnifier overlay, the retry fired three times
+   * and warned, and the run still reported a 4.1.2 finding about the browser's own Zoom In / Rotate
+   * buttons as if the site were at fault. Findings from an unverified capture are not merely unreliable,
+   * they can blame a page for its browser — so they are not shown at all.
+   */
+  captureVerified?: boolean;
   url: string;
   task: string;
   screenReader: string;
@@ -136,6 +145,26 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
   const { verdict } = result;
   const lines: string[] = [];
   if (options.marker) lines.push(`<!-- ${options.marker} -->`);
+  // Lead with it, and show nothing else. A reader who skims must not come away with a finding that was
+  // never about their page.
+  if (result.captureVerified === false) {
+    lines.push(
+      "## a11y-witness — **could not read this page**",
+      "",
+      `**Page:** ${result.url}`,
+      "",
+      "The capture could not be confirmed to have read the requested page: what the screen reader "
+        + "announced did not contain the page's own title, after three attempts. That usually means it read "
+        + "browser chrome — an interstitial, a consent dialog, an image or PDF viewer — rather than your "
+        + "content.",
+      "",
+      "**No findings are reported.** Any that were produced would describe the browser, not this page, "
+        + "and blaming a site for its browser is worse than saying nothing.",
+      "",
+      "<sub>The full capture is in the run artifact if you want to see what it did read.</sub>",
+    );
+    return lines.join("\n");
+  }
   lines.push(
     "## a11y-witness — what a screen reader actually experienced",
     "",

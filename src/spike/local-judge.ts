@@ -56,6 +56,8 @@ export interface CaptureEvidence {
   };
   interaction?: {
     controls?: string[]; stateChanges?: unknown[]; formChanges?: unknown[]; postSubmitFields?: string[];
+    /** Set only when submitting a form NAVIGATED. Absent means it did not, or was not checked. */
+    navigatedOnSubmit?: { from: string; to: string };
   };
 }
 
@@ -85,8 +87,16 @@ const EVIDENCE_CHANNEL: Record<string, (c: CaptureEvidence) => boolean> = {
     || nonEmpty(c.structure?.lists) || nonEmpty(c.structure?.tableCells),
   // Labels or Instructions is about FIELDS. A page whose only control is a button cannot fail it.
   "3.3.2": (c) => hasEditableField(c.structure?.formFields),
-  // Error identification requires a form to have been submitted at all.
-  "3.3.1": (c) => nonEmpty(c.interaction?.formChanges) || nonEmpty(c.interaction?.postSubmitFields),
+  // Error identification requires a form to have been submitted AND to have stayed put.
+  //
+  // A form that submits successfully and navigates has no error to announce, so the absence of one is not
+  // a failure — but it is indistinguishable from a silent rejection if you only ask "was anything
+  // announced afterwards?". Measured on Wikipedia: submitting the search navigated to French Wikipedia,
+  // the post-submit re-read described THAT page, and this criterion was reported as a silent validation
+  // error on a form that worked perfectly. The corpus never showed it because every synthetic page calls
+  // `preventDefault()`.
+  "3.3.1": (c) => !c.interaction?.navigatedOnSubmit
+    && (nonEmpty(c.interaction?.formChanges) || nonEmpty(c.interaction?.postSubmitFields)),
   "4.1.3": (c) => nonEmpty(c.interaction?.formChanges) || nonEmpty(c.interaction?.stateChanges),
   "4.1.2": (c) => nonEmpty(c.structure?.formFields) || nonEmpty(c.interaction?.controls),
 };

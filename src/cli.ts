@@ -201,7 +201,16 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
     process.stderr.write(`Capture did not appear to read "${axe.title}" (wrong content?); re-capturing (attempt ${attempt}/${MAX_CAPTURE_ATTEMPTS}) ...\n`);
     cap = await captureViaWorker(url, { task, worker, probeForms });
   }
-  if (axe.title && !captureMentionsTitle(cap, axe.title)) {
+  // Carry the verdict, do not just warn about it.
+  //
+  // This wrote a WARNING and carried on. On gov.uk the capture read Edge's image-magnifier overlay
+  // ("Image Magnify, document"), the retry fired all three times and said so — and the run then judged
+  // that chrome and reported a 4.1.2 finding about the browser's own Zoom In / Rotate buttons as though
+  // it were the site's fault. The check knew it had failed and the pipeline downstream could not tell.
+  //
+  // A stderr line is not a signal. Anything consuming the result has to be able to see this.
+  const captureVerified = !axe.title || captureMentionsTitle(cap, axe.title);
+  if (!captureVerified) {
     process.stderr.write(`WARNING: after ${MAX_CAPTURE_ATTEMPTS} attempts the capture still doesn't match the page title "${axe.title}" — results may reflect browser chrome, not the page.\n`);
   }
 
@@ -237,6 +246,9 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
       url, task, screenReader: cap.screenReader, transcript: cap.transcript,
       structure: cap.structure, interaction: cap.interaction,
       ruleBased: ruleFindings, verdict: layered,
+      // False when the capture could not be confirmed to have read the requested page. Findings from an
+      // unverified capture may describe browser chrome, so a consumer must be able to refuse them.
+      captureVerified,
     }, null, 2));
   } else {
     printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: ruleFindings });
