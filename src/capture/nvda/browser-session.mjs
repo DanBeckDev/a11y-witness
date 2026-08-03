@@ -39,6 +39,7 @@ import { existsSync } from "node:fs";
 
 /** Chromium's DevTools endpoint. Loopback only — it is never reachable off the guest. */
 export const CDP_PORT = 9222;
+const AX_TREE_TIMEOUT_MS = 5_000;
 const CDP_HOST = "127.0.0.1";
 
 const CDP_READY_TIMEOUT_MS = 20_000;
@@ -117,6 +118,96 @@ export async function navigateExisting(url) {
       void error;
     }
   }
+}
+
+/**
+ * Landmark roles, per ARIA. `region` is deliberately conditional -- see `censusFromAXTree`.
+ */
+const LANDMARK_ROLES = ["main", "navigation", "banner", "contentinfo", "complementary", "search", "form", "region"];
+
+/**
+ * Role -> which sweep it belongs to. A lookup rather than a branch chain: the chain put this function
+ * over the complexity gate, and naming the mapping once is clearer than restating it in `else if`s.
+ */
+const ROLE_BUCKET = new Map([
+  ["heading", "heading"], ["link", "link"],
+  ["image", "graphic"], ["img", "graphic"], ["graphics-document", "graphic"],
+  ...LANDMARK_ROLES.map((role) => [role, "landmark"]),
+]);
+
+/**
+ * How many structural elements does the PAGE actually expose?
+ *
+ * This is a completeness ORACLE, never evidence. The distinction is the whole design: what a screen
+ * reader announced is the evidence, and `docs/local-model.md` forbids the accessibility tree as a model
+ * feature. But a sweep that under-reports is indistinguishable from a page that has nothing -- and that
+ * is exactly the defect this exists to catch. `structure.landmarks` misses a `<main>` wrapping the page
+ * on 2,063 of 2,064 corpus captures, because quick navigation cannot reach a landmark containing the
+ * caret, and nothing could see it.
+ *
+ * Asking Chromium costs one CDP call on a socket that is already open: milliseconds, no keystrokes, no
+ * modal dialog. The alternative -- reading NVDA's own Elements List -- is authoritative but costs ~11s
+ * per capture for landmarks alone, because every keystroke waits on guidepup's 1s speech-quiet
+ * debounce. At 2,122 captures that is the difference between a verification you run always and one you
+ * can never afford.
+ *
+ * @param {Array<{role?: {value?: string}, name?: {value?: string}, ignored?: boolean}>} nodes
+ *   `Accessibility.getFullAXTree`'s flat node list.
+ */
+export function censusFromAXTree(nodes) {
+  const census = { landmark: 0, heading: 0, link: 0, graphic: 0 };
+  for (const node of nodes ?? []) {
+    // Ignored nodes are not in the tree a screen reader walks, so counting them would make the oracle
+    // demand elements NVDA could never announce -- a guard that cries wolf gets removed, not heeded.
+    if (!node || node.ignored) continue;
+    const role = String(node.role?.value ?? "").toLowerCase();
+    const bucket = ROLE_BUCKET.get(role);
+    if (!bucket) continue;
+    // An unnamed `region` is NOT a landmark: ARIA requires an accessible name for `role="region"` to be
+    // exposed as one, and NVDA agrees -- named regions are announced ("Latest news, region") while a
+    // bare `<section>` is not. Counting them would invent landmarks the page does not have.
+    if (role === "region" && !String(node.name?.value ?? "").trim()) continue;
+    census[bucket] += 1;
+  }
+  return census;
+}
+
+/**
+ * Fetch the census from the live page over the already-open DevTools socket.
+ *
+ * Returns null rather than throwing: this is a diagnostic, and a capture must never fail because an
+ * oracle was unavailable. A null census means "not checked", which `crossCheckStructure` treats as
+ * unverified rather than as agreement.
+ */
+export async function structuralCensus() {
+  try {
+    const target = await pageTarget();
+    const socket = new WebSocket(target.webSocketDebuggerUrl);
+    try {
+      await once(socket, "open", CDP_READY_TIMEOUT_MS);
+      const result = waitForResult(socket, 1, AX_TREE_TIMEOUT_MS);
+      socket.send(JSON.stringify({ id: 1, method: "Accessibility.getFullAXTree" }));
+      return censusFromAXTree((await result)?.nodes);
+    } finally {
+      try { socket.close(); } catch (error) { void error; }
+    }
+  } catch (error) {
+    return { error: error.message };
+  }
+}
+
+/** Resolve the reply whose `id` matches, as opposed to waitForMethod which waits for an EVENT. */
+function waitForResult(socket, id, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`CDP: no reply to ${id} within ${timeoutMs}ms`)), timeoutMs);
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(String(event.data));
+      if (message.id !== id) return;
+      clearTimeout(timer);
+      if (message.error) reject(new Error(`CDP error: ${message.error.message}`));
+      else resolve(message.result);
+    });
+  });
 }
 
 function once(socket, event, timeoutMs) {

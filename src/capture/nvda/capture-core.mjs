@@ -20,7 +20,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { captureFault, FAULT } from "./capture-faults.mjs";
 import { installSpeechChannelShim } from "./speech-channel.mjs";
-import { browserAlive, launchReusable, navigateExisting, reusableArgs } from "./browser-session.mjs";
+import { browserAlive, launchReusable, navigateExisting, reusableArgs, structuralCensus } from "./browser-session.mjs";
 import { connect } from "node:net";
 import { existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -246,7 +246,7 @@ async function runCapturePhases(url, opts, diag) {
     silentAtStart: screenReaderWasSilentAtStart(diag),
   });
   failIfScreenReaderIsMute(transcript, diag);
-  const { structure, interaction } = await navigateByStructure({
+  const { structure, interaction } = await navigateByStructureThenAudit({
     deadline, diag,
     probeForms: !!opts.probeForms, probeFocus: !!opts.probeFocus, probeTables: !!opts.probeTables,
     probeElementsList: !!opts.probeElementsList,
@@ -1066,6 +1066,37 @@ async function readWithRetry({ steps, navStrategy, deadline, diag, title, silent
 // quick-nav, and — while a control is under the cursor — operate it to capture
 // the announcements only interaction reveals. Returns the structure model and
 // the interaction model.
+/**
+ * Run the sweeps, then ask Chromium how much there WAS to find.
+ *
+ * A sweep that under-reports reads exactly like a page with nothing on it, and until now nothing could
+ * tell them apart: `structure.landmarks` misses a `<main>` wrapping the page on 2,063 of 2,064 corpus
+ * captures, because quick navigation cannot reach a landmark containing the caret.
+ *
+ * The census is a completeness ORACLE and never evidence -- the announcements stay the evidence, and the
+ * accessibility tree is barred from being a model feature. It runs on EVERY capture because it costs one
+ * call on an already-open DevTools socket; asking NVDA's own Elements List for the same answer costs
+ * ~11s, which is why that stays opt-in. It only ever adds a diagnostic, so no cached capture is
+ * invalidated and no evidence field moves.
+ */
+async function navigateByStructureThenAudit(options) {
+  const result = await navigateByStructure(options);
+  const census = await structuralCensus();
+  options.diag.mark("structureCensus", census);
+  if (census && !census.error) {
+    options.diag.mark("structureCrossCheck", crossCheckStructure({
+      sweep: {
+        heading: result.structure.headings.length,
+        landmark: result.structure.landmarks.length,
+        link: result.structure.links.length,
+        graphic: result.structure.graphics.length,
+      },
+      elementsList: census,
+    }));
+  }
+  return result;
+}
+
 async function navigateByStructure({ deadline, diag, probeForms, probeFocus, probeTables, probeElementsList, task }) {
   const K = nvda.keyboardCommands;
   const interaction = { stateChanges: [], formChanges: [], sweepLog: [] };
@@ -1269,9 +1300,17 @@ async function collectByType(commands, ctx) {
 // harmless to the assertions, but it is noise in the evidence, and it got worse once the
 // sweep stopped starting from a fixed position. Strip a leading container announcement before
 // keying.
-const CONTAINER_PREFIX = /^(?:\w[\w\s'-]*\s)?(?:landmark|region|banner|navigation|main|complementary|content info|form|article),\s*/i;
+// The separator before the role may be a COMMA, not just a space. NVDA announces both shapes:
+//
+//   "main landmark, Children's story time, heading, level 3"      <- space
+//   "Main support article, region, Resetting a password, ..."     <- comma
+//
+// Only the first was matched, so the second survived deduping and the same h2 was recorded twice --
+// three headings on a page with two. Found by the CDP census (sweep 3, page 2), which is exactly the
+// kind of miscount that is invisible without an independent count to compare against.
+const CONTAINER_PREFIX = /^(?:\w[\w\s'-]*[,\s]\s*)?(?:landmark|region|banner|navigation|main|complementary|content info|form|article),\s*/i;
 
-const dedupeKey = (phrase) => phrase.replace(CONTAINER_PREFIX, "").slice(0, DEDUPE_KEY_LEN);
+export const dedupeKey = (phrase) => phrase.replace(CONTAINER_PREFIX, "").slice(0, DEDUPE_KEY_LEN);
 
 /**
  * Given the speech log and how much of it we had already read, did the last quick-nav jump MOVE, and
@@ -1645,7 +1684,10 @@ export function elementsListRowName(phrase) {
 export function crossCheckStructure({ sweep, elementsList }) {
   const disagreements = [];
   let compared = 0;
-  for (const { type } of ELEMENTS_LIST_TYPES) {
+  // Whatever BOTH sides name. Previously this iterated NVDA's five Elements List types, which silently
+  // ignored any type the oracle could speak about but that list cannot -- and the CDP census covers
+  // graphics and links too. Comparing the intersection keeps it honest in both directions.
+  for (const type of Object.keys(sweep ?? {})) {
     const found = sweep?.[type];
     const authoritative = elementsList?.[type];
     // Absent is not a disagreement: a type the dialog could not be read for must not be reported as
