@@ -9,9 +9,11 @@ steps:
     with:
       url: https://example.com/checkout
       task: Complete the checkout with a saved card
-      anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
       fail-on: never           # report first; gate when your team asks for it
 ```
+
+No API key. The default judge is this project's **own trained scorer** — 27 KB of heads shipped in the
+repo, over an 87 MB encoder fetched at setup — so nothing leaves the runner and nothing is billed.
 
 A copy-pasteable workflow is in [`examples/workflow.yml`](../examples/workflow.yml).
 
@@ -27,8 +29,18 @@ An **unrecognised** `fail-on` is a hard error rather than a fallback to `never`.
 that silently produces a permanently green check is the failure nobody notices, because green is exactly
 what they expected.
 
-**Your key, your data.** The judge runs against your own Anthropic key. Nothing about the page or its
-transcript passes through anyone else's service.
+**No rented judge by default.** `judge-backend: local` uses the scorer trained on this project's own
+1,061-pair corpus. It covers **eight criteria** and is silent on everything else — narrower than an LLM,
+and measured at zero false positives across 1,034 conformant records. `anthropic` and `openai` remain
+available for broader, noisier coverage; the action refuses at once if you name one without a key or an
+endpoint, rather than discovering it after a 20-minute capture.
+
+The trained weights are committed deliberately (`models/screenreader-scorer/`). `models/` is otherwise
+gitignored, and the first version of that rule excluded the scorer too — so the local judge worked only on
+the machine that trained it, and a shipped action would have had **no model at all**. Note the pattern is
+`models/*` rather than `models/`: git does not descend into an excluded directory, so a negation under it
+never fires and the file could only be added with `git add -f` — meaning a future retrain would silently
+not be committed.
 
 **One PR comment, updated.** `gh pr comment --edit-last --create-if-none` plus an HTML marker in the body,
 so a busy PR gets one comment that changes rather than one per push. The comment step runs `always()`, so
@@ -59,10 +71,16 @@ ways (default passes despite a blocker, a threshold fails, a typo refuses with e
 file refuses rather than reporting a clean page); and a real end-to-end run — real NVDA capture, real
 judge, `4.1.2 blocker` on a genuinely unnamed button — rendered through the Action's own reporter.
 
-**Not verified: the Anthropic judge backend.** This project deliberately has no metered API key; its own
-judge runs through the Codex CLI. `JUDGE_BACKEND=anthropic` is implemented to the SDK spec and has never
-been exercised, so the first real run of that path will be in someone else's CI. That is worth stating
-rather than discovering.
+The default `local` backend has been run end to end on a real capture: real NVDA, our own scorer, no LLM
+called — one `4.1.2` blocker at 0.998 confidence with `button` quoted as the evidence.
+
+**Not verified: the `anthropic` backend.** This project deliberately has no metered key, so that path is
+written to the SDK spec and unexercised. It is no longer the default, which is the point: the untested
+path is now the opt-in one.
+
+**Not yet verified on a real runner:** the local backend's setup step installs CPU torch and fetches the
+encoder. That works locally and is expected to add 1-2 minutes; it has not run on a Windows runner. A
+lighter ONNX path would remove torch entirely and is the obvious next optimisation.
 
 ## Outputs
 

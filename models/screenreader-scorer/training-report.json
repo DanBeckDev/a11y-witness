@@ -1,0 +1,669 @@
+{
+  "schema": "a11y-witness/screenreader-scorer-training",
+  "encoder": {
+    "path": "models/encoders/all-MiniLM-L6-v2",
+    "hiddenSize": 384,
+    "modelSha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db"
+  },
+  "representation": {
+    "schema": "screenreader-structured-v4",
+    "text": "channel-tagged screen-reader evidenceUnits",
+    "embeddingSize": 384,
+    "structuredFeatureSize": 29,
+    "structuredFeatureScale": 4.0,
+    "structuredFeatureMultipliers": {
+      "vague_link_present": 2.0,
+      "form_field_unnamed": 3.0,
+      "generic_heading_present": 2.0,
+      "form_field_named": 2.0
+    },
+    "structuredFeatures": [
+      "transcript_present",
+      "heading_present",
+      "plain_heading_candidate_present",
+      "landmark_present",
+      "landmark_named",
+      "form_field_present",
+      "form_field_named",
+      "form_field_unnamed",
+      "bare_edit_present",
+      "control_present",
+      "table_present",
+      "table_data_row_present",
+      "table_header_associated",
+      "table_position_only",
+      "state_change_present",
+      "state_changed",
+      "state_unchanged",
+      "form_change_present",
+      "form_change_nonempty",
+      "form_change_empty",
+      "status_update_announced",
+      "post_submit_present",
+      "validation_error_announced",
+      "validation_error_missing",
+      "generic_heading_present",
+      "vague_link_present",
+      "generic_graphic_present",
+      "unnamed_graphic_present",
+      "filename_graphic_present"
+    ],
+    "maxLength": 256
+  },
+  "dataset": {
+    "path": "runs/screenreader-dataset/screenreader-evidence.jsonl",
+    "sha256": "0d6a5d176b372cf90f980a36e7f99d12dd82c0936797a455d2fea298529eb906",
+    "records": 2006
+  },
+  "split": {
+    "train": 1394,
+    "validation": 300,
+    "test": 312
+  },
+  "calibration": {
+    "method": "grouped-out-of-fold-threshold-calibration",
+    "folds": 5,
+    "developmentRecords": 1694
+  },
+  "criteria": {
+    "1.1.1": {
+      "decisionOwner": "deterministic-rules",
+      "threshold": 0.35,
+      "subtypes": {
+        "1.1.1:filename-alt": {
+          "head": "subtype_1_1_1_filename_alt",
+          "development": {
+            "records": 1694,
+            "positive": 27,
+            "clean": 1667,
+            "truePositive": 27,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        "1.1.1:generic-alt": {
+          "head": "subtype_1_1_1_generic_alt",
+          "development": {
+            "records": 1694,
+            "positive": 23,
+            "clean": 1671,
+            "truePositive": 23,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        "1.1.1:missing-alt": {
+          "head": "subtype_1_1_1_missing_alt",
+          "development": {
+            "records": 1694,
+            "positive": 76,
+            "clean": 1618,
+            "truePositive": 76,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "calibration": {
+        "records": 1694,
+        "positive": 126,
+        "clean": 1568,
+        "truePositive": 126,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "train": {
+        "records": 1394,
+        "positive": 101,
+        "clean": 1293,
+        "truePositive": 101,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "validation": {
+        "records": 300,
+        "positive": 25,
+        "clean": 275,
+        "truePositive": 25,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "test": {
+        "records": 312,
+        "positive": 24,
+        "clean": 288,
+        "truePositive": 24,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    },
+    "1.3.1": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "threshold": 0.3,
+      "subtypes": {
+        "1.3.1:fake-heading": {
+          "head": "subtype_1_3_1_fake_heading",
+          "development": {
+            "records": 1694,
+            "positive": 23,
+            "clean": 1671,
+            "truePositive": 23,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        "1.3.1:unassociated-table": {
+          "head": "subtype_1_3_1_unassociated_table",
+          "development": {
+            "records": 1694,
+            "positive": 54,
+            "clean": 1640,
+            "truePositive": 54,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "calibration": {
+        "records": 1694,
+        "positive": 77,
+        "clean": 1617,
+        "truePositive": 77,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "train": {
+        "records": 1394,
+        "positive": 63,
+        "clean": 1331,
+        "truePositive": 63,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "validation": {
+        "records": 300,
+        "positive": 14,
+        "clean": 286,
+        "truePositive": 14,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "test": {
+        "records": 312,
+        "positive": 10,
+        "clean": 302,
+        "truePositive": 10,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    },
+    "2.4.4": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "threshold": 0.15,
+      "subtypes": {
+        "2.4.4:regex": {
+          "head": "subtype_2_4_4_regex",
+          "development": {
+            "records": 1694,
+            "positive": 81,
+            "clean": 1613,
+            "truePositive": 81,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "calibration": {
+        "records": 1694,
+        "positive": 81,
+        "clean": 1613,
+        "truePositive": 81,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "train": {
+        "records": 1394,
+        "positive": 69,
+        "clean": 1325,
+        "truePositive": 69,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "validation": {
+        "records": 300,
+        "positive": 12,
+        "clean": 288,
+        "truePositive": 12,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "test": {
+        "records": 312,
+        "positive": 19,
+        "clean": 293,
+        "truePositive": 19,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    },
+    "2.4.6": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "threshold": 0.2,
+      "subtypes": {
+        "2.4.6:regex": {
+          "head": "subtype_2_4_6_regex",
+          "development": {
+            "records": 1694,
+            "positive": 87,
+            "clean": 1607,
+            "truePositive": 87,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "calibration": {
+        "records": 1694,
+        "positive": 87,
+        "clean": 1607,
+        "truePositive": 87,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "train": {
+        "records": 1394,
+        "positive": 70,
+        "clean": 1324,
+        "truePositive": 70,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "validation": {
+        "records": 300,
+        "positive": 17,
+        "clean": 283,
+        "truePositive": 17,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "test": {
+        "records": 312,
+        "positive": 13,
+        "clean": 299,
+        "truePositive": 13,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    },
+    "3.3.1": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "threshold": 0.15,
+      "subtypes": {
+        "3.3.1:validation-error-silent": {
+          "head": "subtype_3_3_1_validation_error_silent",
+          "development": {
+            "records": 1694,
+            "positive": 103,
+            "clean": 1591,
+            "truePositive": 103,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "calibration": {
+        "records": 1694,
+        "positive": 103,
+        "clean": 1591,
+        "truePositive": 103,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "train": {
+        "records": 1394,
+        "positive": 84,
+        "clean": 1310,
+        "truePositive": 84,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "validation": {
+        "records": 300,
+        "positive": 19,
+        "clean": 281,
+        "truePositive": 19,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "test": {
+        "records": 312,
+        "positive": 22,
+        "clean": 290,
+        "truePositive": 22,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    },
+    "3.3.2": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "threshold": 0.4,
+      "subtypes": {
+        "3.3.2:placeholder-only": {
+          "head": "subtype_3_3_2_placeholder_only",
+          "development": {
+            "records": 1694,
+            "positive": 20,
+            "clean": 1674,
+            "truePositive": 20,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        "3.3.2:unnamed-form-field": {
+          "head": "subtype_3_3_2_unnamed_form_field",
+          "development": {
+            "records": 1694,
+            "positive": 92,
+            "clean": 1602,
+            "truePositive": 92,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "calibration": {
+        "records": 1694,
+        "positive": 112,
+        "clean": 1582,
+        "truePositive": 112,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "train": {
+        "records": 1394,
+        "positive": 94,
+        "clean": 1300,
+        "truePositive": 94,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "validation": {
+        "records": 300,
+        "positive": 18,
+        "clean": 282,
+        "truePositive": 18,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "test": {
+        "records": 312,
+        "positive": 29,
+        "clean": 283,
+        "truePositive": 29,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    },
+    "4.1.2": {
+      "decisionOwner": "deterministic-rules",
+      "threshold": 0.75,
+      "subtypes": {
+        "4.1.2:missing-role": {
+          "head": "subtype_4_1_2_missing_role",
+          "development": {
+            "records": 1694,
+            "positive": 68,
+            "clean": 1626,
+            "truePositive": 68,
+            "falsePositive": 5,
+            "falseNegative": 0,
+            "precision": 0.9315068493150684,
+            "recall": 1.0,
+            "f1": 0.9645390070921985
+          }
+        },
+        "4.1.2:regex": {
+          "head": "subtype_4_1_2_regex",
+          "development": {
+            "records": 1694,
+            "positive": 25,
+            "clean": 1669,
+            "truePositive": 25,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        "4.1.2:state-change-silent": {
+          "head": "subtype_4_1_2_state_change_silent",
+          "development": {
+            "records": 1694,
+            "positive": 59,
+            "clean": 1635,
+            "truePositive": 59,
+            "falsePositive": 1,
+            "falseNegative": 0,
+            "precision": 0.9833333333333333,
+            "recall": 1.0,
+            "f1": 0.9915966386554621
+          }
+        }
+      },
+      "calibration": {
+        "records": 1694,
+        "positive": 152,
+        "clean": 1542,
+        "truePositive": 152,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "train": {
+        "records": 1394,
+        "positive": 123,
+        "clean": 1271,
+        "truePositive": 123,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "validation": {
+        "records": 300,
+        "positive": 29,
+        "clean": 271,
+        "truePositive": 29,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "test": {
+        "records": 312,
+        "positive": 23,
+        "clean": 289,
+        "truePositive": 23,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    },
+    "4.1.3": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "threshold": 0.4,
+      "subtypes": {
+        "4.1.3:form-activation-silent": {
+          "head": "subtype_4_1_3_form_activation_silent",
+          "development": {
+            "records": 1694,
+            "positive": 109,
+            "clean": 1585,
+            "truePositive": 109,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "calibration": {
+        "records": 1694,
+        "positive": 109,
+        "clean": 1585,
+        "truePositive": 109,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "train": {
+        "records": 1394,
+        "positive": 93,
+        "clean": 1301,
+        "truePositive": 93,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "validation": {
+        "records": 300,
+        "positive": 16,
+        "clean": 284,
+        "truePositive": 16,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "test": {
+        "records": 312,
+        "positive": 16,
+        "clean": 296,
+        "truePositive": 16,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    }
+  },
+  "releaseEligible": true,
+  "modelReleaseEligible": true,
+  "warnings": []
+}
