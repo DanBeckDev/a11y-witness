@@ -185,7 +185,12 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
     captureViaWorker(url, { task, worker, probeForms }),
     pageContext(url, ruleLayer, axeResults),
   ]);
-  const axeFindings = axe.findings;
+  // `null` when the rule layer did not run, so "unchecked" can never be mistaken for "clean". Both
+  // output paths must use THIS, not `axe.findings`: the human report already did
+  // (`ruleLayer === "none" ? null : ...`) while the --json path emitted the bare array, so `--no-axe`
+  // produced `"ruleBased": []` and any consumer rendered it as "0 violations". The text report and the
+  // JSON disagreed about whether contrast had been checked, and the JSON was the one that lied.
+  const ruleFindings = ruleLayer === "none" ? null : axe.findings;
 
   // Verify-and-retry (the Root-1 fix, brought to the product). Browser focus on
   // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
@@ -223,9 +228,9 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
 
   if (json) {
     const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
-    console.log(JSON.stringify({ url, task, screenReader: cap.screenReader, transcript: cap.transcript, ruleBased: axeFindings, verdict: layered }, null, 2));
+    console.log(JSON.stringify({ url, task, screenReader: cap.screenReader, transcript: cap.transcript, ruleBased: ruleFindings, verdict: layered }, null, 2));
   } else {
-    printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: ruleLayer === "none" ? null : axeFindings });
+    printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: ruleFindings });
   }
 }
 

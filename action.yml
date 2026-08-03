@@ -1,0 +1,223 @@
+# a11y-witness — drive a real screen reader over a page in CI and report what it announced.
+#
+# A composite action, not a Docker one: container actions do not run on Windows runners, and NVDA needs
+# Windows. It must therefore be used with `runs-on: windows-2022` (or 2025).
+#
+# The setup steps below are not boilerplate. Each one is a fault this project already paid for, and the
+# reasons are kept inline because a future reader's instinct will be to delete them.
+name: a11y-witness
+description: Drive NVDA over a page and report the accessibility barriers a screen-reader user would hit.
+author: a11y-witness
+branding:
+  icon: ear
+  color: purple
+
+inputs:
+  url:
+    description: The page to test.
+    required: true
+  task:
+    description: >-
+      What a user is trying to DO on this page, in plain words ("Complete the checkout"). The judge uses
+      it to decide whether the announced experience lets someone finish, which is a different question
+      from whether the markup passes rules.
+    required: true
+  anthropic-api-key:
+    description: >-
+      API key for the judge. Bring your own: this action never proxies your page or its transcript
+      through anyone else's service.
+    required: true
+  judge-model:
+    description: Model for the judge. Defaults to the project's pinned choice.
+    required: false
+    default: ""
+  fail-on:
+    description: >-
+      never | any | blocker | serious | moderate | minor. A severity means "that or worse".
+      Defaults to `never`: report first, and fail the build when your team asks for it. A tool that
+      breaks builds the day it is installed gets uninstalled.
+    required: false
+    default: never
+  probe-forms:
+    description: >-
+      Submit forms with no valid input to hear whether errors are announced (3.3.1, 4.1.3). Opt-in
+      because submitting a form has side effects on the page under test.
+    required: false
+    default: "false"
+  axe:
+    description: >-
+      Also run axe-core for the visual and rule-based criteria a screen reader cannot perceive, such as
+      contrast. Set false to skip. Note that skipping means those criteria are UNCHECKED, not clean, and
+      the report says so.
+    required: false
+    default: "true"
+  comment-on-pr:
+    description: Post the report as a pull-request comment, updating the previous one rather than adding another.
+    required: false
+    default: "true"
+  node-version:
+    description: Node version for the run.
+    required: false
+    default: "22"
+
+outputs:
+  findings:
+    description: Number of lived-experience findings.
+    value: ${{ steps.report.outputs.findings }}
+  task-completable:
+    description: Whether the judge thinks a screen-reader user could complete the stated task.
+    value: ${{ steps.report.outputs.task-completable }}
+  result-json:
+    description: Path to the full run result, for a later step or an artifact upload.
+    value: ${{ steps.capture.outputs.result-json }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check the runner is Windows
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" != "Windows" ]; then
+          echo "::error::a11y-witness needs NVDA, which is Windows-only. Use runs-on: windows-2022." >&2
+          exit 1
+        fi
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    # Installed into the ACTION's own checkout, not the caller's workspace: `github.action_path` is where
+    # this action's package.json lives, and the caller's repository has nothing to do with it.
+    #
+    # Playwright's browser download is skipped because the capture drives Edge, which Windows runners
+    # already have; axe-core needs Playwright's API but not its bundled Chromium.
+    - name: Install a11y-witness
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci
+      env:
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+    # Install NVDA with the repo's OWN guidepup rather than guidepup/setup-action. The action predates
+    # the @guidepup/setup 0.24.0 CLI rewrite and installs the pre-0.29 layout (registry pointer +
+    # %TEMP%), which guidepup >= 0.29 does not look at -- CI fails with "NVDA is not supported", which
+    # reads like a missing install and is not one. Running the installer from this checkout makes it read
+    # our manifest, keeping the screen reader and the driver in lockstep.
+    - name: Set up NVDA
+      shell: pwsh
+      working-directory: ${{ github.action_path }}
+      run: |
+        npx --yes @guidepup/setup setup
+        npx --yes @guidepup/setup install nvda
+
+    # Guidepup ships NVDA's Speech Viewer ON, and its focus event lands in the speech-log delta captured
+    # after activating a control -- so an interaction probe records "NVDA Speech Viewer" instead of the
+    # page's actual response. Worse, a check that only asserts the probe FIRED still passes. Off before
+    # capturing.
+    - name: Disable the NVDA Speech Viewer
+      shell: pwsh
+      run: |
+        $cacheRoot = if ($env:GUIDEPUP_SCREEN_READERS_PATH) { $env:GUIDEPUP_SCREEN_READERS_PATH }
+                     else { Join-Path $env:LOCALAPPDATA 'guidepup' }
+        $inis = Get-ChildItem (Join-Path $cacheRoot 'nvda') -Recurse -Filter 'nvda.ini' -ErrorAction SilentlyContinue
+        if (-not $inis) { throw "No NVDA config found under $cacheRoot - the install step failed." }
+        foreach ($ini in $inis) {
+          $body = Get-Content $ini.FullName -Raw
+          Set-Content -Path $ini.FullName -NoNewline `
+            -Value ($body -replace 'showSpeechViewerAtStartup = True', 'showSpeechViewerAtStartup = False')
+        }
+        if ($inis | Select-String 'showSpeechViewerAtStartup = True') { throw 'Speech Viewer still enabled.' }
+
+    # A fresh Edge profile shows a first-run welcome/sign-in surface. On a page with no elements of a
+    # type, NVDA's quick-nav escapes the document into that browser UI and pollutes the transcript with
+    # phantom findings about Microsoft's own chrome.
+    - name: Suppress Edge's first-run experience
+      shell: pwsh
+      run: |
+        $key = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+        New-Item -Path $key -Force | Out-Null
+        Set-ItemProperty -Path $key -Name "HideFirstRunExperience" -Value 1 -Type DWord
+        Set-ItemProperty -Path $key -Name "BrowserSignin" -Value 0 -Type DWord
+
+    # The capture runs through the worker rather than in-process, because that is the path the project
+    # tests: `capture:check`, `evidence:check` and the whole dataset pipeline all drive it over HTTP.
+    - name: Start the capture worker
+      shell: pwsh
+      working-directory: ${{ github.action_path }}
+      run: |
+        Start-Process -FilePath "node" -ArgumentList "src/capture/nvda/server.mjs" `
+          -RedirectStandardOutput "$env:RUNNER_TEMP\worker.log" `
+          -RedirectStandardError "$env:RUNNER_TEMP\worker.err" -NoNewWindow
+        # Poll for READY, never sleep a guess. `ok` only means the HTTP server is answering -- a worker
+        # answered it once while NVDA could not start, which is how the pool's dominant failure hid for a
+        # day. `ready` is the environment check, and it is false-then-true on a cold start by design.
+        $deadline = (Get-Date).AddSeconds(180)
+        while ((Get-Date) -lt $deadline) {
+          try {
+            $h = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 5
+            if ($h.ready) { Write-Host "worker ready"; exit 0 }
+          } catch { }
+          Start-Sleep -Milliseconds 500
+        }
+        Write-Host "--- worker stdout ---"; Get-Content "$env:RUNNER_TEMP\worker.log" -ErrorAction SilentlyContinue
+        Write-Host "--- worker stderr ---"; Get-Content "$env:RUNNER_TEMP\worker.err" -ErrorAction SilentlyContinue
+        throw "The capture worker never became ready."
+
+    - name: Capture and judge
+      id: capture
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        A11Y_WORKER: http://127.0.0.1:8765
+        JUDGE_BACKEND: anthropic
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        JUDGE_MODEL: ${{ inputs.judge-model }}
+      run: |
+        set -o pipefail
+        out="$RUNNER_TEMP/a11y-witness-result.json"
+        args=("${{ inputs.url }}" --task "${{ inputs.task }}" --json)
+        [ "${{ inputs.probe-forms }}" = "true" ] && args+=(--probe-forms)
+        [ "${{ inputs.axe }}" = "true" ] || args+=(--no-axe)
+        # stdout is the JSON result; the CLI's diagnostics go to stderr and stay in the log.
+        npx tsx src/cli.ts "${args[@]}" > "$out"
+        echo "result-json=$out" >> "$GITHUB_OUTPUT"
+
+    - name: Report
+      id: report
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        # `|| status=$?`, not `; status=$?`. GitHub runs `shell: bash` with `-eo pipefail`, so a bare
+        # failing command aborts the step immediately and the lines below never run — the outputs would
+        # be missing on exactly the runs where someone needs them. Verified both ways before relying on
+        # it: `false; status=$?` exits 1 without reaching the next line, `false || status=$?` continues.
+        status=0
+        npx tsx src/action/run.ts \
+          --result="${{ steps.capture.outputs.result-json }}" \
+          --fail-on="${{ inputs.fail-on }}" \
+          --summary-out="$RUNNER_TEMP/a11y-witness-summary.md" \
+          --marker=a11y-witness || status=$?
+        # Outputs are set BEFORE propagating the failure, so a failing check still exposes its numbers to
+        # later steps. Reading them from the result rather than re-deriving keeps one source of truth.
+        node -e '
+          const r = require(process.argv[1]);
+          const fs = require("fs");
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `findings=${r.verdict.findings.length}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `task-completable=${r.verdict.taskCompletable}\n`);
+        ' "${{ steps.capture.outputs.result-json }}"
+        exit $status
+
+    # Last, and `always()`, so the report still lands when the check is failing -- which is exactly when
+    # someone wants to read it. `--edit-last --create-if-none` updates the previous comment instead of
+    # adding one per push; the marker in the body makes it identifiable.
+    - name: Comment on the pull request
+      if: ${{ always() && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh pr comment "${{ github.event.pull_request.number }}" \
+          --body-file "$RUNNER_TEMP/a11y-witness-summary.md" \
+          --edit-last --create-if-none \
+          --repo "${{ github.repository }}" \
+          || echo "::warning::Could not post the PR comment. The job summary still has the report."
