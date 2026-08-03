@@ -102,6 +102,8 @@ Look especially for:
 
 The transcript is read line by line, so a single long heading, link, or sentence can be split across consecutive lines. Treat consecutive lines that continue a phrase, or that repeat the same role such as "heading, level 1", as ONE element. Do NOT report "split", "fragmented", or "broken-up" headings or links that are only an element wrapping across lines: that is not an accessibility problem.
 
+This applies to what you conclude, not only to how you word it. JOIN the fragments and judge the joined element. When a line ENDS with "link, <word>" and the next line BEGINS with "link, <word>", that is one link whose text wrapped — read it as the concatenation before asking whether its purpose is clear. Concretely, "link, document" ending one line and "link, use" starting the next is the single link "document use", which is descriptive; reporting "document" and "use" as two links with unclear destinations is the same error as calling them fragmented, and is wrong for the same reason. Standard footer boilerplate ("liability", "trademark", "document use", "software licensing", "privacy policy") names a specific policy document and is not vague link text.
+
 For each problem, quote the exact transcript line(s) that evidence it.
 
 Respond with ONLY a JSON object, nothing else:
