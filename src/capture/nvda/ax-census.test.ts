@@ -15,7 +15,7 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import { censusFromAXTree } from "./browser-session.mjs";
+import { censusFromAXTree, truncatedAnnouncements } from "./browser-session.mjs";
 
 const node = (role: string, name?: string, ignored = false) => ({
   role: { value: role }, name: name === undefined ? undefined : { value: name }, ignored,
@@ -57,12 +57,75 @@ test("headings, links and graphics are counted for the other sweeps", () => {
   const census = censusFromAXTree([
     node("heading", "A"), node("link", "Read more"), node("image", "A chart"), node("img", "Another"),
   ]);
-  assert.deepEqual(census, { landmark: 0, heading: 1, link: 1, graphic: 2 });
+  assert.deepEqual(census, {
+    landmark: 0, heading: 1, link: 1, graphic: 2,
+    // Names are kept alongside the counts so a TRUNCATED announcement is detectable; a count
+    // cross-check cannot see a control that is present but misnamed.
+    names: ["A", "Read more", "A chart", "Another"],
+  });
 });
 
 test("a malformed or empty tree yields zeros, not a throw", () => {
   // The oracle must never be the reason a capture fails.
-  assert.deepEqual(censusFromAXTree([]), { landmark: 0, heading: 0, link: 0, graphic: 0 });
-  assert.deepEqual(censusFromAXTree(undefined as never), { landmark: 0, heading: 0, link: 0, graphic: 0 });
-  assert.deepEqual(censusFromAXTree([null, {}] as never), { landmark: 0, heading: 0, link: 0, graphic: 0 });
+  const empty = { landmark: 0, heading: 0, link: 0, graphic: 0, names: [] };
+  assert.deepEqual(censusFromAXTree([]), empty);
+  assert.deepEqual(censusFromAXTree(undefined as never), empty);
+  assert.deepEqual(censusFromAXTree([null, {}] as never), empty);
+});
+
+/**
+ * Detecting a TRUNCATED announcement.
+ *
+ * Under guidepup's default `capture: "initial"` a log entry holds only the phrases that arrived before
+ * the first one resolved the promise, so a fragment can be recorded as the whole announcement. Measured
+ * once in 48 captures: a button announced as `"o, button"` instead of `"Open account search, button"`.
+ *
+ * `{capture: true}` prevents it by waiting the full 1s debounce per keystroke — and costs 3x (19-20s per
+ * capture becomes 58-60s, ~12h for a corpus run instead of ~2h). Detecting it against the page's real
+ * accessible names costs nothing, because the tree is already fetched.
+ *
+ * A count cross-check cannot see this: the sweep finds the right NUMBER of controls, one of them
+ * misnamed.
+ */
+test("names cover roles the COUNTS do not, or the detector cannot see its own case", () => {
+  // `button` is not a counted role -- the sweeps compare headings, landmarks, links and graphics. But the
+  // truncation this detects was a BUTTON ("o" for "Open account search"), so restricting names to counted
+  // roles left the real name absent and the detector blind to the only case it exists for. Verified on a
+  // guest before this was fixed: names came back as ["Account search"], the h1, with no button name.
+  const census = censusFromAXTree([
+    { role: { value: "heading" }, name: { value: "Account search" } },
+    { role: { value: "button" }, name: { value: "Open account search" } },
+    { role: { value: "textbox" }, name: { value: "Hire duration" } },
+  ] as never);
+  assert.equal(census.heading, 1);
+  assert.deepEqual(census.names, ["Account search", "Open account search", "Hire duration"]);
+  assert.equal(truncatedAnnouncements(["o, button"], census.names).length, 1,
+    "the button truncation must be detectable");
+});
+
+test("a name that stops short of a real accessible name is flagged", () => {
+  const found = truncatedAnnouncements(["o, button"], ["Open account search", "Account search"]);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].heard, "o, button");
+  assert.equal(found[0].name, "open account search");
+});
+
+test("a complete announcement is not flagged", () => {
+  assert.deepEqual(truncatedAnnouncements(["Open account search, button"], ["Open account search"]), []);
+});
+
+test("a control genuinely named with a short string is not flagged", () => {
+  // An exact match is fine however short. Flagging it would punish a page for a terse but real label,
+  // and a check that cries wolf gets switched off.
+  assert.deepEqual(truncatedAnnouncements(["o, button"], ["o"]), []);
+  assert.deepEqual(truncatedAnnouncements(["OK, button"], ["OK", "OK to continue"]), []);
+});
+
+test("an unrelated announcement is not flagged", () => {
+  assert.deepEqual(truncatedAnnouncements(["Submit, button"], ["Open account search"]), []);
+});
+
+test("nothing to compare against yields nothing", () => {
+  assert.deepEqual(truncatedAnnouncements(["o, button"], []), []);
+  assert.deepEqual(truncatedAnnouncements(undefined as never, undefined as never), []);
 });

@@ -20,7 +20,8 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { captureFault, FAULT } from "./capture-faults.mjs";
 import { installSpeechChannelShim } from "./speech-channel.mjs";
-import { browserAlive, launchReusable, navigateExisting, reusableArgs, structuralCensus } from "./browser-session.mjs";
+import { browserAlive, launchReusable, navigateExisting, reusableArgs, structuralCensus,
+  truncatedAnnouncements } from "./browser-session.mjs";
 import { connect } from "node:net";
 import { existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -649,9 +650,25 @@ async function startFreshWithRetry(diag) {
 //
 // This is still Guidepup owning the lifecycle (nvda.stop(), never taskkill), just recovering
 // from a state it did not create.
+// EXPERIMENT: does `{capture: true}` produce complete announcements?
+// Deliberately the guidepup default, `"initial"`, after measuring the alternative.
+//
+// `{capture: true}` makes every keystroke wait guidepup's full 1s speech debounce, which guarantees a
+// COMPLETE announcement -- with `"initial"` a log entry holds only the phrases that arrived before the
+// first one resolved the promise, so a fragment can be recorded as the whole thing. That is the
+// mechanism behind a button announced as `"o, button"` instead of `"Open account search, button"`,
+// seen once in 48 captures.
+//
+// But it costs 3x: measured 19-20s per capture on `"initial"` against 58-60s on `true`, which is ~12
+// hours for a corpus run instead of ~2. Preventing a 2% risk by tripling every capture is the wrong
+// trade when the same defect can be DETECTED for nothing: Chromium's accessibility tree already gives
+// the real accessible names on a socket this capture holds open, so `structureCrossCheck` flags a
+// truncated announcement instead. Detect cheaply, do not prevent expensively.
+const CAPTURE_OPTIONS = undefined;
+
 async function startFreshScreenReader(diag) {
   try {
-    await nvda.start();
+    await nvda.start(CAPTURE_OPTIONS);
     diag.mark("nvdaStart", { ok: true, reused: false });
     return;
   } catch (e) {
@@ -660,7 +677,7 @@ async function startFreshScreenReader(diag) {
   }
   await nvda.stop().catch((e) => diag.mark("nvdaStopLeftover", { error: errMsg(e) }));
   await waitForScreenReaderGone(diag);
-  await nvda.start();
+  await nvda.start(CAPTURE_OPTIONS);
   diag.mark("nvdaStart", { ok: true, reused: false, afterClearingLeftover: true });
 }
 
@@ -1109,6 +1126,14 @@ async function navigateByStructureThenAudit(options) {
   const census = await structuralCensus();
   options.diag.mark("structureCensus", census);
   if (census && !census.error) {
+    // A truncated announcement is not a count problem, so the count cross-check cannot see it: the sweep
+    // finds the right NUMBER of controls and one of them is named "o". Only the page's real accessible
+    // names can distinguish that from a control genuinely named "o".
+    const truncated = truncatedAnnouncements(
+      [...result.structure.formFields, ...result.structure.headings, ...result.structure.links],
+      census.names,
+    );
+    if (truncated.length) options.diag.mark("truncatedAnnouncements", { truncated });
     options.diag.mark("structureCrossCheck", crossCheckStructure({
       sweep: {
         heading: result.structure.headings.length,

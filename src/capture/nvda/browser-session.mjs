@@ -155,12 +155,20 @@ const ROLE_BUCKET = new Map([
  *   `Accessibility.getFullAXTree`'s flat node list.
  */
 export function censusFromAXTree(nodes) {
-  const census = { landmark: 0, heading: 0, link: 0, graphic: 0 };
+  const census = { landmark: 0, heading: 0, link: 0, graphic: 0, names: [] };
   for (const node of nodes ?? []) {
     // Ignored nodes are not in the tree a screen reader walks, so counting them would make the oracle
     // demand elements NVDA could never announce -- a guard that cries wolf gets removed, not heeded.
     if (!node || node.ignored) continue;
     const role = String(node.role?.value ?? "").toLowerCase();
+    // Collect the name from EVERY named node, before the role bucketing, because names serve a different
+    // purpose from counts. The counts are compared against specific sweeps, so they only cover the roles
+    // those sweeps walk; the names exist to catch a TRUNCATED announcement and must therefore cover
+    // everything a capture can announce. Restricting them to the bucketed roles left the detector unable
+    // to see the case it was built for: a button announced as "o", whose real name was not in the list
+    // because `button` is not a bucketed role.
+    const named = String(node.name?.value ?? "").trim();
+    if (named) census.names.push(named);
     const bucket = ROLE_BUCKET.get(role);
     if (!bucket) continue;
     // An unnamed `region` is NOT a landmark: ARIA requires an accessible name for `role="region"` to be
@@ -170,6 +178,29 @@ export function censusFromAXTree(nodes) {
     census[bucket] += 1;
   }
   return census;
+}
+
+/**
+ * Announcements whose name looks like a TRUNCATED version of a real accessible name.
+ *
+ * A proper-prefix match is the signature: "o" against "Open account search". Requiring a proper prefix
+ * rather than any substring keeps this from firing on the ordinary case where NVDA announces a shortened
+ * or differently-punctuated form -- it only fires when what we heard is the START of a real name and
+ * stops short, which is exactly what a partial phrase looks like.
+ */
+export function truncatedAnnouncements(spoken, names) {
+  const real = (names ?? []).map((n) => n.toLowerCase());
+  const suspect = [];
+  for (const phrase of spoken ?? []) {
+    // The announced NAME is what precedes the role, e.g. "o, button" -> "o".
+    const heard = String(phrase).split(",")[0].trim().toLowerCase();
+    if (!heard) continue;
+    // An exact match is fine, however short: a control genuinely named "o" is not a truncation.
+    if (real.includes(heard)) continue;
+    const longer = real.find((n) => n.startsWith(`${heard} `) || n.startsWith(heard) && n.length > heard.length);
+    if (longer) suspect.push({ heard: String(phrase), name: longer });
+  }
+  return suspect;
 }
 
 /**
