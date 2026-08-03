@@ -3,6 +3,7 @@ import { writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WCAG_22_AA } from "../wcag/criteria.js";
+import { judgeLocally } from "./local-judge.js";
 import { ruleFindings } from "./rules.js";
 import { applyGate } from "./verify-gate.js";
 
@@ -438,6 +439,17 @@ function mergeByConsensus(runs: Judgment[]): Judgment {
 }
 
 export async function judge(input: JudgeInput): Promise<Judgment> {
+  // `local` is the LLM-FREE path: this project's own trained scorer instead of a rented one. It needs no
+  // key, no network and no account — 87 MB of encoder and 27 KB of heads — which is what makes it usable
+  // in someone else's CI without asking them to buy anything.
+  //
+  // It composes the same way: `withRuleFindings` still contributes the deterministic rule layer, so the
+  // result is rules + scorer. What it does NOT get is `applyGate`, which exists to filter a GENERATIVE
+  // model's over-flagging; the scorer is already discriminative and carries its own evidence guard.
+  //
+  // Narrower than an LLM and deliberately so: eight criteria, 14 heads, and silent on everything else.
+  // `local-judge.ts` states what that does and does not cover.
+  if (BACKEND === "local") return withRuleFindings(await judgeLocally(input), input);
   const verdict = await runModelJudge(input);
   // Discriminative gate (opt-in): drop the model's unconfirmed semantic findings
   // and its absence findings (the rules re-supply those). No-op unless enabled.

@@ -6,7 +6,18 @@ __pycache__/
 *.log
 .DS_Store
 runs/
-models/
+# Downloaded encoders and scratch artefacts are not ours to version. The TRAINED SCORER is: it is 27 KB,
+# it is this project's actual output, and without it in the repo the LLM-free judge cannot run for anyone
+# but the machine that trained it — which is exactly how a shipped Action would have had no model at all.
+# The training report ships with it as provenance: which corpus, which encoder hash, which thresholds.
+# Note the shape: `models/*` and not `models/`. Git does not descend into an EXCLUDED DIRECTORY, so a
+# negation under `models/` can never fire and the files could only be added with `git add -f` — which
+# means a future retrain would silently not be committed. Each level has to be re-included in turn.
+models/*
+!models/screenreader-scorer/
+models/screenreader-scorer/*
+!models/screenreader-scorer/model.safetensors
+!models/screenreader-scorer/training-report.json
 
 # Corpus snapshots (scripts/corpus-snapshot.mjs) — local archives, never committed
 backups/
