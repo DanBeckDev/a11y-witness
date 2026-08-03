@@ -29,8 +29,17 @@ import type { Finding } from "./judge.js";
  * JudgeInput is assignable to this). */
 export interface RuleInput {
   transcript: string[];
-  structure?: { formFields?: string[] };
+  structure?: { formFields?: string[]; headings?: string[]; links?: string[] };
   interaction?: { controls?: string[] };
+  /**
+   * What the PAGE exposes, from the accessibility tree, as an oracle only.
+   *
+   * Two rules below assert something is ABSENT, and absence is the one claim a sweep cannot make on its
+   * own: quick navigation returns nothing both when a page has no headings and when this pipeline has
+   * accidentally left NVDA in focus mode typing its own keys into the page — which it did, on 353
+   * captures. So a rule about absence must corroborate with the tree, or it is guessing.
+   */
+  census?: { heading?: number; link?: number };
 }
 
 const EMPTY_NAME = "￼"; // ￼ — screen reader announced an element with no text/name
@@ -113,6 +122,57 @@ function addUnnamedControls(entries: string[], requireMarker: boolean, add: AddF
 
 /** Apply the deterministic absence rules to a capture. Findings carry
  * confidence 1: an empty name is a fact, not a judgment. */
+
+/**
+ * Link names that convey nothing when heard on their own.
+ *
+ * Deliberately TINY, and the exclusions matter more than the inclusions. "read more" and "learn more" are
+ * left out: 2.4.4 is Link Purpose **In Context**, so a link may take its meaning from the paragraph or list
+ * item around it, and those two almost always sit next to the text that supplies it. Firing on them would
+ * report a large share of the web. What remains is the set that context cannot rescue, because the phrase
+ * is about the mechanics of clicking rather than the destination.
+ *
+ * Worth knowing: axe does not report these at all — its `link-name` rule asks whether a link HAS a name,
+ * and "click here" has one. This is a judgement a rule scanner structurally cannot make and a screen
+ * reader hears immediately.
+ */
+const VAGUE_LINK_NAMES = new Set(["click here", "click", "here", "this link", "link", "click this"]);
+
+const isLink = (line: string): boolean => /\blink\b/i.test(line);
+
+/** 2.4.4 — a link whose announced name says nothing about where it goes. */
+function addVagueLinks(entries: string[], add: AddFinding): void {
+  for (const line of entries) {
+    if (!isLink(line)) continue;
+    const name = accessibleName(line).toLowerCase().replace(/[.,;:!?]+$/, "").trim();
+    if (!VAGUE_LINK_NAMES.has(name)) continue;
+    add("2.4.4 Link Purpose (In Context)",
+      "Link text does not say where the link goes; heard on its own it is not distinguishable from any other link",
+      line);
+  }
+}
+
+/**
+ * 1.3.1 — a page of content with no headings at all.
+ *
+ * Heading navigation is how a screen reader user skims, so a page with none forces a line-by-line read of
+ * everything to find anything. Requires the tree to CONFIRM zero headings: a sweep alone cannot tell "this
+ * page has none" from "we could not ask", and this project spent 2,122 captures not making that distinction.
+ * Also requires the page to have real content, since a fragment or an error page legitimately has none.
+ */
+function addMissingHeadings(input: RuleInput, add: AddFinding): void {
+  const exposed = input.census?.heading;
+  if (exposed !== 0) return; // undefined means no oracle, so no claim
+  if ((input.structure?.headings?.length ?? 0) !== 0) return;
+  if (input.transcript.length < MIN_CONTENT_LINES) return;
+  add("1.3.1 Info and Relationships",
+    "The page has no headings, so there is no way to skim it or tell its sections apart by structure",
+    `${input.transcript.length} announcements, no heading among them`);
+}
+
+/** Below this a page is a fragment or an error, and having no headings is unremarkable. */
+const MIN_CONTENT_LINES = 15;
+
 export function ruleFindings(input: RuleInput): Finding[] {
   const findings: Finding[] = [];
   const seen = new Set<string>();
@@ -141,6 +201,11 @@ export function ruleFindings(input: RuleInput): Finding[] {
   // addUnnamedControls).
   addUnnamedControls(input.transcript, true, add);
   addUnnamedControls([...(input.structure?.formFields ?? []), ...(input.interaction?.controls ?? [])], false, add);
+
+  // 2.4.4 and 1.3.1 — both about what a screen reader user CANNOT do: tell two links apart, or skim.
+  // Neither is reported by axe, which is the point of having them here.
+  addVagueLinks([...input.transcript, ...(input.structure?.links ?? [])], add);
+  addMissingHeadings(input, add);
 
   return findings;
 }

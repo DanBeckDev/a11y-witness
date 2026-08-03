@@ -94,3 +94,77 @@ test("the missing-description hint does not make described images fail 1.1.1", (
     assert.equal(ruleFindings({ transcript: [line] }).length, 0, line);
   }
 });
+
+// --- 2.4.4 and 1.3.1: two findings axe structurally cannot make ---
+//
+// Both come from the University of Washington "Accessible University" before/after demo, which is a real
+// good/bad pair in the wild. On the inaccessible version NVDA announced `"click here, link"` and found ZERO
+// headings, and axe reported neither 2.4.4 nor 1.3.1 — its link rule asks whether a link has a name, and
+// "click here" has one.
+
+test("a link announced as 'click here' fails 2.4.4", () => {
+  assert.deepEqual(criteria(ruleFindings({ transcript: ["click here, link"] })), ["2.4.4"]);
+});
+
+test("a descriptive link does not", () => {
+  assert.equal(ruleFindings({ transcript: ["Apply to the university, link"] }).length, 0);
+});
+
+test("'read more' is deliberately NOT reported", () => {
+  // 2.4.4 is Link Purpose *In Context*, so a link may take its meaning from the paragraph around it, and
+  // "read more" almost always sits beside the text that supplies it. Reporting it would flag a large share
+  // of the web on a criterion that explicitly permits context.
+  for (const name of ["read more, link", "Learn more, link", "more, link"]) {
+    assert.equal(ruleFindings({ transcript: [name] }).length, 0, `${name} must not be reported`);
+  }
+});
+
+test("1.3.1 fires on a content page the TREE confirms has no headings", () => {
+  const noHeadings = {
+    transcript: Array.from({ length: 20 }, (_, i) => `line ${i} of body copy on this page`),
+    structure: { headings: [], formFields: [], links: [] },
+    census: { heading: 0 },
+  };
+  assert.deepEqual(criteria(ruleFindings(noHeadings)), ["1.3.1"]);
+});
+
+test("1.3.1 does NOT fire when the sweep found nothing but the tree says there ARE headings", () => {
+  // This is the whole reason the rule needs an oracle. A sweep returns nothing both when a page has no
+  // headings and when this pipeline left NVDA in focus mode typing its own keys into the page — which it
+  // did, on 353 captures. Without the tree these two are the same input, and the rule would invent a
+  // finding out of our own bug.
+  const stuckSweep = {
+    transcript: Array.from({ length: 20 }, (_, i) => `line ${i} of body copy on this page`),
+    structure: { headings: [], formFields: [], links: [] },
+    census: { heading: 38 },
+  };
+  assert.equal(ruleFindings(stuckSweep).length, 0);
+});
+
+test("1.3.1 makes no claim without an oracle at all", () => {
+  const noCensus = {
+    transcript: Array.from({ length: 20 }, (_, i) => `line ${i}`),
+    structure: { headings: [], formFields: [], links: [] },
+  };
+  assert.equal(ruleFindings(noCensus).length, 0);
+});
+
+test("1.3.1 does not fire on a fragment or error page", () => {
+  // A page with three lines and no headings is unremarkable; the rule is about content pages.
+  assert.equal(ruleFindings({ transcript: ["Not found", "blank"], structure: { headings: [] }, census: { heading: 0 } }).length, 0);
+});
+
+test("the UW inaccessible page produces the findings a rule scanner cannot", () => {
+  // Exactly what NVDA announced, from a real capture of projects.accesscomputing.uw.edu/au/before.html.
+  const uwBefore = {
+    transcript: [
+      "graphic, au123456789.gif", "click here, link",
+      ...Array.from({ length: 18 }, (_, i) => `line ${i} of the enrollment page`),
+    ],
+    structure: { headings: [], formFields: ["edit", "check box, not checked"], links: ["click here, link"] },
+    census: { heading: 0 },
+  };
+  const found = criteria(ruleFindings(uwBefore)).sort();
+  // 1.1.1 the logo's alt text is its own filename; 2.4.4 "click here"; 1.3.1 no headings; 4.1.2 bare roles.
+  assert.deepEqual(found, ["1.1.1", "1.3.1", "2.4.4", "4.1.2"]);
+});

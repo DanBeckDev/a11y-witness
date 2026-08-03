@@ -48,7 +48,12 @@ export interface JudgeInput {
   transcript: string[];
   /** Optional structural navigation passes (skim by element type). An empty list
    * for a type means the page exposes none of it, even if it looks like it does. */
-  structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
+  structure?: { headings: string[]; landmarks: string[]; formFields: string[]; links?: string[] };
+  /**
+   * What the PAGE exposes, from the accessibility tree — an oracle for the deterministic rules only, never
+   * shown to the model (`docs/local-model.md` bars the tree as a model feature).
+   */
+  census?: { heading?: number; link?: number };
   /** Optional interaction pass: how each interactive control is announced (found
    * via quick-nav), the announced state after activating disclosures, and what
    * was announced after submitting a form with no valid input. */
@@ -98,8 +103,13 @@ Look especially for:
 - Form fields or controls announced without a clear label, or with a confusing name.
 - Text or phone numbers presented as graphics.
 - Data tables: if the cells in data rows are announced WITHOUT their row or column header (for example "column 2, 09:15" rather than "Departs, column 2, 09:15"), the header cells are not programmatically associated. If each data cell IS announced with its header, the table is fine.
-- Use the structural-navigation section (if provided): if the page clearly has visual sections but Headings found NONE, the headings are not real headings (1.3.1); if it has visual regions but Landmarks found NONE, regions are unmarked (1.3.1); a form field listed without a name there is unlabelled (3.3.2 / 4.1.2).
+- Use structural navigation as corroborating evidence, not as a finding by itself. If the ordered transcript already announces a heading or landmark role, do NOT report a failure merely because the structural-navigation list omits it: that pass can be incomplete. If the transcript contains several clear section-title lines interleaved with body text, but none are announced as headings, that supports 1.3.1. A single plain sentence—including a sentence that sounds like a section title—is not enough to establish missing heading semantics unless another direct signal identifies it as a visual heading. Likewise, "Landmarks/regions: NONE found" alone is not a WCAG failure without direct evidence of distinct regions that should be landmarks. A form field listed without a name there is unlabelled (3.3.2 / 4.1.2) only when it is actually a field, not merely a button.
+- When a line contains the U+FFFC replacement marker ("￼"), treat it as an NVDA/Guidepup element-boundary artifact. It is not an unlabelled graphic when it follows a named control such as "Email address, edit, ￼". Flag it only when the role/name is otherwise absent, for example a bare "graphic, ￼".
+- Form and dynamic-interaction probe fields are diagnostic context, not proof that every activated control is an invalid form submission. Do not invent 3.3.1 or 4.1.3 errors for ordinary named buttons. A dynamic result-change probe can support 4.1.3 only when the transcript/context shows that a user-triggered status or result count changed but the empty announcement failed to convey it.
+- Do not treat status/weather lines such as "Traffic:" or "Today:" as headings merely because they are short plain text. Do not flag a link such as "full story" when the immediately associated heading or excerpt identifies the article. Do not flag an image-only unnamed link under 2.4.4 solely because its graphic lacks a name when 1.1.1/4.1.2 already describe the direct problem.
 - Anything announced in a confusing or illogical order.
+- A named combo box/action pair such as "Quick Menu, button, Go" has meaningful control context; do not flag its short action word under 2.4.6. A single content label such as "Artichoke advice telephone hotline:" is not evidence of missing heading semantics when it follows an announced section heading; do not turn labels into headings. Likewise, an isolated trailing value after an otherwise coherent table or list is not evidence of 1.3.2 without direct context showing that the value is out of sequence.
+- An empty generic probe after an ordinary named action such as "Save changes" or "Search" is not a status-message failure. Require direct context that the action changes a result, count, validation state, or other user-relevant status before applying 4.1.3.
 
 The transcript is read line by line, so a single long heading, link, or sentence can be split across consecutive lines. Treat consecutive lines that continue a phrase, or that repeat the same role such as "heading, level 1", as ONE element. Do NOT report "split", "fragmented", or "broken-up" headings or links that are only an element wrapping across lines: that is not an accessibility problem.
 
@@ -129,7 +139,14 @@ Rules:
 - The transcript is read line by line, so one heading, link, or sentence may wrap across consecutive lines. Do NOT create a finding for a "split", "fragmented", or "broken-up" heading or link that is merely line-wrapping (for example, consecutive "heading, level 1, ..." lines that form one title). Line-wrapping is not a WCAG failure.
 - Flag 1.3.1 Info and Relationships ONLY when structure is announced WITHOUT its semantics: a visual section title read as plain text with no "heading" role, or missing list/table relationships. A heading-level skip (for example level 1 then level 4) is NOT a 1.3.1 failure. If headings, lists, and landmarks ARE announced with their roles, do not raise 1.3.1.
 - A control announced with descriptive text (for example "Change Text Size or Colors") HAS an accessible name, even if the word "link" or "button" does not appear on the same transcript line, and even if it also appears compressed elsewhere (such as a skip-link or controls landmark read at the top of the page). Do NOT flag it under 4.1.2 Name, Role, Value or 2.4.6 Headings and Labels. Reserve 4.1.2 for controls announced by ROLE ONLY with no name: a bare "button", "link", "graphic", or "edit text" with no accompanying text.
-- Drop a candidate ONLY if its evidence supports no WCAG A or AA criterion, or it is not actually a barrier. Do not invent problems absent from the transcript.
+- Treat structural navigation as corroborating evidence, not as an independent oracle. If the ordered transcript announces a heading or landmark role, do NOT report a failure merely because the structural list omits it. Report missing heading semantics only when the transcript itself shows several clear, title-like sections announced as plain text, or another direct signal explicitly identifies a plain-text line as a visual heading. An isolated plain sentence or an ambiguous structural-list mismatch is insufficient. Report missing landmarks only when the transcript/context directly establishes distinct regions that should be landmarks; "Landmarks/regions: NONE found" alone is insufficient.
+- Do not infer a missing selection, pressed, or expanded state from a static list of otherwise named controls. For example, "button, All, button, Shoes, button, Bags" does not establish a 4.1.2 failure: require an explicitly announced state, or an interaction re-read showing a state is absent or unchanged after activation. A candidate that calls this only a "potential" state problem is spurious.
+- The character "￼" (U+FFFC) is an NVDA/Guidepup element-boundary marker. It is not evidence of an unlabelled graphic when it follows a named control or field, such as "Email address, edit, ￼" or "Email, radio button, not checked, ￼". Flag it only when the role/name is otherwise absent, such as a standalone "graphic, ￼".
+- Probe metadata about form submission and control activation does not mean that every activated button is an invalid form. Apply 3.3.1 only to an actual form field whose post-submit announcement lacks an error or invalid state. Apply 4.1.3 to an empty post-action announcement only when the page/context clearly requires a user-triggered status or result update; do not flag ordinary named buttons or controls merely because their generic probe delta is empty. A positive announcement such as a changed result count satisfies the status requirement.
+- Context matters for link purpose: "full story" can be sufficiently clear when immediately associated with an announced article heading or excerpt. Do not flag status/weather lines such as "Traffic:" or "Today:" as headings merely because they are short plain text. Do not add 2.4.4 solely because an image-only link also has an unnamed graphic when the direct evidence is already covered by 1.1.1/4.1.2. Do not treat a repeated landmark/content-info announcement or a named landmark/form name as a reading-order or headings-and-labels failure by itself.
+- Keep a candidate only when its evidence directly establishes a WCAG A or AA failure. Do not turn "may", "potentially", generic structural absence, a heading-level skip, a duplicate caused by a landmark announcement, or a U+FFFC marker into a finding.
+- Do not flag 2.4.6 for a short action word like "Go" when the control is explicitly announced with a meaningful context/name such as "Quick Menu". Do not flag 1.3.1 for a single descriptive content label such as "Artichoke advice telephone hotline:"; that is a label, not a proven visual heading. Do not flag 1.3.2 from a solitary trailing value after a coherent table or list unless the transcript directly establishes that the value is out of sequence.
+- Do not flag 4.1.3 when the only evidence is an empty generic probe after an ordinary named action such as "Save changes" or "Search" and no result, count, validation, or other status change is shown.
 
 SEPARATELY, judge whether a screen-reader user could complete the stated task from what was announced. This task judgment must NOT reduce the findings: a page can be fully task-completable and still fail many criteria.
 
@@ -176,6 +193,40 @@ const VERIFY_SCHEMA = {
   },
   required: ["taskCompletable", "summary", "findings", "confidence"],
 };
+
+const SEVERITIES = new Set<Severity>(["blocker", "serious", "moderate", "minor"]);
+
+function isFiniteConfidence(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+/** Validate every field before a backend result can reach the report renderer.
+ * JSON schema decoding is only available on some providers, so this boundary
+ * remains mandatory for Codex, Anthropic, and older OpenAI-compatible servers. */
+export function validateJudgment(value: unknown): Judgment {
+  if (!value || typeof value !== "object") throw new Error("judge output is not an object");
+  const candidate = value as Partial<Judgment>;
+  if (typeof candidate.taskCompletable !== "boolean") throw new Error("judge output has invalid taskCompletable");
+  if (typeof candidate.summary !== "string" || !candidate.summary.trim()) throw new Error("judge output has invalid summary");
+  if (!Array.isArray(candidate.findings)) throw new Error("judge output has invalid findings");
+  if (!isFiniteConfidence(candidate.confidence)) throw new Error("judge output has invalid overall confidence");
+  const findings = candidate.findings.map((finding, index) => {
+    if (!finding || typeof finding !== "object") throw new Error(`judge finding ${index + 1} is not an object`);
+    const item = finding as Partial<Finding>;
+    if (typeof item.issue !== "string" || !item.issue.trim()) throw new Error(`judge finding ${index + 1} has invalid issue`);
+    if (typeof item.wcag !== "string" || !item.wcag.trim()) throw new Error(`judge finding ${index + 1} has invalid wcag`);
+    if (typeof item.evidence !== "string" || !item.evidence.trim()) throw new Error(`judge finding ${index + 1} has invalid evidence`);
+    if (!SEVERITIES.has(item.severity as Severity)) throw new Error(`judge finding ${index + 1} has invalid severity`);
+    if (!isFiniteConfidence(item.confidence)) throw new Error(`judge finding ${index + 1} has invalid confidence`);
+    return item as Finding;
+  });
+  return {
+    taskCompletable: candidate.taskCompletable,
+    summary: candidate.summary,
+    findings,
+    confidence: candidate.confidence,
+  };
+}
 
 function transcriptBlock(input: JudgeInput): string {
   return [
@@ -399,8 +450,8 @@ async function judgeOnce(input: JudgeInput): Promise<Judgment> {
     // If recall fails to parse, stage 2 still audits the transcript directly.
   }
   process.stderr.write(`Recall pass surfaced ${candidates.length} candidate issues.\n`);
-  const verdict = await ask("verify", buildVerifyPrompt(input, candidates), VERIFY_SCHEMA);
-  const judged = JSON.parse(extractJson(verdict)) as Judgment;
+    const verdict = await ask("verify", buildVerifyPrompt(input, candidates), VERIFY_SCHEMA);
+    const judged = validateJudgment(JSON.parse(extractJson(verdict)));
   judged.findings = keepRealCriteria(judged.findings ?? []);
   return judged;
 }

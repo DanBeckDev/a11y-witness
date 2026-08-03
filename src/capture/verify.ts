@@ -170,14 +170,22 @@ export function captureMentionsTitle(capture: CapturedAnnouncements, title: stri
   return announcedPageContent(capture);
 }
 
-/** The census mark itself, for the counts rather than the names. */
-function pageCensus(capture: CapturedAnnouncements): { heading?: number } | null {
+/**
+ * The census mark itself, for the counts rather than the names.
+ *
+ * Exported because the deterministic rules need it too: two of them assert something is ABSENT, and a
+ * sweep alone cannot tell "the page has none" from "we could not ask".
+ */
+export function pageCensus(capture: CapturedAnnouncements): { heading?: number; link?: number } | null {
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
   for (const mark of marks) {
     if (typeof mark !== "object" || mark === null) continue;
-    const record = mark as { event?: unknown; heading?: unknown; error?: unknown };
+    const record = mark as { event?: unknown; heading?: unknown; link?: unknown; error?: unknown };
     if (record.event !== "structureCensus" || record.error) continue;
-    return { heading: typeof record.heading === "number" ? record.heading : undefined };
+    return {
+      heading: typeof record.heading === "number" ? record.heading : undefined,
+      link: typeof record.link === "number" ? record.link : undefined,
+    };
   }
   return null;
 }

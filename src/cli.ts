@@ -23,7 +23,7 @@ import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "./spike/layers.js";
 import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "./capture/local-vm.js";
-import { captureDoubt, captureMentionsTitle, type CaptureDoubt } from "./capture/verify.js";
+import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "./capture/verify.js";
 
 interface Args {
   url: string;
@@ -265,6 +265,9 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
     transcript: cap.transcript,
     structure: cap.structure,
     interaction: cap.interaction,
+    // The tree's own counts, so the rules that assert an ABSENCE can corroborate it. Without this a page
+    // with no headings and a capture that failed to reach them are the same input.
+    census: pageCensus(cap) ?? undefined,
   });
 
   if (json) {

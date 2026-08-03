@@ -103,6 +103,43 @@ One trap worth recording: run the action's snippets under **bash**, not zsh. `st
 variable in zsh, so `status=0` fails with "read-only variable: status" — an artefact of the shell, not of
 the action, which declares `shell: bash`.
 
+## The demonstration: a real before/after pair
+
+`projects.accesscomputing.uw.edu/au/before.html` and `after.html` — the University of Washington's
+"Accessible University" demo, an expert-built inaccessible page and its accessible twin. Not ours, not
+synthetic, and the closest thing to ground truth available in the wild. Both layers, LOCAL judge:
+
+| | before (inaccessible) | after (accessible) |
+|---|---|---|
+| screen-reader layer | 1.1.1, 1.1.1, 4.1.2, **2.4.4**, **1.3.1** | **none** |
+| axe | 1.4.3, 3.1.1, 1.1.1, 4.1.2, 1.4.1, 2.5.8 | **none** |
+
+**Two findings only the screen-reader layer produced**, and the evidence is what a user hears:
+
+```
+2.4.4 Link Purpose      heard: "click here, link"
+1.3.1 Info & Relationships   heard: "102 announcements, no heading among them"
+```
+
+axe reports neither, and not by oversight: its `link-name` rule asks whether a link HAS an accessible
+name, and "click here" has one. Its heading rules are best-practice tagged. Both are judgements about the
+*lived experience* — can you tell two links apart, can you skim the page — which a static DOM inspection
+cannot make. Meanwhile axe found four things a screen reader cannot perceive at all (contrast, page
+language, colour-only meaning, target size). Neither layer subsumes the other; that is ADR 0002's thesis
+demonstrated on somebody else's pair rather than asserted on our own.
+
+**The accessible version is clean on both layers.** That control matters more than the findings: the same
+rules that fire five times on `before` fire zero times on `after`, which has 8 headings and descriptive
+link text. Across the 1,061 conformant pages of the corpus the new 2.4.4 rule fires **0** times, and 38
+times on their inaccessible twins.
+
+One more thing this pair exposed, recorded because it changes what can be claimed: **the trained scorer
+contributed nothing here.** It scored every criterion below 0.002 on the inaccessible page — 2.4.4 at
+4.5e-12 — while scoring 0.997 and 0.985 on the corpus pages it was trained on. Every finding above came
+from the deterministic rule layer. The scorer is sharp on its own distribution and silent off it, so
+`judge-backend: local` is currently the rule layer doing the work on real sites. Retraining on the same
+synthetic corpus will improve calibration, not generalisation.
+
 ## Tested against real sites in the wild
 
 Run locally through `action-dry-run.sh`, full setup, both layers, LOCAL judge — no LLM, no key.
