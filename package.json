@@ -38,7 +38,7 @@
     "worker:compare": "node scripts/compare-workers.mjs",
     "evidence:check": "tsx scripts/evidence-check.mjs",
     "guest:run": "node scripts/guest-run.mjs",
-    "gate:stability": "node scripts/stability-gate.mjs",
+    "gate:stability": "tsx scripts/stability-gate.mjs",
     "fleet:normalise": "node scripts/normalise-fleet.mjs",
     "corpus:snapshot": "node scripts/corpus-snapshot.mjs",
     "training:repeat": "tsx src/training/repeat-capture.mjs",
