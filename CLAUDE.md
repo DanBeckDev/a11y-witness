@@ -391,6 +391,58 @@ Consequences, all of which are now enforced:
 
 Upgrading guidepup is an evidence change: run `npm run evidence:check` and expect a recapture.
 
+### Focus mode makes quick-nav keys TYPE THEMSELVES INTO THE PAGE
+
+The worst evidence defect this project has had, and it ran for 2,122 captures with every check green.
+
+NVDA has two modes. In **browse mode** single letters are navigation commands (`h` heading, `k` link, `f`
+form field, `g` graphic, `l` list). In **focus mode** they are passed to the application — so they are
+typed into whatever has focus. From `browseMode.py`, not inference:
+
+- `autoPassThroughOnFocusChange = boolean(default=true)` in `configSpec.py`, and `shouldPassThrough`
+  returns True for `State.EDITABLE`. So a focus change into an editable control switches focus mode ON.
+- `reason == OutputReason.QUICKNAV: return False` — quick-nav itself never switches it on. **Activating a
+  control does**, because that is a real focus change: an accessible form moves focus to the field it
+  rejected, a disclosure moves it into what it opened.
+- It STICKS. `QuickNavItem.moveTo` returns early, still in focus mode, whenever the next target is
+  focusable.
+
+So every sweep after an activation typed its own commands into the page under test. Decoded from
+apache.org's search box, which is how this was finally proved:
+
+```
+FFffGGggKKkkLLll  =  Shift+F,Shift+F,f,f   Shift+G,…,g,g   Shift+K,…,k,k   Shift+L,…,l,l
+                     formField prev/next   graphic         link            list
+```
+
+apache.org search-as-you-typed it, rendered "1 result for FFffGGggKKkkLLll", and this tool read that as a
+page behaviour and reported a WCAG 3.3.1 failure. The finding was our own keystrokes.
+
+**Measured cost on the corpus this invalidated:** 353 captures activated a control and then found 0 links,
+0 graphics and 0 lists. And 125 pairs carried the artefact on **exactly one variant, never both** — always
+the conformant one, since only an accessible form focuses the field it rejected. That is a pair differing
+by the measuring tool, the U+FFFC lesson again, and worse here because the artefact **correlates with the
+property under test** and is therefore a shortcut feature available to the trained scorer. All 125 are
+`form-error-*`; retrain after recapturing.
+
+Rules that follow:
+
+- **Restore browse mode after anything that activates a control**, and do not trust one remedy. Escape is
+  NVDA's own route out (`script_disablePassThrough`, flagged `ignoreTreeInterceptorPassThrough` so it is
+  reachable from focus mode), and it was **not enough on apache.org**, whose search panel behaves like an
+  embedded document and needs `NVDA+Ctrl+Space`. The sweep detects the echo and escalates.
+- **`nvda.press("Escape")`, never `nvda.perform(keyboardCommands.exitFocusMode)`.** Both are Escape on
+  paper; only `press` worked, measured. `anchorToTop` has used `press` for this since long before anyone
+  understood why.
+- **A one- or two-character phrase is proof of this fault, not noise.** `MIN_CONTROL_NAME_LEN = 3` silently
+  skipped it with a comment calling it a "stray key echo" — the symptom was named and never diagnosed. The
+  sweep now reports `stopPhrase`, so `found=0 stop=repeat` (which says only "nothing") became
+  `stopPhrase: "k"` (which says everything). An unrecoverable sweep stops as `focusModeStuck`, because
+  "this page has no links" and "we could not ask" must never be the same evidence.
+- **`anchorToTop`'s comment already documented all of this.** The remedy was applied only to the
+  post-submit re-read, which is exactly why that was the one sweep that never broke. When a comment names
+  a browser or screen-reader behaviour, check every path that behaviour can reach.
+
 ### Wait for the condition, never `sleep` a duration
 
 The capture path had 18 bare `sleep()` calls against 3 polling loops, and one of them caused the worst
