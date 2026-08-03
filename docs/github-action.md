@@ -103,6 +103,41 @@ One trap worth recording: run the action's snippets under **bash**, not zsh. `st
 variable in zsh, so `status=0` fails with "read-only variable: status" — an artefact of the shell, not of
 the action, which declares `shell: bash`.
 
+## Tested against real sites in the wild
+
+Run locally through `action-dry-run.sh`, full setup, both layers, LOCAL judge — no LLM, no key.
+
+**`w3.org/WAI` — the W3C's own accessibility site.** 143 announcements; 19 headings, 15 landmarks, 42
+links, 10 form fields captured. **Zero findings**, and not marginally: the highest score was 0.049 against
+a 0.4 threshold. A false positive here would have been damning.
+
+**`news.ycombinator.com` — a real site, not built for accessibility.** 151 announcements, 3 findings, all
+true positives: the search box is announced as a bare `edit` with no label (3.3.2, 4.1.2) and the logo has
+no alt text (1.1.1). The 1.1.1 was caught by the `"missing image descriptions"` hint, i.e. by the fix for
+NVDA's nondeterministic `"unlabeled"` prefix.
+
+The same run with `axe: true` shows why there are two layers rather than one:
+
+| criterion | screen-reader layer | axe |
+|---|---|---|
+| 1.1.1 image-alt | yes | yes — **the layers agree** |
+| 4.1.2 label | yes | yes — **agree** |
+| 1.4.3 contrast | — | yes — a screen reader cannot perceive it |
+| 2.5.8 target size | — | yes — likewise |
+| what a user actually HEARS (`edit`, and nothing else) | yes | axe cannot say this |
+
+They corroborate where they overlap and each covers what the other structurally cannot. That is ADR 0002's
+thesis, demonstrated rather than asserted.
+
+Two rough edges found by doing this, both recorded rather than hidden:
+
+- The prose used to state a count (`"1 confirmed failure(s)"`) above a table listing **three**, because
+  `judge()` appends the rule layer's findings AFTER the local judge writes its summary. The summary now
+  carries no number: the renderer counts the findings, so there is one source of truth.
+- `taskCompletable` is derived from "did anything score as a blocker", because this layer has no head for
+  task completion. On that site that reads `No` off an unlabelled search box, though the stated task
+  ("read the top story") does not need search. It is a coarse proxy and is documented as one.
+
 ## Outputs
 
 | Output | Use |

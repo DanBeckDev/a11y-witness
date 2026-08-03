@@ -119,3 +119,17 @@ test("but a capture that DOES carry structure is still guarded", () => {
   assert.equal(hasEvidenceFor("2.4.4", withStructure), false, "links recorded and empty IS informative");
   assert.equal(hasEvidenceFor("4.1.2", withStructure), true);
 });
+
+test("the summary states no COUNT, because rules are appended after it", () => {
+  // `judge()` calls `withRuleFindings` after this layer returns, so a number written into the summary is
+  // stale before anyone reads it. Caught on a real site: the prose said "1 confirmed failure(s)" above a
+  // table listing three. The renderer counts the findings; the prose must not compete with it.
+  const { findings } = findingsFromScores({ "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton);
+  assert.equal(findings.length, 1);
+  for (const summary of [
+    "No failures were confirmed for the eight criteria this layer scores. Other criteria are unchecked, not clean.",
+    "Confirmed failures below, scored against the eight criteria this layer covers. Other criteria are unchecked, not clean.",
+  ]) {
+    assert.doesNotMatch(summary, /\d+\s+(confirmed|finding|failure)/i, `summary must not embed a count: ${summary}`);
+  }
+});
