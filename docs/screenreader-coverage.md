@@ -14,7 +14,7 @@ is real.
 |---|---|---|---|
 | Read the page start to finish | line-by-line stepping | `transcript` | — |
 | Jump heading to heading | `H` / `Shift+H` | `structure.headings` | 1.3.1, 2.4.6 |
-| Jump between regions | `D` / `Shift+D` | `structure.landmarks` | 1.3.1, 2.4.1 |
+| Jump between regions | `D` / `Shift+D` | `structure.landmarks` (**incomplete, see caveat**) | 1.3.1, 2.4.1 |
 | Tab-target hunt for controls | `F` / `Shift+F` | `structure.formFields` | 1.3.1, 4.1.2 |
 | Operate a control, hear the result | activate in place, diff the speech log | `interaction.stateChanges` | 4.1.2 |
 | Submit a form, hear the errors | submit, then re-scan fields | `interaction.formChanges`, `postSubmitFields` | 3.3.1, 3.3.3 |
@@ -27,12 +27,44 @@ is real.
 The first nine are on by default and cost ~15–17 s per capture. The last two are opt-in per
 capture — `"probeFocus": true` (adds ~8 s) and `"probeTables": true` (see the caveat below).
 
-### Caveat: table cells are not dataset-grade yet
+### Caveat: `landmarks` cannot see a landmark that spans the whole document
+
+`structure.landmarks` is swept with `D`/`Shift+D`, and quick navigation **cannot reach a landmark that
+contains the caret**. NVDA's `browseMode.py` searches by START position — `_iterNodesByType(type,
+"next"|"previous", info)` — and an enclosing item requires a third direction, `"up"`, which no quick-nav
+key uses. Its own docs say a landmark's name is spoken "when jumping inside from **outside**" it.
+
+So a `<main>` wrapping the entire page is invisible to the sweep, because every position the caret can
+occupy is inside it. Measured: **2,063 of 2,064 corpus captures whose page contains `<main>` never name
+it.** Anchoring does not help and makes things worse — `Ctrl+Home` is still inside a `<main>` that starts
+at document position 0, and adding an anchor before this sweep turned `["form, Hire duration"]` into `[]`.
+
+**What this does and does not affect, measured rather than assumed:**
+
+- **Dataset signals: unaffected.** All 58 landmark cases use `{type: "structure-empty", field:
+  "landmarks"}`, and their *bad* variants contain no landmark elements at all — so `[]` is the correct
+  answer, and `check-signals` scores them 58/58 discriminating.
+- **The local model: unaffected.** The exporter excludes `1.3.1:missing-landmark` outright.
+- **The judge: affected.** It sees `landmarks: []` on a page that does have a `main`, and inferring
+  "regions are unmarked" from that is wrong. This is why the judge prompt now says
+  "'Landmarks/regions: NONE found' alone is not a WCAG failure without direct evidence".
+
+**Read an empty `landmarks` as "no landmark was reachable by quick navigation", never as "the page
+exposes none."** They are different claims, and only the first one is evidence.
+
+NVDA's Elements List (`NVDA+F7`) *is* authoritative here — it lists `main` — and is available as
+`"probeElementsList": true`, which also cross-checks the sweep counts (`structureCrossCheck`). It is
+opt-in because it costs **~11 s** per capture even when reading landmarks alone: every keystroke waits
+for guidepup's 1 s speech-quiet debounce, and the walk needs about ten. Reading all five types the
+dialog supports costs **~39 s** (20 s → 59 s measured), which no corpus run can afford.
+
+### Caveat: table cells remain opt-in
 
 `tableCells` works and it discriminates — a table with `<th>` announces `"Departs, column 2,
 09:15"` where one without says `"column 2, 09:15"`, which is the 1.3.1 evidence nothing else
-gives us. But it is **not yet deterministic**, so it is off by default and **must not be used as
-dataset evidence**.
+gives us. It is **not yet deterministic**, so it remains off for ordinary captures. Table cases
+explicitly request the probe and use only the announced cell wording, never the number of cells, as
+dataset evidence; a pair without an observable bad cell is skipped rather than treated as a match.
 
 Measured over 18 captures of one unchanged page across three workers: 4, 2, 4, 4, 1, 4, 4 cells,
 and worse before the settle was added. In the same captures the quick-nav sweeps were rock steady
@@ -63,10 +95,10 @@ When it does, `transcript`, `headings` and `tableCells` collapse together — on
 three, which is what made the probe look flaky in the first place. Those are refused by the dataset, so
 they cost a retry and never become evidence.
 
-That met the criterion set here, so the probe is no longer suspected of being timing-dependent. It
-stays **opt-in** anyway, because five runs on ONE page with ONE worker is not the corpus: promoting it
-to dataset evidence wants the same test across several table shapes and more than one guest. That is
-the remaining step, not a fresh doubt.
+That met the criterion set for the signal, so the probe is no longer suspected of measuring the wrong
+thing. It stays **opt-in** for ordinary captures because five runs on ONE page with ONE worker is not
+the corpus: promoting it to a default probe wants the same test across several table shapes and more
+than one guest. The current table cases are the deliberate, bounded use of the signal.
 
 Two fixes were needed, not one, and the second mattered more than the delta:
 
@@ -101,8 +133,8 @@ The lesson is the familiar one: three fields varying together was one fault, not
 npm run training:repeat -- --url=http://<host>:5050/<table-case>/good --times=5 --probe-tables
 ```
 
-It exits non-zero if any field varies. Until that passes, `tableCells` stays opt-in and out of the
-dataset.
+It exits non-zero if any field varies. `tableCells` stays opt-in outside the table cases, and the
+table signal remains presence-based so output-count variation cannot create a label.
 
 ## Not driven yet
 

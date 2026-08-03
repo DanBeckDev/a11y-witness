@@ -20,6 +20,7 @@ import { resolve } from "node:path";
 import { compareCapture, readCapture, summarise } from "../src/capture/evidence-diff.mjs";
 import { isEvidence } from "../src/training/capture-decisions.mjs";
 import { titleOf } from "../src/capture/verify.js";
+import { leasePageServer } from "../src/training/page-server.mjs";
 
 const DATASET = resolve(process.cwd(), "runs/screenreader-dataset");
 const BASELINE = resolve(DATASET, "captures");
@@ -85,13 +86,51 @@ async function pageTitle(testCase, variant) {
     if (!response.ok) return null;
     return titleOf(await response.text());
   } catch {
-    return null; // cannot read the page: skip the gate rather than reject on a network blip
+    return null;
   }
+}
+
+/**
+ * Refuse to run at all unless the pages are actually being served.
+ *
+ * This is not defensive padding; it is the difference between a verdict and a lie. `pageTitle` returns
+ * null when it cannot read a page, and the integrity gate below is written as
+ * `if (title !== null && !isEvidence(...))` -- so a null SKIPPED the gate. With the page server down,
+ * every title read failed, every gate was skipped, and the run captured Edge's "hmmm... can't reach
+ * this page" for all 48 cases, compared those against real evidence, and concluded:
+ *
+ *     48 compared: 0 same, 0 drift, 48 changed
+ *     evidence CHANGED -- bump CAPTURE_PROTOCOL_VERSION and recapture
+ *
+ * Acting on that would have invalidated 2,122 captures because a static file server was not running.
+ * "Cannot verify" must never resolve to "proceed" in a tool whose whole output is a verdict.
+ */
+async function requirePagesServed(cases) {
+  const probe = cases[0];
+  for (const variant of ["good", "bad"]) {
+    if (await pageTitle(probe, variant) !== null) return;
+  }
+  process.stderr.write(
+    `Cannot read ${hostPages}/${probe.id}/good.html — the dataset pages are not being served.\n` +
+    "Refusing to run: without the page title there is nothing to check a capture AGAINST, so every\n" +
+    "capture would be compared ungated and an error page would read as changed evidence.\n" +
+    "Start the pages (a run leases them automatically) or set DATASET_BASE_URL.\n");
+  process.exit(2);
 }
 
 const selected = stratify(manifestCases(), sampleSize);
 process.stdout.write(`Evidence check: ${selected.length} case(s), both variants, against ${worker}\n`);
 process.stdout.write(`Pages: ${hostPages}\nBaseline: ${BASELINE}\n\n`);
+
+// Lease the pages the same way a real run does, instead of assuming somebody left a server up. What
+// had been serving them here was a manual `npx serve` from eight days earlier; when it was cleared,
+// this tool silently began capturing Edge's error page.
+const pagesLease = await leasePageServer({
+  root: resolve(DATASET, "pages"),
+  port: Number(process.env.DATASET_PAGES_PORT || 5050),
+  probePath: `${selected[0].id}/good.html`,
+});
+await requirePagesServed(selected);
 
 const results = [];
 for (const testCase of selected) {
@@ -111,7 +150,14 @@ for (const testCase of selected) {
     // Apply the pipeline's OWN gates before comparing. A capture a real run would reject and retry is
     // not evidence, so diffing it produces a false CHANGED and blames the change for a bad capture.
     const title = await pageTitle(testCase, variant);
-    if (title !== null && !isEvidence(candidate, title)) {
+    if (title === null) {
+      // Preflight proved the server is up, so this is a per-page failure. Skip it: comparing a
+      // capture we cannot gate is how an error page came to read as changed evidence.
+      results.push({ id: testCase.id, variant, comparison: { verdict: "SKIPPED", changes: [], phrases: null } });
+      process.stdout.write(`  SKIPPED     ${testCase.id}.${variant}  page title unreadable; cannot gate, so not compared\n`);
+      continue;
+    }
+    if (!isEvidence(candidate, title)) {
       results.push({ id: testCase.id, variant, comparison: { verdict: "REJECTED", changes: [], phrases: null } });
       process.stdout.write(`  REJECTED    ${testCase.id}.${variant}  the pipeline would reject this capture; excluded\n`);
       continue;
@@ -127,6 +173,8 @@ for (const testCase of selected) {
     process.stdout.write(`  ${comparison.verdict.padEnd(11)} ${testCase.id}.${variant}  ${detail}\n`);
   }
 }
+
+await pagesLease.release();
 
 const summary = summarise(results);
 mkdirSync(OUT, { recursive: true });

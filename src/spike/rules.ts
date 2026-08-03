@@ -53,6 +53,25 @@ const FILENAME_RE = /\b(img[\s_]?\d+|\S+\s+dot\s+(jpe?g|png|gif|svg|webp|bmp)|\S
 // NVDA spells out a missing alt: it announces "Unlabelled graphic".
 const UNLABELLED_RE = /\bunlabell?ed\b/i;
 
+/**
+ * Edge's own prompt for an image it has no description for.
+ *
+ * Measured, not assumed: the same unchanged page announced
+ *
+ *   "unlabeled graphic, to get missing image descriptions, open the context menu."   2 of 3 captures
+ *   "graphic, to get missing image descriptions, open the context menu."             1 of 3 captures
+ *
+ * so `UNLABELLED_RE` alone missed 1.1.1 on a third of captures of an image with NO alt text — a false
+ * negative in a criterion the rule layer owns authoritatively. Note which part moved: the word
+ * "unlabeled" is the UNSTABLE token and this hint is the STABLE one, and the hint is emitted precisely
+ * BECAUSE there is no text alternative. Keying on the stable signal is therefore both more reliable
+ * and more directly about the failure.
+ *
+ * This is additive: a capture that still says "unlabeled" matches the first branch exactly as before,
+ * so no existing finding changes.
+ */
+const NO_DESCRIPTION_HINT_RE = /missing image descriptions?\b/i;
+
 /** Reduce an announcement to its accessible NAME by removing role/state tokens,
  * the empty-name marker, and punctuation. An empty result means no name. */
 function accessibleName(announcement: string): string {
@@ -108,7 +127,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   // name, or a file name used as the alt text.
   for (const line of input.transcript) {
     if (!isImage(line)) continue;
-    if (UNLABELLED_RE.test(line)) {
+    if (UNLABELLED_RE.test(line) || NO_DESCRIPTION_HINT_RE.test(line)) {
       add("1.1.1 Non-text Content", "Image announced as unlabelled (no text alternative)", line);
     } else if (hasEmptyName(line)) {
       add("1.1.1 Non-text Content", "Image announced with no text alternative", line);

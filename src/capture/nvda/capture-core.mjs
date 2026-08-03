@@ -249,6 +249,7 @@ async function runCapturePhases(url, opts, diag) {
   const { structure, interaction } = await navigateByStructure({
     deadline, diag,
     probeForms: !!opts.probeForms, probeFocus: !!opts.probeFocus, probeTables: !!opts.probeTables,
+    probeElementsList: !!opts.probeElementsList,
     task: opts.task,
   });
 
@@ -1065,7 +1066,7 @@ async function readWithRetry({ steps, navStrategy, deadline, diag, title, silent
 // quick-nav, and — while a control is under the cursor — operate it to capture
 // the announcements only interaction reveals. Returns the structure model and
 // the interaction model.
-async function navigateByStructure({ deadline, diag, probeForms, probeFocus, probeTables, task }) {
+async function navigateByStructure({ deadline, diag, probeForms, probeFocus, probeTables, probeElementsList, task }) {
   const K = nvda.keyboardCommands;
   const interaction = { stateChanges: [], formChanges: [], sweepLog: [] };
   const onFormField = (phrase) => operateControl(phrase, { probeForms, deadline, interaction, task });
@@ -1088,6 +1089,14 @@ async function navigateByStructure({ deadline, diag, probeForms, probeFocus, pro
   try {
     structure.headings = await collectByType(
       { prev: K.moveToPreviousHeading, next: K.moveToNextHeading }, { label: "heading", onItem: null, deadline, diag, trips });
+    // INCOMPLETE BY CONSTRUCTION, and that is not fixable here. Quick navigation cannot reach a
+    // landmark containing the caret -- NVDA searches by start position and needs a separate "up"
+    // direction for enclosing items -- so a `<main>` wrapping the page is invisible to this sweep.
+    // 2,063 of 2,064 corpus captures whose page has a `<main>` never name it. Anchoring makes it worse
+    // (Ctrl+Home is still inside such a main; it turned ["form, Hire duration"] into []), and NVDA's
+    // Elements List, which does list it, costs ~11s per capture. See docs/screenreader-coverage.md.
+    //
+    // An empty result therefore means "nothing reachable by quick-nav", NOT "the page exposes none".
     structure.landmarks = await collectByType(
       { prev: K.moveToPreviousLandmark, next: K.moveToNextLandmark }, { label: "landmark", onItem: null, deadline, diag, trips });
     // Enumerate interactive controls with the form-field command ("F"), which
@@ -1163,6 +1172,28 @@ async function navigateByStructure({ deadline, diag, probeForms, probeFocus, pro
   // Last, because it re-anchors and leaves the cursor in focus mode -- anything position
   // dependent has to have run already.
   const focusOrder = probeFocus ? await probeFocusOrder({ deadline, diag }) : [];
+  // Last of all, and opt-in: it opens a modal dialog and leaves the caret somewhere arbitrary, so
+  // nothing position-dependent may run after it.
+  if (probeElementsList) {
+    const authoritative = await probeElementsListCounts({ deadline, diag });
+    if (authoritative) {
+      diag.mark("structureCrossCheck", crossCheckStructure({
+        sweep: {
+          heading: structure.headings.length,
+          landmark: structure.landmarks.length,
+          formField: structure.formFields.length,
+        },
+        elementsList: {
+          heading: authoritative.heading,
+          landmark: authoritative.landmark,
+          // NVDA's "Form fields" list ALREADY includes buttons -- measured: a page with one input and
+          // one button reports formField=2 and button=1, the same button in both. Adding them
+          // double-counted it and reported a truncation that was not there.
+          formField: authoritative.formField,
+        },
+      }));
+    }
+  }
 
   const result = {
     controls: structure.formFields,
@@ -1207,9 +1238,9 @@ async function collectByType(commands, ctx) {
   // per-element cost. Optimising without this is guesswork.
   const startedAt = Date.now();
   const before = ctx.trips.count;
-  await sweepInDirection(commands.prev, sweepCtx);
+  const prevOutcome = await sweepInDirection(commands.prev, sweepCtx);
   const afterPrev = Date.now(), tripsPrev = ctx.trips.count - before;
-  await sweepInDirection(commands.next, sweepCtx);
+  const nextOutcome = await sweepInDirection(commands.next, sweepCtx);
   ctx.diag.mark("sweep", {
     type: ctx.label,
     found: out.length,
@@ -1217,6 +1248,11 @@ async function collectByType(commands, ctx) {
     nextMs: Date.now() - afterPrev,
     prevTrips: tripsPrev,
     nextTrips: ctx.trips.count - before - tripsPrev,
+    // WHY each direction stopped. Without this, an empty sweep and a truncated one are the same
+    // observation -- and telling a phantom from a real element needs to know whether the sweep ran
+    // out of elements, went silent, or hit the step cap.
+    prevStop: prevOutcome?.stop, nextStop: nextOutcome?.stop,
+    phrases: out.slice(),
   });
   return out;
 }
@@ -1237,23 +1273,70 @@ const CONTAINER_PREFIX = /^(?:\w[\w\s'-]*\s)?(?:landmark|region|banner|navigatio
 
 const dedupeKey = (phrase) => phrase.replace(CONTAINER_PREFIX, "").slice(0, DEDUPE_KEY_LEN);
 
+/**
+ * Given the speech log and how much of it we had already read, did the last quick-nav jump MOVE, and
+ * if so what was announced?
+ *
+ * Extracted so the rule can be tested without NVDA. The bug it replaces was a reasoning error rather
+ * than a coding one -- "the spoken phrase changed" was treated as proof of movement -- and a reasoning
+ * error is only pinned down by a test that states the intended rule. `sweep-step.test.ts` asserts the
+ * case that used to produce a phantom: NVDA silent, `lastSpokenPhrase` still holding older text.
+ *
+ * @param {{log: string[], seen: number, prev: string}} state
+ * @returns {{phrase?: string, stop?: string, seen: number}} `stop` names WHY, so a diagnostic can
+ *   distinguish "ran out of elements" from "the channel was rebuilt" -- previously both were `break`.
+ */
+export function sweepStepFromSpeech({ log, seen, prev }) {
+  const entries = log ?? [];
+  // Shorter than what we already consumed means the log was cleared under us: a speech-channel
+  // rebuild. Slicing into it would silently invent a delta out of unrelated phrases.
+  if (entries.length < seen) return { stop: "channelReset", seen: entries.length };
+  const spoken = entries.slice(seen).map((phrase) => String(phrase).trim()).filter(Boolean);
+  const advanced = entries.length;
+  // The whole point: no new speech means no movement. This is the branch where the old test lied.
+  if (!spoken.length) return { stop: "silent", seen: advanced };
+  // The LAST entry, which is exactly what lastSpokenPhrase returned -- so a capture in which NVDA
+  // speaks yields byte-identical evidence to before the fix, and 2,122 cached captures stay valid.
+  const phrase = spoken[spoken.length - 1];
+  if (/\bno (next|previous|more)\b/i.test(phrase)) return { stop: "exhausted", seen: advanced };
+  if (phrase === prev) return { stop: "repeat", seen: advanced };
+  return { phrase, seen: advanced };
+}
+
 async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline, trips }) {
-  // Seed with what is currently spoken. If a quick-nav jump leaves the spoken
-  // phrase UNCHANGED, NVDA did not move (no element of this type in that
-  // direction) and lastSpokenPhrase is just echoing a stale phrase — stop
-  // rather than record it as a phantom element. More robust than matching
-  // NVDA's "no next/previous heading" wording, which varies by version.
+  // Movement is decided by "did NVDA say anything NEW?", never by "did lastSpokenPhrase change?".
+  //
+  // The old test was unsound in the one case that matters. When a quick-nav jump does not move and
+  // NVDA says nothing at all, `lastSpokenPhrase` keeps returning an OLDER phrase -- and because that
+  // phrase was compared against a seed carried over from the previous sweep, it differed, passed
+  // every guard, and was recorded as an element that does not exist. That produced a phantom
+  // landmark on a page where NVDA's own Elements List reports "1 of 1", and the phantom changed the
+  // evidence text enough to flip a conformant page's score across a threshold.
+  //
+  // A log delta cannot be fooled by history: a stale phrase is, by definition, not in it. Note the
+  // asymmetry that makes this the right test -- silence is unambiguous evidence of not moving, while
+  // an unchanged phrase is ambiguous between "did not move" and "moved to something announced the
+  // same way".
+  //
+  // `prev` still guards genuine repetition, but starts EMPTY: seeding it across sweeps is what made
+  // a stale phrase look like news.
+  let prev = "";
+  // Read once, then advance as we go, so this costs the same two round trips per step as the
+  // lastSpokenPhrase version it replaces. `trips` therefore stays comparable across the change.
   trips.count += 1;
-  let prev = (await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, label).catch(() => "") || "").trim();
+  let seen = ((await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, label).catch(() => [])) || []).length;
   for (let i = 0; i < MAX_SWEEP_STEPS; i++) {
     if (Date.now() > deadline) break;
-    let phrase;
+    let step;
     try {
       trips.count += 2;
       await withTimeout(nvda.perform(cmd), NAV_TIMEOUT_MS, label);
-      phrase = ((await withTimeout(nvda.lastSpokenPhrase(), QUERY_TIMEOUT_MS, label)) || "").trim();
+      const log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, label)) || [];
+      step = sweepStepFromSpeech({ log, seen, prev });
     } catch { break; }
-    if (!phrase || /\bno (next|previous|more)\b/i.test(phrase) || phrase === prev) break;
+    seen = step.seen;
+    if (step.stop) return { stop: step.stop, steps: i };
+    const phrase = step.phrase;
     prev = phrase;
     if (phrase.length < MIN_CONTROL_NAME_LEN) continue; // stray key echo, not a control
     const key = dedupeKey(phrase);
@@ -1262,6 +1345,7 @@ async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline, t
     out.push(phrase);
     if (onItem) await onItem(phrase);
   }
+  return { stop: "cap", steps: MAX_SWEEP_STEPS };
 }
 
 // Element types a screen-reader user quick-navigates by, beyond the three we already sweep.
@@ -1476,6 +1560,215 @@ async function probeFocusOrder({ deadline, diag }) {
     stalled: repeats >= TRAP_REPEATS,
   });
   return stops;
+}
+
+/**
+ * NVDA's own answer to "how many elements of each type does this document have?"
+ *
+ * The structural sweeps walk the document with quick-nav, which is RELATIVE: it depends on where the
+ * caret is, and what it reports is whatever NVDA happened to speak. That makes two failure modes
+ * indistinguishable from a correct result -- a truncated sweep, and a phantom entry recorded from a
+ * phrase that was not an element of the requested type at all. A phantom landmark is what moved a
+ * conformant page's score across its threshold and flipped the verdict.
+ *
+ * The Elements List (NVDA+F7) is ABSOLUTE: it enumerates the document irrespective of caret position,
+ * and every row in the Landmarks list is by construction a landmark. Its rows are announced as
+ * "level 1, form, 1 of 1", so ONE arrow press yields the authoritative total for a type -- which is
+ * all a cross-check needs, and keeps the time spent inside a modal dialog to a minimum.
+ *
+ * `ELEMENT_TYPES` in NVDA's browseMode.py is exactly (link, heading, formField, button, landmark), and
+ * the accelerators below come from the labels in that same tuple ("Lan&dmarks" -> Alt+D). The other
+ * types we sweep -- graphics, lists, table cells -- are NOT in that dialog, so this can cross-check
+ * five of them and no more. That limit is why this supplements the sweep rather than replacing it.
+ *
+ * Opt-in, and never on by default: it opens a MODAL dialog on the guest desktop, and a modal blocks
+ * input, which is exactly how a worker wedges.
+ */
+// A generous ceiling, not an expectation: it must exceed the longest real list so the count is a
+// count rather than a cap, and any truncation is reported rather than silently returned as a total.
+const MAX_ELEMENTS_LIST_ROWS = 60;
+
+// The capture path reads LANDMARKS only. That is where the defect is -- quick navigation cannot reach a
+// landmark that spans the whole document, so 2,063 of 2,064 corpus captures never named their `<main>`
+// -- and reading one type costs a fifth of reading five. The full set stays available for the
+// cross-check, which is a verification tool and can afford to be slow.
+const LANDMARKS_ONLY_TYPE = "landmark";
+
+const ELEMENTS_LIST_TYPES = [
+  { type: "link", accelerator: "Alt+k" },
+  { type: "heading", accelerator: "Alt+h" },
+  { type: "formField", accelerator: "Alt+f" },
+  { type: "button", accelerator: "Alt+b" },
+  { type: "landmark", accelerator: "Alt+d" },
+];
+
+// A tree ROW as NVDA announces it while focused:
+//   "main, tree view item, focused, selected, expanded, 1 of 1, level 0"
+// An EMPTY tree announces only the container -- "tree view, focused" -- with no item name, which is the
+// signal that a type has no elements. Distinguishing those two is the whole reason this reads the
+// focused item rather than counting: a silent read means "could not tell", not "none".
+const TREE_ROW_RE = /\btree view item\b/i;
+const EMPTY_TREE_RE = /^tree view(?:,\s*focused)?\.?$/i;
+
+/**
+ * The item name, stripped of the tree-view chrome NVDA appends.
+ *
+ * Position and level are deliberately discarded. The obvious-looking shortcut is to parse the "1 of 1"
+ * suffix as a total, and it is WRONG: the list is HIERARCHICAL (a `<main>` containing a `<form>` reads
+ * "level 0 ... 1 of 1" with the form as a child), so that number counts siblings at one level, not
+ * elements in the document. Reading it as a total silently undercounts every nested structure.
+ */
+export function elementsListRowName(phrase) {
+  const text = String(phrase ?? "").trim();
+  if (!TREE_ROW_RE.test(text)) return null;
+  return text
+    .replace(/,?\s*tree view item\b/i, "")
+    .replace(/,?\s*\b(?:focused|selected|expanded|collapsed)\b/gi, "")
+    .replace(/,?\s*\b\d+ of \d+\b/i, "")
+    .replace(/,?\s*\blevel \d+\b/i, "")
+    .replace(/[\s,]+/g, " ")
+    .trim() || null;
+}
+
+/**
+ * Compare what the sweeps found against what NVDA's Elements List reports.
+ *
+ * Reports; decides nothing. A disagreement is evidence about the CAPTURE, not about the page, and the
+ * layers that gate on evidence must be able to see the difference.
+ *
+ * A count may legitimately be absent on either side — a type the dialog could not be read for, or one
+ * the sweep did not run — so the value type admits `undefined` deliberately. Declaring these as plain
+ * numbers would be a lie about the one input the function exists to handle carefully.
+ *
+ * @param {{sweep: Record<string, number | undefined>, elementsList: Record<string, number | undefined>}} counts
+ */
+export function crossCheckStructure({ sweep, elementsList }) {
+  const disagreements = [];
+  let compared = 0;
+  for (const { type } of ELEMENTS_LIST_TYPES) {
+    const found = sweep?.[type];
+    const authoritative = elementsList?.[type];
+    // Absent is not a disagreement: a type the dialog could not be read for must not be reported as
+    // a mismatch against a sweep that did run. Only two KNOWN numbers that differ are evidence.
+    if (typeof found !== "number" || typeof authoritative !== "number") continue;
+    compared += 1;
+    if (found !== authoritative) {
+      disagreements.push({
+        type,
+        sweep: found,
+        elementsList: authoritative,
+        // Naming the direction matters: too many is a phantom, too few is a truncation, and they have
+        // different causes and different fixes.
+        kind: found > authoritative ? "phantom" : "truncated",
+      });
+    }
+  }
+  // `compared` is not bookkeeping, it is the difference between "checked and agreed" and "checked
+  // nothing". The first version returned agrees:true when every count was unreadable, so a probe that
+  // read the wrong control and parsed nothing reported AGREES -- a verification that cannot fail,
+  // which is the exact defect this cross-check was built to catch elsewhere.
+  return { agrees: compared > 0 && disagreements.length === 0, compared, disagreements };
+}
+
+const LANDMARKS_ONLY = ELEMENTS_LIST_TYPES.filter(({ type }) => type === LANDMARKS_ONLY_TYPE);
+
+/**
+ * Walk one Elements List tree, returning every row's name in order.
+ *
+ * Extracted because the loop sat four blocks deep inside the type iteration, but it earns its own name
+ * anyway: "read the rows of one tree" is a single job, and it is the part with the subtle stopping
+ * rules. Each stop is distinguishable on purpose -- an empty tree, an unparsed row and a hit cap are
+ * three different facts, and collapsing them into "0 rows" is what makes an unread probe look like a
+ * confident zero.
+ */
+async function readTreeRows({ type, readAfter, deadline, notes }) {
+  const rows = [];
+  let previous = null;
+  for (let i = 0; i < MAX_ELEMENTS_LIST_ROWS; i += 1) {
+    if (Date.now() > deadline) { notes.push(`${type}: deadline after ${rows.length} row(s)`); break; }
+    const spoken = await readAfter(`row-${type}-${i}`, () => nvda.perform(nvda.keyboardCommands.reportCurrentFocus));
+    const phrase = spoken[spoken.length - 1] ?? "";
+    // An empty tree names no item, so this type genuinely has none. It is the only safe way to read
+    // zero: silence would mean "could not tell", and recording that as zero manufactures a finding.
+    if (EMPTY_TREE_RE.test(phrase)) break;
+    const name = elementsListRowName(phrase);
+    if (!name) { notes.push(`${type}: unparsed ${JSON.stringify(phrase).slice(0, 60)}`); break; }
+    if (name === previous) break; // ArrowDown stopped moving: this was the last row
+    rows.push(name);
+    previous = name;
+    await readAfter(`down-${type}-${i}`, () => nvda.press("ArrowDown"));
+  }
+  if (rows.length >= MAX_ELEMENTS_LIST_ROWS) notes.push(`${type}: hit the row cap, so the count is a floor`);
+  return rows;
+}
+
+/**
+ * Read the Elements List's authoritative per-type totals.
+ *
+ * Kept deliberately small: select a type by its accelerator, land on one row, parse the "N of M" NVDA
+ * appends, move on. One row is enough for the total, and every extra keystroke is time spent with a
+ * modal dialog open on the guest desktop.
+ *
+ * A type with no elements speaks NOTHING when arrowed -- measured on a page NVDA reports no landmarks
+ * for -- so an empty delta is a genuine zero rather than a failed read. That distinction is only safe
+ * because the dialog itself was confirmed to speak ("Elements List, dialog" -> "tree view") before
+ * this was written; if the dialog were silent, zero and unread would be the same observation.
+ */
+async function probeElementsListCounts({ deadline, diag, types = LANDMARKS_ONLY }) {
+  const K = nvda.keyboardCommands;
+  const counts = {};
+  const items = {};
+  const notes = [];
+  const trace = [];
+  // The offset advances instead of being re-read before every keystroke. Reading it twice per keystroke
+  // doubled the round trips, and round trips are the entire cost here: all five types measured 39s on
+  // top of a 20s capture, which is unaffordable for a 2,122-capture corpus.
+  let seen = ((await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, "elementsListSeed").catch(() => [])) || []).length;
+  const readAfter = async (label, action) => {
+    await withTimeout(action(), NAV_TIMEOUT_MS, label).catch(() => undefined);
+    const log = (await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, label).catch(() => [])) || [];
+    // A shrunken log means the speech channel was rebuilt; resynchronise rather than mis-slice.
+    if (log.length < seen) { seen = log.length; trace.push({ step: label, spoken: [], channelReset: true }); return []; }
+    const spoken = log.slice(seen).map((phrase) => String(phrase).trim()).filter(Boolean);
+    seen = log.length;
+    // Every keystroke's speech, because this dialog's focus behaviour has now been guessed wrong twice:
+    // arrowing without tabbing cycled the radio GROUP, and tabbing on every type walked focus OUT of
+    // the tree. A trace makes the next question answerable from one run instead of another deploy.
+    trace.push({ step: label, spoken });
+    return spoken;
+  };
+
+  try {
+    const opened = await readAfter("elementsListOpen", () => nvda.perform(K.browseModeElementsList));
+    // If the dialog did not announce itself it may not have opened, and arrowing blind inside the
+    // DOCUMENT instead would move the caret and corrupt everything measured after this.
+    if (!opened.some((phrase) => /elements list/i.test(phrase))) {
+      diag.mark("elementsList", { opened: false, spoken: opened });
+      return null;
+    }
+    for (const { type, accelerator } of types) {
+      if (Date.now() > deadline) { notes.push(`${type}: deadline`); break; }
+      await readAfter(`select-${type}`, () => nvda.press(accelerator));
+      // Tab to the tree, then Home for its FIRST row. The accelerator leaves focus on the radio group
+      // (arrowing there cycles TYPES, which shifted every reading by one), and ArrowDown from the tree
+      // container announced nothing at all -- both measured on the guest.
+      await readAfter(`tab-${type}`, () => nvda.press("Tab"));
+      await readAfter(`home-${type}`, () => nvda.press("Home"));
+      const rows = await readTreeRows({ type, readAfter, deadline, notes });
+      if (rows.length >= MAX_ELEMENTS_LIST_ROWS) notes.push(`${type}: hit the row cap, count is a floor`);
+      counts[type] = rows.length;
+      items[type] = rows;
+    }
+  } finally {
+    // UNCONDITIONAL, and twice. This is a MODAL dialog: leaving it open blocks input on the guest and
+    // wedges the next capture, which is a fault that once took two days to attribute correctly. Never
+    // let closing it depend on anything above succeeding.
+    for (let i = 0; i < 2; i += 1) {
+      await withTimeout(nvda.press("Escape"), NAV_TIMEOUT_MS, "escDialog").catch(() => undefined);
+    }
+  }
+  diag.mark("elementsList", { opened: true, counts, items, notes, trace });
+  return counts;
 }
 
 // Operate the control under the cursor and record what the screen reader says —

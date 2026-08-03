@@ -15,7 +15,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { judge } from "../spike/judge.js";
 import { EVAL_CASES, type EvalCase } from "./cases.js";
-import { evaluateFitness, thresholdsFromEnv } from "./fitness.js";
+import { evaluateFitness, persistentFalsePositives, thresholdsFromEnv } from "./fitness.js";
 
 const RUNS = Number(process.env.EVAL_RUNS || 1);
 
@@ -68,7 +68,8 @@ const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 interface CaseReport {
   recalls: number[];
   isFailureCase: boolean;
-  falsePositives: number;
+  /** One entry per run, so the aggregate can tell a persistent false positive from sampling noise. */
+  falsePositivesPerRun: string[][];
 }
 
 // Score a case (RUNS times), print its block, and return what the aggregate needs.
@@ -76,14 +77,21 @@ async function reportCase(c: EvalCase): Promise<CaseReport> {
   process.stderr.write(`Scoring ${c.id} ...\n`);
   const scores: RunScore[] = [];
   for (let i = 0; i < RUNS; i++) scores.push(await scoreOnce(c));
-  const recalls = scores.map((s) => s.recall);
-  const last = scores[scores.length - 1];
   const isFailureCase = c.expect.length > 0;
-  printCaseScore(c, last, recalls, isFailureCase);
-  return { recalls, isFailureCase, falsePositives: last.falsePositives.length };
+  printCaseScore(c, scores, isFailureCase);
+  return {
+    recalls: scores.map((score) => score.recall),
+    isFailureCase,
+    falsePositivesPerRun: scores.map((score) => score.falsePositives),
+  };
 }
 
-function printCaseScore(c: EvalCase, last: RunScore, recalls: number[], isFailureCase: boolean): void {
+// Takes the runs and derives the rest. `last` and `recalls` were separate parameters until they put
+// this over the argument limit -- and they were always just views of `scores`, so passing them was
+// duplication rather than information.
+function printCaseScore(c: EvalCase, scores: RunScore[], isFailureCase: boolean): void {
+  const recalls = scores.map((score) => score.recall);
+  const last = scores[scores.length - 1];
   console.log(`# ${c.id}${isFailureCase ? "" : "  (conformant: expect no findings)"}`);
   console.log(`  expect:    [${c.expect.join(", ") || "(none)"}]`);
   console.log(`  found:     [${last.found.join(", ") || "(none)"}]${RUNS > 1 ? " (last run)" : ""}`);
@@ -91,7 +99,14 @@ function printCaseScore(c: EvalCase, last: RunScore, recalls: number[], isFailur
     const range = RUNS > 1 ? ` (min ${pct(Math.min(...recalls))}, max ${pct(Math.max(...recalls))})` : "";
     console.log(`  recall:    ${pct(mean(recalls))}${range}  caught [${last.caught.join(", ") || "-"}]  missed [${last.missed.join(", ") || "-"}]`);
   }
-  console.log(`  false positives: ${last.falsePositives.length} [${last.falsePositives.join(", ") || "none"}]`);
+  const persistent = persistentFalsePositives(scores.map((s) => s.falsePositives));
+  console.log(`  false positives: ${persistent.length} [${persistent.join(", ") || "none"}]`);
+  // Show what did NOT persist. A criterion that appeared in a minority of runs is the judge's sampling
+  // noise, and hiding it is how a flaky gate gets mistaken for a clean one.
+  if (scores.length > 1) {
+    const transient = [...new Set(scores.flatMap((s) => s.falsePositives))].filter((f) => !persistent.includes(f));
+    if (transient.length) console.log(`  transient (minority of ${scores.length} runs, not gated): [${transient.join(", ")}]`);
+  }
   if (c.notes) console.log(`  note: ${c.notes}`);
   console.log("");
 }
@@ -119,14 +134,15 @@ async function main(): Promise<void> {
 
   console.log(`a11y-witness judge eval  (${RUNS} run(s) per case)\n`);
   const failureRecall: number[] = []; // recall, only on cases with expected failures
-  let totalFalsePositives = 0; // summed across the last run of every case
+  let totalFalsePositives = 0; // persistent across a majority of runs, per case
   let conformantFalsePositives = 0; // false positives on conformant (expect-none) cases
 
   for (const c of cases) {
     const report = await reportCase(c);
     if (report.isFailureCase) failureRecall.push(...report.recalls);
-    totalFalsePositives += report.falsePositives;
-    if (!report.isFailureCase) conformantFalsePositives += report.falsePositives;
+    const persistent = persistentFalsePositives(report.falsePositivesPerRun).length;
+    totalFalsePositives += persistent;
+    if (!report.isFailureCase) conformantFalsePositives += persistent;
   }
 
   const recall = failureRecall.length ? mean(failureRecall) : 1;
