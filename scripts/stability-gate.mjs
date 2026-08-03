@@ -25,15 +25,33 @@
 // point in miniature: the tool already existed and hand-rolled substitutes were worse.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { resolve } from "node:path";
+
+import { leaseWorker, guestReachableUrl } from "../src/capture/local-vm.js";
+import { leasePageServer } from "../src/training/page-server.mjs";
 
 const run = promisify(execFile);
 
 const arg = (name, fallback) =>
   process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 
-const BASE = arg("base", "http://192.168.64.1:5050");
 const TIMES = Number(arg("times", "5"));
-const WORKER = arg("worker", process.env.A11Y_WORKER);
+
+/**
+ * This gate LEASES what it needs, rather than requiring you to have set it up.
+ *
+ * It could not run at all before: `repeat-capture.mjs` refuses without a worker, and the canary URLs
+ * pointed at a page server nobody started — so with neither `A11Y_WORKER` nor a hand-run `npx serve`,
+ * all five canaries reported "harness did not start" and the gate exited 2. A gate that a corpus run is
+ * forbidden to start without, and that cannot start itself, is a gate that gets skipped; `release:gate`
+ * was broken from the day it was written for the same reason, and `capture:check` went unrun for months
+ * because it "cost a ceremony". This project's own rule: automate a check or lose it.
+ *
+ * Both leases put things back as they found them — a worker somebody had already started is left
+ * running, and a page server somebody else is serving is left alone.
+ */
+const DATASET_ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
+const PAGES_PORT = Number(process.env.DATASET_PAGES_PORT || 5050);
 
 /**
  * Canaries, each with the mechanism it exists to catch.
@@ -68,16 +86,37 @@ const CANARIES = [
   },
 ];
 
+// Leased before the first canary and released in the `finally` at the bottom, so a gate that throws
+// half way through still leaves the host as it found it.
+const pages = await leasePageServer({
+  root: resolve(DATASET_ROOT, "pages"),
+  port: PAGES_PORT,
+  probePath: `${CANARIES[0].path}.html`,
+});
+const lease = await leaseWorker({ worker: arg("worker", process.env.A11Y_WORKER), after: "restore" });
+// The GUEST fetches these pages, and the guest's localhost is not ours. `guestReachableUrl` rewrites the
+// host — skipping it is how every capture came to fetch the guest's own localhost, showing Edge
+// "localhost refused to connect" and burning three attempts per page.
+const BASE = arg("base", guestReachableUrl(pages.url, lease));
+process.stdout.write(`worker ${lease.worker} (${lease.source}) · pages ${BASE}\n`);
+
 const results = [];
-for (const { path, reason } of CANARIES) {
-  const url = `${BASE}/${path}`;
+/**
+ * One canary, captured `TIMES` times and judged.
+ *
+ * Extracted so the leases can be held in a `try/finally` around the loop without pushing the loop body
+ * to four levels of nesting -- the lint gate's limit is three, and the honest fix for depth is a named
+ * function rather than a suppression.
+ */
+async function judgeCanary({ path, reason }, { base, worker, results }) {
+  const url = `${base}/${path}`;
   process.stdout.write(`\n=== ${path} (${TIMES}x) ===\n    why: ${reason}\n`);
   // tsx, not node: repeat-capture imports isTransient from capture-decisions.mjs, which imports the
   // TypeScript verify.js. Under plain node that is ERR_MODULE_NOT_FOUND before a single line of output
   // -- which is precisely how five canaries came back "Command failed" with nothing to read. The repo
   // has hit this before with evidence-check.mjs; the fix there was the same.
-  const args = ["src/training/repeat-capture.mjs", `--url=${url}`, `--times=${TIMES}`];
-  if (WORKER) args.push(`--worker=${WORKER}`);
+  const args = ["src/training/repeat-capture.mjs", `--url=${url}`, `--times=${TIMES}`,
+    `--worker=${worker}`];
   try {
     const { stdout } = await run("npx", ["tsx", ...args], { maxBuffer: 1 << 24 });
     const varies = stdout.split("\n").filter((l) => l.includes("VARIES"));
@@ -95,32 +134,50 @@ for (const { path, reason } of CANARIES) {
       process.stdout.write(`  STABLE — ${usable} usable, all fields identical\n`);
     }
   } catch (error) {
-    // repeat-capture exits non-zero for THREE different reasons -- a field varies, a capture errored,
-    // or a capture came back empty -- and they need different responses. Collapsing them into
-    // "Command failed" made a transient capture error read exactly like genuine instability, and cost
-    // a re-run to discover the page was fine. Its output is on stdout even when it exits 1, so keep it.
-    const out = String(error.stdout ?? "");
-    const varies = out.split("\n").filter((l) => l.includes("VARIES")).map((l) => l.trim());
-    const empty = /(\d+) capture\(s\) heard nothing/.exec(out)?.[1];
-    const failedRuns = out.split("\n").filter((l) => l.trim().startsWith("FAILED")).map((l) => l.trim());
-    // An empty stdout means the child never started -- a module resolution error, a missing file --
-    // and that is a broken harness, not an inconclusive measurement. Say so rather than advising a
-    // re-run that will fail identically.
-    if (!out.trim()) {
-      const detail = `harness did not start: ${String(error.stderr ?? error.message).split("\n").find((l) => l.includes("Error")) ?? error.message.split("\n")[0]}`;
-      results.push({ path, ok: false, unstable: false, detail });
-      process.stdout.write(`  BROKEN — ${detail}\n`);
-      continue;
-    }
-    const detail = varies.length ? `UNSTABLE: ${varies.join("; ")}`
-      : empty ? `${empty} empty capture(s) — the foreground flake, not instability`
-      : failedRuns.length ? `${failedRuns.length} capture(s) errored: ${failedRuns[0]}`
-      : error.message.split("\n")[0];
-    // Only a VARIES is evidence the pipeline is nondeterministic. An errored or empty capture is a
-    // flake in the run, so it is reported and retried rather than treated as a verdict.
-    results.push({ path, ok: false, unstable: varies.length > 0, detail });
-    process.stdout.write(`  ${varies.length ? "UNSTABLE" : "INCONCLUSIVE"} — ${detail}\n`);
+    interpretFailure(error, path, results);
   }
+}
+
+/**
+ * What a non-zero exit from repeat-capture actually MEANS.
+ *
+ * Three different outcomes come back the same way -- a field varies, a capture errored, a capture heard
+ * nothing -- and only the first is evidence that the pipeline is nondeterministic. Collapsing them into
+ * "Command failed" once made a transient capture error read exactly like genuine instability and cost a
+ * re-run to discover the page was fine. repeat-capture puts its report on stdout even when it exits 1.
+ */
+function interpretFailure(error, path, results) {
+  const out = String(error.stdout ?? "");
+  const varies = out.split("\n").filter((l) => l.includes("VARIES")).map((l) => l.trim());
+  const empty = /(\d+) capture\(s\) heard nothing/.exec(out)?.[1];
+  const failedRuns = out.split("\n").filter((l) => l.trim().startsWith("FAILED")).map((l) => l.trim());
+  // An empty stdout means the child never started -- a module resolution error, a missing file -- and
+  // that is a broken harness, not an inconclusive measurement. Say so rather than advising a re-run that
+  // will fail identically. This is exactly what five "harness did not start" canaries looked like when
+  // the gate had no worker to give them.
+  if (!out.trim()) {
+    const firstError = String(error.stderr ?? error.message).split("\n").find((l) => l.includes("Error"));
+    const detail = `harness did not start: ${firstError ?? error.message.split("\n")[0]}`;
+    results.push({ path, ok: false, unstable: false, detail });
+    process.stdout.write(`  BROKEN — ${detail}\n`);
+    return;
+  }
+  const detail = varies.length ? `UNSTABLE: ${varies.join("; ")}`
+    : empty ? `${empty} empty capture(s) — the foreground flake, not instability`
+    : failedRuns.length ? `${failedRuns.length} capture(s) errored: ${failedRuns[0]}`
+    : error.message.split("\n")[0];
+  // Only a VARIES is evidence of nondeterminism. An errored or empty capture is a flake in the run, so it
+  // is reported and retried rather than treated as a verdict.
+  results.push({ path, ok: false, unstable: varies.length > 0, detail });
+  process.stdout.write(`  ${varies.length ? "UNSTABLE" : "INCONCLUSIVE"} — ${detail}\n`);
+}
+
+try {
+  for (const canary of CANARIES) await judgeCanary(canary, { base: BASE, worker: lease.worker, results });
+} finally {
+  // Release in the reverse order they were taken, and never let a release failure mask the verdict.
+  await lease.release().catch((e) => process.stderr.write(`worker release failed: ${e.message}\n`));
+  await pages.release().catch((e) => process.stderr.write(`page server release failed: ${e.message}\n`));
 }
 
 const failed = results.filter((r) => !r.ok);
