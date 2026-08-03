@@ -11,6 +11,24 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 import { captureWithNvda } from "./capture-core.mjs";
+import { leasePageServer } from "../../training/page-server.mjs";
+
+// Drive a live WORKER over HTTP instead of NVDA in-process.
+//
+//   npm run capture:check -- --worker=http://192.168.64.4:8765
+//
+// This exists because the in-process path is why this check never ran. It refuses while a worker is
+// serving -- correctly, since NVDA is one machine-wide resource -- so running it meant stopping the
+// worker on the guest, driving a scheduled task in an interactive session, and starting it again. That
+// is a ceremony, and this repo's own rule is that anything a human has to remember is something that
+// does not happen: capture-core changed many times without it ever being run once.
+//
+// Nothing is lost. Every assertion below is a pure function of the capture RESULT -- transcript,
+// structure, interaction -- all of which the worker returns over HTTP. If anything the worker path is
+// the better test, because it is the path production uses. The in-process mode stays the default so
+// capture-regression.yml on a Windows runner, which has no worker, is unaffected.
+const WORKER = process.argv.find((a) => a.startsWith("--worker="))?.slice("--worker=".length);
+const CAPTURE_TIMEOUT_MS = 300_000;
 
 const STEPS = 40; // tutorial pages are tiny; a small read-through cap keeps it fast
 const pagesDir = join(dirname(fileURLToPath(import.meta.url)), "../../eval/pages/tutorials");
@@ -116,12 +134,31 @@ function capturedText(r) {
 // and RETRY until we have genuinely read the target page (or give up loudly).
 const MAX_ATTEMPTS = 4;
 
+// The guest cannot reach the host's filesystem, so worker mode serves the same pages over HTTP and
+// addresses them by the host's LAN IP -- the same reason evidence-check derives `hostPages`.
+let pagesBase = null;
+
+async function captureOnce(check) {
+  if (!WORKER) {
+    return captureWithNvda(pathToFileURL(join(pagesDir, check.page)).href,
+      { steps: STEPS, probeForms: !!check.probeForms });
+  }
+  const response = await fetch(`${WORKER.replace(/\/$/, "")}/capture`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url: `${pagesBase}/${check.page}`, steps: STEPS, probeForms: !!check.probeForms }),
+    signal: AbortSignal.timeout(CAPTURE_TIMEOUT_MS),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(body).slice(0, 200)}`);
+  return body;
+}
+
 async function captureConfirmed(check) {
-  const url = pathToFileURL(join(pagesDir, check.page)).href;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let result;
     try {
-      result = await captureWithNvda(url, { steps: STEPS, probeForms: !!check.probeForms });
+      result = await captureOnce(check);
     } catch (e) {
       console.log(`  attempt ${attempt}/${MAX_ATTEMPTS}: capture threw: ${(e && e.message) || e}`);
       continue;
@@ -208,7 +245,8 @@ async function workerIsServing() {
   }
 }
 
-if (await workerIsServing()) {
+// In worker mode the worker SHOULD be serving -- that is what we are driving.
+if (!WORKER && await workerIsServing()) {
   console.error(
     "A capture worker is already serving on this machine. It drives the same NVDA this check " +
       "would, and whichever finishes first stops the other's screen reader.\n" +
@@ -218,8 +256,23 @@ if (await workerIsServing()) {
   process.exit(2);
 }
 
+let lease = null;
+if (WORKER) {
+  lease = await leasePageServer({
+    root: pagesDir,
+    port: Number(process.env.DATASET_PAGES_PORT || 5050),
+    probePath: CHECKS[0].page,
+  });
+  pagesBase = `http://${new URL(WORKER).hostname.replace(/\.\d+$/, ".1")}:${process.env.DATASET_PAGES_PORT || 5050}`;
+  console.log(`Driving worker ${WORKER}\nPages ${pagesBase}\n`);
+}
+
 let failures = 0;
-for (const check of CHECKS) failures += await runCheck(check);
+try {
+  for (const check of CHECKS) failures += await runCheck(check);
+} finally {
+  if (lease) await lease.release();
+}
 
 console.log(`\n${failures === 0 ? "ALL CAPTURE CHECKS PASSED" : `${failures} CAPTURE CHECK(S) FAILED`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -186,7 +186,30 @@ def main() -> None:
         for criterion, (scores, criterion_records) in scores_by_criterion.items()
     }
     if not all(details["passed"] for details in result["stability"].values()):
-        result["failureReasons"].append("capture-to-capture stability was not measured or was unstable")
+        # NOT MEASURED and UNSTABLE need different responses, so they get different messages. One
+        # combined string sent `release:gate` chasing an instability that did not exist: the gate invoked
+        # this evaluator with no --data, so there were no repeated captures to compare and stability could
+        # not be measured at all -- reported as though a field had varied. A gate whose message cannot
+        # distinguish "I could not check" from "the check failed" is the same defect this pipeline keeps
+        # finding elsewhere.
+        unmeasured = [c for c, d in result["stability"].items() if not d.get("measured")]
+        unstable = [c for c, d in result["stability"].items() if d.get("measured") and not d.get("passed")]
+        if unmeasured:
+            result["failureReasons"].append(
+                "capture-to-capture stability was NOT MEASURED for "
+                + ", ".join(sorted(unmeasured))
+                + " — pass two or more capture runs with repeated --data files (see runs/screenreader-acceptance/repeat-*.jsonl)"
+            )
+        if unstable:
+            result["failureReasons"].append(
+                "capture-to-capture stability FAILED for " + ", ".join(sorted(unstable))
+            )
+    result["passed"] = not result["failureReasons"]
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"passed": result["passed"], "failureReasons": result["failureReasons"]}, indent=2))
+    if not result["passed"]:
+        raise SystemExit(1)
     result["passed"] = not result["failureReasons"]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

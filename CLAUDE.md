@@ -831,7 +831,24 @@ Verification is layered; pick the layers your change touches:
   `src/capture/**`, so it does **not** fire for changes under `src/training/**` — which is exactly
   where the guard bug above lived.
 - `npm run eval [-- <substring>]` — judge quality against 34 labelled fixtures. Needs a local Codex login, so it **cannot run in CI**; run it when you touch the judge, prompts, criteria, or fixtures. Do **not** quote its numbers as a headline: `docs/METHODOLOGY.md` records that the guards were tuned against these cases, scoring is single-run, and there is no expert baseline yet. Report with those caveats or not at all.
-- **`src/capture/nvda/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test. After changing it, deploy (above) and run `src/capture/nvda/capture-check.mjs` **in the interactive session**, then `scripts/bench-capture.mjs` if you touched timing. capture-check refuses to run while the worker is serving, because NVDA is one machine-wide resource and two drivers stop each other's screen reader; stop the worker first and **restart it afterwards**. The VM capture is its test; the book's own rule is "refactor under test."
+- **`src/capture/nvda/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test.
+  After changing it, deploy (above) and then:
+
+  ```bash
+  npm run capture:check -- --worker=http://192.168.64.4:8765   # ~2 min from the Mac
+  ```
+
+  **Use the worker mode.** The in-process mode still exists (it is what `capture-regression.yml` runs on a
+  Windows runner, which has no worker) and it refuses while a worker is serving — correctly, since NVDA is
+  one machine-wide resource. But that refusal is why this check went unrun through many capture-core
+  changes: it meant stopping `a11ysrv` on the guest, driving a scheduled task in an interactive session,
+  and starting it again. A verification that costs a ceremony is one that does not happen, which is this
+  file's own rule about housekeeping applied to testing.
+
+  Nothing is lost by going over HTTP: every assertion is a pure function of the capture RESULT, which the
+  worker returns. It is arguably the better test, since it exercises the path production uses. Run
+  `scripts/bench-capture.mjs` too if you touched timing. The VM capture is its test; the book's rule is
+  "refactor under test".
 - **Count-based checks cannot see content rot — assert what was heard, not how much.** capture-check now gates on probe *values* (`disclosure-good` must reach `expanded`, `disclosure-bad` must stay `collapsed`) and on the read-through still carrying roles, because both lessons were learned the hard way. A readiness gate once overwrote the first line of every page with the document title, deleting the h1's `"heading, level 1, ..."` announcement everywhere: `"heading, level N"` phrases fell from 105 to 15 across 90 captures and **every check stayed green**, because the phrase count had not moved. If you change capture, compare evidence quality against a previous run, not just line counts.
 - `npm run evidence:check <worker>` — after ANY change to the capture pipeline, asks whether the
   evidence moved rather than whether the timing did. Exit 0 = ship without invalidating the cache,
