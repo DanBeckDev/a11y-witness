@@ -12,7 +12,7 @@
     "eval": "tsx src/eval/run.ts",
     "rules-check": "tsx src/eval/rules-check.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "eval:gate": "EVAL_GATE=1 tsx src/eval/run.ts",
+    "eval:gate": "EVAL_GATE=1 EVAL_RUNS=3 tsx src/eval/run.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "scan": "tsx src/scan/run-axe.ts",
@@ -43,7 +43,8 @@
     "corpus:snapshot": "node scripts/corpus-snapshot.mjs",
     "training:repeat": "tsx src/training/repeat-capture.mjs",
     "rules:score": "tsx scripts/score-rules.ts",
-    "rules:gate": "tsx scripts/score-rules.ts --gate"
+    "rules:gate": "tsx scripts/score-rules.ts --gate",
+    "release:gate": "npm run training:check-signals && npm run rules:gate && npm run training:evaluate-acceptance && npm run eval:gate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
