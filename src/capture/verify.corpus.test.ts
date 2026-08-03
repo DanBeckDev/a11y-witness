@@ -65,6 +65,44 @@ test("the corpus is present, or this test is honestly skipped", () => {
   assert.ok(true);
 });
 
+/**
+ * No probe crashed while producing this corpus.
+ *
+ * `sweepLog` is where a probe records its own failure, and until this test existed nothing read it.
+ * A perf change (`9cabfb4`) added `ctx.trips.count` to `collectByType` and did not add `trips` to the
+ * postSubmit call site, so that probe threw before its first sweep on 604 captures. Every one was
+ * caught, logged to `sweepLog`, and forgotten -- `postSubmitFields` came back `[]` across all 2,122
+ * captures, `validationErrorIsSilent` silently fell back to the evidence its own comment calls
+ * useless, and 6 cases stopped discriminating.
+ *
+ * Nothing else could have caught it. The field was empty rather than wrong, counts never moved, and
+ * the eval fixtures that DO show the probe working predate the regression, so no comparison was run
+ * against them. This is the same class as the h1 announcement that vanished from 90 captures with
+ * every check green: absence of evidence reads exactly like evidence of absence.
+ */
+test("no capture in the corpus recorded a probe crash", () => {
+  if (samples.length === 0) return;
+  // sweepLog reaches the capture file only through the `interaction` diagnostic mark -- it is NOT on
+  // `capture.interaction`, which is the shape this test first read, and reading it there made the
+  // test pass against the very corpus that carries 604 crashes. Assert against where the data is.
+  const crashed = samples
+    .map((s) => ({
+      id: `${s.id}.${s.variant}`,
+      errors: ((s.capture as { diagnostics?: { sweepLog?: string[] }[] }).diagnostics ?? [])
+        .flatMap((mark) => mark?.sweepLog ?? [])
+        .filter((line) => line.includes("ERROR")),
+    }))
+    .filter((s) => s.errors.length > 0);
+  assert.deepEqual(
+    crashed.map((c) => c.id),
+    [],
+    `${crashed.length} of ${samples.length} captures recorded a probe ERROR in sweepLog. A probe ` +
+      `that throws yields an EMPTY field, which is indistinguishable from a page that has nothing ` +
+      `to announce -- so a signal reading that field degrades silently instead of failing.\n` +
+      `First few: ${crashed.slice(0, 3).map((c) => `${c.id}: ${c.errors[0]}`).join("\n            ")}`,
+  );
+});
+
 for (const gate of GATES) {
   test(`${gate.name} rejects no capture in the corpus`, () => {
     if (samples.length === 0) return;

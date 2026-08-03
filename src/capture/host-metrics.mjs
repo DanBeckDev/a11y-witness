@@ -135,17 +135,21 @@ export function sampleHost({ processMatch = "QEMU" } = {}) {
  * and useless: 6.6 GB of swap left over from an incident hours ago looks identical to a host swapping
  * right now. Only the delta distinguishes them, and that distinction was worth an afternoon.
  */
+// Every `?.` and `??` is a branch, so six inlined reads of a possibly-absent snapshot pushed diffHost
+// to a complexity of 21 against a limit of 15 -- without being any clearer than naming the read once.
+const reading = (snapshot, field, fallback) => snapshot?.memory?.[field] ?? fallback;
+
 export function diffHost(before, after) {
-  const pageouts = (after?.memory?.pageouts ?? 0) - (before?.memory?.pageouts ?? 0);
-  const pageins = (after?.memory?.pageins ?? 0) - (before?.memory?.pageins ?? 0);
+  const pageouts = reading(after, "pageouts", 0) - reading(before, "pageouts", 0);
+  const pageins = reading(after, "pageins", 0) - reading(before, "pageins", 0);
   return {
     pageoutsDelta: pageouts,
     pageinsDelta: pageins,
     // The honest headline. Non-zero pageouts during a measurement means the host was swapping and the
     // timing describes a constrained machine, not the software under test.
     swappingDuringRun: pageouts > 0,
-    compressorMb: after?.memory?.compressorMb ?? null,
-    freeMb: after?.memory?.freeMb ?? null,
+    compressorMb: reading(after, "compressorMb", null),
+    freeMb: reading(after, "freeMb", null),
     residentMbTotal: (after?.processes ?? []).reduce((sum, p) => sum + p.residentMb, 0),
   };
 }

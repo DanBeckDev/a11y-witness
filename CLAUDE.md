@@ -627,6 +627,47 @@ Two related facts worth not rediscovering:
 - **`server.log` persists on the guest.** You cannot pull it while the worker is down (see above), so
   read it *after* it recovers — the record of the death is still there.
 
+## Before any corpus run: `npm run gate:stability`
+
+Five canary pages, captured repeatedly, compared by CONTENT. It fails closed, and a corpus run must not
+start until it passes.
+
+It exists because the corpus carried a nondeterministic artefact for weeks with every check green.
+Edge's autofill draws a suggestion icon inside recognised inputs; NVDA announces it as an embedded
+object appended to the field:
+
+```
+"Recipient name, edit, ￼"      <- U+FFFC, OBJECT REPLACEMENT CHARACTER
+```
+
+**And `probeForms` submits forms, so the profile LEARNS**, and the rate climbs as a run proceeds —
+measured at 3%, then 8%, then 31% of affected captures, with **26 good/bad pairs disagreeing about it**.
+A pair where one side carries a stray character and the other does not is comparing two things that
+differ for a reason unrelated to accessibility, which is the one defect this project cannot tolerate.
+
+Every existing check stayed green because they all count, and the counts never moved: one form field
+before, one form field after. Content comparison is the only thing that could see it.
+
+Suppressed now with **command-line flags, not Edge policies** (`AutofillServerCommunication`,
+`AutofillAddressProfileSavePrompt`, `--disable-save-password-bubble`). The policy equivalents were set
+by provisioning and had *already drifted* — `StartupBoostEnabled` read 1 on two guests and 0 on a third
+for weeks. A flag is in git, applied at every launch, and cannot differ between guests. Note Chromium
+honours only the **last** `--disable-features`, so new features go in the existing list; a second flag
+silently disables only half of what you asked for.
+
+### A canary that cannot express the fault is worthless
+
+This was got wrong three times in one day, and each time the clean result was read as confirmation:
+
+- verified an autofill fix on `field-followup-date`, which does **not** auto-focus its input — so the
+  affordance never appeared and 12 clean captures proved nothing. `form-unlabelled/good` auto-focuses,
+  and still failed.
+- measured the artefact on `form-unlabelled/bad`, which has no date field at all.
+- compared guest `.4` at 4096 MB against `.6` at 3072 MB and read the difference as a code change.
+
+**Reproduce the fault with your test before trusting the test's verdict.** Every canary in
+`stability-gate.mjs` records the mechanism it exercises; add new ones the same way.
+
 ## The rule that cost the most to learn
 
 **A check must never reject evidence whose absence is the finding.**
@@ -645,6 +686,43 @@ it better: BLIND when a signal cannot fire, CONTAMINATED when it fires on both v
 predicate over every capture on disk and asserts none is rejected. The corpus is free ground truth —
 `check-signals` scores it 1061/0/0, so a rejection is a false positive by construction. It runs in a
 second. Six cases is an anecdote; 2,122 is a test.
+
+### The mirror image: a probe that CRASHES also produces an empty field
+
+The rule above is about not rejecting evidence that is legitimately absent. This is the same
+indistinguishability read from the other end, and it cost a whole corpus.
+
+`9cabfb4` ("the cost was anchorToTop, not the sweeps — 21% faster") added `ctx.trips.count` to
+`collectByType` for per-sweep round-trip counts. Five call sites pass `{...ctx}` or spell out
+`deadline, diag, trips`; the **postSubmit** one spelled out only `label, onItem, deadline`. So
+`ctx.trips` was `undefined` and the function threw on its own first line — *before any sweep ran*.
+
+The throw was caught. The catch was not empty: it recorded `postSubmit ERROR …` to
+`interaction.sweepLog`, exactly as this repo's rules require. **Nothing read `sweepLog`.** Result:
+
+- `postSubmitFields` came back `[]` on **all 2,122 captures**, 604 of them with a logged crash
+- `validationErrorIsSilent` spent the entire corpus on `formChanges.after` — the fallback **its own
+  comment calls useless**, because it reads `"<title>, document"` on both variants
+- 6 cases could not discriminate, and the failure looked like a page problem, not a probe problem
+- every other check stayed green: counts never moved, and an empty field is not a malformed one
+
+Nothing existing could have caught it. `evidence:check` compares fields, and this field was empty in
+both the before and the after. The eval fixtures that *do* show the probe working
+(`filter-status-good.json`, `postSubmit: 3`) predate the regression, so no comparison ran against them.
+This is the same class as the h1 announcement that vanished from 90 captures with every check green.
+
+Three rules follow, and they are cheap:
+
+1. **A caught-and-logged error is not a handled error.** If nothing asserts on the log, the log is a
+   comment. `verify.corpus.test.ts` now fails on any `sweepLog` line containing `ERROR`, which turns
+   604 silent crashes into one red test.
+2. **When you add a required field to a shared helper's context, grep every call site.** Lint and
+   `tsc` cannot see it — this is `.mjs` reading a duck-typed object, so the only signal was a runtime
+   throw inside a `try`.
+3. **A guard must be shown to fail before it is trusted.** The first version of that test read
+   `capture.interaction.sweepLog`, which does not exist — sweepLog reaches the file only via the
+   `interaction` *diagnostic mark*. It passed against the very corpus carrying 604 crashes. A test
+   written against a shape you did not verify is the count-based check all over again.
 
 ## Diagnosing a guest without `utmctl exec`
 

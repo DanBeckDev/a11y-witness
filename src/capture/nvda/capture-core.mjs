@@ -1139,10 +1139,22 @@ async function navigateByStructure({ deadline, diag, probeForms, probeFocus, pro
       // one does not. Version- and mode-robust, unlike the transient live-region
       // text in formChanges.after.
       await anchorToTop();
+      // `diag` and `trips` are NOT optional, even though nothing here reads them: collectByType
+      // reads `ctx.trips.count` on its first line. Omitting them threw
+      // "Cannot read properties of undefined (reading 'count')" on 604 captures of one corpus --
+      // before a single sweep ran, so postSubmitFields came back [] on all 2,122. The throw was
+      // caught and recorded in sweepLog, which nothing reads, so `validationErrorIsSilent` spent
+      // that whole corpus on the fallback its own comment calls useless and 6 cases could not
+      // discriminate. Guarded now by verify.corpus.test.ts, which fails on any sweepLog ERROR.
       postSubmitFields = await collectByType(
-        { prev: K.moveToPreviousFormField, next: K.moveToNextFormField }, { label: "postSubmit", onItem: null, deadline });
+        { prev: K.moveToPreviousFormField, next: K.moveToNextFormField },
+        { label: "postSubmit", onItem: null, deadline, diag, trips });
     } catch (e) {
+      // Also marked, not only logged. A probe that crashes must be visible in the evidence a
+      // check can see -- sweepLog is a local record and was, on its own, indistinguishable from
+      // a page that simply had nothing to announce.
       interaction.sweepLog.push(`postSubmit ERROR ${errMsg(e)}`);
+      diag.mark("postSubmitFailed", { error: errMsg(e) });
     }
   }
 

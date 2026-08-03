@@ -39,7 +39,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -232,7 +232,9 @@ export function runTrimViaElevatedTask({ scriptPath, markerPath, taskName = "a11
   const user = "$([Security.Principal.WindowsIdentity]::GetCurrent().Name)";
   const register =
     `$a = New-ScheduledTaskAction -Execute '${process.execPath}' ` +
-    `-Argument '\"${scriptPath}\" \"${markerPath}\"'; ` +
+    // The inner double quotes are for PowerShell, not for JS: they must survive into the
+    // single-quoted -Argument value so a path containing a space stays one argument.
+    `-Argument '"${scriptPath}" "${markerPath}"'; ` +
     `$p = New-ScheduledTaskPrincipal -UserId "${user}" -LogonType Interactive -RunLevel Highest; ` +
     "$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30); " +
     `Register-ScheduledTask -TaskName '${taskName}' -Action $a -Principal $p -Settings $s -Force | Out-Null; ` +

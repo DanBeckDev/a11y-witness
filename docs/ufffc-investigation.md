@@ -19,11 +19,33 @@ Measured on the reproduction page:
 | guidepup | result |
 |---|---|
 | 0.29.2 | `"Postcode, edit, ￼, button, Book parcel"` — ~7%, 1 in 15 |
-| 0.31.0 | `"edit, , button, Book parcel"` — **15 of 15 identical, zero U+FFFC** |
+| 0.31.0 | `"edit, , button, Book parcel"` — 15 of 15 identical on the reproduction page |
 
-The placeholder now renders as a consistent empty segment instead of surfacing intermittently. Still an
-artefact, but a **deterministic** one — and determinism was the whole point. The defect was never the
-character; it was that the same unchanged page announced differently from one capture to the next.
+The placeholder now renders as a consistent empty segment instead of surfacing intermittently. The
+defect was never the character; it was that the same unchanged page announced differently from one
+capture to the next.
+
+### Corrected against the full corpus: reduced, not eliminated
+
+That table says "15 of 15 on the reproduction page", and an earlier version of this document
+generalised it to "zero U+FFFC" and called the artefact fixed. **The full recapture refutes that** —
+one page, 15 times, cannot measure a ~1% intermittent fault, which is the same small-sample error
+this document's own §"verifying against a fixture that cannot fail" was written to warn about.
+
+Measured over all 2,122 captures after the upgrade:
+
+| | before (0.29.2) | after (0.31.0) |
+|---|---|---|
+| captures carrying `￼` | 36 | **25** |
+| pairs where one half carries it | 26 | **25** |
+| of those, marker on the BAD half | — | 13 — **legitimate signal** |
+| of those, marker on the GOOD half | — | 12 — **residual noise** |
+
+The split is the useful part, and it means the two halves must be read differently. `rules.ts` uses
+`EMPTY_NAME = "￼"` to *detect* an unnamed control, so `"button, ￼"` on an `icon-button-unnamed` bad
+page is the 4.1.2 finding, not an artefact — a strip-the-character "fix" would delete evidence. The 12
+good-half occurrences are named fields with a trailing empty segment and are genuine residual noise at
+~1% of the corpus. Reduced by two-thirds and no longer the dominant source of pair asymmetry, but open.
 
 `guidepupVersion` is now in the cache key (`capture-cache.mjs`) and in the fleet-consistency check
 (`fleet-consistency.mjs`), because the upgrade changed every form transcript. Two guests on different
