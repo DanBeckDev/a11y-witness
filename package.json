@@ -45,7 +45,8 @@
     "rules:score": "tsx scripts/score-rules.ts",
     "rules:gate": "tsx scripts/score-rules.ts --gate",
     "release:gate": "npm run training:check-signals && npm run rules:gate && npm run training:evaluate-acceptance && npm run eval:gate",
-    "capture:check": "tsx src/capture/nvda/capture-check.mjs"
+    "capture:check": "tsx src/capture/nvda/capture-check.mjs",
+    "layers:compare": "node scripts/compare-layers.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
