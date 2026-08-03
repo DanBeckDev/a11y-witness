@@ -20,8 +20,8 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { captureFault, FAULT } from "./capture-faults.mjs";
 import { installSpeechChannelShim } from "./speech-channel.mjs";
-import { browserAlive, launchReusable, navigateExisting, reusableArgs, structuralCensus,
-  truncatedAnnouncements } from "./browser-session.mjs";
+import { browserAlive, currentPageUrl, launchReusable, navigateExisting, reusableArgs,
+  structuralCensus, truncatedAnnouncements } from "./browser-session.mjs";
 import { connect } from "node:net";
 import { existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -1282,6 +1282,12 @@ async function navigateByStructure({ deadline, diag, probeForms, probeFocus, pro
     formChanges: interaction.formChanges,
     postSubmitFields,
     focusOrder,
+    // Named explicitly, because this object is rebuilt from named fields and anything set on `interaction`
+    // but not listed here is SILENTLY DROPPED -- which is how a field a signal reads can go missing with
+    // every check still green. `postSubmitFields` itself was empty on all 2,122 captures for a related
+    // reason. Absent (rather than false) when the submit did not navigate, so "we did not check" and
+    // "it did not navigate" stay distinguishable.
+    ...(interaction.navigatedOnSubmit ? { navigatedOnSubmit: interaction.navigatedOnSubmit } : {}),
   };
   diag.mark("interaction", {
     controls: result.controls.length,
@@ -2089,7 +2095,23 @@ async function activateAndCaptureDelta(phrase, interaction, kind) {
 // announces the error (3.3.1) via a status message (4.1.3); an inaccessible one
 // shows it visually and the screen reader hears nothing.
 async function probeFormSubmit(phrase, { interaction }) {
-  return activateAndCaptureDelta(phrase, interaction, "submit");
+  // Record whether submitting NAVIGATED, because that changes what the absence of an error means.
+  //
+  // A form that stays put and says nothing has failed 3.3.1. A form that submits successfully and moves
+  // to another page has not — there is no error to announce. Both look identical to a probe that only
+  // asks "was anything announced afterwards?", and on a real site the second is the common case:
+  // submitting Wikipedia's search navigated away, the post-submit re-read described French Wikipedia, and
+  // that was reported as a silent validation error on a form that worked.
+  //
+  // Every page in this corpus calls `preventDefault()`, which is why this never surfaced until the probe
+  // met the open web.
+  const before = await currentPageUrl();
+  const result = await activateAndCaptureDelta(phrase, interaction, "submit");
+  const after = await currentPageUrl();
+  if (before && after && before !== after) {
+    interaction.navigatedOnSubmit = { from: before, to: after };
+  }
+  return result;
 }
 
 // Activate a non-submit button the task explicitly names (e.g. a filter "Bags"

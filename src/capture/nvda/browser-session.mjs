@@ -227,6 +227,27 @@ export async function structuralCensus() {
   }
 }
 
+/**
+ * What URL is the browser showing RIGHT NOW?
+ *
+ * Needed because a form probe on a real site can NAVIGATE. Submitting Wikipedia's search moved the browser
+ * to a different page, and the post-submit field re-read then described that page instead — which
+ * `validationErrorIsSilent` read as "a form was submitted and no error was announced", i.e. a 3.3.1
+ * failure, on a form that had worked perfectly.
+ *
+ * Every synthetic page in this corpus calls `preventDefault()`, so submitting never navigated and the
+ * distinction never arose. In the wild it is the ordinary case.
+ *
+ * Returns null rather than throwing: not knowing the URL must degrade the evidence, never fail a capture.
+ */
+export async function currentPageUrl() {
+  try {
+    return (await pageTarget()).url ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Resolve the reply whose `id` matches, as opposed to waitForMethod which waits for an EVENT. */
 function waitForResult(socket, id, timeoutMs) {
   return new Promise((resolve, reject) => {

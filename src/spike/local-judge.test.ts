@@ -133,3 +133,29 @@ test("the summary states no COUNT, because rules are appended after it", () => {
     assert.doesNotMatch(summary, /\d+\s+(confirmed|finding|failure)/i, `summary must not embed a count: ${summary}`);
   }
 });
+
+test("a form that NAVIGATED cannot evidence a silent validation error", () => {
+  // Measured on Wikipedia: submitting the search navigated to French Wikipedia, the post-submit re-read
+  // described that page, and 3.3.1 was reported as "a form was submitted and no error was announced" — on
+  // a form that worked perfectly. A successful submit has no error to announce; only a form that STAYS and
+  // says nothing has failed. The corpus never showed this because every synthetic page preventDefaults.
+  const navigated = {
+    interaction: {
+      formChanges: [{ control: "Search, button", after: "..." }],
+      postSubmitFields: ["Rechercher sur Wikipédia, edit"],
+      navigatedOnSubmit: { from: "https://www.wikipedia.org/", to: "https://fr.wikipedia.org/" },
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", navigated), false);
+  assert.deepEqual(findingsFromScores({ "3.3.1": true }, { "3.3.1": 0.9 }, navigated).findings, []);
+
+  // ...and a form that stayed put is still judged normally, or the guard would blind the criterion.
+  const stayed = {
+    interaction: {
+      formChanges: [{ control: "Submit, button", after: "" }],
+      postSubmitFields: ["Email address, edit"],
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", stayed), true);
+  assert.equal(findingsFromScores({ "3.3.1": true }, { "3.3.1": 0.9 }, stayed).findings.length, 1);
+});

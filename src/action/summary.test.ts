@@ -110,3 +110,30 @@ test("the marker is emitted so a PR comment can be UPDATED rather than duplicate
 test("an empty findings list says so rather than rendering an empty table", () => {
   assert.match(renderSummary(result()), /No lived-experience findings/);
 });
+
+test("an UNVERIFIED capture reports no findings at all", () => {
+  // On gov.uk the capture read Edge's image-magnifier overlay ("Image Magnify, document"), the retry fired
+  // three times and warned — and the run still reported a 4.1.2 finding about the browser's own Zoom In and
+  // Rotate buttons, as though the site were at fault. A stderr warning is not a signal; the verdict has to
+  // travel with the result and be honoured.
+  //
+  // Blaming a page for its browser is worse than saying nothing, so nothing is what gets said.
+  const out = renderSummary(result({
+    captureVerified: false,
+    verdict: {
+      taskCompletable: false, summary: "s", confidence: 0.9,
+      findings: [{ ...finding("serious"), issue: "Zoom In, button", evidence: "Rotate, button" }],
+    },
+  }));
+  assert.match(out, /could not read this page/i);
+  assert.match(out, /No findings are reported/i);
+  assert.doesNotMatch(out, /Rotate, button/, "a chrome finding must not reach the reader");
+  assert.doesNotMatch(out, /lived-experience finding\(s\)/, "no findings table at all");
+});
+
+test("a verified capture is unaffected, and so is one that never reported verification", () => {
+  // `captureVerified` is optional: an older result, or a caller that does not set it, must not be treated
+  // as unverified — that would suppress every finding from anything that predates the field.
+  assert.match(renderSummary(result({ captureVerified: true })), /what a screen reader actually experienced/);
+  assert.match(renderSummary(result()), /what a screen reader actually experienced/);
+});

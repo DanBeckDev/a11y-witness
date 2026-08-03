@@ -42,6 +42,15 @@ if (!result?.verdict || !Array.isArray(result.verdict.findings)) {
 
 const markdown = renderSummary(result, { marker });
 
+// An unverified capture is an infrastructure failure, not a verdict about the page — so it exits 2, the
+// same code used for "could not read the result". Green would say "we checked and it is fine"; red (1)
+// would say "your page has a problem". Neither is true: we did not manage to look at it.
+//
+// The summary is written FIRST so the reader still gets the explanation. Found on gov.uk, where the
+// capture read Edge's image-magnifier overlay, the retry warned three times, and the run reported a 4.1.2
+// finding about the browser's own Zoom In / Rotate buttons.
+const unverified = result.captureVerified === false;
+
 // $GITHUB_STEP_SUMMARY is append-only and shared with other steps, so append rather than overwrite.
 const stepSummary = process.env.GITHUB_STEP_SUMMARY;
 if (stepSummary) appendFileSync(stepSummary, `${markdown}\n`);
@@ -49,6 +58,14 @@ if (stepSummary) appendFileSync(stepSummary, `${markdown}\n`);
 const summaryOut = arg("summary-out");
 if (summaryOut) writeFileSync(resolve(summaryOut), `${markdown}\n`, "utf8");
 if (!stepSummary && !summaryOut) process.stdout.write(`${markdown}\n`);
+
+// The summary has already been written above, so this only decides the exit code. Writing it again here
+// appended it TWICE to $GITHUB_STEP_SUMMARY, which is append-only.
+if (unverified) {
+  process.stderr.write("a11y-witness: the capture could not be confirmed to have read the requested page; "
+    + "reporting no findings. This is a failed measurement, not a clean page.\n");
+  process.exit(2);
+}
 
 const { findings } = result.verdict;
 let fail: boolean;
