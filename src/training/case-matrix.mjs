@@ -513,7 +513,24 @@ function unlabelledFieldVariant({ id, title, heading, label, name, task }) {
     task,
     source: "Practical Web Accessibility, chapter 6; Inclusive Design for Accessibility, chapter 13",
     mutation: "The field has nearby visible text but no programmatic label.",
-    badSignal: { type: "unnamed-form-field" },
+    // The SAME signal its 31 generated variants use (see unnamedIconVariant), and deliberately so.
+    //
+    // This seed declared `{type: "unnamed-form-field"}` while every variant of the same mutation
+    // declared this regex, which split one failure mode across two model heads: `4.1.2:regex` trained
+    // on 31 records and `4.1.2:unnamed-form-field` on ONE. The training gate refuses release for any
+    // subtype under 20 positive development records, and it was right to -- a head fitted to a single
+    // example is not a classifier. An icon button with no accessible name is one failure mode and
+    // belongs in one subtype.
+    //
+    // Verified equivalent before changing it: this pattern fires on `icon-button-unnamed.bad` and stays
+    // silent on `.good`, exactly as `hasUnnamedFormField` did. `hasUnnamedFormField` itself is still
+    // exercised by the 115 `form-unlabelled` cases under 3.3.2, so no signal loses coverage. The pages
+    // are untouched, so no capture is invalidated.
+    badSignal: {
+      type: "regex",
+      pattern: "(?:^|\\n)button[, ]*(?:" + UNNAMED_GRAPHIC + ")?[, ]*(?:$|\\n)",
+      flags: "im",
+    },
     good: page({
       title,
       heading,
@@ -1452,7 +1469,23 @@ export function evidenceUnits(capture) {
   const units = [];
   appendTextUnits(units, "transcript", capture.transcript);
   appendTextUnits(units, "heading-navigation", capture.structure?.headings);
-  appendTextUnits(units, "landmark-navigation", capture.structure?.landmarks);
+  // `landmarks` is deliberately NOT a model feature.
+  //
+  // Whether the landmark sweep reaches a landmark that ENCLOSES the caret depends on where the previous
+  // sweep left it, and that varies. Measured on the same unchanged page: `[]` in one capture and
+  // `["Cycling guide"]` (the h1, which is what NVDA announces on entering `main`) in the next. Fed to
+  // the encoder, that swung a CONFORMANT page's 3.3.2 score from 0.004 to 0.39 across a 0.35 threshold,
+  // so the same page was judged clean once and failing once -- on two acceptance cases.
+  //
+  // Anchoring does not rescue it: measured over three runs per page it left one page still varying
+  // (1 of 3) and made another LOSE a landmark it had previously found. The field cannot currently be
+  // both deterministic and complete, so it must not be an input to a scorer.
+  //
+  // This is the same call the exporter already makes in excluding `1.3.1:missing-landmark`, for the same
+  // stated reason -- "not a reliably inferable screen-reader announcement". The field stays in the
+  // capture and stays available to the dataset signals, which read `capture.structure.landmarks`
+  // directly (`structureIsEmpty`) and are unaffected; and `structureCrossCheck` now reports, per
+  // capture, whether the sweep was complete.
   appendTextUnits(units, "form-navigation", capture.structure?.formFields);
   appendTextUnits(units, "control-navigation", capture.interaction?.controls);
   appendChangeUnits(units, "state-change", capture.interaction?.stateChanges);
