@@ -82,6 +82,27 @@ path is now the opt-in one.
 encoder. That works locally and is expected to add 1-2 minutes; it has not run on a Windows runner. A
 lighter ONNX path would remove torch entirely and is the obvious next optimisation.
 
+## Testing it without spending runner minutes
+
+```bash
+./scripts/local-worker/worker-ctl.sh up
+./scripts/action-dry-run.sh https://example.com "Complete the checkout"
+FAIL_ON=blocker ./scripts/action-dry-run.sh ...      # check the exit contract
+```
+
+`act` cannot run this action — it is Docker/Linux and NVDA needs Windows — so the dry run executes the
+action's own bash for the steps that carry the logic, with `RUNNER_TEMP`, `GITHUB_OUTPUT` and
+`GITHUB_STEP_SUMMARY` set exactly as a runner sets them. It prints the summary a reviewer would read and
+exits with the status the check would.
+
+It cannot cover the Windows-only setup (NVDA, Speech Viewer, Edge policy, starting the worker) or
+`gh pr comment`. Those setup steps are the least speculative part: `capture-regression.yml` already runs the
+same commands on a real Windows runner for the same reasons.
+
+One trap worth recording: run the action's snippets under **bash**, not zsh. `status` is a read-only
+variable in zsh, so `status=0` fails with "read-only variable: status" — an artefact of the shell, not of
+the action, which declares `shell: bash`.
+
 ## Outputs
 
 | Output | Use |
