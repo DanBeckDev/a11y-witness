@@ -39,7 +39,18 @@ import { setTimeout as sleep } from "node:timers/promises";
 // This constant is what the cache keys on, so it must move only when the evidence really changes.
 //
 // Bumping it forces a full recapture. That is the point.
-export const CAPTURE_PROTOCOL_VERSION = 2;
+//
+// 2 -> 3: browse mode is restored after every activation (`operateControl`). Before this, activating a
+// control left NVDA in focus mode, so the quick-navigation sweeps that followed TYPED THEIR OWN LETTERS
+// into the page. Measured on the corpus this bump invalidates: `links`/`graphics`/`lists` came back empty
+// on 353 captures, and 125 pairs carried the typed-letter artefact on exactly ONE variant — always the
+// conformant one, since only an accessible form focuses the field it rejected. That is a pair differing
+// by the measuring tool, and a shortcut feature sitting in the trained scorer's input.
+//
+// The recapture is therefore not a cost of this change, it is the point of it: those 125 pairs are the
+// ones whose evidence was wrong. `formChanges` entries also gain `kind`, and a submit now records
+// `postSubmitNames`, both of which criteria read.
+export const CAPTURE_PROTOCOL_VERSION = 3;
 
 export { edgeArgs as edgeArgsForTest };
 
@@ -1321,6 +1332,9 @@ async function navigateByStructure({ deadline, diag, probeForms, probeFocus, pro
     // reason. Absent (rather than false) when the submit did not navigate, so "we did not check" and
     // "it did not navigate" stay distinguishable.
     ...(interaction.navigatedOnSubmit ? { navigatedOnSubmit: interaction.navigatedOnSubmit } : {}),
+    // Same rule, same reason: absent when no submit happened, so "no submit was probed" cannot be read as
+    // "the page showed nothing after submitting". 3.3.1 depends on telling those apart.
+    ...(interaction.postSubmitNames ? { postSubmitNames: interaction.postSubmitNames } : {}),
   };
   diag.mark("interaction", {
     controls: result.controls.length,
@@ -1420,6 +1434,7 @@ async function collectByType(commands, ctx) {
     // observation -- and telling a phantom from a real element needs to know whether the sweep ran
     // out of elements, went silent, or hit the step cap.
     prevStop: prevOutcome?.stop, nextStop: nextOutcome?.stop,
+    prevStopPhrase: prevOutcome?.stopPhrase, nextStopPhrase: nextOutcome?.stopPhrase,
     phrases: out.slice(),
   });
   return out;
@@ -1479,6 +1494,23 @@ export function sweepStepFromSpeech({ log, seen, prev }) {
   return { phrase, seen: advanced };
 }
 
+/**
+ * Ways back to browse mode, cheapest first, tried in order when a sweep hears its own keystroke.
+ *
+ * Escape is NVDA's own route out (`script_disablePassThrough`, flagged `ignoreTreeInterceptorPassThrough`
+ * so it is reachable from focus mode). It is not always enough: on apache.org, whose search panel behaves
+ * like an embedded document, the caret sits in a different tree interceptor and Escape reaches the page
+ * rather than the mode. NVDA+Control+Space — `moveToContainingBrowseModeDocument`, "moves the focus out of
+ * the current embedded object and into the document that contains it" — is the remedy for that case.
+ *
+ * Neither is trusted; both are tested by whether the next step still echoes.
+ */
+const BROWSE_MODE_REMEDIES = [
+  () => withTimeout(nvda.press("Escape"), NAV_TIMEOUT_MS, "escapeFocusMode"),
+  () => withTimeout(
+    nvda.perform(nvda.keyboardCommands.moveToContainingBrowseModeDocument), NAV_TIMEOUT_MS, "leaveEmbedded"),
+];
+
 async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline, trips }) {
   // Movement is decided by "did NVDA say anything NEW?", never by "did lastSpokenPhrase change?".
   //
@@ -1497,6 +1529,7 @@ async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline, t
   // `prev` still guards genuine repetition, but starts EMPTY: seeding it across sweeps is what made
   // a stale phrase look like news.
   let prev = "";
+  let recoveries = 0;
   // Read once, then advance as we go, so this costs the same two round trips per step as the
   // lastSpokenPhrase version it replaces. `trips` therefore stays comparable across the change.
   trips.count += 1;
@@ -1511,10 +1544,30 @@ async function sweepInDirection(cmd, { label, out, seenKeys, onItem, deadline, t
       step = sweepStepFromSpeech({ log, seen, prev });
     } catch { break; }
     seen = step.seen;
-    if (step.stop) return { stop: step.stop, steps: i };
+    // `prev` is the phrase that ENDED the sweep, and naming it is what makes a leak legible. A sweep
+    // reporting `found=0 stop=repeat` says only "nothing"; the same sweep reporting `stopPhrase: "k"` says
+    // NVDA was in focus mode and this pipeline typed its own quick-navigation key into the page. That
+    // distinction went unmade for 2,122 captures.
+    if (step.stop) return { stop: step.stop, steps: i, stopPhrase: prev };
     const phrase = step.phrase;
     prev = phrase;
-    if (phrase.length < MIN_CONTROL_NAME_LEN) continue; // stray key echo, not a control
+    // A one- or two-character phrase is NVDA echoing the key we just sent, which is proof that the key
+    // went to the page instead of to NVDA -- focus mode. This used to `continue` past it in silence, and
+    // that silence is what let this pipeline type its quick-navigation keys into 2,122 captures' pages.
+    //
+    // Recover rather than assume: each remedy is tried and then TESTED by the next step's phrase, because
+    // pressing Escape and hoping is what left apache.org still echoing after the post-activation Escape
+    // was added. Escalates once, then gives up loudly -- `focusModeStuck` is the difference between "this
+    // page has no links" and "we could not ask".
+    if (phrase.length < MIN_CONTROL_NAME_LEN) {
+      recoveries += 1;
+      if (recoveries > BROWSE_MODE_REMEDIES.length) {
+        return { stop: "focusModeStuck", steps: i, stopPhrase: phrase };
+      }
+      await BROWSE_MODE_REMEDIES[recoveries - 1]().catch(() => undefined);
+      prev = ""; // the echo is not evidence of position, so it must not count as a repeat
+      continue;
+    }
     const key = dedupeKey(phrase);
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
@@ -1964,12 +2017,77 @@ async function probeElementsListCounts({ deadline, diag, types = LANDMARKS_ONLY 
 // required: a separate next/previous sweep finds nothing, because after the
 // structural sweep the cursor sits at the end and the only control is the
 // current position, not a next one.
+/** Which probe, if any, this announced control earns. Separated so `operateControl` is one thing. */
+function chooseProbe(phrase, ctx) {
+  if (/\bcollapsed\b/i.test(phrase)) return () => probeDisclosure(phrase, ctx);
+  if (!ctx.probeForms || !/\bbutton\b/i.test(phrase)) return null;
+  if (SUBMIT_RE.test(phrase)) return () => probeFormSubmit(phrase, ctx);
+  if (taskNamesControl(phrase, ctx.task)) return () => probeTaskButton(phrase, ctx);
+  return null;
+}
+
+/**
+ * Activate a control, then ALWAYS put NVDA back in browse mode.
+ *
+ * The restore is not defensive tidying; without it this pipeline **typed its own keystrokes into the
+ * pages it was measuring**, on 125 captures of the corpus.
+ *
+ * The chain, from NVDA's source rather than inference:
+ *
+ * 1. Activating a control moves focus. An accessible form moves it to the field it just rejected; a
+ *    disclosure moves it into what it opened (gov.uk's "Show search menu" focuses its search combo box).
+ * 2. That is a real focus change, so `browseMode.shouldPassThrough` is consulted with
+ *    `OutputReason.FOCUS`, `autoPassThroughOnFocusChange` defaults to **true** in NVDA's `configSpec`,
+ *    and `State.EDITABLE in states` returns True — **focus mode on**.
+ * 3. In focus mode a character gesture is passed to the application instead of NVDA's browse-mode
+ *    scripts, so the quick-navigation letters ARE THE INPUT. And it sticks: `QuickNavItem.moveTo`
+ *    returns early, still in focus mode, whenever the next target is focusable.
+ *
+ * So the sweeps that follow type their own commands into the page. Decoded from apache.org's search box:
+ *
+ *   FFffGGggKKkkLLll   =   Shift+F,Shift+F,f,f  Shift+G,Shift+G,g,g  Shift+K,Shift+K,k,k  Shift+L,…
+ *                          formField prev/next  graphic              link                 list
+ *
+ * apache.org then search-as-you-typed it and rendered "1 result for FFffGGggKKkkLLll", which this tool
+ * read as a page behaviour. It was our own.
+ *
+ * Two consequences, both measured on the 2,122-capture corpus:
+ *
+ * - `links`, `graphics` and `lists` come back EMPTY after any activation — 353 captures — and an empty
+ *   sweep is indistinguishable from a page that has none of that element.
+ * - The leak is **asymmetric across a pair**: 125 pairs carry it on ONE variant and 0 on both, always the
+ *   good one, because only an accessible form focuses the field it rejected. A pair differing by an
+ *   artefact of the measuring tool is the exact defect the U+FFFC autofill investigation was about — and
+ *   worse here, since the artefact correlates with the property under test and is therefore a shortcut
+ *   feature available to the trained scorer.
+ *
+ * Escape is the key, because NVDA's own `script_disablePassThrough` carries
+ * `ignoreTreeInterceptorPassThrough = True` — it is specifically built to be reachable FROM focus mode,
+ * which is what makes it the one gesture that can get back out. In browse mode it is already a no-op
+ * pass-through.
+ *
+ * Sent with `nvda.press("Escape")`, NOT `nvda.perform(keyboardCommands.exitFocusMode)`. Both are Escape on
+ * paper and only the first works here — measured on apache.org, where `perform` left every following sweep
+ * stopping on `repeat` with 0 links and `press` did not. `anchorToTop` has used `press` for this exact
+ * purpose all along, and its comment names this NVDA behaviour; the remedy was simply never applied to the
+ * sweeps, which is why the post-submit re-read was the one sweep that never broke.
+ *
+ * Escape alone, deliberately: `anchorToTop` follows it with Ctrl+Home, and rewinding the cursor to the top
+ * of the document mid-sweep would make the sweep re-walk ground it has covered and stop early on its own
+ * duplicates.
+ */
 async function operateControl(phrase, ctx) {
-  if (/\bcollapsed\b/i.test(phrase)) return probeDisclosure(phrase, ctx);
-  if (!ctx.probeForms || !/\bbutton\b/i.test(phrase)) return undefined;
-  if (SUBMIT_RE.test(phrase)) return probeFormSubmit(phrase, ctx);
-  if (taskNamesControl(phrase, ctx.task)) return probeTaskButton(phrase, ctx);
-  return undefined;
+  const probe = chooseProbe(phrase, ctx);
+  if (!probe) return undefined;
+  try {
+    return await probe();
+  } finally {
+    await withTimeout(nvda.press("Escape"), NAV_TIMEOUT_MS, "browseMode")
+      // Recorded as an ERROR because it is one: a failed restore leaves NVDA typing this pipeline's own
+      // quick-navigation keys into the page under test, and `verify.corpus.test.ts` fails the corpus on
+      // any sweepLog ERROR. Swallowing it is what let the leak run for 2,122 captures.
+      .catch((e) => ctx.interaction.sweepLog.push(`browseMode ERROR ${errMsg(e)}`));
+  }
 }
 
 // True when the control's announced NAME shares a meaningful word with the task,
@@ -2118,7 +2236,12 @@ async function activateAndCaptureDelta(phrase, interaction, kind) {
     const log = await waitForAnnouncement(before, kind);
     const after = log.slice(before).map((s) => String(s).trim()).filter(Boolean).join(" | ");
     interaction.sweepLog.push(`${kind} ${JSON.stringify(phrase.slice(0, 40))} -> ${JSON.stringify(after)}`);
-    interaction.formChanges.push({ control: phrase, after });
+    // `kind` travels with the evidence, because criteria mean different things per activation.
+    // 3.3.1 is about a SUBMIT that was rejected silently; it was previously satisfied by any non-empty
+    // formChanges, so opening a disclosure counted -- and apache.org's SEARCH toggle was reported as a
+    // form submitted with invalid input and no error announced. Nothing was submitted and nothing was
+    // invalid.
+    interaction.formChanges.push({ control: phrase, kind, after });
   } catch (e) {
     interaction.sweepLog.push(`${kind} ERROR ${errMsg(e)}`);
   }
@@ -2144,6 +2267,18 @@ async function probeFormSubmit(phrase, { interaction }) {
   if (before && after && before !== after) {
     interaction.navigatedOnSubmit = { from: before, to: after };
   }
+  // What the page SHOWS after submitting, from the accessibility tree.
+  //
+  // This is the oracle 3.3.1 and 4.1.3 were missing, and without it neither can be judged honestly.
+  // "The form rejected my input and said nothing" and "the form accepted my input" produce the same
+  // screen-reader evidence — silence — so the criterion was being decided by what our probe happened to
+  // do rather than by what the page did. The visual side settles it: an error message or a result count
+  // present in the tree and absent from the announcements is the failure, and one present in neither is
+  // simply a form that worked.
+  //
+  // Names only, never counts, and it stays a diagnostic-grade oracle rather than evidence, exactly as
+  // `structureCensus` does — `docs/local-model.md` bars the accessibility tree as a model feature.
+  interaction.postSubmitNames = (await structuralCensus())?.names ?? [];
   return result;
 }
 

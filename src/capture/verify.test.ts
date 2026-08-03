@@ -2,7 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle, captureRanRequestedProbes,
+  captureDoubt, captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle,
+  captureRanRequestedProbes, captureReachedThePage,
 } from "./verify.js";
 
 const TITLE = "Aquarium 001 schedule";
@@ -189,4 +190,64 @@ test("with no census the check behaves exactly as it did before", () => {
   // silently accepting them.
   assert.equal(captureMentionsTitle({ transcript: ["blank", "blank"] }, "Welcome to GOV.UK"), false);
   assert.equal(captureMentionsTitle({ transcript: ["heading, level 1, Welcome"] }, "Welcome to GOV.UK"), true);
+});
+
+// --- The consent wall: right page, right title, almost none of it read ---
+
+const censusHeadings = (heading: number, names: string[] = []) =>
+  [{ event: "structureCensus", heading, names }];
+
+test("a capture held inside a consent modal is REJECTED, though every other gate passes", () => {
+  // theregister.com, measured: the page exposes 463 headings, 793 links and 13 landmarks; the sweep
+  // reached 1 heading, 0 links and 0 landmarks, because the consent dialog traps focus and quick
+  // navigation cannot leave it. The URL was right, the title was right, and "Register" appears in the
+  // dialog's own text — so the title gate passed and the run reported "No lived-experience findings"
+  // about a page it had never seen.
+  const walled = {
+    transcript: ["button, Close", "heading, level 2, The Register asks for your consent to use your personal data to:"],
+    structure: { headings: ["heading, level 2, The Register asks for your consent"], landmarks: [], formFields: [] },
+    diagnostics: censusHeadings(463),
+  };
+  assert.equal(captureMentionsTitle(walled, "The Register: Enterprise Technology News"), true,
+    "the title gate genuinely cannot see this — that is why a second gate exists");
+  assert.equal(captureReachedThePage(walled), false);
+  assert.equal(captureDoubt(walled, "The Register: Enterprise Technology News"), "contained");
+});
+
+test("a healthy capture of a big page is accepted", () => {
+  // gov.uk, measured: 38 headings exposed, 37 reached.
+  const healthy = {
+    transcript: [
+      "heading, level 2, Cookies on GOV dot UK",
+      "button, Accept additional cookies",
+      "main landmark, heading, level 1, The best place to find government services and information",
+    ],
+    structure: { headings: Array.from({ length: 37 }, (_, i) => `heading, level 2, section ${i}`), landmarks: [], formFields: [] },
+    // Real census names, because the title "Welcome to GOV.UK" offers only the word `welcome` and the
+    // page never says it — the names route is what verifies this capture, and a fixture without them
+    // tests the wrong thing. (It did, and this test failed against correct code until it carried them.)
+    diagnostics: censusHeadings(38, GOVUK_NAMES),
+  };
+  assert.equal(captureReachedThePage(healthy), true);
+  assert.equal(captureDoubt(healthy, "Welcome to GOV.UK"), null);
+});
+
+test("a SMALL page cannot be judged on reachability, so it is not", () => {
+  // Missing two of three headings says nothing; missing 462 of 463 says everything. Without a floor this
+  // gate would fire on the synthetic dataset pages, which have single-figure heading counts.
+  const small = { transcript: ["blank"], structure: { headings: [], landmarks: [], formFields: [] }, diagnostics: censusHeadings(3) };
+  assert.equal(captureReachedThePage(small), true);
+});
+
+test("no census means no verdict on reachability", () => {
+  // Every capture taken before the census existed, and any guest whose CDP call failed, lands here. A
+  // gate that treats a missing oracle as a failure would reject the entire corpus.
+  assert.equal(captureReachedThePage({ transcript: ["x"], structure: { headings: [], landmarks: [], formFields: [] } }), true);
+  assert.equal(captureReachedThePage({ transcript: ["x"], diagnostics: [{ event: "structureCensus", error: "CDP listed no page target" }] }), true);
+});
+
+test("wrong-content beats contained, because it is the more fundamental doubt", () => {
+  // Edge's magnifier overlay: we did not read a fraction of the page, we read a different document.
+  const overlay = { transcript: ["Image Magnify, document", "Zoom In, button"], diagnostics: censusHeadings(463) };
+  assert.equal(captureDoubt(overlay, "Welcome to GOV.UK"), "wrong-content");
 });

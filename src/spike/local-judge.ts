@@ -55,9 +55,17 @@ export interface CaptureEvidence {
     links?: string[]; lists?: string[]; graphics?: string[]; tableCells?: string[];
   };
   interaction?: {
-    controls?: string[]; stateChanges?: unknown[]; formChanges?: unknown[]; postSubmitFields?: string[];
+    controls?: string[]; stateChanges?: unknown[]; postSubmitFields?: string[];
+    /**
+     * One entry per control this capture activated. `kind` distinguishes a disclosure from a task button
+     * from a submit, and it is optional because captures made before protocol 3 do not carry it — code
+     * reading it must treat `undefined` as "this capture cannot say", never as "not a submit".
+     */
+    formChanges?: { control?: string; kind?: string; after?: string }[];
     /** Set only when submitting a form NAVIGATED. Absent means it did not, or was not checked. */
     navigatedOnSubmit?: { from: string; to: string };
+    /** Accessible names the page exposed AFTER a submit — the visual side of 3.3.1 and 4.1.3. */
+    postSubmitNames?: string[];
   };
 }
 
@@ -66,6 +74,68 @@ const nonEmpty = (value: unknown): boolean => Array.isArray(value) && value.leng
 /** NVDA announces an editable field with an `edit` role; a button is not a field needing a label. */
 const hasEditableField = (fields: string[] = []): boolean =>
   fields.some((f) => /\bedit(\s+text)?\b|\bcombo\s*box\b|\bcheck\s*box\b|\bradio\b|\bspin\s*button\b/i.test(f));
+
+/**
+ * Was a form actually SUBMITTED, as opposed to something merely activated?
+ *
+ * `formChanges` mixes three kinds of activation — a disclosure being opened, a task button being pressed,
+ * and a submit — and 3.3.1 is only about the third. Older captures carry no `kind`, so they fall back to
+ * `postSubmitFields`, which is populated only after a submit and is therefore the same claim by a weaker
+ * route rather than a looser one.
+ */
+const submitWasProbed = (c: CaptureEvidence): boolean =>
+  (c.interaction?.formChanges ?? []).some((change) => change.kind === "submit")
+  || (!(c.interaction?.formChanges ?? []).some((change) => change.kind !== undefined)
+    && nonEmpty(c.interaction?.postSubmitFields));
+
+/** Everything the screen reader said, lowercased, for asking "was this ever spoken?". */
+const spokenText = (c: CaptureEvidence): string => [
+  ...(c.transcript ?? []),
+  ...(c.structure?.formFields ?? []),
+  ...(c.interaction?.postSubmitFields ?? []),
+  ...(c.interaction?.formChanges ?? []).map((change) => change.after ?? ""),
+].join(" ").toLowerCase();
+
+/**
+ * Text a page uses to say an input was rejected.
+ *
+ * A vocabulary list is a blunt instrument and it is used only to decide whether the criterion APPLIES,
+ * never to score it. NVDA's own announcement of a properly marked field ("invalid entry") is included
+ * because that is what the accessible version of this page produces.
+ */
+const ERROR_TEXT = /\b(error|invalid|required|must be|cannot be|please enter|please provide|enter a|enter your|is not valid|missing)\b/i;
+
+/** A count of results or matches — WCAG 4.1.3's own worked example of a status message. */
+const STATUS_TEXT = /\b\d[\d,]*\s+(results?|items?|matches?|products?|found)\b|\bno results?\b|\bshowing\s+\d/i;
+
+/**
+ * Does the page SHOW something it never SAID?
+ *
+ * This is the two-layer thesis applied inside one criterion. The accessibility tree is the visual side and
+ * is an oracle only — never evidence, never a model feature — while the announcements remain the evidence.
+ * A page that displays "Enter a plot preference before requesting." and never speaks it has failed; one
+ * that displays nothing of the sort has no error to announce, and its silence is correct.
+ */
+const shownButNotAnnounced = (c: CaptureEvidence, pattern: RegExp): boolean => {
+  const names = c.interaction?.postSubmitNames ?? [];
+  if (names.length === 0) return false;
+  const heard = spokenText(c);
+  return names.some((name) => pattern.test(name) && !heard.includes(name.toLowerCase()));
+};
+
+/**
+ * The oracle may VETO, but only when we actually have it.
+ *
+ * `postSubmitNames` arrived with capture protocol 3, so every capture recorded before it — all 2,122 on
+ * disk, and every eval fixture — carries none. Requiring it outright would silently switch 3.3.1 off for
+ * all of them while every test stayed green, which is the exact shape of the regression that emptied
+ * `postSubmitFields` across the whole corpus. So absence means "cannot say", and the criterion falls back
+ * to what it could already establish; presence means the question is answerable and is answered.
+ */
+const errorEvidencePermits = (c: CaptureEvidence): boolean =>
+  (c.interaction?.postSubmitNames ?? []).length === 0 || shownButNotAnnounced(c, ERROR_TEXT);
+
+const statusShownButNotAnnounced = (c: CaptureEvidence): boolean => shownButNotAnnounced(c, STATUS_TEXT);
 
 /**
  * Which channel of the capture each criterion is ABOUT.
@@ -95,9 +165,17 @@ const EVIDENCE_CHANNEL: Record<string, (c: CaptureEvidence) => boolean> = {
   // the post-submit re-read described THAT page, and this criterion was reported as a silent validation
   // error on a form that worked perfectly. The corpus never showed it because every synthetic page calls
   // `preventDefault()`.
-  "3.3.1": (c) => !c.interaction?.navigatedOnSubmit
-    && (nonEmpty(c.interaction?.formChanges) || nonEmpty(c.interaction?.postSubmitFields)),
-  "4.1.3": (c) => nonEmpty(c.interaction?.formChanges) || nonEmpty(c.interaction?.stateChanges),
+  //
+  // It also requires an error to EXIST. "The form rejected my input silently" and "the form accepted my
+  // input" are the same screen-reader observation — nothing was said — so silence alone cannot decide it.
+  // The accessibility tree settles it: `errorShownButNotAnnounced` asks whether the page displays an
+  // error it never spoke. On apache.org this criterion fired on a SEARCH toggle that submitted nothing
+  // and rejected nothing, because any non-empty `formChanges` counted as a submission.
+  "3.3.1": (c) => !c.interaction?.navigatedOnSubmit && submitWasProbed(c) && errorEvidencePermits(c),
+  // Status Messages is about a change the page ANNOUNCES nothing for. A result count that appears in the
+  // tree and never in speech is the canonical example in WCAG's own understanding document.
+  "4.1.3": (c) => nonEmpty(c.interaction?.formChanges) || nonEmpty(c.interaction?.stateChanges)
+    || statusShownButNotAnnounced(c),
   "4.1.2": (c) => nonEmpty(c.structure?.formFields) || nonEmpty(c.interaction?.controls),
 };
 
