@@ -20,6 +20,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { captureFault, FAULT } from "./capture-faults.mjs";
 import { installSpeechChannelShim } from "./speech-channel.mjs";
+import { parkPointer } from "./pointer.mjs";
 import { browserAlive, currentPageUrl, launchReusable, navigateExisting, reusableArgs,
   structuralCensus, truncatedAnnouncements } from "./browser-session.mjs";
 import { connect } from "node:net";
@@ -198,6 +199,10 @@ async function runCapturePhases(url, opts, diag) {
   const maxMs = Number(opts.maxMs || DEFAULT_BUDGET_MS);
 
   await focusBrowserWindow(browserWaitMs, diag);
+  // Own the pointer before anything sends a keystroke. It is a capture INPUT, not a bystander: it holds
+  // hover state over whatever it rests on, and guidepup prefixes every captured action with Ctrl, which
+  // Edge turns into a magnifier overlay when an image is underneath. See pointer.mjs.
+  await parkPointer(diag);
   const coldStart = await startScreenReader(diag, { reuse: !!opts.reuseScreenReader });
   // Wait for NVDA to answer, rather than for a fixed three seconds.
   //
@@ -300,11 +305,39 @@ const EDGE_EXES = [
  * third, and nothing noticed for weeks. A flag lives in git, is applied at every launch, and cannot
  * differ between guests.
  */
+/**
+ * Edge's "Magnify image" opens a full-window overlay on **Ctrl pressed twice while the pointer is over
+ * an image** — and guidepup sends Ctrl before EVERY captured action. On gov.uk the overlay took the
+ * foreground and the capture read `"Image Magnify, document"` rather than the page, so the run refused to
+ * report at all.
+ *
+ * **`pointer.mjs` is the fix. This flag is an UNVERIFIED belt beside that brace.** With the pointer parked
+ * at (0,0) no image is ever under it, so the shortcut cannot fire at all — measured: gov.uk went from
+ * three failed attempts and a refusal to a clean 108-announcement capture on the first try. The flag only
+ * matters if the park itself fails, which the capture records as `pointerParkFailed`.
+ *
+ * The name is a GUESS, from Microsoft's documented *enable* flag `--enable-features=msEdgeImageMagnifyUI`;
+ * there is no policy for this feature, only a per-profile settings toggle. An unrecognised
+ * `--disable-features` name is ignored in complete silence, so it is kept for its non-zero chance of
+ * being right at zero runtime cost — not because it is known to work.
+ *
+ * **Do not try to verify it through CDP `SystemInfo.getFeatureState`.** That was built here and removed:
+ * it answers `"Unknown feature"` for `msEdgeImageMagnifyUI`, for `msEdgeWelcomePage` AND for
+ * `AutofillServerCommunication` — the last of which demonstrably works, since suppressing it took the
+ * U+FFFC artefact from 3-31% of affected captures to 0 of 15. The method cannot see the features we set,
+ * so it cannot distinguish "wrong name" from "not queryable", and a diagnostic reporting a working flag
+ * as unknown is worse than none. The only real test is behavioural: park the pointer ON an image with
+ * `A11Y_POINTER_AT` and see whether the overlay appears.
+ */
+const MAGNIFY_FEATURE = "msEdgeImageMagnifyUI";
+
+
 const SUPPRESSED_FEATURES = [
   "msEdgeWelcomePage",
   "AutofillServerCommunication",       // no server-side suggestions
   "AutofillAddressProfileSavePrompt",  // never offer to remember a submitted form
   "AutofillEnableAccountWalletStorage",
+  MAGNIFY_FEATURE,
 ];
 
 function edgeArgs(url) {

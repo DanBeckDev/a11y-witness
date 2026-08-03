@@ -119,3 +119,74 @@ test("a table probe that found cells passes", () => {
   };
   assert.equal(captureRanRequestedProbes(withCells, { probeTables: true }), true);
 });
+
+// --- The gov.uk false refusal, and the overlay that must still be caught ---
+//
+// Both shapes below are real, taken from captures on this machine. They are a pair on purpose: the fix
+// for the first must not weaken the second, and the two differ only in whether what NVDA said has
+// anything to do with the page.
+
+/** gov.uk's own accessible names, as the CDP census recorded them. */
+const GOVUK_NAMES = [
+  "Welcome to GOV.UK", "Cookies on GOV.UK", "Skip to main content", "Accept additional cookies",
+  "Reject additional cookies", "View cookies", "The best place to find government services and information",
+];
+
+const census = (names: string[]) => [{ event: "structureCensus", names }];
+
+test("a capture that READ the page is accepted even when no title word appears in it", () => {
+  // "Welcome to GOV.UK" yields exactly one word that can vote — `gov` is 3 characters and `uk` is 2 —
+  // and `welcome` is in the <title> only. The h1 is "The best place to find government services and
+  // information". Before the page's own names were consulted this exact capture was reported as
+  // "could not read this page", so the Action refused to report findings about a page it had read.
+  const capture = {
+    transcript: [
+      "heading, level 2, Cookies on GOV dot UK",
+      "button, Accept additional cookies",
+      "main landmark, heading, level 1, The best place to find government services and information",
+    ],
+    diagnostics: census(GOVUK_NAMES),
+  };
+  assert.equal(captureMentionsTitle(capture, "Welcome to GOV.UK"), true);
+});
+
+test("Edge's image-magnifier overlay is STILL rejected, on the same page and title", () => {
+  // The fault this gate exists for. Ctrl twice over an image opens Edge's magnifier, and NVDA reads the
+  // overlay: the run then reported a 4.1.2 finding about the browser's own Zoom In and Rotate buttons as
+  // though gov.uk were at fault. None of those is a gov.uk accessible name, so overlap is zero.
+  const capture = {
+    transcript: ["Image Magnify, document", "Zoom In, button", "Rotate, button", "Close, button"],
+    diagnostics: census(GOVUK_NAMES),
+  };
+  assert.equal(captureMentionsTitle(capture, "Welcome to GOV.UK"), false,
+    "blaming a page for its browser is the one thing this gate must prevent");
+});
+
+test("ONE page name heard is not enough to vouch for a capture", () => {
+  // Two independent long names is not a coincidence; one can be. "Skip to main content" in particular is
+  // boilerplate that appears on a great many pages, so it cannot be the sole proof of which page was read.
+  const capture = {
+    transcript: ["Image Magnify, document", "link, Skip to main content"],
+    diagnostics: census(GOVUK_NAMES),
+  };
+  assert.equal(captureMentionsTitle(capture, "Welcome to GOV.UK"), false);
+});
+
+test("a short accessible name cannot vouch for a capture at all", () => {
+  // "View cookies" is 12 characters and counts; anything shorter sits in browser chrome as readily as in
+  // a page. Without a length floor, a magnifier overlay announcing "Close" and "Zoom In" could match a
+  // page that happens to have buttons of those names.
+  const capture = {
+    transcript: ["Image Magnify, document", "Close, button", "Zoom In, button"],
+    diagnostics: census(["Close", "Zoom In", "Search", "Home", "Menu"]),
+  };
+  assert.equal(captureMentionsTitle(capture, "Welcome to GOV.UK"), false);
+});
+
+test("with no census the check behaves exactly as it did before", () => {
+  // Every capture already on disk predates the census mark, and a capture from an older worker has no
+  // diagnostics at all. The new route must be unreachable for those rather than throwing or, worse,
+  // silently accepting them.
+  assert.equal(captureMentionsTitle({ transcript: ["blank", "blank"] }, "Welcome to GOV.UK"), false);
+  assert.equal(captureMentionsTitle({ transcript: ["heading, level 1, Welcome"] }, "Welcome to GOV.UK"), true);
+});

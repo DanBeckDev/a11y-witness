@@ -27,12 +27,16 @@
  * `Page.navigate` re-points the window that already exists. No new window, no focus transition, no
  * process start.
  *
- * ## Off by default
+ * ## ON by default
  *
  * A reused browser is a different evidence-production environment from a fresh one: a persistent
- * renderer keeps session state, and a page loaded by navigation may announce differently from one
- * loaded into a new window. That is exactly what `npm run evidence:check` exists to answer, so this is
- * opt-in via `A11Y_REUSE_BROWSER=1` until it has answered SAME on a real sample.
+ * renderer keeps session state, and a page loaded by navigation may announce differently from one loaded
+ * into a new window. That is exactly what `npm run evidence:check` exists to answer, and it has — so the
+ * gate is passed and this is the normal path, disabled with `A11Y_REUSE_BROWSER=0`.
+ *
+ * Worth knowing before reading `edgeArgs`: the DevTools port is added by `reusableArgs`, not by the
+ * one-shot launch, so CDP is available exactly because reuse is the default. The census and
+ * `currentPageUrl` depend on it.
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
