@@ -300,6 +300,9 @@ function captureOptions(parsed) {
     probeForms: parsed.probeForms ?? false,
     probeFocus: parsed.probeFocus ?? false,
     probeTables: parsed.probeTables ?? false,
+    // Opt-in cross-check against NVDA's own Elements List totals. Opens a modal
+    // dialog on the guest, so it is never on by default.
+    probeElementsList: parsed.probeElementsList ?? false,
     // The worker default is deliberately fast, but callers running a provenance or
     // repeatability pass may require a fresh NVDA lifecycle for every capture. Keep this
     // opt-in at the request boundary so the host's environment cannot be mistaken for the

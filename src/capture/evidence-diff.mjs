@@ -103,17 +103,33 @@ export function compareCapture(baseline, candidate) {
  * with its scale rather than waved through.
  */
 export function summarise(results) {
-  const counts = { SAME: 0, DRIFT: 0, CHANGED: 0, REJECTED: 0 };
-  for (const { comparison } of results) counts[comparison.verdict] += 1;
+  // SKIPPED is a verdict about the CHECK, not the evidence: the page title could not be read, so the
+  // capture could not be gated and must not be compared. It was added when a down page server made
+  // every title read fail, the gate was bypassed, and 48 captures of Edge's error page were reported
+  // as changed evidence -- a recommendation to recapture 2,122 captures.
+  const counts = { SAME: 0, DRIFT: 0, CHANGED: 0, REJECTED: 0, SKIPPED: 0 };
+  // Count defensively. An unknown verdict used to land as `undefined + 1` -> NaN, which propagates
+  // through `compared`, the drift share and the recommendation, so a new verdict silently turned the
+  // whole summary into nonsense rather than failing.
+  for (const { comparison } of results) {
+    const verdict = comparison?.verdict;
+    if (!Object.hasOwn(counts, verdict)) throw new Error(`unknown evidence verdict ${JSON.stringify(verdict)}`);
+    counts[verdict] += 1;
+  }
   // REJECTED captures are excluded from the denominator, not counted against the change. A capture the
   // pipeline itself would throw away says nothing about whether the evidence moved -- it says the
   // capture failed, which a real run answers by retrying. Including them would let a flaky worker
   // masquerade as an evidence change, and that is how a good optimisation gets blamed for a bad guest.
   const compared = counts.SAME + counts.DRIFT + counts.CHANGED;
   const driftShare = counts.DRIFT / (compared || 1);
-  const rejectedNote = counts.REJECTED
+  const rejectedNote = (counts.REJECTED
     ? ` ${counts.REJECTED} capture(s) were rejected by the pipeline's own gates and excluded; re-run if that is most of the sample.`
-    : "";
+    : "")
+    // Never silent. A check that quietly examined less than it was asked to is how "unchanged" comes
+    // to mean "unexamined", which is the failure this whole verdict exists to prevent.
+    + (counts.SKIPPED
+      ? ` ${counts.SKIPPED} capture(s) could not be gated (page title unreadable) and were NOT compared.`
+      : "");
   return {
     counts, compared,
     evidenceChanged: counts.CHANGED > 0,

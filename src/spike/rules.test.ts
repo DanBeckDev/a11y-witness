@@ -60,3 +60,37 @@ test("a clean page yields no findings", () => {
   const clean = { transcript: ["heading, level 1, Welcome", "link, Read the documentation", "Subscribe, button"] };
   assert.equal(ruleFindings(clean).length, 0);
 });
+
+/**
+ * NVDA's "unlabeled" prefix is NOT dependable, so 1.1.1 must not hang on it alone.
+ *
+ * Measured on one unchanged page across three captures: "unlabeled graphic, to get missing image
+ * descriptions, open the context menu." twice, and "graphic, to get missing image descriptions, open
+ * the context menu." once. The rule keyed on "unlabeled", so it MISSED 1.1.1 on a third of captures of
+ * an image with no alt text at all — a silent false negative in a criterion the rule layer owns
+ * outright, on the layer that had never been measured against real captures.
+ *
+ * Edge only emits that hint because there is no description, and unlike the word "unlabeled" it was
+ * present in every capture. The stable token is the one to key on.
+ */
+test("flags a missing text alternative when NVDA omits its 'unlabeled' prefix", () => {
+  const withPrefix = "unlabeled graphic, to get missing image descriptions, open the context menu.";
+  const withoutPrefix = "graphic, to get missing image descriptions, open the context menu.";
+  assert.deepEqual(criteria(ruleFindings({ transcript: [withPrefix] })), ["1.1.1"]);
+  assert.deepEqual(
+    criteria(ruleFindings({ transcript: [withoutPrefix] })),
+    ["1.1.1"],
+    "the same image, announced without the unstable prefix, must still fail 1.1.1",
+  );
+});
+
+test("the missing-description hint does not make described images fail 1.1.1", () => {
+  // The guard has to be shown NOT to over-fire, or it trades a false negative for a false positive:
+  // a described image mentioning descriptions in its alt text must stay clean.
+  for (const line of [
+    "graphic, Map showing the east entrance beside the lake",
+    "graphic, Chart of image descriptions published per month",
+  ]) {
+    assert.equal(ruleFindings({ transcript: [line] }).length, 0, line);
+  }
+});
