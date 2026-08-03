@@ -246,9 +246,13 @@ export async function judgeLocally(capture: CaptureEvidence & { task?: string })
     // Not inferred. This layer scores WCAG criteria and has no head for "could someone finish the task",
     // so claiming an answer would be inventing one. A blocking failure is the closest honest signal.
     taskCompletable: !findings.some((f) => f.severity === "blocker"),
+    // Deliberately carries NO COUNT. `judge()` appends the deterministic rule layer's findings AFTER this
+    // returns (`withRuleFindings`), so any number written here is stale by the time it is read: on a real
+    // site this said "1 confirmed failure(s)" above a table listing three. The renderer counts the actual
+    // findings, so the count has exactly one source of truth and the prose cannot contradict the table.
     summary: findings.length === 0
-      ? "No failures were confirmed for the eight criteria this layer covers. Other criteria are unchecked, not clean."
-      : `${findings.length} confirmed failure(s) across the eight criteria this layer covers. Other criteria are unchecked, not clean.`,
+      ? "No failures were confirmed for the eight criteria this layer scores. Other criteria are unchecked, not clean."
+      : "Confirmed failures below, scored against the eight criteria this layer covers. Other criteria are unchecked, not clean.",
     findings,
     // The layer's own confidence is the weakest finding's: a report is only as good as its shakiest claim.
     confidence: findings.length === 0 ? 1 : Math.min(...findings.map((f) => f.confidence)),
