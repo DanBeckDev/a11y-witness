@@ -152,7 +152,8 @@ host page cache cannot dedupe them.
 
 Two fixes, in order of value:
 
-- **Keep Edge alive and re-point it** (`A11Y_REUSE_BROWSER=1`, see `browser-session.mjs`). Navigates the
+- **Keep Edge alive and re-point it** (ON by default; `A11Y_REUSE_BROWSER=0` reverts. See
+  `browser-session.mjs`). Navigates the
   existing window over the DevTools Protocol. Measured `windowsActivate` 8.9 s → **3.6 s**. This removes
   the reads rather than making them faster.
 - **A shared qcow2 backing file** — one read-only base plus copy-on-write overlays — so the host caches

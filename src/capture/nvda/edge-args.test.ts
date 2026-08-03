@@ -43,3 +43,12 @@ test("first-run and crash bubbles stay suppressed", () => {
 test("the durable profile directory is still passed", () => {
   assert.ok(args().some((a) => a.startsWith("--user-data-dir=")));
 });
+
+test("Edge's image magnifier is suppressed", () => {
+  // Magnify opens a full-window overlay on Ctrl pressed twice while the pointer is over an image, and
+  // guidepup sends Ctrl before EVERY captured action. On gov.uk the overlay took the foreground and the
+  // capture read "Image Magnify, document" instead of the page — so the run reported that it could not
+  // read the site at all. Microsoft documents no policy for this, only a per-profile toggle, which is
+  // why it is a flag: `pointer.mjs` is the second, independent guard.
+  assert.match(args().find((a) => a.startsWith("--disable-features="))!, /msEdgeImageMagnifyUI/);
+});

@@ -48,7 +48,7 @@ function protocolBumpNote() {
 
 function localVersion() {
   const hash = createHash("sha256");
-  for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs", "nvda-logging.mjs", "speech-channel.mjs", "windows-trim.mjs", "browser-session.mjs"]) {
+  for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs", "nvda-logging.mjs", "speech-channel.mjs", "windows-trim.mjs", "browser-session.mjs", "pointer.mjs"]) {
     hash.update(readFileSync(resolve(NVDA_DIR, file)));
   }
   return hash.digest("hex").slice(0, 16);

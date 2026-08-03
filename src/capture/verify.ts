@@ -26,6 +26,16 @@ export interface CapturedAnnouncements {
     stateChanges: { control: string; after: string }[];
     postSubmitFields?: string[];
   };
+  /**
+   * The capture's diagnostic marks. Only the CDP census's accessible names are read here — they are the
+   * page's OWN names as the browser renders them, which is the one thing that can prove NVDA read this
+   * page rather than something on top of it.
+   *
+   * Deliberately `unknown[]`: the marks are heterogeneous by design (each phase records its own shape)
+   * and they arrive over HTTP from the worker, so this is a boundary and gets a runtime check rather
+   * than a declared shape it cannot enforce.
+   */
+  diagnostics?: unknown[];
 }
 
 /** Words shorter than this are too common to be evidence of anything. */
@@ -52,9 +62,100 @@ const STOPWORDS = new Set([
 
 const isSignificant = (word: string): boolean => !STOPWORDS.has(word);
 
+/** Everything the screen reader said, as one lowercased string. */
+function announced(capture: CapturedAnnouncements): string {
+  const s = capture.structure;
+  const it = capture.interaction;
+  return [
+    ...capture.transcript,
+    ...(s?.headings ?? []), ...(s?.landmarks ?? []), ...(s?.formFields ?? []),
+    ...(it?.controls ?? []),
+    ...(it?.stateChanges ?? []).map((x) => `${x.control} ${x.after}`),
+    ...(it?.postSubmitFields ?? []),
+  ].join(" ").toLowerCase();
+}
+
+/**
+ * Punctuation-insensitive, because NVDA does not read punctuation literally: it speaks `GOV.UK` as
+ * "GOV dot UK" and `eVisas` as "e Visas". Comparing raw strings across that boundary fails on exactly
+ * the names most worth matching.
+ */
+const normalise = (text: string): string =>
+  text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * Long enough that appearing by chance is implausible. A short name like "Search" or "Home" sits in
+ * browser chrome as readily as in a page, and this check exists precisely to tell those apart.
+ */
+const DISTINCTIVE_NAME_LENGTH = 12;
+
+/** How many of the page's own names must be heard. Two independent long names is not a coincidence. */
+const NAMES_NEEDED = 2;
+
+/**
+ * The page's own accessible names, from the CDP census mark the capture already records.
+ *
+ * Every field is checked rather than asserted. These marks come off the wire from a worker that may be
+ * running older code — `names` was added to the census after the field it feeds — and a capture whose
+ * census predates it must fall through to "no names", not throw inside a gate.
+ */
+function pageNames(capture: CapturedAnnouncements): string[] {
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  for (const mark of marks) {
+    if (typeof mark !== "object" || mark === null) continue;
+    const { event, names } = mark as { event?: unknown; names?: unknown };
+    if (event !== "structureCensus" || !Array.isArray(names)) continue;
+    return names.filter((name): name is string => typeof name === "string");
+  }
+  return [];
+}
+
+/**
+ * Did the screen reader announce the page's OWN content?
+ *
+ * Direct evidence, where the title check is a proxy. The accessible names come from the page target's
+ * accessibility tree, so browser chrome is not in them: when the capture read Edge's image-magnifier
+ * overlay it announced "Image Magnify, document", "Zoom In, button" and "Rotate, button", none of which
+ * is a gov.uk name — so overlap is zero and the capture is still correctly rejected.
+ *
+ * Names carrying punctuation NVDA expands are simply not matched rather than worked around: `Cookies on
+ * GOV.UK` is heard as "cookies on gov dot uk", and there is no need to recover it when a page has plenty
+ * of plain ones. Only the count has to clear the bar.
+ */
+function announcedPageContent(capture: CapturedAnnouncements): boolean {
+  const heard = normalise(announced(capture));
+  if (!heard) return false;
+  const matched = new Set<string>();
+  for (const name of pageNames(capture)) {
+    const candidate = normalise(name);
+    if (candidate.length < DISTINCTIVE_NAME_LENGTH) continue;
+    if (heard.includes(candidate)) matched.add(candidate);
+    if (matched.size >= NAMES_NEEDED) return true;
+  }
+  return false;
+}
+
 /**
  * True when the capture plausibly read the page with this title -- including when the title
  * gives us nothing to check, since absence of a usable title is not evidence of failure.
+ *
+ * ## Why a title word is not enough on its own
+ *
+ * The word check assumes a page's title words appear in its body, which is true of this project's
+ * synthetic pages and often false in the wild. gov.uk is titled "Welcome to GOV.UK": `gov` and `uk` fall
+ * under the significant-word length, leaving `welcome` as the only word that can vote — and `welcome`
+ * appears nowhere in the page, whose h1 reads "The best place to find government services and
+ * information". So a capture that read gov.uk perfectly was reported as **"could not read this page"**,
+ * and the run refused to report findings about a page it had read.
+ *
+ * A false refusal is not the safe direction. It looks like caution while quietly making the tool
+ * unusable on real sites, and the fix must not be to lower the word length: `with` is four characters
+ * and once passed a browser error page as a match for "Project update with an informative illustration",
+ * putting two error-page captures into a 1,467-capture dataset. Three-character words would be worse.
+ *
+ * So the second route is ADDITIVE and made of direct evidence — the page's own accessible names. It can
+ * only accept captures this function previously rejected, never reject one it accepted, which is what
+ * keeps `verify.corpus.test.ts` honest across 2,122 captures on disk.
  */
 export function captureMentionsTitle(capture: CapturedAnnouncements, title: string): boolean {
   const words = (title.toLowerCase().match(new RegExp(`[a-z0-9]{${SIGNIFICANT_WORD_LENGTH},}`, "g")) ?? [])
@@ -63,16 +164,10 @@ export function captureMentionsTitle(capture: CapturedAnnouncements, title: stri
   // a match. Returning true here keeps the check lenient by design -- it only ever catches the
   // egregious wrong-content case -- but the words that do the catching must be distinctive.
   if (words.length === 0) return true;
-  const s = capture.structure;
-  const it = capture.interaction;
-  const haystack = [
-    ...capture.transcript,
-    ...(s?.headings ?? []), ...(s?.landmarks ?? []), ...(s?.formFields ?? []),
-    ...(it?.controls ?? []),
-    ...(it?.stateChanges ?? []).map((x) => `${x.control} ${x.after}`),
-    ...(it?.postSubmitFields ?? []),
-  ].join(" ").toLowerCase();
-  return words.some((w) => haystack.includes(w));
+  const haystack = announced(capture);
+  if (words.some((w) => haystack.includes(w))) return true;
+  // The title told us nothing, so ask the page directly.
+  return announcedPageContent(capture);
 }
 
 /**
