@@ -815,6 +815,28 @@ manual step left is acting on what it tells you.
 
 ## Verifying changes
 
+**Two of these now run themselves. That is deliberate, and it is the point.**
+
+```bash
+git push                      # pre-push hook: lint, typecheck, tests, check-signals, rules:gate (~5s)
+npm run release:gate          # signals -> rules -> held-out acceptance -> judge quality, cheapest first
+npm run capture:check -- --worker=http://192.168.64.4:8765    # the capture layer, ~2 min
+```
+
+This project had eight verifications and only two were automatic, and the record of what that produces is
+unambiguous: `capture-check` was *required* after any change to `capture-core.mjs` and had never run once;
+`release:gate` was broken from the day it was written (it invoked the acceptance evaluator with no
+`--data`, so stability could not be measured, and reported "not measured OR unstable" in one string); and
+the acceptance gate sat FAILING while three other gates were green. Every gate run for the first time
+found a real defect. **Automate a check or lose it** — the same rule this file already applies to worker
+VMs, the page server and NVDA.
+
+The pre-push hook holds only what costs nothing: measured at ~5 s, no worker, no Codex, no network. It
+SKIPS the corpus-dependent checks loudly when `runs/` is absent rather than passing quietly, because a
+check that reports success having examined nothing is how "verified" comes to mean "unexamined".
+`A11Y_SKIP_VERIFY=1 git push` overrides it, and says so. The worker- and Codex-dependent gates stay
+release-time: a 75-minute check on `git push` gets the hook deleted within a day.
+
 Verification is layered; pick the layers your change touches:
 - `npm run lint` and `npm run typecheck` — must pass. **CI gates on both**, and on `npm test`
   (`.github/workflows/lint.yml`).

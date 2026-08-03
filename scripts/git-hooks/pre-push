@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Run the verifications that are cheap enough to have no excuse, before anything leaves this machine.
+#
+# ## Why a hook and not a habit
+#
+# This project has eight verifications and only two ran automatically: `lint.yml` (lint, typecheck, tests)
+# and `capture-regression.yml`, which is path-filtered. The other six needed a human to remember, and the
+# record of what that produces is unambiguous:
+#
+#   - `capture-check.mjs` was required after any change to `capture-core.mjs` and had never been run once,
+#     across many such changes, because running it meant stopping the worker on the guest.
+#   - `release:gate` was broken from the day it was written: it invoked the acceptance evaluator with no
+#     --data, so stability could not be measured at all, and said "not measured OR unstable" in one string.
+#   - The acceptance gate sat FAILING while three other gates were green, and nobody was looking.
+#
+# So this is the same rule the rest of the repo already follows for worker VMs, the page server and NVDA:
+# anything a human has to remember is something that does not happen. Automate it or lose it.
+#
+# ## Why these five and not the others
+#
+# Measured: all five together take about FIVE SECONDS. They need no Windows worker, no Codex login and no
+# network, so there is no tradeoff to weigh and nothing to opt out of on a normal day.
+#
+# Deliberately NOT here: `gate:stability`, `evidence:check` and `capture:check` need a running worker;
+# `eval:gate` needs a local Codex login and ~75 minutes at EVAL_RUNS=3. Those are release-time gates
+# (`npm run release:gate`), not push-time ones. Putting a 75-minute check on `git push` would get the hook
+# deleted within a day, which is worse than not having it.
+#
+# Override, for a work-in-progress branch or when something below is broken for unrelated reasons:
+#   A11Y_SKIP_VERIFY=1 git push ...
+set -euo pipefail
+
+if [ "${A11Y_SKIP_VERIFY:-0}" = "1" ]; then
+  echo "pre-push: SKIPPED by A11Y_SKIP_VERIFY=1 — nothing was verified." >&2
+  exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+
+failed=()
+skipped=()
+
+run() { # run <label> <command...>
+  local label="$1"; shift
+  if "$@" >/tmp/a11y-prepush.$$ 2>&1; then
+    echo "  ok      $label"
+  else
+    echo "  FAILED  $label"
+    tail -20 /tmp/a11y-prepush.$$ | sed 's/^/            /'
+    failed+=("$label")
+  fi
+  rm -f /tmp/a11y-prepush.$$
+}
+
+echo "pre-push: the cheap tier (~5s). Release gates are separate: npm run release:gate"
+
+run "lint"       npm run --silent lint
+run "typecheck"  npm run --silent typecheck
+run "unit tests" npm test
+
+# The corpus lives in gitignored `runs/`, so these two cannot run on a fresh clone or in CI. Say so out
+# loud rather than passing quietly: a check that reports success when it examined nothing is how "verified"
+# comes to mean "unexamined", which is the specific defect this project keeps finding in its own tooling.
+if [ -d runs/screenreader-dataset/captures ]; then
+  run "check-signals" npm run --silent training:check-signals
+else
+  skipped+=("check-signals (no runs/screenreader-dataset/captures — needs a local corpus)")
+fi
+
+if [ -f runs/screenreader-dataset/screenreader-evidence.jsonl ] && [ -x .venv/bin/python ]; then
+  run "rules:gate" npm run --silent rules:gate
+else
+  skipped+=("rules:gate (needs the exported corpus and .venv)")
+fi
+
+for s in ${skipped+"${skipped[@]}"}; do echo "  SKIPPED $s"; done
+
+if [ ${#failed[@]} -gt 0 ]; then
+  echo "" >&2
+  echo "pre-push: ${#failed[@]} check(s) failed: ${failed[*]}" >&2
+  echo "Fix them, or push anyway with:  A11Y_SKIP_VERIFY=1 git push ..." >&2
+  exit 1
+fi
+
+echo "pre-push: ok${skipped+ (with ${#skipped[@]} skipped, listed above)}"
