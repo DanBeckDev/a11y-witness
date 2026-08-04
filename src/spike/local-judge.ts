@@ -187,10 +187,28 @@ export function hasEvidenceFor(criterion: string, capture: CaptureEvidence): boo
   // `4.1.2 @ 0.993`: the one true finding on the page, silently, while reporting no false positives. It
   // looked exactly like the guard working perfectly.
   //
-  // A guard that cannot see must not veto. With no structural or interaction data at all this cannot
-  // distinguish "the page has no links" from "links were never recorded", so it defers to the model
-  // rather than overruling it on absent information.
-  if (!capture.structure && !capture.interaction) return true;
+  // ...but deferring to the model when there is NO structural evidence was worse, and this is the second
+  // half of the story.
+  //
+  // The rule above deferred to the model on the reasoning that a guard which cannot see must not veto.
+  // Correct for the cause it was written for — the CLI's `--json` dropped `structure` and `interaction`,
+  // so a fully captured page looked blind — and that cause is now fixed AT SOURCE, which is the right
+  // place for it. What the deferral left behind is backwards: it grants maximum trust to the model
+  // exactly when the model has minimum information, because those same missing fields are 29 of its
+  // structured features and they all read zero. `local-judge`'s own header records what that does to its
+  // scores: 2.4.4 went 0.000 -> 0.190 and 3.3.2 0.114 -> 0.495 on one page purely by omitting them.
+  //
+  // Measured: running the eval fixtures through this backend produced false positives on SEVEN
+  // conformant pages — w3c-bad-after [1.1.1, 2.4.4, 3.3.2], tut-forms-good [1.1.1, 3.3.2, 4.1.2],
+  // tut-menus-good, tut-carousels-good and more — because almost every fixture predates the structural
+  // sweeps and carries a transcript only. Those are not judgements about the pages; they are a starved
+  // model being trusted absolutely.
+  //
+  // So a capture with no structural evidence yields NO model findings. The deterministic rules are
+  // unaffected — they read the transcript — so a starved capture still reports what can be proved from
+  // what was announced. If the old cause ever recurs the failure direction is a missing finding rather
+  // than invented ones, which for a tool whose value rests on precision is the safe way round.
+  if (!capture.structure && !capture.interaction) return false;
   // An unknown criterion is never reportable: the scorer has heads for eight, and inventing a finding for
   // a ninth would claim coverage this layer does not have.
   return EVIDENCE_CHANNEL[criterion]?.(capture) ?? false;
@@ -326,6 +344,25 @@ Promise<ScorerOutput> {
 export async function judgeLocally(capture: CaptureEvidence & { task?: string }): Promise<Judgment & {
   suppressed: { criterion: string; score: number; reason: string }[];
 }> {
+  // The scorer is an NVDA artifact and refuses anything else, correctly — it was trained on NVDA speech and
+  // VoiceOver phrases the same page differently. But that refusal used to propagate as a crash: one
+  // VoiceOver fixture aborted the entire eval run mid-way with
+  // `scorer artifact supports NVDA captures only, got 'VoiceOver'`, so no aggregate was ever printed and
+  // the exit code said "gate failed" when the truth was "one input is out of scope".
+  //
+  // Out of scope is not a failure and it is not a pass. The model contributes nothing, the deterministic
+  // rules still read the transcript, and the summary says so.
+  const screenReader = (capture as { screenReader?: string }).screenReader;
+  if (screenReader && !/nvda/i.test(screenReader)) {
+    return {
+      taskCompletable: true,
+      summary: `The trained scorer covers NVDA captures only, and this one is ${screenReader}. `
+        + "Nothing was scored: these criteria are unchecked, not clean.",
+      findings: [],
+      confidence: 0,
+      suppressed: [],
+    };
+  }
   const scored = await scoreCapture(capture);
   const record = scored.records?.[0];
   if (!record) throw new Error("the local scorer returned no record for this capture");

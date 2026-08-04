@@ -15,7 +15,7 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import { evidenceFor, findingsFromScores, hasEvidenceFor } from "./local-judge.js";
+import { evidenceFor, findingsFromScores, hasEvidenceFor, judgeLocally } from "./local-judge.js";
 
 /** The real capture that exposed the drift: heading + an unnamed button, nothing else. */
 const unnamedButton = {
@@ -94,22 +94,30 @@ test("1.1.1 can be evidenced from the transcript when the graphics sweep is empt
   assert.equal(hasEvidenceFor("1.1.1", { structure: { graphics: [] }, transcript: ["heading, level 1, Hi"] }), false);
 });
 
-test("a BLIND guard defers to the model instead of vetoing it", () => {
-  // The bug this replaces: the guard checked only whether each channel was empty, and the CLI's `--json`
-  // output omitted `structure` and `interaction` entirely — so every channel read empty and the guard
-  // suppressed `4.1.2 @ 0.993`, the one true finding on the page. It reported zero false positives and
-  // had destroyed the result, which is exactly what a working guard looks like from the outside.
+test("a capture with no structure is UNREPORTABLE, not deferred to the model", () => {
+  // This test asserted the opposite until the deferral was measured, and both halves are worth keeping.
   //
-  // No structural data at all means the guard cannot tell "no links" from "links not recorded".
+  // The original bug: the guard checked only whether each channel was empty, and the CLI's `--json` output
+  // omitted `structure` and `interaction` entirely — so every channel read empty and the guard suppressed
+  // `4.1.2 @ 0.993`, the one true finding on that page. Zero false positives while destroying the result,
+  // which is what a working guard looks like from outside. The response was to defer to the model rather
+  // than veto on absent information.
+  //
+  // Why that reversed: the CLI bug was fixed at source, so a real capture always carries the sweeps — and
+  // the deferral was granting maximum trust to the model exactly where the model had minimum information,
+  // since those same fields are 29 of its features and read zero. Measured on the eval fixtures, which are
+  // transcript-only, it produced false positives on SEVEN conformant pages.
+  //
+  // So absent structure now means "cannot say". The rules still speak from the transcript, so nothing that
+  // can be PROVED from what was announced is lost.
   const transcriptOnly = { transcript: ["heading, level 1, Account search", "button"] };
-  assert.equal(hasEvidenceFor("4.1.2", transcriptOnly), true, "must not veto on absent information");
-  assert.equal(hasEvidenceFor("2.4.4", transcriptOnly), true);
+  assert.equal(hasEvidenceFor("4.1.2", transcriptOnly), false);
+  assert.equal(hasEvidenceFor("2.4.4", transcriptOnly), false);
 
-  const { findings, suppressed } = findingsFromScores(
-    { "4.1.2": true }, { "4.1.2": 0.993 }, transcriptOnly,
-  );
-  assert.equal(findings.length, 1, "the true finding must survive a capture with no structure");
-  assert.deepEqual(suppressed, []);
+  const { findings } = findingsFromScores({ "4.1.2": true }, { "4.1.2": 0.993 }, transcriptOnly);
+  assert.equal(findings.length, 0,
+    "a starved model must not report, however confident its score looks — the confidence is an artefact " +
+    "of the features it could not read");
 });
 
 test("but a capture that DOES carry structure is still guarded", () => {
@@ -258,4 +266,48 @@ test("4.1.3 can be evidenced by a result count the page showed and never announc
     interaction: { controls: [], postSubmitNames: ["1 result for widgets", "Clear"] },
   };
   assert.equal(hasEvidenceFor("4.1.3", announcedCount), false);
+});
+
+// --- A starved capture must not assert ---
+
+test("a capture with NO structural evidence yields no model findings", () => {
+  // Almost every eval fixture is a transcript only: it predates the structural sweeps, so `structure` and
+  // `interaction` are absent. Those same fields are 29 of the scorer's features and they all read zero,
+  // which this module's own header measures as making its scores noisy (2.4.4 0.000 -> 0.190). Deferring
+  // to the model there produced false positives on SEVEN conformant fixtures.
+  const starved = { transcript: ["heading, level 1, Contact us", "link, Home", "edit"] };
+  for (const criterion of ["1.1.1", "1.3.1", "2.4.4", "2.4.6", "3.3.1", "3.3.2", "4.1.2", "4.1.3"]) {
+    assert.equal(hasEvidenceFor(criterion, starved), false, `${criterion} must not be reportable`);
+  }
+});
+
+test("a capture WITH structural evidence is judged exactly as before", () => {
+  // The inversion above must not quietly switch this layer off for real captures, which always carry the
+  // sweeps. This is the shape the worker actually returns.
+  const real = {
+    transcript: ["edit"],
+    structure: { formFields: ["edit"], headings: [], links: [] },
+    interaction: { controls: ["edit"] },
+  };
+  assert.equal(hasEvidenceFor("4.1.2", real), true);
+  assert.equal(hasEvidenceFor("3.3.2", real), true);
+  // ...and a criterion whose channel is genuinely empty stays unreportable, which is the original point.
+  assert.equal(hasEvidenceFor("2.4.4", real), false, "no links means link purpose is not reportable");
+});
+
+test("a non-NVDA capture is out of SCOPE, which is neither a failure nor a pass", () => {
+  // The scorer refuses a VoiceOver capture, correctly — it was trained on NVDA speech. That refusal used
+  // to propagate as a crash that aborted the whole eval run part-way, so no aggregate was printed and the
+  // exit code read as "the gate failed" when one input was simply out of scope.
+  const voiceOver = {
+    screenReader: "VoiceOver",
+    transcript: ["heading level 1 Contact us"],
+    structure: { formFields: ["edit"], headings: [], links: [] },
+  };
+  return judgeLocally(voiceOver).then((verdict) => {
+    assert.deepEqual(verdict.findings, []);
+    assert.match(verdict.summary, /NVDA captures only/i);
+    assert.match(verdict.summary, /unchecked, not clean/i, "silence must never read as a clean bill of health");
+    assert.equal(verdict.confidence, 0, "nothing was assessed, so there is no confidence to report");
+  });
 });
