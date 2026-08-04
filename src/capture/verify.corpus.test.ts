@@ -116,3 +116,40 @@ for (const gate of GATES) {
     );
   });
 }
+
+/**
+ * An activation delta must contain the page's response, and nothing else.
+ *
+ * `activateAndCaptureDelta` reads a baseline from the speech log, activates the control, then attributes
+ * everything spoken afterwards to that activation. Anything still IN FLIGHT when the baseline is read is
+ * therefore credited to the page — and NVDA's document announcement ("<title>, document") is the phrase
+ * most likely to arrive late, because the readiness gate, the anchor and the browse-mode Escape all
+ * provoke it.
+ *
+ * Measured, at protocol 3: exactly ONE capture out of ~125 with an activation recorded
+ * `after: "Energy results, document"` on `filter-status-silent/bad`, a page whose entire finding is that
+ * activating the filter announces NOTHING. Six repeats of the same page produced the correct empty delta,
+ * so the rate is roughly 1 in 125 — and one was enough. That single record was the false negative that
+ * made the retrained scorer fail its release gate, which is how a rare race came to block a release.
+ *
+ * The race is fixed by settling speech before the baseline is read. This asserts it stays fixed, because
+ * a 1-in-125 fault cannot be demonstrated absent by repeating a page a feasible number of times — only a
+ * check over the whole corpus can see it, and only if something looks.
+ */
+test("no activation delta was contaminated by a document announcement", () => {
+  if (samples.length === 0) return;
+  const contaminated = samples.flatMap((s) => {
+    const changes = (s.capture as {
+      interaction?: { formChanges?: { control?: string; after?: string }[] };
+    }).interaction?.formChanges ?? [];
+    return changes
+      // ", document" is NVDA's role suffix for the document node, so it cannot be part of a control's
+      // own response. Matched narrowly on purpose: a page may legitimately announce the word "document".
+      .filter((change) => /,\s*document\s*$/i.test(change.after ?? ""))
+      .map((change) => `${s.id}.${s.variant}: ${change.control} -> ${change.after}`);
+  });
+  assert.deepEqual(contaminated, [],
+    `${contaminated.length} activation delta(s) recorded NVDA's document announcement instead of the ` +
+    `page's response. That is speech from an earlier step arriving late and being credited to the ` +
+    `activation, and on a page whose finding is silence it inverts the evidence.`);
+});

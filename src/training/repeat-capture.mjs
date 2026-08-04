@@ -62,6 +62,16 @@ function comparable(capture) {
     tableCells: s.tableCells ?? [],
     stateChanges: i.stateChanges ?? [],
     focusOrder: i.focusOrder ?? [],
+    // `formChanges` and `postSubmitFields` are compared because they were NOT, and that is how an
+    // intermittent contaminant reached the corpus with the stability gate green. One capture of
+    // `filter-status-silent/bad` recorded `after: "Energy results, document"` where every other run
+    // recorded the empty delta that IS the finding — a late document announcement attributed to the
+    // activation. Ten fields were watched and the two carrying interaction evidence were not among them.
+    //
+    // Flattened to strings so a differing `after` shows up as a VARIES rather than as two objects the
+    // comparison treats as opaque.
+    formChanges: (i.formChanges ?? []).map((c) => `${c.control} [${c.kind ?? "?"}] -> ${c.after ?? ""}`),
+    postSubmitFields: i.postSubmitFields ?? [],
   };
 }
 
