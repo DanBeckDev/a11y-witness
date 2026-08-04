@@ -81,8 +81,13 @@ function filler({ links: linkCount, sections: sectionCount }) {
     + "</a></li>").join("");
   const sections = Array.from({ length: sectionCount }, (_, i) => {
     const n = String(i + 1).padStart(2, "0");
-    return "<h2 id=\"ref-" + (i + 1) + "\">Reference section " + n + "</h2>"
-      + "<p>Background notes for reference section " + n
+    // "Reference note", NOT "Reference section". The word `section` collided with a real signal —
+    // `heading.*\bsection\b` on `heading-vague-market` — so the filler itself satisfied the badSignal and
+    // the case reported CONTAMINATED, firing on both variants. Found by testing the filler's announced text
+    // against all 382 regex signals statically, which takes seconds and should be run whenever this text
+    // changes: it would have caught this before a single capture was spent.
+    return "<h2 id=\"ref-" + (i + 1) + "\">Reference note " + n + "</h2>"
+      + "<p>Background detail for reference note " + n
       + ", retained for records and reviewed each year by the site team.</p>";
   }).join("");
   return "<ul>" + links + "</ul>" + sections;
