@@ -1,7 +1,7 @@
 {
   "url": "tutorial: tables-good (authored from W3C guidance)",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:50:48.993Z",
+  "capturedAt": "2026-08-04T15:57:48.935Z",
   "transcript": [
     "heading, level 1, Train times",
     "table, with 3 rows and 3 columns, caption, Weekday departures from Central",
@@ -37,62 +37,62 @@
   "diagnostics": [
     {
       "event": "browserReused",
-      "atMs": 68,
+      "atMs": 63,
       "url": "http://192.168.64.1:5052/tutorials/tables-good.html",
-      "captures": 11
+      "captures": 8
     },
     {
       "event": "windowsActivate",
-      "atMs": 870,
+      "atMs": 767,
       "ok": true,
-      "waitedMs": 802
+      "waitedMs": 704
     },
     {
       "event": "pointerParked",
-      "atMs": 1129,
+      "atMs": 923,
       "x": 0,
       "y": 0,
-      "ms": 259
+      "ms": 156
     },
     {
       "event": "nvdaStart",
-      "atMs": 1129,
+      "atMs": 924,
       "ok": true,
       "reused": true,
-      "captures": 12
+      "captures": 9
     },
     {
       "event": "speechChannel",
-      "atMs": 1713,
+      "atMs": 1486,
       "alive": true,
       "heard": "heading, level 1, Train times"
     },
     {
       "event": "documentReady",
-      "atMs": 2364,
+      "atMs": 2163,
       "ok": true,
       "title": "Train times (accessible table)",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 8488,
+      "atMs": 7829,
       "lastSpoken": "heading, level 1, Train times"
     },
     {
       "event": "readThrough",
-      "atMs": 13510,
+      "atMs": 13127,
       "count": 12,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 14390,
+      "atMs": 14029,
       "type": "heading",
       "found": 1,
-      "prevMs": 606,
-      "nextMs": 274,
+      "prevMs": 614,
+      "nextMs": 288,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -105,11 +105,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 14974,
+      "atMs": 14597,
       "type": "landmark",
       "found": 0,
-      "prevMs": 300,
-      "nextMs": 284,
+      "prevMs": 289,
+      "nextMs": 279,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -120,11 +120,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 15521,
+      "atMs": 15167,
       "type": "formField",
       "found": 0,
-      "prevMs": 276,
-      "nextMs": 271,
+      "prevMs": 291,
+      "nextMs": 278,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -135,7 +135,7 @@
     },
     {
       "event": "structural",
-      "atMs": 15521,
+      "atMs": 15167,
       "headings": 1,
       "landmarks": 0,
       "formFields": 0,
@@ -143,11 +143,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 16087,
+      "atMs": 15727,
       "type": "graphic",
       "found": 0,
-      "prevMs": 272,
-      "nextMs": 294,
+      "prevMs": 296,
+      "nextMs": 264,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -158,11 +158,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 16637,
+      "atMs": 16315,
       "type": "link",
       "found": 0,
-      "prevMs": 278,
-      "nextMs": 272,
+      "prevMs": 310,
+      "nextMs": 278,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -173,11 +173,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 17191,
+      "atMs": 16859,
       "type": "list",
       "found": 0,
-      "prevMs": 273,
-      "nextMs": 281,
+      "prevMs": 274,
+      "nextMs": 270,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -188,7 +188,7 @@
     },
     {
       "event": "interaction",
-      "atMs": 17191,
+      "atMs": 16859,
       "controls": 0,
       "stateChanges": 0,
       "formChanges": 0,
@@ -197,11 +197,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 17199,
+      "atMs": 16866,
       "landmark": 0,
       "heading": 1,
       "link": 0,
       "graphic": 0,
+      "graphicUnnamed": 0,
       "names": [
         "Train times (accessible table)",
         "Train times",
@@ -241,24 +242,24 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 17199,
+      "atMs": 16866,
       "agrees": true,
       "compared": 4,
       "disagreements": []
     },
     {
       "event": "done",
-      "atMs": 17199,
+      "atMs": 16866,
       "transcript": 12
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 17199
+      "atMs": 16866
     }
   ],
   "task": "Find which platform the Hilltop train departs from",
   "environment": {
-    "measuredAt": "2026-08-04T13:50:48.994Z",
+    "measuredAt": "2026-08-04T15:57:48.936Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -267,7 +268,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

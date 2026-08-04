@@ -1,7 +1,7 @@
 {
   "url": "file:///C:/Users/borem/a11y-witness/src/eval/pages/books/custom-control-bad.html",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:56:40.279Z",
+  "capturedAt": "2026-08-04T16:03:39.817Z",
   "transcript": [
     "heading, level 1, Settings",
     "clickable, Save changes, button,"
@@ -31,62 +31,71 @@
   "diagnostics": [
     {
       "event": "browserReused",
-      "atMs": 58,
+      "atMs": 76,
       "url": "http://192.168.64.1:5052/books/custom-control-bad.html",
-      "captures": 3
+      "captures": 25
     },
     {
       "event": "windowsActivate",
-      "atMs": 897,
+      "atMs": 795,
       "ok": true,
-      "waitedMs": 839
+      "waitedMs": 719
     },
     {
       "event": "pointerParked",
-      "atMs": 1068,
+      "atMs": 1085,
       "x": 0,
       "y": 0,
-      "ms": 171
+      "ms": 290
+    },
+    {
+      "event": "nvdaRecycle",
+      "atMs": 1085,
+      "after": 25
     },
     {
       "event": "nvdaStart",
-      "atMs": 1069,
+      "atMs": 8650,
       "ok": true,
-      "reused": true,
-      "captures": 4
+      "reused": false
+    },
+    {
+      "event": "nvdaReady",
+      "atMs": 8651,
+      "waitedMs": 1
     },
     {
       "event": "speechChannel",
-      "atMs": 1660,
+      "atMs": 9288,
       "alive": true,
       "heard": "heading, level 1, Settings"
     },
     {
       "event": "documentReady",
-      "atMs": 3016,
+      "atMs": 9855,
       "ok": true,
       "title": "Settings (custom controls without names or roles)",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 6862,
+      "atMs": 12722,
       "lastSpoken": "heading, level 1, Settings"
     },
     {
       "event": "readThrough",
-      "atMs": 8446,
+      "atMs": 15064,
       "count": 2,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 9330,
+      "atMs": 16040,
       "type": "heading",
       "found": 1,
-      "prevMs": 609,
-      "nextMs": 275,
+      "prevMs": 677,
+      "nextMs": 298,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -99,11 +108,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 9916,
+      "atMs": 17285,
       "type": "landmark",
       "found": 0,
-      "prevMs": 286,
-      "nextMs": 300,
+      "prevMs": 284,
+      "nextMs": 961,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -114,11 +123,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 11564,
+      "atMs": 18210,
       "type": "formField",
       "found": 1,
-      "prevMs": 281,
-      "nextMs": 1367,
+      "prevMs": 298,
+      "nextMs": 627,
       "prevTrips": 3,
       "nextTrips": 5,
       "prevStop": "exhausted",
@@ -131,7 +140,7 @@
     },
     {
       "event": "structural",
-      "atMs": 11564,
+      "atMs": 18210,
       "headings": 1,
       "landmarks": 0,
       "formFields": 1,
@@ -139,10 +148,40 @@
     },
     {
       "event": "sweep",
-      "atMs": 12118,
+      "atMs": 18766,
       "type": "graphic",
       "found": 0,
-      "prevMs": 271,
+      "prevMs": 283,
+      "nextMs": 273,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 19369,
+      "type": "link",
+      "found": 0,
+      "prevMs": 303,
+      "nextMs": 300,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 19935,
+      "type": "list",
+      "found": 0,
+      "prevMs": 283,
       "nextMs": 283,
       "prevTrips": 3,
       "nextTrips": 3,
@@ -153,43 +192,13 @@
       "phrases": []
     },
     {
-      "event": "sweep",
-      "atMs": 12685,
-      "type": "link",
-      "found": 0,
-      "prevMs": 283,
-      "nextMs": 284,
-      "prevTrips": 3,
-      "nextTrips": 3,
-      "prevStop": "exhausted",
-      "nextStop": "exhausted",
-      "prevStopPhrase": "",
-      "nextStopPhrase": "",
-      "phrases": []
-    },
-    {
-      "event": "sweep",
-      "atMs": 13244,
-      "type": "list",
-      "found": 0,
-      "prevMs": 272,
-      "nextMs": 287,
-      "prevTrips": 3,
-      "nextTrips": 3,
-      "prevStop": "exhausted",
-      "nextStop": "exhausted",
-      "prevStopPhrase": "",
-      "nextStopPhrase": "",
-      "phrases": []
-    },
-    {
       "event": "formProbe",
-      "atMs": 13244,
+      "atMs": 19935,
       "activated": 0
     },
     {
       "event": "interaction",
-      "atMs": 13244,
+      "atMs": 19935,
       "controls": 1,
       "stateChanges": 0,
       "formChanges": 0,
@@ -198,11 +207,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 13253,
+      "atMs": 19953,
       "landmark": 0,
       "heading": 1,
       "link": 0,
       "graphic": 0,
+      "graphicUnnamed": 0,
       "names": [
         "Settings (custom controls without names or roles)",
         "Settings",
@@ -214,24 +224,24 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 13253,
+      "atMs": 19953,
       "agrees": true,
       "compared": 4,
       "disagreements": []
     },
     {
       "event": "done",
-      "atMs": 13253,
+      "atMs": 19953,
       "transcript": 2
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 13253
+      "atMs": 19953
     }
   ],
   "task": "Save your settings",
   "environment": {
-    "measuredAt": "2026-08-04T13:56:40.280Z",
+    "measuredAt": "2026-08-04T16:03:39.818Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -240,7 +250,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

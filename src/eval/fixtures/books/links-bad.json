@@ -1,7 +1,7 @@
 {
   "url": "file:///C:/Users/borem/a11y-witness/src/eval/pages/books/links-bad.html",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:54:34.102Z",
+  "capturedAt": "2026-08-04T16:01:38.223Z",
   "transcript": [
     "heading, level 1, City News",
     "heading, level 2, Heat wave linked to record temperatures",
@@ -47,62 +47,62 @@
   "diagnostics": [
     {
       "event": "browserReused",
-      "atMs": 67,
+      "atMs": 61,
       "url": "http://192.168.64.1:5052/books/links-bad.html",
-      "captures": 22
+      "captures": 19
     },
     {
       "event": "windowsActivate",
-      "atMs": 887,
+      "atMs": 764,
       "ok": true,
-      "waitedMs": 820
+      "waitedMs": 703
     },
     {
       "event": "pointerParked",
-      "atMs": 1131,
+      "atMs": 903,
       "x": 0,
       "y": 0,
-      "ms": 244
+      "ms": 139
     },
     {
       "event": "nvdaStart",
-      "atMs": 1133,
+      "atMs": 904,
       "ok": true,
       "reused": true,
-      "captures": 23
+      "captures": 20
     },
     {
       "event": "speechChannel",
-      "atMs": 1700,
+      "atMs": 1467,
       "alive": true,
       "heard": "heading, level 1, City News"
     },
     {
       "event": "documentReady",
-      "atMs": 2371,
+      "atMs": 2045,
       "ok": true,
       "title": "City News (ambiguous link text)",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 8060,
+      "atMs": 7960,
       "lastSpoken": "heading, level 1, City News"
     },
     {
       "event": "readThrough",
-      "atMs": 13231,
+      "atMs": 13589,
       "count": 12,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 16052,
+      "atMs": 16441,
       "type": "heading",
       "found": 4,
-      "prevMs": 1602,
-      "nextMs": 1219,
+      "prevMs": 1617,
+      "nextMs": 1235,
       "prevTrips": 11,
       "nextTrips": 9,
       "prevStop": "exhausted",
@@ -118,10 +118,10 @@
     },
     {
       "event": "sweep",
-      "atMs": 16618,
+      "atMs": 17020,
       "type": "landmark",
       "found": 0,
-      "prevMs": 289,
+      "prevMs": 302,
       "nextMs": 277,
       "prevTrips": 3,
       "nextTrips": 3,
@@ -133,11 +133,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 17178,
+      "atMs": 17618,
       "type": "formField",
       "found": 0,
-      "prevMs": 291,
-      "nextMs": 269,
+      "prevMs": 300,
+      "nextMs": 298,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -148,7 +148,7 @@
     },
     {
       "event": "structural",
-      "atMs": 17178,
+      "atMs": 17618,
       "headings": 4,
       "landmarks": 0,
       "formFields": 0,
@@ -156,11 +156,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 17742,
+      "atMs": 18179,
       "type": "graphic",
       "found": 0,
-      "prevMs": 297,
-      "nextMs": 267,
+      "prevMs": 277,
+      "nextMs": 284,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -171,11 +171,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 19979,
+      "atMs": 20488,
       "type": "link",
       "found": 4,
-      "prevMs": 620,
-      "nextMs": 1617,
+      "prevMs": 635,
+      "nextMs": 1674,
       "prevTrips": 5,
       "nextTrips": 11,
       "prevStop": "repeat",
@@ -191,11 +191,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 20878,
+      "atMs": 21373,
       "type": "list",
       "found": 1,
-      "prevMs": 635,
-      "nextMs": 264,
+      "prevMs": 618,
+      "nextMs": 267,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -208,7 +208,7 @@
     },
     {
       "event": "interaction",
-      "atMs": 20878,
+      "atMs": 21373,
       "controls": 0,
       "stateChanges": 0,
       "formChanges": 0,
@@ -217,11 +217,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 20890,
+      "atMs": 21388,
       "landmark": 0,
       "heading": 4,
       "link": 5,
       "graphic": 0,
+      "graphicUnnamed": 0,
       "names": [
         "City News (ambiguous link text)",
         "City News",
@@ -269,7 +270,7 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 20890,
+      "atMs": 21388,
       "agrees": false,
       "compared": 4,
       "disagreements": [
@@ -283,17 +284,17 @@
     },
     {
       "event": "done",
-      "atMs": 20890,
+      "atMs": 21388,
       "transcript": 12
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 20890
+      "atMs": 21389
     }
   ],
   "task": "Read the latest city news",
   "environment": {
-    "measuredAt": "2026-08-04T13:54:34.104Z",
+    "measuredAt": "2026-08-04T16:01:38.226Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -302,7 +303,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

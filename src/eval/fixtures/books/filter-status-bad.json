@@ -1,7 +1,7 @@
 {
   "url": "file:///C:/Users/borem/a11y-witness/src/eval/pages/books/filter-status-bad.html",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:57:36.873Z",
+  "capturedAt": "2026-08-04T16:04:42.526Z",
   "transcript": [
     "heading, level 1, Products",
     "Filter by category:",
@@ -53,62 +53,62 @@
   "diagnostics": [
     {
       "event": "browserReused",
-      "atMs": 61,
+      "atMs": 82,
       "url": "http://192.168.64.1:5052/books/filter-status-bad.html",
-      "captures": 5
+      "captures": 2
     },
     {
       "event": "windowsActivate",
-      "atMs": 828,
+      "atMs": 999,
       "ok": true,
-      "waitedMs": 766
+      "waitedMs": 917
     },
     {
       "event": "pointerParked",
-      "atMs": 1146,
+      "atMs": 1353,
       "x": 0,
       "y": 0,
-      "ms": 318
+      "ms": 354
     },
     {
       "event": "nvdaStart",
-      "atMs": 1146,
+      "atMs": 2099,
       "ok": true,
       "reused": true,
-      "captures": 6
+      "captures": 3
     },
     {
       "event": "speechChannel",
-      "atMs": 1720,
+      "atMs": 2670,
       "alive": true,
       "heard": "heading, level 1, Products"
     },
     {
       "event": "documentReady",
-      "atMs": 3042,
+      "atMs": 3282,
       "ok": true,
       "title": "Products (filter results not announced)",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 7895,
+      "atMs": 6470,
       "lastSpoken": "heading, level 1, Products"
     },
     {
       "event": "readThrough",
-      "atMs": 11109,
+      "atMs": 12284,
       "count": 8,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 12902,
+      "atMs": 13219,
       "type": "heading",
       "found": 1,
-      "prevMs": 1514,
-      "nextMs": 279,
+      "prevMs": 666,
+      "nextMs": 269,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -121,11 +121,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 13462,
+      "atMs": 13783,
       "type": "landmark",
       "found": 0,
-      "prevMs": 273,
-      "nextMs": 287,
+      "prevMs": 289,
+      "nextMs": 275,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -136,11 +136,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 21291,
+      "atMs": 21599,
       "type": "formField",
       "found": 3,
-      "prevMs": 357,
-      "nextMs": 7472,
+      "prevMs": 292,
+      "nextMs": 7524,
       "prevTrips": 3,
       "nextTrips": 9,
       "prevStop": "exhausted",
@@ -155,7 +155,7 @@
     },
     {
       "event": "structural",
-      "atMs": 21291,
+      "atMs": 21599,
       "headings": 1,
       "landmarks": 0,
       "formFields": 3,
@@ -163,11 +163,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 21856,
+      "atMs": 22183,
       "type": "graphic",
       "found": 0,
-      "prevMs": 291,
-      "nextMs": 274,
+      "prevMs": 295,
+      "nextMs": 289,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -178,11 +178,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 22418,
+      "atMs": 22786,
       "type": "link",
       "found": 0,
-      "prevMs": 276,
-      "nextMs": 286,
+      "prevMs": 315,
+      "nextMs": 288,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -193,11 +193,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 23353,
+      "atMs": 23712,
       "type": "list",
       "found": 1,
-      "prevMs": 292,
-      "nextMs": 643,
+      "prevMs": 275,
+      "nextMs": 651,
       "prevTrips": 3,
       "nextTrips": 5,
       "prevStop": "exhausted",
@@ -210,16 +210,16 @@
     },
     {
       "event": "formProbe",
-      "atMs": 23353,
+      "atMs": 23712,
       "activated": 1
     },
     {
       "event": "sweep",
-      "atMs": 27886,
+      "atMs": 28181,
       "type": "postSubmit",
       "found": 3,
-      "prevMs": 315,
-      "nextMs": 1191,
+      "prevMs": 284,
+      "nextMs": 1265,
       "prevTrips": 3,
       "nextTrips": 9,
       "prevStop": "exhausted",
@@ -234,7 +234,7 @@
     },
     {
       "event": "interaction",
-      "atMs": 27886,
+      "atMs": 28181,
       "controls": 3,
       "stateChanges": 0,
       "formChanges": 1,
@@ -245,11 +245,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 27894,
+      "atMs": 28196,
       "landmark": 0,
       "heading": 1,
       "link": 0,
       "graphic": 0,
+      "graphicUnnamed": 0,
       "names": [
         "Products (filter results not announced)",
         "Products",
@@ -278,24 +279,24 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 27894,
+      "atMs": 28197,
       "agrees": true,
       "compared": 4,
       "disagreements": []
     },
     {
       "event": "done",
-      "atMs": 27894,
+      "atMs": 28197,
       "transcript": 8
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 27894
+      "atMs": 28197
     }
   ],
   "task": "Filter the products to show only bags",
   "environment": {
-    "measuredAt": "2026-08-04T13:57:36.874Z",
+    "measuredAt": "2026-08-04T16:04:42.528Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -304,7 +305,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

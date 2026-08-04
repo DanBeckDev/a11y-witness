@@ -21,6 +21,17 @@ export interface EvalCase {
   /** Criteria legitimate to flag here (precision); anything else is a false positive. */
   allow: string[];
   notes?: string;
+  /**
+   * Backends that CANNOT assess this case, so it is excluded from their recall rather than counted as a
+   * miss. Scope, not performance — and it must be declared here rather than sniffed from a verdict.
+   *
+   * The one case: `planted-contact-form` is a VoiceOver transcript, and the trained scorer refuses non-NVDA
+   * input by design because VoiceOver phrases the same page differently. Counting it against the local
+   * backend penalises it for a limitation it correctly declares, exactly as expecting 1.4.5 Images of Text
+   * penalised it for a criterion a screen reader cannot perceive. An LLM backend reads any transcript, so
+   * the case stays fully in scope there.
+   */
+  notApplicableTo?: string[];
 }
 
 // W3C's documented Level A/AA failures on the inaccessible "Before" home page
@@ -275,6 +286,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "planted-contact-form",
+    notApplicableTo: ["local"],
     fixture: "src/eval/fixtures/planted-contact-form.json",
     task: "Send a message to the team using the contact form",
     // Planted: bare "image" (1.1.1), unlabelled field (3.3.2 or 4.1.2),

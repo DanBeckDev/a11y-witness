@@ -1,7 +1,7 @@
 {
   "url": "tutorial: forms-bad (authored from W3C guidance)",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:49:51.490Z",
+  "capturedAt": "2026-08-04T15:56:52.629Z",
   "transcript": [
     "heading, level 1, Sign up",
     "form, Email address",
@@ -41,60 +41,60 @@
       "event": "browserReused",
       "atMs": 64,
       "url": "http://192.168.64.1:5052/tutorials/forms-bad.html",
-      "captures": 8
+      "captures": 5
     },
     {
       "event": "windowsActivate",
-      "atMs": 889,
+      "atMs": 882,
       "ok": true,
-      "waitedMs": 825
+      "waitedMs": 818
     },
     {
       "event": "pointerParked",
-      "atMs": 1080,
+      "atMs": 1120,
       "x": 0,
       "y": 0,
-      "ms": 167
+      "ms": 238
     },
     {
       "event": "nvdaStart",
-      "atMs": 1081,
+      "atMs": 1490,
       "ok": true,
       "reused": true,
-      "captures": 9
+      "captures": 6
     },
     {
       "event": "speechChannel",
-      "atMs": 1866,
+      "atMs": 2323,
       "alive": true,
       "heard": "heading, level 1, Sign up"
     },
     {
       "event": "documentReady",
-      "atMs": 3105,
+      "atMs": 2935,
       "ok": true,
       "title": "Newsletter sign-up (inaccessible)",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 7024,
+      "atMs": 6147,
       "lastSpoken": "heading, level 1, Sign up"
     },
     {
       "event": "readThrough",
-      "atMs": 10175,
+      "atMs": 11222,
       "count": 6,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 11985,
+      "atMs": 12153,
       "type": "heading",
       "found": 1,
-      "prevMs": 1548,
-      "nextMs": 262,
+      "prevMs": 639,
+      "nextMs": 291,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -107,11 +107,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 12846,
+      "atMs": 13008,
       "type": "landmark",
       "found": 1,
-      "prevMs": 285,
-      "nextMs": 576,
+      "prevMs": 282,
+      "nextMs": 573,
       "prevTrips": 3,
       "nextTrips": 5,
       "prevStop": "exhausted",
@@ -124,11 +124,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 14049,
+      "atMs": 14186,
       "type": "formField",
       "found": 2,
-      "prevMs": 277,
-      "nextMs": 926,
+      "prevMs": 272,
+      "nextMs": 906,
       "prevTrips": 3,
       "nextTrips": 7,
       "prevStop": "exhausted",
@@ -142,7 +142,7 @@
     },
     {
       "event": "structural",
-      "atMs": 14049,
+      "atMs": 14187,
       "headings": 1,
       "landmarks": 1,
       "formFields": 2,
@@ -150,11 +150,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 14588,
+      "atMs": 14785,
       "type": "graphic",
       "found": 0,
-      "prevMs": 264,
-      "nextMs": 275,
+      "prevMs": 310,
+      "nextMs": 288,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -165,11 +165,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 15146,
+      "atMs": 15383,
       "type": "link",
       "found": 0,
-      "prevMs": 278,
-      "nextMs": 280,
+      "prevMs": 299,
+      "nextMs": 299,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -180,11 +180,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 15716,
+      "atMs": 15935,
       "type": "list",
       "found": 0,
-      "prevMs": 299,
-      "nextMs": 271,
+      "prevMs": 278,
+      "nextMs": 274,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -195,12 +195,12 @@
     },
     {
       "event": "formProbe",
-      "atMs": 15716,
+      "atMs": 15935,
       "activated": 0
     },
     {
       "event": "interaction",
-      "atMs": 15716,
+      "atMs": 15935,
       "controls": 2,
       "stateChanges": 0,
       "formChanges": 0,
@@ -209,11 +209,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 15724,
+      "atMs": 15946,
       "landmark": 1,
       "heading": 1,
       "link": 0,
       "graphic": 0,
+      "graphicUnnamed": 0,
       "names": [
         "Newsletter sign-up (inaccessible)",
         "Sign up",
@@ -230,24 +231,24 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 15724,
+      "atMs": 15946,
       "agrees": true,
       "compared": 4,
       "disagreements": []
     },
     {
       "event": "done",
-      "atMs": 15724,
+      "atMs": 15946,
       "transcript": 6
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 15724
+      "atMs": 15946
     }
   ],
   "task": "Sign up for the newsletter",
   "environment": {
-    "measuredAt": "2026-08-04T13:49:51.491Z",
+    "measuredAt": "2026-08-04T15:56:52.630Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -256,7 +257,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

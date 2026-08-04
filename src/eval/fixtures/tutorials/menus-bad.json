@@ -1,7 +1,7 @@
 {
   "url": "tutorial: menus-bad (authored from W3C guidance)",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:51:48.582Z",
+  "capturedAt": "2026-08-04T15:58:49.269Z",
   "transcript": [
     "link, Home, , link, Products, button,",
     "link, Help center, , link, Contact",
@@ -36,62 +36,62 @@
   "diagnostics": [
     {
       "event": "browserReused",
-      "atMs": 39,
+      "atMs": 82,
       "url": "http://192.168.64.1:5052/tutorials/menus-bad.html",
-      "captures": 14
+      "captures": 11
     },
     {
       "event": "windowsActivate",
-      "atMs": 823,
+      "atMs": 847,
       "ok": true,
-      "waitedMs": 784
+      "waitedMs": 765
     },
     {
       "event": "pointerParked",
-      "atMs": 995,
+      "atMs": 999,
       "x": 0,
       "y": 0,
-      "ms": 172
+      "ms": 152
     },
     {
       "event": "nvdaStart",
-      "atMs": 995,
+      "atMs": 1000,
       "ok": true,
       "reused": true,
-      "captures": 15
+      "captures": 12
     },
     {
       "event": "speechChannel",
-      "atMs": 1583,
+      "atMs": 1600,
       "alive": true,
       "heard": "link, Home, , link, Products, button,"
     },
     {
       "event": "documentReady",
-      "atMs": 2171,
+      "atMs": 2290,
       "ok": true,
       "title": "Acme - Home (inaccessible menu)",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 7933,
+      "atMs": 8019,
       "lastSpoken": "link, Home, , link, Products, button, "
     },
     {
       "event": "readThrough",
-      "atMs": 9779,
+      "atMs": 9874,
       "count": 4,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 10352,
+      "atMs": 10464,
       "type": "heading",
       "found": 0,
-      "prevMs": 300,
-      "nextMs": 273,
+      "prevMs": 313,
+      "nextMs": 277,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -102,11 +102,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 10915,
+      "atMs": 11029,
       "type": "landmark",
       "found": 0,
-      "prevMs": 272,
-      "nextMs": 291,
+      "prevMs": 281,
+      "nextMs": 284,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -117,11 +117,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 12771,
+      "atMs": 12897,
       "type": "formField",
       "found": 1,
-      "prevMs": 597,
-      "nextMs": 1259,
+      "prevMs": 608,
+      "nextMs": 1260,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -134,7 +134,7 @@
     },
     {
       "event": "structural",
-      "atMs": 12771,
+      "atMs": 12897,
       "headings": 0,
       "landmarks": 0,
       "formFields": 1,
@@ -142,11 +142,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 13305,
+      "atMs": 13451,
       "type": "graphic",
       "found": 0,
-      "prevMs": 267,
-      "nextMs": 267,
+      "prevMs": 278,
+      "nextMs": 276,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -157,11 +157,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 15420,
+      "atMs": 15616,
       "type": "link",
       "found": 4,
-      "prevMs": 931,
-      "nextMs": 1184,
+      "prevMs": 922,
+      "nextMs": 1243,
       "prevTrips": 7,
       "nextTrips": 9,
       "prevStop": "exhausted",
@@ -177,11 +177,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 15970,
+      "atMs": 16161,
       "type": "list",
       "found": 0,
-      "prevMs": 271,
-      "nextMs": 279,
+      "prevMs": 267,
+      "nextMs": 278,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -192,7 +192,7 @@
     },
     {
       "event": "interaction",
-      "atMs": 15970,
+      "atMs": 16162,
       "controls": 1,
       "stateChanges": 0,
       "formChanges": 0,
@@ -201,11 +201,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 15979,
+      "atMs": 16176,
       "landmark": 0,
       "heading": 0,
       "link": 4,
       "graphic": 0,
+      "graphicUnnamed": 0,
       "names": [
         "Acme - Home (inaccessible menu)",
         "Home",
@@ -228,24 +229,24 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 15979,
+      "atMs": 16176,
       "agrees": true,
       "compared": 4,
       "disagreements": []
     },
     {
       "event": "done",
-      "atMs": 15979,
+      "atMs": 16176,
       "transcript": 4
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 15979
+      "atMs": 16177
     }
   ],
   "task": "Go to the Support section",
   "environment": {
-    "measuredAt": "2026-08-04T13:51:48.583Z",
+    "measuredAt": "2026-08-04T15:58:49.270Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -254,7 +255,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

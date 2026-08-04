@@ -1,7 +1,7 @@
 {
   "url": "tutorial: structure-bad (authored from W3C guidance)",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:50:31.185Z",
+  "capturedAt": "2026-08-04T15:57:31.581Z",
   "transcript": [
     "City Library",
     "link, Hours, , link, Events",
@@ -35,62 +35,62 @@
   "diagnostics": [
     {
       "event": "browserReused",
-      "atMs": 41,
+      "atMs": 64,
       "url": "http://192.168.64.1:5052/tutorials/structure-bad.html",
-      "captures": 10
+      "captures": 7
     },
     {
       "event": "windowsActivate",
-      "atMs": 863,
+      "atMs": 963,
       "ok": true,
-      "waitedMs": 822
+      "waitedMs": 899
     },
     {
       "event": "pointerParked",
-      "atMs": 1045,
+      "atMs": 1150,
       "x": 0,
       "y": 0,
-      "ms": 182
+      "ms": 187
     },
     {
       "event": "nvdaStart",
-      "atMs": 1046,
+      "atMs": 1151,
       "ok": true,
       "reused": true,
-      "captures": 11
+      "captures": 8
     },
     {
       "event": "speechChannel",
-      "atMs": 1622,
+      "atMs": 1750,
       "alive": true,
       "heard": "City Library"
     },
     {
       "event": "documentReady",
-      "atMs": 2194,
+      "atMs": 2341,
       "ok": true,
       "title": "City Library (inaccessible structure)",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 8028,
+      "atMs": 5630,
       "lastSpoken": "City Library"
     },
     {
       "event": "readThrough",
-      "atMs": 11431,
+      "atMs": 10857,
       "count": 9,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 12882,
+      "atMs": 11444,
       "type": "heading",
       "found": 0,
-      "prevMs": 982,
-      "nextMs": 469,
+      "prevMs": 302,
+      "nextMs": 285,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -101,11 +101,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 13470,
+      "atMs": 11991,
       "type": "landmark",
       "found": 0,
-      "prevMs": 315,
-      "nextMs": 273,
+      "prevMs": 278,
+      "nextMs": 269,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -116,11 +116,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 14021,
+      "atMs": 12553,
       "type": "formField",
       "found": 0,
-      "prevMs": 276,
-      "nextMs": 275,
+      "prevMs": 280,
+      "nextMs": 282,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -131,7 +131,7 @@
     },
     {
       "event": "structural",
-      "atMs": 14021,
+      "atMs": 12553,
       "headings": 0,
       "landmarks": 0,
       "formFields": 0,
@@ -139,11 +139,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 14559,
+      "atMs": 13145,
       "type": "graphic",
       "found": 0,
-      "prevMs": 275,
-      "nextMs": 263,
+      "prevMs": 303,
+      "nextMs": 289,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -154,11 +154,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 16098,
+      "atMs": 14616,
       "type": "link",
       "found": 2,
-      "prevMs": 938,
-      "nextMs": 601,
+      "prevMs": 901,
+      "nextMs": 570,
       "prevTrips": 7,
       "nextTrips": 5,
       "prevStop": "exhausted",
@@ -172,11 +172,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 16667,
+      "atMs": 15202,
       "type": "list",
       "found": 0,
-      "prevMs": 273,
-      "nextMs": 296,
+      "prevMs": 296,
+      "nextMs": 290,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -187,7 +187,7 @@
     },
     {
       "event": "interaction",
-      "atMs": 16667,
+      "atMs": 15202,
       "controls": 0,
       "stateChanges": 0,
       "formChanges": 0,
@@ -196,11 +196,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 16685,
+      "atMs": 15211,
       "landmark": 0,
       "heading": 0,
       "link": 2,
       "graphic": 0,
+      "graphicUnnamed": 0,
       "names": [
         "City Library (inaccessible structure)",
         "Hours",
@@ -229,24 +230,24 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 16685,
+      "atMs": 15211,
       "agrees": true,
       "compared": 4,
       "disagreements": []
     },
     {
       "event": "done",
-      "atMs": 16685,
+      "atMs": 15211,
       "transcript": 9
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 16685
+      "atMs": 15211
     }
   ],
   "task": "Find the library's opening hours",
   "environment": {
-    "measuredAt": "2026-08-04T13:50:31.185Z",
+    "measuredAt": "2026-08-04T15:57:31.582Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -255,7 +256,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

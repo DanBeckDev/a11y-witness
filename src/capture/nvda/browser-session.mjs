@@ -159,7 +159,17 @@ const ROLE_BUCKET = new Map([
  *   `Accessibility.getFullAXTree`'s flat node list.
  */
 export function censusFromAXTree(nodes) {
-  const census = { landmark: 0, heading: 0, link: 0, graphic: 0, names: [] };
+  // `graphicUnnamed` is the count of images the page exposes with NO accessible name, and it is a finding
+  // the announcements cannot reach on their own. Quick navigation skips a wholly nameless graphic: on
+  // pages whose images at least have a filename NVDA says "Unlabeled graphic" and the sweep records it,
+  // but for an `<img>` with no alt and a `data:` URI there is nothing to say and the sweep walks past.
+  // Measured on the eval fixtures — tree 2 graphics / sweep 1, tree 1 / sweep 0, tree 3 / sweep 2 — which
+  // is three 1.1.1 failures the layer could see and did not.
+  //
+  // Safe as a signal precisely because ignored nodes are skipped below: Chromium marks a decorative
+  // `alt=""` image as ignored, so it never reaches this counter. A non-ignored graphic with no name is an
+  // image a screen-reader user meets and cannot identify.
+  const census = { landmark: 0, heading: 0, link: 0, graphic: 0, graphicUnnamed: 0, names: [] };
   for (const node of nodes ?? []) {
     // Ignored nodes are not in the tree a screen reader walks, so counting them would make the oracle
     // demand elements NVDA could never announce -- a guard that cries wolf gets removed, not heeded.
@@ -180,6 +190,7 @@ export function censusFromAXTree(nodes) {
     // bare `<section>` is not. Counting them would invent landmarks the page does not have.
     if (role === "region" && !String(node.name?.value ?? "").trim()) continue;
     census[bucket] += 1;
+    if (bucket === "graphic" && !named) census.graphicUnnamed += 1;
   }
   return census;
 }

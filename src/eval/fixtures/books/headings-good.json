@@ -1,7 +1,7 @@
 {
   "url": "file:///C:/Users/borem/a11y-witness/src/eval/pages/books/headings-good.html",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:54:52.426Z",
+  "capturedAt": "2026-08-04T16:01:56.053Z",
   "transcript": [
     "heading, level 1, Plain language guide",
     "heading, level 2, What is plain language?",
@@ -35,61 +35,61 @@
   "diagnostics": [
     {
       "event": "browserReused",
-      "atMs": 71,
+      "atMs": 57,
       "url": "http://192.168.64.1:5052/books/headings-good.html",
-      "captures": 23
+      "captures": 20
     },
     {
       "event": "windowsActivate",
-      "atMs": 1109,
+      "atMs": 745,
       "ok": true,
-      "waitedMs": 1038
+      "waitedMs": 688
     },
     {
       "event": "pointerParked",
-      "atMs": 1357,
+      "atMs": 888,
       "x": 0,
       "y": 0,
-      "ms": 248
+      "ms": 143
     },
     {
       "event": "nvdaStart",
-      "atMs": 1358,
+      "atMs": 889,
       "ok": true,
       "reused": true,
-      "captures": 24
+      "captures": 21
     },
     {
       "event": "speechChannel",
-      "atMs": 1968,
+      "atMs": 1509,
       "alive": true,
       "heard": "heading, level 1, Plain language guide"
     },
     {
       "event": "documentReady",
-      "atMs": 2622,
+      "atMs": 2129,
       "ok": true,
       "title": "Plain language guide (descriptive headings)",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 8154,
+      "atMs": 7913,
       "lastSpoken": "heading, level 1, Plain language guide"
     },
     {
       "event": "readThrough",
-      "atMs": 10913,
+      "atMs": 10798,
       "count": 7,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 14746,
+      "atMs": 14435,
       "type": "heading",
       "found": 4,
-      "prevMs": 2600,
+      "prevMs": 2404,
       "nextMs": 1233,
       "prevTrips": 11,
       "nextTrips": 9,
@@ -106,11 +106,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 15297,
+      "atMs": 15036,
       "type": "landmark",
       "found": 0,
-      "prevMs": 273,
-      "nextMs": 278,
+      "prevMs": 302,
+      "nextMs": 299,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -121,11 +121,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 15860,
+      "atMs": 15583,
       "type": "formField",
       "found": 0,
-      "prevMs": 293,
-      "nextMs": 270,
+      "prevMs": 278,
+      "nextMs": 269,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -136,7 +136,7 @@
     },
     {
       "event": "structural",
-      "atMs": 15860,
+      "atMs": 15583,
       "headings": 4,
       "landmarks": 0,
       "formFields": 0,
@@ -144,11 +144,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 16413,
+      "atMs": 16183,
       "type": "graphic",
       "found": 0,
-      "prevMs": 282,
-      "nextMs": 271,
+      "prevMs": 302,
+      "nextMs": 298,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -159,11 +159,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 16994,
+      "atMs": 16758,
       "type": "link",
       "found": 0,
-      "prevMs": 285,
-      "nextMs": 296,
+      "prevMs": 301,
+      "nextMs": 274,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -174,11 +174,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 17572,
+      "atMs": 17320,
       "type": "list",
       "found": 0,
-      "prevMs": 287,
-      "nextMs": 291,
+      "prevMs": 289,
+      "nextMs": 273,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -189,7 +189,7 @@
     },
     {
       "event": "interaction",
-      "atMs": 17573,
+      "atMs": 17320,
       "controls": 0,
       "stateChanges": 0,
       "formChanges": 0,
@@ -198,11 +198,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 17579,
+      "atMs": 17328,
       "landmark": 0,
       "heading": 4,
       "link": 0,
       "graphic": 0,
+      "graphicUnnamed": 0,
       "names": [
         "Plain language guide (descriptive headings)",
         "Plain language guide",
@@ -227,24 +228,24 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 17579,
+      "atMs": 17328,
       "agrees": true,
       "compared": 4,
       "disagreements": []
     },
     {
       "event": "done",
-      "atMs": 17579,
+      "atMs": 17328,
       "transcript": 7
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 17579
+      "atMs": 17328
     }
   ],
   "task": "Find how to reset your password",
   "environment": {
-    "measuredAt": "2026-08-04T13:54:52.427Z",
+    "measuredAt": "2026-08-04T16:01:56.054Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -253,7 +254,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

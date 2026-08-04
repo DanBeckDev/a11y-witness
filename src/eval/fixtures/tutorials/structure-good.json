@@ -1,7 +1,7 @@
 {
   "url": "tutorial: structure-good (authored from W3C guidance)",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:50:13.891Z",
+  "capturedAt": "2026-08-04T15:57:15.289Z",
   "transcript": [
     "same page, link, Skip to main content",
     "banner landmark, City Library",
@@ -50,62 +50,62 @@
   "diagnostics": [
     {
       "event": "browserReused",
-      "atMs": 65,
+      "atMs": 155,
       "url": "http://192.168.64.1:5052/tutorials/structure-good.html",
-      "captures": 9
+      "captures": 6
     },
     {
       "event": "windowsActivate",
-      "atMs": 938,
+      "atMs": 1029,
       "ok": true,
-      "waitedMs": 873
+      "waitedMs": 874
     },
     {
       "event": "pointerParked",
-      "atMs": 1187,
+      "atMs": 1297,
       "x": 0,
       "y": 0,
-      "ms": 249
+      "ms": 268
     },
     {
       "event": "nvdaStart",
-      "atMs": 1188,
+      "atMs": 1298,
       "ok": true,
       "reused": true,
-      "captures": 10
+      "captures": 7
     },
     {
       "event": "speechChannel",
-      "atMs": 1795,
+      "atMs": 1897,
       "alive": true,
       "heard": "same page, link, Skip to main content"
     },
     {
       "event": "documentReady",
-      "atMs": 2388,
+      "atMs": 2583,
       "ok": true,
       "title": "City Library (accessible structure)",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 8148,
+      "atMs": 7856,
       "lastSpoken": "same page, link, Skip to main content"
     },
     {
       "event": "readThrough",
-      "atMs": 13139,
+      "atMs": 12821,
       "count": 11,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 15851,
+      "atMs": 15717,
       "type": "heading",
       "found": 4,
-      "prevMs": 1534,
-      "nextMs": 1178,
+      "prevMs": 1667,
+      "nextMs": 1229,
       "prevTrips": 11,
       "nextTrips": 9,
       "prevStop": "exhausted",
@@ -121,11 +121,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 18008,
+      "atMs": 17978,
       "type": "landmark",
       "found": 4,
-      "prevMs": 940,
-      "nextMs": 1217,
+      "prevMs": 985,
+      "nextMs": 1276,
       "prevTrips": 7,
       "nextTrips": 9,
       "prevStop": "exhausted",
@@ -141,11 +141,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 18576,
+      "atMs": 18535,
       "type": "formField",
       "found": 0,
-      "prevMs": 286,
-      "nextMs": 282,
+      "prevMs": 279,
+      "nextMs": 278,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -156,7 +156,7 @@
     },
     {
       "event": "structural",
-      "atMs": 18576,
+      "atMs": 18535,
       "headings": 4,
       "landmarks": 4,
       "formFields": 0,
@@ -164,11 +164,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 19118,
+      "atMs": 19097,
       "type": "graphic",
       "found": 0,
-      "prevMs": 275,
-      "nextMs": 267,
+      "prevMs": 286,
+      "nextMs": 276,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -179,11 +179,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 21254,
+      "atMs": 21506,
       "type": "link",
       "found": 5,
-      "prevMs": 1246,
-      "nextMs": 890,
+      "prevMs": 1477,
+      "nextMs": 932,
       "prevTrips": 9,
       "nextTrips": 7,
       "prevStop": "exhausted",
@@ -200,11 +200,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 21821,
+      "atMs": 22061,
       "type": "list",
       "found": 0,
-      "prevMs": 277,
-      "nextMs": 290,
+      "prevMs": 284,
+      "nextMs": 271,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -215,7 +215,7 @@
     },
     {
       "event": "interaction",
-      "atMs": 21821,
+      "atMs": 22061,
       "controls": 0,
       "stateChanges": 0,
       "formChanges": 0,
@@ -224,11 +224,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 21829,
+      "atMs": 22104,
       "landmark": 4,
       "heading": 4,
       "link": 3,
       "graphic": 0,
+      "graphicUnnamed": 0,
       "names": [
         "City Library (accessible structure)",
         "Skip to main content",
@@ -265,7 +266,7 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 21829,
+      "atMs": 22105,
       "agrees": false,
       "compared": 4,
       "disagreements": [
@@ -279,17 +280,17 @@
     },
     {
       "event": "done",
-      "atMs": 21829,
+      "atMs": 22105,
       "transcript": 11
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 21829
+      "atMs": 22105
     }
   ],
   "task": "Find the library's opening hours",
   "environment": {
-    "measuredAt": "2026-08-04T13:50:13.892Z",
+    "measuredAt": "2026-08-04T15:57:15.290Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -298,7 +299,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

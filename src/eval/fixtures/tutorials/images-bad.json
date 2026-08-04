@@ -1,7 +1,7 @@
 {
   "url": "tutorial: images-bad (authored from W3C guidance)",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:49:05.411Z",
+  "capturedAt": "2026-08-04T15:56:04.955Z",
   "transcript": [
     "heading, level 1, Acme Trails",
     "Our guided hikes run every weekend.",
@@ -33,62 +33,62 @@
   "diagnostics": [
     {
       "event": "browserReused",
-      "atMs": 87,
+      "atMs": 63,
       "url": "http://192.168.64.1:5052/tutorials/images-bad.html",
-      "captures": 6
+      "captures": 3
     },
     {
       "event": "windowsActivate",
-      "atMs": 979,
+      "atMs": 922,
       "ok": true,
-      "waitedMs": 892
+      "waitedMs": 859
     },
     {
       "event": "pointerParked",
-      "atMs": 1189,
+      "atMs": 1156,
       "x": 0,
       "y": 0,
-      "ms": 210
+      "ms": 234
     },
     {
       "event": "nvdaStart",
-      "atMs": 1189,
+      "atMs": 1156,
       "ok": true,
       "reused": true,
-      "captures": 7
+      "captures": 4
     },
     {
       "event": "speechChannel",
-      "atMs": 1774,
+      "atMs": 1748,
       "alive": true,
       "heard": "heading, level 1, Acme Trails"
     },
     {
       "event": "documentReady",
-      "atMs": 2443,
+      "atMs": 2321,
       "ok": true,
       "title": "Acme Trails - Photos (inaccessible)",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 8425,
+      "atMs": 7587,
       "lastSpoken": "heading, level 1, Acme Trails"
     },
     {
       "event": "readThrough",
-      "atMs": 10002,
+      "atMs": 9156,
       "count": 3,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 10911,
+      "atMs": 10129,
       "type": "heading",
       "found": 1,
-      "prevMs": 643,
-      "nextMs": 266,
+      "prevMs": 696,
+      "nextMs": 276,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -101,11 +101,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 11511,
+      "atMs": 10690,
       "type": "landmark",
       "found": 0,
-      "prevMs": 300,
-      "nextMs": 300,
+      "prevMs": 289,
+      "nextMs": 272,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -116,11 +116,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 12046,
+      "atMs": 11218,
       "type": "formField",
       "found": 0,
-      "prevMs": 270,
-      "nextMs": 265,
+      "prevMs": 262,
+      "nextMs": 266,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -131,7 +131,7 @@
     },
     {
       "event": "structural",
-      "atMs": 12046,
+      "atMs": 11218,
       "headings": 1,
       "landmarks": 0,
       "formFields": 0,
@@ -139,11 +139,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 14011,
+      "atMs": 13231,
       "type": "graphic",
       "found": 2,
-      "prevMs": 1081,
-      "nextMs": 884,
+      "prevMs": 1070,
+      "nextMs": 943,
       "prevTrips": 3,
       "nextTrips": 7,
       "prevStop": "exhausted",
@@ -157,11 +157,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 14906,
+      "atMs": 14167,
       "type": "link",
       "found": 1,
-      "prevMs": 605,
-      "nextMs": 290,
+      "prevMs": 663,
+      "nextMs": 273,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -174,11 +174,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 15488,
+      "atMs": 14747,
       "type": "list",
       "found": 0,
-      "prevMs": 295,
-      "nextMs": 286,
+      "prevMs": 305,
+      "nextMs": 275,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -189,7 +189,7 @@
     },
     {
       "event": "interaction",
-      "atMs": 15488,
+      "atMs": 14747,
       "controls": 0,
       "stateChanges": 0,
       "formChanges": 0,
@@ -198,11 +198,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 15499,
+      "atMs": 14757,
       "landmark": 0,
       "heading": 1,
       "link": 1,
       "graphic": 3,
+      "graphicUnnamed": 2,
       "names": [
         "Acme Trails - Photos (inaccessible)",
         "Acme Trails",
@@ -215,7 +216,7 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 15499,
+      "atMs": 14757,
       "agrees": false,
       "compared": 4,
       "disagreements": [
@@ -229,17 +230,17 @@
     },
     {
       "event": "done",
-      "atMs": 15499,
+      "atMs": 14757,
       "transcript": 3
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 15499
+      "atMs": 14757
     }
   ],
   "task": "View the trail photos",
   "environment": {
-    "measuredAt": "2026-08-04T13:49:05.412Z",
+    "measuredAt": "2026-08-04T15:56:04.956Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -248,7 +249,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

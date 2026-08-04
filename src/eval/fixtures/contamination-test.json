@@ -1,7 +1,7 @@
 {
   "url": "file: authored fresh contamination-test.html (held-out, never published)",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:48:33.399Z",
+  "capturedAt": "2026-08-04T15:55:34.289Z",
   "transcript": [
     "heading, level 1, Acme Widgets",
     "graphic, Acme Widgets company logo",
@@ -52,63 +52,63 @@
   },
   "diagnostics": [
     {
-      "event": "browserReused",
-      "atMs": 118,
-      "url": "http://192.168.64.1:5052/contamination-test.html",
-      "captures": 4
+      "event": "browserReady",
+      "atMs": 1689,
+      "type": "browserReady",
+      "pid": 4372
     },
     {
       "event": "windowsActivate",
-      "atMs": 1532,
+      "atMs": 3364,
       "ok": true,
-      "waitedMs": 1414
+      "waitedMs": 1674
     },
     {
       "event": "pointerParked",
-      "atMs": 1765,
+      "atMs": 5122,
       "x": 0,
       "y": 0,
-      "ms": 233
+      "ms": 1757
     },
     {
       "event": "nvdaStart",
-      "atMs": 1766,
+      "atMs": 5123,
       "ok": true,
       "reused": true,
-      "captures": 5
+      "captures": 2
     },
     {
       "event": "speechChannel",
-      "atMs": 2380,
+      "atMs": 5721,
       "alive": true,
       "heard": "heading, level 1, Acme Widgets"
     },
     {
       "event": "documentReady",
-      "atMs": 2960,
+      "atMs": 6336,
       "ok": true,
       "title": "Acme Widgets - Sign up",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 5945,
+      "atMs": 9335,
       "lastSpoken": "heading, level 1, Acme Widgets"
     },
     {
       "event": "readThrough",
-      "atMs": 12187,
+      "atMs": 15636,
       "count": 11,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 13079,
+      "atMs": 16561,
       "type": "heading",
       "found": 1,
-      "prevMs": 609,
-      "nextMs": 283,
+      "prevMs": 637,
+      "nextMs": 287,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -121,11 +121,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 13942,
+      "atMs": 17458,
       "type": "landmark",
       "found": 1,
-      "prevMs": 260,
-      "nextMs": 603,
+      "prevMs": 292,
+      "nextMs": 605,
       "prevTrips": 3,
       "nextTrips": 5,
       "prevStop": "exhausted",
@@ -138,11 +138,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 15755,
+      "atMs": 19331,
       "type": "formField",
       "found": 4,
-      "prevMs": 265,
-      "nextMs": 1548,
+      "prevMs": 288,
+      "nextMs": 1585,
       "prevTrips": 3,
       "nextTrips": 11,
       "prevStop": "exhausted",
@@ -158,7 +158,7 @@
     },
     {
       "event": "structural",
-      "atMs": 15755,
+      "atMs": 19331,
       "headings": 1,
       "landmarks": 1,
       "formFields": 4,
@@ -166,11 +166,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 16600,
+      "atMs": 20200,
       "type": "graphic",
       "found": 1,
-      "prevMs": 571,
-      "nextMs": 274,
+      "prevMs": 598,
+      "nextMs": 271,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -183,11 +183,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 17737,
+      "atMs": 21388,
       "type": "link",
       "found": 2,
-      "prevMs": 272,
-      "nextMs": 865,
+      "prevMs": 273,
+      "nextMs": 915,
       "prevTrips": 3,
       "nextTrips": 7,
       "prevStop": "exhausted",
@@ -201,11 +201,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 18269,
+      "atMs": 21961,
       "type": "list",
       "found": 0,
-      "prevMs": 266,
-      "nextMs": 266,
+      "prevMs": 295,
+      "nextMs": 278,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -216,7 +216,7 @@
     },
     {
       "event": "interaction",
-      "atMs": 18269,
+      "atMs": 21961,
       "controls": 4,
       "stateChanges": 0,
       "formChanges": 0,
@@ -225,11 +225,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 18282,
+      "atMs": 22017,
       "landmark": 1,
       "heading": 1,
       "link": 2,
       "graphic": 2,
+      "graphicUnnamed": 1,
       "names": [
         "Acme Widgets - Sign up",
         "Acme Widgets",
@@ -268,7 +269,7 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 18282,
+      "atMs": 22018,
       "agrees": false,
       "compared": 4,
       "disagreements": [
@@ -282,17 +283,17 @@
     },
     {
       "event": "done",
-      "atMs": 18282,
+      "atMs": 22018,
       "transcript": 11
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 18282
+      "atMs": 22018
     }
   ],
   "task": "Sign up for an Acme Widgets account",
   "environment": {
-    "measuredAt": "2026-08-04T13:48:33.400Z",
+    "measuredAt": "2026-08-04T15:55:34.292Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -301,7 +302,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

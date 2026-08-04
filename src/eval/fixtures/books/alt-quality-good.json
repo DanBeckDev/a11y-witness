@@ -1,7 +1,7 @@
 {
   "url": "file:///C:/Users/borem/a11y-witness/src/eval/pages/books/alt-quality-good.html",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:55:32.602Z",
+  "capturedAt": "2026-08-04T16:02:30.451Z",
   "transcript": [
     "heading, level 1, Quarterly results",
     "Our revenue grew steadily through the year.",
@@ -33,71 +33,62 @@
   "diagnostics": [
     {
       "event": "browserReused",
-      "atMs": 120,
+      "atMs": 131,
       "url": "http://192.168.64.1:5052/books/alt-quality-good.html",
-      "captures": 25
+      "captures": 22
     },
     {
       "event": "windowsActivate",
-      "atMs": 905,
+      "atMs": 879,
       "ok": true,
-      "waitedMs": 785
+      "waitedMs": 748
     },
     {
       "event": "pointerParked",
-      "atMs": 1125,
+      "atMs": 1081,
       "x": 0,
       "y": 0,
-      "ms": 220
-    },
-    {
-      "event": "nvdaRecycle",
-      "atMs": 1125,
-      "after": 25
+      "ms": 202
     },
     {
       "event": "nvdaStart",
-      "atMs": 7144,
+      "atMs": 1081,
       "ok": true,
-      "reused": false
-    },
-    {
-      "event": "nvdaReady",
-      "atMs": 7144,
-      "waitedMs": 0
+      "reused": true,
+      "captures": 23
     },
     {
       "event": "speechChannel",
-      "atMs": 8047,
+      "atMs": 1675,
       "alive": true,
       "heard": "heading, level 1, Quarterly results"
     },
     {
       "event": "documentReady",
-      "atMs": 8623,
+      "atMs": 2333,
       "ok": true,
       "title": "Quarterly results (descriptive alt text)",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 11598,
+      "atMs": 7918,
       "lastSpoken": "heading, level 1, Quarterly results"
     },
     {
       "event": "readThrough",
-      "atMs": 16860,
+      "atMs": 10133,
       "count": 5,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 17784,
+      "atMs": 11204,
       "type": "heading",
       "found": 1,
-      "prevMs": 638,
-      "nextMs": 286,
+      "prevMs": 755,
+      "nextMs": 316,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -110,11 +101,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 18362,
+      "atMs": 12779,
       "type": "landmark",
       "found": 0,
-      "prevMs": 285,
-      "nextMs": 293,
+      "prevMs": 299,
+      "nextMs": 1275,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -125,11 +116,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 18940,
+      "atMs": 13329,
       "type": "formField",
       "found": 0,
-      "prevMs": 296,
-      "nextMs": 282,
+      "prevMs": 279,
+      "nextMs": 271,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -140,7 +131,7 @@
     },
     {
       "event": "structural",
-      "atMs": 18940,
+      "atMs": 13329,
       "headings": 1,
       "landmarks": 0,
       "formFields": 0,
@@ -148,11 +139,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 20180,
+      "atMs": 14545,
       "type": "graphic",
       "found": 2,
-      "prevMs": 303,
-      "nextMs": 937,
+      "prevMs": 284,
+      "nextMs": 932,
       "prevTrips": 3,
       "nextTrips": 7,
       "prevStop": "exhausted",
@@ -166,11 +157,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 20727,
+      "atMs": 15093,
       "type": "link",
       "found": 0,
-      "prevMs": 285,
-      "nextMs": 262,
+      "prevMs": 276,
+      "nextMs": 272,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -181,11 +172,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 21296,
+      "atMs": 15706,
       "type": "list",
       "found": 0,
-      "prevMs": 304,
-      "nextMs": 265,
+      "prevMs": 302,
+      "nextMs": 311,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -196,7 +187,7 @@
     },
     {
       "event": "interaction",
-      "atMs": 21296,
+      "atMs": 15706,
       "controls": 0,
       "stateChanges": 0,
       "formChanges": 0,
@@ -205,11 +196,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 21308,
+      "atMs": 15718,
       "landmark": 0,
       "heading": 1,
       "link": 0,
       "graphic": 2,
+      "graphicUnnamed": 0,
       "names": [
         "Quarterly results (descriptive alt text)",
         "Quarterly results",
@@ -225,24 +217,24 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 21308,
+      "atMs": 15718,
       "agrees": true,
       "compared": 4,
       "disagreements": []
     },
     {
       "event": "done",
-      "atMs": 21308,
+      "atMs": 15718,
       "transcript": 5
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 21309
+      "atMs": 15719
     }
   ],
   "task": "Review the quarterly results",
   "environment": {
-    "measuredAt": "2026-08-04T13:55:32.604Z",
+    "measuredAt": "2026-08-04T16:02:30.453Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -251,7 +243,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }

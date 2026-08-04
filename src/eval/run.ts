@@ -14,6 +14,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { judge } from "../spike/judge.js";
+import { pageCensus } from "../capture/verify.js";
 import { EVAL_CASES, type EvalCase } from "./cases.js";
 import { evaluateFitness, persistentFalsePositives, thresholdsFromEnv } from "./fitness.js";
 
@@ -39,16 +40,27 @@ async function scoreOnce(c: EvalCase): Promise<RunScore> {
     url: string;
     screenReader?: string;
     transcript: string[];
-    structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
-    interaction?: { controls: string[]; stateChanges: { control: string; after: string }[] };
+    // Declared LOOSELY on purpose. This shape used to name only headings/landmarks/formFields and
+    // controls/stateChanges, which silently stripped `links`, `graphics`, `lists`, `postSubmitFields` and
+    // `formChanges` before the judge ever saw them — so the rules that read those channels could not fire
+    // here, and the model's structured features read zero. That is the same defect as the CLI's `--json`
+    // dropping structure, which suppressed a true 4.1.2 at 0.993. An eval harness that feeds the judge
+    // less than production does is measuring something else.
+    structure?: Record<string, string[]>;
+    interaction?: Record<string, unknown>;
+    diagnostics?: unknown[];
   };
   const verdict = await judge({
     url: data.url,
     task: c.task,
     screenReader: data.screenReader ?? "NVDA",
     transcript: data.transcript,
-    structure: data.structure,
-    interaction: data.interaction,
+    structure: data.structure as never,
+    interaction: data.interaction as never,
+    // The accessibility-tree oracle, which two deterministic rules need: 1.3.1 will not claim "no
+    // headings" without it, and 1.1.1 uses it to see images that expose no name at all — ones quick
+    // navigation walks past, so the announcements alone cannot reach them.
+    census: pageCensus(data as never) ?? undefined,
   });
   const found = Array.from(new Set(verdict.findings.map((f) => criterion(f.wcag))));
   const allow = new Set(c.allow);
@@ -73,7 +85,20 @@ interface CaseReport {
 }
 
 // Score a case (RUNS times), print its block, and return what the aggregate needs.
+/** Which judge is being measured — the skip below is per backend, because scope is per backend. */
+const BACKEND = (process.env.JUDGE_BACKEND ?? "local").toLowerCase();
+
 async function reportCase(c: EvalCase): Promise<CaseReport> {
+  // A case the active backend cannot assess is NOT APPLICABLE: excluded from recall rather than scored as
+  // a zero, and announced so the exclusion can never be mistaken for a pass. Silence about a skipped case
+  // is how a gate comes to report coverage it does not have.
+  //
+  // Checked BEFORE any judging, so an out-of-scope fixture also stops costing a judge call — and, for the
+  // trained scorer, stops raising an exception that once aborted the whole run part-way.
+  if (c.notApplicableTo?.includes(BACKEND)) {
+    console.log(`\n# ${c.id}\n  SKIPPED  out of scope for the ${BACKEND} backend — ${c.notes ?? "see cases.ts"}`);
+    return { recalls: [], isFailureCase: false, falsePositivesPerRun: [] };
+  }
   process.stderr.write(`Scoring ${c.id} ...\n`);
   const scores: RunScore[] = [];
   for (let i = 0; i < RUNS; i++) scores.push(await scoreOnce(c));

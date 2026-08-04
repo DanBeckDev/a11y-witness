@@ -1,7 +1,7 @@
 {
   "url": "tutorial: forms-validation-bad",
   "screenReader": "NVDA",
-  "capturedAt": "2026-08-04T13:53:51.260Z",
+  "capturedAt": "2026-08-04T16:00:55.197Z",
   "transcript": [
     "heading, level 1, Newsletter sign-up",
     "form, Email address (required),",
@@ -60,62 +60,62 @@
   "diagnostics": [
     {
       "event": "browserReused",
-      "atMs": 112,
+      "atMs": 102,
       "url": "http://192.168.64.1:5052/tutorials/forms-validation-bad.html",
-      "captures": 20
+      "captures": 17
     },
     {
       "event": "windowsActivate",
-      "atMs": 940,
+      "atMs": 1116,
       "ok": true,
-      "waitedMs": 828
+      "waitedMs": 1014
     },
     {
       "event": "pointerParked",
-      "atMs": 1246,
+      "atMs": 1363,
       "x": 0,
       "y": 0,
-      "ms": 306
+      "ms": 247
     },
     {
       "event": "nvdaStart",
-      "atMs": 1247,
+      "atMs": 1434,
       "ok": true,
       "reused": true,
-      "captures": 21
+      "captures": 18
     },
     {
       "event": "speechChannel",
-      "atMs": 1825,
+      "atMs": 2018,
       "alive": true,
       "heard": "heading, level 1, Newsletter sign-up"
     },
     {
       "event": "documentReady",
-      "atMs": 3106,
+      "atMs": 2675,
       "ok": true,
       "title": "Newsletter sign-up",
       "attempt": 1
     },
     {
       "event": "afterStart",
-      "atMs": 7989,
+      "atMs": 7979,
       "lastSpoken": "heading, level 1, Newsletter sign-up"
     },
     {
       "event": "readThrough",
-      "atMs": 9824,
+      "atMs": 9892,
       "count": 4,
       "stopReason": "repeatBottom",
       "firstStepError": null
     },
     {
       "event": "sweep",
-      "atMs": 10752,
+      "atMs": 10790,
       "type": "heading",
       "found": 1,
-      "prevMs": 633,
-      "nextMs": 295,
+      "prevMs": 631,
+      "nextMs": 267,
       "prevTrips": 5,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -128,11 +128,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 11623,
+      "atMs": 12752,
       "type": "landmark",
       "found": 1,
-      "prevMs": 279,
-      "nextMs": 592,
+      "prevMs": 318,
+      "nextMs": 1644,
       "prevTrips": 3,
       "nextTrips": 5,
       "prevStop": "exhausted",
@@ -145,11 +145,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 19502,
+      "atMs": 20288,
       "type": "formField",
       "found": 2,
-      "prevMs": 874,
-      "nextMs": 7005,
+      "prevMs": 300,
+      "nextMs": 7236,
       "prevTrips": 3,
       "nextTrips": 7,
       "prevStop": "exhausted",
@@ -163,7 +163,7 @@
     },
     {
       "event": "structural",
-      "atMs": 19502,
+      "atMs": 20288,
       "headings": 1,
       "landmarks": 1,
       "formFields": 2,
@@ -171,11 +171,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 20055,
+      "atMs": 20861,
       "type": "graphic",
       "found": 0,
-      "prevMs": 275,
-      "nextMs": 278,
+      "prevMs": 304,
+      "nextMs": 269,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -186,11 +186,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 20631,
+      "atMs": 21422,
       "type": "link",
       "found": 0,
-      "prevMs": 299,
-      "nextMs": 277,
+      "prevMs": 282,
+      "nextMs": 279,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -201,11 +201,11 @@
     },
     {
       "event": "sweep",
-      "atMs": 21210,
+      "atMs": 22003,
       "type": "list",
       "found": 0,
-      "prevMs": 289,
-      "nextMs": 290,
+      "prevMs": 297,
+      "nextMs": 284,
       "prevTrips": 3,
       "nextTrips": 3,
       "prevStop": "exhausted",
@@ -216,16 +216,16 @@
     },
     {
       "event": "formProbe",
-      "atMs": 21210,
+      "atMs": 22003,
       "activated": 1
     },
     {
       "event": "sweep",
-      "atMs": 25719,
+      "atMs": 26692,
       "type": "postSubmit",
       "found": 2,
-      "prevMs": 276,
-      "nextMs": 896,
+      "prevMs": 321,
+      "nextMs": 959,
       "prevTrips": 3,
       "nextTrips": 7,
       "prevStop": "exhausted",
@@ -239,7 +239,7 @@
     },
     {
       "event": "interaction",
-      "atMs": 25719,
+      "atMs": 26692,
       "controls": 2,
       "stateChanges": 0,
       "formChanges": 1,
@@ -250,11 +250,12 @@
     },
     {
       "event": "structureCensus",
-      "atMs": 25733,
+      "atMs": 26698,
       "landmark": 1,
       "heading": 1,
       "link": 0,
       "graphic": 0,
+      "graphicUnnamed": 0,
       "names": [
         "Newsletter sign-up",
         "Newsletter sign-up",
@@ -272,24 +273,24 @@
     },
     {
       "event": "structureCrossCheck",
-      "atMs": 25733,
+      "atMs": 26699,
       "agrees": true,
       "compared": 4,
       "disagreements": []
     },
     {
       "event": "done",
-      "atMs": 25733,
+      "atMs": 26699,
       "transcript": 4
     },
     {
       "event": "browserKeptAlive",
-      "atMs": 25733
+      "atMs": 26699
     }
   ],
   "task": "Sign up for the newsletter",
   "environment": {
-    "measuredAt": "2026-08-04T13:53:51.262Z",
+    "measuredAt": "2026-08-04T16:00:55.197Z",
     "screenReader": "NVDA",
     "screenReaderVersion": "2026.1.1",
     "browser": "Microsoft Edge",
@@ -298,7 +299,7 @@
     "nodeVersion": "v24.18.0",
     "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
     "architecture": "arm64",
-    "workerCode": "2052b2a3c4c2f0fa",
+    "workerCode": "935baeacbe67c5ff",
     "captureProtocol": 4,
     "provisionRevision": "unstamped"
   }
