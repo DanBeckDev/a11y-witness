@@ -4,7 +4,7 @@ Guidance for Claude Code (and humans) working in this repo.
 
 ## What this is
 
-a11y-witness drives a **real screen reader (NVDA)** through real navigation and uses an AI judge (via local Codex — no metered API) to assess the lived assistive-technology experience: the judgment-based WCAG failures that rule scanners miss. It sits **alongside** axe-core (the rule/visual layer), not instead of it. See `README.md`, `PLAN.md`, and `docs/adr/`.
+a11y-witness drives a **real screen reader (NVDA)** through real navigation and uses **our own trained scorer** (`judge-backend: local`, the default everywhere — no rented LLM, no metered API) to assess the lived assistive-technology experience: the judgment-based WCAG failures that rule scanners miss. It sits **alongside** axe-core (the rule/visual layer), not instead of it. See `README.md`, `PLAN.md`, and `docs/adr/`.
 
 ## Code conventions
 
@@ -964,11 +964,11 @@ Verification is layered; pick the layers your change touches:
   Most of this codebase genuinely cannot be unit-tested — capture needs real NVDA on Windows —
   but the pure functions can be, and these are them. Add to them when you touch a pure function.
 - **Pre-release, and not covered by CI:** `npm run eval:gate` for judge quality, and
-  `verify.corpus.test.ts` for the capture gates. Neither can run in CI — eval needs a local Codex
+  `verify.corpus.test.ts` for the capture gates. Neither can run in CI — eval needs the Python venv
   login, the corpus test needs `runs/`. Note also that `capture-regression.yml` is path-filtered to
   `src/capture/**`, so it does **not** fire for changes under `src/training/**` — which is exactly
   where the guard bug above lived.
-- `npm run eval [-- <substring>]` — judge quality against 34 labelled fixtures. Needs a local Codex login, so it **cannot run in CI**; run it when you touch the judge, prompts, criteria, or fixtures. Do **not** quote its numbers as a headline: `docs/METHODOLOGY.md` records that the guards were tuned against these cases, scoring is single-run, and there is no expert baseline yet. Report with those caveats or not at all.
+- `npm run eval [-- <substring>]` — judge quality against 34 labelled fixtures, **against our own scorer** (`JUDGE_BACKEND` defaults to `local`). Needs the Python venv, so it **cannot run in CI**; run it when you touch the judge, prompts, criteria, or fixtures. Do **not** quote its numbers as a headline: `docs/METHODOLOGY.md` records that the guards were tuned against these cases, scoring is single-run, and there is no expert baseline yet. Report with those caveats or not at all.
 - **`src/capture/nvda/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test.
   After changing it, deploy (above) and then:
 
@@ -998,7 +998,14 @@ Verification is layered; pick the layers your change touches:
 
 ## Environment facts
 - ESM throughout (`"type": "module"`). `.ts` for the control plane, `.mjs` for the capture worker (it runs under plain Node on the VM).
-- The judge runs via the **Codex CLI** (subscription login), never the metered Anthropic API.
+- **The judge is our own trained scorer.** `JUDGE_BACKEND` defaults to `local` — the 27 KB of heads in
+  `models/screenreader-scorer/` over a frozen MiniLM encoder. `codex`, `anthropic` and `openai` remain
+  available for comparison and are **never** the default.
+  > It defaulted to `codex` until 2026-08-04, and the GitHub Action already shipped `local` — so
+  > `npm run eval` and `npm run eval:gate` measured a rented model and **never once measured ours**. A
+  > gate that does not exercise what ships is not a gate. Flipping it immediately surfaced two real
+  > defects invisible to an LLM that only reads transcripts: a starved scorer asserting on seven
+  > conformant fixtures, and a crash on an out-of-scope (VoiceOver) capture.
 - Don't manually `taskkill nvda.exe` — let Guidepup own NVDA's lifecycle, or the speech-capture channel destabilises. Killing the worker with `Stop-Process` orphans its NVDA (still holding port 6837); the next cold start recovers, but expect to see it.
 - The worker keeps NVDA alive between captures (recycled every 25). `A11Y_REUSE_NVDA=0` reverts to a fresh NVDA per capture — the first thing to try if captures drift as a run progresses.
 - The guest is provisioned as an **appliance**: Windows Update may install but not reboot, and Edge's background mode, startup boost and auto-updater are off. It used to reboot itself mid-run and leak Edge processes.

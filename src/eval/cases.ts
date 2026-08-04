@@ -46,10 +46,22 @@ export const EVAL_CASES: EvalCase[] = [
     id: "w3c-bad-before",
     fixture: "src/spike/fixtures/nvda-w3c-bad-before.json",
     task: "Read the City Lights home page and find the latest news",
-    // The failures clearly observable from this page's announced reading:
-    // unlabelled graphics (1.1.1), visual titles not marked as headings (1.3.1),
-    // vague link text (2.4.4), and a phone number shown as an image (1.4.5).
-    expect: ["1.1.1", "1.3.1", "2.4.4", "1.4.5"],
+    // The failures clearly observable from this page's announced reading: unlabelled graphics (1.1.1),
+    // visual titles not marked as headings (1.3.1), and vague link text (2.4.4).
+    //
+    // 1.4.5 was here too, on the reasoning that the phone number is shown as an image. That conflates two
+    // criteria. Announcements can reveal an unlabelled graphic — which IS 1.1.1, and is expected below —
+    // but they cannot reveal that the graphic contains text which should have been real text: if the alt
+    // text matches the pictured words, the announcement is identical to genuine text. 1.4.5 is an
+    // authoring/visual criterion, axe's side of the two-layer split, and it is not one of the eight this
+    // layer scores, so the scorer has no head for it and can never predict it.
+    //
+    // Keeping it in `expect` therefore imposed a permanent recall penalty for a criterion the layer does
+    // not claim to cover. It stays in `allow` (via W3C_BEFORE_DOCUMENTED_AA), so a backend that does flag
+    // it is not penalised either. Stated plainly because this change RAISES the measured recall: it is a
+    // correction to a mis-specified expectation, not a tuning of the layer to clear a gate, and it is the
+    // only expectation in the whole set that sits outside the eight criteria.
+    expect: ["1.1.1", "1.3.1", "2.4.4"],
     allow: W3C_BEFORE_DOCUMENTED_AA,
     notes: "Ground truth: W3C BAD before-page evaluation report.",
   },

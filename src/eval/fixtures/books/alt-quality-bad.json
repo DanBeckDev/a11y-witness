@@ -1,1 +1,260 @@
-{"url":"file:///C:/Users/borem/a11y-witness/src/eval/pages/books/alt-quality-bad.html","screenReader":"NVDA","capturedAt":"2026-06-29T10:56:09.458Z","transcript":["heading, level 1, Quarterly results","Our revenue grew steadily through the year.","graphic, A graph about stocks","Meet the team behind the numbers.","graphic, image"],"structure":{"headings":[],"landmarks":[],"formFields":[]},"interaction":{"controls":[],"stateChanges":[],"formChanges":[],"postSubmitFields":[]},"diagnostics":[{"event":"browserLaunched","atMs":20,"url":"file:///C:/Users/borem/a11y-witness/src/eval/pages/books/alt-quality-bad.html"},{"event":"windowsActivate","atMs":13615,"ok":true},{"event":"nvdaStart","atMs":15720,"ok":true},{"event":"afterStart","atMs":18735,"lastSpoken":""},{"event":"readThrough","atMs":24334,"count":5,"stopReason":"repeatBottom","firstStepError":null},{"event":"structural","atMs":29237,"headings":0,"landmarks":0,"formFields":0},{"event":"interaction","atMs":29237,"controls":0,"stateChanges":0,"formChanges":0,"postSubmit":0,"sweepLog":[]},{"event":"done","atMs":30094,"transcript":5}],"task":"Review the quarterly results"}
+{
+  "url": "file:///C:/Users/borem/a11y-witness/src/eval/pages/books/alt-quality-bad.html",
+  "screenReader": "NVDA",
+  "capturedAt": "2026-08-04T13:55:51.709Z",
+  "transcript": [
+    "heading, level 1, Quarterly results",
+    "Our revenue grew steadily through the year.",
+    "graphic, A graph about stocks",
+    "Meet the team behind the numbers.",
+    "graphic, image"
+  ],
+  "structure": {
+    "headings": [
+      "Quarterly results, heading, level 1"
+    ],
+    "landmarks": [],
+    "formFields": [],
+    "graphics": [
+      "A graph about stocks, graphic",
+      "image, graphic"
+    ],
+    "links": [],
+    "lists": [],
+    "tableCells": []
+  },
+  "interaction": {
+    "controls": [],
+    "stateChanges": [],
+    "formChanges": [],
+    "postSubmitFields": [],
+    "focusOrder": []
+  },
+  "diagnostics": [
+    {
+      "event": "browserRecycle",
+      "atMs": 0,
+      "after": 25
+    },
+    {
+      "event": "browserClosed",
+      "atMs": 763,
+      "owned": true,
+      "forced": false
+    },
+    {
+      "event": "browserReady",
+      "atMs": 2917,
+      "type": "browserReady",
+      "pid": 3168
+    },
+    {
+      "event": "windowsActivate",
+      "atMs": 4583,
+      "ok": true,
+      "waitedMs": 1666
+    },
+    {
+      "event": "pointerParked",
+      "atMs": 4799,
+      "x": 0,
+      "y": 0,
+      "ms": 216
+    },
+    {
+      "event": "nvdaStart",
+      "atMs": 4800,
+      "ok": true,
+      "reused": true,
+      "captures": 2
+    },
+    {
+      "event": "speechChannel",
+      "atMs": 5373,
+      "alive": true,
+      "heard": "heading, level 1, Quarterly results"
+    },
+    {
+      "event": "documentReady",
+      "atMs": 5987,
+      "ok": true,
+      "title": "Quarterly results (unhelpful alt text)",
+      "attempt": 1
+    },
+    {
+      "event": "afterStart",
+      "atMs": 11221,
+      "lastSpoken": "heading, level 1, Quarterly results"
+    },
+    {
+      "event": "readThrough",
+      "atMs": 13299,
+      "count": 5,
+      "stopReason": "repeatBottom",
+      "firstStepError": null
+    },
+    {
+      "event": "sweep",
+      "atMs": 14149,
+      "type": "heading",
+      "found": 1,
+      "prevMs": 589,
+      "nextMs": 261,
+      "prevTrips": 5,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "Quarterly results, heading, level 1",
+      "nextStopPhrase": "",
+      "phrases": [
+        "Quarterly results, heading, level 1"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 14687,
+      "type": "landmark",
+      "found": 0,
+      "prevMs": 272,
+      "nextMs": 266,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 16253,
+      "type": "formField",
+      "found": 0,
+      "prevMs": 1306,
+      "nextMs": 260,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "structural",
+      "atMs": 16253,
+      "headings": 1,
+      "landmarks": 0,
+      "formFields": 0,
+      "roundTrips": 20
+    },
+    {
+      "event": "sweep",
+      "atMs": 17397,
+      "type": "graphic",
+      "found": 2,
+      "prevMs": 268,
+      "nextMs": 876,
+      "prevTrips": 3,
+      "nextTrips": 7,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "image, graphic",
+      "phrases": [
+        "A graph about stocks, graphic",
+        "image, graphic"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 17935,
+      "type": "link",
+      "found": 0,
+      "prevMs": 272,
+      "nextMs": 266,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 18485,
+      "type": "list",
+      "found": 0,
+      "prevMs": 265,
+      "nextMs": 285,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "interaction",
+      "atMs": 18485,
+      "controls": 0,
+      "stateChanges": 0,
+      "formChanges": 0,
+      "postSubmit": 0,
+      "sweepLog": []
+    },
+    {
+      "event": "structureCensus",
+      "atMs": 18496,
+      "landmark": 0,
+      "heading": 1,
+      "link": 0,
+      "graphic": 2,
+      "names": [
+        "Quarterly results (unhelpful alt text)",
+        "Quarterly results",
+        "A graph about stocks",
+        "image",
+        "Quarterly results",
+        "Our revenue grew steadily through the year.",
+        "Meet the team behind the numbers.",
+        "Quarterly results",
+        "Our revenue grew steadily through the year.",
+        "Meet the team behind the numbers."
+      ]
+    },
+    {
+      "event": "structureCrossCheck",
+      "atMs": 18496,
+      "agrees": true,
+      "compared": 4,
+      "disagreements": []
+    },
+    {
+      "event": "done",
+      "atMs": 18496,
+      "transcript": 5
+    },
+    {
+      "event": "browserKeptAlive",
+      "atMs": 18496
+    }
+  ],
+  "task": "Review the quarterly results",
+  "environment": {
+    "measuredAt": "2026-08-04T13:55:51.711Z",
+    "screenReader": "NVDA",
+    "screenReaderVersion": "2026.1.1",
+    "browser": "Microsoft Edge",
+    "browserVersion": "151.0.4129.59",
+    "guidepupVersion": "0.31.0",
+    "nodeVersion": "v24.18.0",
+    "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
+    "architecture": "arm64",
+    "workerCode": "2052b2a3c4c2f0fa",
+    "captureProtocol": 4,
+    "provisionRevision": "unstamped"
+  }
+}

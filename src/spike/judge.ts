@@ -7,12 +7,25 @@ import { judgeLocally } from "./local-judge.js";
 import { ruleFindings } from "./rules.js";
 import { applyGate } from "./verify-gate.js";
 
-// Model backend (the judge needs an LLM). The DEFAULT is the local Codex CLI,
-// which uses your codex login — no metered API cost. External consumers (CI, the
-// GitHub Action) can't use that login, so JUDGE_BACKEND=anthropic calls the
-// Anthropic API with their own ANTHROPIC_API_KEY (JUDGE_MODEL overrides the
-// model). The backend is one clean seam: a prompt in, raw text out.
-const BACKEND = (process.env.JUDGE_BACKEND ?? "codex").toLowerCase();
+/**
+ * Which judge to use. **The default is `local`: this project's OWN trained scorer.**
+ *
+ * It used to default to `codex`, and that was wrong in a way that quietly undermined every gate. The
+ * whole point of training a screen-reader scorer was to stop renting an LLM's opinion, and the GitHub
+ * Action already shipped `judge-backend: local` — but `npm run eval` and `npm run eval:gate` inherited
+ * this default, so **judge quality was measured on a rented model and never once on ours**. A gate that
+ * does not exercise what ships is not a gate.
+ *
+ * Flipping it also changed what those gates report, and the changes were real defects rather than noise:
+ * running the fixtures through our own model found a starved-model false-positive storm on seven
+ * conformant fixtures, and a crash on an out-of-scope capture. Both were invisible to `codex`, which only
+ * ever reads the transcript.
+ *
+ * The other backends stay available and are never the default. They are for comparison and research —
+ * `codex` uses a local subscription login (no metered cost), `anthropic` and `openai` need the caller's
+ * own key. The backend is one clean seam: evidence in, findings out.
+ */
+const BACKEND = (process.env.JUDGE_BACKEND ?? "local").toLowerCase();
 const JUDGE_MODEL = process.env.JUDGE_MODEL ?? "claude-opus-4-8";
 // OpenAI-compatible backend (JUDGE_BACKEND=openai): works against hosted OpenAI
 // or any local server that speaks /v1/chat/completions (llama.cpp, vLLM, Ollama,
