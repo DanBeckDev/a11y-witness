@@ -1,14 +1,16 @@
 {
   "url": "tutorial: forms-validation-bad",
   "screenReader": "NVDA",
+  "capturedAt": "2026-08-04T13:53:51.260Z",
   "transcript": [
+    "heading, level 1, Newsletter sign-up",
     "form, Email address (required),",
     "edit",
     "button, Sign up"
   ],
   "structure": {
     "headings": [
-      "Newsletter sign up, heading, level 1"
+      "Newsletter sign-up, heading, level 1"
     ],
     "landmarks": [
       "form, Email address (required),"
@@ -16,7 +18,11 @@
     "formFields": [
       "Email address (required), edit",
       "Sign up, button"
-    ]
+    ],
+    "graphics": [],
+    "links": [],
+    "lists": [],
+    "tableCells": []
   },
   "interaction": {
     "controls": [
@@ -27,12 +33,273 @@
     "formChanges": [
       {
         "control": "Sign up, button",
+        "kind": "submit",
         "after": ""
       }
     ],
     "postSubmitFields": [
       "form, Email address (required), edit",
       "Sign up, button"
+    ],
+    "focusOrder": [],
+    "postSubmitNames": [
+      "Newsletter sign-up",
+      "Newsletter sign-up",
+      "Newsletter sign-up",
+      "Sign up",
+      "Newsletter sign-up",
+      "Email address (required)",
+      "Sign up",
+      "Email address (required)",
+      "Email address is required.",
+      "Sign up",
+      "Email address (required)",
+      "Email address is required."
     ]
+  },
+  "diagnostics": [
+    {
+      "event": "browserReused",
+      "atMs": 112,
+      "url": "http://192.168.64.1:5052/tutorials/forms-validation-bad.html",
+      "captures": 20
+    },
+    {
+      "event": "windowsActivate",
+      "atMs": 940,
+      "ok": true,
+      "waitedMs": 828
+    },
+    {
+      "event": "pointerParked",
+      "atMs": 1246,
+      "x": 0,
+      "y": 0,
+      "ms": 306
+    },
+    {
+      "event": "nvdaStart",
+      "atMs": 1247,
+      "ok": true,
+      "reused": true,
+      "captures": 21
+    },
+    {
+      "event": "speechChannel",
+      "atMs": 1825,
+      "alive": true,
+      "heard": "heading, level 1, Newsletter sign-up"
+    },
+    {
+      "event": "documentReady",
+      "atMs": 3106,
+      "ok": true,
+      "title": "Newsletter sign-up",
+      "attempt": 1
+    },
+    {
+      "event": "afterStart",
+      "atMs": 7989,
+      "lastSpoken": "heading, level 1, Newsletter sign-up"
+    },
+    {
+      "event": "readThrough",
+      "atMs": 9824,
+      "count": 4,
+      "stopReason": "repeatBottom",
+      "firstStepError": null
+    },
+    {
+      "event": "sweep",
+      "atMs": 10752,
+      "type": "heading",
+      "found": 1,
+      "prevMs": 633,
+      "nextMs": 295,
+      "prevTrips": 5,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "Newsletter sign-up, heading, level 1",
+      "nextStopPhrase": "",
+      "phrases": [
+        "Newsletter sign-up, heading, level 1"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 11623,
+      "type": "landmark",
+      "found": 1,
+      "prevMs": 279,
+      "nextMs": 592,
+      "prevTrips": 3,
+      "nextTrips": 5,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "form, Email address (required),",
+      "phrases": [
+        "form, Email address (required),"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 19502,
+      "type": "formField",
+      "found": 2,
+      "prevMs": 874,
+      "nextMs": 7005,
+      "prevTrips": 3,
+      "nextTrips": 7,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "Sign up, button",
+      "phrases": [
+        "Email address (required), edit",
+        "Sign up, button"
+      ]
+    },
+    {
+      "event": "structural",
+      "atMs": 19502,
+      "headings": 1,
+      "landmarks": 1,
+      "formFields": 2,
+      "roundTrips": 26
+    },
+    {
+      "event": "sweep",
+      "atMs": 20055,
+      "type": "graphic",
+      "found": 0,
+      "prevMs": 275,
+      "nextMs": 278,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 20631,
+      "type": "link",
+      "found": 0,
+      "prevMs": 299,
+      "nextMs": 277,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 21210,
+      "type": "list",
+      "found": 0,
+      "prevMs": 289,
+      "nextMs": 290,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "formProbe",
+      "atMs": 21210,
+      "activated": 1
+    },
+    {
+      "event": "sweep",
+      "atMs": 25719,
+      "type": "postSubmit",
+      "found": 2,
+      "prevMs": 276,
+      "nextMs": 896,
+      "prevTrips": 3,
+      "nextTrips": 7,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "Sign up, button",
+      "phrases": [
+        "form, Email address (required), edit",
+        "Sign up, button"
+      ]
+    },
+    {
+      "event": "interaction",
+      "atMs": 25719,
+      "controls": 2,
+      "stateChanges": 0,
+      "formChanges": 1,
+      "postSubmit": 2,
+      "sweepLog": [
+        "submit \"Sign up, button\" -> \"\""
+      ]
+    },
+    {
+      "event": "structureCensus",
+      "atMs": 25733,
+      "landmark": 1,
+      "heading": 1,
+      "link": 0,
+      "graphic": 0,
+      "names": [
+        "Newsletter sign-up",
+        "Newsletter sign-up",
+        "Newsletter sign-up",
+        "Sign up",
+        "Newsletter sign-up",
+        "Email address (required)",
+        "Sign up",
+        "Email address (required)",
+        "Email address is required.",
+        "Sign up",
+        "Email address (required)",
+        "Email address is required."
+      ]
+    },
+    {
+      "event": "structureCrossCheck",
+      "atMs": 25733,
+      "agrees": true,
+      "compared": 4,
+      "disagreements": []
+    },
+    {
+      "event": "done",
+      "atMs": 25733,
+      "transcript": 4
+    },
+    {
+      "event": "browserKeptAlive",
+      "atMs": 25733
+    }
+  ],
+  "task": "Sign up for the newsletter",
+  "environment": {
+    "measuredAt": "2026-08-04T13:53:51.262Z",
+    "screenReader": "NVDA",
+    "screenReaderVersion": "2026.1.1",
+    "browser": "Microsoft Edge",
+    "browserVersion": "151.0.4129.59",
+    "guidepupVersion": "0.31.0",
+    "nodeVersion": "v24.18.0",
+    "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
+    "architecture": "arm64",
+    "workerCode": "2052b2a3c4c2f0fa",
+    "captureProtocol": 4,
+    "provisionRevision": "unstamped"
   }
 }

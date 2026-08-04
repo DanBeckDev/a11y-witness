@@ -1,1 +1,311 @@
-{"url":"file:///C:/Users/borem/a11y-witness/src/eval/pages/books/filter-status-good.html","screenReader":"NVDA","capturedAt":"2026-06-29T12:00:14.745Z","transcript":["heading, level 1, Products","Filter by category:","button, All, button, Shoes, button, Bags","Showing 4 of 4 products","list, with 4 items, bullet Running shoes","bullet Hiking boots","bullet Tote bag","bullet Backpack"],"structure":{"headings":[],"landmarks":[],"formFields":["All, button","Shoes, button","Bags, button"]},"interaction":{"controls":["All, button","Shoes, button","Bags, button"],"stateChanges":[],"formChanges":[{"control":"Bags, button","after":"Showing 2 of 4 products"}],"postSubmitFields":["All, button","Shoes, button","Bags, button"]},"diagnostics":[{"event":"browserLaunched","atMs":13,"url":"file:///C:/Users/borem/a11y-witness/src/eval/pages/books/filter-status-good.html"},{"event":"windowsActivate","atMs":13702,"ok":true},{"event":"nvdaStart","atMs":16286,"ok":true},{"event":"afterStart","atMs":19289,"lastSpoken":""},{"event":"readThrough","atMs":26851,"count":8,"stopReason":"repeatBottom","firstStepError":null},{"event":"structural","atMs":34652,"headings":0,"landmarks":0,"formFields":3},{"event":"formProbe","atMs":34652,"activated":1},{"event":"interaction","atMs":39473,"controls":3,"stateChanges":0,"formChanges":1,"postSubmit":3,"sweepLog":["taskButton \"Bags, button\" -> \"Showing 2 of 4 products\""]},{"event":"done","atMs":40848,"transcript":8}],"task":"Filter the products to show only bags"}
+{
+  "url": "file:///C:/Users/borem/a11y-witness/src/eval/pages/books/filter-status-good.html",
+  "screenReader": "NVDA",
+  "capturedAt": "2026-08-04T13:57:08.388Z",
+  "transcript": [
+    "heading, level 1, Products",
+    "Filter by category:",
+    "button, All, button, Shoes, button, Bags",
+    "Showing 4 of 4 products",
+    "list, with 4 items, bullet Running shoes",
+    "bullet Hiking boots",
+    "bullet Tote bag",
+    "bullet Backpack"
+  ],
+  "structure": {
+    "headings": [
+      "Products, heading, level 1"
+    ],
+    "landmarks": [],
+    "formFields": [
+      "All, button",
+      "Shoes, button",
+      "Bags, button"
+    ],
+    "graphics": [],
+    "links": [],
+    "lists": [
+      "list, with 2 items, bullet Tote bag"
+    ],
+    "tableCells": []
+  },
+  "interaction": {
+    "controls": [
+      "All, button",
+      "Shoes, button",
+      "Bags, button"
+    ],
+    "stateChanges": [],
+    "formChanges": [
+      {
+        "control": "Bags, button",
+        "kind": "taskButton",
+        "after": "Showing 2 of 4 products"
+      }
+    ],
+    "postSubmitFields": [
+      "All, button",
+      "Shoes, button",
+      "Bags, button"
+    ],
+    "focusOrder": []
+  },
+  "diagnostics": [
+    {
+      "event": "browserReused",
+      "atMs": 52,
+      "url": "http://192.168.64.1:5052/books/filter-status-good.html",
+      "captures": 4
+    },
+    {
+      "event": "windowsActivate",
+      "atMs": 1003,
+      "ok": true,
+      "waitedMs": 951
+    },
+    {
+      "event": "pointerParked",
+      "atMs": 1225,
+      "x": 0,
+      "y": 0,
+      "ms": 222
+    },
+    {
+      "event": "nvdaStart",
+      "atMs": 1225,
+      "ok": true,
+      "reused": true,
+      "captures": 5
+    },
+    {
+      "event": "speechChannel",
+      "atMs": 1790,
+      "alive": true,
+      "heard": "heading, level 1, Products"
+    },
+    {
+      "event": "documentReady",
+      "atMs": 2468,
+      "ok": true,
+      "title": "Products (filter results announced)",
+      "attempt": 1
+    },
+    {
+      "event": "afterStart",
+      "atMs": 8293,
+      "lastSpoken": "heading, level 1, Products"
+    },
+    {
+      "event": "readThrough",
+      "atMs": 11440,
+      "count": 8,
+      "stopReason": "repeatBottom",
+      "firstStepError": null
+    },
+    {
+      "event": "sweep",
+      "atMs": 13199,
+      "type": "heading",
+      "found": 1,
+      "prevMs": 1478,
+      "nextMs": 281,
+      "prevTrips": 5,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "Products, heading, level 1",
+      "nextStopPhrase": "",
+      "phrases": [
+        "Products, heading, level 1"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 13741,
+      "type": "landmark",
+      "found": 0,
+      "prevMs": 273,
+      "nextMs": 269,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 19866,
+      "type": "formField",
+      "found": 3,
+      "prevMs": 293,
+      "nextMs": 5832,
+      "prevTrips": 3,
+      "nextTrips": 9,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "Bags, button",
+      "phrases": [
+        "All, button",
+        "Shoes, button",
+        "Bags, button"
+      ]
+    },
+    {
+      "event": "structural",
+      "atMs": 19866,
+      "headings": 1,
+      "landmarks": 0,
+      "formFields": 3,
+      "roundTrips": 26
+    },
+    {
+      "event": "sweep",
+      "atMs": 20414,
+      "type": "graphic",
+      "found": 0,
+      "prevMs": 264,
+      "nextMs": 284,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 20979,
+      "type": "link",
+      "found": 0,
+      "prevMs": 275,
+      "nextMs": 290,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 22575,
+      "type": "list",
+      "found": 1,
+      "prevMs": 271,
+      "nextMs": 1325,
+      "prevTrips": 3,
+      "nextTrips": 5,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "list, with 2 items, bullet Tote bag",
+      "phrases": [
+        "list, with 2 items, bullet Tote bag"
+      ]
+    },
+    {
+      "event": "formProbe",
+      "atMs": 22575,
+      "activated": 1
+    },
+    {
+      "event": "sweep",
+      "atMs": 26981,
+      "type": "postSubmit",
+      "found": 3,
+      "prevMs": 360,
+      "nextMs": 1187,
+      "prevTrips": 3,
+      "nextTrips": 9,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "Bags, button",
+      "phrases": [
+        "All, button",
+        "Shoes, button",
+        "Bags, button"
+      ]
+    },
+    {
+      "event": "interaction",
+      "atMs": 26981,
+      "controls": 3,
+      "stateChanges": 0,
+      "formChanges": 1,
+      "postSubmit": 3,
+      "sweepLog": [
+        "taskButton \"Bags, button\" -> \"Showing 2 of 4 products\""
+      ]
+    },
+    {
+      "event": "structureCensus",
+      "atMs": 26995,
+      "landmark": 0,
+      "heading": 1,
+      "link": 0,
+      "graphic": 0,
+      "names": [
+        "Products (filter results announced)",
+        "Products",
+        "All",
+        "Shoes",
+        "Bags",
+        "Products",
+        "Filter by category:",
+        "All",
+        "Shoes",
+        "Bags",
+        "Showing 2 of 4 products",
+        "Products",
+        "Filter by category:",
+        "All",
+        "Shoes",
+        "Bags",
+        "Showing 2 of 4 products",
+        "•",
+        "Tote bag",
+        "•",
+        "Backpack",
+        "Tote bag",
+        "Backpack"
+      ]
+    },
+    {
+      "event": "structureCrossCheck",
+      "atMs": 26995,
+      "agrees": true,
+      "compared": 4,
+      "disagreements": []
+    },
+    {
+      "event": "done",
+      "atMs": 26995,
+      "transcript": 8
+    },
+    {
+      "event": "browserKeptAlive",
+      "atMs": 26996
+    }
+  ],
+  "task": "Filter the products to show only bags",
+  "environment": {
+    "measuredAt": "2026-08-04T13:57:08.390Z",
+    "screenReader": "NVDA",
+    "screenReaderVersion": "2026.1.1",
+    "browser": "Microsoft Edge",
+    "browserVersion": "151.0.4129.59",
+    "guidepupVersion": "0.31.0",
+    "nodeVersion": "v24.18.0",
+    "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
+    "architecture": "arm64",
+    "workerCode": "2052b2a3c4c2f0fa",
+    "captureProtocol": 4,
+    "provisionRevision": "unstamped"
+  }
+}

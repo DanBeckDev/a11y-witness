@@ -1,8 +1,10 @@
 {
   "url": "tutorial: structure-bad (authored from W3C guidance)",
   "screenReader": "NVDA",
+  "capturedAt": "2026-08-04T13:50:31.185Z",
   "transcript": [
-    "link, Hours, link, Events",
+    "City Library",
+    "link, Hours, , link, Events",
     "Welcome to the City Library",
     "Opening hours",
     "Open 9am to 8pm on weekdays.",
@@ -14,6 +16,247 @@
   "structure": {
     "headings": [],
     "landmarks": [],
-    "formFields": []
+    "formFields": [],
+    "graphics": [],
+    "links": [
+      "Events, link",
+      "Hours, link"
+    ],
+    "lists": [],
+    "tableCells": []
+  },
+  "interaction": {
+    "controls": [],
+    "stateChanges": [],
+    "formChanges": [],
+    "postSubmitFields": [],
+    "focusOrder": []
+  },
+  "diagnostics": [
+    {
+      "event": "browserReused",
+      "atMs": 41,
+      "url": "http://192.168.64.1:5052/tutorials/structure-bad.html",
+      "captures": 10
+    },
+    {
+      "event": "windowsActivate",
+      "atMs": 863,
+      "ok": true,
+      "waitedMs": 822
+    },
+    {
+      "event": "pointerParked",
+      "atMs": 1045,
+      "x": 0,
+      "y": 0,
+      "ms": 182
+    },
+    {
+      "event": "nvdaStart",
+      "atMs": 1046,
+      "ok": true,
+      "reused": true,
+      "captures": 11
+    },
+    {
+      "event": "speechChannel",
+      "atMs": 1622,
+      "alive": true,
+      "heard": "City Library"
+    },
+    {
+      "event": "documentReady",
+      "atMs": 2194,
+      "ok": true,
+      "title": "City Library (inaccessible structure)",
+      "attempt": 1
+    },
+    {
+      "event": "afterStart",
+      "atMs": 8028,
+      "lastSpoken": "City Library"
+    },
+    {
+      "event": "readThrough",
+      "atMs": 11431,
+      "count": 9,
+      "stopReason": "repeatBottom",
+      "firstStepError": null
+    },
+    {
+      "event": "sweep",
+      "atMs": 12882,
+      "type": "heading",
+      "found": 0,
+      "prevMs": 982,
+      "nextMs": 469,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 13470,
+      "type": "landmark",
+      "found": 0,
+      "prevMs": 315,
+      "nextMs": 273,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 14021,
+      "type": "formField",
+      "found": 0,
+      "prevMs": 276,
+      "nextMs": 275,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "structural",
+      "atMs": 14021,
+      "headings": 0,
+      "landmarks": 0,
+      "formFields": 0,
+      "roundTrips": 18
+    },
+    {
+      "event": "sweep",
+      "atMs": 14559,
+      "type": "graphic",
+      "found": 0,
+      "prevMs": 275,
+      "nextMs": 263,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 16098,
+      "type": "link",
+      "found": 2,
+      "prevMs": 938,
+      "nextMs": 601,
+      "prevTrips": 7,
+      "nextTrips": 5,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "Hours, link",
+      "nextStopPhrase": "Events, link",
+      "phrases": [
+        "Events, link",
+        "Hours, link"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 16667,
+      "type": "list",
+      "found": 0,
+      "prevMs": 273,
+      "nextMs": 296,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "interaction",
+      "atMs": 16667,
+      "controls": 0,
+      "stateChanges": 0,
+      "formChanges": 0,
+      "postSubmit": 0,
+      "sweepLog": []
+    },
+    {
+      "event": "structureCensus",
+      "atMs": 16685,
+      "landmark": 0,
+      "heading": 0,
+      "link": 2,
+      "graphic": 0,
+      "names": [
+        "City Library (inaccessible structure)",
+        "Hours",
+        "Events",
+        "Welcome to the City Library",
+        "Opening hours",
+        "Open 9am to 8pm on weekdays.",
+        "Upcoming events",
+        "Children's story time",
+        "Saturdays at 11am.",
+        "Contact us at the front desk.",
+        "City Library",
+        "Hours",
+        "Events",
+        "Welcome to the City Library",
+        "Opening hours",
+        "Open 9am to 8pm on weekdays.",
+        "Upcoming events",
+        "Children's story time",
+        "Saturdays at 11am.",
+        "Contact us at the front desk.",
+        "City Library",
+        "Hours",
+        "Events"
+      ]
+    },
+    {
+      "event": "structureCrossCheck",
+      "atMs": 16685,
+      "agrees": true,
+      "compared": 4,
+      "disagreements": []
+    },
+    {
+      "event": "done",
+      "atMs": 16685,
+      "transcript": 9
+    },
+    {
+      "event": "browserKeptAlive",
+      "atMs": 16685
+    }
+  ],
+  "task": "Find the library's opening hours",
+  "environment": {
+    "measuredAt": "2026-08-04T13:50:31.185Z",
+    "screenReader": "NVDA",
+    "screenReaderVersion": "2026.1.1",
+    "browser": "Microsoft Edge",
+    "browserVersion": "151.0.4129.59",
+    "guidepupVersion": "0.31.0",
+    "nodeVersion": "v24.18.0",
+    "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
+    "architecture": "arm64",
+    "workerCode": "2052b2a3c4c2f0fa",
+    "captureProtocol": 4,
+    "provisionRevision": "unstamped"
   }
 }

@@ -1,1 +1,297 @@
-{"url":"file:///C:/Users/borem/a11y-witness/src/eval/pages/books/custom-control-good.html","screenReader":"NVDA","capturedAt":"2026-06-29T10:56:50.759Z","transcript":["heading, level 1, Settings","button, Save changes, button, Search"],"structure":{"headings":[],"landmarks":[],"formFields":["Save changes, button","Search, button"]},"interaction":{"controls":["Save changes, button","Search, button"],"stateChanges":[],"formChanges":[{"control":"Save changes, button","after":""},{"control":"Search, button","after":""}],"postSubmitFields":["Save changes, button","Search, button"]},"diagnostics":[{"event":"browserLaunched","atMs":16,"url":"file:///C:/Users/borem/a11y-witness/src/eval/pages/books/custom-control-good.html"},{"event":"windowsActivate","atMs":13659,"ok":true},{"event":"nvdaStart","atMs":15751,"ok":true},{"event":"afterStart","atMs":18755,"lastSpoken":""},{"event":"readThrough","atMs":23241,"count":2,"stopReason":"repeatBottom","firstStepError":null},{"event":"structural","atMs":36003,"headings":0,"landmarks":0,"formFields":2},{"event":"formProbe","atMs":36003,"activated":2},{"event":"interaction","atMs":40408,"controls":2,"stateChanges":0,"formChanges":2,"postSubmit":2,"sweepLog":["submit \"Save changes, button\" -> \"\"","submit \"Search, button\" -> \"\""]},{"event":"done","atMs":41276,"transcript":2}],"task":"Save your settings"}
+{
+  "url": "file:///C:/Users/borem/a11y-witness/src/eval/pages/books/custom-control-good.html",
+  "screenReader": "NVDA",
+  "capturedAt": "2026-08-04T13:56:26.381Z",
+  "transcript": [
+    "heading, level 1, Settings",
+    "button, Save changes, button, Search"
+  ],
+  "structure": {
+    "headings": [
+      "Settings, heading, level 1"
+    ],
+    "landmarks": [],
+    "formFields": [
+      "Save changes, button",
+      "Search, button"
+    ],
+    "graphics": [],
+    "links": [],
+    "lists": [],
+    "tableCells": []
+  },
+  "interaction": {
+    "controls": [
+      "Save changes, button",
+      "Search, button"
+    ],
+    "stateChanges": [],
+    "formChanges": [
+      {
+        "control": "Save changes, button",
+        "kind": "submit",
+        "after": ""
+      },
+      {
+        "control": "Search, button",
+        "kind": "submit",
+        "after": ""
+      }
+    ],
+    "postSubmitFields": [
+      "Save changes, button",
+      "Search, button"
+    ],
+    "focusOrder": [],
+    "postSubmitNames": [
+      "Settings (native controls with names and roles)",
+      "Settings",
+      "Save changes",
+      "Search",
+      "Settings",
+      "Save changes",
+      "Settings",
+      "Save changes"
+    ]
+  },
+  "diagnostics": [
+    {
+      "event": "browserReused",
+      "atMs": 57,
+      "url": "http://192.168.64.1:5052/books/custom-control-good.html",
+      "captures": 2
+    },
+    {
+      "event": "windowsActivate",
+      "atMs": 1008,
+      "ok": true,
+      "waitedMs": 951
+    },
+    {
+      "event": "pointerParked",
+      "atMs": 1212,
+      "x": 0,
+      "y": 0,
+      "ms": 203
+    },
+    {
+      "event": "nvdaStart",
+      "atMs": 1212,
+      "ok": true,
+      "reused": true,
+      "captures": 3
+    },
+    {
+      "event": "speechChannel",
+      "atMs": 1778,
+      "alive": true,
+      "heard": "heading, level 1, Settings"
+    },
+    {
+      "event": "documentReady",
+      "atMs": 2383,
+      "ok": true,
+      "title": "Settings (native controls with names and roles)",
+      "attempt": 1
+    },
+    {
+      "event": "afterStart",
+      "atMs": 8022,
+      "lastSpoken": "heading, level 1, Settings"
+    },
+    {
+      "event": "readThrough",
+      "atMs": 9265,
+      "count": 2,
+      "stopReason": "repeatBottom",
+      "firstStepError": null
+    },
+    {
+      "event": "sweep",
+      "atMs": 10157,
+      "type": "heading",
+      "found": 1,
+      "prevMs": 624,
+      "nextMs": 268,
+      "prevTrips": 5,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "Settings, heading, level 1",
+      "nextStopPhrase": "",
+      "phrases": [
+        "Settings, heading, level 1"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 10713,
+      "type": "landmark",
+      "found": 0,
+      "prevMs": 274,
+      "nextMs": 282,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 27065,
+      "type": "formField",
+      "found": 2,
+      "prevMs": 271,
+      "nextMs": 16081,
+      "prevTrips": 3,
+      "nextTrips": 7,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "Search, button",
+      "phrases": [
+        "Save changes, button",
+        "Search, button"
+      ]
+    },
+    {
+      "event": "structural",
+      "atMs": 27065,
+      "headings": 1,
+      "landmarks": 0,
+      "formFields": 2,
+      "roundTrips": 24
+    },
+    {
+      "event": "sweep",
+      "atMs": 27614,
+      "type": "graphic",
+      "found": 0,
+      "prevMs": 288,
+      "nextMs": 261,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 28182,
+      "type": "link",
+      "found": 0,
+      "prevMs": 278,
+      "nextMs": 290,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 28732,
+      "type": "list",
+      "found": 0,
+      "prevMs": 268,
+      "nextMs": 282,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "formProbe",
+      "atMs": 28732,
+      "activated": 2
+    },
+    {
+      "event": "sweep",
+      "atMs": 33382,
+      "type": "postSubmit",
+      "found": 2,
+      "prevMs": 300,
+      "nextMs": 928,
+      "prevTrips": 3,
+      "nextTrips": 7,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "Search, button",
+      "phrases": [
+        "Save changes, button",
+        "Search, button"
+      ]
+    },
+    {
+      "event": "interaction",
+      "atMs": 33382,
+      "controls": 2,
+      "stateChanges": 0,
+      "formChanges": 2,
+      "postSubmit": 2,
+      "sweepLog": [
+        "submit \"Save changes, button\" -> \"\"",
+        "submit \"Search, button\" -> \"\""
+      ]
+    },
+    {
+      "event": "structureCensus",
+      "atMs": 33386,
+      "landmark": 0,
+      "heading": 1,
+      "link": 0,
+      "graphic": 0,
+      "names": [
+        "Settings (native controls with names and roles)",
+        "Settings",
+        "Save changes",
+        "Search",
+        "Settings",
+        "Save changes",
+        "Settings",
+        "Save changes"
+      ]
+    },
+    {
+      "event": "structureCrossCheck",
+      "atMs": 33386,
+      "agrees": true,
+      "compared": 4,
+      "disagreements": []
+    },
+    {
+      "event": "done",
+      "atMs": 33386,
+      "transcript": 2
+    },
+    {
+      "event": "browserKeptAlive",
+      "atMs": 33387
+    }
+  ],
+  "task": "Save your settings",
+  "environment": {
+    "measuredAt": "2026-08-04T13:56:26.381Z",
+    "screenReader": "NVDA",
+    "screenReaderVersion": "2026.1.1",
+    "browser": "Microsoft Edge",
+    "browserVersion": "151.0.4129.59",
+    "guidepupVersion": "0.31.0",
+    "nodeVersion": "v24.18.0",
+    "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
+    "architecture": "arm64",
+    "workerCode": "2052b2a3c4c2f0fa",
+    "captureProtocol": 4,
+    "provisionRevision": "unstamped"
+  }
+}

@@ -1,1 +1,263 @@
-{"url":"file:///C:/Users/borem/a11y-witness/src/eval/pages/books/headings-bad.html","screenReader":"NVDA","capturedAt":"2026-06-29T10:55:08.936Z","transcript":["heading, level 1, Welcome","heading, level 2, Exploring the effects behind the nature of things","Plain language helps everyone understand your content faster.","heading, level 2, Everything you need to know about how to get the most","heading, level 2, out of using our writing platform every single day of the","heading, level 2, week","Short sentences and common words reduce cognitive load.","heading, level 2, Stuff","To reset your password, open Settings and choose Security."],"structure":{"headings":["Exploring the effects behind the nature of things, heading, level 2","Everything you need to know about how to get the most out of using our writing platform every single day of the week, heading, level 2","Stuff, heading, level 2"],"landmarks":[],"formFields":[]},"interaction":{"controls":[],"stateChanges":[],"formChanges":[],"postSubmitFields":[]},"diagnostics":[{"event":"browserLaunched","atMs":18,"url":"file:///C:/Users/borem/a11y-witness/src/eval/pages/books/headings-bad.html"},{"event":"windowsActivate","atMs":13773,"ok":true},{"event":"nvdaStart","atMs":15880,"ok":true},{"event":"afterStart","atMs":18887,"lastSpoken":""},{"event":"readThrough","atMs":26425,"count":9,"stopReason":"repeatBottom","firstStepError":null},{"event":"structural","atMs":32633,"headings":3,"landmarks":0,"formFields":0},{"event":"interaction","atMs":32633,"controls":0,"stateChanges":0,"formChanges":0,"postSubmit":0,"sweepLog":[]},{"event":"done","atMs":33462,"transcript":9}],"task":"Find how to reset your password"}
+{
+  "url": "file:///C:/Users/borem/a11y-witness/src/eval/pages/books/headings-bad.html",
+  "screenReader": "NVDA",
+  "capturedAt": "2026-08-04T13:55:10.648Z",
+  "transcript": [
+    "heading, level 1, Welcome",
+    "heading, level 2, Exploring the effects behind the nature of things",
+    "Plain language helps everyone understand your content faster.",
+    "heading, level 2, Everything you need to know about how to get the most out of using our writing platform every",
+    "heading, level 2, single day of the week",
+    "Short sentences and common words reduce cognitive load.",
+    "heading, level 2, Stuff",
+    "To reset your password, open Settings and choose Security."
+  ],
+  "structure": {
+    "headings": [
+      "Stuff, heading, level 2",
+      "Everything you need to know about how to get the most out of using our writing platform every single day of the week, heading, level 2",
+      "Exploring the effects behind the nature of things, heading, level 2",
+      "Welcome, heading, level 1"
+    ],
+    "landmarks": [],
+    "formFields": [],
+    "graphics": [],
+    "links": [],
+    "lists": [],
+    "tableCells": []
+  },
+  "interaction": {
+    "controls": [],
+    "stateChanges": [],
+    "formChanges": [],
+    "postSubmitFields": [],
+    "focusOrder": []
+  },
+  "diagnostics": [
+    {
+      "event": "browserReused",
+      "atMs": 58,
+      "url": "http://192.168.64.1:5052/books/headings-bad.html",
+      "captures": 24
+    },
+    {
+      "event": "windowsActivate",
+      "atMs": 912,
+      "ok": true,
+      "waitedMs": 854
+    },
+    {
+      "event": "pointerParked",
+      "atMs": 1117,
+      "x": 0,
+      "y": 0,
+      "ms": 205
+    },
+    {
+      "event": "nvdaStart",
+      "atMs": 1118,
+      "ok": true,
+      "reused": true,
+      "captures": 25
+    },
+    {
+      "event": "speechChannel",
+      "atMs": 1684,
+      "alive": true,
+      "heard": "heading, level 1, Welcome"
+    },
+    {
+      "event": "documentReady",
+      "atMs": 2393,
+      "ok": true,
+      "title": "Plain language guide (non-descriptive headings)",
+      "attempt": 1
+    },
+    {
+      "event": "afterStart",
+      "atMs": 8055,
+      "lastSpoken": "heading, level 1, Welcome"
+    },
+    {
+      "event": "readThrough",
+      "atMs": 11154,
+      "count": 8,
+      "stopReason": "repeatBottom",
+      "firstStepError": null
+    },
+    {
+      "event": "sweep",
+      "atMs": 14563,
+      "type": "heading",
+      "found": 4,
+      "prevMs": 2137,
+      "nextMs": 1272,
+      "prevTrips": 11,
+      "nextTrips": 9,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "Welcome, heading, level 1",
+      "nextStopPhrase": "Stuff, heading, level 2",
+      "phrases": [
+        "Stuff, heading, level 2",
+        "Everything you need to know about how to get the most out of using our writing platform every single day of the week, heading, level 2",
+        "Exploring the effects behind the nature of things, heading, level 2",
+        "Welcome, heading, level 1"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 15145,
+      "type": "landmark",
+      "found": 0,
+      "prevMs": 305,
+      "nextMs": 277,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 15724,
+      "type": "formField",
+      "found": 0,
+      "prevMs": 302,
+      "nextMs": 277,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "structural",
+      "atMs": 15724,
+      "headings": 4,
+      "landmarks": 0,
+      "formFields": 0,
+      "roundTrips": 32
+    },
+    {
+      "event": "sweep",
+      "atMs": 16307,
+      "type": "graphic",
+      "found": 0,
+      "prevMs": 290,
+      "nextMs": 293,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 16900,
+      "type": "link",
+      "found": 0,
+      "prevMs": 292,
+      "nextMs": 301,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 17472,
+      "type": "list",
+      "found": 0,
+      "prevMs": 291,
+      "nextMs": 280,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "interaction",
+      "atMs": 17472,
+      "controls": 0,
+      "stateChanges": 0,
+      "formChanges": 0,
+      "postSubmit": 0,
+      "sweepLog": []
+    },
+    {
+      "event": "structureCensus",
+      "atMs": 17481,
+      "landmark": 0,
+      "heading": 4,
+      "link": 0,
+      "graphic": 0,
+      "names": [
+        "Plain language guide (non-descriptive headings)",
+        "Welcome",
+        "Exploring the effects behind the nature of things",
+        "Everything you need to know about how to get the most out of using our writing platform every single day of the week",
+        "Stuff",
+        "Welcome",
+        "Exploring the effects behind the nature of things",
+        "Plain language helps everyone understand your content faster.",
+        "Everything you need to know about how to get the most out of using our writing platform every single day of the week",
+        "Short sentences and common words reduce cognitive load.",
+        "Stuff",
+        "To reset your password, open Settings and choose Security.",
+        "Welcome",
+        "Exploring the effects behind the nature of things",
+        "Plain language helps everyone understand your content faster.",
+        "Everything you need to know about how to get the most",
+        "out of using our writing platform every single day of the",
+        "week",
+        "Short sentences and common words reduce cognitive load.",
+        "Stuff",
+        "To reset your password, open Settings and choose Security."
+      ]
+    },
+    {
+      "event": "structureCrossCheck",
+      "atMs": 17481,
+      "agrees": true,
+      "compared": 4,
+      "disagreements": []
+    },
+    {
+      "event": "done",
+      "atMs": 17481,
+      "transcript": 8
+    },
+    {
+      "event": "browserKeptAlive",
+      "atMs": 17482
+    }
+  ],
+  "task": "Find how to reset your password",
+  "environment": {
+    "measuredAt": "2026-08-04T13:55:10.650Z",
+    "screenReader": "NVDA",
+    "screenReaderVersion": "2026.1.1",
+    "browser": "Microsoft Edge",
+    "browserVersion": "151.0.4129.59",
+    "guidepupVersion": "0.31.0",
+    "nodeVersion": "v24.18.0",
+    "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
+    "architecture": "arm64",
+    "workerCode": "2052b2a3c4c2f0fa",
+    "captureProtocol": 4,
+    "provisionRevision": "unstamped"
+  }
+}

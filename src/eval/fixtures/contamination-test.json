@@ -1,19 +1,308 @@
 {
   "url": "file: authored fresh contamination-test.html (held-out, never published)",
   "screenReader": "NVDA",
+  "capturedAt": "2026-08-04T13:48:33.399Z",
   "transcript": [
+    "heading, level 1, Acme Widgets",
     "graphic, Acme Widgets company logo",
     "Acme Widgets helps small teams track inventory. Create an account to get started.",
     "Why teams choose Acme",
     "Fast setup, fair pricing, and friendly support.",
-    "graphic, \ufffc",
     "Not sure yet?, link, See our pricing plans, dot",
     "To continue,, link, click here, dot",
     "form, Create your account",
     "Email address",
-    "Email address, edit, \ufffc",
-    "edit, \ufffc",
-    "button, \ufffc",
-    "button, Create account"
-  ]
+    "edit",
+    "button, , button, Create account"
+  ],
+  "structure": {
+    "headings": [
+      "Acme Widgets, heading, level 1"
+    ],
+    "landmarks": [
+      "form, Create your account"
+    ],
+    "formFields": [
+      "Email address, edit",
+      "edit",
+      "button",
+      "Create account, button"
+    ],
+    "graphics": [
+      "Acme Widgets company logo, graphic"
+    ],
+    "links": [
+      "See our pricing plans, link",
+      "click here, link"
+    ],
+    "lists": [],
+    "tableCells": []
+  },
+  "interaction": {
+    "controls": [
+      "Email address, edit",
+      "edit",
+      "button",
+      "Create account, button"
+    ],
+    "stateChanges": [],
+    "formChanges": [],
+    "postSubmitFields": [],
+    "focusOrder": []
+  },
+  "diagnostics": [
+    {
+      "event": "browserReused",
+      "atMs": 118,
+      "url": "http://192.168.64.1:5052/contamination-test.html",
+      "captures": 4
+    },
+    {
+      "event": "windowsActivate",
+      "atMs": 1532,
+      "ok": true,
+      "waitedMs": 1414
+    },
+    {
+      "event": "pointerParked",
+      "atMs": 1765,
+      "x": 0,
+      "y": 0,
+      "ms": 233
+    },
+    {
+      "event": "nvdaStart",
+      "atMs": 1766,
+      "ok": true,
+      "reused": true,
+      "captures": 5
+    },
+    {
+      "event": "speechChannel",
+      "atMs": 2380,
+      "alive": true,
+      "heard": "heading, level 1, Acme Widgets"
+    },
+    {
+      "event": "documentReady",
+      "atMs": 2960,
+      "ok": true,
+      "title": "Acme Widgets - Sign up",
+      "attempt": 1
+    },
+    {
+      "event": "afterStart",
+      "atMs": 5945,
+      "lastSpoken": "heading, level 1, Acme Widgets"
+    },
+    {
+      "event": "readThrough",
+      "atMs": 12187,
+      "count": 11,
+      "stopReason": "repeatBottom",
+      "firstStepError": null
+    },
+    {
+      "event": "sweep",
+      "atMs": 13079,
+      "type": "heading",
+      "found": 1,
+      "prevMs": 609,
+      "nextMs": 283,
+      "prevTrips": 5,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "Acme Widgets, heading, level 1",
+      "nextStopPhrase": "",
+      "phrases": [
+        "Acme Widgets, heading, level 1"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 13942,
+      "type": "landmark",
+      "found": 1,
+      "prevMs": 260,
+      "nextMs": 603,
+      "prevTrips": 3,
+      "nextTrips": 5,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "form, Create your account",
+      "phrases": [
+        "form, Create your account"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 15755,
+      "type": "formField",
+      "found": 4,
+      "prevMs": 265,
+      "nextMs": 1548,
+      "prevTrips": 3,
+      "nextTrips": 11,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "Create account, button",
+      "phrases": [
+        "Email address, edit",
+        "edit",
+        "button",
+        "Create account, button"
+      ]
+    },
+    {
+      "event": "structural",
+      "atMs": 15755,
+      "headings": 1,
+      "landmarks": 1,
+      "formFields": 4,
+      "roundTrips": 30
+    },
+    {
+      "event": "sweep",
+      "atMs": 16600,
+      "type": "graphic",
+      "found": 1,
+      "prevMs": 571,
+      "nextMs": 274,
+      "prevTrips": 5,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "Acme Widgets company logo, graphic",
+      "nextStopPhrase": "",
+      "phrases": [
+        "Acme Widgets company logo, graphic"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 17737,
+      "type": "link",
+      "found": 2,
+      "prevMs": 272,
+      "nextMs": 865,
+      "prevTrips": 3,
+      "nextTrips": 7,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "click here, link",
+      "phrases": [
+        "See our pricing plans, link",
+        "click here, link"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 18269,
+      "type": "list",
+      "found": 0,
+      "prevMs": 266,
+      "nextMs": 266,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "interaction",
+      "atMs": 18269,
+      "controls": 4,
+      "stateChanges": 0,
+      "formChanges": 0,
+      "postSubmit": 0,
+      "sweepLog": []
+    },
+    {
+      "event": "structureCensus",
+      "atMs": 18282,
+      "landmark": 1,
+      "heading": 1,
+      "link": 2,
+      "graphic": 2,
+      "names": [
+        "Acme Widgets - Sign up",
+        "Acme Widgets",
+        "Acme Widgets company logo",
+        "Acme Widgets",
+        "Acme Widgets helps small teams track inventory. Create an account to get started.",
+        "Why teams choose Acme",
+        "Fast setup, fair pricing, and friendly support.",
+        "Not sure yet?",
+        "See our pricing plans",
+        ".",
+        "To continue,",
+        "click here",
+        ".",
+        "Email address",
+        "Create account",
+        "Acme Widgets",
+        "Acme Widgets helps small teams track inventory. Create an account to get started.",
+        "Why teams choose Acme",
+        "Fast setup, fair pricing, and friendly support.",
+        "Not sure yet?",
+        "See our pricing plans",
+        ".",
+        "To continue,",
+        "click here",
+        ".",
+        "Create your account",
+        "Email address",
+        "Create account",
+        "See our pricing plans",
+        "click here",
+        "Create your account",
+        "Email address",
+        "Create account"
+      ]
+    },
+    {
+      "event": "structureCrossCheck",
+      "atMs": 18282,
+      "agrees": false,
+      "compared": 4,
+      "disagreements": [
+        {
+          "type": "graphic",
+          "sweep": 1,
+          "elementsList": 2,
+          "kind": "truncated"
+        }
+      ]
+    },
+    {
+      "event": "done",
+      "atMs": 18282,
+      "transcript": 11
+    },
+    {
+      "event": "browserKeptAlive",
+      "atMs": 18282
+    }
+  ],
+  "task": "Sign up for an Acme Widgets account",
+  "environment": {
+    "measuredAt": "2026-08-04T13:48:33.400Z",
+    "screenReader": "NVDA",
+    "screenReaderVersion": "2026.1.1",
+    "browser": "Microsoft Edge",
+    "browserVersion": "151.0.4129.59",
+    "guidepupVersion": "0.31.0",
+    "nodeVersion": "v24.18.0",
+    "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
+    "architecture": "arm64",
+    "workerCode": "2052b2a3c4c2f0fa",
+    "captureProtocol": 4,
+    "provisionRevision": "unstamped"
+  }
 }

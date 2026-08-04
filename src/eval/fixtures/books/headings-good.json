@@ -1,1 +1,260 @@
-{"url":"file:///C:/Users/borem/a11y-witness/src/eval/pages/books/headings-good.html","screenReader":"NVDA","capturedAt":"2026-06-29T10:54:35.440Z","transcript":["heading, level 1, Plain language guide","heading, level 2, What is plain language?","Plain language helps everyone understand your content faster.","heading, level 2, How to get the most out of the writing platform","Short sentences and common words reduce cognitive load.","heading, level 2, How to reset your password","To reset your password, open Settings and choose Security."],"structure":{"headings":["What is plain language?, heading, level 2","How to get the most out of the writing platform, heading, level 2","How to reset your password, heading, level 2"],"landmarks":[],"formFields":[]},"interaction":{"controls":[],"stateChanges":[],"formChanges":[],"postSubmitFields":[]},"diagnostics":[{"event":"browserLaunched","atMs":15,"url":"file:///C:/Users/borem/a11y-witness/src/eval/pages/books/headings-good.html"},{"event":"windowsActivate","atMs":13877,"ok":true},{"event":"nvdaStart","atMs":15954,"ok":true},{"event":"afterStart","atMs":18956,"lastSpoken":""},{"event":"readThrough","atMs":25680,"count":7,"stopReason":"repeatBottom","firstStepError":null},{"event":"structural","atMs":31877,"headings":3,"landmarks":0,"formFields":0},{"event":"interaction","atMs":31877,"controls":0,"stateChanges":0,"formChanges":0,"postSubmit":0,"sweepLog":[]},{"event":"done","atMs":32708,"transcript":7}],"task":"Find how to reset your password"}
+{
+  "url": "file:///C:/Users/borem/a11y-witness/src/eval/pages/books/headings-good.html",
+  "screenReader": "NVDA",
+  "capturedAt": "2026-08-04T13:54:52.426Z",
+  "transcript": [
+    "heading, level 1, Plain language guide",
+    "heading, level 2, What is plain language?",
+    "Plain language helps everyone understand your content faster.",
+    "heading, level 2, How to get the most out of the writing platform",
+    "Short sentences and common words reduce cognitive load.",
+    "heading, level 2, How to reset your password",
+    "To reset your password, open Settings and choose Security."
+  ],
+  "structure": {
+    "headings": [
+      "How to reset your password, heading, level 2",
+      "How to get the most out of the writing platform, heading, level 2",
+      "What is plain language?, heading, level 2",
+      "Plain language guide, heading, level 1"
+    ],
+    "landmarks": [],
+    "formFields": [],
+    "graphics": [],
+    "links": [],
+    "lists": [],
+    "tableCells": []
+  },
+  "interaction": {
+    "controls": [],
+    "stateChanges": [],
+    "formChanges": [],
+    "postSubmitFields": [],
+    "focusOrder": []
+  },
+  "diagnostics": [
+    {
+      "event": "browserReused",
+      "atMs": 71,
+      "url": "http://192.168.64.1:5052/books/headings-good.html",
+      "captures": 23
+    },
+    {
+      "event": "windowsActivate",
+      "atMs": 1109,
+      "ok": true,
+      "waitedMs": 1038
+    },
+    {
+      "event": "pointerParked",
+      "atMs": 1357,
+      "x": 0,
+      "y": 0,
+      "ms": 248
+    },
+    {
+      "event": "nvdaStart",
+      "atMs": 1358,
+      "ok": true,
+      "reused": true,
+      "captures": 24
+    },
+    {
+      "event": "speechChannel",
+      "atMs": 1968,
+      "alive": true,
+      "heard": "heading, level 1, Plain language guide"
+    },
+    {
+      "event": "documentReady",
+      "atMs": 2622,
+      "ok": true,
+      "title": "Plain language guide (descriptive headings)",
+      "attempt": 1
+    },
+    {
+      "event": "afterStart",
+      "atMs": 8154,
+      "lastSpoken": "heading, level 1, Plain language guide"
+    },
+    {
+      "event": "readThrough",
+      "atMs": 10913,
+      "count": 7,
+      "stopReason": "repeatBottom",
+      "firstStepError": null
+    },
+    {
+      "event": "sweep",
+      "atMs": 14746,
+      "type": "heading",
+      "found": 4,
+      "prevMs": 2600,
+      "nextMs": 1233,
+      "prevTrips": 11,
+      "nextTrips": 9,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "Plain language guide, heading, level 1",
+      "nextStopPhrase": "How to reset your password, heading, level 2",
+      "phrases": [
+        "How to reset your password, heading, level 2",
+        "How to get the most out of the writing platform, heading, level 2",
+        "What is plain language?, heading, level 2",
+        "Plain language guide, heading, level 1"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 15297,
+      "type": "landmark",
+      "found": 0,
+      "prevMs": 273,
+      "nextMs": 278,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 15860,
+      "type": "formField",
+      "found": 0,
+      "prevMs": 293,
+      "nextMs": 270,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "structural",
+      "atMs": 15860,
+      "headings": 4,
+      "landmarks": 0,
+      "formFields": 0,
+      "roundTrips": 32
+    },
+    {
+      "event": "sweep",
+      "atMs": 16413,
+      "type": "graphic",
+      "found": 0,
+      "prevMs": 282,
+      "nextMs": 271,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 16994,
+      "type": "link",
+      "found": 0,
+      "prevMs": 285,
+      "nextMs": 296,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 17572,
+      "type": "list",
+      "found": 0,
+      "prevMs": 287,
+      "nextMs": 291,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "interaction",
+      "atMs": 17573,
+      "controls": 0,
+      "stateChanges": 0,
+      "formChanges": 0,
+      "postSubmit": 0,
+      "sweepLog": []
+    },
+    {
+      "event": "structureCensus",
+      "atMs": 17579,
+      "landmark": 0,
+      "heading": 4,
+      "link": 0,
+      "graphic": 0,
+      "names": [
+        "Plain language guide (descriptive headings)",
+        "Plain language guide",
+        "What is plain language?",
+        "How to get the most out of the writing platform",
+        "How to reset your password",
+        "Plain language guide",
+        "What is plain language?",
+        "Plain language helps everyone understand your content faster.",
+        "How to get the most out of the writing platform",
+        "Short sentences and common words reduce cognitive load.",
+        "How to reset your password",
+        "To reset your password, open Settings and choose Security.",
+        "Plain language guide",
+        "What is plain language?",
+        "Plain language helps everyone understand your content faster.",
+        "How to get the most out of the writing platform",
+        "Short sentences and common words reduce cognitive load.",
+        "How to reset your password",
+        "To reset your password, open Settings and choose Security."
+      ]
+    },
+    {
+      "event": "structureCrossCheck",
+      "atMs": 17579,
+      "agrees": true,
+      "compared": 4,
+      "disagreements": []
+    },
+    {
+      "event": "done",
+      "atMs": 17579,
+      "transcript": 7
+    },
+    {
+      "event": "browserKeptAlive",
+      "atMs": 17579
+    }
+  ],
+  "task": "Find how to reset your password",
+  "environment": {
+    "measuredAt": "2026-08-04T13:54:52.427Z",
+    "screenReader": "NVDA",
+    "screenReaderVersion": "2026.1.1",
+    "browser": "Microsoft Edge",
+    "browserVersion": "151.0.4129.59",
+    "guidepupVersion": "0.31.0",
+    "nodeVersion": "v24.18.0",
+    "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
+    "architecture": "arm64",
+    "workerCode": "2052b2a3c4c2f0fa",
+    "captureProtocol": 4,
+    "provisionRevision": "unstamped"
+  }
+}

@@ -104,7 +104,8 @@ The model call itself is one seam (`ask()` in [`src/spike/judge.ts`](./src/spike
 
 | `JUDGE_BACKEND` | needs | notes |
 |---|---|---|
-| `codex` (default) | local Codex login | no metered API cost |
+| `local` (default) | our own trained scorer | no LLM, no key, nothing leaves the machine |
+| `codex` | local Codex login | comparison only; no metered API cost |
 | `anthropic` | `ANTHROPIC_API_KEY` | optional `JUDGE_MODEL` |
 | `openai` | `JUDGE_BASE_URL` | hosted OpenAI **or** any local engine (llama.cpp, vLLM, Ollama, LM Studio) |
 
@@ -231,7 +232,7 @@ unit-tested, since a real screen reader on a real desktop is the thing under tes
 | command | what it checks |
 |---|---|
 | `npm run lint` / `npm run typecheck` | mechanical; both gate CI |
-| `npm run eval` | judge quality against **34 labelled fixtures** — W3C tutorial pages and paired good/bad cases. Needs a local Codex login, so it cannot run in CI |
+| `npm run eval` | judge quality against **34 labelled fixtures** — W3C tutorial pages and paired good/bad cases. Runs against our own scorer by default; needs the Python venv, so it cannot run in CI |
 | `npm run rules-check` | the deterministic rules in isolation. Exits non-zero on **any** false positive against a conformant page — precision is the entire point of a rule |
 | `node src/capture/nvda/capture-check.mjs` | the capture half, on the worker itself. Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
 | `capture-regression.yml` | real NVDA on a GitHub-hosted Windows runner |
@@ -257,7 +258,7 @@ The strongest evidence so far is structural rather than a number: the judge sees
 
 A frontier model calling an API is the current engine, not the destination. The goal is **our own model of the screen-reader experience** — and the reason it can exist is that parts 1 and 2 manufacture something no public dataset contains: paired captures of *what a screen reader actually announced* on pages that differ by one deliberate accessibility defect.
 
-**A release candidate is trained but not integrated yet.** The repository now has a reproducible frozen-encoder runner and a 1,556-record NVDA dataset from 778 model-eligible controlled pairs, producing a safetensors scorer. The source matrix has expanded to 1,061 pairs, but the 225 new calibration pairs still need NVDA capture. The scorer uses subtype-specific heads and grouped out-of-fold threshold calibration; it has 0 false positives and 0 false negatives on the current held-out test split. It is still not release-eligible: grouped calibration has 10 false negatives, and the new calibration pairs are not yet captured. The 1.3.1 missing-landmark subtype is deliberately left to the structural layer because the expected landmark cannot be inferred reliably from screen-reader output alone. The plan of record is [`docs/local-model.md`](./docs/local-model.md).
+**The local scorer is not integrated yet.** The repository has a reproducible frozen-encoder runner and a safetensors scorer, but the last diagnostic export contains 1,996 records from an interrupted protocol-2 capture. The source matrix has 1,061 pairs; 58 missing-landmark pairs remain in the structural layer because that absence is not reliably inferable from screen-reader output alone. The current page/provenance guard correctly rejects those older captures as stale, so a fresh export is empty until the matrix is recaptured. The current report is not release-eligible: grouped calibration has one 3.3.1 false negative and the unnamed-form-field subtype lacks sufficient positive coverage. The plan of record is [`docs/local-model.md`](./docs/local-model.md).
 
 ### Now: a scorer over captured evidence
 
@@ -278,8 +279,7 @@ There is a concrete reason this needs its own dataset. Link purpose (2.4.4) is a
 ```bash
 npm run training:generate      # write the page pairs + manifest
 npm run training:generate-acceptance # write the untouched acceptance pairs
-npx serve runs/screenreader-dataset/pages -l 5050
-npm run training:capture       # ~1922 NVDA captures; starts a local VM on demand
+npm run training:capture       # starts/leases the local workers and page server on demand
 npm run training:status        # progress, current case, failures, worker health
 npm run training:export        # JSONL, only for pairs where the contrast was observable
 npm run training:analyze-errors # held-out false positives/negatives with NVDA evidence
@@ -300,9 +300,9 @@ updates go cold past one capture timeout it exits 3. Exit codes are the contract
 **1** finished with failures, **2** no run recorded, **3** wedged. Both commands emit a
 `next_command` field, so a script never has to infer the next step.
 
- `training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. `--resume` picks up from the captures already on disk. See [`src/training/README.md`](./src/training/README.md).
+`training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. A stale run reports `running: false`, `stale: true`, and no misleading ETA. `--resume` picks up only captures whose page identity and provenance still match. See [`src/training/README.md`](./src/training/README.md).
 
-The source matrix now contains 1,061 pairs: the original 836 plus 225 targeted calibration pairs for image alternatives, fake headings, placeholder-only fields, unnamed icon buttons, validation errors, live status updates, missing-role controls, and silent state changes. Only 778 pairs are currently model-eligible and captured; 58 observable missing-landmark pairs are retained for the structural/signal layer but excluded from the local scorer because their expected landmark is not present in the screen-reader evidence. The scorer combines channel-tagged screen-reader evidence with 26 screen-reader-derived structural features, including field-name/role and table-header relationships, then uses one head per violation subtype and max-pools those subtype scores into a criterion score. Thresholds are selected from grouped out-of-fold development predictions rather than in-sample scores. The current held-out test split has 0 false positives and 0 false negatives, but grouped calibration still has 10 false negatives, so this remains an evaluation artifact until the new captures, independent acceptance set, and repeated-capture stability checks pass. `docs/local-model.md` sets out the planning bands honestly — roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality. Splits must be grouped by page family, template and source so a good and bad version of the same template never straddle train and test, and repeated captures of one page do not count as independent examples. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by [`scripts/verify-safetensors.mjs`](./scripts/verify-safetensors.mjs).
+The source matrix now contains 1,061 pairs: the original 836 plus 225 targeted calibration pairs for image alternatives, fake headings, placeholder-only fields, unnamed icon buttons, validation errors, live status updates, missing-role controls, and silent state changes. The last diagnostic export has 1,996 records; 58 observable missing-landmark pairs are retained for the structural/signal layer but excluded from the local scorer because their expected landmark is not present in the screen-reader evidence. The current page/provenance guard rejects the old captures as stale, so the matrix must be recaptured before training. The scorer combines channel-tagged screen-reader evidence with 29 screen-reader-derived structural features, including field-name/role and table-header relationships, then uses one head per violation subtype and max-pools those subtype scores into a criterion score. Thresholds are selected from grouped out-of-fold development predictions rather than in-sample scores. Grouped calibration still has one false negative, so this remains a diagnostic artifact until recapture, independent acceptance, and repeated-capture stability checks pass. `docs/local-model.md` sets out the planning bands honestly — roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality. Splits must be grouped by page family, template and source so a good and bad version of the same template never straddle train and test, and repeated captures of one page do not count as independent examples. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by [`scripts/verify-safetensors.mjs`](./scripts/verify-safetensors.mjs).
 
 ### Later, and unproven: predicting the announcement
 

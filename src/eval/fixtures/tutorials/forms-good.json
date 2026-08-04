@@ -1,13 +1,329 @@
 {
   "url": "tutorial: forms-good (authored from W3C guidance)",
   "screenReader": "NVDA",
+  "capturedAt": "2026-08-04T13:49:35.184Z",
   "transcript": [
+    "heading, level 1, Sign up",
     "form, Email address",
-    "Email address, edit, \ufffc",
-    "Contact preference, grouping, Contact preference",
-    "Email, radio button, not checked, \ufffc",
-    "Phone, radio button, not checked, \ufffc",
+    "edit",
+    "grouping, Contact preference",
+    "radio button, not checked, Email",
+    "radio button, not checked, Phone",
     "out of grouping, button, Subscribe",
     "button, Subscribe"
-  ]
+  ],
+  "structure": {
+    "headings": [
+      "Sign up, heading, level 1"
+    ],
+    "landmarks": [
+      "form, Email address"
+    ],
+    "formFields": [
+      "Email address, edit",
+      "Contact preference, grouping, Email, radio button, not checked",
+      "Phone, radio button, not checked",
+      "Subscribe, button"
+    ],
+    "graphics": [],
+    "links": [],
+    "lists": [],
+    "tableCells": []
+  },
+  "interaction": {
+    "controls": [
+      "Email address, edit",
+      "Contact preference, grouping, Email, radio button, not checked",
+      "Phone, radio button, not checked",
+      "Subscribe, button"
+    ],
+    "stateChanges": [],
+    "formChanges": [
+      {
+        "control": "Subscribe, button",
+        "kind": "submit",
+        "after": "Newsletter sign-up (accessible), document"
+      }
+    ],
+    "postSubmitFields": [
+      "form, Email address, edit",
+      "Contact preference, grouping, Email, radio button, not checked",
+      "Phone, radio button, not checked",
+      "Subscribe, button"
+    ],
+    "focusOrder": [],
+    "navigatedOnSubmit": {
+      "from": "http://192.168.64.1:5052/tutorials/forms-good",
+      "to": "http://192.168.64.1:5052/tutorials/forms-good?email="
+    },
+    "postSubmitNames": [
+      "Newsletter sign-up (accessible)",
+      "Sign up",
+      "Sign up",
+      "Email address",
+      "Contact preference",
+      "Subscribe",
+      "Sign up",
+      "Email address",
+      "Email",
+      "Phone",
+      "Subscribe",
+      "Email address",
+      "Contact preference",
+      "Subscribe",
+      "Contact preference"
+    ]
+  },
+  "diagnostics": [
+    {
+      "event": "browserReused",
+      "atMs": 63,
+      "url": "http://192.168.64.1:5052/tutorials/forms-good.html",
+      "captures": 7
+    },
+    {
+      "event": "windowsActivate",
+      "atMs": 866,
+      "ok": true,
+      "waitedMs": 803
+    },
+    {
+      "event": "pointerParked",
+      "atMs": 1050,
+      "x": 0,
+      "y": 0,
+      "ms": 184
+    },
+    {
+      "event": "nvdaStart",
+      "atMs": 1051,
+      "ok": true,
+      "reused": true,
+      "captures": 8
+    },
+    {
+      "event": "speechChannel",
+      "atMs": 1631,
+      "alive": true,
+      "heard": "heading, level 1, Sign up"
+    },
+    {
+      "event": "documentReady",
+      "atMs": 2264,
+      "ok": true,
+      "title": "Newsletter sign-up (accessible)",
+      "attempt": 1
+    },
+    {
+      "event": "afterStart",
+      "atMs": 7940,
+      "lastSpoken": "heading, level 1, Sign up"
+    },
+    {
+      "event": "readThrough",
+      "atMs": 11052,
+      "count": 8,
+      "stopReason": "repeatBottom",
+      "firstStepError": null
+    },
+    {
+      "event": "sweep",
+      "atMs": 13078,
+      "type": "heading",
+      "found": 1,
+      "prevMs": 1755,
+      "nextMs": 271,
+      "prevTrips": 5,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "Sign up, heading, level 1",
+      "nextStopPhrase": "",
+      "phrases": [
+        "Sign up, heading, level 1"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 13964,
+      "type": "landmark",
+      "found": 1,
+      "prevMs": 287,
+      "nextMs": 599,
+      "prevTrips": 3,
+      "nextTrips": 5,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "form, Email address",
+      "phrases": [
+        "form, Email address"
+      ]
+    },
+    {
+      "event": "sweep",
+      "atMs": 21781,
+      "type": "formField",
+      "found": 4,
+      "prevMs": 278,
+      "nextMs": 7539,
+      "prevTrips": 3,
+      "nextTrips": 19,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "Subscribe, button",
+      "phrases": [
+        "Email address, edit",
+        "Contact preference, grouping, Email, radio button, not checked",
+        "Phone, radio button, not checked",
+        "Subscribe, button"
+      ]
+    },
+    {
+      "event": "structural",
+      "atMs": 21781,
+      "headings": 1,
+      "landmarks": 1,
+      "formFields": 4,
+      "roundTrips": 38
+    },
+    {
+      "event": "sweep",
+      "atMs": 23369,
+      "type": "graphic",
+      "found": 0,
+      "prevMs": 289,
+      "nextMs": 1299,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 23911,
+      "type": "link",
+      "found": 0,
+      "prevMs": 277,
+      "nextMs": 265,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "sweep",
+      "atMs": 24476,
+      "type": "list",
+      "found": 0,
+      "prevMs": 278,
+      "nextMs": 287,
+      "prevTrips": 3,
+      "nextTrips": 3,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "",
+      "phrases": []
+    },
+    {
+      "event": "formProbe",
+      "atMs": 24477,
+      "activated": 1
+    },
+    {
+      "event": "sweep",
+      "atMs": 29151,
+      "type": "postSubmit",
+      "found": 4,
+      "prevMs": 288,
+      "nextMs": 1495,
+      "prevTrips": 3,
+      "nextTrips": 11,
+      "prevStop": "exhausted",
+      "nextStop": "exhausted",
+      "prevStopPhrase": "",
+      "nextStopPhrase": "Subscribe, button",
+      "phrases": [
+        "form, Email address, edit",
+        "Contact preference, grouping, Email, radio button, not checked",
+        "Phone, radio button, not checked",
+        "Subscribe, button"
+      ]
+    },
+    {
+      "event": "interaction",
+      "atMs": 29151,
+      "controls": 4,
+      "stateChanges": 0,
+      "formChanges": 1,
+      "postSubmit": 4,
+      "sweepLog": [
+        "submit \"Subscribe, button\" -> \"Newsletter sign-up (accessible), document\""
+      ]
+    },
+    {
+      "event": "structureCensus",
+      "atMs": 29157,
+      "landmark": 1,
+      "heading": 1,
+      "link": 0,
+      "graphic": 0,
+      "names": [
+        "Newsletter sign-up (accessible)",
+        "Sign up",
+        "Sign up",
+        "Email address",
+        "Contact preference",
+        "Subscribe",
+        "Sign up",
+        "Email address",
+        "Email",
+        "Phone",
+        "Subscribe",
+        "Email address",
+        "Contact preference",
+        "Subscribe",
+        "Contact preference"
+      ]
+    },
+    {
+      "event": "structureCrossCheck",
+      "atMs": 29157,
+      "agrees": true,
+      "compared": 4,
+      "disagreements": []
+    },
+    {
+      "event": "done",
+      "atMs": 29157,
+      "transcript": 8
+    },
+    {
+      "event": "browserKeptAlive",
+      "atMs": 29157
+    }
+  ],
+  "task": "Sign up for the newsletter",
+  "environment": {
+    "measuredAt": "2026-08-04T13:49:35.185Z",
+    "screenReader": "NVDA",
+    "screenReaderVersion": "2026.1.1",
+    "browser": "Microsoft Edge",
+    "browserVersion": "151.0.4129.59",
+    "guidepupVersion": "0.31.0",
+    "nodeVersion": "v24.18.0",
+    "windowsVersion": "Microsoft Windows 11 Pro 10.0.22621",
+    "architecture": "arm64",
+    "workerCode": "2052b2a3c4c2f0fa",
+    "captureProtocol": 4,
+    "provisionRevision": "unstamped"
+  }
 }
