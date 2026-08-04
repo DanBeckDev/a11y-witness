@@ -29,7 +29,7 @@ import type { Finding } from "./judge.js";
  * JudgeInput is assignable to this). */
 export interface RuleInput {
   transcript: string[];
-  structure?: { formFields?: string[]; headings?: string[]; links?: string[] };
+  structure?: { formFields?: string[]; headings?: string[]; links?: string[]; graphics?: string[] };
   interaction?: { controls?: string[] };
   /**
    * What the PAGE exposes, from the accessibility tree, as an oracle only.
@@ -39,7 +39,7 @@ export interface RuleInput {
    * accidentally left NVDA in focus mode typing its own keys into the page — which it did, on 353
    * captures. So a rule about absence must corroborate with the tree, or it is guessing.
    */
-  census?: { heading?: number; link?: number };
+  census?: { heading?: number; link?: number; graphic?: number; graphicUnnamed?: number };
 }
 
 const EMPTY_NAME = "￼"; // ￼ — screen reader announced an element with no text/name
@@ -173,6 +173,33 @@ function addMissingHeadings(input: RuleInput, add: AddFinding): void {
 /** Below this a page is a fragment or an error, and having no headings is unremarkable. */
 const MIN_CONTENT_LINES = 15;
 
+
+/**
+ * 1.1.1 — images the page exposes with NO accessible name.
+ *
+ * The announcements cannot always reach these, which is why the tree is consulted. NVDA's quick navigation
+ * walks past a wholly nameless graphic: where an image at least has a filename it says "Unlabeled graphic"
+ * and the sweep records it (that is how the W3C pages are caught), but an `<img>` with no alt and a `data:`
+ * URI has nothing to announce at all. Measured on the eval fixtures — tree 2 / sweep 1, tree 1 / sweep 0,
+ * tree 3 / sweep 2 — three real 1.1.1 failures this layer could see and did not.
+ *
+ * Safe because the census skips IGNORED nodes: Chromium marks a decorative `alt=""` image as ignored, so it
+ * never reaches the counter. A non-ignored graphic with no name is an image a user meets and cannot
+ * identify — which is the criterion, stated directly.
+ *
+ * The tree is the oracle and never the evidence. It answers "is there something here", and what the screen
+ * reader said remains what is quoted.
+ */
+function addUnnamedGraphics(input: RuleInput, add: AddFinding): void {
+  const unnamed = input.census?.graphicUnnamed ?? 0;
+  if (unnamed === 0) return; // 0 is an answer; undefined means no oracle, and both stop here
+  const announced = (input.structure?.graphics ?? []).length;
+  add("1.1.1 Non-text Content",
+    `${unnamed} image(s) on the page have no text alternative, so a screen reader cannot identify them`,
+    `${unnamed} of ${input.census?.graphic ?? unnamed} images expose no accessible name; `
+      + `the screen reader reached ${announced}`);
+}
+
 export function ruleFindings(input: RuleInput): Finding[] {
   const findings: Finding[] = [];
   const seen = new Set<string>();
@@ -206,6 +233,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   // Neither is reported by axe, which is the point of having them here.
   addVagueLinks([...input.transcript, ...(input.structure?.links ?? [])], add);
   addMissingHeadings(input, add);
+  addUnnamedGraphics(input, add);
 
   return findings;
 }

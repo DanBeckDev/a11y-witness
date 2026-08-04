@@ -58,7 +58,7 @@ test("headings, links and graphics are counted for the other sweeps", () => {
     node("heading", "A"), node("link", "Read more"), node("image", "A chart"), node("img", "Another"),
   ]);
   assert.deepEqual(census, {
-    landmark: 0, heading: 1, link: 1, graphic: 2,
+    landmark: 0, heading: 1, link: 1, graphicUnnamed: 0, graphic: 2,
     // Names are kept alongside the counts so a TRUNCATED announcement is detectable; a count
     // cross-check cannot see a control that is present but misnamed.
     names: ["A", "Read more", "A chart", "Another"],
@@ -67,7 +67,7 @@ test("headings, links and graphics are counted for the other sweeps", () => {
 
 test("a malformed or empty tree yields zeros, not a throw", () => {
   // The oracle must never be the reason a capture fails.
-  const empty = { landmark: 0, heading: 0, link: 0, graphic: 0, names: [] };
+  const empty = { landmark: 0, heading: 0, link: 0, graphicUnnamed: 0, graphic: 0, names: [] };
   assert.deepEqual(censusFromAXTree([]), empty);
   assert.deepEqual(censusFromAXTree(undefined as never), empty);
   assert.deepEqual(censusFromAXTree([null, {}] as never), empty);
@@ -128,4 +128,23 @@ test("an unrelated announcement is not flagged", () => {
 test("nothing to compare against yields nothing", () => {
   assert.deepEqual(truncatedAnnouncements(["o, button"], []), []);
   assert.deepEqual(truncatedAnnouncements(undefined as never, undefined as never), []);
+});
+
+test("an image with no accessible name is counted separately, and a decorative one is not", () => {
+  // This is a 1.1.1 finding the announcements cannot always reach. NVDA's quick navigation walks past a
+  // wholly nameless graphic: where an image has a filename it says "Unlabeled graphic" and the sweep
+  // records it, but an `<img>` with no alt and a `data:` URI has nothing to announce. Measured on the eval
+  // fixtures — tree 2 graphics / sweep 1, tree 1 / sweep 0, tree 3 / sweep 2.
+  //
+  // The `ignored` case is what makes the counter safe to act on: Chromium marks a decorative `alt=""`
+  // image as ignored, so it must never reach the count. Without that, every well-authored decorative image
+  // on the web would become a false 1.1.1.
+  const census = censusFromAXTree([
+    { role: { value: "image" }, name: { value: "Acme Widgets company logo" } },
+    { role: { value: "image" }, name: { value: "" } },
+    { role: { value: "img" } },
+    { role: { value: "img" }, ignored: true, name: { value: "" } },
+  ]);
+  assert.equal(census.graphic, 3, "the decorative ignored image is not a graphic the user meets");
+  assert.equal(census.graphicUnnamed, 2, "two of the three expose no name at all");
 });
