@@ -83,6 +83,34 @@ Not bugs being hidden — work consciously not done before shipping.
 | Scoped cache invalidation | Two recaptures were measured as 65% unnecessary — a global `CAPTURE_PROTOCOL_VERSION` invalidates captures a fix could not have touched |
 | ONNX export | Would drop torch (~529 MB) from the Action's setup |
 | `provisionRevision` reads `"unstamped"` | Needs a deliberate pool-wide re-provision |
+| **CI's `lint` job is RED** — 6 test files fail on the runner | See below; the fix is understood and is a refactor I chose not to attempt under release pressure |
+
+## The one thing that is red, and exactly why
+
+`.github/workflows/lint.yml` fails on 6 files under `src/capture/nvda/`. The cause is one line:
+
+```
+Error: No available supported screen readers
+```
+
+`@guidepup/guidepup` **throws at import time** where no screen reader exists. CI is Linux, so merely
+importing `capture-core.mjs` fails — and every test that imports it to reach a *pure* helper
+(`sweepStepFromSpeech`, `dedupeKey`, `phraseAction`, `crossCheckStructure`, `elementsListRowName`,
+`failIfScreenReaderIsMute`, `edgeArgs`) dies with it. Node reports these per FILE — "test failed" — which
+reads like broken logic rather than an unavailable dependency.
+
+Three things worth being straight about:
+
+- **It predates this release.** CI was already failing this way on 1 Aug with 2 files. Test files added
+  since took it to 6, because more of them import `capture-core` to reach pure logic.
+- **The assertions themselves pass.** All 344 run green on a clean checkout on macOS, where guidepup
+  imports fine. Nothing here indicates a defect in the code under test.
+- **The fix is known:** move those pure functions into a `capture-pure.mjs` with no guidepup in its import
+  graph, and have `capture-core` re-export them. I attempted it, broke `capture-core` (a 2,000-line module
+  with no local test — it only runs against real NVDA on the VM), and reverted rather than ship a
+  half-finished refactor of the capture path. It is a contained job with a clear acceptance test — the same
+  6 files passing with `guidepup` absent from the graph — and it should be done deliberately, not at the
+  end of a long day.
 
 ## Reproducing the verification
 
