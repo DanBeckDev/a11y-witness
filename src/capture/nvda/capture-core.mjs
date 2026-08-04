@@ -50,7 +50,13 @@ import { setTimeout as sleep } from "node:timers/promises";
 // The recapture is therefore not a cost of this change, it is the point of it: those 125 pairs are the
 // ones whose evidence was wrong. `formChanges` entries also gain `kind`, and a submit now records
 // `postSubmitNames`, both of which criteria read.
-export const CAPTURE_PROTOCOL_VERSION = 3;
+// 3 -> 4: speech is settled before an activation's baseline is read, and after the browse-mode Escape.
+// Protocol 3's corpus carried ONE contaminated record out of ~125 activation captures —
+// `filter-status-silent/bad` recorded `after: "Energy results, document"` instead of the empty delta that
+// is the finding — and that single record was the false negative that made the retrained scorer fail its
+// release gate. A 1-in-125 race cannot be recaptured away, so the fix is the race and the bump is what
+// makes the corpus uniform afterwards.
+export const CAPTURE_PROTOCOL_VERSION = 4;
 
 export { edgeArgs as edgeArgsForTest };
 
@@ -2087,6 +2093,10 @@ async function operateControl(phrase, ctx) {
       // quick-navigation keys into the page under test, and `verify.corpus.test.ts` fails the corpus on
       // any sweepLog ERROR. Swallowing it is what let the leak run for 2,122 captures.
       .catch((e) => ctx.interaction.sweepLog.push(`browseMode ERROR ${errMsg(e)}`));
+    // Escape makes NVDA re-announce the document, and that phrase must land HERE rather than in whatever
+    // runs next. Bleeding into a sweep would be worse than bleeding into a delta: `sweepStepFromSpeech`
+    // reads new speech as proof of movement, so a stray phrase becomes a phantom element.
+    await waitForSpeechQuiet("browseModeSettle");
   }
 }
 
@@ -2231,6 +2241,18 @@ async function waitForAnnouncement(before, kind) {
 
 async function activateAndCaptureDelta(phrase, interaction, kind) {
   try {
+    // Settle BEFORE reading the baseline, or something already in flight is attributed to this
+    // activation. Measured: one capture of `filter-status-silent/bad` in the corpus recorded
+    // `after: "Energy results, document"` — NVDA's document announcement, arriving late from an earlier
+    // step — on a page whose entire finding is that activating the filter announces NOTHING. Six repeats
+    // of the same page produced the correct empty delta, so it is a race at roughly 1 in 125 activations,
+    // and 1 in 125 is enough: that single record was the one false negative that made the retrained
+    // scorer fail its release gate.
+    //
+    // `waitForAnnouncement` already guards the other end. This is its missing counterpart, and the
+    // asymmetry is why the hole survived: the code waited carefully for speech to arrive and not at all
+    // for the previous speech to finish.
+    await waitForSpeechQuiet(`${kind}Baseline`);
     const before = ((await withTimeout(nvda.spokenPhraseLog(), QUERY_TIMEOUT_MS, kind)) || []).length;
     await withTimeout(nvda.act(), ACT_TIMEOUT_MS, kind); // Enter on the control under the cursor
     const log = await waitForAnnouncement(before, kind);
