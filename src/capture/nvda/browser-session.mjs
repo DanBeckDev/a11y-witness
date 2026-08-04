@@ -158,6 +158,27 @@ const ROLE_BUCKET = new Map([
  * @param {Array<{role?: {value?: string}, name?: {value?: string}, ignored?: boolean}>} nodes
  *   `Accessibility.getFullAXTree`'s flat node list.
  */
+/**
+ * Which bucket this node counts toward, and whether it is nameless — or null when it counts toward none.
+ *
+ * Split out of `censusFromAXTree` because the two jobs are separable: this one classifies a single node,
+ * the caller accumulates. It also put the census over the complexity gate, and the honest fix for that is a
+ * named function rather than a bigger limit.
+ */
+function classifyAXNode(node) {
+  // Ignored nodes are not in the tree a screen reader walks, so counting them would make the oracle demand
+  // elements NVDA could never announce -- a guard that cries wolf gets removed, not heeded.
+  if (!node || node.ignored) return null;
+  const role = String(node.role?.value ?? "").toLowerCase();
+  const named = String(node.name?.value ?? "").trim();
+  const bucket = ROLE_BUCKET.get(role);
+  // An unnamed `region` is NOT a landmark: ARIA requires an accessible name for `role="region"` to be
+  // exposed as one, and NVDA agrees -- named regions are announced ("Latest news, region") while a bare
+  // `<section>` is not. Counting them would invent landmarks the page does not have.
+  if (bucket === "landmark" && role === "region" && !named) return { named, bucket: null };
+  return { named, bucket: bucket ?? null };
+}
+
 export function censusFromAXTree(nodes) {
   // `graphicUnnamed` is the count of images the page exposes with NO accessible name, and it is a finding
   // the announcements cannot reach on their own. Quick navigation skips a wholly nameless graphic: on
@@ -171,26 +192,18 @@ export function censusFromAXTree(nodes) {
   // image a screen-reader user meets and cannot identify.
   const census = { landmark: 0, heading: 0, link: 0, graphic: 0, graphicUnnamed: 0, names: [] };
   for (const node of nodes ?? []) {
-    // Ignored nodes are not in the tree a screen reader walks, so counting them would make the oracle
-    // demand elements NVDA could never announce -- a guard that cries wolf gets removed, not heeded.
-    if (!node || node.ignored) continue;
-    const role = String(node.role?.value ?? "").toLowerCase();
+    const classified = classifyAXNode(node);
+    if (!classified) continue;
     // Collect the name from EVERY named node, before the role bucketing, because names serve a different
     // purpose from counts. The counts are compared against specific sweeps, so they only cover the roles
     // those sweeps walk; the names exist to catch a TRUNCATED announcement and must therefore cover
-    // everything a capture can announce. Restricting them to the bucketed roles left the detector unable
-    // to see the case it was built for: a button announced as "o", whose real name was not in the list
-    // because `button` is not a bucketed role.
-    const named = String(node.name?.value ?? "").trim();
-    if (named) census.names.push(named);
-    const bucket = ROLE_BUCKET.get(role);
-    if (!bucket) continue;
-    // An unnamed `region` is NOT a landmark: ARIA requires an accessible name for `role="region"` to be
-    // exposed as one, and NVDA agrees -- named regions are announced ("Latest news, region") while a
-    // bare `<section>` is not. Counting them would invent landmarks the page does not have.
-    if (role === "region" && !String(node.name?.value ?? "").trim()) continue;
-    census[bucket] += 1;
-    if (bucket === "graphic" && !named) census.graphicUnnamed += 1;
+    // everything a capture can announce. Restricting them to the bucketed roles left the detector unable to
+    // see the case it was built for: a button announced as "o", whose real name was not in the list because
+    // `button` is not a bucketed role.
+    if (classified.named) census.names.push(classified.named);
+    if (!classified.bucket) continue;
+    census[classified.bucket] += 1;
+    if (classified.bucket === "graphic" && !classified.named) census.graphicUnnamed += 1;
   }
   return census;
 }
