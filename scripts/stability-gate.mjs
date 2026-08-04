@@ -84,6 +84,18 @@ const CANARIES = [
     reason: "the simplest page there is — if this one varies, the fault is in the pipeline rather " +
       "than in anything the page does",
   },
+  {
+    // The page that proved this gate had a blind spot. An intermittent late document announcement was
+    // credited to the activation here — `after: "Energy results, document"` on a page whose entire
+    // finding is that activating the filter announces NOTHING — and it reached the corpus while every
+    // canary reported stable, because no canary drove a task-button probe and `formChanges` was not even
+    // among the compared fields.
+    path: "filter-status-silent-solar/bad",
+    task: "Show solar tours and notice the result count.",
+    probeForms: true,
+    reason: "the only canary that activates a control and measures what the page says back; the " +
+      "interaction criteria (3.3.1, 4.1.3) are unreachable without it, and a contaminant lived here",
+  },
 ];
 
 // Leased before the first canary and released in the `finally` at the bottom, so a gate that throws
@@ -108,7 +120,7 @@ const results = [];
  * to four levels of nesting -- the lint gate's limit is three, and the honest fix for depth is a named
  * function rather than a suppression.
  */
-async function judgeCanary({ path, reason }, { base, worker, results }) {
+async function judgeCanary({ path, reason, task, probeForms }, { base, worker, results }) {
   const url = `${base}/${path}`;
   process.stdout.write(`\n=== ${path} (${TIMES}x) ===\n    why: ${reason}\n`);
   // tsx, not node: repeat-capture imports isTransient from capture-decisions.mjs, which imports the
@@ -117,6 +129,9 @@ async function judgeCanary({ path, reason }, { base, worker, results }) {
   // has hit this before with evidence-check.mjs; the fix there was the same.
   const args = ["src/training/repeat-capture.mjs", `--url=${url}`, `--times=${TIMES}`,
     `--worker=${worker}`];
+  // Opt-in per canary: a capture must never pay for evidence nobody asked for, and a probe that does not
+  // run is cheaper than one that does.
+  if (probeForms) args.push("--probe-forms", `--task=${task}`);
   try {
     const { stdout } = await run("npx", ["tsx", ...args], { maxBuffer: 1 << 24 });
     const varies = stdout.split("\n").filter((l) => l.includes("VARIES"));

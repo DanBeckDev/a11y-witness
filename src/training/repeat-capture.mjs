@@ -31,6 +31,13 @@ const WORKER = arg("worker", process.env.A11Y_WORKER);
 const TIMES = Number(arg("times", "5"));
 const STEPS = Number(arg("steps", "10"));
 const PROBE_TABLES = process.argv.includes("--probe-tables");
+// `--probe-forms` and `--task` exist because without them this harness could not exercise the task-button
+// or submit probes AT ALL, and those are where the interaction criteria (3.3.1, 4.1.3) live. The
+// consequence was not theoretical: an intermittent contaminant in `formChanges.after` — a late document
+// announcement credited to an activation, on a page whose finding is silence — reached the corpus with
+// `gate:stability` reporting every canary stable, because no canary could reach the code path.
+const PROBE_FORMS = process.argv.includes("--probe-forms");
+const TASK = arg("task");
 const REUSE = process.argv.includes("--reuse");
 const CAPTURE_TIMEOUT_MS = 300_000;
 // Every capture is kept, not just summarised. The first real run of this harness found two degenerate
@@ -40,9 +47,17 @@ const CAPTURE_TIMEOUT_MS = 300_000;
 const OUT_DIR = resolve(arg("out", "runs/repeat-captures"));
 const BETWEEN_MS = 2_000; // let the guest settle, as a real run would between cases
 
+// A probe-forms run with no task cannot activate anything, so it would compare an empty field five times
+// and call it stable. Refuse rather than pass vacuously.
+if (PROBE_FORMS && !TASK) {
+  console.error("--probe-forms needs --task=\"...\": the task selects which control is activated, so " +
+    "without one nothing is activated and the run reports a stable empty result.");
+  process.exit(2);
+}
+
 if (!URL_ARG || !WORKER) {
   console.error("usage: npm run training:repeat -- --url=<page> [--worker=<url>] [--times=5] " +
-    "[--probe-tables] [--reuse]\n" +
+    "[--probe-tables] [--probe-forms] [--task=\"...\"] [--reuse]\n" +
     "  --worker may come from A11Y_WORKER; get one from scripts/local-worker/worker-ctl.sh pool");
   process.exit(2);
 }
@@ -81,6 +96,11 @@ async function captureOnce() {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       url: URL_ARG, steps: STEPS, probeTables: PROBE_TABLES, reuseScreenReader: REUSE,
+      // The task is what selects which button the probe activates -- a control whose announced name
+      // shares a meaningful word with it -- so a probe-forms run without one activates nothing and
+      // reports a stable empty field, which looks exactly like a pass.
+      ...(PROBE_FORMS ? { probeForms: true } : {}),
+      ...(TASK ? { task: TASK } : {}),
     }),
     signal: AbortSignal.timeout(CAPTURE_TIMEOUT_MS),
   });
