@@ -130,6 +130,29 @@ A11Y_WORKERS=url1,url2 npm run training:capture     # explicit pool: yours to ma
 them, so nothing is started or stopped for you. `--after stop|pause|leave` overrides the
 restore behaviour.
 
+### UPDATE: three workers now scale, and the negative-scaling section below is out of date
+
+Measured on a real full recapture — 2,122 captures, all three guests, one run:
+
+| | measured |
+|---|---|
+| wall clock | **3 h 46 m** (13,541 s) |
+| throughput | **0.157 captures/s** — more than 2x the 0.072 recorded below for three workers |
+| failures | **0** of 1,061 cases |
+| recoveries / evictions | 0 / 0 |
+| swapouts during the run | **+0** (delta, not the since-boot counter) |
+| host memory | 405 MB unused at peak, 1,273 MB compressor, no thrash |
+
+So the table below is a measurement of a pipeline that no longer exists. The plausible causes of the
+change are the two fixes made since: `ensureSpeechChannel`'s probe (which took the pool from
+36.7/42.0/93.7 s medians to ~12.4 s) and browser reuse being turned on by default (`windowsActivate`
+8.9 s → 3.6 s), both of which removed exactly the per-capture work that was contending on the SSD.
+
+Two cautions before anyone deletes the section below. This is **one** run, not an interleaved comparison
+against one and two workers, so it establishes that three workers now work — not the shape of the curve.
+And take the swap delta seriously as the reason it worked: `vm_stat`'s counters are since-boot, so a
+baseline before the run is the only way to tell "the host swapped" from "the host swapped hours ago".
+
 ### The pool scales NEGATIVELY, and the cause is disk, not memory
 
 Measured end to end on this Mac, same page, interleaved rounds:
@@ -442,6 +465,46 @@ Rules that follow:
 - **`anchorToTop`'s comment already documented all of this.** The remedy was applied only to the
   post-submit re-read, which is exactly why that was the one sweep that never broke. When a comment names
   a browser or screen-reader behaviour, check every path that behaviour can reach.
+
+### A fix applied at ONE call site when the behaviour reaches several
+
+Three defects in this file share one shape, and it is worth naming so the next one is caught by pattern:
+
+| the behaviour | where the remedy was | where it was missing |
+|---|---|---|
+| focus mode makes quick-nav keys type themselves | `anchorToTop`, before the post-submit re-read | every sweep after an activation — 353 captures |
+| guidepup 0.31 throws on `start()` of a live NVDA | `startScreenReader`'s catch, which adopts it | `ensureSpeechChannel`'s restart, which called `startFreshWithRetry` directly |
+| speech must be settled before a delta baseline is read | `waitForAnnouncement`, at the END of the delta | the START — late speech credited to the activation |
+
+Each remedy was correct, commented, and reachable from only one of the paths that needed it. In two of
+the three cases the comment at the working call site **already described the behaviour**, so the knowledge
+was present and the coverage was not.
+
+The `ensureSpeechChannel` one is the most instructive because of how it presented: every capture returned
+`500 {"error":"NVDA is already running","fault":null}` while `/health` reported `ready: true` with all
+four checks green, `failures: 35` against `captures: 24`, and `gate:stability` degrading 5/5 → 3/5 → 0/5
+on unchanged pages. That reads exactly like the pages going nondeterministic. **The bare message and the
+null fault are what identified it**: `startScreenReader` prefixes its failures with `"nvda.start failed:"`
+and attaches a fault code, so an error with neither cannot have come from there.
+
+**When you find a screen-reader behaviour worth a comment, grep every path that can reach it.** Lint and
+`tsc` cannot see this — it is `.mjs` and the paths are unrelated functions.
+
+### Two blind spots let a 1-in-125 contaminant into the corpus
+
+`gate:stability` reported every canary stable while one capture of `filter-status-silent/bad` recorded
+`after: "Energy results, document"` instead of the empty delta that IS the finding. Two independent gaps,
+both over the same field:
+
+- **`repeat-capture` compared ten fields and not `formChanges` or `postSubmitFields`** — the two carrying
+  interaction evidence. Ten fields watched, and the ones this fault lives in were not among them.
+- **`repeat-capture` had no `--probe-forms` and no `--task`**, so it could not activate a control at all.
+  Every canary exercised only the disclosure probe, which runs unconditionally; 3.3.1 and 4.1.3 were
+  structurally unreachable.
+
+Both are fixed, and the sixth canary is now the exact page the fault occurred on. Note the trap that
+required refusing a flag combination: `--probe-forms` with no `--task` activates nothing, so it compares
+an empty field five times and reports it stable — a count-based check in a new costume.
 
 ### Wait for the condition, never `sleep` a duration
 
