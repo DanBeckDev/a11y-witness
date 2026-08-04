@@ -818,9 +818,20 @@ async function ensureSpeechChannel(diag) {
   }
 
   diag.mark("speechChannelRestart", { reason: "no speech, and a socket rebuild did not fix it" });
-  await stopScreenReader(diag);
-  await startFreshWithRetry(diag);
-  screenReader = { running: true, captures: 1 };
+  // Through `startScreenReader`, NOT `stopScreenReader` + `startFreshWithRetry` directly.
+  //
+  // Those two lines bypassed the "already running" adoption that `startScreenReader`'s catch performs,
+  // and guidepup 0.31 throws when `start()` is called on a live NVDA. So whenever a stop did not take,
+  // this path threw the BARE message with no fault attached — which meant `worker-recovery.mjs` and
+  // `capture-decisions.mjs` could not match it, nothing recovered, and every capture afterwards returned
+  // `500 {"error":"NVDA is already running","fault":null}` while `/health` still reported `ready: true`
+  // with every check green. Measured on this guest: `failures: 35` against `captures: 24`, and
+  // `gate:stability` degrading 5/5 -> 3/5 -> 0/5 across three runs on unchanged pages.
+  //
+  // The adoption fix was written for one call site when the behaviour can reach two, which is the same
+  // mistake as applying the browse-mode Escape only to the post-submit re-read. `startScreenReader` with
+  // `reuse: false` already stops a live instance first, so this is strictly the same work plus the guard.
+  await startScreenReader(diag, { reuse: false });
   // POLL, because what follows is a thrown fault. A fixed 3s wait then ONE probe means a screen reader
   // that needed 3.1s is reported as "running but not speaking" -- a false capture failure that the run
   // classifies transient and pays for with a whole retry. Keep asking until the budget is spent; only
