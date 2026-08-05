@@ -237,9 +237,29 @@ cheaply as possible, and the first step moves no files at all.
   judgment nested under `verdict`); and `git add -- src` swept up another agent's
   untracked test file, which the committed-content check surfaced as 0 failures becoming
   7.
-- [ ] **M8 — Collapse the remainder into `@a11y-witness/lab`.** Eval, training,
-  gates, the three judge harnesses, the Python analysis programs. Gate: `npm test`,
-  `verify.corpus.test.ts` and `npm run release:gate` all green from the new layout.
+- [x] **M8 — Collapse the remainder into `@a11y-witness/lab`.** DONE (`e09bbcd`),
+  `"private": true`, never published. **`src/` no longer exists**; root `scripts/` holds
+  only monorepo tooling. The `.ps1` provisioning went to `worker-fleet` (ADR 0004 always
+  said `fleetScriptPaths()` covered `.ps1`; M6 moved only the `.sh`), and
+  `guest-run.test.ts` followed its subject there.
+
+  The isolation gate now skips private packages and **announces** the skip, because a
+  gate that overstates its own coverage is the failure it exists to prevent.
+
+  Gate: `release:gate` stops at `check-signals` for the pre-existing 418-stale-capture
+  reason, exactly as before M8; every other stage verified individually — clean tree
+  371 tests / 0 fail, `gate:isolation` 6/6, `rules:gate` PASS, `verify.corpus.test.ts`
+  6/6, acceptance `passed: true`, `npm run eval` recall 90% with 0 false positives on
+  conformant pages.
+
+  Six path defects surfaced, all the same shape — a path that was right only because of
+  where a file sat: two tests resolving the repo root from `process.cwd()`; four Python
+  programs anchoring the scorer at `parents[1]`, with one variable serving both the scorer
+  package and the corpus; 34 repo-relative fixture paths in `cases.ts` that made
+  `npm run eval` report an empty corpus; and `referenced-scripts.test.ts` matching
+  `scripts/foo.py` inside `packages/lab/scripts/foo.py`, reporting 9 present programs as
+  missing.
+
 - [ ] **M9 — `1.0.0` across the board, once an external consumer has used the APIs.**
   Everything stays `0.x` until then, deliberately: `0.x` makes a wrong boundary cheap
   to correct, and publishing `1.0.0` before anyone has consumed the API converts a
