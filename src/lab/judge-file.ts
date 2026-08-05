@@ -1,7 +1,7 @@
 /**
  * Run the judge against a captured transcript JSON file.
  *
- * Usage: npx tsx src/spike/judge-file.ts <transcript.json> "<task>"
+ * Usage: npx tsx src/lab/judge-file.ts <transcript.json> "<task>"
  *
  * The transcript file is the output of a capture worker:
  *   { url, screenReader, transcript: string[] }
@@ -9,13 +9,13 @@
  * the Windows worker) judged by the Codex-backed judge on the control plane.
  */
 import { readFileSync } from "node:fs";
-import { judge } from "./judge.js";
+import { judge } from "@a11y-witness/judge";
 
 async function main(): Promise<void> {
   const path = process.argv[2];
   const task = process.argv[3] ?? "Read and understand this page";
   if (!path) {
-    console.error('Usage: npx tsx src/spike/judge-file.ts <transcript.json> "<task>"');
+    console.error('Usage: npx tsx src/lab/judge-file.ts <transcript.json> "<task>"');
     process.exit(1);
   }
   const data = JSON.parse(readFileSync(path, "utf8")) as {

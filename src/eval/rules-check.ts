@@ -1,12 +1,12 @@
 /**
- * Validate the deterministic absence rules (src/spike/rules.ts) over the eval
+ * Validate the deterministic absence rules (@a11y-witness/judge/rules) over the eval
  * fixtures. Exits non-zero if the rules produce ANY false positive on a
  * conformant page — precision is the whole point of a rule.
  *
  * Run: npm run rules-check
  */
 import { existsSync, readFileSync } from "node:fs";
-import { ruleFindings, type RuleInput } from "../spike/rules.js";
+import { ruleFindings, type RuleInput } from "@a11y-witness/judge/rules";
 import { EVAL_CASES } from "./cases.js";
 
 const crit = (w: string): string => w.match(/(\d+\.\d+\.\d+)/)?.[1] ?? w;

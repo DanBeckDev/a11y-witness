@@ -19,7 +19,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
-import { checkIsolation } from "../../scripts/isolation-gate.mjs";
+import { checkIsolation, internalDependencies } from "../../scripts/isolation-gate.mjs";
 
 const fixture = (name: string) => fileURLToPath(new URL(`../../scripts/isolation-fixtures/${name}`, import.meta.url));
 
@@ -53,4 +53,22 @@ test("a package with no smoke test is REJECTED rather than silently passed", () 
   const verdict = checkIsolation(fileURLToPath(new URL("../../packages", import.meta.url)));
   assert.equal(verdict.ok, false);
   assert.equal(verdict.stage, "setup");
+});
+
+test("a package's unpublished siblings are resolved, so the gate can install them", () => {
+  // The gate only ever handled LEAF packages, and nothing noticed until `judge` arrived with two internal
+  // dependencies. Nothing is published, so npm cannot fetch `@a11y-witness/evidence` from the registry — it
+  // fails the install with E404, and the gate would report a broken package that is perfectly fine. npm 7+
+  // auto-installs peer dependencies too, so a peer on an unpublished sibling fails the same way.
+  const judge = fileURLToPath(new URL("../../packages/judge", import.meta.url));
+  const resolved = internalDependencies(judge).map((dir: string) => dir.split("/").pop());
+  assert.deepEqual(resolved.sort(), ["evidence", "scorer"],
+    "judge depends on evidence and peers on scorer; both must be packed alongside it");
+});
+
+test("a dependency on a sibling that does not exist is an ERROR, not a silent skip", () => {
+  // The failure this prevents is a typo'd internal dependency quietly falling through to the registry, where
+  // it 404s during install and looks like a broken package instead of a broken manifest.
+  const fixture = fileURLToPath(new URL("../../scripts/isolation-fixtures/missing-sibling", import.meta.url));
+  assert.throws(() => internalDependencies(fixture), /not a package in this repo/);
 });

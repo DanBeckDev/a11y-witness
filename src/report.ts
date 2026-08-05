@@ -9,9 +9,9 @@
  * pattern: the interesting half becomes a pure function, and the half that touches the world becomes
  * too small to hold a bug.
  */
-import type { Judgment } from "./spike/judge.js";
+import type { Judgment } from "@a11y-witness/judge";
 import type { AxeFinding } from "./scan/axe.js";
-import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "./spike/layers.js";
+import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11y-witness/judge/layers";
 
 /** How much offending markup to quote as evidence. Enough to recognise the element, not the page. */
 const EVIDENCE_CHARS = 100;

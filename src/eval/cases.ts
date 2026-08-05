@@ -55,7 +55,7 @@ const W3C_SURVEY_DOCUMENTED_AA = [
 export const EVAL_CASES: EvalCase[] = [
   {
     id: "w3c-bad-before",
-    fixture: "src/spike/fixtures/nvda-w3c-bad-before.json",
+    fixture: "src/eval/fixtures/nvda/nvda-w3c-bad-before.json",
     task: "Read the City Lights home page and find the latest news",
     // The failures clearly observable from this page's announced reading: unlabelled graphics (1.1.1),
     // visual titles not marked as headings (1.3.1), and vague link text (2.4.4).
@@ -78,7 +78,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "w3c-bad-after",
-    fixture: "src/spike/fixtures/nvda-w3c-bad-after-content.json",
+    fixture: "src/eval/fixtures/nvda/nvda-w3c-bad-after-content.json",
     task: "Read the City Lights home page and find the latest news",
     // W3C documents the accessible page as fully conformant: expect nothing.
     // Uses the content-only fixture (demo switcher chrome stripped) so we score
@@ -89,7 +89,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "w3c-bad-before-survey",
-    fixture: "src/spike/fixtures/nvda-w3c-bad-before-survey.json",
+    fixture: "src/eval/fixtures/nvda/nvda-w3c-bad-before-survey.json",
     task: "Fill in and submit the City Lights visitor survey",
     // Form-heavy page: radio buttons are announced with no label ("radio
     // button, not checked, [no name]") and the menu is a junk-named combo box.
@@ -101,7 +101,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "w3c-wai-home",
-    fixture: "src/spike/fixtures/nvda-w3c-wai-home.json",
+    fixture: "src/eval/fixtures/nvda/nvda-w3c-wai-home.json",
     task: "Find guidance on getting started with accessibility",
     // W3C's own WAI site: a reference-quality accessible page, no demo chrome.
     // A conformant page should yield ~no findings, so this is a clean

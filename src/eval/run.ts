@@ -13,7 +13,7 @@
  * Fixtures are frozen transcripts, so this evaluates the JUDGE, not capture.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { judge } from "../spike/judge.js";
+import { judge } from "@a11y-witness/judge";
 import { pageCensus } from "@a11y-witness/evidence/verify";
 import { EVAL_CASES, type EvalCase } from "./cases.js";
 import { evaluateFitness, persistentFalsePositives, thresholdsFromEnv } from "./fitness.js";

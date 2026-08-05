@@ -38,10 +38,8 @@
  * On CONFORMANT pages the model is silent regardless: 0 findings across 150 conformant records.
  */
 import { spawn } from "node:child_process";
-import { join } from "node:path";
 
 import { scorerPaths as artefact } from "@a11y-witness/scorer";
-import { fileURLToPath } from "node:url";
 
 import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
 import type { Judgment, Finding, Severity } from "./judge.js";
@@ -312,20 +310,21 @@ export function findingsFromScores(
 /**
  * Where the scorer lives.
  *
- * The SCRIPT path now comes from `@a11y-witness/scorer`, which resolves it from its own module — so this
- * function no longer has to know the repo layout, and stops being wrong the moment the file moves. The
- * original defect (PLAN.md M0) was `".venv/bin/python"` and `"scripts/score-screenreader-model.py"`, relative
- * to wherever the process happened to start: correct for `npm run …` at the repo root and wrong everywhere
- * else, which is how the DEFAULT judge backend came to be unusable from an installed package.
+ * The SCRIPT path comes from `@a11y-witness/scorer`, which resolves it from its own module, so this function
+ * does not have to know any layout.
  *
- * The INTERPRETER stays here, deliberately. Choosing a Python is the caller's business, not the artefact's,
- * and `A11Y_PYTHON` must keep winning because `action.yml` sets it to a bare `python`: a GitHub Windows runner
- * has no venv and installs to the system interpreter, so an absolute path would break the Action.
+ * The INTERPRETER defaults to `python3` on the PATH. It used to default to `<repo>/.venv/bin/python`, which
+ * was wrong in two ways at once: an installed package has no venv at all, and the path was derived as `../../`
+ * from this file — so when the judge moved into its own package it silently became `packages/.venv/bin/python`
+ * and every score failed with ENOENT. A default that depends on where the source file happens to sit is the
+ * same defect M0 found in the cwd-relative version, one level removed.
+ *
+ * `A11Y_PYTHON` still wins, and this repo's own scripts set it to the venv. `action.yml` sets it to a bare
+ * `python`, because a GitHub Windows runner has no venv and installs to the system interpreter.
  */
 export function scorerPaths(): { python: string; script: string } {
-  const root = fileURLToPath(new URL("../../", import.meta.url));
   return {
-    python: process.env.A11Y_PYTHON ?? join(root, ".venv/bin/python"),
+    python: process.env.A11Y_PYTHON ?? "python3",
     script: artefact().scoreScript,
   };
 }

@@ -42,6 +42,34 @@ function run(command, args, cwd) {
 }
 
 /**
+ * Sibling packages this one depends on, as directories, transitively.
+ *
+ * Only `@a11y-witness/*` — everything else comes from the registry, which is the point of the gate: a
+ * dependency npm can actually resolve is not the failure mode being tested.
+ */
+export function internalDependencies(packageDir, seen = new Set()) {
+  const manifest = JSON.parse(readFileSync(join(resolve(packageDir), "package.json"), "utf8"));
+  const wanted = { ...manifest.dependencies, ...manifest.peerDependencies };
+  const optional = manifest.peerDependenciesMeta ?? {};
+  const dirs = [];
+  for (const dependency of Object.keys(wanted)) {
+    if (!dependency.startsWith("@a11y-witness/") || seen.has(dependency)) continue;
+    if (optional[dependency]?.optional && !existsSync(siblingDir(packageDir, dependency))) continue;
+    seen.add(dependency);
+    const dir = siblingDir(packageDir, dependency);
+    if (!existsSync(join(dir, "package.json"))) {
+      throw new Error(`${manifest.name} depends on ${dependency}, which is not a package in this repo`);
+    }
+    dirs.push(dir, ...internalDependencies(dir, seen));
+  }
+  return dirs;
+}
+
+/** `@a11y-witness/foo` lives at `packages/foo`, beside the package asking for it. */
+const siblingDir = (packageDir, dependency) =>
+  join(resolve(packageDir), "..", dependency.slice("@a11y-witness/".length));
+
+/**
  * Pack, install outside the repo, run the smoke test. Returns a verdict rather than throwing, because the
  * caller needs to report every package rather than stop at the first bad one.
  */
@@ -52,15 +80,27 @@ export function checkIsolation(packageDir) {
   // A package with no smoke test cannot be gated, and silently passing it would make the gate a decoration.
   if (!existsSync(smoke)) return { ok: false, stage: "setup", detail: `no ${SMOKE} — the gate cannot verify this package` };
 
-  const name = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).name;
+  const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+  const name = manifest.name;
   const consumer = consumerDir();
   try {
-    const packed = run("npm", ["pack", "--silent", "--pack-destination", consumer], dir).trim().split("\n").pop();
+    // Every sibling this package needs, packed too.
+    //
+    // Nothing is published, so npm cannot fetch `@a11y-witness/evidence` from the registry — it would fail
+    // the install with E404 and the gate would report a broken package that is fine. npm 7+ also
+    // auto-installs PEER dependencies, so a peer on an unpublished sibling fails the same way; that is why
+    // peers are collected here as well.
+    //
+    // This is not a workaround, it is the composition the gate should have been testing all along: a
+    // consumer installs `judge` AND the `scorer` it peers on, and the two have to work together outside the
+    // workspace. `evidence` and `scorer` are leaves, so the omission was invisible until `judge` arrived.
+    const tarballs = [dir, ...internalDependencies(dir)].map((source) =>
+      join(consumer, basename(run("npm", ["pack", "--silent", "--pack-destination", consumer], source).trim().split("\n").pop())));
     run("npm", ["init", "-y"], consumer);
-    // `--no-workspaces` and an absolute tarball path: without them npm can walk UP from the temp directory
+    // `--no-workspaces` and absolute tarball paths: without them npm can walk UP from the temp directory
     // and re-attach to a workspace root, which would reintroduce exactly the symlink resolution the gate
     // exists to avoid.
-    run("npm", ["install", "--silent", "--no-workspaces", join(consumer, basename(packed))], consumer);
+    run("npm", ["install", "--silent", "--no-workspaces", ...tarballs], consumer);
     copyFileSync(smoke, join(consumer, SMOKE));
     const output = run("node", [SMOKE], consumer);
     return { ok: true, stage: "smoke", name, detail: output.trim().split("\n").slice(-1)[0] ?? "" };

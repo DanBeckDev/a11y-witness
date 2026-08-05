@@ -6,6 +6,8 @@ enforcement was in place before the code could drift against it.
 | package | licence | contents |
 |---|---|---|
 | `evidence` (M2) | Apache-2.0 | wire types (`.`), pure verification predicates (`./verify`), the WCAG 2.2 AA list (`./wcag`) — zero deps, no I/O |
+| `scorer` (M3) | AGPL-3.0-or-later | the trained heads, the training report, the Python scoring program and the feature contract. The weights are the API, so a retrain is a major bump |
+| `judge` (M4) | AGPL-3.0-or-later | `judge()` (`.`), the deterministic absence rules (`./rules`), experience-layer ordering (`./layers`), and `./internal` with no semver guarantee |
 
 The order is deliberate. M0 tested the assumption that could invalidate the whole design — that a consumer
 can install and run one package in isolation — and its findings are in `docs/isolation-spike.md`. M1 adds
@@ -33,6 +35,19 @@ Each package under `packages/` owns an `isolation-smoke.mjs` that imports itself
 exercises the first example in its README. The gate copies it into a throwaway consumer directory next to
 the installed tarball and runs it there. Importing by name rather than by path is the whole point: a
 relative import would resolve inside the repo and prove nothing.
+
+## The gate packs a package's unpublished siblings too
+
+`judge` is the first package with internal dependencies, and it exposed an omission: nothing is published, so
+npm cannot fetch `@a11y-witness/evidence` from the registry — the install fails with E404 and the gate reports
+a broken package that is fine. npm 7+ auto-installs **peer** dependencies as well, so a peer on an unpublished
+sibling fails identically.
+
+The gate now packs the whole internal closure and installs the tarballs together, which is the composition it
+should have been testing from the start: a consumer installs `judge` *and* the `scorer` it peers on, and the
+two must work together outside the workspace. `evidence` and `scorer` are leaves, so this was invisible until
+M4. A dependency on a sibling that is not a package in this repo is an error rather than a silent fall-through
+to the registry.
 
 ## Why the gate has to exist at all
 
