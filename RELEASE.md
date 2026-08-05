@@ -9,13 +9,20 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 
 | check | result |
 |---|---|
-| unit tests | **344 / 344 pass** |
-| typecheck | clean |
-| lint | 0 errors (303 warnings, all `no-magic-numbers`, non-blocking by design) |
+| unit tests | **371 pass, 0 fail, 2 honest skips** (the two git-dependent tests, in a tree with no `.git`) |
+| typecheck | clean — and now actually covering the package tests: `tsc --listFiles` showed **0** of them in the program before M5, 24 after |
+| lint | 0 errors (317 warnings, all `no-magic-numbers`, non-blocking by design) |
+| `gate:isolation` | **6/6 packages usable when installed**, 1 private package skipped and announced |
 | `rules:gate` | **PASS** — every rule-owned subtype exact on real captured evidence, **0 false positives across 1,003 conformant records** |
 | held-out acceptance | **PASS** — `"passed": true`, no failure reasons |
-| `eval:gate` (judge quality) | **PASS** — recall 90%, **0 false positives on conformant pages**, 48 failure-case runs |
-| shipped model | `releaseEligible: true`, `modelReleaseEligible: true`, **0 warnings** |
+| `npm run eval` (judge quality) | **recall 90%, 0 false positives on conformant pages**, 16 failure-case runs |
+| `verify.corpus.test.ts` | 6/6 |
+| CI (`lint` + `capture-regression`) | **both green** — first time since 1 August; the fix was `capture-pure.mjs` |
+| shipped model | `releaseEligible: true`, **0 warnings** |
+
+Measured on a tree containing only committed content, which is what CI and a consumer see. `release:gate`
+itself stops at `check-signals` for the 418 stale captures recorded below — a corpus-state item, deliberately
+deferred; every other stage above was run individually.
 
 The judge runs on **our own trained scorer** (`judge-backend: local`) — 27 KB of heads over an 87 MB
 encoder. No LLM, no API key, nothing leaves the runner.
