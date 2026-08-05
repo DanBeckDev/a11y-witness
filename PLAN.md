@@ -95,11 +95,19 @@ The whole plan rests on one unproven claim: **that a consumer can install and ru
 package in isolation.** Every step below is ordered to test that as early and as
 cheaply as possible, and the first step moves no files at all.
 
-- [ ] **M0 — Prove isolation before restructuring anything.** `npm pack` the current
-  repo, install the tarball into an empty directory **outside** the repo, and try two
-  things: score one committed eval fixture, and serve `/health` from the worker on a
-  Windows runner. This is a throwaway spike, and it is expected to **fail** — the
-  point is to enumerate exactly how.
+- [x] **M0 — Prove isolation before restructuring anything.** Done; findings in
+  **`docs/isolation-spike.md`**. Both predicted defects confirmed, plus two that were not
+  predicted: Node **refuses type stripping inside `node_modules`**
+  (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), so shipping unbuilt `.ts` is impossible rather
+  than merely awkward and ADR 0005's build is load-bearing; and the committed weights
+  (`screenreader-structured-v4`) do not match the committed trainer (`v1`), so **a fresh clone
+  cannot score at all**. `.mjs` ships and imports verbatim, which validates the worker package's
+  shape. Nothing invalidates ADR 0004's boundaries.
+
+  The scorer program and `check-screenreader-hardening.py` were never committed and now are, with
+  a test asserting every referenced `scripts/…` program is tracked in git. The trainer mismatch is
+  open: the `v4` trainer is uncommitted work belonging to another session, coherent with ~17 other
+  files, so it is an ownership decision rather than a fix.
 
   Two failures are already known from reading the code and must be confirmed here:
   `local-judge.ts:311-312` resolves the scorer as `".venv/bin/python"` and
