@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Clone the local NVDA worker VM into an additional, independent worker.
 #
-#   ./scripts/local-worker/clone-worker.sh [new-name]      # default: a11y-worker-2
+#   ./packages/worker-fleet/src/local-worker/clone-worker.sh [new-name]      # default: a11y-worker-2
 #
 # One worker serves one capture at a time by design (one desktop, one foreground window, one
 # NVDA), so throughput scales by running more of them. On APFS the clone is copy-on-write, so
@@ -120,4 +120,4 @@ done
 
 echo
 say "pool:"
-./"$(dirname "$0")/worker-ctl.sh" pool 2>/dev/null || echo "  (run scripts/local-worker/worker-ctl.sh pool)"
+./"$(dirname "$0")/worker-ctl.sh" pool 2>/dev/null || echo "  (run npm run worker:ctl -- pool)"

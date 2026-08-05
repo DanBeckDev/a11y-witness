@@ -14,15 +14,19 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { availableHostMemoryMb, workersHostCanRun } from "../src/capture/host-capacity.mjs";
-import { fleetConsistency, describeMismatches } from "../src/capture/fleet-consistency.mjs";
-import { assessWorker } from "../src/capture/worker-health.mjs";
+import { availableHostMemoryMb, workersHostCanRun } from "./host-capacity.mjs";
+import { fleetConsistency, describeMismatches } from "./fleet-consistency.mjs";
+import { assessWorker } from "./worker-health.mjs";
 
 const run = promisify(execFile);
 const JSON_OUT = process.argv.includes("--json");
 const WORKER_ENV = process.env.A11Y_WORKER ?? null;
 const PAGES_PORT = Number(process.env.DATASET_PAGES_PORT || 5050);
-const CTL = fileURLToPath(new URL("../scripts/local-worker/worker-ctl.sh", import.meta.url));
+// The lifecycle script ships beside this one in the fleet package. It was `../scripts/local-worker/...`,
+// resolved from this module — correct while doctor lived in `scripts/`, and silently wrong the moment it
+// moved: doctor then reported "no local VM tooling here" on a host with three registered VMs, which reads as
+// a broken environment rather than a broken path.
+const CTL = fileURLToPath(new URL("./local-worker/worker-ctl.sh", import.meta.url));
 const DATASET = resolve(process.cwd(), "runs/screenreader-dataset");
 const PROBE_TIMEOUT_MS = 8000;
 

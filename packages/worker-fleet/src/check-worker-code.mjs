@@ -13,10 +13,16 @@
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import { codeVersion } from "../packages/nvda-worker/src/code-version.mjs";
+import { fileURLToPath } from "node:url";
+import { codeVersion, workerSourceDir } from "@a11y-witness/nvda-worker";
 
-const CTL = resolve("scripts/local-worker/worker-ctl.sh");
-const NVDA_DIR = resolve("packages/nvda-worker/src");
+// Resolved from THIS module: the fleet scripts ship with this package, so a cwd-relative path was only ever
+// right when run from the repo root.
+const CTL = fileURLToPath(new URL("./local-worker/worker-ctl.sh", import.meta.url));
+// From the worker PACKAGE, not from the cwd. This was `resolve("src/capture/nvda")` and then
+// `resolve("packages/nvda-worker/src")` — a repo-layout guess that had to be edited every time the worker
+// moved, and that silently pointed at nothing whenever the cwd was not the repo root.
+const NVDA_DIR = workerSourceDir();
 // /health now reports installed runtime versions as well as the code hash. The first
 // request after a Windows boot may need PowerShell file-version discovery, so four seconds
 // was too tight and made a healthy worker look unreachable.

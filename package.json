@@ -33,10 +33,10 @@
     "training:hardening": ".venv/bin/python scripts/check-screenreader-hardening.py",
     "training:fetch-encoder": ".venv/bin/python packages/scorer/python/fetch-encoder.py",
     "training:train": ".venv/bin/python scripts/train-screenreader-model.py",
-    "doctor": "node scripts/doctor.mjs",
-    "worker:code": "node scripts/check-worker-code.mjs",
-    "worker:deploy": "node scripts/deploy-worker.mjs",
-    "worker:compare": "node scripts/compare-workers.mjs",
+    "doctor": "node packages/worker-fleet/src/doctor.mjs",
+    "worker:code": "node packages/worker-fleet/src/check-worker-code.mjs",
+    "worker:deploy": "node packages/worker-fleet/src/deploy-worker.mjs",
+    "worker:compare": "node packages/worker-fleet/src/compare-workers.mjs",
     "evidence:check": "tsx scripts/evidence-check.mjs",
     "guest:run": "node scripts/guest-run.mjs",
     "gate:stability": "tsx scripts/stability-gate.mjs",
@@ -50,13 +50,15 @@
     "capture:check": "tsx src/lab/capture-check.mjs",
     "layers:compare": "A11Y_PYTHON=.venv/bin/python node scripts/compare-layers.mjs",
     "pretest": "npm run build",
-    "pretypecheck": "npm run build"
+    "pretypecheck": "npm run build",
+    "worker:ctl": "packages/worker-fleet/src/local-worker/worker-ctl.sh"
   },
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
     "@a11y-witness/judge": "0.1.0",
     "@a11y-witness/nvda-worker": "0.1.0",
     "@a11y-witness/scorer": "0.1.0",
+    "@a11y-witness/worker-fleet": "0.1.0",
     "@anthropic-ai/sdk": "^0.106.0",
     "@guidepup/guidepup": "^0.31.0"
   },

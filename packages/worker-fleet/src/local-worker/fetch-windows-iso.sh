@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build an official Windows 11 ARM64 ISO on macOS, from the CLI.
 #
-#   ./scripts/local-worker/fetch-windows-iso.sh [outdir]
+#   ./packages/worker-fleet/src/local-worker/fetch-windows-iso.sh [outdir]
 #
 # Microsoft's ARM64 ISO download is a session-token web flow that does not script
 # cleanly, so this uses UUP dump: it fetches the same Unified Update Platform packages
@@ -86,7 +86,7 @@ cd "$OUT_DIR"
 EXISTING="$(ls -t "$OUT_DIR"/*.ISO "$OUT_DIR"/*.iso 2>/dev/null | grep -vi support | head -1 || true)"
 if [ -n "$EXISTING" ] && xorriso -indev "$EXISTING" -report_el_torito plain 2>/dev/null | grep -q UEFI; then
   echo "ISO ready (already built): $EXISTING"
-  echo "Next:  ./scripts/local-worker/create-utm-vm.sh \"$EXISTING\""
+  echo "Next:  ./packages/worker-fleet/src/local-worker/create-utm-vm.sh \"$EXISTING\""
   exit 0
 fi
 if [ -n "$EXISTING" ]; then
@@ -220,5 +220,5 @@ fi
 
 echo
 echo "ISO ready: $ISO"
-echo "Next:  ./scripts/local-worker/build-vm.sh \"$ISO\""
-echo "       ./scripts/local-worker/create-utm-vm.sh \"$ISO\""
+echo "Next:  ./packages/worker-fleet/src/local-worker/build-vm.sh \"$ISO\""
+echo "       ./packages/worker-fleet/src/local-worker/create-utm-vm.sh \"$ISO\""

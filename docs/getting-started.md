@@ -74,16 +74,16 @@ brew install --cask utm
 Then:
 
 ```bash
-./scripts/local-worker/fetch-windows-iso.sh          # official Win11 ARM64 ISO (~10 GB download)
-./scripts/local-worker/build-vm.sh <the-iso>         # unattend answer file + ARM64 drivers
-./scripts/local-worker/create-utm-vm.sh <the-iso>    # creates and starts the VM
+./packages/worker-fleet/src/local-worker/fetch-windows-iso.sh          # official Win11 ARM64 ISO (~10 GB download)
+./packages/worker-fleet/src/local-worker/build-vm.sh <the-iso>         # unattend answer file + ARM64 drivers
+./packages/worker-fleet/src/local-worker/create-utm-vm.sh <the-iso>    # creates and starts the VM
 ```
 
 It installs Windows, logs in, installs NVDA and starts the worker with no clicking. Budget
 1.5–2 hours, almost all of it the download. Check it came up:
 
 ```bash
-./scripts/local-worker/worker-ctl.sh status
+npm run worker:ctl -- status
 # health:  includes deployed code plus worker-reported NVDA/Edge/runtime versions
 ```
 
@@ -184,7 +184,7 @@ That is a working install. `--json` gives you the full transcript alongside the 
 |---|---|
 | `fetch failed` / `ECONNREFUSED` | The worker is not reachable. Check `A11Y_WORKER`, and that the worker machine is up and its firewall allows 8765 |
 | `WARNING: 0 announcements captured` | The worker is running but NVDA produced no speech. **This is a worker problem, not a clean page.** Re-run with `--debug` and read `documentReady` first |
-| `Local worker VM ... did not become healthy` | Route A: the VM booted but the worker task did not start. `./scripts/local-worker/worker-ctl.sh status` |
+| `Local worker VM ... did not become healthy` | Route A: the VM booted but the worker task did not start. `npm run worker:ctl -- status` |
 | `NVDA not installed` | Almost always a **version mismatch**, not a missing install |
 | `nvda.start failed: NVDA is not supported` | You ran the capture in **session 0** — `utmctl exec` and SSH both land there and cannot drive NVDA. Use a scheduled task with `LogonType Interactive` |
 | VM state `unknown`, worker unreachable, but the bundle is there | **UTM is not running.** `utmctl` is a client for the app, not a daemon; `worker-ctl.sh` launches it for you. `pgrep -x UTM` to confirm |
@@ -205,7 +205,7 @@ enough that the table is faster than reasoning from first principles.
 - **Keeping the VM cheap** — `worker-ctl.sh pause` between runs; `idle-pause 15` to do it
   automatically.
 - **Making it faster** — add a second worker with
-  `./scripts/local-worker/clone-worker.sh`, then just run as normal: with no `A11Y_WORKER` set,
+  `packages/worker-fleet/src/local-worker/clone-worker.sh`, then just run as normal: with no `A11Y_WORKER` set,
   a run uses as many local workers as the host can hold and puts each one back afterwards.
   Measured 1.90x on two workers, 2.36x on three *on a quiet host* — but a worker VM costs ~7 GB
   of host memory, so three do not fit on a 36 GB Mac that is also your desktop, and

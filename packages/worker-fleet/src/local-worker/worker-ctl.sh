@@ -2,21 +2,21 @@
 # Start, pause, stop and check the local NVDA worker VM, so it is not burning resources
 # while you are not capturing.
 #
-#   ./scripts/local-worker/worker-ctl.sh up            # make it ready (start or resume), wait for /health
-#   ./scripts/local-worker/worker-ctl.sh pause         # freeze it: ~0.6% CPU, instant resume, RAM not guaranteed
-#   ./scripts/local-worker/worker-ctl.sh stop          # shut it down: nothing held, ~15 s to come back
-#   ./scripts/local-worker/worker-ctl.sh status        # state, resource use, health
-#   ./scripts/local-worker/worker-ctl.sh json          # the same, machine-readable (used by the CLI)
-#   ./scripts/local-worker/worker-ctl.sh pool          # every a11y-worker* VM, as JSON
-#   ./scripts/local-worker/worker-ctl.sh pool-up       # start them all, wait for health
-#   ./scripts/local-worker/worker-ctl.sh pool-stop     # shut the whole pool down
-#   ./scripts/local-worker/worker-ctl.sh pool-pause    # freeze the whole pool
+#   npm run worker:ctl -- up                           # make it ready (start or resume), wait for /health
+#   ./packages/worker-fleet/src/local-worker/worker-ctl.sh pause         # freeze it: ~0.6% CPU, instant resume, RAM not guaranteed
+#   ./packages/worker-fleet/src/local-worker/worker-ctl.sh stop          # shut it down: nothing held, ~15 s to come back
+#   ./packages/worker-fleet/src/local-worker/worker-ctl.sh status        # state, resource use, health
+#   ./packages/worker-fleet/src/local-worker/worker-ctl.sh json          # the same, machine-readable (used by the CLI)
+#   ./packages/worker-fleet/src/local-worker/worker-ctl.sh pool          # every a11y-worker* VM, as JSON
+#   ./packages/worker-fleet/src/local-worker/worker-ctl.sh pool-up       # start them all, wait for health
+#   ./packages/worker-fleet/src/local-worker/worker-ctl.sh pool-stop     # shut the whole pool down
+#   ./packages/worker-fleet/src/local-worker/worker-ctl.sh pool-pause    # freeze the whole pool
 #
 # One VM serves one capture at a time, so throughput comes from more VMs. `pool` reports the
 # lot; add one with clone-worker.sh (which handles the duplicate-MAC trap).
 # Operate on a single named VM with A11Y_VM_NAME=a11y-worker-2.
-#   ./scripts/local-worker/worker-ctl.sh idle-pause 15 # watch, then pause after 15 idle minutes
-#   ./scripts/local-worker/worker-ctl.sh idle-stop 30  # same but shut down instead
+#   ./packages/worker-fleet/src/local-worker/worker-ctl.sh idle-pause 15 # watch, then pause after 15 idle minutes
+#   ./packages/worker-fleet/src/local-worker/worker-ctl.sh idle-stop 30  # same but shut down instead
 #
 # Measured on an M4 Max, 4 vCPU / 8 GB guest. Every number here was observed on this
 # machine; none is an estimate:
@@ -85,7 +85,7 @@ resolve_uuid() {
   [ -n "${A11Y_VM_UUID:-}" ] && { echo "$A11Y_VM_UUID"; return; }
   local matches
   matches="$(utmctl list | awk -v n="$VM_NAME" '$3 == n { print $1 }')"
-  [ -n "$matches" ] || die "no VM named '$VM_NAME' (create one: scripts/local-worker/create-utm-vm.sh)"
+  [ -n "$matches" ] || die "no VM named '$VM_NAME' (create one: packages/worker-fleet/src/local-worker/create-utm-vm.sh)"
   if [ "$(echo "$matches" | wc -l | tr -d ' ')" -gt 1 ]; then
     # Do NOT guess, and do NOT suggest deleting one. Duplicate registrations under the same
     # name point at the SAME <name>.utm bundle, so `utmctl delete` on either removes that
@@ -285,7 +285,9 @@ case "$CMD" in
         echo "         it is down for 5-10s during a restart; if it persists:" >&2
         echo "         utmctl exec <uuid> --cmd powershell.exe -NoProfile -Command 'Start-ScheduledTask -TaskName a11ysrv'" >&2
       else
-        echo "         no guest IP either, so the VM itself is not ready. Try '$0 up'." >&2
+        # `$0` is this file's path, which after M6 is `packages/worker-fleet/src/local-worker/worker-ctl.sh` — true,
+        # and not what anyone wants to type. The npm alias is the stable way to say it, and it is what the docs use.
+        echo "         no guest IP either, so the VM itself is not ready. Try 'npm run worker:ctl -- up'." >&2
       fi
     fi
     ;;
