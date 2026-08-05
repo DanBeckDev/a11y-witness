@@ -246,7 +246,7 @@ runs:
         [ "${{ inputs.probe-forms }}" = "true" ] && args+=(--probe-forms)
         [ "${{ inputs.axe }}" = "true" ] || args+=(--no-axe)
         # stdout is the JSON result; the CLI's diagnostics go to stderr and stay in the log.
-        npx tsx src/cli.ts "${args[@]}" > "$out"
+        npx tsx packages/cli/src/cli.ts "${args[@]}" > "$out"
         echo "result-json=$out" >> "$GITHUB_OUTPUT"
 
     - name: Report
@@ -259,7 +259,7 @@ runs:
         # be missing on exactly the runs where someone needs them. Verified both ways before relying on
         # it: `false; status=$?` exits 1 without reaching the next line, `false || status=$?` continues.
         status=0
-        npx tsx src/action/run.ts \
+        npx tsx packages/cli/src/action/run.ts \
           --result="${{ steps.capture.outputs.result-json }}" \
           --fail-on="${{ inputs.fail-on }}" \
           --summary-out="$RUNNER_TEMP/a11y-witness-summary.md" \

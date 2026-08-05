@@ -1,0 +1,56 @@
+{
+  "name": "a11y-witness",
+  "version": "0.1.0",
+  "description": "Drives a real screen reader through a real page and reports the WCAG 2.2 AA failures a rule scanner cannot see \u2014 alongside axe, never instead of it.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "a11y-witness": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@a11y-witness/evidence": "0.1.0",
+    "@a11y-witness/judge": "0.1.0",
+    "@a11y-witness/worker-fleet": "0.1.0",
+    "@a11y-witness/scorer": "0.1.0"
+  },
+  "optionalDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "playwright": "^1.61.1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepack": "tsc --build",
+    "prepare": "tsc --build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DanBeckDev/a11y-witness.git",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "accessibility",
+    "a11y",
+    "wcag",
+    "screen-reader",
+    "nvda",
+    "axe",
+    "cli"
+  ]
+}
