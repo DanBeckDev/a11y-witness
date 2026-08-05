@@ -143,7 +143,10 @@ without renaming anything — ADR 0001 deferred VoiceOver, it did not rule it ou
 - bin — `a11y-doctor`, `a11y-worker-ctl`, `a11y-worker-deploy`, `a11y-worker-compare`.
 - `.` — `leaseWorker`, `leaseWorkerPool`, `DEFAULT_WORKER`, `AfterRun`,
   `isAfterRun`, `guestReachableUrl`, `hostAddressForWorker`.
-- `./health` — `assessWorker`, `shouldRetireWorker`.
+- `./health` — `assessWorker`. **Not `shouldRetireWorker`**, corrected during M6: it lives in
+  `capture-decisions.mjs` with the rest of a run's accept/reject/retry/evict decisions, and pulling one
+  member out of that cohesive set to satisfy a package boundary would be the boundary dictating the code
+  rather than describing it. It stays in `lab`.
 - `./capacity` — `availableHostMemoryMb`, `workersHostCanRun`.
 - `fleetScriptPaths()` for the `.sh`/`.ps1` provisioning files, same
   resolve-from-`import.meta.url` pattern as `scorer`.

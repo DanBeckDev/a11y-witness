@@ -10,7 +10,7 @@
  * The worker URL also reads from A11Y_WORKER.
  *
  * With neither set, the run manages a local UTM worker VM on demand: it starts one if
- * needed and puts it back how it found it afterwards. See leaseWorker in capture/local-vm.
+ * needed and puts it back how it found it afterwards. See leaseWorker in @a11y-witness/worker-fleet.
  * Set A11Y_SHADOW_MODEL=1 to run the verified local screen-reader scorer beside the existing
  * judge. Shadow output is log-only and never changes findings.
  */
@@ -22,7 +22,7 @@ import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "@a11y-witness/judge/layers";
 import { reportLines, type Report } from "./report.js";
-import { leaseWorker, isAfterRun, type AfterRun } from "./capture/local-vm.js";
+import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fleet";
 import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
 

@@ -30,9 +30,9 @@ amount of container plumbing gets around it.
 ## Path A — scripted, no GUI clicking
 
 ```bash
-./scripts/local-worker/fetch-windows-iso.sh              # official Win11 ARM64 ISO (~10 GB dl)
-./scripts/local-worker/build-vm.sh <the-iso>             # builds support.iso (unattend + drivers)
-./scripts/local-worker/create-utm-vm.sh <the-iso>        # creates + starts the VM in UTM
+./packages/worker-fleet/src/local-worker/fetch-windows-iso.sh              # official Win11 ARM64 ISO (~10 GB dl)
+./packages/worker-fleet/src/local-worker/build-vm.sh <the-iso>             # builds support.iso (unattend + drivers)
+./packages/worker-fleet/src/local-worker/create-utm-vm.sh <the-iso>        # creates + starts the VM in UTM
 ```
 
 The third script is the one that took some finding. `utmctl` has no `create`
@@ -312,8 +312,8 @@ Given the QEMU blocker above, this is currently the working route.
 The ISO and `support.iso` from the scripted path are exactly what UTM needs, so the
 Windows install is still hands-off:
 
-1. `./scripts/local-worker/fetch-windows-iso.sh` — build the ISO (works; unaffected).
-2. `./scripts/local-worker/build-vm.sh <iso>` — still worth running: it produces
+1. `./packages/worker-fleet/src/local-worker/fetch-windows-iso.sh` — build the ISO (works; unaffected).
+2. `./packages/worker-fleet/src/local-worker/build-vm.sh <iso>` — still worth running: it produces
    `~/a11y-worker-vm/support.iso`, which carries `autounattend.xml`, the ARM64 virtio
    drivers and the bootstrap.
 3. In UTM: **Virtualize → Windows**, uncheck "Import VHDX", select the Windows ISO.
@@ -338,13 +338,13 @@ A Windows guest is never really idle, so leaving it running costs you. `worker-c
 wraps the lifecycle:
 
 ```bash
-./scripts/local-worker/worker-ctl.sh up        # start or resume, then wait for /health
-./scripts/local-worker/worker-ctl.sh pool      # every a11y-worker* VM, as JSON
-./scripts/local-worker/worker-ctl.sh pool-up   # start them all
-./scripts/local-worker/worker-ctl.sh pool-stop # release them all (~13 s for three)
-./scripts/local-worker/worker-ctl.sh pause     # ~0.6% CPU, resume under a second
-./scripts/local-worker/worker-ctl.sh stop      # nothing held, ~15 s to come back
-./scripts/local-worker/worker-ctl.sh idle-pause 15   # pause after 15 min with no capture
+npm run worker:ctl -- up        # start or resume, then wait for /health
+npm run worker:ctl -- pool      # every a11y-worker* VM, as JSON
+npm run worker:ctl -- pool-up   # start them all
+npm run worker:ctl -- pool-stop # release them all (~13 s for three)
+npm run worker:ctl -- pause     # ~0.6% CPU, resume under a second
+npm run worker:ctl -- stop      # nothing held, ~15 s to come back
+npm run worker:ctl -- idle-pause 15   # pause after 15 min with no capture
 ```
 
 `idle-*` polls the worker's own `busy` flag, so a capture in flight resets the clock.
@@ -493,7 +493,7 @@ Check in this order:
 pgrep -x UTM              # utmctl needs this
 pgrep -f QEMULauncher     # is a guest actually running?
 utmctl list               # is the VM registered, and under what UUID?
-./scripts/local-worker/worker-ctl.sh status
+npm run worker:ctl -- status
 ```
 
 **Two shells or two agents driving one worker will produce exactly this confusion.** There is
@@ -519,7 +519,7 @@ osascript \
 ```
 
 Repeat for `a11y-worker-2.utm` and `a11y-worker-3.utm`, then verify with `utmctl list` and
-`./scripts/local-worker/worker-ctl.sh pool`. Some UTM versions show a security confirmation
+`npm run worker:ctl -- pool`. Some UTM versions show a security confirmation
 when an imported bundle contains custom arguments; an operator must approve that prompt in
 UTM before the AppleScript call returns. The repository deliberately does not bypass that
 confirmation or edit UTM's private registry while the app is running.

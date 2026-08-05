@@ -29,9 +29,9 @@ scripted local one — start here: **`docs/getting-started.md`**, details in
 `docs/local-worker-vm.md`.
 
 ```bash
-./scripts/local-worker/worker-ctl.sh up        # start/resume the VM, wait for /health
-./scripts/local-worker/worker-ctl.sh status    # state, host cost, health
-./scripts/local-worker/worker-ctl.sh pause     # see below: UTM cannot actually suspend these guests
+npm run worker:ctl -- up        # start/resume the VM, wait for /health
+npm run worker:ctl -- status    # state, host cost, health
+npm run worker:ctl -- pause     # see below: UTM cannot actually suspend these guests
 npm run witness -- https://example.com --task "..."   # no A11Y_WORKER needed
 ```
 
@@ -121,10 +121,10 @@ and **how many actually start is capped by host memory** (next section).
 
 ```bash
 npm run training:capture                            # uses every local worker, releases them after
-./scripts/local-worker/clone-worker.sh              # add one (handles utmctl's MAC copying)
-./scripts/local-worker/worker-ctl.sh pool           # what have I got, as JSON
-./scripts/local-worker/worker-ctl.sh pool-up        # start them all
-./scripts/local-worker/worker-ctl.sh pool-stop      # release the lot (~13 s for three)
+packages/worker-fleet/src/local-worker/clone-worker.sh              # add one (handles utmctl's MAC copying)
+npm run worker:ctl -- pool           # what have I got, as JSON
+npm run worker:ctl -- pool-up        # start them all
+npm run worker:ctl -- pool-stop      # release the lot (~13 s for three)
 A11Y_WORKERS=url1,url2 npm run training:capture     # explicit pool: yours to manage, no lifecycle
 ```
 

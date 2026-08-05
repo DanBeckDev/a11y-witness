@@ -25,16 +25,22 @@ import { createHash } from "node:crypto";
 import { createReadStream, readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
-import { WORKER_FILES } from "../packages/nvda-worker/src/worker-files.mjs";
+import { fileURLToPath } from "node:url";
+import { WORKER_FILES, workerSourceDir } from "@a11y-witness/nvda-worker";
 
 const run = promisify(execFile);
-const NVDA_DIR = resolve("packages/nvda-worker/src");
+// From the worker PACKAGE, not from the cwd. This was `resolve("src/capture/nvda")` and then
+// `resolve("packages/nvda-worker/src")` — a repo-layout guess that had to be edited every time the worker
+// moved, and that silently pointed at nothing whenever the cwd was not the repo root.
+const NVDA_DIR = workerSourceDir();
 // The guest's layout deliberately does NOT mirror the repo's. It is where provisioning put the files and
 // where the scheduled task points, so renaming it means re-provisioning every guest — and M5 moving the host
 // directory to `packages/nvda-worker/src` changed nothing here. All the worker needs is that its files land in
 // one directory together.
 const GUEST_DIR = "C:\\Users\\witness\\a11y-witness\\src\\capture\\nvda";
-const CTL = resolve("scripts/local-worker/worker-ctl.sh");
+// Resolved from THIS module: the fleet scripts ship with this package, so a cwd-relative path was only ever
+// right when run from the repo root.
+const CTL = fileURLToPath(new URL("./local-worker/worker-ctl.sh", import.meta.url));
 const LIFECYCLE_TIMEOUT_MS = 420_000;
 // `pool` launches UTM if it is closed and polls every VM's /health. 90s was too short: it timed out
 // mid-deploy while three guests were transitioning, and the whole run died with a bare SIGTERM.

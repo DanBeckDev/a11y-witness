@@ -24,8 +24,8 @@
 // It also refuses to declare a difference the samples do not support -- see src/capture/worker-stats.mjs.
 // "Not distinguishable" is a real answer, and it is the one that was missing.
 import { writeFileSync, mkdirSync } from "node:fs";
-import { compareWorkers, describe as summarise, recoveryRates } from "../src/capture/worker-stats.mjs";
-import { sampleHost, diffHost } from "../src/capture/host-metrics.mjs";
+import { compareWorkers, describe as summarise, recoveryRates } from "./worker-stats.mjs";
+import { sampleHost, diffHost } from "./host-metrics.mjs";
 import { resolve } from "node:path";
 
 const CAPTURE_TIMEOUT_MS = 300_000;

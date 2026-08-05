@@ -318,7 +318,7 @@ answer, and an intact bundle plus a state of `unknown` reads as a corrupted VM. 
 pgrep -x UTM              # utmctl needs this
 pgrep -f QEMULauncher     # is a guest actually running?
 utmctl list               # registered, and under which UUID?
-./scripts/local-worker/worker-ctl.sh status   # launches UTM if needed, explains `unknown`
+npm run worker:ctl -- status   # launches UTM if needed, explains `unknown`
 ```
 
 The other cause is contention. One machine hosts **one** VM and **one** NVDA, so a second

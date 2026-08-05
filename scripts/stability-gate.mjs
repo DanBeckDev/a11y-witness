@@ -27,7 +27,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
 
-import { leaseWorker, guestReachableUrl } from "../src/capture/local-vm.js";
+import { leaseWorker, guestReachableUrl } from "@a11y-witness/worker-fleet";
 import { leasePageServer } from "../src/training/page-server.mjs";
 
 const run = promisify(execFile);
