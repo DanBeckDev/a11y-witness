@@ -1,5 +1,5 @@
 /**
- * Every program this repo tells someone to run must actually be IN the repo.
+ * Every file this repo tells a tool to read must actually be IN the repo.
  *
  * `scripts/score-screenreader-model.py` — the default judge backend — was never committed. It lived in one
  * working tree and in two unreachable `kanban checkpoint` commits, was not gitignored, and was referenced
@@ -15,11 +15,24 @@
  *
  * It needs no worker, no venv, no network — so it runs in CI, which is the one place that sees a clean
  * checkout and would have failed immediately.
+ *
+ * ## The second test, and why it exists
+ *
+ * The same omission recurred one milestone later on a file that is not a program: `tsconfig.base.json`, which
+ * carries the `composite: true` that PLAN.md M1 exists to establish, was written and never staged. Every
+ * local check passed — `npm test`, `npm run typecheck`, `npm run build`, both new gates — because the file
+ * was sitting in the working tree. A clean clone failed with `TS5083: Cannot read file ...tsconfig.base.json`.
+ *
+ * So this is not a fact about `scripts/`; it is a fact about the difference between a working tree and a
+ * repository, and it has now cost this project four times (the scorer, the hardening checker, the resume
+ * module, this). The second test generalises the guard to config: any `extends` target of a tracked tsconfig
+ * must itself be tracked.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { join, dirname, relative } from "node:path";
 
 /** Anything shaped like a path into `scripts/`, wherever it appears in the file. */
 const SCRIPT_PATH = /scripts\/[A-Za-z0-9._-]+\.(?:mjs|js|ts|py|ps1|sh)/g;
@@ -81,4 +94,41 @@ test("every scripts/ program referenced by package.json or action.yml is tracked
   assert.deepEqual(missing, [],
     `${missing.length} referenced program(s) are not in the repo. Anyone who clones or installs this cannot `
     + `run them, however well they work on the machine that has them.`);
+});
+
+/** `extends` targets of every tracked tsconfig, resolved to repo-relative paths. */
+function extendedConfigs(): Array<{ from: string; target: string }> {
+  const configs = execFileSync("git", ["ls-files", "*tsconfig*.json"], { encoding: "utf8" })
+    .split("\n").filter(Boolean);
+  const found: Array<{ from: string; target: string }> = [];
+  for (const from of configs) {
+    // tsconfig permits comments, and this repo uses them heavily to record WHY a setting is load-bearing.
+    const source = readFileSync(from, "utf8").replace(/^\s*\/\/.*$/gm, "");
+    const extended = (JSON.parse(source) as { extends?: string | string[] }).extends;
+    if (!extended) continue;
+    for (const target of Array.isArray(extended) ? extended : [extended]) {
+      // Only relative paths are ours to guarantee; a bare specifier comes from node_modules.
+      if (target.startsWith(".")) found.push({ from, target: relative(".", join(dirname(from), target)) });
+    }
+  }
+  return found;
+}
+
+test("every tsconfig extends target is tracked in git", (t) => {
+  if (!insideGitRepo()) {
+    t.skip("not a git checkout, so tracked-ness cannot be determined here");
+    return;
+  }
+  const extended = extendedConfigs();
+  // Guard the guard, as above: if the parse silently stops finding `extends`, this passes by examining
+  // nothing. `tsconfig.base.json` is extended by at least the project-reference fixtures.
+  assert.ok(extended.length >= 1, "found no tsconfig extends targets at all; the scan is broken");
+
+  const missing = extended
+    .filter(({ target }) => !isTracked(target))
+    .map(({ from, target }) => `${target} (extended by ${from})`);
+
+  assert.deepEqual(missing, [],
+    `${missing.length} tsconfig(s) extend a file that is not in the repo. Every local check passes — the `
+    + `file is in the working tree — and a clean clone fails with TS5083.`);
 });
