@@ -20,6 +20,14 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 The judge runs on **our own trained scorer** (`judge-backend: local`) — 27 KB of heads over an 87 MB
 encoder. No LLM, no API key, nothing leaves the runner.
 
+> **Corrected 5 Aug.** The figures above were first recorded while `scripts/score-screenreader-model.py`
+> — the program that *is* this backend — had never been committed. It existed only in one working tree,
+> so a fresh clone could not run its own default judge, and the numbers were produced by a file no
+> consumer received. `npm pack` includes untracked files, which is why installing it appeared to work.
+> The program is now tracked, resolves from `import.meta.url` rather than the process cwd, and
+> `npm run eval:gate` reproduces these exact figures from the committed tree. A test now asserts that
+> every `scripts/…` program referenced by `package.json` or `action.yml` is tracked in git.
+
 ### The claim this project exists to make, demonstrated
 
 Against the University of Washington "Accessible University" demo — a third-party, expert-built
@@ -83,6 +91,7 @@ Not bugs being hidden — work consciously not done before shipping.
 | Scoped cache invalidation | Two recaptures were measured as 65% unnecessary — a global `CAPTURE_PROTOCOL_VERSION` invalidates captures a fix could not have touched |
 | ONNX export | Would drop torch (~529 MB) from the Action's setup |
 | `provisionRevision` reads `"unstamped"` | Needs a deliberate pool-wide re-provision |
+| `scripts/check-screenreader-hardening.py` was also untracked | Now committed; backs `npm run training:hardening`, which is in no gate, so it had no effect on any recorded result |
 | **CI's `lint` job is RED** — 6 test files fail on the runner | See below; the fix is understood and is a refactor I chose not to attempt under release pressure |
 
 ## The one thing that is red, and exactly why
