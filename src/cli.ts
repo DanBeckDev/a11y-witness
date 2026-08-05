@@ -16,11 +16,11 @@
  */
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { judge } from "./spike/judge.js";
+import { judge } from "@a11y-witness/judge";
 import { scanWithAxe, axeAvailable, type AxeFinding } from "./scan/axe.js";
 import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
-import { layerOf } from "./spike/layers.js";
+import { layerOf } from "@a11y-witness/judge/layers";
 import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "./capture/local-vm.js";
 import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "@a11y-witness/evidence/verify";

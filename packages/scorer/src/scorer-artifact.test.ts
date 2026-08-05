@@ -30,7 +30,15 @@ import { fileURLToPath } from "node:url";
 import { scorerPaths } from "@a11y-witness/scorer";
 import { join } from "node:path";
 
-const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
+/**
+ * Resolved from THIS package, not from the repo root.
+ *
+ * This test moved here with the artefacts it checks (PLAN.md M4 retired `src/spike/`), and `../../` used to
+ * mean the repo root — from `packages/scorer/src/` it means `packages/`, so the schema check failed on a
+ * missing file. Anchoring on the package is also the correct relationship: the feature pipeline and the
+ * weights are what must agree, and both live here.
+ */
+const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 
 /** `__metadata__` from a safetensors file, without loading a single tensor. */
 function safetensorsMetadata(path: string): Record<string, string> {
@@ -53,7 +61,7 @@ test("the committed weights carry the schema the committed feature pipeline comp
   // Reading the trainer here would now find nothing and — before the guard below existed — would have passed
   // by examining an empty match.
   const weights = scorerPaths().weights;
-  const trainer = join(repoRoot, "packages/scorer/python/screenreader_features.py");
+  const trainer = join(packageRoot, "python/screenreader_features.py");
 
   const stamped = safetensorsMetadata(weights).representation;
   assert.ok(stamped, `${weights} has no \`representation\` metadata; it was not written by the trainer`);

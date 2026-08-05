@@ -1445,7 +1445,7 @@ function tableHeadersAreUnassociated(capture) {
 // and so discriminated nothing -- NVDA announces a correctly labelled field across two
 // lines, the label then the role, leaving a line that is only "edit". The structural
 // form-field sweep does not have that ambiguity: the name and role arrive together.
-// Same rule as the 4.1.2 check in src/spike/rules.ts.
+// Same rule as the 4.1.2 check in @a11y-witness/judge/rules.
 const LEADING_ROLE = /^(edit(\s+text)?|button|checkbox|radio|combo\s*box|list\s*box|slider|spin\s*button)\b/i;
 
 function hasUnnamedFormField(capture) {

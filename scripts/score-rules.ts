@@ -25,7 +25,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { ruleFindings } from "../src/spike/rules.js";
+import { ruleFindings } from "@a11y-witness/judge/rules";
 
 /**
  * Reported per SUBTYPE, not per criterion, because that is where the division of labour actually falls.

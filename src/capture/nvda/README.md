@@ -80,7 +80,7 @@ Start-ScheduledTask -TaskName "a11ycap"
 ```
 
 Then collect `transcript.json` and feed it to the judge on the control plane:
-`npx tsx src/spike/judge-file.ts transcript.json "<the user's task>"`.
+`npx tsx src/lab/judge-file.ts transcript.json "<the user's task>"`.
 
 ## Gotchas learned the hard way
 

@@ -1,0 +1,7 @@
+{
+  "name": "@a11y-witness-fixture/missing-sibling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Declares an internal dependency that is not a package in this repo. The gate must refuse it rather than let npm try the registry and 404.",
+  "dependencies": { "@a11y-witness/does-not-exist": "0.1.0" }
+}

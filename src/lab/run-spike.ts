@@ -18,7 +18,7 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { voiceOver } from "@guidepup/guidepup";
-import { judge } from "./judge.js";
+import { judge } from "@a11y-witness/judge";
 
 const sh = promisify(exec);
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

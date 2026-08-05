@@ -1,0 +1,65 @@
+{
+  "name": "@a11y-witness/judge",
+  "version": "0.1.0",
+  "description": "Judges a screen-reader capture against WCAG 2.2 AA: the trained local scorer by default, the deterministic absence rules, and the experience-layer ordering.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./layers": {
+      "types": "./dist/layers.d.ts",
+      "default": "./dist/layers.js"
+    },
+    "./rules": {
+      "types": "./dist/rules.d.ts",
+      "default": "./dist/rules.js"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "default": "./dist/internal.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@a11y-witness/evidence": "0.1.0"
+  },
+  "peerDependencies": {
+    "@a11y-witness/scorer": "0.1.0",
+    "@anthropic-ai/sdk": "^0.106.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepack": "tsc --build",
+    "prepare": "tsc --build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DanBeckDev/a11y-witness.git",
+    "directory": "packages/judge"
+  },
+  "keywords": [
+    "accessibility",
+    "a11y",
+    "wcag",
+    "screen-reader",
+    "nvda",
+    "judge"
+  ]
+}
