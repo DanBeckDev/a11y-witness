@@ -21,6 +21,7 @@ import { compareCapture, readCapture, summarise } from "../src/capture/evidence-
 import { isEvidence } from "../src/training/capture-decisions.mjs";
 import { titleOf } from "@a11y-witness/evidence/verify";
 import { leasePageServer } from "../src/training/page-server.mjs";
+import { hasUsableCaptureFiles } from "../src/training/capture-resume.mjs";
 
 const DATASET = resolve(process.cwd(), "runs/screenreader-dataset");
 const BASELINE = resolve(DATASET, "captures");
@@ -44,6 +45,29 @@ function manifestCases() {
   const manifest = JSON.parse(readFileSync(resolve(DATASET, "manifest.json"), "utf8"));
   return manifest.cases.filter((c) => !only || (c.family ?? c.id).includes(only));
 }
+
+/**
+ * Can this case answer the question at all?
+ *
+ * A comparison is only about the CODE if both sides saw the same page. On a corpus where the page generator
+ * has moved since capture, the recorded capture describes a different page — so the diff reports the page
+ * change and calls it an evidence change.
+ *
+ * That is not hypothetical: this check once reported **40 of 47 CHANGED** for a refactor that moved pure
+ * functions between files and altered no behaviour, with differences like `structure.links 40->0` that were
+ * purely the shelved page rescale. Its own advice is "bump CAPTURE_PROTOCOL_VERSION and recapture", which
+ * would have meant 2,122 captures for a no-op. Every one of those 40 had a moved page, and every case whose
+ * page had NOT moved came back SAME — so excluding them costs nothing and is the only way the answer means
+ * anything.
+ *
+ * `hasUsableCaptureFiles` is the same predicate `--resume` and `check-signals` use, so "comparable here" and
+ * "current on disk" cannot drift apart.
+ */
+const pageIsUnchanged = (testCase) => hasUsableCaptureFiles({
+  id: testCase.id,
+  captureRoot: resolve(DATASET, "captures"),
+  pageRoot: resolve(DATASET, "pages"),
+});
 
 /** One case per family until the sample is full, so no family can be silently absent. */
 function stratify(cases, limit) {
@@ -118,7 +142,20 @@ async function requirePagesServed(cases) {
   process.exit(2);
 }
 
-const selected = stratify(manifestCases(), sampleSize);
+const comparable = manifestCases().filter(pageIsUnchanged);
+const skipped = manifestCases().length - comparable.length;
+if (skipped) {
+  process.stdout.write(
+    `${skipped} case(s) excluded: their PAGE has changed since capture, so a diff would measure the page and `
+    + `not the code. Recapture them (npm run training:capture -- --resume) to widen this check.\n`);
+}
+if (!comparable.length) {
+  // Refusing is the honest answer. Reporting SAME over nothing examined is how "verified" comes to mean
+  // "unexamined", which is the failure this repo keeps meeting.
+  process.stderr.write("no case has a capture taken against its CURRENT page — nothing can be compared.\n");
+  process.exit(2);
+}
+const selected = stratify(comparable, sampleSize);
 process.stdout.write(`Evidence check: ${selected.length} case(s), both variants, against ${worker}\n`);
 process.stdout.write(`Pages: ${hostPages}\nBaseline: ${BASELINE}\n\n`);
 

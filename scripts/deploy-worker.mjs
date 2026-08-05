@@ -25,6 +25,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
+import { WORKER_FILES } from "../src/capture/nvda/worker-files.mjs";
 
 const run = promisify(execFile);
 const NVDA_DIR = resolve("src/capture/nvda");
@@ -41,14 +42,13 @@ const only = process.argv.find((a) => a.startsWith("--vm="))?.slice("--vm=".leng
 /**
  * The files that make up the worker's code version.
  *
- * Read from check-worker-code.mjs rather than duplicated here, because a third copy of this list is a
- * third thing to forget to update — and a file missing from the list deploys invisibly.
+ * Imported from the one module that defines them. This used to parse `check-worker-code.mjs`'s SOURCE with a
+ * regex for the same list — better than a third copy, which is what the comment here used to argue, but it
+ * still broke silently if that loop were ever rewritten, and "a file missing from the list deploys invisibly"
+ * is the failure it was guarding against.
  */
 function hashedFiles() {
-  const source = readFileSync(resolve("scripts/check-worker-code.mjs"), "utf8");
-  const match = /for \(const file of \[([^\]]+)\]\)/.exec(source);
-  if (!match) throw new Error("could not find the hashed-file list in scripts/check-worker-code.mjs");
-  return match[1].split(",").map((name) => name.trim().replace(/^["']|["']$/g, ""));
+  return WORKER_FILES;
 }
 
 /** Must match server.mjs codeVersion(): same files, same order. */

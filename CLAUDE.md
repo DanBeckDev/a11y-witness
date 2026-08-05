@@ -48,7 +48,9 @@ npm run worker:deploy -- --vm=a11y-worker-2
 npm run worker:code                       # each worker's /health.code vs this checkout
 ```
 
-It pushes **every hashed file** (seven of them now, not two), reboots each guest — mandatory, because
+It pushes **every hashed file** (13 now, defined once in `src/capture/nvda/worker-files.mjs` — the
+list used to be duplicated in `server.mjs` and `check-worker-code.mjs` with a third derived by regex in the
+deploy script), reboots each guest — mandatory, because
 `utmctl exec` cannot be trusted to restart the worker — and verifies `/health.code` over HTTP, which
 shares no failure mode with the push. Then it puts each VM back in the state it found it.
 

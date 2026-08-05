@@ -1,41 +1,44 @@
-// The worker's code hash is computed twice — once on the guest (server.mjs) and once on the host
-// (check-worker-code.mjs) — and the two lists must be identical or the comparison is meaningless.
+// The worker's code hash is computed on the guest (server.mjs) and on the host (check-worker-code.mjs), and
+// the two must cover identical files in an identical order or the comparison is meaningless.
 //
-// They are kept in step by a comment saying "must match server.mjs codeVersion() exactly". That held
-// until a new worker file was added and only one list learned about it: the deploy check then reported
-// a worker as up to date while it was running a different version of that file. This test is what the
-// comment was hoping for.
+// It used to be two literal lists kept in step by a comment saying "must match server.mjs codeVersion()
+// exactly", plus a third derived by regex in deploy-worker.mjs. That held until a new worker file was added and
+// only one list learned about it: the deploy check then reported a worker as up to date while it was running a
+// different version of that file. The first test below was written to catch that.
 //
-// It parses the two sources rather than importing them: server.mjs binds a port on import, and
-// check-worker-code.mjs runs its check on import. Neither can be loaded just to read a constant.
+// `worker-files.mjs` now defines the list once and all three import it, so divergence is no longer possible to
+// express — a better fix than checking for it. What is still worth asserting is that nobody reintroduces a
+// second copy, and that the list actually covers what the guest runs.
+//
+// Note what may not be imported here: `server.mjs` binds a port on import and `check-worker-code.mjs` runs its
+// check on import, so those two are read as TEXT. `worker-files.mjs` is a bare constant and safe to import,
+// which is the point of it being its own module.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const HASHED_FILES = /for \(const file of \[([^\]]+)\]\)/;
+import { WORKER_FILES } from "./worker-files.mjs";
 
-function hashedFileList(path: string): string[] {
-  const source = readFileSync(resolve(process.cwd(), path), "utf8");
-  const match = HASHED_FILES.exec(source);
-  assert.ok(match, `no code-hash file list found in ${path}`);
-  return match[1].split(",").map((name) => name.trim().replace(/^["']|["']$/g, ""));
-}
+const LITERAL_LIST = /for \(const file of \[["']/;
 
-test("the guest and the host hash exactly the same worker files, in the same order", () => {
-  const guest = hashedFileList("src/capture/nvda/server.mjs");
-  const host = hashedFileList("scripts/check-worker-code.mjs");
-  assert.deepEqual(guest, host,
-    "server.mjs and check-worker-code.mjs disagree about which files make up the worker's code " +
-    "version. A file in only one list deploys without the parity check noticing.");
+test("there is exactly ONE definition of the worker file list", () => {
+  // A reintroduced literal is the regression: two lists that must agree, kept in step by hope.
+  for (const path of ["src/capture/nvda/server.mjs", "scripts/check-worker-code.mjs", "scripts/deploy-worker.mjs"]) {
+    const source = readFileSync(resolve(process.cwd(), path), "utf8");
+    assert.ok(!LITERAL_LIST.test(source),
+      `${path} has its own literal worker-file list again. Import WORKER_FILES from worker-files.mjs — a `
+      + `second copy is how a file came to deploy without the parity check noticing.`);
+    assert.ok(source.includes("WORKER_FILES"), `${path} should use the shared WORKER_FILES list`);
+  }
 });
 
 test("the hash covers every worker source file the guest runs", () => {
   // A new .mjs under src/capture/nvda that the worker runs but nobody hashes is invisible to
   // `npm run worker:code` — the only check that a deploy actually landed. It must follow imports
-  // TRANSITIVELY: capture-faults.mjs is imported by capture-core, not by server.mjs, so a check that
-  // only looked at server.mjs's own imports would have missed it and reported a stale guest as fresh.
-  const hashed = new Set(hashedFileList("src/capture/nvda/server.mjs"));
+  // TRANSITIVELY: capture-faults.mjs is imported by capture-core, not by server.mjs, so a check that only
+  // looked at server.mjs's own imports would have missed it and reported a stale guest as fresh.
+  const hashed = new Set(WORKER_FILES);
   const seen = new Set<string>();
   const queue = ["server.mjs"];
   while (queue.length) {
@@ -48,4 +51,13 @@ test("the hash covers every worker source file the guest runs", () => {
       queue.push(imported);
     }
   }
+  // Guard the guard: if the walk stopped following imports it would pass having examined almost nothing.
+  assert.ok(seen.size >= 5, `the import walk only reached ${seen.size} file(s); it is not following imports`);
+});
+
+test("the list contains itself, so a change to it is deployed", () => {
+  // `worker-files.mjs` is a file the guest runs. If it were absent from its own list, editing it would change
+  // no hash — `worker:code` would report every worker current while they served the old list.
+  assert.ok(WORKER_FILES.includes("worker-files.mjs"));
+  assert.equal(new Set(WORKER_FILES).size, WORKER_FILES.length, "a duplicate would be hashed twice");
 });

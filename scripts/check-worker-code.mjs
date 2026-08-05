@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import { WORKER_FILES } from "../src/capture/nvda/worker-files.mjs";
 
 const CTL = resolve("scripts/local-worker/worker-ctl.sh");
 const NVDA_DIR = resolve("src/capture/nvda");
@@ -48,7 +49,7 @@ function protocolBumpNote() {
 
 function localVersion() {
   const hash = createHash("sha256");
-  for (const file of ["capture-core.mjs", "server.mjs", "worker-recovery.mjs", "capture-faults.mjs", "diagnostics.mjs", "browser-profile.mjs", "nvda-logging.mjs", "speech-channel.mjs", "windows-trim.mjs", "browser-session.mjs", "pointer.mjs"]) {
+  for (const file of WORKER_FILES) {
     hash.update(readFileSync(resolve(NVDA_DIR, file)));
   }
   return hash.digest("hex").slice(0, 16);

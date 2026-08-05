@@ -93,7 +93,6 @@ Not bugs being hidden — work consciously not done before shipping.
 | ONNX export | Would drop torch (~529 MB) from the Action's setup |
 | `provisionRevision` reads `"unstamped"` | Needs a deliberate pool-wide re-provision |
 | `scripts/check-screenreader-hardening.py` was also untracked | Now committed; backs `npm run training:hardening`, which is in no gate, so it had no effect on any recorded result |
-| **CI's `lint` job is RED** — 6 test files fail on the runner | See below; the fix is understood and is a refactor I chose not to attempt under release pressure |
 
 ### Why those 418 captures went stale — diagnosed, so nobody re-derives it
 
@@ -114,32 +113,65 @@ npm run training:capture -- --resume      # 418 pairs, ~2.9 h, one worker
 One consequence to weigh when this is picked up: the v4 scorer was trained across both page populations, so
 those 418 contributed transcripts from larger pages than the corpus now generates.
 
-## The one thing that is red, and exactly why
+## The red CI job is FIXED
 
-`.github/workflows/lint.yml` fails on 6 files under `src/capture/nvda/`. The cause is one line:
+`.github/workflows/lint.yml` used to fail on 6 files under `src/capture/nvda/`, and the cause was one line:
 
 ```
 Error: No available supported screen readers
 ```
 
-`@guidepup/guidepup` **throws at import time** where no screen reader exists. CI is Linux, so merely
-importing `capture-core.mjs` fails — and every test that imports it to reach a *pure* helper
-(`sweepStepFromSpeech`, `dedupeKey`, `phraseAction`, `crossCheckStructure`, `elementsListRowName`,
-`failIfScreenReaderIsMute`, `edgeArgs`) dies with it. Node reports these per FILE — "test failed" — which
-reads like broken logic rather than an unavailable dependency.
+`@guidepup/guidepup` **throws at import time** where no screen reader exists. CI is Linux, so merely importing
+`capture-core.mjs` failed — and every test that imported it to reach a *pure* helper (`sweepStepFromSpeech`,
+`dedupeKey`, `phraseAction`, `crossCheckStructure`, `elementsListRowName`, `failIfScreenReaderIsMute`,
+`edgeArgs`) died with it. Node reports these per FILE — "test failed" — which reads like broken logic rather
+than an unavailable dependency. It had been red since 1 August, growing from 2 files to 6 as more tests reached
+for pure logic through `capture-core`.
 
-Three things worth being straight about:
+Those seven functions now live in `capture-pure.mjs`, which imports no guidepup; `capture-core.mjs` imports and
+re-exports them, so every existing caller is unchanged.
 
-- **It predates this release.** CI was already failing this way on 1 Aug with 2 files. Test files added
-  since took it to 6, because more of them import `capture-core` to reach pure logic.
-- **The assertions themselves pass.** All 344 run green on a clean checkout on macOS, where guidepup
-  imports fine. Nothing here indicates a defect in the code under test.
-- **The fix is known:** move those pure functions into a `capture-pure.mjs` with no guidepup in its import
-  graph, and have `capture-core` re-export them. I attempted it, broke `capture-core` (a 2,000-line module
-  with no local test — it only runs against real NVDA on the VM), and reverted rather than ship a
-  half-finished refactor of the capture path. It is a contained job with a clear acceptance test — the same
-  6 files passing with `guidepup` absent from the graph — and it should be done deliberately, not at the
-  end of a long day.
+**The move was computed, not eyeballed.** An earlier attempt by hand broke `capture-core` — 2,370 lines, no
+local test, it only runs against real NVDA on the worker — and was reverted. This time the transitive closure
+of the seven symbols was derived with the TypeScript parser: exactly 19 top-level declarations, containing no
+guidepup symbol, moved with their comments attached.
+
+Verified, in the order that matters:
+
+| check | result |
+|---|---|
+| the 6 files with `node_modules/@guidepup` physically moved away | **43 assertions pass** — CI's exact condition |
+| `pure-graph.test.ts` | walks the import graph and fails on a Mac if any of them reaches guidepup again |
+| `node -e "import('./capture-core.mjs')"` | clean — the only real check for a `.mjs` |
+| `npm run capture:check --worker=…` on the real VM | **ALL CAPTURE CHECKS PASSED**, probe values and role phrases included |
+| `npm run worker:deploy` | `/health.code` matches over HTTP, which shares no failure mode with the push |
+| `npm run evidence:check` | **8 compared, 8 SAME** — evidence unchanged, so the cache stays valid and `CAPTURE_PROTOCOL_VERSION` stays at 4 |
+
+### `evidence:check` was comparing captures of DIFFERENT PAGES
+
+Its first run on this change reported **40 of 47 CHANGED**, with differences like `structure.links 40->0` — and
+recommended its own worst outcome: "bump `CAPTURE_PROTOCOL_VERSION` and recapture", i.e. 2,122 captures, for a
+refactor that moved pure functions between files and altered no behaviour.
+
+Every one of those 40 was a case whose PAGE had moved since capture (the 418 above): the recorded capture
+describes the shelved rescaled page, the fresh one describes the current small page. Cross-tabulated, the split
+is exact — **40 CHANGED / 40 stale pages, and all 8 whose page was current came back SAME or rejected. Zero
+cases changed on an unmoved page.**
+
+So the tool now excludes cases whose page has moved, using `hasUsableCaptureFiles` — the same predicate
+`--resume` and `check-signals` use, so "comparable" and "current" cannot drift apart. It says how many it
+excluded (418 of 1,061 here), and if nothing is comparable it exits 2 rather than reporting SAME over nothing.
+
+This matters beyond one refactor: `evidence:check` exists to make a capture optimisation *affordable to
+evaluate*. A version that cries "recapture everything" whenever the corpus is mid-migration is a version that
+gets ignored, and then the cache-invalidation decision goes back to guesswork.
+
+One thing came free with it. There were **two copies of the worker's hashed-file list plus a third derived by
+regex** — `server.mjs`, `check-worker-code.mjs`, and `deploy-worker.mjs` parsing the second one's source. They
+had to agree on contents *and order* or `/health.code` compares a different set than was deployed. Adding
+`capture-pure.mjs` would have meant editing two lists by hand, which is precisely the shape that made this
+check necessary in the first place, so the list is now one module (`worker-files.mjs`) that all three import —
+and it contains itself, so editing it changes the hash.
 
 ## Reproducing the verification
 
