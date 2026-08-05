@@ -1,0 +1,8 @@
+{
+  "name": "@a11y-witness-fixture/truncated-files",
+  "version": "0.0.0",
+  "private": false,
+  "type": "module",
+  "exports": { ".": "./index.mjs" },
+  "files": ["index.mjs"]
+}

@@ -14,6 +14,7 @@
     "test": "tsx --test \"src/**/*.test.ts\"",
     "eval:gate": "EVAL_GATE=1 EVAL_RUNS=3 tsx src/eval/run.ts",
     "typecheck": "tsc --noEmit",
+    "build": "node scripts/build-packages.mjs",
     "lint": "eslint .",
     "scan": "tsx src/scan/run-axe.ts",
     "training:generate": "node src/training/generate-screenreader-dataset.mjs",
@@ -39,12 +40,13 @@
     "evidence:check": "tsx scripts/evidence-check.mjs",
     "guest:run": "node scripts/guest-run.mjs",
     "gate:stability": "tsx scripts/stability-gate.mjs",
+    "gate:isolation": "node scripts/isolation-gate.mjs --all",
     "fleet:normalise": "node scripts/normalise-fleet.mjs",
     "corpus:snapshot": "node scripts/corpus-snapshot.mjs",
     "training:repeat": "tsx src/training/repeat-capture.mjs",
     "rules:score": "tsx scripts/score-rules.ts",
     "rules:gate": "tsx scripts/score-rules.ts --gate",
-    "release:gate": "npm run training:check-signals && npm run rules:gate && npm run training:evaluate-acceptance && npm run eval:gate",
+    "release:gate": "npm run gate:isolation && npm run training:check-signals && npm run rules:gate && npm run training:evaluate-acceptance && npm run eval:gate",
     "capture:check": "tsx src/capture/nvda/capture-check.mjs",
     "layers:compare": "node scripts/compare-layers.mjs"
   },
@@ -64,5 +66,8 @@
   "optionalDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "playwright": "^1.61.1"
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }
