@@ -13,23 +13,29 @@ on:
   push:
     branches: [main]
     paths:
-      - "packages/lab/src/capture/**"
-      - "!packages/lab/src/capture/**/*.md" # doc-only edits shouldn't spend Windows minutes
-      # `packages/lab/src/training/**` is here because a probe and its signal are COUPLED, and this filter used to
-      # exclude it. `case-matrix.mjs` decides what each signal reads, so a change there can blind a probe
-      # without touching src/capture at all -- and that is exactly where the guard bug lived that failed
+      # THE WORKER, which is what this job exists to test. It was `src/capture/**` and a mechanical rewrite
+      # during M8 turned that into `packages/lab/src/capture/**` — a directory holding two lab files and no
+      # capture code at all. The filter would then have fired on lab edits and NEVER on a worker change: a
+      # check that silently stops running, which is worse than one that fails.
+      - "packages/nvda-worker/**"
+      - "!packages/nvda-worker/**/*.md" # doc-only edits shouldn't spend Windows minutes
+      # `packages/lab/src/training/**` is here because a probe and its signal are COUPLED, and this filter used
+      # to exclude it. `case-matrix.mjs` decides what each signal reads, so a change there can blind a probe
+      # without touching the worker at all -- and that is exactly where the guard bug lived that failed
       # 44 cases in a live run. A filter that cannot fire on the file that broke it protects nothing.
       - "packages/lab/src/training/**"
       - "!packages/lab/src/training/**/*.md"
+      # The harness this job runs, and the fixture pages it drives.
+      - "packages/lab/src/harnesses/capture-check.mjs"
       - "packages/lab/src/eval/pages/tutorials/**"
       - ".github/workflows/capture-regression.yml"
   pull_request:
     paths:
-      - "packages/lab/src/capture/**"
-      - "!packages/lab/src/capture/**/*.md"
-      # `packages/lab/src/training/**` is here because a probe and its signal are COUPLED, and this filter used to
-      # exclude it. `case-matrix.mjs` decides what each signal reads, so a change there can blind a probe
-      # without touching src/capture at all -- and that is exactly where the guard bug lived that failed
+      - "packages/nvda-worker/**"
+      - "!packages/nvda-worker/**/*.md"
+      # `packages/lab/src/training/**` is here because a probe and its signal are COUPLED, and this filter used
+      # to exclude it. `case-matrix.mjs` decides what each signal reads, so a change there can blind a probe
+      # without touching the worker at all -- and that is exactly where the guard bug lived that failed
       # 44 cases in a live run. A filter that cannot fire on the file that broke it protects nothing.
       - "packages/lab/src/training/**"
       - "!packages/lab/src/training/**/*.md"
