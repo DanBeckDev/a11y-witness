@@ -147,6 +147,25 @@ Verified, in the order that matters:
 | `npm run worker:deploy` | `/health.code` matches over HTTP, which shares no failure mode with the push |
 | `npm run evidence:check` | **8 compared, 8 SAME** — evidence unchanged, so the cache stays valid and `CAPTURE_PROTOCOL_VERSION` stays at 4 |
 
+### `evidence:check` was ALSO comparing captures asked DIFFERENT QUESTIONS
+
+Found during M5, one field along from the page problem above and invisible to it. The probes are opt-in over
+the wire, so a case whose recorded options differ from what the manifest asks for now is not comparable
+either: **61 cases recorded `probeTables: true` while the manifest on disk said false**, because the manifest
+predated the fix that derives that flag from the signal type. The fresh capture then asked no table question,
+`structure.tableCells` went 4 → 0, and the diff called it an evidence change.
+
+Both halves are now fixed and both were proven rather than argued:
+
+- `evidence:check` excludes cases whose recorded probe options differ from the manifest's, and says how many;
+- regenerating the manifest (`npm run training:generate`) removed the mismatch — **0 cases now differ**, page
+  staleness unchanged at 643 current / 418 stale — and the two cases that had reported CHANGED then compared
+  **2 of 2 SAME**.
+
+That manifest staleness mattered beyond this check: a resumed capture run would have asked 61 table cases no
+table question, which is precisely the "8 cases went silently blind when a probe changed" failure this repo
+already has a rule about.
+
 ### `evidence:check` was comparing captures of DIFFERENT PAGES
 
 Its first run on this change reported **40 of 47 CHANGED**, with differences like `structure.links 40->0` — and
