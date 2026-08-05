@@ -87,12 +87,32 @@ Not bugs being hidden — work consciously not done before shipping.
 | item | why deferred |
 |---|---|
 | Corpus rescale for generalisation (branch `dataset-rescale`) | ~10 h of capture; improves the model, changes nothing that ships |
+| **418 of 1,061 cases have STALE captures**, so `release:gate` fails at its first check | ~2.9 h of recapture (836 captures at the measured 12.4 s) on **one** worker — two halves reliability. Nothing that ships reads `runs/`; the scorer's weights are committed and its eval fixtures are tracked, so this blocks a *gate*, not the product. Deliberately out of scope for the packaging work (5 Aug). |
 | 98 cases whose `badSignal` cannot match their own generated page | Pre-existing inconsistency in `case-matrix.mjs`, exposed by regenerating pages; the local corpus in gitignored `runs/` is inconsistent as a result |
 | Scoped cache invalidation | Two recaptures were measured as 65% unnecessary — a global `CAPTURE_PROTOCOL_VERSION` invalidates captures a fix could not have touched |
 | ONNX export | Would drop torch (~529 MB) from the Action's setup |
 | `provisionRevision` reads `"unstamped"` | Needs a deliberate pool-wide re-provision |
 | `scripts/check-screenreader-hardening.py` was also untracked | Now committed; backs `npm run training:hardening`, which is in no gate, so it had no effect on any recorded result |
 | **CI's `lint` job is RED** — 6 test files fail on the runner | See below; the fix is understood and is a refactor I chose not to attempt under release pressure |
+
+### Why those 418 captures went stale — diagnosed, so nobody re-derives it
+
+`check-signals` reports **554 discriminating, 83 blind, 6 contaminated, 418 stale**. The stale ones were
+captured while the page rescale was live in the working tree; `3cce38d` shelved the rescale and restored the
+generator, but not those captures. Measured rather than assumed: regenerating every page and comparing to the
+hash each capture recorded gives **643 MATCH / 418 DIFFER**, so a regenerate cannot fix it — the committed
+generator genuinely no longer produces those pages. The families are form (106), filter (106), image (61) and
+the table cases.
+
+`--resume` targets exactly these and nothing else, because `hasUsableCaptureFiles` **is** the resume
+predicate — the same function `check-signals` calls:
+
+```bash
+npm run training:capture -- --resume      # 418 pairs, ~2.9 h, one worker
+```
+
+One consequence to weigh when this is picked up: the v4 scorer was trained across both page populations, so
+those 418 contributed transcripts from larger pages than the corpus now generates.
 
 ## The one thing that is red, and exactly why
 

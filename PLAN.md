@@ -122,11 +122,19 @@ cheaply as possible, and the first step moves no files at all.
   If M0 finds that isolation is structurally impossible for the judge path (e.g. the
   87 MB encoder cannot be fetched without our credentials), the scorer-as-npm-package
   decision in ADR 0004 needs revisiting **before** any file moves.
-- [ ] **M1 — Workspace scaffolding, zero moves.** Root becomes a workspace root;
-  `packages/` exists; `tsc --build` with project references and `composite: true`;
-  the isolation gate is scripted and, per this repo's rule, **shown to fail** on a
-  package with a deliberately omitted dependency and one with a truncated `"files"`.
-  Nothing is published. Nothing has moved, so nothing can have broken.
+- [x] **M1 — Workspace scaffolding, zero moves.** DONE (`2b6f44f`, `5c146e3`),
+  verified from a clean clone of the remote: 365/365 tests, typecheck clean, `build`
+  and `gate:isolation` both working. Both gates are **shown to reject** — the
+  isolation gate fails an omitted dependency and a truncated `"files"` while passing
+  a sound package, and a reference cycle is a build error (TS6202, exit 4) while a
+  sound composite project still emits `.d.ts`. Two deviations from the plan, both
+  measured: `npm run build` **discovers** `packages/*` rather than reading a solution
+  file, because an empty `"files": []` is a hard error (TS18002) and a maintained
+  project list is one more thing that can go stale; and `npm ls --workspaces` errors
+  "No workspaces found!" on an empty glob, which is cosmetic and goes away with M2.
+  `tsconfig.base.json` was omitted from the first commit and every local check passed
+  anyway — the clean clone caught it, and the guard is now generalised to *any*
+  tsconfig `extends` target being tracked.
 - [ ] **M2 — Extract `@a11y-witness/evidence` and publish `0.1.0`.** The lowest-risk
   package (two zero-import files plus the criteria list) is deliberately the first
   thing through the release pipeline: it proves scope reservation, provenance,
