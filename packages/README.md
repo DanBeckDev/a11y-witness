@@ -1,7 +1,11 @@
 # `packages/`
 
-Empty on purpose. This is M1 of `PLAN.md`'s multi-package split: **the scaffolding exists before anything
-moves into it**, so the enforcement is in place before the code can drift against it.
+`PLAN.md`'s multi-package split. M1 built the scaffolding **before** anything moved into it, so the
+enforcement was in place before the code could drift against it.
+
+| package | licence | contents |
+|---|---|---|
+| `evidence` (M2) | Apache-2.0 | wire types (`.`), pure verification predicates (`./verify`), the WCAG 2.2 AA list (`./wcag`) — zero deps, no I/O |
 
 The order is deliberate. M0 tested the assumption that could invalidate the whole design — that a consumer
 can install and run one package in isolation — and its findings are in `docs/isolation-spike.md`. M1 adds
@@ -17,7 +21,13 @@ rather than asking a human to judge.
 | the isolation gate | `scripts/isolation-gate.mjs`, `npm run gate:isolation` | packs a package, installs it **outside the repo**, runs its smoke test |
 | proof the gate works | `scripts/isolation-fixtures/` | one sound package it must accept, two broken ones it must reject |
 
-## The contract a package will follow
+## The contract every package follows
+
+**`"prepack": "tsc --build"` is mandatory, not tidiness.** `npm pack` does not build, so without it the
+tarball ships an empty `dist` on any machine that has not built first — every clean clone, every CI job.
+Demonstrated rather than assumed: with `dist` deleted, the isolation gate failed with `ERR_MODULE_NOT_FOUND`,
+and passed once `prepack` existed. `"prepare"` runs the same build after `npm install`, so the root
+`typecheck` resolves the package's `.d.ts` without a separate step.
 
 Each package under `packages/` owns an `isolation-smoke.mjs` that imports itself **by package name** and
 exercises the first example in its README. The gate copies it into a throwaway consumer directory next to
@@ -34,3 +44,10 @@ npm's hoisting permits, cwd-relative path resolution, assets an over-tight `"fil
 This is not hypothetical here. M0 found `local-judge.ts` resolving the scorer relative to the process cwd,
 and the scorer program itself missing from the repo while every local run succeeded — because **`npm pack`
 includes untracked files**, so "it worked when I installed it" was never evidence.
+
+M2 then earned it twice over on the first real package. The gate rejected `@a11y-witness/evidence` three
+times before accepting it, and every rejection was a genuine defect in what a consumer would have received:
+the README's first example used a field name the contract does not have (`announcements`, not `transcript`),
+it asserted the wrong `Criterion` key (`id`, not `num`), and the tarball shipped no `dist` at all. A
+documented example that does not run is the same class of defect as a check that examines nothing — which is
+why the smoke test exercises the README rather than something convenient.

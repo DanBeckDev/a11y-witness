@@ -11,7 +11,7 @@
     "worker": "node src/capture/nvda/server.mjs",
     "eval": "tsx src/eval/run.ts",
     "rules-check": "tsx src/eval/rules-check.ts",
-    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test": "tsx --test \"src/**/*.test.ts\" \"packages/*/src/**/*.test.ts\"",
     "eval:gate": "EVAL_GATE=1 EVAL_RUNS=3 tsx src/eval/run.ts",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build-packages.mjs",
@@ -48,7 +48,9 @@
     "rules:gate": "tsx scripts/score-rules.ts --gate",
     "release:gate": "npm run gate:isolation && npm run training:check-signals && npm run rules:gate && npm run training:evaluate-acceptance && npm run eval:gate",
     "capture:check": "tsx src/capture/nvda/capture-check.mjs",
-    "layers:compare": "node scripts/compare-layers.mjs"
+    "layers:compare": "node scripts/compare-layers.mjs",
+    "pretest": "npm run build",
+    "pretypecheck": "npm run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",

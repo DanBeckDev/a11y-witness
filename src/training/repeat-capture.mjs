@@ -19,7 +19,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isTransient } from "./capture-decisions.mjs";
-import { captureIsSelfConsistent } from "../capture/verify.js";
+import { captureIsSelfConsistent } from "@a11y-witness/evidence/verify";
 
 const arg = (name, fallback = null) => {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));

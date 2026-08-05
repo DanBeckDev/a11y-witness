@@ -6,7 +6,7 @@
 // person deciding whether their site is accessible, which makes this the more serious of the two.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WCAG_22_AA } from "./criteria.js";
+import { WCAG_22_AA } from "./wcag.js";
 
 const numbers = new Set(WCAG_22_AA.map((c) => c.num));
 

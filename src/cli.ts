@@ -23,7 +23,7 @@ import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "./spike/layers.js";
 import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "./capture/local-vm.js";
-import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "./capture/verify.js";
+import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 
 interface Args {
   url: string;

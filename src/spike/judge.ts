@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WCAG_22_AA } from "../wcag/criteria.js";
+import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
 import { judgeLocally } from "./local-judge.js";
 import { ruleFindings } from "./rules.js";
 import { applyGate } from "./verify-gate.js";

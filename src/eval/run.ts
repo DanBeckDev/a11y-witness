@@ -14,7 +14,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { judge } from "../spike/judge.js";
-import { pageCensus } from "../capture/verify.js";
+import { pageCensus } from "@a11y-witness/evidence/verify";
 import { EVAL_CASES, type EvalCase } from "./cases.js";
 import { evaluateFitness, persistentFalsePositives, thresholdsFromEnv } from "./fitness.js";
 

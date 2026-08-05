@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "include": ["src"],
+  // Tests are run from source by the root `npm test`, and must not reach a consumer's `node_modules`.
+  // `files: ["dist"]` in package.json would ship them compiled if they were built.
+  "exclude": ["src/**/*.test.ts"]
+}
