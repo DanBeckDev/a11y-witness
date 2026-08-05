@@ -25,10 +25,14 @@ import { createHash } from "node:crypto";
 import { createReadStream, readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
-import { WORKER_FILES } from "../src/capture/nvda/worker-files.mjs";
+import { WORKER_FILES } from "../packages/nvda-worker/src/worker-files.mjs";
 
 const run = promisify(execFile);
-const NVDA_DIR = resolve("src/capture/nvda");
+const NVDA_DIR = resolve("packages/nvda-worker/src");
+// The guest's layout deliberately does NOT mirror the repo's. It is where provisioning put the files and
+// where the scheduled task points, so renaming it means re-provisioning every guest — and M5 moving the host
+// directory to `packages/nvda-worker/src` changed nothing here. All the worker needs is that its files land in
+// one directory together.
 const GUEST_DIR = "C:\\Users\\witness\\a11y-witness\\src\\capture\\nvda";
 const CTL = resolve("scripts/local-worker/worker-ctl.sh");
 const LIFECYCLE_TIMEOUT_MS = 420_000;
@@ -129,9 +133,20 @@ function guardProtocolChange() {
   let committed;
   try {
     committed = /CAPTURE_PROTOCOL_VERSION = (\d+)/.exec(
-      execFileSync("git", ["show", "HEAD:src/capture/nvda/capture-core.mjs"], { encoding: "utf8" }))?.[1];
+      execFileSync("git", ["show", "HEAD:packages/nvda-worker/src/capture-core.mjs"], { encoding: "utf8" }))?.[1];
   } catch {
-    return; // not a git checkout, or no HEAD yet: nothing to compare against
+    // Two very different situations, and one of them is a guard that has quietly stopped guarding: there may
+    // be no git checkout at all, or the PATH may have moved (M5 relocated this file from `src/capture/nvda/`)
+    // so `git show` finds nothing. The second would silently disable the most expensive check in this script,
+    // which is exactly the shape this repo keeps paying for, so it says so.
+    try {
+      execFileSync("git", ["rev-parse", "--verify", "HEAD"], { stdio: "ignore" });
+      process.stdout.write(
+        "  note: cannot compare CAPTURE_PROTOCOL_VERSION against HEAD — packages/nvda-worker/src/"
+        + "capture-core.mjs is not in HEAD.\n        Expected for a brand-new or just-moved file; if the path"
+        + " moved, fix it here or this guard is off.\n");
+    } catch { /* genuinely not a git checkout: nothing to compare, and nothing to warn about */ }
+    return;
   }
   if (!inTree || !committed || inTree === committed) return;
   if (process.argv.includes("--allow-protocol-change")) {

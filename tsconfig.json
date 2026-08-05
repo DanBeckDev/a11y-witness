@@ -12,7 +12,15 @@
     ],
     "allowJs": true
   },
+  // `packages/*/src/**/*.ts` is here because each package's own tsconfig EXCLUDES its tests (they must not
+  // reach a consumer's node_modules), and the root program only had "src" — so as packages were extracted in
+  // M2-M5, about 25 test files silently stopped being type-checked and `npm run typecheck` reported clean
+  // over them. Measured with `tsc --listFiles`: 0 package tests in the program.
+  //
+  // Deliberately `**/*.ts` and not the directory: `allowJs` is on, so naming the directory would newly
+  // type-check 14 worker `.mjs` files as JS, which is a separate change with its own fallout.
   "include": [
-    "src"
+    "src",
+    "packages/*/src/**/*.ts"
   ]
 }

@@ -26,4 +26,5 @@ export const WORKER_FILES = [
   "browser-session.mjs",
   "pointer.mjs",
   "worker-files.mjs",
+  "code-version.mjs",
 ];

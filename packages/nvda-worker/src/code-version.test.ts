@@ -22,19 +22,22 @@ import { WORKER_FILES } from "./worker-files.mjs";
 
 const LITERAL_LIST = /for \(const file of \[["']/;
 
-test("there is exactly ONE definition of the worker file list", () => {
+test("there is exactly ONE definition of the worker file list, and one hasher", () => {
   // A reintroduced literal is the regression: two lists that must agree, kept in step by hope.
-  for (const path of ["src/capture/nvda/server.mjs", "scripts/check-worker-code.mjs", "scripts/deploy-worker.mjs"]) {
+  for (const path of ["packages/nvda-worker/src/server.mjs", "scripts/check-worker-code.mjs", "scripts/deploy-worker.mjs"]) {
     const source = readFileSync(resolve(process.cwd(), path), "utf8");
     assert.ok(!LITERAL_LIST.test(source),
       `${path} has its own literal worker-file list again. Import WORKER_FILES from worker-files.mjs — a `
       + `second copy is how a file came to deploy without the parity check noticing.`);
-    assert.ok(source.includes("WORKER_FILES"), `${path} should use the shared WORKER_FILES list`);
+    // Either the shared list or the shared hasher — both live in one place, and using either means this
+    // file cannot disagree with the other side about contents or order.
+    assert.match(source, /worker-files\.mjs|code-version\.mjs/,
+      `${path} should get the worker file list, or the hash itself, from the shared module`);
   }
 });
 
 test("the hash covers every worker source file the guest runs", () => {
-  // A new .mjs under src/capture/nvda that the worker runs but nobody hashes is invisible to
+  // A new .mjs in this package that the worker runs but nobody hashes is invisible to
   // `npm run worker:code` — the only check that a deploy actually landed. It must follow imports
   // TRANSITIVELY: capture-faults.mjs is imported by capture-core, not by server.mjs, so a check that only
   // looked at server.mjs's own imports would have missed it and reported a stale guest as fresh.
@@ -45,7 +48,7 @@ test("the hash covers every worker source file the guest runs", () => {
     const file = queue.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
-    const source = readFileSync(resolve(process.cwd(), "src/capture/nvda", file), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "packages/nvda-worker/src", file), "utf8");
     for (const [, imported] of source.matchAll(/from "\.\/([\w-]+\.mjs)"/g)) {
       assert.ok(hashed.has(imported), `${file} imports ${imported} but it is not in the code-version hash`);
       queue.push(imported);

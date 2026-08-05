@@ -3,7 +3,7 @@ name: capture-regression
 # Phase 1 (ADR 0003): the capture half's regression gate. Drives the real
 # capture worker (NVDA on a Windows runner via guidepup/setup-action) over the
 # bundled tutorial pages and asserts the stable raw signals each should yield
-# (see src/capture/nvda/capture-check.mjs). Path-filtered so it only spends
+# (see src/lab/capture-check.mjs). Path-filtered so it only spends
 # Windows-runner minutes when capture could have regressed; also on-demand.
 #
 # The filter covers src/training/** as well as src/capture/**: a probe and the signal that reads it are
@@ -92,4 +92,4 @@ jobs:
           Set-ItemProperty -Path $key -Name "HideFirstRunExperience" -Value 1 -Type DWord
           Set-ItemProperty -Path $key -Name "BrowserSignin" -Value 0 -Type DWord
       - name: Capture-regression checks (real NVDA)
-        run: node src/capture/nvda/capture-check.mjs
+        run: node src/lab/capture-check.mjs

@@ -10,8 +10,8 @@
 // .github/workflows/capture-regression.yml. Exits non-zero on any failed check.
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
-import { captureWithNvda } from "./capture-core.mjs";
-import { leasePageServer } from "../../training/page-server.mjs";
+import { captureWithNvda } from "@a11y-witness/nvda-worker";
+import { leasePageServer } from "../training/page-server.mjs";
 
 // Drive a live WORKER over HTTP instead of NVDA in-process.
 //
@@ -31,7 +31,7 @@ const WORKER = process.argv.find((a) => a.startsWith("--worker="))?.slice("--wor
 const CAPTURE_TIMEOUT_MS = 300_000;
 
 const STEPS = 40; // tutorial pages are tiny; a small read-through cap keeps it fast
-const pagesDir = join(dirname(fileURLToPath(import.meta.url)), "../../eval/pages/tutorials");
+const pagesDir = join(dirname(fileURLToPath(import.meta.url)), "../eval/pages/tutorials");
 
 // Each check has:
 //  - signature: text unique to THIS page that NVDA must have announced. This is
