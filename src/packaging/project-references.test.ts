@@ -48,6 +48,10 @@ test("a reference cycle between two projects is a BUILD ERROR", () => {
   // check still working.
   assert.match(result.output, /TS6202/);
   assert.match(result.output, /circular/i);
+  // And not for the wrong reason. This test PASSED in a clean clone that was missing `tsconfig.base.json`
+  // entirely — tsc reports the cycle before it needs the base config, so "the cycle is rejected" was true
+  // while the milestone's whole point was absent from the repo. TS5083 is that state; refuse it here.
+  assert.doesNotMatch(result.output, /TS5083/, "a config the fixture extends is missing; this passed vacuously");
 });
 
 test("a sound composite project builds and emits declarations", () => {
