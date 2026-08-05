@@ -163,10 +163,24 @@ cheaply as possible, and the first step moves no files at all.
   Also closed two checks that would have passed by examining nothing after the move:
   `scorer-artifact.test.ts` read the schema from the trainer, and
   `referenced-scripts.test.ts` matched only `scripts/`.
-- [ ] **M4 — Extract `@a11y-witness/judge`.** Move `judge`/`local-judge`/`rules`/
-  `layers`/`verify-gate` out of `src/spike/`, retire the misleading directory name,
-  and draw the `./internal` subpath so `lab` can drive the real gates. Gate:
-  `npm run eval` and `npm run rules:gate` unchanged.
+- [x] **M4 — Extract `@a11y-witness/judge`.** DONE (`04841b9`) at `0.1.0`,
+  AGPL-3.0-or-later, not published. `src/spike/` is retired; its three harnesses are
+  `src/lab/`, its NVDA fixtures are `src/eval/fixtures/nvda/`. Gate met:
+  `rules:gate` PASS and `npm run eval` recall 90% with 0 false positives on conformant
+  pages — unchanged.
+
+  It exposed three defects, all of the same shape (a path that was right only because
+  of where a file sat), and all found by the committed-content-only check rather than by
+  anything in the repo: **`npm ci` failed outright**, because `prepare` ran in `judge`
+  before its siblings were built — fixed with project `references`, the first real use
+  of the `composite: true` ordering guarantee M1 put in place; the local judge's
+  interpreter default was `<repo>/.venv/bin/python` derived as `../../` from its own
+  source, which became `packages/.venv/bin/python` (now `python3` on the PATH, with
+  `A11Y_PYTHON` winning); and the artefact test's `repoRoot` became `packages/`.
+
+  The isolation gate also turned out to handle only LEAF packages: nothing is published,
+  so npm could not resolve `@a11y-witness/evidence` for `judge` and failed with E404. It
+  now packs the internal closure and installs the tarballs together.
 - [ ] **M5 — Extract `@a11y-witness/nvda-worker`.** The most expensive step, because
   three things are coupled to its paths: `action.yml`'s
   `node src/capture/nvda/server.mjs`, and the hashed-file list shared by
