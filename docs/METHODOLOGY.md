@@ -59,7 +59,7 @@ whether a claim is entailed by its evidence.
   Optional consensus (`JUDGE_CONSENSUS=N`) runs the pipeline N times and keeps
   only findings recurring in a majority. See `src/spike/judge.ts`.
 - **Eval.** Labeled cases scored automatically for recall and false positives
-  against authoritative ground truth. See `src/eval/`.
+  against authoritative ground truth. See `packages/lab/src/eval/`.
 
 ## Grounding in W3C guidance
 
@@ -108,7 +108,7 @@ The approach is anchored in primary W3C material, not just our own intuition:
 | Confidence calibration | Not done | Findings carry a confidence number, but it has not been validated against outcomes. |
 | Test-retest reliability | Partial | `EVAL_RUNS` can repeat cases, but reliability is not yet reported as a metric. We have observed run-to-run variation. |
 | Human-agreement baseline | Partial | No direct expert labelling yet, but the W3C tutorial baseline derives its ground truth from W3C's own documented techniques, not our judgment, which reduces (does not eliminate) the self-grading concern. A live expert-labelled sample is still wanted. |
-| Held-out set / anti-overfitting | Substantial | Beyond the contamination page, 12 paired good/bad pages authored fresh from the W3C tutorials (`src/eval/pages/tutorials/`; images, forms, structure, tables, menus, carousels) form a held-out, contamination-resistant baseline. Good pages score 0 findings; bad pages are caught (100% recall, 0 false positives). A further 12 paired pages authored from published expert references (`src/eval/pages/books/`; Matuzović 2024, Firth 2024) extend coverage to link purpose (2.4.4), descriptive headings (2.4.6), alt-text *quality* vs absence (1.1.1), custom controls (4.1.2), status messages (4.1.3), and layout-table semantics (1.3.1); these are authored and **pending NVDA capture**, after which their `expect`/`allow` sets are tuned to the real transcripts. |
+| Held-out set / anti-overfitting | Substantial | Beyond the contamination page, 12 paired good/bad pages authored fresh from the W3C tutorials (`packages/lab/src/eval/pages/tutorials/`; images, forms, structure, tables, menus, carousels) form a held-out, contamination-resistant baseline. Good pages score 0 findings; bad pages are caught (100% recall, 0 false positives). A further 12 paired pages authored from published expert references (`packages/lab/src/eval/pages/books/`; Matuzović 2024, Firth 2024) extend coverage to link purpose (2.4.4), descriptive headings (2.4.6), alt-text *quality* vs absence (1.1.1), custom controls (4.1.2), status messages (4.1.3), and layout-table semantics (1.3.1); these are authored and **pending NVDA capture**, after which their `expect`/`allow` sets are tuned to the real transcripts. |
 | Contamination control | Partial (initial evidence) | The evidence-constrained design mitigates it, and a fresh, never-published page confirms recall is genuine judging rather than recall-from-memory (see Validation log). The public ground-truth pages (W3C BAD, WAI) remain a caveat; more novel pages needed. |
 | Reproducibility | Partial | Reasoning effort is pinned; the model is whatever the local Codex login resolves to; sampling temperature is not controlled; prompts live in-repo but are not versioned. |
 | Reporting standard | Not done | We have quoted bare "recall 100%" on n=5 without sample sizes, confidence intervals, or test-retest. |
@@ -177,7 +177,7 @@ independently-derived ground truth:
 ## Validation log
 
 - **Contamination / held-out test (passed, initial).** A page was authored fresh
-  for this purpose (`src/eval/pages/contamination-test.html`), never published,
+  for this purpose (`packages/lab/src/eval/pages/contamination-test.html`), never published,
   with a known set of planted violations mixed with correct controls. Captured
   via the real NVDA worker and judged. The judge caught all four planted
   observable violation categories with high confidence (1.1.1 at 0.99, 2.4.4 at
@@ -188,7 +188,7 @@ independently-derived ground truth:
   still required.
 - **W3C tutorial baseline (passed, all 6 topics).** 12 paired good/bad pages
   authored from the W3C WAI tutorials (images, forms, page structure, tables,
-  menus, carousels; `src/eval/pages/tutorials/`), captured via the real NVDA
+  menus, carousels; `packages/lab/src/eval/pages/tutorials/`), captured via the real NVDA
   worker. Good pages: 0 findings (precision). Bad pages: the documented failure
   caught in every topic (100% recall, 0 false positives). The baseline surfaced
   a genuine recall gap on missing table-header association, which was then fixed
@@ -198,7 +198,7 @@ independently-derived ground truth:
   motion (2.2.2), keyboard (2.1.1), focus, and change-announcement issues are
   documented as out of scope for a passive read.
 - **Book-grounded baseline (authored, pending capture).** 12 paired good/bad
-  pages (`src/eval/pages/books/`) authored from documented failures in two
+  pages (`packages/lab/src/eval/pages/books/`) authored from documented failures in two
   published references (Matuzović 2024; Firth 2024), each citing its source
   recipe/chapter. They extend the held-out set into criteria the tutorial
   baseline did not isolate: link purpose, descriptive headings, alt-text quality

@@ -16,11 +16,18 @@ from pathlib import Path
 from typing import Any
 
 
-ROOT = Path(__file__).resolve().parents[1]
+# Two different anchors, because this file needs two different things and one variable was doing both jobs:
+# the SCORER PACKAGE (a sibling package) and the CORPUS (`runs/`, at the repo root). After M8 moved this file
+# into `packages/lab/scripts/`, the single `parents[1]` anchor pointed at `packages/lab` and produced
+# `packages/lab/packages/scorer/python/score.py` — a path that does not exist.
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # The weights, the encoder and the scoring program live in `@a11y-witness/scorer` (PLAN.md M3). Anchored on
 # the package directory rather than on `models/` at the repo root, which no longer holds them.
-SCORER_PACKAGE = ROOT / "packages" / "scorer"
+# `packages/lab/scripts/` -> `packages/` -> `packages/scorer`. It was `parents[1] / "packages" / "scorer"`,
+# which resolved to `packages/lab/packages/scorer` once M8 moved this file into the lab package — a path that
+# does not exist, and the failure was `ModuleNotFoundError: No module named 'screenreader_features'`.
+SCORER_PACKAGE = Path(__file__).resolve().parents[2] / "scorer"
 
 
 def load_training_module() -> Any:
@@ -34,7 +41,7 @@ def load_training_module() -> Any:
 
 
 def load_scorer_module() -> Any:
-    path = ROOT / "packages" / "scorer" / "python" / "score.py"
+    path = SCORER_PACKAGE / "python" / "score.py"
     spec = importlib.util.spec_from_file_location("screenreader_scorer", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"could not load scorer helpers from {path}")
@@ -46,17 +53,17 @@ def load_scorer_module() -> Any:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", action="append", type=Path)
-    parser.add_argument("--training-data", type=Path, default=ROOT / "runs/screenreader-dataset/screenreader-evidence.jsonl")
+    parser.add_argument("--training-data", type=Path, default=REPO_ROOT / "runs/screenreader-dataset/screenreader-evidence.jsonl")
     parser.add_argument("--encoder", type=Path, default=SCORER_PACKAGE / "models/encoders/all-MiniLM-L6-v2")
     parser.add_argument("--model", type=Path, default=SCORER_PACKAGE / "models/screenreader-scorer", help="scorer directory or model.safetensors path")
     parser.add_argument("--training-report", type=Path, default=SCORER_PACKAGE / "models/screenreader-scorer/training-report.json")
-    parser.add_argument("--out", type=Path, default=ROOT / "runs/screenreader-acceptance/acceptance-report.json")
+    parser.add_argument("--out", type=Path, default=REPO_ROOT / "runs/screenreader-acceptance/acceptance-report.json")
     parser.add_argument("--min-positive", type=int, default=3)
     parser.add_argument("--min-clean", type=int, default=3)
     parser.add_argument("--max-length", type=int, default=256)
     args = parser.parse_args()
     if not args.data:
-        args.data = [ROOT / "runs/screenreader-acceptance/screenreader-evidence.jsonl"]
+        args.data = [REPO_ROOT / "runs/screenreader-acceptance/screenreader-evidence.jsonl"]
     return args
 
 

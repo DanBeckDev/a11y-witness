@@ -9,9 +9,9 @@ reason when reality diverges from them:
 
 | | |
 |---|---|
-| `scripts/diagnose-nvda-worker.ps1` | Read-only. PASS/FAIL per layer with the fix for each. **Start here when something breaks.** |
-| `scripts/provision-nvda-worker.ps1` | Set up or **repair** a worker. Idempotent — re-running it is the normal fix. |
-| `scripts/bootstrap-windows-worker.ps1` | Fresh Windows → provisioned worker (Node, Git, SSH, clone, then hand off to the above). |
+| `packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1` | Read-only. PASS/FAIL per layer with the fix for each. **Start here when something breaks.** |
+| `packages/worker-fleet/src/provisioning/provision-nvda-worker.ps1` | Set up or **repair** a worker. Idempotent — re-running it is the normal fix. |
+| `packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1` | Fresh Windows → provisioned worker (Node, Git, SSH, clone, then hand off to the above). |
 
 > **Want the worker on your own machine instead of a separate box?** See
 > [`local-worker-vm.md`](./local-worker-vm.md) — NVDA runs natively on Windows ARM64,
@@ -22,7 +22,7 @@ reason when reality diverges from them:
 Run either one remotely by copying it over and invoking it with `-File`:
 
 ```bash
-scp scripts/diagnose-nvda-worker.ps1 user@worker:C:/Users/user/
+scp packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1 user@worker:C:/Users/user/
 ssh user@worker "powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\user\diagnose-nvda-worker.ps1"
 ```
 
@@ -65,7 +65,7 @@ provisioning:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-irm https://raw.githubusercontent.com/DanBeckDev/a11y-witness/main/scripts/bootstrap-windows-worker.ps1 | iex
+irm https://raw.githubusercontent.com/DanBeckDev/a11y-witness/main/packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1 | iex
 ```
 
 > **Do not reach for `winget` here.** On a freshly installed Windows it does not exist:
@@ -143,7 +143,7 @@ curl -X POST http://<worker>:8765/capture -H 'content-type: application/json' \
 # 3. full capture regression (6 real captures, ~5 min).
 #    MUST run in the console session -- via a scheduled task, not bare SSH.
 #    There is now a task and a launcher for exactly this; see below.
-node src/capture/nvda/capture-check.mjs
+node packages/lab/src/capture/nvda/capture-check.mjs
 ```
 
 ### Running the gate for real
@@ -210,7 +210,7 @@ The error text is often actively misleading. This table is the shortcut.
 | `NVDA is not supported` | `getNVDAInstallationPath()` found nothing at guidepup's cache path | `npx @guidepup/setup install nvda` from the repo |
 | `NVDA is running but not speaking` | **should now be rare — the speech channel is probed before every capture.** The cause: guidepup reaches NVDA over a TLS socket (NVDA Remote, 127.0.0.1:6837) and speech is *pushed* back over it, so when that socket goes half-open every keystroke still succeeds and nothing is ever spoken. Guidepup reconnects only on a socket `error`, which a half-open connection never raises — no keepalive, no read timeout, no `reconnect()`. Previously NVDA answers keystrokes but its speech channel has died. It is stochastic: across the corpus ~45% of NVDA instances survive to the 25-capture recycle, while in a tight loop on a swapping host lifespans of 5-9 were measured. Reuse is causal (with `reuseScreenReader:false`, 8 of 8 ran clean) | **nothing to do.** The worker retries once itself on a fresh NVDA before answering, so the caller never sees it. Do **not** reboot the guest, and do **not** lower `MAX_CAPTURES_PER_NVDA` — most instances reach 25, so recycling early costs more than it saves. Watch `/health.vitals.recoveries`: if it climbs, suspect host memory first |
 | every capture on a worker slow (~45s) *and* mute failures *and* `/health` blackouts | **the host is out of memory, not the worker degrading.** A worker VM costs the host ~7 GB, not its configured 4096 MB; guests get swapped out from under NVDA. This exact pattern was misread as "the workers are dying" for a day | `npm run doctor` prints what the host can hold. Run fewer workers, or `A11Y_MAX_WORKERS=N`. Note the host's own load counts — a `npm test` on the Mac competes with the guests |
-| 0 phrases, `afterStart.lastSpoken` empty, no error | Three candidates, in order of likelihood: **`ForegroundLockTimeout` is not 0 in the live session** (Edge cannot take focus, so there is nothing to read); no interactive desktop; or a modal dialog freezing the session | run `scripts/apply-foreground-lock-timeout.ps1` **in the interactive session** and re-capture; otherwise log in at the console and dismiss the dialog *there* — it never surfaces over SSH |
+| 0 phrases, `afterStart.lastSpoken` empty, no error | Three candidates, in order of likelihood: **`ForegroundLockTimeout` is not 0 in the live session** (Edge cannot take focus, so there is nothing to read); no interactive desktop; or a modal dialog freezing the session | run `packages/worker-fleet/src/provisioning/apply-foreground-lock-timeout.ps1` **in the interactive session** and re-capture; otherwise log in at the console and dismiss the dialog *there* — it never surfaces over SSH |
 | every probe `after` is `"NVDA Speech Viewer"` | Speech Viewer enabled; probes record that window, not the page | patch `nvda.ini` |
 | phantom `"Welcome to Microsoft Edge"` / `"Sign in to sync data"` | fresh Edge profile; quick-nav escaped an empty document into browser UI | Edge policies + durable profile dir |
 | `/health` refused, SSH fine | worker not started (task has no trigger), or firewall/IP changed | `Start-ScheduledTask -TaskName a11ysrv` |

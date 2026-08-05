@@ -26,7 +26,7 @@ import { existsSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
-const root = fileURLToPath(new URL("../../", import.meta.url));
+const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const fixture = (name: string) => join(root, "scripts/tsconfig-fixtures", name);
 
 /** `tsc --build` caches in `.tsbuildinfo`, so a stale one would let a later run pass by doing nothing. */

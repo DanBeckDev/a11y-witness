@@ -19,9 +19,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
-import { checkIsolation, internalDependencies } from "../../scripts/isolation-gate.mjs";
+// Four levels up, to the REPO ROOT. The gate is monorepo tooling, not a package: it has to pack and install
+// every package including this one, so it cannot live inside any of them. Its tests live here because `lab` is
+// where this repo's internal tooling tests live.
+import { checkIsolation, internalDependencies } from "../../../../scripts/isolation-gate.mjs";
 
-const fixture = (name: string) => fileURLToPath(new URL(`../../scripts/isolation-fixtures/${name}`, import.meta.url));
+const fixture = (name: string) => fileURLToPath(new URL(`../../../../scripts/isolation-fixtures/${name}`, import.meta.url));
 
 test("a correctly packaged package PASSES, so the gate is not merely always-failing", () => {
   const verdict = checkIsolation(fixture("sound"));
@@ -50,7 +53,7 @@ test("a package with no smoke test is REJECTED rather than silently passed", () 
   // `packages/README.md` is a directory with no manifest; more importantly, a real package that forgot its
   // smoke test must not be waved through, or the gate becomes a decoration on exactly the packages nobody
   // remembered to cover.
-  const verdict = checkIsolation(fileURLToPath(new URL("../../packages", import.meta.url)));
+  const verdict = checkIsolation(fileURLToPath(new URL("../../../../packages", import.meta.url)));
   assert.equal(verdict.ok, false);
   assert.equal(verdict.stage, "setup");
 });
@@ -60,7 +63,7 @@ test("a package's unpublished siblings are resolved, so the gate can install the
   // dependencies. Nothing is published, so npm cannot fetch `@a11y-witness/evidence` from the registry — it
   // fails the install with E404, and the gate would report a broken package that is perfectly fine. npm 7+
   // auto-installs peer dependencies too, so a peer on an unpublished sibling fails the same way.
-  const judge = fileURLToPath(new URL("../../packages/judge", import.meta.url));
+  const judge = fileURLToPath(new URL("../../../../packages/judge", import.meta.url));
   const resolved = internalDependencies(judge).map((dir: string) => dir.split("/").pop());
   assert.deepEqual(resolved.sort(), ["evidence", "scorer"],
     "judge depends on evidence and peers on scorer; both must be packed alongside it");
@@ -69,6 +72,6 @@ test("a package's unpublished siblings are resolved, so the gate can install the
 test("a dependency on a sibling that does not exist is an ERROR, not a silent skip", () => {
   // The failure this prevents is a typo'd internal dependency quietly falling through to the registry, where
   // it 404s during install and looks like a broken package instead of a broken manifest.
-  const fixture = fileURLToPath(new URL("../../scripts/isolation-fixtures/missing-sibling", import.meta.url));
+  const fixture = fileURLToPath(new URL("../../../../scripts/isolation-fixtures/missing-sibling", import.meta.url));
   assert.throws(() => internalDependencies(fixture), /not a package in this repo/);
 });

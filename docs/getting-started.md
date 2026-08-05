@@ -96,7 +96,7 @@ On that machine, in an **elevated** PowerShell:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-irm https://raw.githubusercontent.com/DanBeckDev/a11y-witness/main/scripts/bootstrap-windows-worker.ps1 | iex
+irm https://raw.githubusercontent.com/DanBeckDev/a11y-witness/main/packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1 | iex
 ```
 
 It installs Node, Git and NVDA, configures the interactive session, and starts the worker
@@ -127,7 +127,7 @@ npm run doctor
 `doctor` reporting `3 worker(s), all stopped` is a READY state. Follow its `next` line rather
 than trying to get everything running first.
 
-**If you changed anything under `src/capture/nvda/`, check the workers are running it:**
+**If you changed anything under `packages/lab/src/capture/nvda/`, check the workers are running it:**
 
 ```bash
 npm run worker:code    # each worker's /health.code vs this checkout; exits 1 if any is stale
@@ -191,7 +191,7 @@ That is a working install. `--json` gives you the full transcript alongside the 
 | It worked a minute ago and now nothing responds | Something else is driving the worker. There is **one** VM and **one** NVDA here, so another shell, agent, or a `capture-check` run restarts it out from under you. `worker-ctl.sh status` before assuming breakage |
 | Findings that look wrong | Check the `evidence` line against the transcript in `--json`. If the evidence is not in the transcript, that is a bug here — please report it |
 
-On a Windows worker, `scripts/diagnose-nvda-worker.ps1` checks six layers and prints
+On a Windows worker, `packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1` checks six layers and prints
 PASS/FAIL with the fix for each. The error-string-to-real-cause table is in
 [`nvda-worker-runbook.md`](./nvda-worker-runbook.md) — the messages are misleading often
 enough that the table is faster than reasoning from first principles.

@@ -120,7 +120,23 @@ export function allPackages() {
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && existsSync(join(root, entry.name, "package.json")))
-    .map((entry) => join(root, entry.name));
+    .map((entry) => join(root, entry.name))
+    // A `private` package is never published, so "can a consumer install this?" has no meaning for it and a
+    // missing smoke test is not a defect. `@a11y-witness/lab` is private on purpose (ADR 0008): the corpus is
+    // not distributable and the trainer would imply a reproducibility promise this project cannot make.
+    // Skipping is announced by the caller rather than silent — a gate that quietly covers less than you think
+    // is the failure mode this whole file exists to prevent.
+    .filter((dir) => !JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).private);
+}
+
+/** How many packages were skipped for being private — reported, so the gate's coverage is never overstated. */
+function countPrivatePackages() {
+  const root = fileURLToPath(new URL("../packages/", import.meta.url));
+  if (!existsSync(root)) return 0;
+  return readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(root, entry.name, "package.json")))
+    .filter((entry) => JSON.parse(readFileSync(join(root, entry.name, "package.json"), "utf8")).private)
+    .length;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -129,6 +145,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (args.length > 0 && args[0] !== "--all" && targets.length === 0) {
     process.stderr.write("usage: node scripts/isolation-gate.mjs [--all | <package-dir>...]\n");
     process.exit(2);
+  }
+  const privateCount = args.length === 0 || args[0] === "--all" ? countPrivatePackages() : 0;
+  if (privateCount) {
+    process.stdout.write(`skipping ${privateCount} private package(s): never published, so nothing installs them\n`);
   }
   if (targets.length === 0) {
     // Says so rather than reporting success over nothing. The gate's own correctness is asserted separately

@@ -48,7 +48,7 @@ npm run worker:deploy -- --vm=a11y-worker-2
 npm run worker:code                       # each worker's /health.code vs this checkout
 ```
 
-It pushes **every hashed file** (13 now, defined once in `src/capture/nvda/worker-files.mjs` — the
+It pushes **every hashed file** (13 now, defined once in `packages/lab/src/capture/nvda/worker-files.mjs` — the
 list used to be duplicated in `server.mjs` and `check-worker-code.mjs` with a third derived by regex in the
 deploy script), reboots each guest — mandatory, because
 `utmctl exec` cannot be trusted to restart the worker — and verifies `/health.code` over HTTP, which
@@ -356,7 +356,7 @@ NVDA and Edge versions, **the Windows build and architecture**, the provisioning
   revision changes every key it produces and invalidates its cache — the behaviour you want, and
   unit-tested. Re-provision the pool together rather than one at a time so two differently prepared
   guests cannot silently share an `"unstamped"` key.
-- **Bump `CAPTURE_PROTOCOL_VERSION`** (`src/capture/nvda/capture-core.mjs`) when a change alters what
+- **Bump `CAPTURE_PROTOCOL_VERSION`** (`packages/lab/src/capture/nvda/capture-core.mjs`) when a change alters what
   the evidence *means* — a new field a signal reads, a probe that announces differently. It forces a
   full recapture; that is the point. Do **not** reach for it on a refactor.
 - The worker's code hash is deliberately **not** in the key. It changes when a comment changes, and
@@ -369,7 +369,7 @@ NVDA and Edge versions, **the Windows build and architecture**, the provisioning
 
 ```bash
 npm run training:repeat -- --url=<page> --times=5 [--probe-tables]   # is a field stable at all?
-node scripts/bench-capture.mjs --from-disk                          # p50/p95 per phase, per worker
+node packages/lab/scripts/bench-capture.mjs --from-disk                          # p50/p95 per phase, per worker
 ```
 
 ## Readiness: `ready`, not `ok`
@@ -918,7 +918,7 @@ Anything a human has to remember is something that does not happen. What runs it
 
 - **Worker VMs** — a run starts what it needs and puts each back as it found it. Stopped is the
   correct resting state.
-- **The dataset page server** — leased the same way (`src/training/page-server.mjs`). A run starts it
+- **The dataset page server** — leased the same way (`packages/lab/src/training/page-server.mjs`). A run starts it
   if missing and stops it afterwards, including on SIGINT; a server somebody else started is used and
   left alone. This replaced a manual `npx serve` that had leaked four processes onto this host, one of
   which was a stray that could 404 an entire run while it reported success.
@@ -968,10 +968,10 @@ Verification is layered; pick the layers your change touches:
 - **Pre-release, and not covered by CI:** `npm run eval:gate` for judge quality, and
   `verify.corpus.test.ts` for the capture gates. Neither can run in CI — eval needs the Python venv
   login, the corpus test needs `runs/`. Note also that `capture-regression.yml` is path-filtered to
-  `src/capture/**`, so it does **not** fire for changes under `src/training/**` — which is exactly
+  `packages/lab/src/capture/**`, so it does **not** fire for changes under `packages/lab/src/training/**` — which is exactly
   where the guard bug above lived.
 - `npm run eval [-- <substring>]` — judge quality against 34 labelled fixtures, **against our own scorer** (`JUDGE_BACKEND` defaults to `local`). Needs the Python venv, so it **cannot run in CI**; run it when you touch the judge, prompts, criteria, or fixtures. Do **not** quote its numbers as a headline: `docs/METHODOLOGY.md` records that the guards were tuned against these cases, scoring is single-run, and there is no expert baseline yet. Report with those caveats or not at all.
-- **`src/capture/nvda/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test.
+- **`packages/lab/src/capture/nvda/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test.
   After changing it, deploy (above) and then:
 
   ```bash
@@ -987,7 +987,7 @@ Verification is layered; pick the layers your change touches:
 
   Nothing is lost by going over HTTP: every assertion is a pure function of the capture RESULT, which the
   worker returns. It is arguably the better test, since it exercises the path production uses. Run
-  `scripts/bench-capture.mjs` too if you touched timing. The VM capture is its test; the book's rule is
+  `packages/lab/scripts/bench-capture.mjs` too if you touched timing. The VM capture is its test; the book's rule is
   "refactor under test".
 - **Count-based checks cannot see content rot — assert what was heard, not how much.** capture-check now gates on probe *values* (`disclosure-good` must reach `expanded`, `disclosure-bad` must stay `collapsed`) and on the read-through still carrying roles, because both lessons were learned the hard way. A readiness gate once overwrote the first line of every page with the document title, deleting the h1's `"heading, level 1, ..."` announcement everywhere: `"heading, level N"` phrases fell from 105 to 15 across 90 captures and **every check stayed green**, because the phrase count had not moved. If you change capture, compare evidence quality against a previous run, not just line counts.
 - `npm run evidence:check <worker>` — after ANY change to the capture pipeline, asks whether the
@@ -995,7 +995,7 @@ Verification is layered; pick the layers your change touches:
   1 = evidence CHANGED, bump `CAPTURE_PROTOCOL_VERSION` and recapture. This is what makes a capture
   optimisation affordable to evaluate; before it, every one "cost a full recapture" to find out.
 - `npm run training:check-signals` — proves every dataset `badSignal` fires on the bad page and stays silent on the good one, against captures already on disk (no worker needed). Run it after ANY change to a probe's output shape: a probe and its signal are coupled, and 8 cases once went silently blind when a probe changed. `npm run training:status` reports a long capture run; `--resume` picks up where one stopped.
-- **Worker broken? Don't debug from first principles** — `docs/nvda-worker-runbook.md` has the error-string → real-cause table (the messages are misleading: `"NVDA not installed"` usually means a version mismatch, not a missing install), and `scripts/diagnose-nvda-worker.ps1` applies it automatically. `scripts/provision-nvda-worker.ps1` is the idempotent repair.
+- **Worker broken? Don't debug from first principles** — `docs/nvda-worker-runbook.md` has the error-string → real-cause table (the messages are misleading: `"NVDA not installed"` usually means a version mismatch, not a missing install), and `packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1` applies it automatically. `packages/worker-fleet/src/provisioning/provision-nvda-worker.ps1` is the idempotent repair.
 - **No worker to hand?** Build one: `docs/getting-started.md` (~1.5–2 h, almost all of it downloading Windows). Validating capture changes through CI is a ~10-minute loop and should be the fallback, not the habit.
 
 ## Environment facts

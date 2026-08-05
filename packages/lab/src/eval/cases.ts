@@ -55,7 +55,7 @@ const W3C_SURVEY_DOCUMENTED_AA = [
 export const EVAL_CASES: EvalCase[] = [
   {
     id: "w3c-bad-before",
-    fixture: "src/eval/fixtures/nvda/nvda-w3c-bad-before.json",
+    fixture: "packages/lab/src/eval/fixtures/nvda/nvda-w3c-bad-before.json",
     task: "Read the City Lights home page and find the latest news",
     // The failures clearly observable from this page's announced reading: unlabelled graphics (1.1.1),
     // visual titles not marked as headings (1.3.1), and vague link text (2.4.4).
@@ -78,7 +78,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "w3c-bad-after",
-    fixture: "src/eval/fixtures/nvda/nvda-w3c-bad-after-content.json",
+    fixture: "packages/lab/src/eval/fixtures/nvda/nvda-w3c-bad-after-content.json",
     task: "Read the City Lights home page and find the latest news",
     // W3C documents the accessible page as fully conformant: expect nothing.
     // Uses the content-only fixture (demo switcher chrome stripped) so we score
@@ -89,7 +89,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "w3c-bad-before-survey",
-    fixture: "src/eval/fixtures/nvda/nvda-w3c-bad-before-survey.json",
+    fixture: "packages/lab/src/eval/fixtures/nvda/nvda-w3c-bad-before-survey.json",
     task: "Fill in and submit the City Lights visitor survey",
     // Form-heavy page: radio buttons are announced with no label ("radio
     // button, not checked, [no name]") and the menu is a junk-named combo box.
@@ -101,7 +101,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "w3c-wai-home",
-    fixture: "src/eval/fixtures/nvda/nvda-w3c-wai-home.json",
+    fixture: "packages/lab/src/eval/fixtures/nvda/nvda-w3c-wai-home.json",
     task: "Find guidance on getting started with accessibility",
     // W3C's own WAI site: a reference-quality accessible page, no demo chrome.
     // A conformant page should yield ~no findings, so this is a clean
@@ -112,7 +112,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "contamination-fresh-page",
-    fixture: "src/eval/fixtures/contamination-test.json",
+    fixture: "packages/lab/src/eval/fixtures/contamination-test.json",
     task: "Sign up for an Acme Widgets account",
     // Authored fresh (src/eval/pages/contamination-test.html), never published,
     // so no model can have memorized it. This is both an anti-contamination
@@ -131,7 +131,7 @@ export const EVAL_CASES: EvalCase[] = [
   // surface the documented failure (recall). Pages in src/eval/pages/tutorials/.
   {
     id: "tut-images-good",
-    fixture: "src/eval/fixtures/tutorials/images-good.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/images-good.json",
     task: "View the trail photos",
     expect: [],
     allow: [],
@@ -139,7 +139,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-images-bad",
-    fixture: "src/eval/fixtures/tutorials/images-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/images-bad.json",
     task: "View the trail photos",
     expect: ["1.1.1"],
     // 4.1.2 is allowed: the alt-less image used as a link genuinely has no
@@ -149,7 +149,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-forms-good",
-    fixture: "src/eval/fixtures/tutorials/forms-good.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/forms-good.json",
     task: "Sign up for the newsletter",
     expect: [],
     allow: [],
@@ -157,7 +157,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-forms-bad",
-    fixture: "src/eval/fixtures/tutorials/forms-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/forms-bad.json",
     task: "Sign up for the newsletter",
     expect: ["4.1.2"],
     allow: ["4.1.2", "3.3.2", "1.3.1"],
@@ -165,7 +165,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-structure-good",
-    fixture: "src/eval/fixtures/tutorials/structure-good.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/structure-good.json",
     task: "Find the library's opening hours",
     expect: [],
     allow: [],
@@ -173,7 +173,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-structure-bad",
-    fixture: "src/eval/fixtures/tutorials/structure-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/structure-bad.json",
     task: "Find the library's opening hours",
     expect: ["1.3.1"],
     allow: ["1.3.1", "2.4.6", "2.4.1"],
@@ -181,7 +181,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-tables-good",
-    fixture: "src/eval/fixtures/tutorials/tables-good.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/tables-good.json",
     task: "Find which platform the Hilltop train departs from",
     expect: [],
     allow: [],
@@ -189,7 +189,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-tables-bad",
-    fixture: "src/eval/fixtures/tutorials/tables-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/tables-bad.json",
     task: "Find which platform the Hilltop train departs from",
     expect: ["1.3.1"],
     allow: ["1.3.1"],
@@ -197,7 +197,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-menus-good",
-    fixture: "src/eval/fixtures/tutorials/menus-good.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/menus-good.json",
     task: "Go to the Support section",
     expect: [],
     allow: [],
@@ -205,7 +205,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-menus-bad",
-    fixture: "src/eval/fixtures/tutorials/menus-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/menus-bad.json",
     task: "Go to the Support section",
     expect: ["4.1.2"],
     allow: ["4.1.2", "1.3.1", "2.4.4"],
@@ -213,7 +213,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-carousels-good",
-    fixture: "src/eval/fixtures/tutorials/carousels-good.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/carousels-good.json",
     task: "Browse the featured products",
     expect: [],
     allow: [],
@@ -221,7 +221,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-carousels-bad",
-    fixture: "src/eval/fixtures/tutorials/carousels-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/carousels-bad.json",
     task: "Browse the featured products",
     expect: ["4.1.2", "1.1.1"],
     allow: ["4.1.2", "1.1.1", "1.3.1"],
@@ -229,7 +229,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-disclosure-good",
-    fixture: "src/eval/fixtures/tutorials/disclosure-good.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/disclosure-good.json",
     task: "Expand the FAQ answer about resetting a password",
     // A proper disclosure: the toggle is a named button announced "collapsed", and
     // activating it flips aria-expanded, so re-reading the control reports
@@ -247,7 +247,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-disclosure-bad",
-    fixture: "src/eval/fixtures/tutorials/disclosure-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/disclosure-bad.json",
     task: "Expand the FAQ answer about resetting a password",
     // A broken disclosure: it visually reveals content but never updates
     // aria-expanded, so re-reading the control after activation still reports
@@ -261,7 +261,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-forms-validation-good",
-    fixture: "src/eval/fixtures/tutorials/forms-validation-good.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/forms-validation-good.json",
     task: "Sign up for the newsletter",
     // Submitting with an empty required field announces the error through a live
     // region ("There is a problem. Email address is required.") — the screen
@@ -273,7 +273,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "tut-forms-validation-bad",
-    fixture: "src/eval/fixtures/tutorials/forms-validation-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/tutorials/forms-validation-bad.json",
     task: "Sign up for the newsletter",
     // The same form shows the validation error only as red text: no live region,
     // no association, no focus move. On submit the screen reader announces
@@ -287,7 +287,7 @@ export const EVAL_CASES: EvalCase[] = [
   {
     id: "planted-contact-form",
     notApplicableTo: ["local"],
-    fixture: "src/eval/fixtures/planted-contact-form.json",
+    fixture: "packages/lab/src/eval/fixtures/planted-contact-form.json",
     task: "Send a message to the team using the contact form",
     // Planted: bare "image" (1.1.1), unlabelled field (3.3.2 or 4.1.2),
     // unnamed "button" (4.1.2). The h1->h4 jump is NOT a clear failure, and
@@ -306,7 +306,7 @@ export const EVAL_CASES: EvalCase[] = [
   // it (it does not affect metrics), so these can be authored before capture.
   {
     id: "book-links-good",
-    fixture: "src/eval/fixtures/books/links-good.json",
+    fixture: "packages/lab/src/eval/fixtures/books/links-good.json",
     task: "Read the latest city news",
     expect: [],
     allow: [],
@@ -314,7 +314,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "book-links-bad",
-    fixture: "src/eval/fixtures/books/links-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/books/links-bad.json",
     task: "Read the latest city news",
     // Link text announced detached from its sentence: "Read more...", bullet-list
     // "Click here", and a bare "Go!" do not convey purpose (mirrors W3C BAD's
@@ -325,7 +325,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "book-headings-good",
-    fixture: "src/eval/fixtures/books/headings-good.json",
+    fixture: "packages/lab/src/eval/fixtures/books/headings-good.json",
     task: "Find how to reset your password",
     expect: [],
     allow: [],
@@ -333,7 +333,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "book-headings-bad",
-    fixture: "src/eval/fixtures/books/headings-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/books/headings-bad.json",
     task: "Find how to reset your password",
     // Headings have proper roles/levels (so not 1.3.1) but are non-descriptive:
     // "Welcome", "Stuff", a vague title, and a run-on title. Semantic 2.4.6.
@@ -343,7 +343,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "book-alt-quality-good",
-    fixture: "src/eval/fixtures/books/alt-quality-good.json",
+    fixture: "packages/lab/src/eval/fixtures/books/alt-quality-good.json",
     task: "Review the quarterly results",
     expect: [],
     allow: [],
@@ -351,7 +351,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "book-alt-quality-bad",
-    fixture: "src/eval/fixtures/books/alt-quality-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/books/alt-quality-bad.json",
     task: "Review the quarterly results",
     // Alt is PRESENT (so the absence rule won't fire) but unhelpful: a declaration
     // ("A graph about stocks") and a generic placeholder ("image"). Semantic 1.1.1
@@ -362,7 +362,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "book-custom-control-good",
-    fixture: "src/eval/fixtures/books/custom-control-good.json",
+    fixture: "packages/lab/src/eval/fixtures/books/custom-control-good.json",
     task: "Save your settings",
     expect: [],
     allow: [],
@@ -370,7 +370,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "book-custom-control-bad",
-    fixture: "src/eval/fixtures/books/custom-control-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/books/custom-control-bad.json",
     task: "Save your settings",
     // An icon-only button with no accessible name (rule-catchable 4.1.2) plus a
     // <div> styled as a button with no role (announced as plain text, not operable).
@@ -380,7 +380,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "book-filter-status-good",
-    fixture: "src/eval/fixtures/books/filter-status-good.json",
+    fixture: "packages/lab/src/eval/fixtures/books/filter-status-good.json",
     task: "Filter the products to show only bags",
     expect: [],
     allow: [],
@@ -388,7 +388,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "book-filter-status-bad",
-    fixture: "src/eval/fixtures/books/filter-status-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/books/filter-status-bad.json",
     task: "Filter the products to show only bags",
     // Filtering updates the visible result count, but it is not in any live region
     // and focus does not move, so the change is never announced (4.1.3). Only
@@ -399,7 +399,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "book-layout-table-good",
-    fixture: "src/eval/fixtures/books/layout-table-good.json",
+    fixture: "packages/lab/src/eval/fixtures/books/layout-table-good.json",
     task: "Read about the company",
     expect: [],
     allow: [],
@@ -407,7 +407,7 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "book-layout-table-bad",
-    fixture: "src/eval/fixtures/books/layout-table-bad.json",
+    fixture: "packages/lab/src/eval/fixtures/books/layout-table-bad.json",
     task: "Read about the company",
     // A <table> used purely for two-column layout, with no role=presentation, so a
     // screen reader announces table/row/column relationships that do not exist.

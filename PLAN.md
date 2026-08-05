@@ -16,11 +16,11 @@ Make the real assistive-technology experience of any website measurable and impr
 
 - [x] **Integrated axe-core** (rule-based layer): `src/scan/axe.ts` runs it via Playwright (A/AA tags) on the same URL; the `witness` CLI now emits a two-layer report (rule-based + lived-experience), run concurrently. Proven: catches 1.4.3 contrast (which the screen-reader layer cannot perceive) and agrees with the lived-experience layer on overlapping structural criteria (1.1.1). Clean on correct markup.
 - [x] **Made the axe layer optional, and importable** (amendment to ADR 0002). The code is 99 lines and ~1s concurrent with a ~53s capture, but Playwright pulled ~536 MB of Chromium as a hard dependency, and a team already running axe would get duplicate findings from two engine versions in one CI. Now `optionalDependencies` + dynamic import (absence is a supported state, not a crash), `--no-axe`/`A11Y_AXE=0`, and `--axe-results <file>` to consume results they already have — three real-world shapes accepted, all mapped through the same code so a finding cannot differ by who scanned, with a warning when the recorded URL disagrees. The report says "not run" rather than "0 violations", because silence must not read as a pass. Required decoupling the capture-integrity page title from axe first (`src/scan/page-title.ts`), independently of the worker so the check is not circular.
-- [x] **Interaction model, part 1 — structural navigation.** The capture now skims by element type (headings, landmarks, form fields) via NVDA quick-nav, swept in both directions so it works regardless of cursor position (Guidepup has no "move to top"). Reveals presence AND absence (e.g. a page whose visual titles are not real headings shows zero headings). Wired into the judge (recall + verify); no eval regression. `src/capture/nvda/capture-core.mjs`.
-- [x] **Interaction model, part 2 — operate controls.** Two lived-experience probes that activate controls and judge whether the screen reader hears the result, neither of which a rule engine can do. Both activate *in place* during the form-field quick-nav sweep (a separate next/previous sweep fails: after the sweep the cursor sits at the end, so on a sparse page "next" returns nothing — the only control is the *current* position). (a) **Disclosure state change**: activate a "collapsed" control and record what is announced; an empty announcement = the state change is not conveyed (4.1.2). (b) **Form submit (opt-in `--probe-forms`, since activating a submit button has side effects)**: submit with no valid input and capture the `spokenPhraseLog` delta (every phrase announced after the submit, so a live-region alert is not overwritten by a following focus move); if no error is announced the user is never told what failed (3.3.1 Error Identification, 4.1.3 Status Messages). Wired into the judge (recall + verify). `src/capture/nvda/capture-core.mjs`.
+- [x] **Interaction model, part 1 — structural navigation.** The capture now skims by element type (headings, landmarks, form fields) via NVDA quick-nav, swept in both directions so it works regardless of cursor position (Guidepup has no "move to top"). Reveals presence AND absence (e.g. a page whose visual titles are not real headings shows zero headings). Wired into the judge (recall + verify); no eval regression. `packages/lab/src/capture/nvda/capture-core.mjs`.
+- [x] **Interaction model, part 2 — operate controls.** Two lived-experience probes that activate controls and judge whether the screen reader hears the result, neither of which a rule engine can do. Both activate *in place* during the form-field quick-nav sweep (a separate next/previous sweep fails: after the sweep the cursor sits at the end, so on a sparse page "next" returns nothing — the only control is the *current* position). (a) **Disclosure state change**: activate a "collapsed" control and record what is announced; an empty announcement = the state change is not conveyed (4.1.2). (b) **Form submit (opt-in `--probe-forms`, since activating a submit button has side effects)**: submit with no valid input and capture the `spokenPhraseLog` delta (every phrase announced after the submit, so a live-region alert is not overwritten by a following focus move); if no error is announced the user is never told what failed (3.3.1 Error Identification, 4.1.3 Status Messages). Wired into the judge (recall + verify). `packages/lab/src/capture/nvda/capture-core.mjs`.
 - [x] **Fixed the flakiness via the Guidepup docs.** Cross-referencing the official API surfaced `windowsActivate`, which explicitly focuses the Edge window instead of hoping the launch took focus — a real cause of empty/partial captures. (The other, found later via structured diagnostics: a Windows permission dialog silently blocking the interactive session.)
 - [x] **Refactored the interaction traversal to NVDA quick-nav** (`moveToNext/PreviousFormField` + in-place activation) instead of raw Tab, which stalled on sparse pages and escaped into the browser chrome. Note: NVDA's "B" button quick-nav misses plain `<button>`s that "F" (form field) reaches, so the sweep navigates by form field.
-- [x] **Debug mode / structured diagnostics (all levels).** Every capture phase records a diagnostic (`browserLaunched`, `windowsActivate`, `nvdaStart`, `afterStart`, `readThrough` with stopReason + firstStepError, `structural`, `formProbe`, `interaction` sweepLog, `done`) instead of a silent catch; surfaced via `server.log` and the CLI `--debug`, with a 0-announcement WARNING. This is what pinpointed the permission-dialog outage. `src/capture/nvda/capture-core.mjs`.
+- [x] **Debug mode / structured diagnostics (all levels).** Every capture phase records a diagnostic (`browserLaunched`, `windowsActivate`, `nvdaStart`, `afterStart`, `readThrough` with stopReason + firstStepError, `structural`, `formProbe`, `interaction` sweepLog, `done`) instead of a silent catch; surfaced via `server.log` and the CLI `--debug`, with a 0-announcement WARNING. This is what pinpointed the permission-dialog outage. `packages/lab/src/capture/nvda/capture-core.mjs`.
 - [x] **Validated part 2 against paired W3C tutorial examples.** Disclosure pair (`disclosure-good` announces the state change → clean; `disclosure-bad` never updates `aria-expanded` → 4.1.2 caught) and form-validation pair (`forms-validation-good` announces the error via a live region → clean; `forms-validation-bad` shows it visually only → 3.3.1 + 4.1.3 caught), both with zero false positives. Added as eval cases; the signal lives in `interaction.stateChanges` / `interaction.formChanges`, invisible to a static read.
 
 ### Next: reproducible testing + distribution (ADR 0003)
@@ -54,13 +54,13 @@ own worker pool, or write a JAWS backend, has no route in.
 The layout below is measured, not assumed. Two findings from the import graph
 overturned the obvious core/workers/model split:
 
-- **`src/capture/verify.ts` and `src/wcag/criteria.ts` have zero imports** and are
+- **`packages/lab/src/capture/verify.ts` and `src/wcag/criteria.ts` have zero imports** and are
   imported by the CLI, the report, the scan layer, the judge, the eval harness,
-  three files in `src/training/`, and `scripts/evidence-check.mjs`. They are not
+  three files in `packages/lab/src/training/`, and `packages/lab/scripts/evidence-check.mjs`. They are not
   capture code — they are the **shared evidence contract**, and their location under
-  `src/capture/` is the only thing that makes a three-way split look workable.
+  `packages/lab/src/capture/` is the only thing that makes a three-way split look workable.
 - **Worker and fleet have different operating systems.** Everything in
-  `src/capture/nvda/` imports only node builtins, guidepup and its own siblings;
+  `packages/lab/src/capture/nvda/` imports only node builtins, guidepup and its own siblings;
   everything host-side (`local-vm`, `worker-health`, `host-capacity`, `doctor`,
   `worker-ctl`) never imports guidepup. `action.yml` proves the split is real: on a
   Windows runner it starts `server.mjs` directly with no VM, no `utmctl`, no pool.
@@ -165,7 +165,7 @@ cheaply as possible, and the first step moves no files at all.
   `referenced-scripts.test.ts` matched only `scripts/`.
 - [x] **M4 — Extract `@a11y-witness/judge`.** DONE (`04841b9`) at `0.1.0`,
   AGPL-3.0-or-later, not published. `src/spike/` is retired; its three harnesses are
-  `src/lab/`, its NVDA fixtures are `src/eval/fixtures/nvda/`. Gate met:
+  `packages/lab/src/harnesses/`, its NVDA fixtures are `packages/lab/src/eval/fixtures/nvda/`. Gate met:
   `rules:gate` PASS and `npm run eval` recall 90% with 0 false positives on conformant
   pages — unchanged.
 
@@ -182,7 +182,7 @@ cheaply as possible, and the first step moves no files at all.
   so npm could not resolve `@a11y-witness/evidence` for `judge` and failed with E404. It
   now packs the internal closure and installs the tarballs together.
 - [x] **M5 — Extract `@a11y-witness/nvda-worker`.** DONE (`b03fab1`) at `0.1.0`,
-  AGPL-3.0-or-later, not published. `src/capture/nvda/` retired; `.mjs` ships verbatim so
+  AGPL-3.0-or-later, not published. `packages/lab/src/capture/nvda/` retired; `.mjs` ships verbatim so
   there is no build step. **`CAPTURE_PROTOCOL_VERSION` did not move** — still 4, nothing
   invalidated. All four gates met, in order:
 
@@ -195,7 +195,7 @@ cheaply as possible, and the first step moves no files at all.
 
   The cycle inverted by moving the boundary rather than adding machinery: ADR 0004 named
   one escape, but `capture-check.mjs` and `capture-books.mjs` also serve
-  `src/eval/pages/tutorials`, which makes both LAB harnesses. They are `src/lab/` now and
+  `packages/lab/src/eval/pages/tutorials`, which makes both LAB harnesses. They are `packages/lab/src/harnesses/` now and
   the worker package imports nothing outside itself. Consequence: the worker does **not**
   ship `a11y-capture-check`, and ADR 0004 records the deviation.
 
@@ -502,7 +502,7 @@ Measured: 50s per capture, of which only 13s is work (`readThrough` + `structura
 - [x] **Deployed and validated** persistent NVDA (recycled every 25, `A11Y_REUSE_NVDA=0` to
   revert), the Edge-window poll replacing the fixed 12s sleep, the conditional startup
   settle, and per-capture speech-log clearing. Validate with `capture-check` **plus** the
-  disclosure and form probes by value, then benchmark with `scripts/bench-capture.mjs`.
+  disclosure and form probes by value, then benchmark with `packages/lab/scripts/bench-capture.mjs`.
   **Measured on the worker: 28.8s -> 13.3s per capture**, with identical output (3 phrases on
   every run, before and after). `windowsActivate` 13.3s -> 1.5s, `nvdaStart` 2.1s -> 0.5s
   (reused on 3 of 4 captures), `afterStart` 3s -> 0s. `capture-check` passes all 7 pages
@@ -755,27 +755,27 @@ Prove that an AI model can judge the real screen-reader experience trustworthily
 
 VoiceOver capture was deferred: macOS AppleScript automation is fragile and deprecating (`-1708`), and VoiceOver cannot be containerised or run by contributors. Capture moved to NVDA on Windows, the most representative and most reliably automatable target. See `docs/adr/0001-capture-architecture.md`.
 
-- [x] NVDA capture running on a Proxmox Windows VM via Guidepup, in an interactive session, driven remotely. `src/capture/nvda/`
+- [x] NVDA capture running on a Proxmox Windows VM via Guidepup, in an interactive session, driven remotely. `packages/lab/src/capture/nvda/`
 - [x] Real browse-mode read-through of a real page, producing a faithful transcript that audibly contains the page's actual defects (unlabelled graphics, "Click here" links, unmarked headings). Fixture: `src/spike/fixtures/nvda-w3c-bad-before.json`
 - [x] End-to-end: capture (Windows) piped to the Codex judge (control plane) yields a grounded, hallucination-free verdict. `src/spike/judge-file.ts`
-- [ ] Productionise the worker as the `POST /capture` HTTP service behind `src/capture/backend.ts` (currently a scheduled-task recipe).
+- [ ] Productionise the worker as the `POST /capture` HTTP service behind `packages/lab/src/capture/backend.ts` (currently a scheduled-task recipe).
 
 **Judge half — works end-to-end; recall now strong, calibration next.**
 
 - [x] Produces WCAG-cited, confidence-scored verdicts, grounded in the verified WCAG 2.2 A/AA criteria and citing only from that list. `src/spike/judge.ts`, `src/wcag/criteria.ts` (validated against the W3C spec)
 - [x] On the short planted sample, catches the defects and avoids false positives. `src/spike/judge-sample.ts`
 - [x] **Recall fixed via a two-stage judge:** an exhaustive recall pass (task-independent) then a keep-biased grounding/verification pass. On the 79-line real capture this went from 1 finding to 8 distinct, correctly-cited ones (1.1.1, 1.3.1, 1.4.5, and four 2.4.4 link-purpose issues), with no regression on the planted sample.
-- [x] **Eval suite** scoring the judge against authoritative ground truth (W3C BAD before/after reports, a chrome-free conformant reference page from W3C WAI, and a planted sample), with an automatic scorer that reports recall on failure cases and false-positive counts on conformant ones. `src/eval/`, `npm run eval`.
+- [x] **Eval suite** scoring the judge against authoritative ground truth (W3C BAD before/after reports, a chrome-free conformant reference page from W3C WAI, and a planted sample), with an automatic scorer that reports recall on failure cases and false-positive counts on conformant ones. `packages/lab/src/eval/`, `npm run eval`.
 - [x] **Recall 100%** on observable failures (before + planted) with **0 false positives** there. Fixed a `1.3.1` over-flag (no heading-level-skip flags; requires plain-text-title evidence).
 - [x] **Consensus mode** (`JUDGE_CONSENSUS=N`): judge N times, keep only findings recurring in a majority, to cut run-to-run noise. Opt-in (N x cost).
 - [x] **Resolved a conformant-page false positive by research, not punting.** The WAI "Change Text Size or Colors" finding was verified against W3C's own source markup (a correct `<a>` with descriptive text), confirmed a false positive, root-caused to the role-less skip-link nav at the top of the read, and fixed with a judge guard (descriptive text IS a name; reserve 4.1.2 for role-only-no-name).
 - [x] **Cleaned the "after" fixture** (stripped the W3C demo switcher chrome) and **added the W3C BAD survey page** as a form-heavy failure case. Recall is now 100% across all three failure cases, including unlabelled form controls (`4.1.2`) the home pages did not exercise.
 - [x] **Quantified consensus; not defaulting it.** `JUDGE_CONSENSUS=3` suppresses *flaky* false positives (varying criterion run to run) but NOT *stable* ones, and costs N x. The one surviving conformant-page FP (WAI) is stable, so consensus does not fix it and is not worth forcing on every run. Consensus stays opt-in as a reproducibility/precision lever.
-- [x] **Fixed a wrap-around capture bug.** NVDA "read next" looped back to the top of long pages, duplicating ~36% of the WAI transcript (150 -> 88 phrases after the fix). Cheaper, cleaner captures. `src/capture/nvda/capture-core.mjs`.
-- [x] **Methodology audit + contamination test.** `docs/METHODOLOGY.md` audits our LLM-as-judge usage against established practice and recalibrates the headline numbers as preliminary. A fresh, never-published authored page (`src/eval/pages/contamination-test.html`) scored 4/4 recall with 0 false positives, which is evidence that recall is genuine judging rather than memorization, and is also our first held-out case. The biggest remaining gap is an expert-labeled human-agreement baseline.
+- [x] **Fixed a wrap-around capture bug.** NVDA "read next" looped back to the top of long pages, duplicating ~36% of the WAI transcript (150 -> 88 phrases after the fix). Cheaper, cleaner captures. `packages/lab/src/capture/nvda/capture-core.mjs`.
+- [x] **Methodology audit + contamination test.** `docs/METHODOLOGY.md` audits our LLM-as-judge usage against established practice and recalibrates the headline numbers as preliminary. A fresh, never-published authored page (`packages/lab/src/eval/pages/contamination-test.html`) scored 4/4 recall with 0 false positives, which is evidence that recall is genuine judging rather than memorization, and is also our first held-out case. The biggest remaining gap is an expert-labeled human-agreement baseline.
 - [x] **Grounded in primary W3C material.** Criteria are version-tagged (2.0/2.1/2.2, parsed from each spec) so findings can be reported against WCAG 2.1 AA (the legal baseline, e.g. EN 301 549) as well as 2.2 AA. The observable-subset scoping is validated against W3C's POUR principles, and the tool is positioned against ATAG (a Part B tool whose own outputs must meet Part A). See `docs/METHODOLOGY.md`.
 - [ ] **Remaining conformant FP is a known, proven, low-confidence (~0.66) artifact**, not a judge logic gap: NVDA announces the top-of-page skip-link/controls region as role-less text (e.g. "Change Text Size or Colors"), which the judge reads as a possibly-unexposed control even though the source is a correct link. Real fixes: capture-side skip-link handling, or cross-check a flagged control against the page DOM before reporting (a tool feature, not more prompt patching). Confidence-tiering the report (surface <0.7 as "needs human check") would also neutralize it.
-- [x] **W3C tutorial baseline (all 6 topics).** 12 paired good/bad pages authored fresh from the W3C WAI tutorials (images, forms, page structure, tables, menus, carousels) with W3C-derived ground truth: `src/eval/pages/tutorials/`. Good pages score 0 findings; bad pages are caught in every topic (100% recall, 0 false positives). It surfaced (and then fixed, via a generalising hint) a real recall gap on missing table-header association. Carousels test only the observable subset; their motion/keyboard/focus issues are documented as out of scope for a passive read. Authoritative, contamination-resistant, held-out.
+- [x] **W3C tutorial baseline (all 6 topics).** 12 paired good/bad pages authored fresh from the W3C WAI tutorials (images, forms, page structure, tables, menus, carousels) with W3C-derived ground truth: `packages/lab/src/eval/pages/tutorials/`. Good pages score 0 findings; bad pages are caught in every topic (100% recall, 0 false positives). It surfaced (and then fixed, via a generalising hint) a real recall gap on missing table-header association. Carousels test only the observable subset; their motion/keyboard/focus issues are documented as out of scope for a passive read. Authoritative, contamination-resistant, held-out.
 - [ ] Grow the eval set further (MDPI LLM-auditing dataset, public-sector accessibility statements, ACT Rules cases).
 
 **Acceptance:** on real pages, the judgment is credible AND reasonably complete, and a human can verify each finding from the transcript. The capture clears this bar; the judge's recall does not yet.

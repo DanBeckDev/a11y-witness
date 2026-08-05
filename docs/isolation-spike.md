@@ -46,8 +46,8 @@ the repo":
 | cause | status |
 |---|---|
 | `scripts/score-screenreader-model.py` never committed | **fixed** — committed, plus a test asserting every referenced `scripts/…` program is tracked |
-| `scripts/check-screenreader-hardening.py` never committed | **fixed** — same commit |
-| `scripts/train-screenreader-model.py` committed at `v1` while the weights are `v4` | **open** — see below |
+| `packages/lab/scripts/check-screenreader-hardening.py` never committed | **fixed** — same commit |
+| `packages/lab/scripts/train-screenreader-model.py` committed at `v1` while the weights are `v4` | **open** — see below |
 
 The third is not a missing file: the trainer *is* tracked, at the wrong version. The `v4` trainer exists
 only as an uncommitted change in one shared working tree — 80 hours old, 99 insertions, introducing

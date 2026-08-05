@@ -90,8 +90,8 @@ lighter ONNX path would remove torch entirely and is the obvious next optimisati
 
 ```bash
 npm run worker:ctl -- up
-./scripts/action-dry-run.sh https://example.com "Complete the checkout"
-FAIL_ON=blocker ./scripts/action-dry-run.sh ...      # check the exit contract
+./packages/lab/scripts/action-dry-run.sh https://example.com "Complete the checkout"
+FAIL_ON=blocker ./packages/lab/scripts/action-dry-run.sh ...      # check the exit contract
 ```
 
 `act` cannot run this action — it is Docker/Linux and NVDA needs Windows — so the dry run executes the

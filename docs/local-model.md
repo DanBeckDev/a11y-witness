@@ -134,8 +134,8 @@ python3.12 -m venv .venv
 .venv/bin/python -m pip install -r packages/scorer/requirements.txt
 npm run training:fetch-encoder
 npm run training:train
-node scripts/verify-safetensors.mjs models/encoders/all-MiniLM-L6-v2
-node scripts/verify-safetensors.mjs packages/scorer/models/screenreader-scorer
+node packages/lab/scripts/verify-safetensors.mjs models/encoders/all-MiniLM-L6-v2
+node packages/lab/scripts/verify-safetensors.mjs packages/scorer/models/screenreader-scorer
 ~~~
 
 The learned artifact is `packages/scorer/models/screenreader-scorer/model.safetensors` and its
@@ -161,7 +161,7 @@ training again. Existing acceptance captures are retained, but the
 acceptance gate must be rerun against a release-eligible artifact rather than
 treated as evidence for this diagnostic model.
 
-The repeatable collection path is implemented in src/training/. npm run
+The repeatable collection path is implemented in packages/lab/src/training/. npm run
 training:generate creates 1,061 controlled good/bad page pairs across independent
 content families (45 seed pairs, 128 initial independent variants, 627 bulk
 variants, 36 targeted follow-ups, and 225 calibration variants).
@@ -332,7 +332,7 @@ model that does not need custom code. A model page's verification indicator is
 useful provenance, but it is not a substitute for checking the publisher,
 license, revision, files, and hashes.
 
-The repository includes `scripts/verify-safetensors.mjs` to enforce the local
+The repository includes `packages/lab/scripts/verify-safetensors.mjs` to enforce the local
 file-format rule. A converted ONNX or GGUF inference artifact may be used only
 after the training checkpoint has passed the training check and the converted
 artifact is recorded separately.
