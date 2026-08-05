@@ -10,6 +10,7 @@ enforcement was in place before the code could drift against it.
 | `judge` (M4) | AGPL-3.0-or-later | `judge()` (`.`), the deterministic absence rules (`./rules`), experience-layer ordering (`./layers`), and `./internal` with no semver guarantee |
 | `nvda-worker` (M5) | AGPL-3.0-or-later | the Windows capture worker. `.mjs` ships verbatim, so no build step; the HTTP contract is the API and `CAPTURE_PROTOCOL_VERSION` versions it independently of semver |
 | `worker-fleet` (M6) | AGPL-3.0-or-later | host-side lease/health/capacity, the `a11y-doctor` and `a11y-worker-*` bins, and the UTM provisioning scripts. Touches no NVDA |
+| `a11y-witness` (M7) | AGPL-3.0-or-later | the CLI, unscoped so `npx a11y-witness` needs no wrapper. Exports `reportLines` only; the root package was renamed to `a11y-witness-monorepo` to free the name |
 
 The order is deliberate. M0 tested the assumption that could invalidate the whole design — that a consumer
 can install and run one package in isolation — and its findings are in `docs/isolation-spike.md`. M1 adds

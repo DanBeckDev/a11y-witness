@@ -1,5 +1,5 @@
 {
-  "name": "a11y-witness",
+  "name": "a11y-witness-monorepo",
   "version": "0.0.0",
   "private": true,
   "description": "Judge the real assistive-technology experience of a website with AI: drive a real screen reader through real navigation and assess whether the experience is coherent and usable.",
@@ -7,7 +7,7 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "spike": "tsx src/lab/run-spike.ts",
-    "witness": "A11Y_PYTHON=.venv/bin/python tsx src/cli.ts",
+    "witness": "A11Y_PYTHON=.venv/bin/python tsx packages/cli/src/cli.ts",
     "worker": "node packages/nvda-worker/src/server.mjs",
     "eval": "A11Y_PYTHON=.venv/bin/python tsx src/eval/run.ts",
     "rules-check": "tsx src/eval/rules-check.ts",
@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build-packages.mjs",
     "lint": "eslint .",
-    "scan": "tsx src/scan/run-axe.ts",
+    "scan": "tsx packages/cli/src/scan/run-axe.ts",
     "training:generate": "node src/training/generate-screenreader-dataset.mjs",
     "training:generate-acceptance": "node src/training/generate-screenreader-acceptance.mjs",
     "training:preflight": "node src/training/preflight-screenreader-dataset.mjs",
@@ -60,7 +60,8 @@
     "@a11y-witness/scorer": "0.1.0",
     "@a11y-witness/worker-fleet": "0.1.0",
     "@anthropic-ai/sdk": "^0.106.0",
-    "@guidepup/guidepup": "^0.31.0"
+    "@guidepup/guidepup": "^0.31.0",
+    "a11y-witness": "0.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
