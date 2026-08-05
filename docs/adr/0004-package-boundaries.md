@@ -111,7 +111,20 @@ without renaming anything — ADR 0001 deferred VoiceOver, it did not rule it ou
 - Peer deps: `@a11y-witness/scorer` for the default `local` backend;
   `@anthropic-ai/sdk` optional for the `anthropic` backend.
 
-**`@a11y-witness/nvda-worker`** — `"os": ["win32"]`.
+**`@a11y-witness/nvda-worker`** — Windows only, but **NOT** via `"os": ["win32"]`.
+
+> **Corrected during M5, by measurement.** npm applies the platform check to WORKSPACE MEMBERS, not just to
+> installed dependencies, so `"os": ["win32"]` made `npm install` fail outright on macOS:
+> `npm error notsup Unsupported platform for @a11y-witness/nvda-worker@0.1.0: wanted {"os":"win32"} (current:
+> {"os":"darwin"})`. Removing the package from the root `dependencies` did not help — workspace membership
+> alone is enough. Since this repo is developed on a Mac (CLAUDE.md's "the usual case"), the field and the
+> monorepo are mutually exclusive, and `publishConfig` cannot add `os` at publish time either.
+>
+> The field bought a clean install refusal on the wrong platform. What replaces it is a loud runtime failure
+> that already existed: `@guidepup/guidepup` throws `No available supported screen readers` at import where
+> no screen reader is present, which is exactly the situation `os` was guarding against — and the README says
+> Windows in its first line. A worse error message on a rarer mistake was the cheaper trade against not being
+> able to install the repo at all.
 - bin — `a11y-nvda-worker`, `a11y-capture-check`.
 - `.` — `captureWithNvda()` (the one-shot entrypoint ADR 0003 Phase 1 asked for),
   `CAPTURE_PROTOCOL_VERSION`, `codeVersion()`.

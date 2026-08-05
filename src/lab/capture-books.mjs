@@ -5,7 +5,7 @@
 // Edge can load them, e.g. from the repo root:
 //     npx serve src/eval/pages/books -l 5050
 // then, in the interactive session:
-//     node src/capture/nvda/capture-books.mjs http://localhost:5050
+//     node src/lab/capture-books.mjs http://localhost:5050
 //
 // Writes src/eval/fixtures/books/<name>.json (the eval fixture shape) for each
 // page, so the corresponding EvalCase auto-activates on the next eval run.
@@ -21,7 +21,7 @@
 //   first and flag anything that comes back without an interaction delta.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { captureWithNvda } from "./capture-core.mjs";
+import { captureWithNvda } from "@a11y-witness/nvda-worker";
 
 const BASE = (process.argv[2] || process.env.BOOKS_BASE_URL || "http://localhost:5050").replace(/\/$/, "");
 const STEPS = Number(process.env.CAPTURE_STEPS || 150);

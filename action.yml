@@ -209,7 +209,7 @@ runs:
       shell: pwsh
       working-directory: ${{ github.action_path }}
       run: |
-        Start-Process -FilePath "node" -ArgumentList "src/capture/nvda/server.mjs" `
+        Start-Process -FilePath "node" -ArgumentList "packages/nvda-worker/src/server.mjs" `
           -RedirectStandardOutput "$env:RUNNER_TEMP\worker.log" `
           -RedirectStandardError "$env:RUNNER_TEMP\worker.err" -NoNewWindow
         # Poll for READY, never sleep a guess. `ok` only means the HTTP server is answering -- a worker

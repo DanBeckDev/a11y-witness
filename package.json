@@ -8,7 +8,7 @@
   "scripts": {
     "spike": "tsx src/lab/run-spike.ts",
     "witness": "A11Y_PYTHON=.venv/bin/python tsx src/cli.ts",
-    "worker": "node src/capture/nvda/server.mjs",
+    "worker": "node packages/nvda-worker/src/server.mjs",
     "eval": "A11Y_PYTHON=.venv/bin/python tsx src/eval/run.ts",
     "rules-check": "tsx src/eval/rules-check.ts",
     "test": "tsx --test \"src/**/*.test.ts\" \"packages/*/src/**/*.test.ts\"",
@@ -47,7 +47,7 @@
     "rules:score": "tsx scripts/score-rules.ts",
     "rules:gate": "tsx scripts/score-rules.ts --gate",
     "release:gate": "npm run gate:isolation && npm run training:check-signals && npm run rules:gate && npm run training:evaluate-acceptance && npm run eval:gate",
-    "capture:check": "tsx src/capture/nvda/capture-check.mjs",
+    "capture:check": "tsx src/lab/capture-check.mjs",
     "layers:compare": "A11Y_PYTHON=.venv/bin/python node scripts/compare-layers.mjs",
     "pretest": "npm run build",
     "pretypecheck": "npm run build"
@@ -55,6 +55,7 @@
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
     "@a11y-witness/judge": "0.1.0",
+    "@a11y-witness/nvda-worker": "0.1.0",
     "@a11y-witness/scorer": "0.1.0",
     "@anthropic-ai/sdk": "^0.106.0",
     "@guidepup/guidepup": "^0.31.0"

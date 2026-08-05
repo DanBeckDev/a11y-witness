@@ -6,7 +6,6 @@
 // NVDA is a single shared resource, so captures are serialized.
 import { createServer } from "node:http";
 import { appendFileSync, existsSync, openSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { freemem, totalmem, uptime as osUptime } from "node:os";
@@ -17,7 +16,7 @@ import {
   screenReaderReady, shutdownScreenReader, warmUpScreenReader,
 } from "./capture-core.mjs";
 import { isLocallyRecoverable } from "./worker-recovery.mjs";
-import { WORKER_FILES } from "./worker-files.mjs";
+import { codeVersion } from "./code-version.mjs";
 import { faultCode } from "./capture-faults.mjs";
 import { edgePolicy, guestDiagnostics, processCounts, screenReaderState, treeSize } from "./diagnostics.mjs";
 import { killStrayBrowsers, pruneEdgeProfile, reportBrowserPolicyDrift } from "./browser-profile.mjs";
@@ -157,34 +156,19 @@ const ENVIRONMENT_CACHE_MS = 5_000;
 // Every probe is opt-in over the wire and defaults to off, so an old client keeps the old
 // behaviour and no capture pays for a probe it did not ask for. Extracted from the handler
 // because each default is a branch and the handler sat at the complexity ceiling.
-// What code is this worker actually running?
-//
-// Deploying is push-then-restart, and both halves can fail silently. `utmctl exec` returns
-// success and no output whether or not it ran anything -- measured: on two cloned guests the
-// restart never happened, the workers served the previous process for another hour, and the
-// hash check meant to catch that ALSO goes through exec, so it came back empty instead of
-// mismatched. A verification that shares a failure mode with the action verifies nothing.
-//
-// So the worker reports its own code over the channel it serves on. `/health` is reachable
-// exactly when the worker is usable, needs no guest agent, and a mismatch against the host's
-// hash is unambiguous. Compare with: npm run worker:code
-function codeVersion() {
+// The worker reports its own code over the channel it serves on — see `code-version.mjs` for why that
+// channel, and not `utmctl exec`. Wrapped here because a worker that cannot hash itself can still capture,
+// and saying so beats refusing to start.
+function reportedCodeVersion() {
   try {
-    const hash = createHash("sha256");
-    // Order matters and must match the host side: capture behaviour, then the wire contract.
-    for (const file of WORKER_FILES) {
-      hash.update(readFileSync(new URL(file, import.meta.url)));
-    }
-    return hash.digest("hex").slice(0, 16);
+    return codeVersion();
   } catch (e) {
-    // Never fatal: a worker that cannot hash itself can still capture, and saying so beats
-    // refusing to start.
     log(`could not compute code version: ${e.message}`);
     return "unknown";
   }
 }
 
-const CODE_VERSION = codeVersion();
+const CODE_VERSION = reportedCodeVersion();
 
 const EDGE_EXES = [
   `${process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)"}\\Microsoft\\Edge\\Application\\msedge.exe`,

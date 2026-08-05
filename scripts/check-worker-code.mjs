@@ -10,20 +10,20 @@
 //
 // This asks each worker over HTTP, which is reachable exactly when the worker is usable and
 // involves no guest agent. Exit 0 when every worker matches, 1 otherwise.
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import { WORKER_FILES } from "../src/capture/nvda/worker-files.mjs";
+import { codeVersion } from "../packages/nvda-worker/src/code-version.mjs";
 
 const CTL = resolve("scripts/local-worker/worker-ctl.sh");
-const NVDA_DIR = resolve("src/capture/nvda");
+const NVDA_DIR = resolve("packages/nvda-worker/src");
 // /health now reports installed runtime versions as well as the code hash. The first
 // request after a Windows boot may need PowerShell file-version discovery, so four seconds
 // was too tight and made a healthy worker look unreachable.
 const HEALTH_TIMEOUT_MS = 15000;
 
-// Must match server.mjs codeVersion() exactly: same files, same order.
+// The guest and the host now call the SAME function over the SAME list, so they cannot disagree by
+// construction. This used to be two copies of one loop kept in step by a comment.
 /**
  * A STALE report is usually a real stale guest — but not when the working tree carries an uncommitted
  * CAPTURE_PROTOCOL_VERSION bump. Then every worker reports stale because the LOCAL hash moved, and the
@@ -36,7 +36,7 @@ function protocolBumpNote() {
     const inTree = /CAPTURE_PROTOCOL_VERSION = (\d+)/.exec(
       readFileSync(resolve(NVDA_DIR, "capture-core.mjs"), "utf8"))?.[1];
     const committed = /CAPTURE_PROTOCOL_VERSION = (\d+)/.exec(
-      execFileSync("git", ["show", "HEAD:src/capture/nvda/capture-core.mjs"], { encoding: "utf8" }))?.[1];
+      execFileSync("git", ["show", "HEAD:packages/nvda-worker/src/capture-core.mjs"], { encoding: "utf8" }))?.[1];
     if (inTree && committed && inTree !== committed) {
       return `\nNOTE: your working tree has CAPTURE_PROTOCOL_VERSION = ${inTree} but HEAD has ${committed}.\n` +
         "That alone changes the local hash, so the guests may not be stale at all. Deploying it would\n" +
@@ -47,13 +47,7 @@ function protocolBumpNote() {
   return "";
 }
 
-function localVersion() {
-  const hash = createHash("sha256");
-  for (const file of WORKER_FILES) {
-    hash.update(readFileSync(resolve(NVDA_DIR, file)));
-  }
-  return hash.digest("hex").slice(0, 16);
-}
+const localVersion = () => codeVersion(NVDA_DIR);
 
 function workerUrls() {
   if (process.env.A11Y_WORKER) return [process.env.A11Y_WORKER];

@@ -58,7 +58,7 @@ const TRANSIENT_FAULTS = new Set(["screen-reader-mute", "screen-reader-start-fai
 export function isTransient(error) {
   // Prefer the code. The regex below is the fallback for older workers and for host-side failures
   // (a dropped socket has no fault code), but a message is prose and prose gets reworded — see
-  // src/capture/nvda/capture-faults.mjs for what that cost.
+  // packages/nvda-worker/src/capture-faults.mjs for what that cost.
   if (TRANSIENT_FAULTS.has(error?.code)) return true;
   return TRANSIENT.test(String(error?.message ?? error ?? ""));
 }
