@@ -38,6 +38,8 @@
  * On CONFORMANT pages the model is silent regardless: 0 findings across 150 conformant records.
  */
 import { spawn } from "node:child_process";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { WCAG_22_AA } from "../wcag/criteria.js";
 import type { Judgment, Finding, Severity } from "./judge.js";
@@ -305,11 +307,38 @@ export function findingsFromScores(
   return { findings, suppressed };
 }
 
+/**
+ * Where the scorer lives, resolved from THIS MODULE rather than the process cwd.
+ *
+ * These two paths were `".venv/bin/python"` and `"scripts/score-screenreader-model.py"`, relative to
+ * wherever the process happened to start. That works only when the cwd is the repo root, which it is for
+ * `npm run …` and is not for anything else — an installed package, a git worktree, a scheduled task, or
+ * simply `cd /tmp && node …`. `PLAN.md`'s M0 names it as one of the two defects that make the current
+ * layout impossible to consume.
+ *
+ * The Python program needs no equivalent fix: it already resolves `ROOT = Path(__file__).parents[1]`, so
+ * its `--encoder` and `--model` defaults are correct as soon as the program itself is found.
+ *
+ * `A11Y_PYTHON` is preserved and still wins, because `action.yml` sets it to a bare `python`: a GitHub
+ * Windows runner has no venv, and its packages go to the system interpreter. An absolute path here would
+ * have broken the Action.
+ */
+export function scorerPaths(): { python: string; script: string } {
+  // ../../ from src/spike/ is the repo root. Kept as one expression so there is a single place to change
+  // if this module moves — which it will, when `@a11y-witness/judge` is extracted (PLAN.md M4).
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+  return {
+    python: process.env.A11Y_PYTHON ?? join(root, ".venv/bin/python"),
+    script: join(root, "scripts/score-screenreader-model.py"),
+  };
+}
+
 /** Run the scorer over one raw witness capture. Separate so the pure logic above needs no subprocess. */
 export async function scoreCapture(capture: unknown, options: { python?: string; script?: string; timeoutMs?: number } = {}):
 Promise<ScorerOutput> {
-  const python = options.python ?? process.env.A11Y_PYTHON ?? ".venv/bin/python";
-  const script = options.script ?? "scripts/score-screenreader-model.py";
+  const resolved = scorerPaths();
+  const python = options.python ?? resolved.python;
+  const script = options.script ?? resolved.script;
   return new Promise((resolve, reject) => {
     const child = spawn(python, [script, "--stdin"], { stdio: ["pipe", "pipe", "pipe"] });
     let out = "", err = "";
