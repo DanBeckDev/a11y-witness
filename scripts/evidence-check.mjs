@@ -69,6 +69,34 @@ const pageIsUnchanged = (testCase) => hasUsableCaptureFiles({
   pageRoot: resolve(DATASET, "pages"),
 });
 
+/**
+ * Would this case be captured the same WAY it was captured?
+ *
+ * The probes are opt-in over the wire, so a case whose recorded options differ from what the manifest asks for
+ * now is not comparable either — and this one is invisible to the page hash. Measured: 61 cases recorded
+ * `probeTables: true` while the manifest on disk says false, because the manifest predates the fix that derives
+ * that flag from the signal type. The fresh capture then requests no table probe, `structure.tableCells` goes
+ * 4 -> 0, and the diff reports an evidence change that is really a missing question.
+ *
+ * Same rule as the page check, one field along: **a comparison must not be between two things that differ for
+ * a reason unrelated to the change under test.**
+ */
+function optionsUnchanged(testCase) {
+  const wanted = { probeForms: !!testCase.probeForms, probeTables: !!testCase.probeTables };
+  return ["good", "bad"].every((variant) => {
+    try {
+      const recorded = JSON.parse(readFileSync(resolve(DATASET, "captures", `${testCase.id}.${variant}.json`), "utf8"))
+        .provenance?.options;
+      // No recorded options at all is a capture from before provenance existed; the page check already refuses
+      // those, so this must not turn "cannot tell" into "comparable".
+      if (!recorded) return false;
+      return !!recorded.probeForms === wanted.probeForms && !!recorded.probeTables === wanted.probeTables;
+    } catch {
+      return false;
+    }
+  });
+}
+
 /** One case per family until the sample is full, so no family can be silently absent. */
 function stratify(cases, limit) {
   const byFamily = new Map();
@@ -142,12 +170,21 @@ async function requirePagesServed(cases) {
   process.exit(2);
 }
 
-const comparable = manifestCases().filter(pageIsUnchanged);
-const skipped = manifestCases().length - comparable.length;
-if (skipped) {
+const allCases = manifestCases();
+const pageOk = allCases.filter(pageIsUnchanged);
+const comparable = pageOk.filter(optionsUnchanged);
+const pageSkipped = allCases.length - pageOk.length;
+const optionSkipped = pageOk.length - comparable.length;
+if (pageSkipped) {
   process.stdout.write(
-    `${skipped} case(s) excluded: their PAGE has changed since capture, so a diff would measure the page and `
-    + `not the code. Recapture them (npm run training:capture -- --resume) to widen this check.\n`);
+    `${pageSkipped} case(s) excluded: their PAGE has changed since capture, so a diff would measure the page `
+    + `and not the code. Recapture them (npm run training:capture -- --resume) to widen this check.\n`);
+}
+if (optionSkipped) {
+  process.stdout.write(
+    `${optionSkipped} case(s) excluded: the manifest now asks for different PROBES than the recorded capture `
+    + `used, so the fresh capture would be asked a different question. Regenerate the manifest `
+    + `(npm run training:generate) and recapture them.\n`);
 }
 if (!comparable.length) {
   // Refusing is the honest answer. Reporting SAME over nothing examined is how "verified" comes to mean
