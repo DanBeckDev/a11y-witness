@@ -1,0 +1,49 @@
+{
+  "name": "@a11y-witness/scorer",
+  "version": "0.1.0",
+  "description": "The trained screen-reader accessibility scorer as an artefact: 27 KB of heads over a frozen MiniLM encoder, plus the Python program that runs them. The weights are the API.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "a11y-scorer-fetch-encoder": "./bin/fetch-encoder.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "python",
+    "models/screenreader-scorer",
+    "requirements.txt",
+    "README.md",
+    "LICENSE",
+    "!python/__pycache__"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepack": "tsc --build",
+    "prepare": "tsc --build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DanBeckDev/a11y-witness.git",
+    "directory": "packages/scorer"
+  },
+  "keywords": [
+    "accessibility",
+    "a11y",
+    "wcag",
+    "screen-reader",
+    "nvda",
+    "scorer"
+  ]
+}

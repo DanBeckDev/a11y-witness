@@ -15,7 +15,7 @@
  * judge. Shadow output is log-only and never changes findings.
  */
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { judge } from "./spike/judge.js";
 import { scanWithAxe, axeAvailable, type AxeFinding } from "./scan/axe.js";
 import { fetchPageTitle } from "./scan/page-title.js";
@@ -24,6 +24,7 @@ import { layerOf } from "./spike/layers.js";
 import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "./capture/local-vm.js";
 import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "@a11y-witness/evidence/verify";
+import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
 
 interface Args {
   url: string;
@@ -119,8 +120,13 @@ interface CaptureResponse {
 }
 
 const MAX_CAPTURE_ATTEMPTS = 3;
-const SHADOW_PYTHON = process.env.A11Y_SHADOW_PYTHON ?? resolve(process.cwd(), ".venv/bin/python");
-const SHADOW_SCORER = resolve(process.cwd(), "scripts/score-screenreader-model.py");
+// Both of these were resolved against `process.cwd()`, so the shadow scorer ran only when the CLI happened
+// to be invoked from the repo root — the same defect M0 found in `local-judge.ts`. The program's path now
+// comes from `@a11y-witness/scorer`, which resolves it from its own module; the interpreter is still
+// overridable, because choosing a Python is the caller's business and a Windows runner has no venv.
+const SHADOW_PYTHON = process.env.A11Y_SHADOW_PYTHON
+  ?? fileURLToPath(new URL("../.venv/bin/python", import.meta.url));
+const SHADOW_SCORER = scorerArtefact().scoreScript;
 
 async function main(): Promise<void> {
   const args = parseArgs();

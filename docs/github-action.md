@@ -35,12 +35,16 @@ and measured at zero false positives across 1,034 conformant records. `anthropic
 available for broader, noisier coverage; the action refuses at once if you name one without a key or an
 endpoint, rather than discovering it after a 20-minute capture.
 
-The trained weights are committed deliberately (`models/screenreader-scorer/`). `models/` is otherwise
-gitignored, and the first version of that rule excluded the scorer too — so the local judge worked only on
-the machine that trained it, and a shipped action would have had **no model at all**. Note the pattern is
-`models/*` rather than `models/`: git does not descend into an excluded directory, so a negation under it
-never fires and the file could only be added with `git add -f` — meaning a future retrain would silently
-not be committed.
+The trained weights are committed deliberately, in `@a11y-witness/scorer`
+(`packages/scorer/models/screenreader-scorer/`). Only the 87 MB encoder beside them is gitignored, and an
+earlier version of that rule excluded the weights too — so the local judge worked only on the machine that
+trained it, and a shipped action would have had **no model at all**.
+
+The rule used to need `models/*` rather than `models/`, because git does not descend into an excluded
+directory: a negation under it never fires, the file could only be added with `git add -f`, and a future
+retrain would then silently not be committed. That shape is no longer needed for the weights — nothing
+excludes an ancestor of `packages/scorer/models/screenreader-scorer` — but the lesson still applies to any
+new ignore rule with a negation under it.
 
 **One PR comment, updated.** `gh pr comment --edit-last --create-if-none` plus an HTML marker in the body,
 so a busy PR gets one comment that changes rather than one per push. The comment step runs `always()`, so

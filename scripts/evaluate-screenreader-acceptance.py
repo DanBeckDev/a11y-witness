@@ -18,6 +18,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The weights, the encoder and the scoring program live in `@a11y-witness/scorer` (PLAN.md M3). Anchored on
+# the package directory rather than on `models/` at the repo root, which no longer holds them.
+SCORER_PACKAGE = ROOT / "packages" / "scorer"
+
 
 def load_training_module() -> Any:
     path = Path(__file__).with_name("train-screenreader-model.py")
@@ -30,7 +34,7 @@ def load_training_module() -> Any:
 
 
 def load_scorer_module() -> Any:
-    path = Path(__file__).with_name("score-screenreader-model.py")
+    path = ROOT / "packages" / "scorer" / "python" / "score.py"
     spec = importlib.util.spec_from_file_location("screenreader_scorer", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"could not load scorer helpers from {path}")
@@ -43,9 +47,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", action="append", type=Path)
     parser.add_argument("--training-data", type=Path, default=ROOT / "runs/screenreader-dataset/screenreader-evidence.jsonl")
-    parser.add_argument("--encoder", type=Path, default=ROOT / "models/encoders/all-MiniLM-L6-v2")
-    parser.add_argument("--model", type=Path, default=ROOT / "models/screenreader-scorer", help="scorer directory or model.safetensors path")
-    parser.add_argument("--training-report", type=Path, default=ROOT / "models/screenreader-scorer/training-report.json")
+    parser.add_argument("--encoder", type=Path, default=SCORER_PACKAGE / "models/encoders/all-MiniLM-L6-v2")
+    parser.add_argument("--model", type=Path, default=SCORER_PACKAGE / "models/screenreader-scorer", help="scorer directory or model.safetensors path")
+    parser.add_argument("--training-report", type=Path, default=SCORER_PACKAGE / "models/screenreader-scorer/training-report.json")
     parser.add_argument("--out", type=Path, default=ROOT / "runs/screenreader-acceptance/acceptance-report.json")
     parser.add_argument("--min-positive", type=int, default=3)
     parser.add_argument("--min-clean", type=int, default=3)

@@ -39,6 +39,8 @@
  */
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+
+import { scorerPaths as artefact } from "@a11y-witness/scorer";
 import { fileURLToPath } from "node:url";
 
 import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
@@ -308,28 +310,23 @@ export function findingsFromScores(
 }
 
 /**
- * Where the scorer lives, resolved from THIS MODULE rather than the process cwd.
+ * Where the scorer lives.
  *
- * These two paths were `".venv/bin/python"` and `"scripts/score-screenreader-model.py"`, relative to
- * wherever the process happened to start. That works only when the cwd is the repo root, which it is for
- * `npm run …` and is not for anything else — an installed package, a git worktree, a scheduled task, or
- * simply `cd /tmp && node …`. `PLAN.md`'s M0 names it as one of the two defects that make the current
- * layout impossible to consume.
+ * The SCRIPT path now comes from `@a11y-witness/scorer`, which resolves it from its own module — so this
+ * function no longer has to know the repo layout, and stops being wrong the moment the file moves. The
+ * original defect (PLAN.md M0) was `".venv/bin/python"` and `"scripts/score-screenreader-model.py"`, relative
+ * to wherever the process happened to start: correct for `npm run …` at the repo root and wrong everywhere
+ * else, which is how the DEFAULT judge backend came to be unusable from an installed package.
  *
- * The Python program needs no equivalent fix: it already resolves `ROOT = Path(__file__).parents[1]`, so
- * its `--encoder` and `--model` defaults are correct as soon as the program itself is found.
- *
- * `A11Y_PYTHON` is preserved and still wins, because `action.yml` sets it to a bare `python`: a GitHub
- * Windows runner has no venv, and its packages go to the system interpreter. An absolute path here would
- * have broken the Action.
+ * The INTERPRETER stays here, deliberately. Choosing a Python is the caller's business, not the artefact's,
+ * and `A11Y_PYTHON` must keep winning because `action.yml` sets it to a bare `python`: a GitHub Windows runner
+ * has no venv and installs to the system interpreter, so an absolute path would break the Action.
  */
 export function scorerPaths(): { python: string; script: string } {
-  // ../../ from src/spike/ is the repo root. Kept as one expression so there is a single place to change
-  // if this module moves — which it will, when `@a11y-witness/judge` is extracted (PLAN.md M4).
   const root = fileURLToPath(new URL("../../", import.meta.url));
   return {
     python: process.env.A11Y_PYTHON ?? join(root, ".venv/bin/python"),
-    script: join(root, "scripts/score-screenreader-model.py"),
+    script: artefact().scoreScript,
   };
 }
 

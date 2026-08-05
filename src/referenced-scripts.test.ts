@@ -34,8 +34,15 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 
-/** Anything shaped like a path into `scripts/`, wherever it appears in the file. */
-const SCRIPT_PATH = /scripts\/[A-Za-z0-9._-]+\.(?:mjs|js|ts|py|ps1|sh)/g;
+/**
+ * Anything shaped like a program path, wherever it appears in the file.
+ *
+ * A package's `python` and `bin` directories are in here because M3 moved the scoring program out of
+ * `scripts/` and into `@a11y-witness/scorer`. A `scripts/`-only pattern would then have stopped seeing the
+ * very file this test was written for — the guard would still pass, having quietly narrowed to nothing. That
+ * is the failure mode this suite keeps meeting, so the pattern follows the code.
+ */
+const SCRIPT_PATH = /(?:scripts|packages\/[A-Za-z0-9._-]+\/(?:python|bin))\/[A-Za-z0-9._-]+\.(?:mjs|js|ts|py|ps1|sh)/g;
 
 function referencedScripts(): Map<string, string[]> {
   const sources = ["package.json", "action.yml"];

@@ -13,11 +13,17 @@ runs/
 # Note the shape: `models/*` and not `models/`. Git does not descend into an EXCLUDED DIRECTORY, so a
 # negation under `models/` can never fire and the files could only be added with `git add -f` — which
 # means a future retrain would silently not be committed. Each level has to be re-included in turn.
+# The weights now live in `@a11y-witness/scorer` (PLAN.md M3), so only the ENCODER is ignored — the 27 KB of
+# heads and the training report are tracked, and nothing under `packages/scorer/models` needs re-including
+# level by level because no ancestor is excluded any more. The lesson above still applies to `models/*`
+# below, which is kept because a retrain writes its intermediate output there.
+packages/scorer/models/encoders/
+
+# `npm pack` includes UNTRACKED files, so the encoder sitting inside the package directory would be shipped
+# to every consumer if `packages/scorer/package.json` listed `models` instead of `models/screenreader-scorer`.
+# That is why the allow-list names the subdirectory.
+
 models/*
-!models/screenreader-scorer/
-models/screenreader-scorer/*
-!models/screenreader-scorer/model.safetensors
-!models/screenreader-scorer/training-report.json
 
 # Corpus snapshots (scripts/corpus-snapshot.mjs) — local archives, never committed
 backups/
