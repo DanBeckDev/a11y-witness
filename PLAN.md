@@ -181,15 +181,31 @@ cheaply as possible, and the first step moves no files at all.
   The isolation gate also turned out to handle only LEAF packages: nothing is published,
   so npm could not resolve `@a11y-witness/evidence` for `judge` and failed with E404. It
   now packs the internal closure and installs the tarballs together.
-- [ ] **M5 — Extract `@a11y-witness/nvda-worker`.** The most expensive step, because
-  three things are coupled to its paths: `action.yml`'s
-  `node src/capture/nvda/server.mjs`, and the hashed-file list shared by
-  `deploy-worker.mjs` and `check-worker-code.mjs`. **`CAPTURE_PROTOCOL_VERSION` must
-  not move.** Gates, in order: `npm run evidence:check` reports SAME (a CHANGED
-  result means recapturing 2,122 captures), `npm run capture:check --worker=...`,
-  `npm run worker:code` clean on every guest, `npm run gate:stability` green. Invert
-  `capture-check.mjs`'s dependency on `page-server.mjs` here or earlier — while that
-  cycle exists, this package cannot be published at all.
+- [x] **M5 — Extract `@a11y-witness/nvda-worker`.** DONE (`b03fab1`) at `0.1.0`,
+  AGPL-3.0-or-later, not published. `src/capture/nvda/` retired; `.mjs` ships verbatim so
+  there is no build step. **`CAPTURE_PROTOCOL_VERSION` did not move** — still 4, nothing
+  invalidated. All four gates met, in order:
+
+  | gate | result |
+  |---|---|
+  | `evidence:check` | 44 SAME, 3 CHANGED — all 3 triaged to causes outside M5, then re-verified SAME |
+  | `capture:check --worker=…` | ALL CAPTURE CHECKS PASSED, from the new location |
+  | `worker:code` | matching on both sides (`8498203513af544c`) |
+  | `gate:stability` | **6/6 canaries stable** |
+
+  The cycle inverted by moving the boundary rather than adding machinery: ADR 0004 named
+  one escape, but `capture-check.mjs` and `capture-books.mjs` also serve
+  `src/eval/pages/tutorials`, which makes both LAB harnesses. They are `src/lab/` now and
+  the worker package imports nothing outside itself. Consequence: the worker does **not**
+  ship `a11y-capture-check`, and ADR 0004 records the deviation.
+
+  Two ADR corrections came from contact with reality. **`"os": ["win32"]` is impossible
+  here** — npm applies the platform check to workspace members, so it broke `npm install`
+  on macOS outright, and `publishConfig` cannot add `os` at publish time. And `typecheck`
+  had been **reporting clean over nothing**: ~25 package test files stopped being
+  type-checked as M2–M5 moved them (measured with `tsc --listFiles`: 0 in the program,
+  now 24) — my own regression, introduced in M2 and found in M5.
+
 - [ ] **M6 — Extract `@a11y-witness/worker-fleet`.** Host-side lifecycle, health,
   capacity, and the `doctor`/`worker-ctl`/`deploy`/`compare` bins. Gate:
   `npm run doctor` still reports READY and still names its own fixes.
