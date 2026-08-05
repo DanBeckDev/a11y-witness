@@ -51,7 +51,7 @@ function printFailures(progress) {
 // stored average: capture cost varies with page size and with what else the host is doing.
 function etaMinutes(progress, counts, now) {
   const done = counts.captured + counts.failed + counts.skipped;
-  if (!done || progress.finishedAt) return null;
+  if (!done || progress.finishedAt || isStale(progress, now)) return null;
   const perCase = (now - Date.parse(progress.startedAt)) / done;
   return +(((progress.total - done) * perCase) / 60000).toFixed(1);
 }
@@ -82,7 +82,7 @@ function outcomeExit(progress, counts, now) {
   if (progress.finishedAt) return counts.failed ? EXIT.failures : EXIT.ok;
   if (isStale(progress, now)) {
     console.log("\nWEDGED: no update within one capture timeout plus slack. Check the worker, then");
-    console.log("re-run with --resume to pick up from the captures already on disk.");
+    console.log("re-run with --resume --no-cache to pick up from the captures already on disk.");
     return EXIT.stale;
   }
   return EXIT.ok;
@@ -98,10 +98,16 @@ async function main() {
   }
   const now = Date.now();
   const counts = tally(progress);
+  const stale = isStale(progress, now);
   if (JSON_OUT) {
     const verdict = outcomeExitQuiet(progress, counts, now);
     console.log(JSON.stringify({
-      running: !progress.finishedAt,
+      // An unfinished file is not necessarily a live process. Once the staleness contract says
+      // the run is wedged, reporting `running: true` and an ETA makes automation wait forever or
+      // restart the wrong thing. Keep `finished` implicit for compatibility and expose the real
+      // state directly.
+      running: !progress.finishedAt && !stale,
+      stale,
       total: progress.total,
       captured: counts.captured,
       failed: counts.failed,
@@ -115,8 +121,8 @@ async function main() {
       failures: Object.entries(progress.cases ?? {}).filter(([, c]) => c.status === "failed")
         .map(([id, c]) => ({ id, reason: c.reason })),
       verdict,
-      next_command: verdict === EXIT.failures ? "npm run training:capture -- --resume"
-        : verdict === EXIT.stale ? "npm run doctor && npm run training:capture -- --resume"
+      next_command: verdict === EXIT.failures ? "npm run training:capture -- --resume --no-cache"
+        : verdict === EXIT.stale ? "npm run doctor && npm run training:capture -- --resume --no-cache"
         : progress.finishedAt ? "npm run training:check-signals && npm run training:export"
         : "npm run training:wait",
     }, null, 2));

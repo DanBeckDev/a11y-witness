@@ -84,7 +84,7 @@ It installs Windows, logs in, installs NVDA and starts the worker with no clicki
 
 ```bash
 ./scripts/local-worker/worker-ctl.sh status
-# health:  {"ok":true,"screenReader":"NVDA","busy":false,"code":"<hash of the deployed code>"}
+# health:  includes deployed code plus worker-reported NVDA/Edge/runtime versions
 ```
 
 Full walkthrough, including what to do when a step fails:

@@ -18,6 +18,7 @@ const KNOWN_SIGNALS = new Set([
   "table-unassociated",
   "unnamed-form-field",
   "validation-error-silent",
+  "placeholder-only",
 ]);
 
 function readJson(path) {
@@ -29,6 +30,9 @@ function metadataErrors(testCase) {
   if (!/^\d+\.\d+\.\d+$/.test(testCase.criterion)) errors.push("invalid criterion");
   if (!testCase.task || !testCase.source || !testCase.mutation) errors.push("missing label metadata");
   if (!KNOWN_SIGNALS.has(testCase.badSignal?.type)) errors.push("unknown bad signal");
+  if (testCase.badSignal?.type === "table-unassociated" && testCase.probeTables !== true) {
+    errors.push("table-unassociated requires probeTables");
+  }
   return errors;
 }
 
@@ -58,6 +62,13 @@ function countBy(values) {
   }, {});
 }
 
+function probeName({ probeForms, probeTables }) {
+  const probes = [];
+  if (probeForms) probes.push("interaction");
+  if (probeTables) probes.push("table");
+  return probes.length ? probes.join("+") + "-probe" : "read-through-only";
+}
+
 function buildReport(manifest) {
   const results = EXPECTED_CASES.map((testCase) => ({
     id: testCase.id,
@@ -73,7 +84,7 @@ function buildReport(manifest) {
     families: countBy(EXPECTED_CASES.map(({ family }) => family)),
     criteria: countBy(EXPECTED_CASES.map(({ criterion }) => criterion)),
     signalTypes: countBy(EXPECTED_CASES.map(({ badSignal }) => badSignal.type)),
-    probes: countBy(EXPECTED_CASES.map(({ probeForms }) => (probeForms ? "interaction-probe" : "read-through-only"))),
+    probes: countBy(EXPECTED_CASES.map(probeName)),
     errors,
   };
 }

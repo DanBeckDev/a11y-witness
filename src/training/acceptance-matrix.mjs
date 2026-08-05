@@ -5,6 +5,13 @@
 
 const STYLE = "body{font:16px system-ui,sans-serif;line-height:1.5;max-width:48rem;margin:2rem auto;padding:0 1rem}main{display:grid;gap:1rem}img{display:block;max-width:100%;margin:1rem 0}label{display:block;margin-top:.75rem}.fake-heading{font-size:1.4rem;font-weight:700;margin-top:1rem}.error{color:#9b1c1c}.card{border:1px solid #bbb;padding:1rem}[hidden]{display:none}";
 
+// NVDA speaks image filenames rather than spelling punctuation: "orchard-gate-03.jpg"
+// becomes "orchard-gate-03 dot jpg". Keep acceptance signals aligned with the
+// screen-reader transcript instead of the source attribute spelling.
+function spokenForm(text) {
+  return text.replaceAll("_", "[ _]").replaceAll(".", "(?:\\.| dot )");
+}
+
 function page({ title, heading, body, script = "", landmark = true }) {
   const content = "<h1>" + heading + "</h1>" + body;
   const container = landmark ? "<main>" + content + "</main>" : content;
@@ -13,7 +20,7 @@ function page({ title, heading, body, script = "", landmark = true }) {
     + (script ? "<script>" + script + "</script>" : "") + "</body></html>";
 }
 
-function pair({ id, criterion, subtype, task, mutation, badSignal, good, bad, probeForms = false }) {
+function pair({ id, criterion, subtype, task, mutation, badSignal, good, bad, probeForms = false, probeTables = false }) {
   return {
     id: "acceptance-" + id,
     family: "acceptance-" + id,
@@ -24,13 +31,16 @@ function pair({ id, criterion, subtype, task, mutation, badSignal, good, bad, pr
     mutation,
     badSignal,
     probeForms,
+    probeTables,
     good,
     bad,
   };
 }
 
 function imagePair({ id, title, description, file, goodAlt, badAlt, subtype, task }) {
-  const badName = badAlt === null ? "(?:\\ufffc|to get missing image descriptions)" : badAlt;
+  const badName = badAlt === null
+    ? "(?:\\ufffc|to get missing image descriptions)"
+    : spokenForm(badAlt);
   return pair({
     id,
     criterion: "1.1.1",
@@ -105,6 +115,7 @@ function tablePair({ id, title, destination, task }) {
     task,
     mutation: "Table headers are visible but not associated with data cells.",
     badSignal: { type: "table-unassociated" },
+    probeTables: true,
     good: page({ title, heading: title, body: good }),
     bad: page({ title, heading: title, body: bad }),
   });
@@ -112,8 +123,8 @@ function tablePair({ id, title, destination, task }) {
 
 function errorPair({ id, title, field, submit, task }) {
   const message = "Enter the " + field.toLowerCase() + " before submitting.";
-  const good = "<form id=\"form\"><label for=\"field\">" + field + "</label><input id=\"field\" aria-describedby=\"error\"><button type=\"submit\">" + submit + "</button><p id=\"error\" role=\"alert\" hidden>" + message + "</p></form>";
-  const bad = "<form id=\"form\"><label for=\"field\">" + field + "</label><input id=\"field\"><button type=\"submit\">" + submit + "</button><p class=\"error\" hidden>" + message + "</p></form>";
+  const good = "<form id=\"form\" onsubmit=\"event.preventDefault(); document.querySelector('#field').setAttribute('aria-invalid', 'true'); document.querySelector('#error').hidden = false; document.querySelector('#field').focus();\"><label for=\"field\">" + field + "</label><input id=\"field\" aria-describedby=\"error\"><button type=\"submit\">" + submit + "</button><p id=\"error\" role=\"alert\" hidden>" + message + "</p></form>";
+  const bad = "<form id=\"form\" onsubmit=\"event.preventDefault(); document.querySelector('.error').hidden = false;\"><label for=\"field\">" + field + "</label><input id=\"field\"><button type=\"submit\">" + submit + "</button><p class=\"error\" hidden>" + message + "</p></form>";
   return pair({
     id,
     criterion: "3.3.1",
@@ -122,8 +133,8 @@ function errorPair({ id, title, field, submit, task }) {
     mutation: "The validation message appears visually but is not announced.",
     badSignal: { type: "validation-error-silent", control: submit },
     probeForms: true,
-    good: page({ title, heading: title, body: good, script: "document.querySelector('#form').addEventListener('submit',e=>{e.preventDefault();document.querySelector('#field').setAttribute('aria-invalid','true');document.querySelector('#error').hidden=false;document.querySelector('#field').focus()})" }),
-    bad: page({ title, heading: title, body: bad, script: "document.querySelector('#form').addEventListener('submit',e=>{e.preventDefault();document.querySelector('.error').hidden=false})" }),
+    good: page({ title, heading: title, body: good }),
+    bad: page({ title, heading: title, body: bad }),
   });
 }
 
@@ -139,7 +150,7 @@ function formPair({ id, title, label, name, task, placeholderOnly = false }) {
     task,
     mutation: placeholderOnly ? "The field relies on a placeholder instead of a persistent label." : "The field loses its programmatic label.",
     badSignal: placeholderOnly
-      ? { type: "regex", pattern: "(?:edit text|edit)[, ]*(?:\\ufffc)?\\s*$", flags: "im" }
+      ? { type: "placeholder-only", placeholder: "Example value" }
       : { type: "unnamed-form-field" },
     probeForms: true,
     good: page({ title, heading: title, body: goodBody, script: "document.querySelector('input').focus()" }),
@@ -203,7 +214,15 @@ function statusPair({ id, title, control, task }) {
     mutation: "A result count changes without a live status announcement.",
     badSignal: { type: "form-activation-silent", control, expected: "Showing 2 matching items." },
     probeForms: true,
-    good: page({ title, heading: title, body: body.replace('id="count"', 'id="count" role="status"'), script }),
+    good: page({
+      title,
+      heading: title,
+      body: body.replace(
+        'id="count"',
+        'id="count" role="status" aria-live="polite" aria-atomic="true"',
+      ),
+      script,
+    }),
     bad: page({ title, heading: title, body, script }),
   });
 }

@@ -28,6 +28,7 @@ function buildManifest() {
       subtype: testCase.subtype,
       task: testCase.task,
       probeForms: testCase.probeForms,
+      probeTables: testCase.probeTables,
       source: testCase.source,
       mutation: testCase.mutation,
       badSignal: testCase.badSignal,

@@ -12,6 +12,7 @@ import {
 } from "./capture-decisions.mjs";
 import { beginRun, readProgress } from "./capture-progress.mjs";
 import { cacheDecision, cacheKey, hashPageDir, stampProvenance } from "./capture-cache.mjs";
+import { previouslyCaptured } from "./capture-resume.mjs";
 import { leasePageServer } from "./page-server.mjs";
 
 const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
@@ -146,8 +147,8 @@ function writeCapture(testCase, variant, capture, provenance) {
 // existed: a stray server on port 5050 produced "Capture complete: 3/3 cases" while every
 // transcript read "Error code: 404".
 const SERVE_HINT =
-  "Serve them with: npx serve runs/screenreader-dataset/pages -l 5050 " +
-  "(and check nothing else already holds that port -- a stray server answers 404 for every page).";
+  "The capture command normally leases the page server automatically; check that no other " +
+  `process owns port ${PAGES_PORT} (a stray server can answer 404 for every page).`;
 
 async function pageTitle(url) {
   let response;
@@ -310,10 +311,12 @@ async function workerEnvironment(worker) {
 
 function provenanceFor(ctx, testCase) {
   const pageDir = resolve(PAGE_ROOT, testCase.id);
+  const pageHash = hashPageDir(pageDir);
   const options = captureOptions(testCase);
   const environment = ctx.environment ?? {};
   return {
-    key: cacheKey({ caseId: testCase.id, pageHash: hashPageDir(pageDir), options, environment }),
+    key: cacheKey({ caseId: testCase.id, pageHash, options, environment }),
+    pageHash,
     options,
     environment,
     worker: ctx.worker ?? null,
@@ -366,32 +369,6 @@ async function captureCase(ctx, testCase) {
 // A case counts as done only if the previous run recorded it captured AND both files are
 // still on disk: the progress file and the captures can be deleted independently, and
 // trusting either alone silently skips work that no longer exists.
-function hasUsableCaptureFiles(id) {
-  return ["good", "bad"].every((variant) => {
-    try {
-      const capture = JSON.parse(readFileSync(resolve(CAPTURE_ROOT, id + "." + variant + ".json"), "utf8"));
-      return capture.screenReader === "NVDA" && Array.isArray(capture.transcript) && capture.transcript.length > 0;
-    } catch {
-      return false;
-    }
-  });
-}
-
-function previouslyCaptured(cases) {
-  if (!RESUME) return new Set();
-  if (CACHE) return new Set();
-  const previous = readProgress(ROOT)?.cases ?? {};
-  const allowed = new Set(cases.map(({ id }) => id));
-  const done = new Set(Object.entries(previous)
-    .filter(([id, entry]) =>
-      allowed.has(id) &&
-      (entry.status === "captured" || entry.status === "skipped" ||
-        (entry.status === "failed" && /HTTP 429.*capture is already in progress/i.test(entry.reason || ""))) &&
-      hasUsableCaptureFiles(id))
-    .map(([id]) => id));
-  return done;
-}
-
 function afterRun() {
   const v = process.env.A11Y_VM_AFTER;
   if (!v) return "restore";
@@ -549,7 +526,7 @@ async function captureAll(ctxBase, cases, done) {
   console.log("Capture complete: " + outcome + ".");
   if (failures.length) {
     throw new Error(failures.length + " case(s) failed. The completed captures were kept; " +
-      "see npm run training:status, and re-run with --resume to retry only what is missing.");
+      "see npm run training:status, and re-run with --resume --no-cache to retry only what is missing.");
   }
 }
 
@@ -629,7 +606,7 @@ async function captureWithPool({ baseUrl, progress, pool }, cases, done) {
   console.log("Capture complete: " + outcome + ".");
   if (failures.length) {
     throw new Error(failures.length + " case(s) failed. The completed captures were kept; " +
-      "see npm run training:status, and re-run with --resume to retry only what is missing.");
+      "see npm run training:status, and re-run with --resume --no-cache to retry only what is missing.");
   }
 }
 
@@ -652,7 +629,14 @@ async function main() {
   const cases = ONLY ? manifest.cases.filter(({ id }) => id.includes(ONLY)) : manifest.cases;
   if (!cases.length) throw new Error("No generated case matches --only=" + ONLY);
 
-  const done = previouslyCaptured(cases);
+  const done = previouslyCaptured({
+    cases,
+    previous: readProgress(ROOT),
+    captureRoot: CAPTURE_ROOT,
+    pageRoot: PAGE_ROOT,
+    resume: RESUME,
+    cache: CACHE,
+  });
   if (done.size) console.log("Resuming: " + done.size + " case(s) already captured.");
 
   // The pages are leased like the workers are: started if missing, put back as found. Serving them

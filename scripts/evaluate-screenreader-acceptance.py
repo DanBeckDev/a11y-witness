@@ -29,12 +29,22 @@ def load_training_module() -> Any:
     return module
 
 
+def load_scorer_module() -> Any:
+    path = Path(__file__).with_name("score-screenreader-model.py")
+    spec = importlib.util.spec_from_file_location("screenreader_scorer", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"could not load scorer helpers from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", action="append", type=Path)
     parser.add_argument("--training-data", type=Path, default=ROOT / "runs/screenreader-dataset/screenreader-evidence.jsonl")
     parser.add_argument("--encoder", type=Path, default=ROOT / "models/encoders/all-MiniLM-L6-v2")
-    parser.add_argument("--model", type=Path, default=ROOT / "models/screenreader-scorer/model.safetensors")
+    parser.add_argument("--model", type=Path, default=ROOT / "models/screenreader-scorer", help="scorer directory or model.safetensors path")
     parser.add_argument("--training-report", type=Path, default=ROOT / "models/screenreader-scorer/training-report.json")
     parser.add_argument("--out", type=Path, default=ROOT / "runs/screenreader-acceptance/acceptance-report.json")
     parser.add_argument("--min-positive", type=int, default=3)
@@ -44,6 +54,13 @@ def parse_args() -> argparse.Namespace:
     if not args.data:
         args.data = [ROOT / "runs/screenreader-acceptance/screenreader-evidence.jsonl"]
     return args
+
+
+def model_directory(path: Path) -> Path:
+    """Accept the historical file argument while verifying the complete artifact directory."""
+    if path.is_dir() or path.suffix == "":
+        return path
+    return path.parent
 
 
 def load_records(training: Any, paths: list[Path]) -> list[dict[str, Any]]:
@@ -126,6 +143,12 @@ def eligible_records(criterion: str, criterion_report: dict[str, Any], records: 
     return indices, excluded
 
 
+def model_decision_owner(criterion_report: dict[str, Any]) -> str:
+    # Reports produced before decision ownership was recorded remain learned
+    # scorer reports for backwards compatibility.
+    return criterion_report.get("decisionOwner", "learned-screenreader-scorer")
+
+
 def assert_disjoint(training: Any, acceptance: list[dict[str, Any]], training_data: Path) -> None:
     trained = training.read_records(training_data)
     trained_cases = {record["provenance"].get("caseId") for record in trained}
@@ -139,18 +162,26 @@ def assert_disjoint(training: Any, acceptance: list[dict[str, Any]], training_da
 def main() -> None:
     args = parse_args()
     training = load_training_module()
+    scorer = load_scorer_module()
     records = load_records(training, args.data)
     assert_disjoint(training, records, args.training_data)
-    report = json.loads(args.training_report.read_text(encoding="utf-8"))
-    features, _, _ = training.encode_records(records, args.encoder, args.max_length)
-    from safetensors.torch import load_file
-
-    weights = load_file(str(args.model))
+    report, weights, artifact = scorer.verify_artifact(
+        argparse.Namespace(
+            model=model_directory(args.model),
+            training_report=args.training_report,
+            encoder=args.encoder,
+            allow_ineligible=False,
+        ),
+        training,
+    )
+    max_length = int(report["representation"]["maxLength"])
+    features, _, _ = training.encode_records(records, args.encoder, max_length)
     import torch
 
     result: dict[str, Any] = {
         "schema": "a11y-witness/screenreader-scorer-acceptance",
         "data": [{"path": str(path), "records": len(training.read_records(path))} for path in args.data],
+        "artifact": artifact,
         "criteria": {},
         "stability": {},
         "passed": False,
@@ -158,6 +189,14 @@ def main() -> None:
     }
     scores_by_criterion = {}
     for criterion, criterion_report in report["criteria"].items():
+        owner = model_decision_owner(criterion_report)
+        if owner != "learned-screenreader-scorer":
+            result["criteria"][criterion] = {
+                "decisionOwner": owner,
+                "modelEvaluated": False,
+                "reason": "criterion is evaluated by the authoritative deterministic rule layer",
+            }
+            continue
         included_indices, excluded = eligible_records(criterion, criterion_report, records)
         labels = torch.tensor(
             [criterion in record["target"].get("criteria", []) for record in records], dtype=torch.bool
@@ -204,12 +243,6 @@ def main() -> None:
             result["failureReasons"].append(
                 "capture-to-capture stability FAILED for " + ", ".join(sorted(unstable))
             )
-    result["passed"] = not result["failureReasons"]
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"passed": result["passed"], "failureReasons": result["failureReasons"]}, indent=2))
-    if not result["passed"]:
-        raise SystemExit(1)
     result["passed"] = not result["failureReasons"]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

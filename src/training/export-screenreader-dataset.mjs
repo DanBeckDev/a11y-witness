@@ -5,10 +5,12 @@ import {
   evidenceUnits,
   signalMatches,
 } from "./case-matrix.mjs";
+import { hasUsableCaptureFiles } from "./capture-resume.mjs";
 
 const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
 const MANIFEST_PATH = resolve(ROOT, "manifest.json");
 const CAPTURE_ROOT = resolve(ROOT, process.env.DATASET_CAPTURE_ROOT || "captures");
+const PAGE_ROOT = resolve(ROOT, "pages");
 const DEFAULT_OUTPUT = resolve(ROOT, "screenreader-evidence.jsonl");
 const outputArg = process.argv.find((arg) => arg.startsWith("--out="));
 const OUTPUT_PATH = resolve(process.cwd(), outputArg?.slice("--out=".length) || DEFAULT_OUTPUT);
@@ -59,6 +61,37 @@ function assertModelBoundary(input, caseId) {
   if (leaked.length) throw new Error(caseId + " leaked forbidden model input: " + leaked.join(", "));
 }
 
+function lifecycleProfile(capture) {
+  const nvdaStart = (capture.diagnostics || []).find((event) => event.event === "nvdaStart");
+  return typeof nvdaStart?.reused === "boolean"
+    ? (nvdaStart.reused ? "nvda-reused" : "nvda-fresh")
+    : "unspecified";
+}
+
+function workerEnvironment(capture) {
+  return capture.environment && typeof capture.environment === "object" ? capture.environment : {};
+}
+
+function knownOr(value, fallback) {
+  return value || fallback;
+}
+
+function captureEnvironment(capture) {
+  const worker = workerEnvironment(capture);
+  return {
+    profile: lifecycleProfile(capture),
+    screenReader: knownOr(worker.screenReader, capture.screenReader || "unknown"),
+    screenReaderVersion: knownOr(worker.screenReaderVersion, null),
+    browser: knownOr(worker.browser, null),
+    browserVersion: knownOr(worker.browserVersion, null),
+    guidepupVersion: knownOr(worker.guidepupVersion, null),
+    nodeVersion: knownOr(worker.nodeVersion, null),
+    windowsVersion: knownOr(worker.windowsVersion, null),
+    workerCode: knownOr(worker.workerCode, null),
+    worker: process.env.A11Y_WORKERS || process.env.A11Y_WORKER || "managed-local-vm",
+  };
+}
+
 function record(testCase, variant, capture) {
   const isBad = variant === "bad";
   const subtype = testCase.subtype || testCase.badSignal.type;
@@ -79,6 +112,7 @@ function record(testCase, variant, capture) {
       source: testCase.source,
       mutation: testCase.mutation,
       capturedAt: capture.capturedAt || null,
+      environment: captureEnvironment(capture),
     },
   };
 }
@@ -89,7 +123,9 @@ function exportCases(manifest) {
   for (const testCase of manifest.cases) {
     const good = readCapture(testCase, "good");
     const bad = readCapture(testCase, "bad");
-    const result = validatePair(testCase, good, bad);
+    const result = hasUsableCaptureFiles({ id: testCase.id, captureRoot: CAPTURE_ROOT, pageRoot: PAGE_ROOT })
+      ? validatePair(testCase, good, bad)
+      : { status: "skipped", reason: "capture is missing, empty, or does not match current page/provenance" };
     summary[result.status]++;
     if (result.reason) summary.reasons[result.reason] = (summary.reasons[result.reason] || 0) + 1;
     if (result.status !== "observed") {

@@ -130,9 +130,11 @@ Cheapest first — stop at the first failure.
 
 ```bash
 # 1. is it up?
-curl http://<worker>:8765/health   # -> {"ok":true,"screenReader":"NVDA","busy":false,"code":"<hash>"}
+curl http://<worker>:8765/health   # -> includes code and environment versions
 #   `code` identifies the DEPLOYED code. `npm run worker:code` compares it against your checkout
 #   and exits 1 on a mismatch — the only deploy check that does not go through `utmctl exec`.
+#   `environment` is reported by the worker itself: NVDA, Edge, guidepup, Node, Windows,
+#   and workerCode. Capture responses carry the same object for dataset provenance.
 
 # 2. can it capture at all?
 curl -X POST http://<worker>:8765/capture -H 'content-type: application/json' \

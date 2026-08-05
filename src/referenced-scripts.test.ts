@@ -37,6 +37,24 @@ function referencedScripts(): Map<string, string[]> {
   return found;
 }
 
+/**
+ * Is there a git repository to ask?
+ *
+ * Without this the test reported ALL 17 referenced programs as missing when run from an exported tree with
+ * no `.git` — every `git ls-files` fails, and "the command failed" is indistinguishable from "the file is
+ * untracked". A guard that cries wolf outside a checkout is worse than no guard: it gets deleted. So an
+ * absent repository is reported as SKIPPED, loudly, in the same spirit as `verify.corpus.test.ts` skipping
+ * when the corpus is absent. CI runs `actions/checkout`, which provides `.git`, so the check still runs
+ * exactly where it matters.
+ */
+function insideGitRepo(): boolean {
+  try {
+    return execFileSync("git", ["rev-parse", "--is-inside-work-tree"], { encoding: "utf8" }).trim() === "true";
+  } catch {
+    return false;
+  }
+}
+
 const isTracked = (path: string): boolean => {
   try {
     execFileSync("git", ["ls-files", "--error-unmatch", path], { stdio: "ignore" });
@@ -46,7 +64,11 @@ const isTracked = (path: string): boolean => {
   }
 };
 
-test("every scripts/ program referenced by package.json or action.yml is tracked in git", () => {
+test("every scripts/ program referenced by package.json or action.yml is tracked in git", (t) => {
+  if (!insideGitRepo()) {
+    t.skip("not a git checkout, so tracked-ness cannot be determined here");
+    return;
+  }
   const referenced = referencedScripts();
   // Guard the guard: if the regexes stop matching, this test would pass by examining nothing — the exact
   // failure mode this project keeps meeting. The repo references well over a dozen.
