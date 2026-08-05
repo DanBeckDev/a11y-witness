@@ -135,12 +135,16 @@ cheaply as possible, and the first step moves no files at all.
   `tsconfig.base.json` was omitted from the first commit and every local check passed
   anyway — the clean clone caught it, and the guard is now generalised to *any*
   tsconfig `extends` target being tracked.
-- [ ] **M2 — Extract `@a11y-witness/evidence` and publish `0.1.0`.** The lowest-risk
-  package (two zero-import files plus the criteria list) is deliberately the first
-  thing through the release pipeline: it proves scope reservation, provenance,
-  `publishConfig.access`, the licence split and the isolation gate against a package
-  whose failure costs nothing. Rehearse the release on the package that does not
-  matter.
+- [x] **M2 — Extract `@a11y-witness/evidence`.** DONE (`cf8578d`) at `0.1.0`,
+  Apache-2.0, **not published** — the release is prepared and the decision deferred.
+  Verified in a tree containing only staged content: `npm ci` links the workspace,
+  `prepare` builds `dist`, 365 tests / 0 fail, typecheck clean, gate 1/1, and
+  `npm run eval` through the local judge still reports recall 100% with 0 false
+  positives on conformant pages. The gate **rejected the package three times** first,
+  each a real defect a consumer would have received and none visible from inside the
+  workspace: two wrong field names in the README's own example, and a tarball with no
+  `dist` because `npm pack` does not build. `"prepack": "tsc --build"` is now a
+  documented requirement for every package.
 - [ ] **M3 — Extract `@a11y-witness/scorer`; fix cwd-relative resolution.** Restore
   the scoring program, move the weights and `training-report.json`, add
   `scorerPaths()` resolving from `import.meta.url`, and change `local-judge.ts` to
