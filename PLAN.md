@@ -43,6 +43,126 @@ Real NVDA runs in GitHub Actions (via `guidepup/setup-action`), which makes capt
   **Not verified: the Anthropic judge backend.** This project deliberately has no metered API key (the judge runs via Codex), so `JUDGE_BACKEND=anthropic` is implemented to the SDK spec and unexercised — the same caveat Phase 2 recorded. The first real run of that path will be someone else's CI, which is worth saying out loud rather than discovering. **Marketplace listing is still to do** and needs a tag plus a publisher account.
 - [ ] **Phase 4 (later) — Hosted open-core layer.** Managed capture pool + judge-as-a-service + dashboard, once the Action proves demand.
 
+### Next: a distributable, semantically-versioned multi-package repo (ADRs 0004–0008)
+
+ADR 0003 chose the GitHub Action as the primary distribution vector. That serves CI
+users and nobody else: the repo is one `private: true`, `version: 0.0.0`,
+`noEmit: true` package, so **nothing here can be installed, and therefore nothing
+here can be pinned.** A consumer who wants to score archived captures, or run their
+own worker pool, or write a JAWS backend, has no route in.
+
+The layout below is measured, not assumed. Two findings from the import graph
+overturned the obvious core/workers/model split:
+
+- **`src/capture/verify.ts` and `src/wcag/criteria.ts` have zero imports** and are
+  imported by the CLI, the report, the scan layer, the judge, the eval harness,
+  three files in `src/training/`, and `scripts/evidence-check.mjs`. They are not
+  capture code — they are the **shared evidence contract**, and their location under
+  `src/capture/` is the only thing that makes a three-way split look workable.
+- **Worker and fleet have different operating systems.** Everything in
+  `src/capture/nvda/` imports only node builtins, guidepup and its own siblings;
+  everything host-side (`local-vm`, `worker-health`, `host-capacity`, `doctor`,
+  `worker-ctl`) never imports guidepup. `action.yml` proves the split is real: on a
+  Windows runner it starts `server.mjs` directly with no VM, no `utmctl`, no pool.
+
+Also: **`src/spike/` is the production judging engine**, not spike code. Only three
+of its files are harnesses.
+
+| package | licence | runs on | separate because |
+|---|---|---|---|
+| `@a11y-witness/evidence` | Apache-2.0 | anywhere | zero deps; all an alternative capture backend needs |
+| `@a11y-witness/scorer` | AGPL | host + Python | the weights are the API — a retrain is a major |
+| `@a11y-witness/judge` | AGPL | anywhere | score an archived capture with no worker at all |
+| `@a11y-witness/nvda-worker` | AGPL | **win32** | a GitHub Windows runner needs this and nothing else |
+| `@a11y-witness/worker-fleet` | AGPL | macOS/Linux | `doctor`/`worker-ctl` run where there is no NVDA |
+| `a11y-witness` | AGPL | host | the front door; carries axe/playwright optionals |
+| `@a11y-witness/lab` | AGPL, **unpublished** | host | our corpus, gates, dataset pipeline and eval fixtures |
+
+npm workspaces (pnpm's `workspace:` protocol is rejected by npm 11.5.1 with
+`EUNSUPPORTEDPROTOCOL` — measured), inter-package deps as published semver ranges,
+`tsc --build` with project references so the dependency graph is compiler-enforced,
+`.mjs` shipped verbatim, Changesets for independent per-package semver. ADRs 0004
+(boundaries and public API), 0005 (tooling and build), 0006 (naming, registry,
+licensing), 0007 (versioning and release), 0008 (what stays internal).
+`docs/glossary.md` pins the new vocabulary — in particular **scorer** (the trained
+model, which produces numbers) versus **judge** (the layer that turns numbers plus
+rules into findings), because conflating them makes "the model changed" and "the
+thresholds changed" the same sentence when they need different version bumps.
+
+#### Migration order — riskiest assumption first, and it is not a file move
+
+The whole plan rests on one unproven claim: **that a consumer can install and run one
+package in isolation.** Every step below is ordered to test that as early and as
+cheaply as possible, and the first step moves no files at all.
+
+- [ ] **M0 — Prove isolation before restructuring anything.** `npm pack` the current
+  repo, install the tarball into an empty directory **outside** the repo, and try two
+  things: score one committed eval fixture, and serve `/health` from the worker on a
+  Windows runner. This is a throwaway spike, and it is expected to **fail** — the
+  point is to enumerate exactly how.
+
+  Two failures are already known from reading the code and must be confirmed here:
+  `local-judge.ts:311-312` resolves the scorer as `".venv/bin/python"` and
+  `"scripts/score-screenreader-model.py"`, both relative to the process cwd, which is
+  never the repo root for an installed package; and
+  **`scripts/score-screenreader-model.py` does not exist on `main`** — verified with
+  `git cat-file -e main:scripts/score-screenreader-model.py`, which fails. It survives
+  only in unreachable `kanban checkpoint` commits, so the default judge backend
+  cannot run from a clean checkout today. Restoring it is a prerequisite for M3, and
+  it is a real defect independent of packaging.
+
+  If M0 finds that isolation is structurally impossible for the judge path (e.g. the
+  87 MB encoder cannot be fetched without our credentials), the scorer-as-npm-package
+  decision in ADR 0004 needs revisiting **before** any file moves.
+- [ ] **M1 — Workspace scaffolding, zero moves.** Root becomes a workspace root;
+  `packages/` exists; `tsc --build` with project references and `composite: true`;
+  the isolation gate is scripted and, per this repo's rule, **shown to fail** on a
+  package with a deliberately omitted dependency and one with a truncated `"files"`.
+  Nothing is published. Nothing has moved, so nothing can have broken.
+- [ ] **M2 — Extract `@a11y-witness/evidence` and publish `0.1.0`.** The lowest-risk
+  package (two zero-import files plus the criteria list) is deliberately the first
+  thing through the release pipeline: it proves scope reservation, provenance,
+  `publishConfig.access`, the licence split and the isolation gate against a package
+  whose failure costs nothing. Rehearse the release on the package that does not
+  matter.
+- [ ] **M3 — Extract `@a11y-witness/scorer`; fix cwd-relative resolution.** Restore
+  the scoring program, move the weights and `training-report.json`, add
+  `scorerPaths()` resolving from `import.meta.url`, and change `local-judge.ts` to
+  call it. Closes the M0 defect. Gate: `npm run eval` unchanged against the local
+  backend.
+- [ ] **M4 — Extract `@a11y-witness/judge`.** Move `judge`/`local-judge`/`rules`/
+  `layers`/`verify-gate` out of `src/spike/`, retire the misleading directory name,
+  and draw the `./internal` subpath so `lab` can drive the real gates. Gate:
+  `npm run eval` and `npm run rules:gate` unchanged.
+- [ ] **M5 — Extract `@a11y-witness/nvda-worker`.** The most expensive step, because
+  three things are coupled to its paths: `action.yml`'s
+  `node src/capture/nvda/server.mjs`, and the hashed-file list shared by
+  `deploy-worker.mjs` and `check-worker-code.mjs`. **`CAPTURE_PROTOCOL_VERSION` must
+  not move.** Gates, in order: `npm run evidence:check` reports SAME (a CHANGED
+  result means recapturing 2,122 captures), `npm run capture:check --worker=...`,
+  `npm run worker:code` clean on every guest, `npm run gate:stability` green. Invert
+  `capture-check.mjs`'s dependency on `page-server.mjs` here or earlier — while that
+  cycle exists, this package cannot be published at all.
+- [ ] **M6 — Extract `@a11y-witness/worker-fleet`.** Host-side lifecycle, health,
+  capacity, and the `doctor`/`worker-ctl`/`deploy`/`compare` bins. Gate:
+  `npm run doctor` still reports READY and still names its own fixes.
+- [ ] **M7 — Extract `a11y-witness` (the CLI).** `cli.ts`, `report.ts`, `scan/*`, and
+  `src/action/` as a private module. Gate: a real end-to-end run against a live
+  worker, plus `--json` and `--no-axe` behaving as ADR 0003 Phase 3 recorded.
+- [ ] **M8 — Collapse the remainder into `@a11y-witness/lab`.** Eval, training,
+  gates, the three judge harnesses, the Python analysis programs. Gate: `npm test`,
+  `verify.corpus.test.ts` and `npm run release:gate` all green from the new layout.
+- [ ] **M9 — `1.0.0` across the board, once an external consumer has used the APIs.**
+  Everything stays `0.x` until then, deliberately: `0.x` makes a wrong boundary cheap
+  to correct, and publishing `1.0.0` before anyone has consumed the API converts a
+  guess into a promise.
+
+Ordering rationale: M0 tests the assumption that could invalidate the design; M1
+adds enforcement before anything can drift; M2–M4 walk up the dependency graph from
+the leaf, so each step's consumers are already extracted and every gate is a
+same-result comparison rather than a judgement call; M5 is deferred until the release
+machinery is proven because it is the step that can cost hours of worker time.
+
 ### NVDA correctness audit (`docs/nvda-correctness-audit.md`)
 
 Systematic review of the capture worker against the official NVDA user guide (four parallel dimension reviews, re-verified on the live worker). **Verdict: no incorrect or unsafe usage.** A follow-on three-whys root-cause pass then fixed the recurring *capture* issues at their roots:
@@ -579,6 +699,10 @@ VoiceOver capture was deferred: macOS AppleScript automation is fragile and depr
 - [ ] Portable control plane (container) that dispatches to capture workers and runs the judge. Judge made provider-pluggable (Codex CLI / OpenAI / Anthropic / local) so others are not tied to one account.
 - [ ] Make the NVDA worker reproducible and usable by others (per ADR 0001): a one-command PowerShell bootstrap for any Windows box, and a GitHub Actions `windows-latest` job so contributors run the full pipeline with zero infra.
 - [ ] Repo polish: examples, contribution guide, basic CI (typecheck and lint).
+- [ ] **Installable, independently versioned packages** so adoption is per-module
+  rather than all-or-nothing and consumers can pin what they trust: ADRs 0004–0008
+  and the M0–M9 migration order above. This is the other half of ADR 0003's
+  distribution story — the Action serves CI; packages serve everyone else.
 - [ ] First launch artifact / blog post (this is the content roadmap's first concrete deliverable).
 
 ### M2 — Trust layer (the moat)
@@ -609,4 +733,20 @@ NVDA on Windows is the primary backend, proven in M0 and productionised in M1. M
 - **Trustworthiness of AI judgment.** The make-or-break. M0 decides it.
 - **JAWS automation difficulty.** Commercial and awkward to drive; budget time for it.
 - **Representative coverage.** Most desktop screen-reader users are on Windows (NVDA and JAWS), so we lead with NVDA. VoiceOver (Mac and iOS) and Orca (Linux) follow behind the same interface; broad coverage is required for credibility, not optional.
+- **The default judge backend does not run from a clean checkout.**
+  `scripts/score-screenreader-model.py` is absent from `main` (verified: `git cat-file
+  -e main:scripts/score-screenreader-model.py` fails) yet is the documented default in
+  `local-judge.ts` and behind three npm scripts. It survives only in unreachable
+  `kanban checkpoint` commits. Anyone cloning this repo cannot run the local judge,
+  and `@a11y-witness/scorer` cannot be built until it is restored. See M0.
+- **AGPL on published libraries will deter some adopters**, which pulls directly
+  against the adoption goal. ADR 0006 resolves it by keeping the engine AGPL and
+  licensing the contracts package Apache-2.0, so third-party capture backends are
+  legally writable. That split is effectively irreversible and needs an explicit
+  sign-off before the first publish.
+- **Packaging can silently change the evidence.** Moving the worker touches
+  `action.yml`'s hardcoded server path and the hashed-file list that
+  `deploy-worker.mjs` and `check-worker-code.mjs` share — the mechanism that once had
+  two guests serving stale code for an hour. `evidence:check` reporting SAME is the
+  gate; a CHANGED result costs a 2,122-capture recapture.
 - **Capture is OS-bound.** No single portable container runs the whole product; capture workers live where the operating system allows (Windows for NVDA, a Mac for VoiceOver). The portable core hides this from users, but it shapes the infrastructure. See ADR 0001.
