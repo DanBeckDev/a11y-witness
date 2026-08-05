@@ -16,8 +16,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { CapturedAnnouncements } from "./verify.js";
-import { captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle, titleOf } from "./verify.js";
+import type { CapturedAnnouncements } from "@a11y-witness/evidence/verify";
+import { captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle, titleOf } from "@a11y-witness/evidence/verify";
 
 const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT ?? "runs/screenreader-dataset");
 const MANIFEST = resolve(ROOT, "manifest.json");

@@ -3,7 +3,7 @@
 //   npm run evidence:check -- <worker-url> [--sample=24] [--only=family]
 //
 // Runs under tsx, not plain node: it applies the pipeline's own verification gates, which live in
-// TypeScript (src/capture/verify.ts). Same reason capture-screenreader-dataset.mjs does.
+// TypeScript (@a11y-witness/evidence/verify). Same reason capture-screenreader-dataset.mjs does.
 //
 // Prints a per-case verdict and one recommendation: ship without invalidating the cache, or bump
 // CAPTURE_PROTOCOL_VERSION and recapture. See src/capture/evidence-diff.mjs for why this exists --
@@ -19,7 +19,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { compareCapture, readCapture, summarise } from "../src/capture/evidence-diff.mjs";
 import { isEvidence } from "../src/training/capture-decisions.mjs";
-import { titleOf } from "../src/capture/verify.js";
+import { titleOf } from "@a11y-witness/evidence/verify";
 import { leasePageServer } from "../src/training/page-server.mjs";
 
 const DATASET = resolve(process.cwd(), "runs/screenreader-dataset");

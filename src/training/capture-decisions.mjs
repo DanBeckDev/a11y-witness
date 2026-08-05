@@ -10,7 +10,7 @@
 //
 // They are pure functions of their inputs, so they can be tested without a worker, a VM or a
 // network — which is the whole point of moving them out of a 650-line orchestrator.
-import { captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle } from "../capture/verify.js";
+import { captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle } from "@a11y-witness/evidence/verify";
 import { assessWorker } from "../capture/worker-health.mjs";
 
 /** How much of a rejected transcript to quote back. Enough to recognise the wrong page, not a dump. */

@@ -1,0 +1,49 @@
+{
+  "name": "@a11y-witness/evidence",
+  "version": "0.1.0",
+  "description": "The shared evidence contract for screen-reader accessibility captures: wire types, pure verification predicates, and the WCAG 2.2 AA criteria list. Zero dependencies, no I/O.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./verify": {
+      "types": "./dist/verify.d.ts",
+      "default": "./dist/verify.js"
+    },
+    "./wcag": {
+      "types": "./dist/wcag.d.ts",
+      "default": "./dist/wcag.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DanBeckDev/a11y-witness.git",
+    "directory": "packages/evidence"
+  },
+  "keywords": [
+    "accessibility",
+    "a11y",
+    "wcag",
+    "screen-reader",
+    "nvda"
+  ],
+  "scripts": {
+    "prepack": "tsc --build",
+    "prepare": "tsc --build"
+  }
+}

@@ -16,7 +16,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { titleOf } from "../capture/verify.js";
+import { titleOf } from "@a11y-witness/evidence/verify";
 
 const TITLE_TIMEOUT_MS = 10_000;
 

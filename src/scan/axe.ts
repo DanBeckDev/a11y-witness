@@ -5,7 +5,7 @@
  * read-through cannot perceive. It complements the lived-experience judge; it
  * does not replace it.
  *
- * Scoped to WCAG A/AA to match src/wcag/criteria.ts and the legal baseline.
+ * Scoped to WCAG A/AA to match @a11y-witness/evidence/wcag and the legal baseline.
  *
  * OPTIONAL. Playwright and @axe-core/playwright are optionalDependencies: the layer is
  * ~100 lines and about a second of wall-clock, but it pulls half a gigabyte of Chromium,

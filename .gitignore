@@ -25,3 +25,7 @@ backups/
 # tsc --build output from the project-reference fixtures (src/packaging/project-references.test.ts)
 scripts/tsconfig-fixtures/*/dist/
 scripts/tsconfig-fixtures/*/tsconfig.tsbuildinfo
+
+# Package build output (npm run build)
+packages/*/dist/
+packages/*/tsconfig.tsbuildinfo

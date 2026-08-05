@@ -41,7 +41,7 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { WCAG_22_AA } from "../wcag/criteria.js";
+import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
 import type { Judgment, Finding, Severity } from "./judge.js";
 
 /** Shape of what the scorer prints. */
