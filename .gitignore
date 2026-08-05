@@ -21,3 +21,7 @@ models/screenreader-scorer/*
 
 # Corpus snapshots (scripts/corpus-snapshot.mjs) — local archives, never committed
 backups/
+
+# tsc --build output from the project-reference fixtures (src/packaging/project-references.test.ts)
+scripts/tsconfig-fixtures/*/dist/
+scripts/tsconfig-fixtures/*/tsconfig.tsbuildinfo
