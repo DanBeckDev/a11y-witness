@@ -12,7 +12,7 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import { dedupeKey } from "./capture-core.mjs";
+import { dedupeKey } from "./capture-pure.mjs";
 
 test("a space-separated container prefix is stripped", () => {
   assert.equal(

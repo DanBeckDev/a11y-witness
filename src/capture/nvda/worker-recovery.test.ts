@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isLocallyRecoverable } from "./worker-recovery.mjs";
 import { captureFault, FAULT } from "./capture-faults.mjs";
-import { failIfScreenReaderIsMute } from "./capture-core.mjs";
+import { failIfScreenReaderIsMute } from "./capture-pure.mjs";
 
 /** The shape capture-core's diagnostics have, with only what this gate reads. */
 const diagnostics = (lastSpoken: string | undefined) => ({

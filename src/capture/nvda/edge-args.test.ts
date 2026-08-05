@@ -3,7 +3,7 @@
 // two guests and 0 on a third for weeks, and nothing noticed.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { edgeArgsForTest as edgeArgs } from "./capture-core.mjs";
+import { edgeArgs } from "./capture-pure.mjs";
 
 const args = () => edgeArgs("http://pages/case/good");
 
