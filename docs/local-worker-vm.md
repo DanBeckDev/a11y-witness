@@ -406,7 +406,7 @@ manages the VM itself:
 ```bash
 npm run witness -- https://example.com --task "Find the contact details"
 # Local worker VM 'a11y-worker' is stopped; bringing it up ...
-#   ready after 12s: {"ok":true,"screenReader":"NVDA","busy":false,"code":"<deployed code hash>"}
+#   ready after 12s: health includes the deployed code and worker-reported runtime versions
 # ... report ...
 # Shutting down the local worker VM ...
 ```
@@ -503,6 +503,26 @@ unreachable for a minute while its scheduled task comes back. It is the same sin
 resource problem as running `capture-check` against a live worker. Before concluding the guest
 is broken, check nothing else is mid-operation on it; `worker-ctl.sh status` is the cheap way
 to ask.
+
+### Bundles exist but `utmctl list` is empty
+
+This is different from a stopped pool. If the `a11y-worker*.utm` directories are present but
+`utmctl list` prints only its header, the guests are intact but UTM has lost their registrations.
+Do not run `create-utm-vm.sh`, clone a replacement, or delete anything. UTM's AppleScript
+interface can import an existing bundle without recreating the guest:
+
+```bash
+osascript \
+  -e 'tell application "UTM"' \
+  -e 'import virtual machine from file (POSIX file "/path/to/a11y-worker.utm")' \
+  -e 'end tell'
+```
+
+Repeat for `a11y-worker-2.utm` and `a11y-worker-3.utm`, then verify with `utmctl list` and
+`./scripts/local-worker/worker-ctl.sh pool`. Some UTM versions show a security confirmation
+when an imported bundle contains custom arguments; an operator must approve that prompt in
+UTM before the AppleScript call returns. The repository deliberately does not bypass that
+confirmation or edit UTM's private registry while the app is running.
 
 ### Never `utmctl delete` a VM whose name appears twice
 

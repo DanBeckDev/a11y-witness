@@ -21,10 +21,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { signalMatches } from "./case-matrix.mjs";
+import { hasUsableCaptureFiles } from "./capture-resume.mjs";
 
 const ROOT = resolve(process.cwd(), process.env.DATASET_ROOT || "runs/screenreader-dataset");
 const MANIFEST_PATH = resolve(ROOT, "manifest.json");
 const CAPTURE_ROOT = resolve(ROOT, process.env.DATASET_CAPTURE_ROOT || "captures");
+const PAGE_ROOT = resolve(ROOT, "pages");
 const ONLY = process.argv.find((a) => a.startsWith("--only="))?.slice("--only=".length);
 const EVIDENCE_LINES = 4;
 
@@ -67,6 +69,9 @@ function checkCase(testCase) {
   const good = readCapture(testCase.id, "good");
   const bad = readCapture(testCase.id, "bad");
   if (!good || !bad) return { id: testCase.id, verdict: "NO CAPTURES" };
+  if (!hasUsableCaptureFiles({ id: testCase.id, captureRoot: CAPTURE_ROOT, pageRoot: PAGE_ROOT })) {
+    return { id: testCase.id, verdict: "STALE CAPTURES" };
+  }
 
   const firesOnBad = signalMatches(bad, testCase.badSignal);
   const firesOnGood = signalMatches(good, testCase.badSignal);
@@ -85,6 +90,10 @@ function report(result, testCase) {
   if (result.verdict === "NO CAPTURES") {
     console.log(`  NO CAPTURES   ${result.id}  (nothing to check — capture it first)`);
     return 0;
+  }
+  if (result.verdict === "STALE CAPTURES") {
+    console.log(`  STALE CAPTURES ${result.id}  (recapture after the page or worker identity changed)`);
+    return 1;
   }
   console.log(`  ${result.verdict.padEnd(13)} ${result.id}  [${describeSignal(testCase.badSignal)}]`);
   if (result.verdict === "CONTAMINATED") {
@@ -110,7 +119,7 @@ if (!cases.length) {
 
 console.log(`Checking ${cases.length} signal(s) against captures in ${CAPTURE_ROOT}\n`);
 let failures = 0;
-const counts = { OK: 0, BLIND: 0, CONTAMINATED: 0, "NO CAPTURES": 0 };
+const counts = { OK: 0, BLIND: 0, CONTAMINATED: 0, "NO CAPTURES": 0, "STALE CAPTURES": 0 };
 for (const testCase of cases) {
   const result = checkCase(testCase);
   counts[result.verdict] += 1;
@@ -119,6 +128,6 @@ for (const testCase of cases) {
 
 console.log(
   `\n${counts.OK} discriminating, ${counts.BLIND} blind, ${counts.CONTAMINATED} contaminated, ` +
-    `${counts["NO CAPTURES"]} uncaptured`
+    `${counts["NO CAPTURES"]} uncaptured, ${counts["STALE CAPTURES"]} stale`
 );
 process.exit(failures === 0 ? 0 : 1);

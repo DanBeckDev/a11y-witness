@@ -28,11 +28,28 @@ VALIDATION_RATIO = 0.15
 DEFAULT_EPOCHS = 250
 CALIBRATION_FOLDS = 5
 ENGINEERED_FEATURE_SCALE = 4.0
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v1"
+ENGINEERED_FEATURE_MULTIPLIERS = {
+    # This is an explicit relation in the NVDA evidence, not an embedding
+    # guess. Give it enough representation strength to survive surrounding
+    # prose that can otherwise make a generic link look semantically specific.
+    "vague_link_present": 2.0,
+    "form_field_unnamed": 3.0,
+    # Acceptance evidence includes headings whose generic name is announced
+    # correctly by NVDA. This relation is useful for 2.4.6, but the frozen
+    # text embedding can dilute it among otherwise descriptive page context.
+    "generic_heading_present": 2.0,
+    # A named field is direct counter-evidence for the unnamed-field subtype;
+    # strengthen that explicit screen-reader relation so prose around the
+    # field cannot turn a conforming field into a violation prediction.
+    "form_field_named": 2.0,
+}
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v4"
+RULE_OWNED_CRITERIA = frozenset({"1.1.1", "4.1.2"})
 
 FEATURE_NAMES = (
     "transcript_present",
     "heading_present",
+    "plain_heading_candidate_present",
     "landmark_present",
     "landmark_named",
     "form_field_present",
@@ -50,8 +67,10 @@ FEATURE_NAMES = (
     "form_change_present",
     "form_change_nonempty",
     "form_change_empty",
+    "status_update_announced",
     "post_submit_present",
     "validation_error_announced",
+    "validation_error_missing",
     "generic_heading_present",
     "vague_link_present",
     "generic_graphic_present",
@@ -60,7 +79,7 @@ FEATURE_NAMES = (
 )
 
 LEADING_ROLE = re.compile(
-    r"^(edit(?:\s+text)?|button|checkbox|radio|combo\s*box|list\s*box|slider|spin\s*button)\b",
+    r"^(?:\uFFFC\s*,\s*)?(edit(?:\s+text)?|button|checkbox|radio|combo\s*box|list\s*box|slider|spin\s*button)\b",
     re.IGNORECASE,
 )
 LANDMARK_ROLES = {
@@ -73,10 +92,15 @@ LANDMARK_ROLES = {
     "search",
 }
 STATE_WORD = re.compile(r"\b(expanded|collapsed|open|closed|pressed|checked)\b", re.IGNORECASE)
+HEADING_ANNOUNCEMENT = re.compile(r"^heading\s*,\s*level\s+\d+\b", re.IGNORECASE)
 TABLE_DATA_ROW = re.compile(r"\brow\s+(?!1\b)(?P<row>\d+)\b(?P<between>.*?)\bcolumn\b", re.IGNORECASE)
+TABLE_ASSOCIATED_CELL = re.compile(r"^.+,\s*column\s+\d+\b", re.IGNORECASE)
+TABLE_POSITION_ONLY_CELL = re.compile(r"^column\s+\d+\b", re.IGNORECASE)
 TABLE_WORD = re.compile(r"\btable\b", re.IGNORECASE)
 ROW_WORD = re.compile(r"\brow\b", re.IGNORECASE)
 ERROR_WORD = re.compile(r"invalid|\berror\b", re.IGNORECASE)
+STATUS_UPDATE = re.compile(r"^(?:showing|displaying|updated|loaded|filtered)\b", re.IGNORECASE)
+FORM_FIELD_ROLE = re.compile(r"\b(?:edit(?:\s+text)?|combo\s*box|list\s*box|checkbox|radio|spin\s*button)\b", re.IGNORECASE)
 GENERIC_HEADINGS = {"welcome", "overview", "stuff", "things", "information", "notes", "options", "updates", "more", "section", "introduction", "help", "miscellaneous", "details", "next"}
 VAGUE_LINKS = {"read more", "learn more", "click here", "here", "this", "that", "details", "more", "go", "info"}
 GENERIC_GRAPHICS = {"photo", "image", "graphic", "picture"}
@@ -151,6 +175,24 @@ def heading_name(value: str) -> str:
     return value.split(", heading", 1)[0].strip().lower()
 
 
+def plain_heading_candidate(value: str, following_value: str) -> bool:
+    """Find a likely spoken section title that has no heading announcement.
+
+    This is intentionally a weak, screen-reader-only relation. It does not
+    infer a heading from HTML or visual styling; it only notices the common
+    transcript pattern of a short, punctuation-free line followed by prose.
+    The model learns whether that relation is predictive for the criterion.
+    """
+    candidate = value.strip()
+    following = following_value.strip()
+    if not candidate or not following or HEADING_ANNOUNCEMENT.match(candidate):
+        return False
+    if candidate[-1:] in ".,;:!?" or not re.search(r"[.!?]$", following):
+        return False
+    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9'’-]*", candidate)
+    return 1 <= len(words) <= 8
+
+
 def link_name(value: str) -> str:
     match = re.match(r"link\s*,\s*(.*)$", value.strip(), re.IGNORECASE)
     return match.group(1).strip().lower() if match else ""
@@ -171,6 +213,7 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     headings = structure.get("headings") or []
     landmarks = structure.get("landmarks") or []
     form_fields = structure.get("formFields") or []
+    table_cells = [value for value in structure.get("tableCells") or [] if isinstance(value, str)]
     controls = interaction.get("controls") or []
     state_changes = interaction.get("stateChanges") or []
     form_changes = interaction.get("formChanges") or []
@@ -178,6 +221,12 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
 
     values["transcript_present"] = float(bool(transcript))
     values["heading_present"] = float(bool(headings))
+    values["plain_heading_candidate_present"] = float(
+        any(
+            plain_heading_candidate(value, transcript[index + 1])
+            for index, value in enumerate(transcript[:-1])
+        )
+    )
     values["landmark_present"] = float(bool(landmarks))
     values["landmark_named"] = float(any(named_landmark(value) for value in landmarks))
     values["form_field_present"] = float(bool(form_fields))
@@ -186,14 +235,19 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     values["bare_edit_present"] = float(any(value.strip().lower() in {"edit", "edit text"} for value in all_evidence(record)))
     values["control_present"] = float(bool(controls))
 
-    table_evidence = [value for value in all_evidence(record) if TABLE_WORD.search(value) or ROW_WORD.search(value)]
+    table_evidence = [
+        value for value in all_evidence(record)
+        if TABLE_WORD.search(value) or ROW_WORD.search(value)
+    ] + table_cells
     data_rows = [match for value in table_evidence for match in TABLE_DATA_ROW.finditer(value)]
     associated_rows = [match for match in data_rows if match.group("between").strip(" ,")]
     position_only_rows = [match for match in data_rows if not match.group("between").strip(" ,")]
-    values["table_present"] = float(any(TABLE_WORD.search(value) for value in table_evidence))
-    values["table_data_row_present"] = float(bool(data_rows))
-    values["table_header_associated"] = float(bool(associated_rows))
-    values["table_position_only"] = float(bool(position_only_rows))
+    associated_cells = [value for value in table_cells if TABLE_ASSOCIATED_CELL.search(value.strip())]
+    position_only_cells = [value for value in table_cells if TABLE_POSITION_ONLY_CELL.search(value.strip())]
+    values["table_present"] = float(bool(table_cells) or any(TABLE_WORD.search(value) for value in table_evidence))
+    values["table_data_row_present"] = float(bool(data_rows) or bool(table_cells))
+    values["table_header_associated"] = float(bool(associated_rows) or bool(associated_cells))
+    values["table_position_only"] = float(bool(position_only_rows) or bool(position_only_cells))
 
     values["state_change_present"] = float(bool(state_changes))
     state_pairs = [
@@ -206,10 +260,18 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     values["form_change_present"] = float(bool(form_changes))
     values["form_change_nonempty"] = float(any(change.get("after", "").strip() for change in form_changes))
     values["form_change_empty"] = float(any(not change.get("after", "").strip() for change in form_changes))
+    values["status_update_announced"] = float(
+        any(STATUS_UPDATE.match(change.get("after", "").strip()) for change in form_changes)
+    )
     values["post_submit_present"] = float(bool(post_submit_fields))
     values["validation_error_announced"] = float(
         any(ERROR_WORD.search(value) for value in post_submit_fields)
         or any(ERROR_WORD.search(change.get("after", "")) for change in form_changes)
+    )
+    values["validation_error_missing"] = float(
+        any(FORM_FIELD_ROLE.search(value) for value in post_submit_fields)
+        and any(not change.get("after", "").strip() for change in form_changes)
+        and not values["validation_error_announced"]
     )
     values["generic_heading_present"] = float(
         any(heading_name(value) in GENERIC_HEADINGS for value in headings)
@@ -228,10 +290,15 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
 def structured_features(records: list[dict[str, Any]]) -> Any:
     import torch
 
-    return torch.tensor(
+    feature_tensor = torch.tensor(
         [[values[name] for name in FEATURE_NAMES] for values in map(structured_feature_values, records)],
         dtype=torch.float32,
-    ) * ENGINEERED_FEATURE_SCALE
+    )
+    multipliers = torch.tensor(
+        [ENGINEERED_FEATURE_MULTIPLIERS.get(name, 1.0) for name in FEATURE_NAMES],
+        dtype=torch.float32,
+    )
+    return feature_tensor * ENGINEERED_FEATURE_SCALE * multipliers
 
 
 def assert_encoder(root: Path) -> Path:
@@ -368,7 +435,13 @@ def choose_threshold(scores: Any, labels: Any) -> float:
         result = metrics(scores, labels, threshold)
         if result["falsePositive"] == 0:
             valid.append((result["f1"], threshold))
-    return max(valid)[1] if valid else 0.5
+    if not valid:
+        return 0.5
+    # Once the zero-false-positive guard is satisfied, prefer the lowest
+    # threshold among equal-F1 candidates. That preserves recall and follows
+    # the model's accessibility safety objective rather than adding a second,
+    # undocumented conservatism bias through tuple ordering.
+    return max(valid, key=lambda item: (item[0], -item[1]))[1]
 
 
 def train_head(features: Any, labels: Any, epochs: int) -> tuple[Any, Any]:
@@ -424,7 +497,9 @@ def main() -> None:
             "embeddingSize": dimension,
             "structuredFeatureSize": structured_dimension,
             "structuredFeatureScale": ENGINEERED_FEATURE_SCALE,
+            "structuredFeatureMultipliers": ENGINEERED_FEATURE_MULTIPLIERS,
             "structuredFeatures": list(FEATURE_NAMES),
+            "maxLength": args.max_length,
         },
         "dataset": {"path": str(args.data), "sha256": sha256(args.data), "records": len(records)},
         "split": {split: len(indices) for split, indices in split_indices.items()},
@@ -435,6 +510,7 @@ def main() -> None:
         },
         "criteria": {},
         "releaseEligible": True,
+        "modelReleaseEligible": True,
         "warnings": [],
     }
     for criterion in criteria:
@@ -452,7 +528,9 @@ def main() -> None:
             )
             subtype_development_labels = subtype_labels[development_indices]
             if int(subtype_development_labels.sum()) < 20:
-                report["releaseEligible"] = False
+                report["modelReleaseEligible"] = False
+                if criterion not in RULE_OWNED_CRITERIA:
+                    report["releaseEligible"] = False
                 report["warnings"].append(f"{subtype}: fewer than 20 positive development records")
             oof_scores = out_of_fold_scores(
                 features,
@@ -476,6 +554,7 @@ def main() -> None:
         criterion_final_scores = torch.stack(subtype_final_scores).amax(dim=0)
         threshold = choose_threshold(criterion_oof_scores[development_indices], criterion_labels[development_indices])
         criterion_report = {
+            "decisionOwner": "deterministic-rules" if criterion in RULE_OWNED_CRITERIA else "learned-screenreader-scorer",
             "threshold": threshold,
             "subtypes": subtype_report,
             "calibration": metrics(
@@ -487,12 +566,16 @@ def main() -> None:
         for split, indices in split_indices.items():
             criterion_report[split] = metrics(criterion_final_scores[indices], criterion_labels[indices], threshold)
             if int(criterion_labels[indices].sum()) == 0:
-                report["releaseEligible"] = False
+                report["modelReleaseEligible"] = False
+                if criterion not in RULE_OWNED_CRITERIA:
+                    report["releaseEligible"] = False
                 report["warnings"].append(f"{criterion}: {split} split has no positive records")
         calibration_false_positive = criterion_report["calibration"]["falsePositive"]
         calibration_false_negative = criterion_report["calibration"]["falseNegative"]
         if calibration_false_positive or calibration_false_negative:
-            report["releaseEligible"] = False
+            report["modelReleaseEligible"] = False
+            if criterion not in RULE_OWNED_CRITERIA:
+                report["releaseEligible"] = False
             report["warnings"].append(
                 f"{criterion}: grouped calibration has {calibration_false_positive} false positives "
                 f"and {calibration_false_negative} false negatives"
@@ -506,9 +589,12 @@ def main() -> None:
         metadata={
             "format": "pt",
             "encoder": "all-MiniLM-L6-v2",
+            "encoder_sha256": sha256(encoder_file),
             "representation": FEATURE_SCHEMA_VERSION,
             "structured_features": json.dumps(list(FEATURE_NAMES)),
             "structured_feature_scale": str(ENGINEERED_FEATURE_SCALE),
+            "structured_feature_multipliers": json.dumps(ENGINEERED_FEATURE_MULTIPLIERS, sort_keys=True),
+            "max_length": str(args.max_length),
         },
     )
     (args.output / "training-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

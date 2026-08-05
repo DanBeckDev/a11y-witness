@@ -63,6 +63,18 @@ function pair({
   good,
   bad,
   probeForms = false,
+  // DERIVED from the signal, not asked for per case, and that is the point.
+  //
+  // The table probe is opt-in because it is not deterministic enough to be dataset evidence by default
+  // (`docs/screenreader-coverage.md`), and `preflight-screenreader-dataset.mjs` REFUSES a
+  // `table-unassociated` case that does not request it. But a case whose signal reads `structure.tableCells`
+  // needs the probe by definition, so making all 61 of them say so by hand is 61 chances to forget — and
+  // every one of them HAD forgotten: the field was absent from the whole matrix, so regenerating the
+  // manifest silently produced 61 cases that would capture no cells at all and go blind.
+  //
+  // Deriving it from the badSignal makes the invariant structural. Still overridable, for a case that wants
+  // cells without a table signal.
+  probeTables = badSignal?.type === "table-unassociated",
   family = id,
   subtype = null,
 }) {
@@ -76,6 +88,7 @@ function pair({
     mutation,
     badSignal,
     probeForms,
+    probeTables,
     good,
     bad,
   };

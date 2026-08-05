@@ -36,11 +36,9 @@ Run the worker-free instrument and manifest audit:
 npm run training:preflight
 ~~~
 
-Serve the generated pages from the page directory:
-
-~~~sh
-npx serve runs/screenreader-dataset/pages -l 5050
-~~~
+The capture command leases the generated page server for the duration of the
+run. Do not start `npx serve` by hand; this avoids leaked servers and a stray
+server serving the wrong directory.
 
 In the interactive Windows session that owns NVDA, start the existing worker:
 
@@ -63,7 +61,6 @@ VM on demand, works out the address the guest can use to reach this host, and
 puts the VM back in the state it found it (see docs/local-worker-vm.md):
 
 ~~~sh
-npx serve runs/screenreader-dataset/pages -l 5050
 npm run training:capture
 ~~~
 
@@ -80,7 +77,7 @@ npm run training:status
 
 ~~~
 run:      started 2026-07-26T08:20:19.822Z
-progress: 836/836 cases  (106 captured, 0 failed, 730 skipped)
+progress: 1,061/1,061 cases  (1,061 captured, 0 failed, 0 skipped)
 worker:   http://192.168.64.4:8765
 pages:    http://192.168.64.1:5050
 current:  finished
@@ -126,12 +123,14 @@ failures, 2 no run recorded, 3 wedged (no update within one capture timeout plus
 slack). A wedged or interrupted run does not have to start over:
 
 ~~~sh
-npm run training:capture -- --resume
+npm run training:capture -- --resume --no-cache
 ~~~
 
-Resume skips a case only when the previous run recorded it captured *and* both of its
-files are still on disk, since the progress file and the captures can be deleted
-independently.
+Resume skips a case only when the previous run recorded it captured, both files are
+still on disk, and their recorded page identity matches the current bytes. Legacy
+captures without `pageHash` are checked by recomputing their stored cache key; captures
+without sufficient provenance are recaptured. This keeps `--resume --no-cache` safe
+after a fixture edit rather than silently trusting old evidence.
 
 Before exporting, prove the labels can actually tell the pairs apart:
 
@@ -153,6 +152,21 @@ written. Without the second, a stray server holding port 5050 produced
 `Capture complete: 3/3 cases` while every transcript read `Error code: 404` --
 mislabelled training data that looks entirely plausible downstream.
 
+The worker reuses NVDA by default and recycles it periodically for throughput. A request that
+finishes with no verified document speech never preserves that NVDA instance, so one transient
+blank capture cannot poison the next retry. For a deliberately fresh lifecycle on every
+capture -- useful for a small repeatability probe, not the fast training path -- send the
+setting to the worker through the capture client:
+
+~~~sh
+DATASET_REUSE_NVDA=0 npm run training:capture -- --only=one-case-id
+~~~
+
+`A11Y_REUSE_NVDA=0` on the host is not equivalent: NVDA runs in the Windows worker process,
+so a host-only environment variable cannot change its lifecycle. The read anchor also falls
+back to NVDA's explicit read-current-line command when the virtual cursor has named the
+document but has not exposed its first item yet.
+
 Each worker serializes its own NVDA resource; the local pool runs one case per
 worker concurrently. The capture step writes raw captures under
 runs/screenreader-dataset/captures/. A failed case does not discard completed
@@ -164,6 +178,38 @@ Finally export the model dataset:
 npm run training:export
 ~~~
 
+Export also verifies that both captures still match the current page bytes and
+capture provenance. A fixture edit, worker/protocol change, or missing identity
+skips the pair instead of turning stale evidence into a training label; recapture
+first when the export reports stale pairs.
+
+The trained artifact is consumed through a verified score-only boundary. It
+checks the safetensors metadata and the frozen encoder hash before inference:
+
+~~~sh
+npm run training:score -- --data runs/screenreader-dataset/screenreader-evidence.jsonl
+npm run training:shadow -- --data runs/screenreader-acceptance/screenreader-evidence.jsonl
+npm run training:hardening
+~~~
+
+For a live witness capture, `A11Y_SHADOW_MODEL=1 npm run witness -- <url>
+--task "..."` runs the local scorer beside the existing judge. The result is
+logged only; it does not change findings or bypass deterministic rules.
+
+The worker stamps capture provenance from its installed runtime into each row:
+NVDA, Edge, guidepup, Node, Windows, and the deployed worker-code hash. These
+fields are not model input. Version environment variables are deliberately not
+used, because a manual declaration can silently become stale after a guest
+update. The hardening report flags older captures without exact version
+metadata so a candidate cannot be mistaken for cross-version validated.
+
+The scorer gives explicit screen-reader relations extra representation strength:
+vague link names (2x), unnamed form fields (3x), generic heading names (2x),
+and named-field counterevidence (2x). Table cases also contribute the opt-in
+table-cell-navigation announcements, with associated versus position-only
+cells represented as screen-reader-derived features. These are still model
+features derived only from NVDA evidence, not HTML or DOM facts.
+
 Calibration failures are written alongside the normal held-out error report;
 the report includes the exact NVDA-only evidence for every grouped out-of-fold
 false positive and false negative. The new acceptance set is separate from the
@@ -172,12 +218,17 @@ training manifest and is evaluated only after capture:
 ~~~sh
 npm run training:generate-acceptance
 npm run training:preflight-acceptance
-npm run training:evaluate-acceptance
+npm run training:evaluate-acceptance -- \
+  --data runs/screenreader-acceptance/screenreader-evidence.jsonl \
+  --data runs/screenreader-acceptance/repeat-1.jsonl \
+  --data runs/screenreader-acceptance/repeat-2.jsonl
 ~~~
 
 The acceptance evaluator requires disjoint case families, minimum per-criterion
 coverage, zero acceptance false positives and false negatives, and repeated
-capture stability. It never fits the model or thresholds.
+capture stability for criteria owned by the learned scorer. Criteria owned by
+the deterministic rule layer are reported but are not scored as model failures.
+It never fits the model or thresholds.
 
 The JSONL output is
 runs/screenreader-dataset/screenreader-evidence.jsonl. Each row has an input

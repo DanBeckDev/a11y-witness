@@ -12,7 +12,7 @@
 //
 // Exit codes match capture-status.mjs, so a caller can branch on them:
 //   0  finished, no failures
-//   1  finished with failures        -> re-run with --resume
+//   1  finished with failures        -> re-run with --resume --no-cache
 //   2  no run recorded               -> nothing to wait for
 //   3  wedged, gave up waiting       -> the worker stopped updating
 import { watch } from "node:fs";
@@ -50,8 +50,8 @@ function summarise(progress) {
 // The point of the whole exercise: say what to do next, so the caller does not have to
 // work it out from counts.
 function nextCommand(summary, verdict) {
-  if (verdict === EXIT.failures) return "npm run training:capture -- --resume";
-  if (verdict === EXIT.stale) return "npm run doctor && npm run training:capture -- --resume";
+  if (verdict === EXIT.failures) return "npm run training:capture -- --resume --no-cache";
+  if (verdict === EXIT.stale) return "npm run doctor && npm run training:capture -- --resume --no-cache";
   if (verdict === EXIT.noRun) return "npm run training:capture";
   return "npm run training:check-signals && npm run training:export";
 }

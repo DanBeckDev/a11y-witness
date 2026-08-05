@@ -21,7 +21,9 @@ The model's input boundary is the screen-reader output only:
   quick-navigation;
 - `interaction`: announcements after activating a disclosure, submitting a
   form, or activating a task-named control, including empty announcement deltas;
-- screen-reader identity/version and capture metadata, for reproducibility.
+- screen-reader identity and capture metadata, for reproducibility. The worker
+  stamps its own versions into each capture; these provenance fields are not
+  model features.
 
 The page HTML, DOM, CSS, accessibility tree, axe results, URL, and source code
 must not be model features. `task` may be passed to a separate task-completion
@@ -139,24 +141,25 @@ node scripts/verify-safetensors.mjs models/screenreader-scorer
 The learned artifact is `models/screenreader-scorer/model.safetensors` and its
 metrics/provenance are in `training-report.json`. The runner splits by page
 family, never by transcript row, and rejects forbidden page-level fields. The
-current exported run contains 1,556 records from 778 model-eligible good/bad
-pairs. The source matrix now contains 1,061 pairs, including 225 targeted
-calibration pairs that still need capture. The scorer
-combines channel-tagged evidence-unit embeddings with 26 structured features
-derived only from the screen-reader output: named versus unnamed fields,
-associated versus position-only table cells, announced state changes, and
-other presence or relationship facts. It trains subtype heads and chooses
-criterion thresholds from grouped out-of-fold predictions over the development
-families; the outer test families remain untouched. On the current grouped
-held-out test split it has zero false positives and zero false negatives across
-all eight model criteria. The report is nevertheless `releaseEligible: false`:
-grouped calibration has 10 false negatives, several subtype heads have fewer than
-20 positive development records, and the new calibration pairs are not yet
-captured. The `1.3.1:missing-landmark` cases remain in the structural/signal
-layer rather than this scorer: an expected landmark is not reliably inferable
-from screen-reader output alone. It remains an
-independently measured opt-in artifact until those gaps are addressed and it
-also passes an independent acceptance set and test-retest stability checks.
+scorer combines channel-tagged evidence-unit embeddings with 29 structured
+features derived only from screen-reader output:
+heading-role gaps, named versus unnamed fields, associated versus position-only
+table cells, announced state changes, status announcements, and other explicit
+relations. High-confidence relations such as vague link names and unnamed form
+fields have recorded feature multipliers in the training report. It trains
+subtype heads and chooses criterion thresholds from grouped out-of-fold
+predictions over the development families; the outer test families remain
+untouched. The last diagnostic export contained 1,996 records. The source matrix
+contains 1,061 pairs; 58 missing-landmark pairs remain in the structural/signal
+layer because that absence is not reliably inferable from screen-reader output
+alone. Under the current page/provenance guard, those older captures are stale
+and the current export is intentionally empty until the matrix is recaptured.
+The current report is not release-eligible: grouped calibration has one false
+negative for 3.3.1, and the 4.1.2 unnamed-form-field subtype is still below its
+minimum positive-development coverage. All 1,061 pairs must be recaptured before
+training again. Existing acceptance captures are retained, but the
+acceptance gate must be rerun against a release-eligible artifact rather than
+treated as evidence for this diagnostic model.
 
 The repeatable collection path is implemented in src/training/. npm run
 training:generate creates 1,061 controlled good/bad page pairs across independent
@@ -166,7 +169,9 @@ npm run training:capture sends each pair through the existing interactive NVDA
 worker, and npm run training:export emits JSONL only for pairs whose expected
 contrast was actually heard by NVDA. The exporter keeps the page source as an
 instrument and provenance, never as model input. It stops rather than
-fabricating transcripts when no Windows/NVDA worker is available.
+fabricating transcripts when no Windows/NVDA worker is available. It also
+rejects captures whose page hash or provenance no longer matches the current
+generated fixture, so stale evidence cannot silently become a label.
 `npm run training:analyze-errors` then writes per-case reports for the selected
 held-out split and grouped out-of-fold calibration, joining each scorer error to
 its NVDA transcript, structured screen-reader evidence, and capture provenance.
@@ -177,36 +182,97 @@ The untouched acceptance set is generated separately:
 ~~~sh
 npm run training:generate-acceptance
 npm run training:preflight-acceptance
-DATASET_ROOT=runs/screenreader-acceptance npx serve runs/screenreader-acceptance/pages -l 5051
-DATASET_ROOT=runs/screenreader-acceptance DATASET_BASE_URL=http://localhost:5051 npm run training:capture
+DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_PAGES_PORT=5051 DATASET_BASE_URL=http://localhost:5051 npm run training:capture
 DATASET_ROOT=runs/screenreader-acceptance npm run training:check-signals
 DATASET_ROOT=runs/screenreader-acceptance npm run training:export -- --out=runs/screenreader-acceptance/screenreader-evidence.jsonl
-npm run training:evaluate-acceptance
+# Run the evaluator after the repeat exports below so stability is measured.
 ~~~
 
 For capture-to-capture stability, repeat the acceptance capture into separate
 namespaces and pass every exported JSONL file to the evaluator:
 
 ~~~sh
-DATASET_ROOT=runs/screenreader-acceptance DATASET_BASE_URL=http://localhost:5051 DATASET_CAPTURE_ROOT=captures/repeat-1 npm run training:capture
-DATASET_ROOT=runs/screenreader-acceptance DATASET_BASE_URL=http://localhost:5051 DATASET_CAPTURE_ROOT=captures/repeat-2 npm run training:capture
+DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_PAGES_PORT=5051 DATASET_BASE_URL=http://localhost:5051 DATASET_CAPTURE_ROOT=captures/repeat-1 npm run training:capture
+DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_PAGES_PORT=5051 DATASET_BASE_URL=http://localhost:5051 DATASET_CAPTURE_ROOT=captures/repeat-2 npm run training:capture
 DATASET_ROOT=runs/screenreader-acceptance DATASET_CAPTURE_ROOT=captures/repeat-1 npm run training:export -- --out=runs/screenreader-acceptance/repeat-1.jsonl
 DATASET_ROOT=runs/screenreader-acceptance DATASET_CAPTURE_ROOT=captures/repeat-2 npm run training:export -- --out=runs/screenreader-acceptance/repeat-2.jsonl
-.venv/bin/python scripts/evaluate-screenreader-acceptance.py --data runs/screenreader-acceptance/repeat-1.jsonl --data runs/screenreader-acceptance/repeat-2.jsonl
+npm run training:evaluate-acceptance -- \
+  --data runs/screenreader-acceptance/screenreader-evidence.jsonl \
+  --data runs/screenreader-acceptance/repeat-1.jsonl \
+  --data runs/screenreader-acceptance/repeat-2.jsonl
 ~~~
+
+The normal capture path reuses NVDA for speed and discards a silent or not-ready
+instance before retrying. To measure cold-start behaviour explicitly, set
+`DATASET_REUSE_NVDA=0`; this is sent to the worker in the capture request. Setting
+`A11Y_REUSE_NVDA=0` only on the Mac does not affect the Windows worker process.
+
+## Verified inference and shadow mode
+
+The release candidate is consumed through the checked-in scorer wrapper rather
+than by importing the training script into the product. The wrapper verifies
+the release gate, encoder SHA-256, representation schema, structured-feature
+order, feature scaling, multipliers, and every safetensors head before it
+scores anything:
+
+~~~sh
+npm run training:score -- \
+  --data runs/screenreader-acceptance/screenreader-evidence.jsonl \
+  --out /tmp/screenreader-scores.json
+
+npm run training:shadow -- \
+  --data runs/screenreader-acceptance/screenreader-evidence.jsonl \
+  --out /tmp/screenreader-shadow.json
+~~~
+
+`npm run training:shadow` is score-only and explicitly log-only. To run the
+same scorer beside the existing witness judge for a live capture, set
+`A11Y_SHADOW_MODEL=1` on `npm run witness`. The existing judge and deterministic
+rules remain authoritative; a scorer failure or ineligible artifact leaves the
+current result unchanged.
+
+Each score result records SHA-256 identities for the encoder, scorer weights,
+training report, and exported training dataset. That provenance is the release
+identity for an inference result; a filesystem path alone is not sufficient
+because the model directory is mutable during development.
+
+This artifact is intentionally NVDA-only. The score boundary rejects records
+from another or unknown screen reader rather than implying that NVDA-trained
+features generalise to VoiceOver, JAWS, or Orca; each new screen reader needs
+its own captured and evaluated artifact.
+
+Run the offline hardening gate before an integration change:
+
+~~~sh
+npm run training:hardening
+~~~
+
+It checks artifact integrity, family-disjoint acceptance data, per-criterion
+held-out coverage, and prediction invariance under case-folding and harmless
+whitespace changes. Its report is written to
+`runs/screenreader-hardening.json`.
+
+Capture provenance is stamped by the worker itself from its installed runtime:
+NVDA, Edge, guidepup, Node, Windows, and the deployed worker-code hash. This is
+deliberately not sourced from `DATASET_*_VERSION` environment variables, which
+can silently become stale after a guest update. Existing captures predate this
+field and therefore contain no exact version metadata; recapture them through
+the worker before treating cross-version generalisation as complete.
 
 ## How much data is enough?
 
 There is no responsible fixed number. The target depends on whether the model
 is a frozen text encoder with a small classifier head, how many WCAG criteria
 have separate heads, and how many independent page families are represented.
-The current 961-pair source matrix is enough to evaluate a first candidate, but
-not enough to release it. The current grouped held-out test has 0 false positives
-and 0 false negatives, but grouped out-of-fold calibration still has 10 false
-negatives. These are useful diagnostic results, not a reason to wire
-the scorer into `applyGate`: the holdout is still controlled and small, several
-subtypes have very few positive examples, and the model has not yet been tested
-for capture-to-capture stability or on an untouched external acceptance set.
+The current 1,061-pair source matrix is enough to evaluate a candidate, but it is
+still below the recommended release-quality coverage band for several individual
+criteria. Acceptance and repeatability are release gates, not permanent properties
+of the matrix: rerun them after a capture-worker, NVDA, browser, encoder, or model
+change and keep the artifact ineligible until they pass. Zero-error metrics from an
+earlier iteration are evidence that that iteration was coherent, not proof that the
+model will generalise to every site or NVDA version. Continue adding independent
+content families and repeat captures as a monitored expansion, keeping the
+acceptance set untouched.
 
 Use these planning bands for the proposed frozen-encoder classifier:
 

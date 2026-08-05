@@ -103,7 +103,7 @@ The approach is anchored in primary W3C material, not just our own intuition:
 | Grounding / reference-based judging | Done | The verified WCAG 2.2 A/AA list is injected; the judge may cite only from it. |
 | Evidence-constrained judging | Done | The judge sees the transcript, not the page. This is our strongest anti-contamination property: it cannot simply recall a page's known issues, it must point to announced evidence. |
 | Task decomposition | Done | Recall vs verify; audit vs task-completability are separated so "task is doable" cannot suppress findings. |
-| Structured output | Partial | JSON is requested and parsed, but not schema-enforced or validated; malformed output is only loosely recovered. |
+| Structured output | Done | OpenAI-compatible backends can use strict JSON-schema decoding, and every backend passes through a runtime validator for required fields, allowed severities, real confidence bounds, and fail-closed malformed-output handling. |
 | Self-consistency / ensembling | Done (opt-in) | Consensus mode keeps only recurring findings. Quantified: it removes flaky FPs, not stable ones. |
 | Confidence calibration | Not done | Findings carry a confidence number, but it has not been validated against outcomes. |
 | Test-retest reliability | Partial | `EVAL_RUNS` can repeat cases, but reliability is not yet reported as a metric. We have observed run-to-run variation. |
@@ -170,8 +170,9 @@ independently-derived ground truth:
 3. **Reporting discipline**: report n, test-retest reliability (`EVAL_RUNS`),
    and intervals; stop quoting bare point estimates.
 4. **Calibration study**: check whether confidence tracks correctness.
-5. **Engineering hygiene**: schema-enforced output, and pin the model, sampling,
-   and prompt version per run.
+5. **Engineering hygiene**: pin the model, sampling, and prompt version per run;
+   judgment shape is schema-constrained where supported and runtime-validated
+   everywhere.
 
 ## Validation log
 
