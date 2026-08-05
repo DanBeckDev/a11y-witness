@@ -42,7 +42,10 @@ import { join, dirname, relative } from "node:path";
  * very file this test was written for — the guard would still pass, having quietly narrowed to nothing. That
  * is the failure mode this suite keeps meeting, so the pattern follows the code.
  */
-const SCRIPT_PATH = /(?:scripts|packages\/[A-Za-z0-9._-]+\/(?:python|bin))\/[A-Za-z0-9._-]+\.(?:mjs|js|ts|py|ps1|sh)/g;
+// The lookbehind is load-bearing. Without it, `scripts/foo.py` matched INSIDE
+// `packages/lab/scripts/foo.py`, and this test reported 9 programs "not in the repo" that were all present
+// under their real paths — a false positive, which is the kind of noise that gets a guard deleted.
+const SCRIPT_PATH = /(?<![A-Za-z0-9._/-])(?:scripts|packages\/[A-Za-z0-9._-]+(?:\/(?:src|scripts|python|bin|provisioning))?)\/[A-Za-z0-9._/-]+\.(?:mjs|js|ts|py|ps1|sh)/g;
 
 function referencedScripts(): Map<string, string[]> {
   const sources = ["package.json", "action.yml"];

@@ -90,7 +90,7 @@ opt-in per capture. **[`docs/screenreader-coverage.md`](./docs/screenreader-cove
 map of what we drive and what we do not** — a behaviour missing from that table is not a missing
 feature, it is a claim this project cannot yet make.
 
-- **Capture worker** (Windows): drives **NVDA** via [Guidepup](https://github.com/guidepup/guidepup) through real navigation and returns the announcement transcript over HTTP. Speech is read over NVDA's Remote Access channel, not audio, so the machine needs no sound device. See [`src/capture/nvda/`](./src/capture/nvda/).
+- **Capture worker** (Windows): drives **NVDA** via [Guidepup](https://github.com/guidepup/guidepup) through real navigation and returns the announcement transcript over HTTP. Speech is read over NVDA's Remote Access channel, not audio, so the machine needs no sound device. See [`packages/lab/src/capture/nvda/`](./packages/lab/src/capture/nvda/).
 - **Control plane** (anywhere): the `witness` CLI runs the capture and — if the optional axe layer is installed — axe-core concurrently, then judges the transcript and prints the report. Architecture rationale: [`docs/adr/0001-capture-architecture.md`](./docs/adr/0001-capture-architecture.md) and [`0002-layered-coverage.md`](./docs/adr/0002-layered-coverage.md).
 
 ### The judge is a hybrid
@@ -186,7 +186,7 @@ This is not a footnote to the interesting work — it *is* some of the work. Scr
 | you have | do this | what you get |
 |---|---|---|
 | a Mac | [`docs/local-worker-vm.md`](./docs/local-worker-vm.md) | A scripted Windows VM: ISO build, unattended install, auto-logon, NVDA provisioning, capture verified — no GUI clicking |
-| a Windows box | [`scripts/bootstrap-windows-worker.ps1`](./scripts/bootstrap-windows-worker.ps1) | One idempotent script, then `A11Y_WORKER=http://host:8765` |
+| a Windows box | [`packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1`](./packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1) | One idempotent script, then `A11Y_WORKER=http://host:8765` |
 | neither | [`capture-regression.yml`](./.github/workflows/capture-regression.yml) | Real NVDA on a GitHub-hosted runner, so a contributor needs no infrastructure at all |
 
 Because a Windows guest is never genuinely idle, the pipeline manages it **on demand**: with a local VM and no `A11Y_WORKER` set, a run starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15 s. Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`worker-ctl.sh`](./scripts/local-worker/worker-ctl.sh) does `up | pause | stop | status | idle-pause`.
@@ -220,7 +220,7 @@ Throughput scales by running more workers, not more threads ([ADR 0001](./docs/a
 It also means a second shell or agent driving the same worker will see your restarts as
 breakage; `worker-ctl.sh status` is the arbiter.
 
-When a worker breaks, the error messages lie — `"NVDA not installed"` usually means a version mismatch, not a missing install. [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) maps error string to actual cause, and [`scripts/diagnose-nvda-worker.ps1`](./scripts/diagnose-nvda-worker.ps1) applies that table automatically across six layers.
+When a worker breaks, the error messages lie — `"NVDA not installed"` usually means a version mismatch, not a missing install. [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) maps error string to actual cause, and [`packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1`](./packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1) applies that table automatically across six layers.
 
 ## How we know it works
 
@@ -234,23 +234,23 @@ unit-tested, since a real screen reader on a real desktop is the thing under tes
 | `npm run lint` / `npm run typecheck` | mechanical; both gate CI |
 | `npm run eval` | judge quality against **34 labelled fixtures** — W3C tutorial pages and paired good/bad cases. Runs against our own scorer by default; needs the Python venv, so it cannot run in CI |
 | `npm run rules-check` | the deterministic rules in isolation. Exits non-zero on **any** false positive against a conformant page — precision is the entire point of a rule |
-| `node src/capture/nvda/capture-check.mjs` | the capture half, on the worker itself. Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
+| `node packages/lab/src/capture/nvda/capture-check.mjs` | the capture half, on the worker itself. Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
 | `capture-regression.yml` | real NVDA on a GitHub-hosted Windows runner |
 
 **On the numbers.** The suite currently reports full recall on the observable failure cases with a small number of false positives, concentrated in the subjective link-purpose (2.4.4) and descriptive-heading (2.4.6) criteria. Treat that as *promising, not validated*, and read [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) before quoting it anywhere: the guards were iteratively tuned against these cases, scoring is single-run with no test-retest interval, and **there is no expert human-agreement baseline yet**. That document sets the bar for "trustworthy enough" *before* measuring against it, and lists what is still missing — deliberately, so the goalposts cannot move.
 
-The strongest evidence so far is structural rather than a number: the judge sees the **transcript, not the page**, so it cannot recall a well-known page's documented issues — it has to point at something that was announced. A page authored fresh and never published ([`src/eval/pages/contamination-test.html`](./src/eval/pages/contamination-test.html)) was caught correctly on all four planted violation categories with no false positives on the correct controls, which is evidence that recall is genuine judging rather than memorisation. One page is not a suite.
+The strongest evidence so far is structural rather than a number: the judge sees the **transcript, not the page**, so it cannot recall a well-known page's documented issues — it has to point at something that was announced. A page authored fresh and never published ([`packages/lab/src/eval/pages/contamination-test.html`](./packages/lab/src/eval/pages/contamination-test.html)) was caught correctly on all four planted violation categories with no false positives on the correct controls, which is evidence that recall is genuine judging rather than memorisation. One page is not a suite.
 
 ## Repository map
 
 | path | what lives there |
 |---|---|
 | `src/cli.ts` | the `witness` pipeline: capture → axe → judge → report |
-| `src/capture/` | capture backend interface, the NVDA worker, local-VM lifecycle |
+| `packages/lab/src/capture/` | capture backend interface, the NVDA worker, local-VM lifecycle |
 | `src/spike/` | the judge, deterministic rules, the discriminative gate, layering |
 | `src/scan/` | axe-core via Playwright |
-| `src/eval/` | labelled fixtures and the eval harness |
-| `src/training/` | the dataset pipeline |
+| `packages/lab/src/eval/` | labelled fixtures and the eval harness |
+| `packages/lab/src/training/` | the dataset pipeline |
 | `scripts/` | worker provisioning, diagnosis, and the scripted local VM |
 | `docs/adr/` | why the architecture is the way it is |
 
@@ -274,7 +274,7 @@ There is a concrete reason this needs its own dataset. Link purpose (2.4.4) is a
 
 ### Building the training set
 
-`src/training/` collects screen-reader-only evidence from a source matrix of **1,061 controlled page pairs** (2,122 potential NVDA records), each a known-good page and a mutated one that breaks a single criterion, so a label comes from the contrast rather than from anyone's opinion. Model input is deliberately limited to what a screen reader produced — **no HTML, DOM, CSS, URL or axe findings** — so a model trained on it cannot learn to cheat by reading the markup. The pages are instruments for producing captures and labels; they are not training input.
+`packages/lab/src/training/` collects screen-reader-only evidence from a source matrix of **1,061 controlled page pairs** (2,122 potential NVDA records), each a known-good page and a mutated one that breaks a single criterion, so a label comes from the contrast rather than from anyone's opinion. Model input is deliberately limited to what a screen reader produced — **no HTML, DOM, CSS, URL or axe findings** — so a model trained on it cannot learn to cheat by reading the markup. The pages are instruments for producing captures and labels; they are not training input.
 
 ```bash
 npm run training:generate      # write the page pairs + manifest
@@ -300,9 +300,9 @@ updates go cold past one capture timeout it exits 3. Exit codes are the contract
 **1** finished with failures, **2** no run recorded, **3** wedged. Both commands emit a
 `next_command` field, so a script never has to infer the next step.
 
-`training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. A stale run reports `running: false`, `stale: true`, and no misleading ETA. `--resume` picks up only captures whose page identity and provenance still match. See [`src/training/README.md`](./src/training/README.md).
+`training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. A stale run reports `running: false`, `stale: true`, and no misleading ETA. `--resume` picks up only captures whose page identity and provenance still match. See [`packages/lab/src/training/README.md`](./packages/lab/src/training/README.md).
 
-The source matrix now contains 1,061 pairs: the original 836 plus 225 targeted calibration pairs for image alternatives, fake headings, placeholder-only fields, unnamed icon buttons, validation errors, live status updates, missing-role controls, and silent state changes. The last diagnostic export has 1,996 records; 58 observable missing-landmark pairs are retained for the structural/signal layer but excluded from the local scorer because their expected landmark is not present in the screen-reader evidence. The current page/provenance guard rejects the old captures as stale, so the matrix must be recaptured before training. The scorer combines channel-tagged screen-reader evidence with 29 screen-reader-derived structural features, including field-name/role and table-header relationships, then uses one head per violation subtype and max-pools those subtype scores into a criterion score. Thresholds are selected from grouped out-of-fold development predictions rather than in-sample scores. Grouped calibration still has one false negative, so this remains a diagnostic artifact until recapture, independent acceptance, and repeated-capture stability checks pass. `docs/local-model.md` sets out the planning bands honestly — roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality. Splits must be grouped by page family, template and source so a good and bad version of the same template never straddle train and test, and repeated captures of one page do not count as independent examples. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by [`scripts/verify-safetensors.mjs`](./scripts/verify-safetensors.mjs).
+The source matrix now contains 1,061 pairs: the original 836 plus 225 targeted calibration pairs for image alternatives, fake headings, placeholder-only fields, unnamed icon buttons, validation errors, live status updates, missing-role controls, and silent state changes. The last diagnostic export has 1,996 records; 58 observable missing-landmark pairs are retained for the structural/signal layer but excluded from the local scorer because their expected landmark is not present in the screen-reader evidence. The current page/provenance guard rejects the old captures as stale, so the matrix must be recaptured before training. The scorer combines channel-tagged screen-reader evidence with 29 screen-reader-derived structural features, including field-name/role and table-header relationships, then uses one head per violation subtype and max-pools those subtype scores into a criterion score. Thresholds are selected from grouped out-of-fold development predictions rather than in-sample scores. Grouped calibration still has one false negative, so this remains a diagnostic artifact until recapture, independent acceptance, and repeated-capture stability checks pass. `docs/local-model.md` sets out the planning bands honestly — roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality. Splits must be grouped by page family, template and source so a good and bad version of the same template never straddle train and test, and repeated captures of one page do not count as independent examples. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by [`packages/lab/scripts/verify-safetensors.mjs`](./packages/lab/scripts/verify-safetensors.mjs).
 
 ### Later, and unproven: predicting the announcement
 

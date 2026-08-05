@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
 
-const ROOT = resolve(process.cwd());
-const STATUS = resolve(ROOT, "src/training/capture-status.mjs");
+// Resolved from THIS FILE, not the cwd: `process.cwd()` is the repo root for `npm test` and nothing else, and
+// it broke when M8 moved this file into a package.
+const ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
+const STATUS = resolve(ROOT, "packages/lab/src/training/capture-status.mjs");
 
 function statusFor(progress: Record<string, unknown>) {
   const root = mkdtempSync(resolve(tmpdir(), "a11y-status-"));

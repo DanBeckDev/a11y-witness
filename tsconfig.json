@@ -19,8 +19,8 @@
   //
   // Deliberately `**/*.ts` and not the directory: `allowJs` is on, so naming the directory would newly
   // type-check 14 worker `.mjs` files as JS, which is a separate change with its own fallout.
+  // `src` is gone as of M8 — every source file now lives in a package.
   "include": [
-    "src",
     "packages/*/src/**/*.ts"
   ]
 }

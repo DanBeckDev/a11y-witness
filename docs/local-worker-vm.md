@@ -292,7 +292,7 @@ account via `WindowsIdentity` instead of `$env:USERDOMAIN` (which is literally
 `WORKGROUP` on a non-domain machine, and fails SID lookup with `0x80070534`).
 
 Because the account inside the image is always `witness`, a recipient does not even need
-to re-provision — but running `scripts/provision-nvda-worker.ps1` again is harmless and
+to re-provision — but running `packages/worker-fleet/src/provisioning/provision-nvda-worker.ps1` again is harmless and
 is the way to repair anything that has drifted.
 
 The image is ARM64 Windows: portable to any Apple Silicon Mac, **not** to an x86 host.
@@ -329,7 +329,7 @@ Windows install is still hands-off:
 
 If you skip `support.iso` entirely, Windows Setup becomes interactive: click through it,
 create a local admin (`Shift+F10` → `start ms-cxh:localonly` to dodge the Microsoft
-account requirement), then run `scripts/bootstrap-windows-worker.ps1` in the guest —
+account requirement), then run `packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1` in the guest —
 it does everything from Node through to a verified worker.
 
 ## Running it day to day — `worker-ctl.sh`
@@ -431,7 +431,7 @@ started a capture while the first was finishing.
 | a remote worker, no VM management | `--worker http://host:8765` or `A11Y_WORKER=...` |
 | the old behaviour (localhost:8765) | `A11Y_LOCAL_VM=0` |
 
-Everything UTM-specific stays in `worker-ctl.sh`; `src/capture/local-vm.ts` only reads its
+Everything UTM-specific stays in `worker-ctl.sh`; `packages/lab/src/capture/local-vm.ts` only reads its
 `json` output, so the control plane never learns about utmctl, bundles or bookmarks.
 
 `npm run training:capture` uses the same lease (it runs under `tsx` so it can import the
@@ -564,7 +564,7 @@ While iterating on `capture-core.mjs` specifically, it is faster to copy the sin
 file and restart the worker than to commit and pull:
 
 ```bash
-scp src/capture/nvda/capture-core.mjs user@vm:C:/Users/user/a11y-witness/src/capture/nvda/
+scp packages/lab/src/capture/nvda/capture-core.mjs user@vm:C:/Users/user/a11y-witness/packages/lab/src/capture/nvda/
 # Prefer a REBOOT over a task restart. Stop/Start-ScheduledTask silently fails to replace the
 # running process when the guest agent is not ready, and two workers once served stale code for
 # an hour that way. `worker-ctl.sh stop && up` always picks up a pushed file, and
@@ -576,11 +576,11 @@ Verify the copy landed with a hash on both sides — a stale worker silently run
 code looks exactly like a logic bug, and costs far more time than the check:
 
 ```bash
-shasum -a 256 src/capture/nvda/capture-core.mjs
+shasum -a 256 packages/lab/src/capture/nvda/capture-core.mjs
 ssh user@vm "powershell -NoProfile -Command \"(Get-FileHash 'C:\Users\user\a11y-witness\src\capture\nvda\capture-core.mjs' -Algorithm SHA256).Hash\""
 ```
 
-Then re-validate with `node src/capture/nvda/capture-check.mjs` **in the VM's console
+Then re-validate with `node packages/lab/src/capture/nvda/capture-check.mjs` **in the VM's console
 session** (via a scheduled task, not bare SSH — SSH has no interactive desktop).
 
 ## Sources

@@ -24,7 +24,10 @@ from typing import Any
 # distributed.
 # Both cwd-relative defaults below were `Path("models/...")`, so a train run from any other directory wrote
 # its weights somewhere the scorer would never look. Anchored on the file, like everything else now.
-SCORER_PACKAGE = Path(__file__).resolve().parents[1] / "packages" / "scorer"
+# `packages/lab/scripts/` -> `packages/` -> `packages/scorer`. It was `parents[1] / "packages" / "scorer"`,
+# which resolved to `packages/lab/packages/scorer` once M8 moved this file into the lab package — a path that
+# does not exist, and the failure was `ModuleNotFoundError: No module named 'screenreader_features'`.
+SCORER_PACKAGE = Path(__file__).resolve().parents[2] / "scorer"
 sys.path.insert(0, str(SCORER_PACKAGE / "python"))
 from screenreader_features import (  # noqa: E402  (path shim must precede the import)
     ENGINEERED_FEATURE_MULTIPLIERS,

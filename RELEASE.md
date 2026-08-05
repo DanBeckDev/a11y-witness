@@ -55,7 +55,7 @@ findings.
 - **The `anthropic` and `openai` judge backends.** Written to their SDK specs and unexercised; this project
   keeps no metered key. They are opt-in, never the default.
 - **The Action on a real Windows runner.** Its logic is covered by 14 renderer/policy tests and by
-  `scripts/action-dry-run.sh`, which runs the Action's own bash locally against a live worker. The
+  `packages/lab/scripts/action-dry-run.sh`, which runs the Action's own bash locally against a live worker. The
   Windows-only setup steps (NVDA install, Speech Viewer, Edge policy) are exercised by
   `capture-regression.yml` on a real runner for the same reasons. `act` cannot help — it is Docker/Linux
   and NVDA needs Windows.
@@ -92,7 +92,7 @@ Not bugs being hidden — work consciously not done before shipping.
 | Scoped cache invalidation | Two recaptures were measured as 65% unnecessary — a global `CAPTURE_PROTOCOL_VERSION` invalidates captures a fix could not have touched |
 | ONNX export | Would drop torch (~529 MB) from the Action's setup |
 | `provisionRevision` reads `"unstamped"` | Needs a deliberate pool-wide re-provision |
-| `scripts/check-screenreader-hardening.py` was also untracked | Now committed; backs `npm run training:hardening`, which is in no gate, so it had no effect on any recorded result |
+| `packages/lab/scripts/check-screenreader-hardening.py` was also untracked | Now committed; backs `npm run training:hardening`, which is in no gate, so it had no effect on any recorded result |
 
 ### Why those 418 captures went stale — diagnosed, so nobody re-derives it
 
@@ -115,7 +115,7 @@ those 418 contributed transcripts from larger pages than the corpus now generate
 
 ## The red CI job is FIXED
 
-`.github/workflows/lint.yml` used to fail on 6 files under `src/capture/nvda/`, and the cause was one line:
+`.github/workflows/lint.yml` used to fail on 6 files under `packages/lab/src/capture/nvda/`, and the cause was one line:
 
 ```
 Error: No available supported screen readers
@@ -197,7 +197,7 @@ and it contains itself, so editing it changes the hash.
 ```bash
 npm run lint && npm run typecheck && npm test   # no worker, no venv, no network
 npm run release:gate                            # signals -> rules -> acceptance -> judge quality
-./scripts/action-dry-run.sh https://example.com "Complete the checkout"
+./packages/lab/scripts/action-dry-run.sh https://example.com "Complete the checkout"
 npm run layers:compare -- '[["https://www.washington.edu/accesscomputing/AU/before.html","Apply now"]]'
 ```
 

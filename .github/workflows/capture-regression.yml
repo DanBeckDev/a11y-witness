@@ -3,37 +3,37 @@ name: capture-regression
 # Phase 1 (ADR 0003): the capture half's regression gate. Drives the real
 # capture worker (NVDA on a Windows runner via guidepup/setup-action) over the
 # bundled tutorial pages and asserts the stable raw signals each should yield
-# (see src/lab/capture-check.mjs). Path-filtered so it only spends
+# (see packages/lab/src/harnesses/capture-check.mjs). Path-filtered so it only spends
 # Windows-runner minutes when capture could have regressed; also on-demand.
 #
-# The filter covers src/training/** as well as src/capture/**: a probe and the signal that reads it are
+# The filter covers packages/lab/src/training/** as well as packages/lab/src/capture/**: a probe and the signal that reads it are
 # coupled, so a change to the case matrix can blind a probe without touching any capture code.
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - "src/capture/**"
-      - "!src/capture/**/*.md" # doc-only edits shouldn't spend Windows minutes
-      # `src/training/**` is here because a probe and its signal are COUPLED, and this filter used to
+      - "packages/lab/src/capture/**"
+      - "!packages/lab/src/capture/**/*.md" # doc-only edits shouldn't spend Windows minutes
+      # `packages/lab/src/training/**` is here because a probe and its signal are COUPLED, and this filter used to
       # exclude it. `case-matrix.mjs` decides what each signal reads, so a change there can blind a probe
       # without touching src/capture at all -- and that is exactly where the guard bug lived that failed
       # 44 cases in a live run. A filter that cannot fire on the file that broke it protects nothing.
-      - "src/training/**"
-      - "!src/training/**/*.md"
-      - "src/eval/pages/tutorials/**"
+      - "packages/lab/src/training/**"
+      - "!packages/lab/src/training/**/*.md"
+      - "packages/lab/src/eval/pages/tutorials/**"
       - ".github/workflows/capture-regression.yml"
   pull_request:
     paths:
-      - "src/capture/**"
-      - "!src/capture/**/*.md"
-      # `src/training/**` is here because a probe and its signal are COUPLED, and this filter used to
+      - "packages/lab/src/capture/**"
+      - "!packages/lab/src/capture/**/*.md"
+      # `packages/lab/src/training/**` is here because a probe and its signal are COUPLED, and this filter used to
       # exclude it. `case-matrix.mjs` decides what each signal reads, so a change there can blind a probe
       # without touching src/capture at all -- and that is exactly where the guard bug lived that failed
       # 44 cases in a live run. A filter that cannot fire on the file that broke it protects nothing.
-      - "src/training/**"
-      - "!src/training/**/*.md"
-      - "src/eval/pages/tutorials/**"
+      - "packages/lab/src/training/**"
+      - "!packages/lab/src/training/**/*.md"
+      - "packages/lab/src/eval/pages/tutorials/**"
       - ".github/workflows/capture-regression.yml"
 
 jobs:
@@ -92,4 +92,4 @@ jobs:
           Set-ItemProperty -Path $key -Name "HideFirstRunExperience" -Value 1 -Type DWord
           Set-ItemProperty -Path $key -Name "BrowserSignin" -Value 0 -Type DWord
       - name: Capture-regression checks (real NVDA)
-        run: node src/lab/capture-check.mjs
+        run: node packages/lab/src/harnesses/capture-check.mjs
