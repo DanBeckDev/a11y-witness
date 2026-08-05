@@ -18,8 +18,12 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# The weights, the encoder and the scoring program live in `@a11y-witness/scorer` (PLAN.md M3). Anchored on
+# the package directory rather than on `models/` at the repo root, which no longer holds them.
+SCORER_PACKAGE = ROOT / "packages" / "scorer"
 TRAINING_SCRIPT = ROOT / "scripts" / "train-screenreader-model.py"
-SCORER_SCRIPT = ROOT / "scripts" / "score-screenreader-model.py"
+SCORER_SCRIPT = SCORER_PACKAGE / "python" / "score.py"
 MIN_TEST_POSITIVES = 10
 
 
@@ -36,8 +40,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--training-data", type=Path, default=ROOT / "runs/screenreader-dataset/screenreader-evidence.jsonl")
     parser.add_argument("--acceptance-data", action="append", type=Path)
-    parser.add_argument("--encoder", type=Path, default=ROOT / "models/encoders/all-MiniLM-L6-v2")
-    parser.add_argument("--model", type=Path, default=ROOT / "models/screenreader-scorer")
+    parser.add_argument("--encoder", type=Path, default=SCORER_PACKAGE / "models/encoders/all-MiniLM-L6-v2")
+    parser.add_argument("--model", type=Path, default=SCORER_PACKAGE / "models/screenreader-scorer")
     parser.add_argument(
         "--allow-ineligible",
         action="store_true",

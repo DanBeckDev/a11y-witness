@@ -10,7 +10,6 @@ existing judge or deterministic rules until a separate integration decision.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -18,17 +17,22 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TRAINING_SCRIPT = ROOT / "scripts" / "train-screenreader-model.py"
 SUPPORTED_SCREEN_READER = "NVDA"
 
-
-def training_module() -> Any:
-    spec = importlib.util.spec_from_file_location("screenreader_training", TRAINING_SCRIPT)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load training module: {TRAINING_SCRIPT}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+# The feature pipeline is a SIBLING module, not the trainer.
+#
+# This program used to load `scripts/train-screenreader-model.py` dynamically by file path and call into it,
+# which made the trainer a runtime dependency of scoring — so shipping a scorer meant shipping a trainer.
+# ADR 0004 rejects that: distributing a trainer implies a consumer can reproduce training, and they cannot,
+# because the corpus is not distributed. The shared half is the FEATURE CONTRACT, and it belongs with the
+# weights it describes — `FEATURE_SCHEMA_VERSION` is stamped into the safetensors metadata, so the two are
+# checked against each other at load time.
+#
+# Named `feature_pipeline`, not `features`: `score_records` has a LOCAL variable called `features` (the
+# encoded tensor), and aliasing the module to that name shadows it — `UnboundLocalError` on every capture,
+# which is how this was found.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import screenreader_features as feature_pipeline  # noqa: E402  (path shim must precede the import)
 
 
 def parse_args() -> argparse.Namespace:
@@ -115,7 +119,7 @@ def read_sources(args: argparse.Namespace, training: Any) -> list[dict[str, Any]
     if args.data:
         records: list[dict[str, Any]] = []
         for path in args.data:
-            records.extend(training.read_records(path))
+            records.extend(feature_pipeline.read_records(path))
         unsupported = sorted({
             record["input"].get("screenReader", "unknown")
             for record in records
@@ -161,8 +165,8 @@ def verify_artifact(args: argparse.Namespace, training: Any) -> tuple[dict[str, 
     if report.get("releaseEligible") is not True and not args.allow_ineligible:
         raise RuntimeError("scorer report is not releaseEligible; use --allow-ineligible only for diagnostics")
 
-    encoder_file = training.assert_encoder(args.encoder)
-    actual_encoder_hash = training.sha256(encoder_file)
+    encoder_file = feature_pipeline.assert_encoder(args.encoder)
+    actual_encoder_hash = feature_pipeline.sha256(encoder_file)
     expected_encoder_hash = report.get("encoder", {}).get("modelSha256")
     if actual_encoder_hash != expected_encoder_hash:
         raise RuntimeError("encoder SHA-256 does not match the training report")
@@ -170,20 +174,20 @@ def verify_artifact(args: argparse.Namespace, training: Any) -> tuple[dict[str, 
     with safe_open(str(model_file), framework="pt", device="cpu") as handle:
         metadata = handle.metadata() or {}
         keys = set(handle.keys())
-    expected_features = list(training.FEATURE_NAMES)
-    if metadata.get("representation") != training.FEATURE_SCHEMA_VERSION:
+    expected_features = list(feature_pipeline.FEATURE_NAMES)
+    if metadata.get("representation") != feature_pipeline.FEATURE_SCHEMA_VERSION:
         raise RuntimeError("scorer representation schema does not match the runtime")
     if metadata.get("encoder_sha256") != actual_encoder_hash:
         raise RuntimeError("scorer encoder SHA-256 metadata does not match the encoder")
     if json_metadata(metadata.get("structured_features"), "structured_features") != expected_features:
         raise RuntimeError("scorer structured feature order does not match the runtime")
-    if float(metadata.get("structured_feature_scale", "nan")) != training.ENGINEERED_FEATURE_SCALE:
+    if float(metadata.get("structured_feature_scale", "nan")) != feature_pipeline.ENGINEERED_FEATURE_SCALE:
         raise RuntimeError("scorer structured feature scale does not match the runtime")
-    if json_metadata(metadata.get("structured_feature_multipliers"), "structured_feature_multipliers") != training.ENGINEERED_FEATURE_MULTIPLIERS:
+    if json_metadata(metadata.get("structured_feature_multipliers"), "structured_feature_multipliers") != feature_pipeline.ENGINEERED_FEATURE_MULTIPLIERS:
         raise RuntimeError("scorer structured feature multipliers do not match the runtime")
 
     representation = report.get("representation", {})
-    if representation.get("schema") != training.FEATURE_SCHEMA_VERSION:
+    if representation.get("schema") != feature_pipeline.FEATURE_SCHEMA_VERSION:
         raise RuntimeError("training report representation schema does not match the runtime")
     if representation.get("structuredFeatures") != expected_features:
         raise RuntimeError("training report feature order does not match the runtime")
@@ -240,8 +244,8 @@ def verify_artifact(args: argparse.Namespace, training: Any) -> tuple[dict[str, 
     artifact = {
         "screenReader": SUPPORTED_SCREEN_READER,
         "encoderSha256": actual_encoder_hash,
-        "modelSha256": training.sha256(model_file),
-        "reportSha256": training.sha256(report_path),
+        "modelSha256": feature_pipeline.sha256(model_file),
+        "reportSha256": feature_pipeline.sha256(report_path),
         "trainingDatasetSha256": report.get("dataset", {}).get("sha256"),
         "modelPath": str(model_file),
         "reportPath": str(report_path),
@@ -253,7 +257,7 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
     import torch
 
     max_length = int(report["representation"]["maxLength"])
-    features, _, _ = training.encode_records(records, args.encoder, max_length)
+    features, _, _ = feature_pipeline.encode_records(records, args.encoder, max_length)
     scored: list[dict[str, Any]] = []
     criteria = report["criteria"]
     for index, record in enumerate(records):
@@ -263,7 +267,7 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
             subtype_scores = []
             for subtype_report in criterion_report["subtypes"].values():
                 head = subtype_report["head"]
-                subtype_scores.append(training.score_head(features[index:index + 1], weights[head + ".weight"], weights[head + ".bias"])[0])
+                subtype_scores.append(feature_pipeline.score_head(features[index:index + 1], weights[head + ".weight"], weights[head + ".bias"])[0])
             score = float(torch.stack(subtype_scores).amax())
             scores[criterion] = score
             predictions[criterion] = score >= float(criterion_report["threshold"])
@@ -284,7 +288,7 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
 
 def main() -> None:
     args = parse_args()
-    training = training_module()
+    training = feature_pipeline
     records = read_sources(args, training)
     if not records:
         raise RuntimeError("no screen-reader evidence supplied")

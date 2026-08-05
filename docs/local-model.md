@@ -131,14 +131,14 @@ checkpoint and train from the exported screen-reader-only JSONL:
 
 ~~~sh
 python3.12 -m venv .venv
-.venv/bin/python -m pip install -r requirements-local-model.txt
+.venv/bin/python -m pip install -r packages/scorer/requirements.txt
 npm run training:fetch-encoder
 npm run training:train
 node scripts/verify-safetensors.mjs models/encoders/all-MiniLM-L6-v2
-node scripts/verify-safetensors.mjs models/screenreader-scorer
+node scripts/verify-safetensors.mjs packages/scorer/models/screenreader-scorer
 ~~~
 
-The learned artifact is `models/screenreader-scorer/model.safetensors` and its
+The learned artifact is `packages/scorer/models/screenreader-scorer/model.safetensors` and its
 metrics/provenance are in `training-report.json`. The runner splits by page
 family, never by transcript row, and rejects forbidden page-level fields. The
 scorer combines channel-tagged evidence-unit embeddings with 29 structured

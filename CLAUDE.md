@@ -999,7 +999,7 @@ Verification is layered; pick the layers your change touches:
 ## Environment facts
 - ESM throughout (`"type": "module"`). `.ts` for the control plane, `.mjs` for the capture worker (it runs under plain Node on the VM).
 - **The judge is our own trained scorer.** `JUDGE_BACKEND` defaults to `local` — the 27 KB of heads in
-  `models/screenreader-scorer/` over a frozen MiniLM encoder. `codex`, `anthropic` and `openai` remain
+  `packages/scorer/models/screenreader-scorer/` over a frozen MiniLM encoder. `codex`, `anthropic` and `openai` remain
   available for comparison and are **never** the default.
   > It defaulted to `codex` until 2026-08-04, and the GitHub Action already shipped `local` — so
   > `npm run eval` and `npm run eval:gate` measured a rented model and **never once measured ours**. A

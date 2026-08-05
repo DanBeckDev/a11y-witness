@@ -198,9 +198,9 @@ runs:
         python -m pip install --quiet --upgrade pip
         python -m pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
         python -m pip install --quiet transformers safetensors numpy
-        python scripts/fetch-screenreader-encoder.py
+        python packages/scorer/python/fetch-encoder.py
         # Fail here rather than at judging time: a missing model must not read as "this page is clean".
-        test -f models/screenreader-scorer/model.safetensors \
+        test -f packages/scorer/models/screenreader-scorer/model.safetensors \
           || { echo "::error::The trained scorer is missing from the action checkout." >&2; exit 1; }
 
     # The capture runs through the worker rather than in-process, because that is the path the project

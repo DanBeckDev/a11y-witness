@@ -26,6 +26,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openSync, readSync, closeSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+import { scorerPaths } from "@a11y-witness/scorer";
 import { join } from "node:path";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -45,9 +47,13 @@ function safetensorsMetadata(path: string): Record<string, string> {
   }
 }
 
-test("the committed weights carry the schema the committed trainer computes", () => {
-  const weights = join(repoRoot, "models/screenreader-scorer/model.safetensors");
-  const trainer = join(repoRoot, "scripts/train-screenreader-model.py");
+test("the committed weights carry the schema the committed feature pipeline computes", () => {
+  // `FEATURE_SCHEMA_VERSION` moved out of the trainer and into the feature module that SHIPS WITH the weights
+  // (PLAN.md M3), which is the point: the two must version together, and the trainer is not published at all.
+  // Reading the trainer here would now find nothing and — before the guard below existed — would have passed
+  // by examining an empty match.
+  const weights = scorerPaths().weights;
+  const trainer = join(repoRoot, "packages/scorer/python/screenreader_features.py");
 
   const stamped = safetensorsMetadata(weights).representation;
   assert.ok(stamped, `${weights} has no \`representation\` metadata; it was not written by the trainer`);
@@ -64,10 +70,8 @@ test("the committed weights carry the schema the committed trainer computes", ()
 test("the training report agrees with the weights", () => {
   // The scorer checks this too, and separately: a report from a different run than the weights would make
   // every threshold and every recorded metric describe a model that is not the one loaded.
-  const weights = join(repoRoot, "models/screenreader-scorer/model.safetensors");
-  const report = JSON.parse(
-    readFileSync(join(repoRoot, "models/screenreader-scorer/training-report.json"), "utf8"),
-  ) as { representation?: { schema?: string } };
+  const { weights, trainingReport } = scorerPaths();
+  const report = JSON.parse(readFileSync(trainingReport, "utf8")) as { representation?: { schema?: string } };
   assert.equal(report.representation?.schema, safetensorsMetadata(weights).representation,
     "the training report and the weights come from different runs");
 });
