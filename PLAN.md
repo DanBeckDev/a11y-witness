@@ -206,9 +206,20 @@ cheaply as possible, and the first step moves no files at all.
   type-checked as M2–M5 moved them (measured with `tsc --listFiles`: 0 in the program,
   now 24) — my own regression, introduced in M2 and found in M5.
 
-- [ ] **M6 — Extract `@a11y-witness/worker-fleet`.** Host-side lifecycle, health,
-  capacity, and the `doctor`/`worker-ctl`/`deploy`/`compare` bins. Gate:
-  `npm run doctor` still reports READY and still names its own fixes.
+- [x] **M6 — Extract `@a11y-witness/worker-fleet`.** DONE (`659a8e7`) at `0.1.0`,
+  AGPL-3.0-or-later, not published. Five bins; the UTM provisioning assets ship with it.
+  Gate met: `doctor` finds all three workers, measures capacity, and every FAIL carries
+  its remedy.
+
+  It broke `doctor` first, in the way this milestone is about: the lifecycle script was
+  resolved as `../scripts/local-worker/…` relative to the module, so after the move
+  doctor reported **"no local VM tooling here" on a host with three registered VMs**.
+  Same class in `deploy-worker`/`check-worker-code` (`resolve("packages/nvda-worker/src")`,
+  a repo-layout guess), and in `fleetScriptPaths()`, which had to resolve `../src/…`
+  because tsc does not copy `.sh`/`.xml` into `dist` — the isolation gate caught that one.
+
+  ADR correction recorded: `shouldRetireWorker` stays in `capture-decisions.mjs` with the
+  run's other accept/reject/evict decisions rather than moving to `./health`.
 - [ ] **M7 — Extract `a11y-witness` (the CLI).** `cli.ts`, `report.ts`, `scan/*`, and
   `src/action/` as a private module. Gate: a real end-to-end run against a live
   worker, plus `--json` and `--no-axe` behaving as ADR 0003 Phase 3 recorded.
