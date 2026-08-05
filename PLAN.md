@@ -145,11 +145,24 @@ cheaply as possible, and the first step moves no files at all.
   workspace: two wrong field names in the README's own example, and a tarball with no
   `dist` because `npm pack` does not build. `"prepack": "tsc --build"` is now a
   documented requirement for every package.
-- [ ] **M3 — Extract `@a11y-witness/scorer`; fix cwd-relative resolution.** Restore
-  the scoring program, move the weights and `training-report.json`, add
-  `scorerPaths()` resolving from `import.meta.url`, and change `local-judge.ts` to
-  call it. Closes the M0 defect. Gate: `npm run eval` unchanged against the local
-  backend.
+- [x] **M3 — Extract `@a11y-witness/scorer`.** DONE (`c5b9813`) at `0.1.0`,
+  AGPL-3.0-or-later, not published. Gate met: `npm run eval` unchanged against the
+  local backend, and behaviour preservation measured directly — **28 fixtures scored
+  byte-identically before and after**, including the VoiceOver capture that must be
+  refused; scoring from `/` matches scoring from the repo root.
+
+  Two things this milestone did not anticipate. **The trainer was a runtime dependency
+  of scoring** — `score.py` loaded it by file path and called nine symbols out of it —
+  which ADR 0004 forbids shipping. All nine were feature-pipeline or inference, so
+  `screenreader_features.py` became the feature contract and ships *with the weights
+  it describes*; the trainer went 607 → 303 lines and stays unpublished. And the M0
+  defect was **four** cwd-relative resolutions, not one: `cli.ts`'s shadow scorer,
+  `fetch-encoder.py`'s output directory (87 MB into whatever directory the consumer
+  stood in) and the trainer's own `--encoder`/`--output` defaults.
+
+  Also closed two checks that would have passed by examining nothing after the move:
+  `scorer-artifact.test.ts` read the schema from the trainer, and
+  `referenced-scripts.test.ts` matched only `scripts/`.
 - [ ] **M4 — Extract `@a11y-witness/judge`.** Move `judge`/`local-judge`/`rules`/
   `layers`/`verify-gate` out of `src/spike/`, retire the misleading directory name,
   and draw the `./internal` subpath so `lab` can drive the real gates. Gate:
