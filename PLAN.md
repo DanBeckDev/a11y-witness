@@ -220,9 +220,23 @@ cheaply as possible, and the first step moves no files at all.
 
   ADR correction recorded: `shouldRetireWorker` stays in `capture-decisions.mjs` with the
   run's other accept/reject/evict decisions rather than moving to `./health`.
-- [ ] **M7 — Extract `a11y-witness` (the CLI).** `cli.ts`, `report.ts`, `scan/*`, and
-  `src/action/` as a private module. Gate: a real end-to-end run against a live
-  worker, plus `--json` and `--no-axe` behaving as ADR 0003 Phase 3 recorded.
+- [x] **M7 — Extract `a11y-witness` (the CLI).** DONE (`22e7181`) at `0.1.0`, unscoped so
+  `npx a11y-witness` needs no wrapper; the root package became `a11y-witness-monorepo`
+  because npm refuses two workspace members with the same name. `reportLines` and
+  `Report` are the whole public surface.
+
+  Gate met, against a live worker on the UW demo pair:
+
+  | run | result |
+  |---|---|
+  | `before.html --no-axe` | 1.1.1 ×3, 1.3.1, 2.4.4, 4.1.2 — layered perceive → navigate → interact, and the report states that visual criteria come from the rule layer |
+  | `after.html --no-axe --json` | **0 findings, `taskCompletable: true`**, `ruleBased: null` (did not run, not "ran and found nothing"), `captureVerified: true`, 102 announcements, 8 headings |
+
+  The clean twin matters more than the findings, and both match what `RELEASE.md`
+  records. The smoke test caught a third wrong API guess of mine (`reportLines` takes the
+  judgment nested under `verdict`); and `git add -- src` swept up another agent's
+  untracked test file, which the committed-content check surfaced as 0 failures becoming
+  7.
 - [ ] **M8 — Collapse the remainder into `@a11y-witness/lab`.** Eval, training,
   gates, the three judge harnesses, the Python analysis programs. Gate: `npm test`,
   `verify.corpus.test.ts` and `npm run release:gate` all green from the new layout.
