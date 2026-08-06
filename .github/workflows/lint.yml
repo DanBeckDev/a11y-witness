@@ -24,6 +24,10 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # Coverage is enforced, not merely reported: `check-coverage` in .c8rc.json fails the build below the
+      # threshold, and `all: true` counts files no test imports — without it a file with no test is invisible
+      # rather than zero, which is how 85.9% was really 47.4%.
+      - run: npm run coverage
       # Deterministic absence-rules fitness function: no model needed, so it runs
       # on every push and fails if the rules regress (e.g. a clean-page false positive).
       - run: npm run rules-check
