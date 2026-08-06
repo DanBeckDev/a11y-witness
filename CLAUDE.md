@@ -941,6 +941,17 @@ npm run release:gate          # signals -> rules -> held-out acceptance -> judge
 npm run capture:check -- --worker=http://192.168.64.4:8765    # the capture layer, ~2 min
 ```
 
+**Run the clean-code review on your own diff before you push.** Not on the whole repo — on what you
+changed, plus anything the Boy Scout Rule says you should have tidied in passing. It is a judgement
+pass, so it cannot live in the pre-push hook next to lint and `tsc`: those catch the mechanical half
+(`max-lines-per-function`, `complexity`, `no-empty`), and the half that actually costs this project
+money is the other one — does the function do one thing, does the name reveal intent, is a caught
+error genuinely handled or merely logged. Three of the worst defects recorded in this file were clean
+by every mechanical check and would have been caught by reading the diff and asking those questions.
+
+Review before pushing, not after: a review that lands after the commit becomes a follow-up nobody
+schedules.
+
 This project had eight verifications and only two were automatic, and the record of what that produces is
 unambiguous: `capture-check` was *required* after any change to `capture-core.mjs` and had never run once;
 `release:gate` was broken from the day it was written (it invoked the acceptance evaluator with no
