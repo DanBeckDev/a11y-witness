@@ -206,6 +206,31 @@ function warnUnverified(reason: CaptureDoubt, title: string | undefined): void {
     + "modal such as a cookie or consent dialog. Reporting no findings rather than describing the dialog.\n");
 }
 
+/**
+ * Re-capture while the transcript does not appear to be about the page.
+ *
+ * axe gives us the page title; a capture that never says it probably read something else — Edge's image
+ * magnifier overlay did exactly this on gov.uk, three attempts running. A retry is worth it because that fault
+ * is usually transient (a window that had not taken focus yet).
+ *
+ * Reachability is deliberately NOT checked here: a consent wall is present on every attempt, so retrying buys
+ * three captures and the same answer. `captureDoubt` handles that afterwards, once, and carries it in the
+ * result rather than only warning.
+ */
+async function recaptureUntilItReadsThePage(
+  first: CaptureResponse,
+  title: string,
+  options: { url: string; task: string; worker: string; probeForms: boolean },
+): Promise<CaptureResponse> {
+  let cap = first;
+  const { url, ...captureOptions } = options;
+  for (let attempt = 2; attempt <= MAX_CAPTURE_ATTEMPTS && !captureMentionsTitle(cap, title); attempt++) {
+    process.stderr.write(`Capture did not appear to read "${title}" (wrong content?); re-capturing (attempt ${attempt}/${MAX_CAPTURE_ATTEMPTS}) ...\n`);
+    cap = await captureViaWorker(url, captureOptions);
+  }
+  return cap;
+}
+
 async function runWitness({ url, task, worker, json, debug, probeForms, axe: wantAxe, axeResults }: RunOptions): Promise<void> {
   const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults });
   process.stderr.write(`Scanning ${url} (${ruleLayer === "none" ? "" : "rule-based axe-core + "}real screen reader) ...\n`);
@@ -225,13 +250,7 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
 
   // Verify-and-retry (the Root-1 fix, brought to the product). Browser focus on
   // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
-  // axe (Playwright) gives us the page title; if the capture doesn't contain it,
-  // NVDA likely read the wrong content — re-capture before judging.
-  let cap = firstCap;
-  for (let attempt = 2; attempt <= MAX_CAPTURE_ATTEMPTS && !captureMentionsTitle(cap, axe.title); attempt++) {
-    process.stderr.write(`Capture did not appear to read "${axe.title}" (wrong content?); re-capturing (attempt ${attempt}/${MAX_CAPTURE_ATTEMPTS}) ...\n`);
-    cap = await captureViaWorker(url, { task, worker, probeForms });
-  }
+  const cap = await recaptureUntilItReadsThePage(firstCap, axe.title, { url, task, worker, probeForms });
   // Carry the verdict, do not just warn about it.
   //
   // This wrote a WARNING and carried on. On gov.uk the capture read Edge's image-magnifier overlay
@@ -276,27 +295,36 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
     census: pageCensus(cap) ?? undefined,
   });
 
-  if (json) {
-    const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
-    // `structure` and `interaction` are included deliberately. They were omitted, so the machine-readable
-    // output carried only the read-through and dropped every structural sweep and interaction probe --
-    // the evidence behind most findings. A consumer reading this JSON could not tell "this page has no
-    // links" from "links were never recorded", and the local judge's evidence guard, given exactly that,
-    // suppressed a correct 4.1.2 finding scored at 0.993.
-    console.log(JSON.stringify({
-      url, task, screenReader: cap.screenReader, transcript: cap.transcript,
-      structure: cap.structure, interaction: cap.interaction,
-      ruleBased: ruleFindings, verdict: layered,
-      // False when the capture could not be confirmed to have read the requested page. Findings from an
-      // unverified capture may describe browser chrome, so a consumer must be able to refuse them.
-      captureVerified,
-      // WHY it is unverified, because the two causes need different explanations to a reader: reading the
-      // wrong thing entirely, versus reading only a modal dialog that sat in front of the right page.
-      ...(unverifiedReason ? { captureUnverifiedReason: unverifiedReason } : {}),
-    }, null, 2));
-  } else {
-    printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: ruleFindings });
-  }
+  if (json) printJson({ url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason });
+  else printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: ruleFindings });
+}
+
+/**
+ * The machine-readable result, for CI and for anything downstream of this tool.
+ *
+ * `structure` and `interaction` are included DELIBERATELY. They were omitted once, so this output carried only
+ * the read-through and dropped every structural sweep and interaction probe — the evidence behind most
+ * findings. A consumer reading it could not tell "this page has no links" from "links were never recorded",
+ * and the local judge's evidence guard, given exactly that, suppressed a correct 4.1.2 finding scored at 0.993.
+ */
+function printJson(
+  { url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason }: {
+    url: string; task: string; cap: CaptureResponse; verdict: Report["verdict"];
+    ruleFindings: AxeFinding[] | null; captureVerified: boolean; unverifiedReason?: CaptureDoubt;
+  },
+): void {
+  const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
+  console.log(JSON.stringify({
+    url, task, screenReader: cap.screenReader, transcript: cap.transcript,
+    structure: cap.structure, interaction: cap.interaction,
+    ruleBased: ruleFindings, verdict: layered,
+    // False when the capture could not be confirmed to have read the requested page. Findings from an
+    // unverified capture may describe browser chrome, so a consumer must be able to refuse them.
+    captureVerified,
+    // WHY it is unverified, because the two causes need different explanations to a reader: reading the
+    // wrong thing entirely, versus reading only a modal dialog that sat in front of the right page.
+    ...(unverifiedReason ? { captureUnverifiedReason: unverifiedReason } : {}),
+  }, null, 2));
 }
 
 type RuleLayer = "none" | "run" | "import";
