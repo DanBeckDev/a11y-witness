@@ -51,7 +51,8 @@
     "layers:compare": "A11Y_PYTHON=.venv/bin/python node packages/lab/scripts/compare-layers.mjs",
     "pretest": "npm run build",
     "pretypecheck": "npm run build",
-    "worker:ctl": "packages/worker-fleet/src/local-worker/worker-ctl.sh"
+    "worker:ctl": "packages/worker-fleet/src/local-worker/worker-ctl.sh",
+    "coverage": "node scripts/coverage.mjs"
   },
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
