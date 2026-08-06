@@ -53,7 +53,10 @@ test("provenance reads the schema as a STRING, not as the object it sits in", ()
   // safetensors metadata, and reading the wrong one produced a provenance value that looked fine in a log.
   const provenance = scorerProvenance();
   assert.ok(provenance, "the training report ships with the weights and must be readable");
-  assert.equal(typeof provenance.featureSchema, "string",
+  // `assert.ok` on the typeof rather than `assert.equal` of it: both check the same thing at runtime, but
+  // only this form narrows `string | undefined` for the `assert.match` below, which otherwise does not
+  // typecheck. Written the other way first, and `npm run typecheck` caught it.
+  assert.ok(typeof provenance.featureSchema === "string",
     `featureSchema must be the schema string, got ${JSON.stringify(provenance.featureSchema)}`);
   assert.match(provenance.featureSchema, /^screenreader-/);
   assert.equal(typeof provenance.releaseEligible, "boolean",
