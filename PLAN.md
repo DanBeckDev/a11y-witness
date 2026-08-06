@@ -454,6 +454,38 @@ re-derives the analysis.
   recapture is already required, and bundling them pays the cost once. **Do not start the recapture
   until this is fixed**, or the false zeros are written into every capture.
 
+  **UPDATE, and it is worse than a truncation bug: the rescale made a capture 5-10x slower, so the
+  848-pair recapture estimate of ~5.8h is wrong by roughly an order of magnitude.** Timed end to end
+  on one guest, deployed code, quiet host:
+
+  | page | capture time |
+  |---|---|
+  | `table-unassociated-headers/bad` — 40 links, 29 headings | **123.4s** |
+  | `form-unlabelled/good` — 14 links | **58.1s** |
+  | documented baseline before the rescale | 12.4s |
+
+  The 123.4s is the capture hitting `DEFAULT_BUDGET_MS` (120s), so **the overall budget ceiling is
+  itself truncating evidence** — that is why the list sweep reports `deadline`. Per-sweep detail on the
+  40-link page shows where it goes: `heading` 13.8s + 12.6s and `link` 0.3s + 20.6s, ~50s of sweeping
+  in one capture. Each sweep step is 2 round trips (`perform` + `spokenPhraseLog`) at ~225ms, so cost
+  is linear in element count and the filler multiplied element count by 20-40x.
+
+  1,696 captures at these rates is **~18h on three workers, ~42h on one** — not one overnight run.
+
+  So the per-sweep budget fix is necessary but not sufficient: fair allocation stops `lists: 0` being a
+  false zero, but it cannot make a 40-link page affordable. The options, and this is a research-design
+  decision rather than a code one:
+
+  1. **Shrink `SCALE_BUCKETS`** (currently up to `{links: 40, sections: 28}`). The rescale's goal was
+     realistic structure; most of that realism is present at 14-20 links for a fraction of the cost.
+     Cheapest, and it keeps the recapture to one night.
+  2. **Cut the round trips per sweep step** from 2 to 1. Structural, benefits every capture including
+     un-rescaled ones, but it touches the most defect-prone code in the repo.
+  3. **Accept ~18h** across three workers and run it over a weekend. Note the host-memory cap means
+     three guests on a 36 GB Mac is exactly the over-commitment that produced starved workers.
+
+  Do not pick one of these without the user: option 1 changes what the corpus represents.
+
   Reproduces in ~90s. Two throwaway probes exist under this session's scratchpad
   (`probe-sweep.mjs`, `dump.mjs`); they lease the page server, capture N times against a named worker,
   and print the per-field counts with `/health.vitals` after each.
