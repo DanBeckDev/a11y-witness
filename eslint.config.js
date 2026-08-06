@@ -47,8 +47,25 @@ export default tseslint.config(
       // our whole diagnostics model exists to avoid exactly that. ---
       "no-empty": ["error", { allowEmptyCatch: false }],
 
-      // --- Clean Code: G25 replace magic numbers with named constants. Valuable
-      // but noisy (config defaults, thresholds), so surfaced, not gated. ---
+      // --- Clean Code: G25 replace magic numbers with named constants. Valuable but noisy, so surfaced,
+      // never gated.
+      //
+      // TRIAGED 6 Aug, all 321 of them, so the count is not mistaken for 321 unexamined defects:
+      //
+      //   150  in tests and benchmarks, where the literal IS the fixture data. The book explicitly allows
+      //        tests to trade a little rigour for readability, and naming `expect(4)` buys nothing.
+      //   171  in production code, and the commonest values are:
+      //          200/400/429/500  HTTP status codes — CLAUDE.md exempts these by name
+      //          1024             byte arithmetic; `bytes / 1024 / 1024` is self-explanatory (G25's own test
+      //                           is "not ALREADY self-explanatory", not "not a literal")
+      //          5050             always as `process.env.DATASET_PAGES_PORT || 5050`, i.e. an env default
+      //                           beside the name that explains it. Centralising it would need worker-fleet
+      //                           to import from lab, inverting the dependency direction — worse architecture
+      //                           for a cosmetic gain.
+      //          1000/60/24       time conversions, in expressions that state their own units
+      //
+      // Conclusion: reviewed and accepted, not deferred. If this count climbs a lot, re-triage rather than
+      // assuming the new ones are the same kind. ---
       "no-magic-numbers": [
         "warn",
         { ignore: [0, 1, -1, 2], ignoreArrayIndexes: true, enforceConst: true, ignoreDefaultValues: true },
