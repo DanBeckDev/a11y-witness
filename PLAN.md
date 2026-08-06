@@ -486,6 +486,23 @@ re-derives the analysis.
 
   Do not pick one of these without the user: option 1 changes what the corpus represents.
 
+  **SECOND UPDATE, after shrinking the buckets (ADR 0009) and regenerating the pages.** The cost fix
+  works — 123.4s -> 28.1s on the page that was hitting the budget, a 4.4x win. But two things came out
+  of verifying it that matter more than the win:
+
+  - **The cost model was wrong and the test that encoded it passed anyway.** Predicted 12.4s for an
+    unfurnished page, measured **28.1s**; predicted 21s for `{6,4}`, measured **37.2s**. The 12.4s came
+    from CLAUDE.md, measured on a different host state. So the honest recapture figure is **15.4h on one
+    worker, 8.1h on two** — it fits a night on two guests, not one. `scale-buckets.test.ts` now carries
+    the measured constants and names the pool in its assertion, because the comfortable single-worker
+    number was hiding the constraint. Corrected within the hour, but it passed against an unchecked
+    model first, which is this repo's own count-based-check trap.
+  - **`lists: 0` SURVIVES the fix, and is therefore not a budget problem.** A 6-link page with 6 list
+    items, captured in 37.2s against a 120s budget, still reports zero lists. So the list sweep has a
+    defect independent of truncation — the deadline was masking it, not causing it. This is unfinished
+    and is the next thing to diagnose: `stop`/`stopPhrase` are now on the wire for exactly this, so
+    start by reading `nextStop` for the `list` sweep rather than reasoning about it.
+
   Reproduces in ~90s. Two throwaway probes exist under this session's scratchpad
   (`probe-sweep.mjs`, `dump.mjs`); they lease the page server, capture N times against a named worker,
   and print the per-field counts with `/health.vitals` after each.
