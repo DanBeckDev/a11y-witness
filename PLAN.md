@@ -421,6 +421,43 @@ cost ~184s each to recover; the read now stops after
 Ideas below are ordered by expected value, each with the reason it is still open — so nobody
 re-derives the analysis.
 
+- [ ] **BLOCKER for the recapture: the structure sweeps are truncated by the capture deadline, and
+  truncation is indistinguishable from absence.** Measured 2026-08-06 on
+  `table-unassociated-headers/bad` (40 links, 40 list items, 29 headings), four captures, one guest,
+  **0 recoveries and 0 failures** — so this is not the mute fault and not focus mode:
+
+  | field | four captures | page truth |
+  |---|---|---|
+  | headings | 29, 29, 29, 29 | 29 — stable |
+  | links | **27, 34, 33, 26** | 40 — never reached |
+  | lists | **0, 0, 0, 0** | present — false zero |
+
+  `MAX_SWEEP_STEPS` is 40, exactly the filler's link count, but at 26-34 the cap is not what binds —
+  the shared capture deadline is. Links stops at a varying point; `lists` runs afterwards, finds the
+  budget already spent, and returns 0. **`lists: 0` on a page full of lists is the exact conflation
+  this project forbids**: "the page has no lists" and "we ran out of time" become the same evidence.
+  The `break` at `capture-core.mjs:1388` records no stop reason, so it is invisible in the same way
+  the 604 silent `sweepLog` crashes were.
+
+  Caused BY the page rescale (`6d5fcae`), which made pages 20-40x bigger without scaling the sweep
+  budget. It is why `gate:stability` reports 4/6 — though note the gate's summary points at the wrong
+  field: `headings 29,29,29,29,5` was a genuine one-off, and headings are stable on repeat. The
+  unstable field is `links`.
+
+  Not a shortcut feature — the filler is identical across a pair, so it does not correlate with the
+  good/bad label the way U+FFFC did. It is noise, but it makes `links`/`lists` unreliable and any
+  signal reading them can flip.
+
+  Fix: a per-sweep budget scaled to page size, and a `deadline` stop reason so a truncated sweep can
+  never again read as absence. Then deploy, `capture:check`, `evidence:check`. It changes what the
+  evidence means, so it needs a `CAPTURE_PROTOCOL_VERSION` bump — free right now, because the 848-pair
+  recapture is already required, and bundling them pays the cost once. **Do not start the recapture
+  until this is fixed**, or the false zeros are written into every capture.
+
+  Reproduces in ~90s. Two throwaway probes exist under this session's scratchpad
+  (`probe-sweep.mjs`, `dump.mjs`); they lease the page server, capture N times against a named worker,
+  and print the per-field counts with `/health.vitals` after each.
+
 - [x] **Removed a redundant anchor: 15.8s -> 13.4s per capture.** Measuring before optimising
   corrected my own claim that the time was mostly browser setup. On a typical page with NVDA
   reused it was: structural 4.7s, documentReady 3.9s, afterStart 3.0s, windowsActivate 2.2s,
