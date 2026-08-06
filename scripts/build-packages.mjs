@@ -22,7 +22,7 @@ const buildable = allPackages().filter((dir) => existsSync(join(dir, "tsconfig.j
 if (buildable.length === 0) {
   // Reported rather than passed silently. There is genuinely nothing to build yet (M1 is scaffolding, zero
   // moves), and the enforcement `composite: true` buys is verified separately by
-  // `src/packaging/project-references.test.ts` — so an empty build here is honest, not unverified.
+  // `packages/lab/src/packaging/project-references.test.ts` — so an empty build here is honest, not unverified.
   process.stdout.write("no buildable packages under packages/ yet (PLAN.md M1 is scaffolding only)\n");
   process.exit(0);
 }
