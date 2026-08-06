@@ -21,7 +21,8 @@ SUPPORTED_SCREEN_READER = "NVDA"
 
 # The feature pipeline is a SIBLING module, not the trainer.
 #
-# This program used to load `scripts/train-screenreader-model.py` dynamically by file path and call into it,
+# This program used to load the trainer (now `packages/lab/scripts/train-screenreader-model.py`)
+# dynamically by file path and call into it,
 # which made the trainer a runtime dependency of scoring — so shipping a scorer meant shipping a trainer.
 # ADR 0004 rejects that: distributing a trainer implies a consumer can reproduce training, and they cannot,
 # because the corpus is not distributed. The shared half is the FEATURE CONTRACT, and it belongs with the

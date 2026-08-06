@@ -100,7 +100,14 @@ export function checkIsolation(packageDir) {
     // `--no-workspaces` and absolute tarball paths: without them npm can walk UP from the temp directory
     // and re-attach to a workspace root, which would reintroduce exactly the symlink resolution the gate
     // exists to avoid.
-    run("npm", ["install", "--silent", "--no-workspaces", ...tarballs], consumer);
+    // `--omit=optional` because an OPTIONAL dependency is by definition not required to install and use the
+    // package. The CLI declares `playwright` and `@axe-core/playwright` optional — the visual layer is opt-in
+    // and loaded with a dynamic `import()` behind an availability check — so installing them here fetched
+    // 25 MB of browser engine from the registry to run a renderer assertion that never opens a browser.
+    // Measured: 7.1 s for the CLI against 2.2 s for a leaf package, and the gate could not run offline at all,
+    // which is a Fast/Repeatable failure for no coverage in return. A package that genuinely NEEDS a dependency
+    // must declare it as a dependency, and this gate exists to catch exactly that mistake.
+    run("npm", ["install", "--silent", "--no-workspaces", "--omit=optional", ...tarballs], consumer);
     copyFileSync(smoke, join(consumer, SMOKE));
     const output = run("node", [SMOKE], consumer);
     return { ok: true, stage: "smoke", name, detail: output.trim().split("\n").slice(-1)[0] ?? "" };
@@ -152,10 +159,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
   if (targets.length === 0) {
     // Says so rather than reporting success over nothing. The gate's own correctness is asserted separately
-    // by `src/packaging/isolation-gate.test.ts` against three fixtures, so an empty run here is honest
+    // by `packages/lab/src/packaging/isolation-gate.test.ts` against three fixtures, so an empty run here is honest
     // rather than unverified: there is genuinely nothing published yet (PLAN.md M1, zero moves).
     process.stdout.write("no packages under packages/ yet — nothing to gate (PLAN.md M1 is scaffolding only)\n");
-    process.stdout.write("the gate itself is verified by src/packaging/isolation-gate.test.ts\n");
+    process.stdout.write("the gate itself is verified by packages/lab/src/packaging/isolation-gate.test.ts\n");
     process.exit(0);
   }
   let failed = 0;

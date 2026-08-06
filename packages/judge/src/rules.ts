@@ -13,7 +13,7 @@
  * headings, so they cannot produce the over-flagging the generative judge did.
  *
  * A note on announcement strings (verified against the real NVDA captures in
- * src/eval/fixtures/nvda/nvda-w3c-*.json, 2026-06-29): published guides document an
+ * packages/lab/src/eval/fixtures/nvda/nvda-w3c-*.json, 2026-06-29): published guides document an
  * unlabelled control as "edit, blank" and unnamed image-in-link as a filename or
  * spelled-out URL. Those are JAWS/VoiceOver/version-specific — they do NOT match
  * what our NVDA pipeline emits. Our NVDA announces an empty name as the U+FFFC

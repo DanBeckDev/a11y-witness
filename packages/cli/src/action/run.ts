@@ -1,6 +1,6 @@
 // The Action's entry point: read a witness run's JSON, write the summary, decide the exit code.
 //
-//   tsx src/action/run.ts --result run.json [--fail-on never|any|blocker|serious|moderate|minor]
+//   tsx packages/cli/src/action/run.ts --result run.json [--fail-on never|any|blocker|serious|moderate|minor]
 //                         [--summary-out summary.md] [--marker a11y-witness]
 //
 // Deliberately separate from `src/cli.ts`. The CLI's job is to capture and judge; this one's job is to
@@ -17,7 +17,7 @@ const arg = (name: string, fallback?: string): string | undefined =>
 
 const resultPath = arg("result");
 if (!resultPath) {
-  process.stderr.write("usage: tsx src/action/run.ts --result=<file.json> [--fail-on=...] [--summary-out=...]\n");
+  process.stderr.write("usage: tsx packages/cli/src/action/run.ts --result=<file.json> [--fail-on=...] [--summary-out=...]\n");
   process.exit(2);
 }
 
