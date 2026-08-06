@@ -74,10 +74,15 @@ findings.
 ## Known limitations, stated plainly
 
 - **The trained scorer does not generalise to real pages yet.** It scores 0.997 on a page from its own
-  distribution and **≤ 0.002** on the UW inaccessible page. The cause is measured: the training corpus has
+  distribution and **≤ 0.002** on the UW inaccessible page. The cause is measured: the training corpus had
   a median of 0 links and a maximum of 1, where real pages carry 41–47, so the model's structured features
-  sit 10–40× outside its fitted range. **On real sites the deterministic rule layer is what finds things**,
-  including both findings above. The fix is a rescaled corpus, parked on branch `dataset-rescale`.
+  sat 10–40× outside its fitted range. **On real sites the deterministic rule layer is what finds things**,
+  including both findings above.
+
+  **The generator half of the fix has landed** (`6d5fcae`): the corpus now generates a median of 14 links and
+  a maximum of 40, and a capture was measured reaching 25 of 25 links on a rescaled page. What remains is
+  mechanical and expensive — recapture 848 pairs and retrain. Until that runs, the SHIPPED model is exactly
+  as limited as this paragraph describes, because it is still the model trained on the old corpus.
 - **`task` does nothing on the defaults.** With `judge-backend: local` and `probe-forms: false` it is
   carried through and consumed by nothing. It becomes load-bearing the moment you enable `probe-forms` (it
   selects which control is activated) or switch backend. Documented in `docs/github-action.md`.
@@ -93,8 +98,8 @@ Not bugs being hidden — work consciously not done before shipping.
 
 | item | why deferred |
 |---|---|
-| Corpus rescale for generalisation (branch `dataset-rescale`) | ~10 h of capture; improves the model, changes nothing that ships |
-| **418 of 1,061 cases have STALE captures**, so `release:gate` fails at its first check | ~2.9 h of recapture (836 captures at the measured 12.4 s) on **one** worker — two halves reliability. Nothing that ships reads `runs/`; the scorer's weights are committed and its eval fixtures are tracked, so this blocks a *gate*, not the product. Deliberately out of scope for the packaging work (5 Aug). |
+| **`gate:stability` FAILS on the rescaled pages — 4/6 canaries** | **This gates the recapture below and must be diagnosed first.** `form-unlabelled/good` varied its `lists` count 0,0,0,0,1 and its transcript CONTENT at identical counts; `table-unassociated-headers/bad` reached 29,29,29,29,**5** headings. The worker logged **1 recovery** during the gate, so a papered-over mute-NVDA fault is the leading suspect for the truncated run — bigger pages mean longer sweeps and more chance of a timing miss. Starting the 848-pair capture in this state would produce evidence that varies for an unchanged page, "the one defect this project cannot tolerate". |
+| **Recapture 848 pairs, then retrain** — the corpus does not match its generator | The rescale is ADOPTED (`6d5fcae`), so the pages now carry real-page structure and 848 of 1,061 captures describe the old ones. ~5.8 h on one worker (1,696 captures at the measured 12.4 s; two workers halve reliability). `--resume` targets exactly these. Then retrain, and only then is the generalisation claim testable. Nothing that ships reads `runs/`: the weights are committed, the 34 eval fixtures are tracked, and `npm run eval` still reports recall 90% with 0 false positives on conformant pages. This blocks a *gate*, not the product. |
 | 98 cases whose `badSignal` cannot match their own generated page | Pre-existing inconsistency in `case-matrix.mjs`, exposed by regenerating pages; the local corpus in gitignored `runs/` is inconsistent as a result |
 | Scoped cache invalidation | Two recaptures were measured as 65% unnecessary — a global `CAPTURE_PROTOCOL_VERSION` invalidates captures a fix could not have touched |
 | ONNX export | Would drop torch (~529 MB) from the Action's setup |
