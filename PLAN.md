@@ -418,6 +418,45 @@ settle). And a **mute NVDA** (stochastic; ~55% of instances die before their 25-
 cost ~184s each to recover; the read now stops after
 8 silent advances, bringing that to ~86s. Both are detailed in `CLAUDE.md`.
 
+### Found 2026-08-07 during the recapture, all open
+
+Five defects surfaced by actually running the thing. Recorded because four of them are tooling that
+*reports* wrongly rather than code that breaks — the class this project keeps being bitten by.
+
+- [ ] **The host-memory cap approved two guests on a host with 0.1 GB free.** It reported
+  `~14867 MB available ... 2 of 3 local workers will be used` while `Pages free` was 0.1 GB and the
+  compressor held 55.7 GB (compressed into an 8.8 GB footprint) after a hibernate. `vm_stat` counts
+  compressed pages as available, so **the estimate rises as the host gets sicker** — this file already
+  says so, and the cap still fell for it. The second guest's footprint then collapsed to 1.4 GB against
+  the healthy one's 6.25 GB (`top -o mem`, not RSS) and its NVDA went mute repeatedly:
+  `recoverable fault: NVDA is running but not speaking`. 6 recoveries in 32 captures, against 0 in 244.
+  Needs a signal compression cannot inflate, **and** a mid-run check — the pool is sized once at start
+  and never re-examined.
+- [ ] **`worker-ctl up --vm=<name>` ignores the flag and reports a different VM's health.** It said
+  `already started / answering, NVDA still warming up` for `a11y-worker-3` while `utmctl` showed that
+  guest **stopped** — it was describing the default worker. A command that names one VM and verifies
+  another is this repo's recurring lesson in a new costume, and worse than the deploy-verification case
+  because the wrong answer is *plausible*.
+- [ ] **`training:status --json` emitted nothing parseable while the run was demonstrably healthy**
+  (captures landing on disk, worker at 0 failures). It is the command `next_command` tells you to run
+  and the one you would rely on overnight. Either the JSON shape moved or the progress file is not read
+  as expected. Do not guess — read it against a live run.
+- [ ] **Soften the power guard from refuse to warn above a low-battery floor.** Added the same day (see
+  `power-guard.mjs`), and the very first real use blocked an attended run at 100% battery, which is
+  friction rather than protection: the operator was sitting there and could plug in. A guard that
+  blocks the common case gets switched off, which is worse than a softer one that survives. Keep the
+  refusal only when the charge genuinely cannot outlast the run. Note also that `caffeinate` does **not**
+  save you — Low Power Sleep at 1% fires regardless of a power assertion, so the honest value of that
+  half is narrower than its commit message claimed.
+- [ ] **Rebuild `a11y-worker-2`.** Deleted after the host hibernated at 1% with guests running and the
+  recovery stop timed out waiting for RPC, leaving Windows unbootable in Automatic Repair. Rebuild with
+  `clone-worker.sh` from a healthy guest rather than repairing — Automatic Repair had already failed its
+  own first attempt. Not urgent: the memory cap permits two guests, and `a11y-worker-3` fills that slot,
+  so this restores a spare and not capacity.
+- [ ] **A `pmset` sleep hook that stops guests cleanly before the host suspends.** The power guard
+  prevents a *run* starting into this, but nothing protects guests already up when the host loses power
+  for an unrelated reason — which is exactly how worker-2 was destroyed.
+
 Ideas below are ordered by expected value, each with the reason it is still open — so nobody
 re-derives the analysis.
 
