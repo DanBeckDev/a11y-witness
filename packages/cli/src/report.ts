@@ -13,6 +13,7 @@ import type { Judgment } from "@a11y-witness/judge";
 import { taskVerdictLabel } from "@a11y-witness/judge";
 import type { AxeFinding } from "./scan/axe.js";
 import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11y-witness/judge/layers";
+import type { ConformanceRequirement } from "@a11y-witness/evidence/conformance";
 
 /** How much offending markup to quote as evidence. Enough to recognise the element, not the page. */
 const EVIDENCE_CHARS = 100;
@@ -25,6 +26,13 @@ export interface Report {
   verdict: Judgment;
   /** null when the rule-based layer did not run — distinct from "ran and found nothing". */
   axe: AxeFinding[] | null;
+  /**
+   * What this run establishes against WCAG's five CONFORMANCE REQUIREMENTS (§5.2), which govern whether
+   * a conformance claim is valid at all and are not success criteria. Optional so an older caller still
+   * renders — but when it is absent the section says so rather than being silently dropped, because a
+   * missing limit is exactly what makes a findings list read as a clean bill of health.
+   */
+  conformance?: ConformanceRequirement[];
 }
 
 /**
@@ -60,6 +68,28 @@ function judgeLabel(): string {
   return backend === "local" ? "trained scorer" : `${backend} judge`;
 }
 
+/**
+ * The five conformance requirements, each as "established / not established".
+ *
+ * Printed on EVERY report, including one with no findings — that is the case it exists for. Success
+ * criteria tell you what was found; these tell you what the run was capable of concluding, and WCAG
+ * §5.2 is explicit that a claim needs all five. Requirement 2 in particular is why a truncated sweep
+ * cannot be reported as a clean page.
+ */
+function conformanceSection(requirements: ConformanceRequirement[] | undefined): string[] {
+  if (!requirements?.length) {
+    return ["-- WCAG conformance requirements --",
+      "  NOT REPORTED for this run, so nothing here should be read as full-page or full-process coverage."];
+  }
+  const lines = ["-- WCAG conformance requirements (§5.2) — what this run can and cannot conclude --"];
+  for (const requirement of requirements) {
+    lines.push(`  ${requirement.number}. ${requirement.name}`);
+    lines.push(`     established: ${requirement.establishes}`);
+    lines.push(`     limit:       ${requirement.limitation}`);
+  }
+  return lines;
+}
+
 function findingsSection(verdict: Judgment, screenReader: string, announcements: number): string[] {
   const lines = [
     // Names what actually assessed the page rather than claiming "AI judge". The shipped default is
@@ -88,7 +118,9 @@ function findingsSection(verdict: Judgment, screenReader: string, announcements:
 }
 
 /** The whole report, ready to print. */
-export function reportLines({ url, task, screenReader, announcements, verdict, axe }: Report): string[] {
+export function reportLines(
+  { url, task, screenReader, announcements, verdict, axe, conformance }: Report,
+): string[] {
   return [
     "",
     "a11y-witness report",
@@ -99,6 +131,8 @@ export function reportLines({ url, task, screenReader, announcements, verdict, a
     ...axeSection(axe),
     "",
     ...findingsSection(verdict, screenReader, announcements),
+    "",
+    ...conformanceSection(conformance),
     "",
     // Kept in the output on purpose: a report that lists only what a screen reader can hear invites
     // the reader to conclude the rest is fine.

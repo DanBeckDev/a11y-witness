@@ -16,6 +16,10 @@
     "./wcag": {
       "types": "./dist/wcag.d.ts",
       "default": "./dist/wcag.js"
+    },
+    "./conformance": {
+      "types": "./dist/conformance.d.ts",
+      "default": "./dist/conformance.js"
     }
   },
   "files": [

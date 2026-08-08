@@ -22,10 +22,32 @@ is real.
 | Hear link text out of context | `K` / `Shift+K` | `structure.links` | 2.4.4, 2.4.9 |
 | Meet a list | `L` / `Shift+L` | `structure.lists` | 1.3.1 |
 | Read a table cell by cell | `T`, then `Ctrl+Alt+Arrow` (**opt-in, see caveat**) | `structure.tableCells` | 1.3.1 |
-| Tab through the page | `Tab` + report focus (**opt-in**) | `interaction.focusOrder` | 2.1.2, 2.4.3 |
+| Tab through the page | `Tab` + report focus | `interaction.focusOrder` | **none — see caveat** |
 
 The first nine are on by default and cost ~15–17 s per capture. The last two are opt-in per
 capture — `"probeFocus": true` (adds ~8 s) and `"probeTables": true` (see the caveat below).
+
+### Caveat: `focusOrder` is CAPTURED and never ASSESSED — it claims no criterion
+
+This row used to claim 2.1.2 No Keyboard Trap and 2.4.3 Focus Order. It should not have. The probe works
+and records what it hears, but:
+
+- **no rule and no scorer head reads `interaction.focusOrder`** — grep it: the only consumers are
+  `evidence-diff.mjs` and `repeat-capture.mjs`, both stability tooling. A keyboard trap sitting in that
+  array is reported to nobody.
+- **no user could turn it on.** `probeFocus` is accepted over the wire by `server.mjs` and set by nothing:
+  there is no CLI flag and no Action input. Nothing in the dataset uses it either.
+
+So the honest entry is "none". This matters more than a normal gap because 2.1.2 is one of the four
+**non-interference** criteria in WCAG §5.2.5, which apply to ALL content on a page whether or not it is
+relied upon to meet any other criterion — and a keyboard trap is a total blocker, not a degradation.
+`packages/evidence/src/conformance.ts` therefore reports 2.1.2 as NOT assessed, and its tests assert that
+capturing evidence never counts as assessing it.
+
+Two ways forward, and the choice is not obvious: build a deterministic trap rule over `focusOrder`
+(a cycle that revisits a subset while the form-field sweep found controls it never reaches), or delete
+the probe. Building it is the better answer given §5.2.5, but it needs fixtures and a false-positive
+budget of its own — a wrongly reported keyboard trap is a serious accusation.
 
 ### Caveat: `landmarks` cannot see a landmark that spans the whole document
 

@@ -25,6 +25,9 @@ import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fleet";
 import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
+import { conformanceScope, sweepOutcomes, type ConformanceRequirement }
+  from "@a11y-witness/evidence/conformance";
+import { assessedCriteria } from "@a11y-witness/judge/coverage";
 
 interface Args {
   url: string;
@@ -300,8 +303,39 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
     census: pageCensus(cap) ?? undefined,
   });
 
-  if (json) printJson({ url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason });
-  else printReport({ url, task, screenReader: cap.screenReader, announcements: cap.transcript.length, verdict, axe: ruleFindings });
+  const conformance = conformanceFor(cap, ruleFindings);
+  if (json) printJson({ url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance });
+  else {
+    printReport({
+      url, task, screenReader: cap.screenReader, announcements: cap.transcript.length,
+      verdict, axe: ruleFindings, conformance,
+    });
+  }
+}
+
+/**
+ * What this run establishes against WCAG's five conformance requirements (§5.2).
+ *
+ * Built from the capture rather than assumed, because Requirement 2 (Full pages) turns on whether the
+ * sweeps actually reached the end of the page — and `environment` carries the exact screen-reader and
+ * browser versions Requirement 4 scopes the claim to.
+ *
+ * `assessedCriteria` is what the shipped assessors can return a finding for, and NOT what we captured
+ * evidence about. `interaction.focusOrder` is the cautionary case: the worker records it, no rule or
+ * scorer head reads it, so counting it would report a criterion as covered while a keyboard trap in that
+ * array reached nobody.
+ */
+function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): ConformanceRequirement[] {
+  const env = (cap as { environment?: Record<string, string> }).environment ?? {};
+  const version = (name: string, ver: string): string | null =>
+    env[name] ? `${env[name]}${env[ver] ? ` ${env[ver]}` : ""}` : null;
+  return conformanceScope({
+    assessedCriteria: assessedCriteria(),
+    sweeps: sweepOutcomes((cap as { diagnostics?: unknown[] }).diagnostics ?? []),
+    screenReader: version("screenReader", "screenReaderVersion") ?? cap.screenReader,
+    browser: version("browser", "browserVersion"),
+    ruleLayerRan: axe !== null,
+  });
 }
 
 /**
@@ -313,9 +347,10 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
  * and the local judge's evidence guard, given exactly that, suppressed a correct 4.1.2 finding scored at 0.993.
  */
 function printJson(
-  { url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason }: {
+  { url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance }: {
     url: string; task: string; cap: CaptureResponse; verdict: Report["verdict"];
     ruleFindings: AxeFinding[] | null; captureVerified: boolean; unverifiedReason?: CaptureDoubt;
+    conformance: ConformanceRequirement[];
   },
 ): void {
   const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
@@ -329,6 +364,11 @@ function printJson(
     // WHY it is unverified, because the two causes need different explanations to a reader: reading the
     // wrong thing entirely, versus reading only a modal dialog that sat in front of the right page.
     ...(unverifiedReason ? { captureUnverifiedReason: unverifiedReason } : {}),
+    // WCAG §5.2's five conformance requirements, each with what this run established and what it did
+    // NOT. In the machine-readable output as well as the printed report, because a CI job deciding
+    // whether to fail a build needs the limits as much as a human does — and a consumer that sees only
+    // `findings: []` is the reader most likely to conclude the page is fine.
+    conformance,
   }, null, 2));
 }
 
