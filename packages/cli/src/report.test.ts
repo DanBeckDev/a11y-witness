@@ -71,6 +71,11 @@ test("the report always warns that a screen reader cannot see visual issues", ()
 test("a clean verdict reports no findings without inventing a section", () => {
   const clean = { ...verdict, findings: [], taskCompletable: true } as Report["verdict"];
   const output = render({ verdict: clean });
-  assert.match(output, /Task completable: yes/);
+  // The DEFAULT local scorer has no head for task completion and never sees the task, so the report
+  // must not claim one. This test used to assert "Task completable: yes" — it was pinning the
+  // overclaim in place. Now it pins the honest label, and refuses the claim, so reintroducing it fails.
+  assert.match(output, /No blocking findings: yes/);
+  assert.doesNotMatch(output, /Task completable/,
+    "the local scorer must not claim task completion — it never sees the task");
   assert.match(output, /0 finding\(s\)/);
 });

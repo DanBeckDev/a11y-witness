@@ -142,11 +142,27 @@ export interface SummaryOptions {
   limit?: number;
   /** Included as an HTML comment so a PR comment can be found and UPDATED rather than duplicated. */
   marker?: string;
+  /**
+   * What `taskCompletable` should be LABELLED as, because it means different things per backend.
+   *
+   * Passed in rather than read from the environment here: this renderer is deliberately pure so the
+   * output is testable without a Windows runner, and reading process.env would end that.
+   *
+   * The default is the honest one for the shipped `local` scorer, which has no head for task completion
+   * and never sees the task — local-judge.ts computes `!findings.some(f => f.severity === "blocker")`
+   * and its own comment says claiming a task answer would be inventing one. This comment is posted on
+   * someone's PULL REQUEST in bold, so inventing it there is the worst place to do it. The LLM backends
+   * do read the task, and pass their own wording.
+   */
+  taskQuestion?: string;
 }
 
 const DEFAULT_LIMIT = 20;
+/** See SummaryOptions.taskQuestion: true for the shipped local scorer, which never sees the task. */
+const DEFAULT_TASK_QUESTION = "No blocking findings:";
 
 export function renderSummary(result: RunResult, options: SummaryOptions = {}): string {
+  const taskQuestion = options.taskQuestion ?? DEFAULT_TASK_QUESTION;
   const limit = options.limit ?? DEFAULT_LIMIT;
   const { verdict } = result;
   const lines: string[] = [];
