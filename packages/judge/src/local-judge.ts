@@ -76,6 +76,12 @@ export interface CaptureEvidence {
     /** Accessible names the page exposed AFTER a submit — the visual side of 3.3.1 and 4.1.3. */
     postSubmitNames?: string[];
   };
+  /**
+   * Media elements the page declares, from the DOM. Deliberately NOT added to `EVIDENCE_CHANNEL`: that
+   * table gates the trained SCORER, which has no head for 1.4.2, and letting it report one would claim
+   * coverage the model does not have. 1.4.2 is rule-only, and `outcomes.ts` handles its applicability.
+   */
+  media?: { tag: string; autoplay: boolean; muted: boolean; controls: boolean; loop: boolean }[];
 }
 
 const nonEmpty = (value: unknown): boolean => Array.isArray(value) && value.length > 0;

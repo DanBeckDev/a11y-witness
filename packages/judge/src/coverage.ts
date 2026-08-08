@@ -27,11 +27,13 @@ export const SCORED_CRITERIA = [
 /**
  * Criteria the deterministic rule layer can emit, which is a strict subset of the above.
  *
- * Pinned separately so the subset relationship is asserted rather than assumed: a rule that emitted a
- * criterion missing from `SCORED_CRITERIA` would produce a finding for something the report simultaneously
- * described as unassessed.
+ * NOT a subset of `SCORED_CRITERIA` any more. 1.4.2 Audio Control is rule-only: it is read from the DOM
+ * (`autoplay` and `muted` are attributes with no accessibility-tree equivalent) and the trained scorer has
+ * no head for it. That is why `assessedCriteria()` is a UNION rather than the scorer's list — a criterion
+ * covered by a rule alone is still covered, and reporting it as untested would be the mirror of the
+ * over-claim this file exists to prevent.
  */
-export const RULE_CRITERIA = ["1.1.1", "1.3.1", "2.4.4", "4.1.2"] as const;
+export const RULE_CRITERIA = ["1.1.1", "1.3.1", "1.4.2", "2.4.4", "4.1.2"] as const;
 
 /** Everything the shipped judge can return a finding for, deduplicated and sorted. */
 export function assessedCriteria(): string[] {

@@ -52,6 +52,15 @@ export interface CriterionOutcome {
  *
  * `type` values are the sweep labels recorded in the capture's `sweep` diagnostics.
  */
+/**
+ * Criteria whose evidence does NOT come from a structural sweep, so a truncated sweep says nothing about
+ * them. 1.4.2 is read from the DOM in one query that either ran or did not.
+ *
+ * Listed explicitly rather than defaulted, so that a criterion missing from BOTH tables is a mistake the
+ * parity test can catch — the alternative silently disables the truncation guard for it.
+ */
+export const NOT_SWEEP_DERIVED: readonly string[] = ["1.4.2"];
+
 const SWEEPS_FEEDING: Record<string, readonly string[]> = {
   "1.1.1": ["graphic"],
   "1.3.1": ["heading", "landmark", "list"],
@@ -85,6 +94,22 @@ export interface OutcomeInput {
 function truncatedFeeds(criterion: string, truncated: readonly { type: string }[]): string[] {
   const feeding = SWEEPS_FEEDING[criterion] ?? [];
   return [...new Set(truncated.map((s) => s.type).filter((type) => feeding.includes(type)))];
+}
+
+/**
+ * Is there anything on this page for the criterion to be about?
+ *
+ * Mostly delegates to `hasEvidenceFor`, which is the applicability table the scorer already uses. The
+ * exception is 1.4.2, which is rule-only: its evidence is a DOM query, and a capture taken before that
+ * probe existed carries no `media` field at all. "The probe did not run" and "there is no media" must not
+ * collapse into one answer — the first is `cantTell` and the second is `inapplicable`.
+ */
+function applicabilityOf(criterion: string, capture: CaptureEvidence): "applicable" | "empty" | "notProbed" {
+  if (criterion === "1.4.2") {
+    if (capture.media === undefined) return "notProbed";
+    return capture.media.length > 0 ? "applicable" : "empty";
+  }
+  return hasEvidenceFor(criterion, capture) ? "applicable" : "empty";
 }
 
 /**
@@ -136,7 +161,15 @@ function outcomeFor(criterion: string, input: OutcomeInput): CriterionOutcome {
         + "was never examined for this criterion.",
     };
   }
-  if (!hasEvidenceFor(criterion, input.capture)) {
+  const applies = applicabilityOf(criterion, input.capture);
+  if (applies === "notProbed") {
+    return {
+      criterion, outcome: "cantTell",
+      reason: "The evidence this criterion needs was not collected on this capture, so it is undetermined "
+        + "rather than clean.",
+    };
+  }
+  if (applies === "empty") {
     return {
       criterion, outcome: "inapplicable",
       reason: "The page exposed nothing of the kind this criterion is about, so there is nothing to be "

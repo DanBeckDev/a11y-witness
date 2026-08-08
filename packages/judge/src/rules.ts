@@ -40,6 +40,15 @@ export interface RuleInput {
    * captures. So a rule about absence must corroborate with the tree, or it is guessing.
    */
   census?: { heading?: number; link?: number; graphic?: number; graphicUnnamed?: number };
+  /**
+   * Media elements the PAGE declares, from the DOM rather than the accessibility tree — `autoplay` and
+   * `muted` are attributes, not accessibility properties, so no screen reader can report them.
+   *
+   * Absent means NOT CHECKED and the rule makes no claim, which matters because captures taken before this
+   * probe existed have no `media` field. Treating absence as "no autoplaying audio" would turn every one
+   * of them into a silent pass for 1.4.2.
+   */
+  media?: { tag: string; autoplay: boolean; muted: boolean; controls: boolean; loop: boolean }[];
 }
 
 const EMPTY_NAME = "￼"; // ￼ — screen reader announced an element with no text/name
@@ -211,6 +220,31 @@ const VAGUE_LINK_NAMES = new Set(["click here", "click", "here", "this link", "l
 
 const isLink = (line: string): boolean => /\blink\b/i.test(line);
 
+/**
+ * 1.4.2 — audio that starts on its own with no way to stop it.
+ *
+ * One of the four NON-INTERFERENCE criteria (WCAG §5.2.5): it applies to ALL content on the page, whether
+ * or not that content is relied upon to satisfy anything else. And it is worse for this tool's users than
+ * the criterion's wording suggests — audio that plays automatically competes directly with the synthetic
+ * speech a screen-reader user is listening to, so it does not merely annoy, it masks the interface.
+ *
+ * Read from the DOM because `autoplay` and `muted` are attributes with no accessibility-tree equivalent.
+ * That makes this the one rule here whose evidence is not something a screen reader said, which is stated
+ * in its ACT description rather than hidden.
+ */
+function addAutoplayingAudio(input: RuleInput, add: AddFinding): void {
+  if (!input.media) return; // absent means not checked; only a probe's silence is a finding
+  for (const element of input.media) {
+    // Muted media makes no sound, so there is nothing to control. `controls` gives the native pause and
+    // stop mechanism the criterion asks for.
+    if (!element.autoplay || element.muted || element.controls) continue;
+    add("1.4.2 Audio Control",
+      "Audio starts automatically with no visible control to pause or stop it, so it competes with the "
+        + "screen reader's own speech",
+      `<${element.tag} autoplay${element.loop ? " loop" : ""}> with no controls attribute`);
+  }
+}
+
 /** 2.4.4 — a link whose announced name says nothing about where it goes. */
 function addVagueLinks(entries: string[], add: AddFinding): void {
   for (const line of entries) {
@@ -315,6 +349,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addVagueLinks([...input.transcript, ...(input.structure?.links ?? [])], add);
   addMissingHeadings(input, add);
   addUnnamedGraphics(input, add);
+  addAutoplayingAudio(input, add);
 
   return findings;
 }

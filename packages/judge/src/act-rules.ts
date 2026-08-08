@@ -179,4 +179,33 @@ export const ACT_RULES: ActRuleDescription[] = [
     ],
     accessibilitySupport: NVDA_EDGE,
   },
+  {
+    id: "a11y-witness:autoplaying-audio",
+    version: "2026-08-08",
+    name: "Audio starts automatically with no way to stop it",
+    description: "A page that plays audio on load, unmuted and with no visible control, gives a "
+      + "screen-reader user no way to silence it.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "1.4.2", mapping: "secondary" }],
+    inputAspects: ["DOM (media elements)"],
+    applicability: "Every `audio` and `video` element the page declares. A capture with no media probe "
+      + "result at all is not applicable — it is unchecked, and the rule makes no claim.",
+    expectation: "Any element that autoplays is either muted or carries a native controls affordance.",
+    assumptions: [
+      "SECONDARY on two counts. The criterion applies to audio playing for more than THREE SECONDS, and "
+        + "this rule cannot measure duration — a two-second notification chime autoplaying is not a "
+        + "failure. And the mechanism to pause or stop need not be the native `controls` attribute; a "
+        + "custom button elsewhere on the page satisfies it and we would not see it.",
+      "`muted` media makes no sound, so there is nothing to control. Flagging it would report ordinary, "
+        + "correct markup — muted autoplay is the standard technique for a background video.",
+      "This is the one rule in the set whose evidence is NOT something a screen reader said. `autoplay` "
+        + "and `muted` are DOM attributes with no accessibility-tree equivalent, so no announcement can "
+        + "carry them. It is included because 1.4.2 is a non-interference criterion under WCAG §5.2.5, "
+        + "applying to all content whether or not it is relied upon — and because autoplaying audio masks "
+        + "the synthetic speech this tool's users depend on.",
+    ],
+    accessibilitySupport: "Independent of the screen reader: read from the DOM over DevTools, so it holds "
+      + "for any browser that reports the attributes. It says nothing about whether the audio is actually "
+      + "audible to a given user, only that the page declared it to start on its own.",
+  },
 ];
