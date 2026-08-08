@@ -9,16 +9,16 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 
 | check | result |
 |---|---|
-| unit tests | **371 pass, 0 fail, 2 honest skips** (the two git-dependent tests, in a tree with no `.git`) |
+| unit tests | **462 pass, 0 fail, 2 honest skips** (the two git-dependent tests, in a tree with no `.git`) |
 | typecheck | clean — and now actually covering the package tests: `tsc --listFiles` showed **0** of them in the program before M5, 24 after |
-| lint | 0 errors (317 warnings, all `no-magic-numbers`, non-blocking by design) |
+| lint | 0 errors (337 warnings, all `no-magic-numbers`, non-blocking by design) |
 | `gate:isolation` | **6/6 packages usable when installed**, 1 private package skipped and announced |
 | `rules:gate` | **PASS** — every rule-owned subtype exact on real captured evidence, **0 false positives across 1,003 conformant records** |
 | held-out acceptance | **PASS** — `"passed": true`, no failure reasons |
-| `npm run eval` (judge quality) | **recall 90%, 0 false positives on conformant pages**, 16 failure-case runs |
+| `npm run eval` (judge quality) | **recall 59%, 0 false positives on conformant pages**, 16 failure-case runs. Was 90% recall with 3 false positives, 2 of them accusing conformant W3C pages; the scorer now ABSTAINS outside its training distribution rather than extrapolating, and 59% is what it can honestly claim. See the limitation below. |
 | `verify.corpus.test.ts` | 6/6 |
 | CI (`lint` + `capture-regression`) | **both green** — first time since 1 August; the fix was `capture-pure.mjs` |
-| shipped model | `releaseEligible: true`, **0 warnings** |
+| shipped model | `calibrationClean: true`, `generalisationVerified: true` (held-out, 0 errors), `releaseBlockedBy: []` |
 
 Measured on a tree containing only committed content, which is what CI and a consumer see. `release:gate`
 itself stops at `check-signals` for the 418 stale captures recorded below — a corpus-state item, deliberately
@@ -73,11 +73,21 @@ findings.
 
 ## Known limitations, stated plainly
 
-- **The trained scorer does not generalise to real pages yet.** It scores 0.997 on a page from its own
-  distribution and **≤ 0.002** on the UW inaccessible page. The cause is measured: the training corpus had
-  a median of 0 links and a maximum of 1, where real pages carry 41–47, so the model's structured features
-  sat 10–40× outside its fitted range. **On real sites the deterministic rule layer is what finds things**,
-  including both findings above.
+- **The trained scorer ABSTAINS on real pages, and says so rather than guessing.** Measured with a
+  k-NN feature-space novelty score (Sun et al., ICML 2022): every training record sits at cosine
+  **0.847–0.99** from its nearest neighbour, while **28 of 32** real eval fixtures sit at **0.50–0.84** —
+  outside the corpus's own support. A linear head on a frozen embedding cannot tell it is extrapolating,
+  and it returned **0.97 and 0.99 for 4.1.2 on two conformant W3C pages**. For an accessibility tool a
+  false positive is an accusation, so the scorer now declines outside its support and reports those
+  criteria as **unchecked, not clean**.
+  - That is why eval recall reads 59% rather than 90%: the missing 31 points were the model predicting
+    beyond its competence and sometimes being right. Not a capability, and not separable from the score.
+  - **On real sites the deterministic rule layer is what finds things**, and it still runs when the
+    scorer abstains.
+  - The abstention floor (0.847) is **derived** from the corpus's own nearest-neighbour minimum, not
+    chosen — but it is **not conformally calibrated**, so no error-rate guarantee is claimed. The
+    defensible form calibrates against a stated error rate on a labelled real-page set, which does not
+    exist yet and is the same missing asset as ADR 0009's realism tier. One asset blocks three things.
 
   **The generator half of the fix has landed** (`6d5fcae`): the corpus now generates a median of 14 links and
   a maximum of 40, and a capture was measured reaching 25 of 25 links on a rescaled page. What remains is
@@ -103,7 +113,7 @@ Not bugs being hidden — work consciously not done before shipping.
 | `probeElementsListCounts` (40 code lines) and `leaseWorkerPool` (48) reviewed and left | Both read as one thing; splitting either would need a sentinel or a mutable bag. Recorded so the decision is visible rather than an oversight. |
 | Another agent's untracked `case-matrix.test.ts` reports TS7031 | Implicit `any` in destructuring against the rescaled generator's shape. Untracked, so a clean tree typechecks clean; theirs to fix. |
 | **`gate:stability` FAILS on the rescaled pages — 4/6 canaries** | **This gates the recapture below and must be diagnosed first.** `form-unlabelled/good` varied its `lists` count 0,0,0,0,1 and its transcript CONTENT at identical counts; `table-unassociated-headers/bad` reached 29,29,29,29,**5** headings. The worker logged **1 recovery** during the gate, so a papered-over mute-NVDA fault is the leading suspect for the truncated run — bigger pages mean longer sweeps and more chance of a timing miss. Starting the 848-pair capture in this state would produce evidence that varies for an unchanged page, "the one defect this project cannot tolerate". |
-| **Recapture 848 pairs, then retrain** — the corpus does not match its generator | The rescale is ADOPTED (`6d5fcae`), so the pages now carry real-page structure and 848 of 1,061 captures describe the old ones. ~5.8 h on one worker (1,696 captures at the measured 12.4 s; two workers halve reliability). `--resume` targets exactly these. Then retrain, and only then is the generalisation claim testable. Nothing that ships reads `runs/`: the weights are committed, the 34 eval fixtures are tracked, and `npm run eval` still reports recall 90% with 0 false positives on conformant pages. This blocks a *gate*, not the product. |
+| **DONE 2026-08-08: recaptured and retrained.** | The full corpus is fresh protocol-5 evidence: 1,059 of 1,061 cases discriminating, **0 blind** (was 83), 0 stale, `gate:stability` 6/6 (was 4/6). Five capture defects were fixed to get there, including sweeps truncated by the capture deadline and a removed anchor that had silently zeroed the `lists` field on every page whose links sit in a `<ul>`. The generalisation claim is now testable, and the answer is the abstention limitation above: the corpus does not span real-page structure, so the scorer declines on real pages rather than extrapolating. Note the page sizes were REDUCED (ADR 0009) for affordability, which widened that gap — the realism tier is the outstanding work. |
 | 98 cases whose `badSignal` cannot match their own generated page | Pre-existing inconsistency in `case-matrix.mjs`, exposed by regenerating pages; the local corpus in gitignored `runs/` is inconsistent as a result |
 | Scoped cache invalidation | Two recaptures were measured as 65% unnecessary — a global `CAPTURE_PROTOCOL_VERSION` invalidates captures a fix could not have touched |
 | ONNX export | Would drop torch (~529 MB) from the Action's setup |
