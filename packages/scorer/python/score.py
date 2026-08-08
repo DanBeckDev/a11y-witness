@@ -259,8 +259,38 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
 
     max_length = int(report["representation"]["maxLength"])
     features, _, _ = feature_pipeline.encode_records(records, args.encoder, max_length)
-    scored: list[dict[str, Any]] = []
+    # Features are per evidence unit now, so a head is applied to every instance and the bag takes the
+    # MAX -- the same aggregation the trainer uses inside its loss. `bag_offsets` is derived from the
+    # records here exactly as it is there, rather than read from the artifact, so the two cannot drift.
+    #
+    # Scored once per head for the whole batch rather than per record inside the loop below: the old
+    # shape sliced one row per record, which no longer identifies a bag.
+    offsets = feature_pipeline.bag_offsets(records)
     criteria = report["criteria"]
+    # Each head is scored on the view it was TRAINED on, read from the report rather than assumed.
+    # Local signals ("a control with a role and no name") are scored per announcement; contextual ones
+    # ("is this heading vague?") need the whole capture, because the encoder's cross-unit attention is
+    # where that context lives. Using the wrong view yields confident scores from the wrong
+    # representation, and no downstream check would catch it.
+    #
+    # The document view is a bag of one, so both run through the same `score_bags` path.
+    views: dict[str, Any] = {"instance-max": (features, offsets)}
+    if any(
+        subtype_report.get("pooling", "document-mean") == "document-mean"
+        for criterion_report in criteria.values()
+        for subtype_report in criterion_report["subtypes"].values()
+    ):
+        views["document-mean"] = feature_pipeline.encode_documents(records, args.encoder, max_length)
+    head_scores: dict[str, Any] = {}
+    for criterion_report in criteria.values():
+        for subtype_report in criterion_report["subtypes"].values():
+            head = subtype_report["head"]
+            if head not in head_scores:
+                view_features, view_offsets = views[subtype_report.get("pooling", "document-mean")]
+                head_scores[head] = feature_pipeline.score_bags(
+                    view_features, view_offsets, weights[head + ".weight"], weights[head + ".bias"]
+                )
+    scored: list[dict[str, Any]] = []
     for index, record in enumerate(records):
         scores: dict[str, float] = {}
         predictions: dict[str, bool] = {}
@@ -268,7 +298,7 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
             subtype_scores = []
             for subtype_report in criterion_report["subtypes"].values():
                 head = subtype_report["head"]
-                subtype_scores.append(feature_pipeline.score_head(features[index:index + 1], weights[head + ".weight"], weights[head + ".bias"])[0])
+                subtype_scores.append(head_scores[head][index])
             score = float(torch.stack(subtype_scores).amax())
             scores[criterion] = score
             predictions[criterion] = score >= float(criterion_report["threshold"])

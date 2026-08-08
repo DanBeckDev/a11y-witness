@@ -50,7 +50,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
     "form_field_named": 2.0,
 }
 
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v4"
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v5"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -323,21 +323,51 @@ def score_head(features: Any, weight: Any, bias: Any) -> Any:
 
     return torch.sigmoid((features @ weight.t() + bias)[:, 0])
 
-def encode_records(records: list[dict[str, Any]], encoder_root: Path, max_length: int) -> Any:
+# Which subtypes are scored per ANNOUNCEMENT rather than per capture, and why it is per subtype.
+#
+# Measured both ways on the same corpus. Instance-max scoring took 4.1.2's heads to precision 0.98 /
+# 0.89 / 0.97 -- because "a control announced with a role and no name" is entirely contained in ONE
+# announcement ("edit", with nothing after it) and needs no other line to judge.
+#
+# The same change took 2.4.6 from precision 0.51 to 0.30. Whether "Welcome" is a vague heading depends
+# on what the page is ABOUT; scoring that announcement in isolation strips away the context that makes
+# vagueness judgeable. For contextual criteria the document view is the correct representation, and
+# mean-pooling was never their problem.
+#
+# So pooling is a property of the SIGNAL, not of the pipeline. Local findings pool by max over
+# instances; contextual findings keep the whole capture. Default is document-mean: only subtypes with
+# evidence that instance scoring helps are listed here.
+INSTANCE_POOLED_SUBTYPES = frozenset({
+    "4.1.2:missing-role",
+    "4.1.2:regex",
+    "4.1.2:state-change-silent",
+})
+
+
+def pooling_for(subtype: str) -> str:
+    return "instance-max" if subtype in INSTANCE_POOLED_SUBTYPES else "document-mean"
+
+
+def encode_documents(records: list[dict[str, Any]], encoder_root: Path, max_length: int) -> tuple[Any, list[int]]:
+    """The whole-capture view: every announcement joined and encoded as ONE sequence.
+
+    A SECOND encoder pass, deliberately, and not a mean over the per-unit embeddings — that was tried
+    and left 2.4.6 at 48 false negatives against 22 for this view. The difference is cross-unit
+    ATTENTION: joining the text lets the transformer relate one announcement to another, which is
+    precisely what a contextual criterion needs. Whether "Welcome" is a vague heading depends on what
+    the rest of the page says, and encoding units independently destroys that relationship before any
+    averaging can happen. Pooling after the fact cannot restore information the encoder never saw.
+
+    Returned with identity offsets so a document-pooled head runs through the same `score_bags` path as
+    an instance-pooled one -- a capture is a bag of one. Same arithmetic, no branching.
+    """
     import torch
     from transformers import AutoModel, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(encoder_root, local_files_only=True)
     encoder = AutoModel.from_pretrained(encoder_root, local_files_only=True, use_safetensors=True)
     encoder.eval()
-    texts = [
-        "\n".join(
-            f"{unit.get('channel', 'evidence')}: {unit['text']}"
-            for unit in record["input"].get("evidenceUnits", [])
-            if isinstance(unit.get("text"), str)
-        )
-        for record in records
-    ]
+    texts = ["\n".join(unit_texts(record)) for record in records]
     embeddings = []
     with torch.no_grad():
         for start in range(0, len(texts), 16):
@@ -347,5 +377,115 @@ def encode_records(records: list[dict[str, Any]], encoder_root: Path, max_length
             pooled = (output * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
             embeddings.append(torch.nn.functional.normalize(pooled, p=2, dim=1))
     text_features = torch.cat(embeddings)
-    structural = structured_features(records)
+    features = torch.cat([text_features, structured_features(records)], dim=1)
+    return features, list(range(len(records) + 1))
+
+
+def unit_texts(record: dict[str, Any]) -> list[str]:
+    """The channel-tagged announcements of one capture — the INSTANCES of its bag.
+
+    A capture is a bag and it fails if AT LEAST ONE announcement is bad, which is the multiple-instance
+    learning setup. Kept as its own function so training and inference cannot disagree about what an
+    instance is; the empty fallback keeps a unit-less capture occupying exactly one row, or every bag
+    after it would be misaligned.
+    """
+    texts = [
+        f"{unit.get('channel', 'evidence')}: {unit['text']}"
+        for unit in record["input"].get("evidenceUnits", [])
+        if isinstance(unit.get("text"), str)
+    ]
+    return texts or [""]
+
+
+def bag_offsets(records: list[dict[str, Any]]) -> list[int]:
+    """Row boundaries of each record's instances in the flat feature matrix.
+
+    A PURE function of the records, deliberately: the trainer and the scorer each derive this from the
+    same records rather than passing it between them, so the two cannot drift. Returns N+1 offsets, so
+    record i owns rows [offsets[i], offsets[i + 1]).
+    """
+    offsets, total = [0], 0
+    for record in records:
+        total += len(unit_texts(record))
+        offsets.append(total)
+    return offsets
+
+
+def bag_gather(offsets: list[int]) -> tuple[Any, Any]:
+    """A padded [records x longest_bag] index matrix and its validity mask.
+
+    Pooling by slicing each bag in a Python loop is correct but ruinous inside a training loop: the
+    trainer runs ~21,000 epochs across its heads and folds, so 2,000 slices per epoch became ~42
+    million and a two-minute train ran past forty minutes. One gather plus one max over a padded
+    matrix is the same arithmetic, vectorised, and stays differentiable so the gradient still reaches
+    each bag's argmax instance.
+
+    Padded positions index row 0 and are masked to -inf before the max, so they can never win.
+    """
+    import torch
+
+    sizes = [end - start for start, end in zip(offsets[:-1], offsets[1:])]
+    widest = max(sizes) if sizes else 1
+    gather = torch.zeros((len(sizes), widest), dtype=torch.long)
+    mask = torch.zeros((len(sizes), widest), dtype=torch.bool)
+    for row, (start, size) in enumerate(zip(offsets[:-1], sizes)):
+        gather[row, :size] = torch.arange(start, start + size)
+        mask[row, :size] = True
+    return gather, mask
+
+
+def score_bags(features: Any, offsets: list[int], weight: Any, bias: Any) -> Any:
+    """Score every instance, then take the MAX within each bag. One score per record.
+
+    This is the single symmetry point between training and inference: both route through it, and
+    nothing else may pool. A subtly different aggregation on each side produces plausible numbers and
+    wrong findings, which is the failure mode that matters here.
+
+    Max, not mean: mean-pooling is what broke this. A good/bad pair for 2.4.6 differs by one word in
+    27 announcements, and averaging drove it below the representation's resolution -- precision 0.51 at
+    recall 1.0, i.e. the head could not see the signal at all. Max also encodes the semantics
+    literally ("at least one") and names the announcement responsible, which this tool needs as the
+    evidence it cites for a finding.
+
+    Element-wise max over unit EMBEDDINGS was tried first and is not the same thing: it saturates into
+    an envelope of the bag's variety and destroys instance identity. The max must be over SCORES.
+    """
+    import torch
+
+    gather, mask = bag_gather(offsets)
+    unit_scores = score_head(features, weight, bias)
+    return unit_scores[gather].masked_fill(~mask, float("-inf")).max(dim=1).values
+
+
+def encode_records(records: list[dict[str, Any]], encoder_root: Path, max_length: int) -> Any:
+    import torch
+    from transformers import AutoModel, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(encoder_root, local_files_only=True)
+    encoder = AutoModel.from_pretrained(encoder_root, local_files_only=True, use_safetensors=True)
+    encoder.eval()
+    # One row per EVIDENCE UNIT, not per record. This used to join every announcement into a single
+    # string and mean-pool its tokens -- two dilutions stacked -- so a one-word difference in a
+    # 27-line capture was averaged away before any head saw it. `score_bags` collapses these rows back
+    # to one score per record by taking the max within each bag.
+    #
+    # The STRUCTURED block stays document-level and is repeated across the bag. Those 29 values are
+    # cross-channel facts and several are genuinely not computable from a single announcement --
+    # `validation_error_announced` ORs postSubmitFields with formChanges, and
+    # `plain_heading_candidate_present` needs adjacent transcript pairs. Repeating them keeps every
+    # instance able to see them, keeps FEATURE_NAMES untouched, and keeps the head 413 wide, so the
+    # head shape and the width assertion in score.py are unchanged. Only how OFTEN the head runs moved.
+    bags = [unit_texts(record) for record in records]
+    flat = [text for bag in bags for text in bag]
+    unit_vectors = []
+    with torch.no_grad():
+        for start in range(0, len(flat), 64):
+            batch = tokenizer(flat[start : start + 64], padding=True, truncation=True, max_length=max_length, return_tensors="pt")
+            output = encoder(**batch).last_hidden_state
+            mask = batch["attention_mask"].unsqueeze(-1).expand(output.size()).float()
+            pooled = (output * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
+            unit_vectors.append(torch.nn.functional.normalize(pooled, p=2, dim=1))
+    text_features = torch.cat(unit_vectors)
+    counts = torch.tensor([len(bag) for bag in bags])
+    structural = structured_features(records).repeat_interleave(counts, dim=0)
     return torch.cat([text_features, structural], dim=1), encoder.config.hidden_size, len(FEATURE_NAMES)
