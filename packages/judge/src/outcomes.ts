@@ -63,6 +63,9 @@ export const NOT_SWEEP_DERIVED: readonly string[] = ["1.4.2"];
 
 const SWEEPS_FEEDING: Record<string, readonly string[]> = {
   "1.1.1": ["graphic"],
+  // Not a quick-nav sweep, but it truncates the same way: the probe stops after a fixed number of Tab
+  // presses, and a trap past that point was never looked for.
+  "2.1.2": ["focusOrder"],
   "1.3.1": ["heading", "landmark", "list"],
   "2.4.4": ["link"],
   "2.4.6": ["heading", "formField"],
@@ -108,6 +111,13 @@ function applicabilityOf(criterion: string, capture: CaptureEvidence): "applicab
   if (criterion === "1.4.2") {
     if (capture.media === undefined) return "notProbed";
     return capture.media.length > 0 ? "applicable" : "empty";
+  }
+  // 2.1.2 needs the focus probe. It was reachable from nothing at all until recently, so most captures
+  // carry no `focusOrder` — and "we never tabbed" must not read as "there is no trap".
+  if (criterion === "2.1.2") {
+    const stops = capture.interaction?.focusOrder;
+    if (stops === undefined) return "notProbed";
+    return stops.length > 0 ? "applicable" : "empty";
   }
   return hasEvidenceFor(criterion, capture) ? "applicable" : "empty";
 }

@@ -30,7 +30,16 @@ import type { Finding, RequirementMapping } from "./judge.js";
 export interface RuleInput {
   transcript: string[];
   structure?: { formFields?: string[]; headings?: string[]; links?: string[]; graphics?: string[] };
-  interaction?: { controls?: string[]; stateChanges?: { control: string; after: string }[] };
+  interaction?: {
+    controls?: string[];
+    stateChanges?: { control: string; after: string }[];
+    /**
+     * What each Tab press announced, in order. Absent means the focus probe did not run — which was true
+     * of EVERY capture until this rule existed, because `probeFocus` was reachable from no CLI flag and no
+     * Action input. Absent must therefore make no claim.
+     */
+    focusOrder?: string[];
+  };
   /**
    * What the PAGE exposes, from the accessibility tree, as an oracle only.
    *
@@ -245,6 +254,52 @@ function addAutoplayingAudio(input: RuleInput, add: AddFinding): void {
   }
 }
 
+/**
+ * How many times the LAST focus stop repeats consecutively at the end of the tab order.
+ *
+ * Separated because "focus stopped moving" is the whole signal and deserves a name. The capture probe
+ * stops tabbing after two identical stops, so a trapped page's `focusOrder` ends in a short run rather
+ * than filling to the cap.
+ */
+function trailingRepeats(stops: string[]): number {
+  if (stops.length < 2) return 0;
+  const last = stops[stops.length - 1];
+  let repeats = 0;
+  for (let i = stops.length - 1; i >= 0 && stops[i] === last; i -= 1) repeats += 1;
+  return repeats;
+}
+
+/**
+ * 2.1.2 — Tab stopped moving, so focus is trapped.
+ *
+ * A non-interference criterion (WCAG §5.2.5): it applies to ALL content whether or not it is relied upon,
+ * and unlike most failures it is TOTAL. A keyboard user who cannot leave a control cannot use the rest of
+ * the page at all, so a trap outranks everything else on the report.
+ *
+ * The capture probe deliberately does not decide this — its own comment says "the same control twice
+ * running means Tab stopped moving: either the end of the document or a focus trap. Which one it is, is
+ * the judge's call." This is that call, and it is made conservatively, on TWO signals:
+ *
+ * 1. Focus repeated the same control at the end of the tab order, and
+ * 2. it visited fewer distinct controls than the form-field sweep found on the page.
+ *
+ * The second is what separates a trap from the end of a short document. Requiring only the first would
+ * fire on any page whose last control is genuinely last — and, worse, on a stale announcement, which this
+ * pipeline produces often enough to have a whole section about.
+ */
+function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
+  const stops = input.interaction?.focusOrder;
+  if (!stops || stops.length < 3) return; // absent means the probe did not run; too short proves nothing
+  if (trailingRepeats(stops) < 2) return;
+  const reached = new Set(stops).size;
+  const onPage = (input.structure?.formFields ?? []).length;
+  if (onPage === 0 || reached >= onPage) return; // no corroboration, or focus did reach everything
+  add("2.1.2 No Keyboard Trap",
+    "Tab stopped moving: focus repeated the same control and never reached the rest of the page, so a "
+      + "keyboard user cannot get past it",
+    `focus stopped at "${stops[stops.length - 1]}" after reaching ${reached} of ${onPage} controls`);
+}
+
 /** 2.4.4 — a link whose announced name says nothing about where it goes. */
 function addVagueLinks(entries: string[], add: AddFinding): void {
   for (const line of entries) {
@@ -350,6 +405,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addMissingHeadings(input, add);
   addUnnamedGraphics(input, add);
   addAutoplayingAudio(input, add);
+  addKeyboardTrap(input, add);
 
   return findings;
 }

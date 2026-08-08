@@ -80,6 +80,20 @@ inputs:
       — so "show only bags" presses *Bags* and never *Delete account*.
     required: false
     default: "true"
+  probe-focus:
+    description: >-
+      Tab through the page and report what receives focus, which is how 2.1.2 No Keyboard Trap is
+      detected.
+
+      ON by default, and in the CLI too — unlike `probe-forms`, because Tab moves focus and activates
+      nothing, so it is safe on any page. 2.1.2 is one of the four NON-INTERFERENCE criteria that WCAG
+      §5.2.5 applies to all content whether or not it is relied upon, and a keyboard trap is a total
+      blocker: a user who cannot leave a control cannot use the rest of the page.
+
+      Costs roughly 8 seconds per capture. Set false to skip it, and note what that costs — 2.1.2 becomes
+      unreachable rather than clean, and the report says so.
+    required: false
+    default: "true"
   axe:
     description: >-
       Also run axe-core for the visual and rule-based criteria a screen reader cannot perceive, such as
@@ -317,6 +331,9 @@ runs:
         out="$RUNNER_TEMP/a11y-witness-result.json"
         args=("${{ inputs.url }}" --task "${{ inputs.task }}" --json)
         [ "${{ inputs.probe-forms }}" = "true" ] && args+=(--probe-forms)
+        # Inverted, because the CLI defaults this ON: only an explicit false turns it off. Tab activates
+        # nothing, so unlike probe-forms there is no reason to make a consumer opt in to it.
+        [ "${{ inputs.probe-focus }}" = "false" ] && args+=(--no-probe-focus)
         [ "${{ inputs.axe }}" = "true" ] || args+=(--no-axe)
         # stdout is the JSON result; the CLI's diagnostics go to stderr and stay in the log.
         npx tsx packages/cli/src/cli.ts "${args[@]}" > "$out"

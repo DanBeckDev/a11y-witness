@@ -271,3 +271,63 @@ test("a capture with NO media field makes no 1.4.2 claim at all", () => {
   assert.equal(probed.filter((f) => f.wcag.startsWith("1.4.2")).length, 0,
     "an empty probe result is also not a finding — it is a page with no media");
 });
+
+/**
+ * 2.1.2 No Keyboard Trap — a non-interference criterion, and the only failure here that is TOTAL: a
+ * keyboard user who cannot leave a control cannot use the rest of the page at all.
+ *
+ * The capture probe has always recorded the evidence and deliberately refused to judge it ("which one it
+ * is, is the judge's call"). These are that call, and they are mostly about NOT making it too eagerly.
+ */
+test("focus repeating while most controls were never reached is a trap", () => {
+  const findings = ruleFindings({
+    transcript: [],
+    structure: { formFields: ["a, edit", "b, edit", "c, edit", "d, button", "e, button"] },
+    interaction: { focusOrder: ["a, edit", "b, edit", "b, edit", "b, edit"] },
+  } as never);
+  const trap = findings.filter((f) => f.wcag.startsWith("2.1.2"));
+  assert.equal(trap.length, 1);
+  assert.match(trap[0].evidence, /reaching 2 of 5 controls/);
+  assert.equal(trap[0].mapping, "secondary",
+    "WCAG permits an escape by other standard means if the page says so, which we cannot see");
+});
+
+test("reaching the END of a short tab order is NOT a trap", () => {
+  // The ambiguity the probe's own comment names. Focus repeating at the last control of a page whose
+  // controls it all visited is the end of the document, not a trap — and reporting it would fire on
+  // ordinary pages, which is how a rule like this gets switched off.
+  const findings = ruleFindings({
+    transcript: [],
+    structure: { formFields: ["a, edit", "b, button"] },
+    interaction: { focusOrder: ["a, edit", "b, button", "b, button"] },
+  } as never);
+  assert.equal(findings.filter((f) => f.wcag.startsWith("2.1.2")).length, 0);
+});
+
+test("focus that keeps moving is never a trap, however short", () => {
+  const findings = ruleFindings({
+    transcript: [],
+    structure: { formFields: ["a", "b", "c", "d"] },
+    interaction: { focusOrder: ["a", "b", "c"] },
+  } as never);
+  assert.equal(findings.filter((f) => f.wcag.startsWith("2.1.2")).length, 0);
+});
+
+test("no focus probe means no 2.1.2 claim, which was every capture until now", () => {
+  // `probeFocus` was reachable from no CLI flag and no Action input, so `focusOrder` is absent from the
+  // entire corpus. Treating that as "no trap" would have made 2.1.2 a silent pass everywhere.
+  const findings = ruleFindings({
+    transcript: [], structure: { formFields: ["a", "b", "c"] }, interaction: {},
+  } as never);
+  assert.equal(findings.filter((f) => f.wcag.startsWith("2.1.2")).length, 0);
+});
+
+test("a trap claim needs corroboration from the sweep, not just a repeat", () => {
+  // Without the second signal this fires on a single stale announcement — and stale announcements are
+  // frequent enough in this pipeline to have their own section in CLAUDE.md.
+  const findings = ruleFindings({
+    transcript: [], structure: { formFields: [] },
+    interaction: { focusOrder: ["a", "a", "a"] },
+  } as never);
+  assert.equal(findings.filter((f) => f.wcag.startsWith("2.1.2")).length, 0);
+});

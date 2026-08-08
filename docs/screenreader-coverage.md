@@ -22,12 +22,29 @@ is real.
 | Hear link text out of context | `K` / `Shift+K` | `structure.links` | 2.4.4, 2.4.9 |
 | Meet a list | `L` / `Shift+L` | `structure.lists` | 1.3.1 |
 | Read a table cell by cell | `T`, then `Ctrl+Alt+Arrow` (**opt-in, see caveat**) | `structure.tableCells` | 1.3.1 |
-| Tab through the page | `Tab` + report focus | `interaction.focusOrder` | **none — see caveat** |
+| Tab through the page | `Tab` + report focus (on by default) | `interaction.focusOrder` | 2.1.2 |
 
 The first nine are on by default and cost ~15–17 s per capture. The last two are opt-in per
 capture — `"probeFocus": true` (adds ~8 s) and `"probeTables": true` (see the caveat below).
 
-### Caveat: `focusOrder` is CAPTURED and never ASSESSED — it claims no criterion
+### Resolved 2026-08-08: `focusOrder` is now assessed, and reachable
+
+The caveat below described a real defect and it is fixed. `probeFocus` is exposed as `--no-probe-focus`
+(CLI) and `probe-focus` (Action), ON by default in both because Tab activates nothing — the opposite of
+`probe-forms`, and the reason the defaults differ. `addKeyboardTrap` reads the evidence and claims 2.1.2.
+
+The rule is deliberately conservative and needs TWO signals: focus repeating at the end of the tab order,
+AND fewer distinct controls reached than the form-field sweep found. The capture probe had always recorded
+the first and refused to interpret it — "which one it is, is the judge's call" — because a repeat alone
+also happens at the end of a short document, and would fire on a single stale announcement.
+
+Mapped SECONDARY: 2.1.2 permits an escape by other standard means, and permits a non-standard one if the
+user is advised of it. We press Tab only and cannot see an on-page advisory.
+
+The original report follows, because the shape of the defect is worth keeping: a probe that ran, evidence
+nobody read, and a coverage table claiming the criterion anyway.
+
+### Original caveat: `focusOrder` was CAPTURED and never ASSESSED
 
 This row used to claim 2.1.2 No Keyboard Trap and 2.4.3 Focus Order. It should not have. The probe works
 and records what it hears, but:

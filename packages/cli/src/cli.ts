@@ -39,6 +39,8 @@ interface Args {
   json: boolean;
   debug: boolean;
   probeForms: boolean;
+  /** Tab through the page and report focus. Covers 2.1.2 No Keyboard Trap. */
+  probeFocus: boolean;
   /** Run the optional axe-core layer. Off with --no-axe or A11Y_AXE=0. */
   axe: boolean;
   /** Path to axe results produced elsewhere, used instead of running our own scan. */
@@ -55,7 +57,8 @@ function parsedAfterRun(): AfterRun {
 
 const USAGE =
   'Usage: npm run witness -- <url> --task "..." [--worker http://host:port] ' +
-  "[--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms] [--no-axe] [--axe-results <file>]";
+  "[--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms] [--no-probe-focus] "
+  + "[--no-axe] [--axe-results <file>]";
 
 function defaultArgs(): Args {
   return {
@@ -71,6 +74,11 @@ function defaultArgs(): Args {
     // submitting. This CLI can be aimed at any URL on the internet, and pressing *Book* or *Send* on
     // somebody else's production site is not a review. So the risky default follows who owns the page.
     probeForms: false,
+    // ON, unlike probe-forms, and the difference is side effects: Tab moves focus and activates nothing,
+    // so it is safe on a page you do not own. 2.1.2 is also a NON-INTERFERENCE criterion — WCAG §5.2.5
+    // applies it to all content whether or not it is relied upon — and a keyboard trap is total: a user
+    // who cannot leave a control cannot use the rest of the page. It costs ~8 s per capture.
+    probeFocus: true,
     axe: process.env.A11Y_AXE !== "0",
     axeResults: process.env.A11Y_AXE_RESULTS ?? null,
   };
@@ -89,6 +97,7 @@ function applyArg(args: Args, argv: string[], i: number): number {
     case "--json": args.json = true; return i;
     case "--debug": args.debug = true; return i;
     case "--probe-forms": args.probeForms = true; return i;
+    case "--no-probe-focus": args.probeFocus = false; return i;
     case "--no-axe": args.axe = false; return i;
     default:
       if (!v.startsWith("--")) args.url = v;
@@ -229,7 +238,7 @@ function warnUnverified(reason: CaptureDoubt, title: string | undefined): void {
 async function recaptureUntilItReadsThePage(
   first: CaptureResponse,
   title: string,
-  options: { url: string; task: string; worker: string; probeForms: boolean },
+  options: { url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean },
 ): Promise<CaptureResponse> {
   let cap = first;
   const { url, ...captureOptions } = options;
@@ -240,14 +249,16 @@ async function recaptureUntilItReadsThePage(
   return cap;
 }
 
-async function runWitness({ url, task, worker, json, debug, probeForms, axe: wantAxe, axeResults }: RunOptions): Promise<void> {
+async function runWitness(
+  { url, task, worker, json, debug, probeForms, probeFocus, axe: wantAxe, axeResults }: RunOptions,
+): Promise<void> {
   const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults });
   process.stderr.write(`Scanning ${url} (${ruleLayer === "none" ? "" : "rule-based axe-core + "}real screen reader) ...\n`);
   // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
   const [firstCap, axe] = await Promise.all([
-    captureViaWorker(url, { task, worker, probeForms }),
+    captureViaWorker(url, { task, worker, probeForms, probeFocus }),
     pageContext(url, ruleLayer, axeResults),
   ]);
   // `null` when the rule layer did not run, so "unchecked" can never be mistaken for "clean". Both
@@ -259,7 +270,8 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
 
   // Verify-and-retry (the Root-1 fix, brought to the product). Browser focus on
   // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
-  const cap = await recaptureUntilItReadsThePage(firstCap, axe.title, { url, task, worker, probeForms });
+  const cap = await recaptureUntilItReadsThePage(firstCap, axe.title,
+    { url, task, worker, probeForms, probeFocus });
   // Carry the verdict, do not just warn about it.
   //
   // This wrote a WARNING and carried on. On gov.uk the capture read Edge's image-magnifier overlay
@@ -425,13 +437,16 @@ interface CaptureRequest {
   task: string;
   worker: string;
   probeForms: boolean;
+  probeFocus: boolean;
 }
 
-async function captureViaWorker(url: string, { task, worker, probeForms }: CaptureRequest): Promise<CaptureResponse> {
+async function captureViaWorker(
+  url: string, { task, worker, probeForms, probeFocus }: CaptureRequest,
+): Promise<CaptureResponse> {
   const res = await fetch(`${worker}/capture`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ url, task, probeForms }),
+    body: JSON.stringify({ url, task, probeForms, probeFocus }),
   });
   if (!res.ok) {
     throw new Error(`Worker error ${res.status}: ${await res.text()}`);
