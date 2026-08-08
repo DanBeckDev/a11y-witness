@@ -25,7 +25,9 @@ import { applyGate } from "./verify-gate.js";
  * `codex` uses a local subscription login (no metered cost), `anthropic` and `openai` need the caller's
  * own key. The backend is one clean seam: evidence in, findings out.
  */
-const BACKEND = (process.env.JUDGE_BACKEND ?? "local").toLowerCase();
+// `||`, not `??`: an env var set to the EMPTY string is how CI passes "unset", and `??` only defaults on
+// nullish — so an empty JUDGE_BACKEND selected no backend at all here rather than the intended default.
+const BACKEND = (process.env.JUDGE_BACKEND || "local").toLowerCase();
 const JUDGE_MODEL = process.env.JUDGE_MODEL ?? "claude-opus-4-8";
 // OpenAI-compatible backend (JUDGE_BACKEND=openai): works against hosted OpenAI
 // or any local server that speaks /v1/chat/completions (llama.cpp, vLLM, Ollama,
