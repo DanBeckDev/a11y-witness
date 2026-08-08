@@ -186,3 +186,14 @@ test("requirement 4 admits one language and one technology configuration", () =>
   assert.match(supported.limitation, /language/i);
   assert.match(supported.limitation, /turned OFF|unsupported/i);
 });
+
+test("a truncated FOCUS probe is reported like a truncated sweep", () => {
+  // It is not a quick-nav sweep, but it stops after a fixed number of Tab presses and the consequence is
+  // the same: a keyboard trap past that point was never looked for. 2.1.2 must not read as passed.
+  const outcomes = sweepOutcomes([
+    { event: "focusOrder", stops: 12, truncated: true, stalled: false },
+    { event: "focusOrder", stops: 4, truncated: false, stalled: false },
+  ]);
+  assert.deepEqual(outcomes, [{ type: "focusOrder", stop: "cap" }]);
+  assert.equal(truncatedSweeps(outcomes).length, 1);
+});

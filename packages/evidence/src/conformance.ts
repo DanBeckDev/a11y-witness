@@ -84,7 +84,17 @@ export function truncatedSweeps(sweeps: readonly SweepOutcome[] = []): SweepOutc
 export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcome[] {
   const out: SweepOutcome[] = [];
   for (const mark of diagnostics) {
-    const m = mark as { event?: string; type?: string; prevStop?: string; nextStop?: string };
+    const m = mark as {
+      event?: string; type?: string; prevStop?: string; nextStop?: string; truncated?: boolean;
+    };
+    // The focus probe is not a quick-nav sweep, but it truncates the same way — it stops after a fixed
+    // number of Tab presses — and the consequence is identical: content past that point was never
+    // examined. Reported as a sweep outcome so 2.1.2 gets the same `cantTell` treatment as every other
+    // criterion whose evidence collection stopped early, instead of a `passed` it did not earn.
+    if (m?.event === "focusOrder") {
+      if (m.truncated === true) out.push({ type: "focusOrder", stop: "cap" });
+      continue;
+    }
     if (m?.event !== "sweep") continue;
     for (const stop of [m.prevStop, m.nextStop]) {
       if (stop !== undefined) out.push({ type: String(m.type ?? "unknown"), stop });

@@ -75,6 +75,8 @@ export interface CaptureEvidence {
     navigatedOnSubmit?: { from: string; to: string };
     /** Accessible names the page exposed AFTER a submit — the visual side of 3.3.1 and 4.1.3. */
     postSubmitNames?: string[];
+    /** What each Tab press announced. Absent means the focus probe did not run. Rule-only, like `media`. */
+    focusOrder?: string[];
   };
   /**
    * Media elements the page declares, from the DOM. Deliberately NOT added to `EVIDENCE_CHANNEL`: that

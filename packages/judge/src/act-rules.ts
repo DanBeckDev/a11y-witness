@@ -208,4 +208,31 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "for any browser that reports the attributes. It says nothing about whether the audio is actually "
       + "audible to a given user, only that the page declared it to start on its own.",
   },
+  {
+    id: "a11y-witness:keyboard-trap",
+    version: "2026-08-08",
+    name: "Tab stopped moving, so focus is trapped",
+    description: "Pressing Tab repeatedly stopped advancing while most of the page's controls had never "
+      + "been reached, so a keyboard user cannot get past the current control.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "2.1.2", mapping: "secondary" }],
+    inputAspects: ["interaction.focusOrder", "structure.formFields"],
+    applicability: "Captures where the focus probe ran and recorded at least three tab stops. A capture "
+      + "with no `focusOrder` is unchecked, not clean.",
+    expectation: "Either focus keeps advancing, or it settles only after visiting every control the "
+      + "form-field sweep found.",
+    assumptions: [
+      "The same control announced twice running means focus did not move. The capture probe stops there "
+        + "deliberately and refuses to interpret it — its comment says the distinction between a trap and "
+        + "the end of the document is the judge's call, and this rule is that call.",
+      "TWO signals are required: the repeat, AND fewer distinct controls reached than the sweep found. The "
+        + "second is what separates a trap from a genuinely short tab order, and it also defends against a "
+        + "stale announcement, which this pipeline produces often enough to have a section about.",
+      "SECONDARY because 2.1.2 allows focus to be moved away by 'unmodified arrow or tab keys or other "
+        + "standard exit method', and permits a non-standard method if the user is advised of it. We press "
+        + "Tab only, and we cannot see an on-page advisory, so a repeat is strong evidence and not proof.",
+    ],
+    accessibilitySupport: NVDA_EDGE + " Tab is pressed through the screen reader, so what is reported is "
+      + "the focus order a screen-reader user experiences, which can differ from raw browser tab order.",
+  },
 ];
