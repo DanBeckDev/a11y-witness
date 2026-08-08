@@ -10,6 +10,7 @@
  * too small to hold a bug.
  */
 import type { Judgment } from "@a11y-witness/judge";
+import { taskVerdictLabel } from "@a11y-witness/judge";
 import type { AxeFinding } from "./scan/axe.js";
 import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11y-witness/judge/layers";
 
@@ -66,7 +67,9 @@ function findingsSection(verdict: Judgment, screenReader: string, announcements:
     // its training data, nothing judged anything at all. A report that overstates its own assessor is
     // the same defect as reporting "not run" as a pass.
     `-- Lived-experience layer (${screenReader} + ${judgeLabel()}): ${announcements} announcements --`,
-    `Task completable: ${verdict.taskCompletable ? "yes" : "no"} (overall confidence ${verdict.confidence})`,
+    // See taskVerdictLabel: with the default local scorer this is "no finding was a blocker", not a
+    // task verdict — that scorer never sees the task. Only the LLM backends actually answer it.
+    `${taskVerdictLabel().question}: ${verdict.taskCompletable ? "yes" : "no"} (overall confidence ${verdict.confidence})`,
     verdict.summary,
     `${verdict.findings.length} finding(s):`,
   ];

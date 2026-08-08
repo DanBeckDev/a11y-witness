@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { renderSummary, shouldFail, type FailOn, type RunResult } from "./summary.js";
+import { taskVerdictLabel } from "@a11y-witness/judge";
 
 const arg = (name: string, fallback?: string): string | undefined =>
   process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
@@ -40,7 +41,7 @@ if (!result?.verdict || !Array.isArray(result.verdict.findings)) {
   process.exit(2);
 }
 
-const markdown = renderSummary(result, { marker });
+const markdown = renderSummary(result, { marker, taskQuestion: taskVerdictLabel().question });
 
 // An unverified capture is an infrastructure failure, not a verdict about the page — so it exits 2, the
 // same code used for "could not read the result". Green would say "we checked and it is fine"; red (1)
