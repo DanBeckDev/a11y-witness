@@ -53,9 +53,19 @@ function axeSection(axe: AxeFinding[] | null): string[] {
  * Most fundamental first, because a page you cannot perceive is not worth reporting navigation
  * problems on.
  */
+/** Which assessor ran, read from the same env var the judge selects on, so the two cannot disagree. */
+function judgeLabel(): string {
+  const backend = (process.env.JUDGE_BACKEND || "local").toLowerCase();
+  return backend === "local" ? "trained scorer" : `${backend} judge`;
+}
+
 function findingsSection(verdict: Judgment, screenReader: string, announcements: number): string[] {
   const lines = [
-    `-- Lived-experience layer (${screenReader} + AI judge): ${announcements} announcements --`,
+    // Names what actually assessed the page rather than claiming "AI judge". The shipped default is
+    // this project's own trained scorer, not an LLM — and when that scorer abstains on a page unlike
+    // its training data, nothing judged anything at all. A report that overstates its own assessor is
+    // the same defect as reporting "not run" as a pass.
+    `-- Lived-experience layer (${screenReader} + ${judgeLabel()}): ${announcements} announcements --`,
     `Task completable: ${verdict.taskCompletable ? "yes" : "no"} (overall confidence ${verdict.confidence})`,
     verdict.summary,
     `${verdict.findings.length} finding(s):`,
