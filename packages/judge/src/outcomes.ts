@@ -24,8 +24,9 @@
  */
 import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
 
-import { assessedCriteria } from "./coverage.js";
+import { assessedCriteria, criterionNumber } from "./coverage.js";
 import { hasEvidenceFor, type CaptureEvidence } from "./local-judge.js";
+import type { RequirementMapping } from "./judge.js";
 
 /** ACT's five outcomes. https://www.w3.org/TR/act-rules-format/#output-outcome */
 export type ActOutcome = "inapplicable" | "passed" | "failed" | "cantTell" | "untested";
@@ -66,8 +67,11 @@ const SWEEPS_FEEDING: Record<string, readonly string[]> = {
 
 export interface OutcomeInput {
   capture: CaptureEvidence;
-  /** Findings produced by any layer, each carrying a `wcag` string that starts with the criterion number. */
-  findings: readonly { wcag?: string }[];
+  /**
+   * Findings produced by any layer. `wcag` starts with the criterion number; `mapping` says whether a
+   * failure asserts non-conformance, and absent means `secondary` — see `RequirementMapping`.
+   */
+  findings: readonly { wcag?: string; mapping?: RequirementMapping }[];
   /**
    * True when the trained scorer declined to score this capture because it is unlike anything it was
    * validated on. Nothing was scored, so every criterion it covers is undetermined rather than clean.
@@ -76,8 +80,6 @@ export interface OutcomeInput {
   /** Sweeps that stopped before the page ran out of elements. */
   truncatedSweeps?: readonly { type: string }[];
 }
-
-const criterionOf = (wcag: string | undefined): string => String(wcag ?? "").trim().split(/\s+/)[0];
 
 /** Did a truncated sweep feed this criterion? Returns the sweep names, so the reason can name them. */
 function truncatedFeeds(criterion: string, truncated: readonly { type: string }[]): string[] {
@@ -99,9 +101,25 @@ function truncatedFeeds(criterion: string, truncated: readonly { type: string }[
  * 4. Only then may an empty channel mean `inapplicable`, which is ACT's "nothing here to judge".
  */
 function outcomeFor(criterion: string, input: OutcomeInput): CriterionOutcome {
-  const failed = input.findings.filter((f) => criterionOf(f.wcag) === criterion);
+  const failed = input.findings.filter((f) => criterionNumber(f.wcag) === criterion);
+  // Only a CONFORMANCE-mapped failure may say the criterion is not satisfied. ACT is explicit that a
+  // secondary-mapped rule "could" indicate non-conformance, which is `cantTell` — the finding is real and
+  // still reported, but the rule is stricter or looser than the criterion, so asserting from it would be
+  // an accusation the standard itself does not support. "click here" is the case that proves it: 2.4.4
+  // permits the purpose to come from surrounding context we cannot see.
+  const asserted = failed.filter((f) => f.mapping === "conformance");
+  if (asserted.length) {
+    return {
+      criterion, outcome: "failed",
+      reason: `${asserted.length} finding(s) whose evidence establishes this criterion is not satisfied.`,
+    };
+  }
   if (failed.length) {
-    return { criterion, outcome: "failed", reason: `${failed.length} finding(s) reported for this criterion.` };
+    return {
+      criterion, outcome: "cantTell",
+      reason: `${failed.length} finding(s) indicate a possible failure, but the rules that produced them `
+        + "are stricter or looser than the criterion, so this needs human confirmation.",
+    };
   }
   if (input.abstained) {
     return {

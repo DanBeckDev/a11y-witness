@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { scorerPaths } from "@a11y-witness/scorer";
 import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
 
-import { assessedCriteria, RULE_CRITERIA, SCORED_CRITERIA } from "./coverage.js";
+import { assessedCriteria, criterionNumber, RULE_CRITERIA, SCORED_CRITERIA } from "./coverage.js";
 import { ruleFindings } from "./rules.js";
 
 test("SCORED_CRITERIA equals the shipped model's own criteria", () => {
@@ -65,7 +65,7 @@ test("the criteria a rule ACTUALLY emitted on real evidence stay inside the list
   } as never);
   assert.ok(findings.length > 0, "the fixture must actually produce findings, or this asserts nothing");
   for (const finding of findings) {
-    const num = String(finding.wcag).split(" ")[0];
+    const num = criterionNumber(finding.wcag);
     assert.ok((SCORED_CRITERIA as readonly string[]).includes(num),
       `a rule emitted ${num}, which is outside the declared coverage`);
   }

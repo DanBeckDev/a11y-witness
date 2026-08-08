@@ -137,6 +137,13 @@ function findingsSection(verdict: Judgment, screenReader: string, announcements:
     `${taskVerdictLabel().question}: ${verdict.taskCompletable ? "yes" : "no"} (overall confidence ${verdict.confidence})`,
     verdict.summary,
     `${verdict.findings.length} finding(s):`,
+    // Stated once, above the list, rather than repeated per finding. Without it "INDICATOR" is jargon; with
+    // it, a reader knows exactly which lines they can quote as a failure and which need a human.
+    ...(verdict.findings.some((f) => f.mapping !== "conformance")
+      ? ["  ASSERTED = the evidence establishes the criterion is not satisfied.",
+        "  INDICATOR = a likely failure, but this check is stricter or looser than the criterion itself,",
+        "              so it needs human confirmation before it is quoted as non-conformance."]
+      : []),
   ];
   let currentLayer: ExperienceLayer | "" = "";
   for (const finding of orderByLayer(verdict.findings)) {
@@ -145,7 +152,12 @@ function findingsSection(verdict: Judgment, screenReader: string, announcements:
       currentLayer = layer;
       lines.push(`  ${LAYER_LABEL[layer]}`);
     }
-    lines.push(`    [${finding.severity.toUpperCase()}] ${finding.wcag}  (confidence ${finding.confidence})`);
+    // ASSERTED vs INDICATOR is the ACT requirement mapping, and it is the most consequential thing on the
+    // line: it tells the reader whether they may act on this as a failure or must confirm it by hand.
+    // Absent means secondary, so an unmapped finding never reads as an assertion.
+    const claim = finding.mapping === "conformance" ? "ASSERTED" : "INDICATOR";
+    lines.push(
+      `    [${finding.severity.toUpperCase()}] ${finding.wcag}  (confidence ${finding.confidence}) ${claim}`);
     lines.push(`       ${finding.issue}`);
     lines.push(`       evidence: ${finding.evidence}`);
   }

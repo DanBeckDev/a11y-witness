@@ -168,3 +168,64 @@ test("the UW inaccessible page produces the findings a rule scanner cannot", () 
   // 1.1.1 the logo's alt text is its own filename; 2.4.4 "click here"; 1.3.1 no headings; 4.1.2 bare roles.
   assert.deepEqual(found, ["1.1.1", "1.3.1", "2.4.4", "4.1.2"]);
 });
+
+/**
+ * Which rules may ASSERT non-conformance, pinned.
+ *
+ * ACT distinguishes a rule mapped to a criterion as a conformance requirement — failed means the criterion
+ * is not satisfied — from one mapped as secondary, which correlates but is stricter or looser. Getting this
+ * wrong in the permissive direction turns a heuristic into an accusation, which for an accessibility tool
+ * is the expensive kind of wrong. So the classification is asserted, not left to whoever edits next.
+ */
+test("only the rules whose evidence IS the failure assert non-conformance", () => {
+  // NVDA saying "Unlabeled graphic" and a control announced as a bare role are the two cases where the
+  // announcement is not a proxy for the criterion — it states it.
+  const asserted = ruleFindings({
+    transcript: ["Unlabeled graphic"],
+    structure: { formFields: ["combo box, collapsed"] },
+  } as never);
+  assert.ok(asserted.length >= 2, "the fixture must produce both asserting rules");
+  for (const finding of asserted) {
+    assert.equal(finding.mapping, "conformance",
+      `${finding.wcag} — ${finding.issue}: this rule reads the failure directly and should assert it`);
+  }
+});
+
+test("the heuristic rules report as INDICATORS, never as assertions", () => {
+  // 2.4.4 permits the link's context to supply its purpose, so "click here" can conform; 1.3.1 is about
+  // visual structure this layer cannot see. Both are worth reporting and neither is proof.
+  const vague = ruleFindings({ transcript: [], structure: { links: ["click here, link"] } } as never);
+  assert.equal(vague.length, 1);
+  assert.equal(vague[0].mapping, "secondary", "2.4.4 is stricter here than the criterion itself");
+
+  const headless = ruleFindings({
+    transcript: Array.from({ length: 20 }, (_, i) => `line ${i} of ordinary page content`),
+    structure: { headings: [] },
+    census: { heading: 0 },
+  } as never);
+  assert.equal(headless.length, 1);
+  assert.equal(headless[0].mapping, "secondary", "1.3.1 needs the visual layer to be proof");
+});
+
+test("the census count is an INDICATOR, because it already produced one false positive", () => {
+  // CSS list bullets were counted as unnamed images and accused a page W3C publishes as AA conformant.
+  // Fixed at the census, but the rule reads a COUNT rather than an announcement, so it stays an indicator.
+  const census = ruleFindings({
+    transcript: [], structure: { graphics: [] }, census: { graphic: 4, graphicUnnamed: 2 },
+  } as never);
+  assert.equal(census.length, 1);
+  assert.equal(census[0].mapping, "secondary");
+});
+
+test("every finding declares a mapping, so none defaults by accident at the type level", () => {
+  const findings = ruleFindings({
+    transcript: ["Unlabeled graphic"],
+    structure: { links: ["click here, link"], formFields: ["combo box, collapsed"] },
+    census: { graphic: 2, graphicUnnamed: 1 },
+  } as never);
+  assert.ok(findings.length >= 3);
+  for (const finding of findings) {
+    assert.ok(finding.mapping === "conformance" || finding.mapping === "secondary",
+      `${finding.issue} has no requirement mapping`);
+  }
+});
