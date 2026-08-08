@@ -23,7 +23,7 @@
  * on spacing). Validate any new announcement-string rule against our own captures,
  * not against a book's strings.
  */
-import type { Finding } from "./judge.js";
+import type { Finding, RequirementMapping } from "./judge.js";
 
 /** The capture fields the rules inspect (a subset of JudgeInput; a full
  * JudgeInput is assignable to this). */
@@ -101,7 +101,15 @@ const isImage = (line: string): boolean => /\b(graphic|image)\b/i.test(line);
 const isControl = (entry: string): boolean =>
   /\b(button|edit|radio|checkbox|combo box|list box|menu button|link)\b/i.test(entry);
 
-type AddFinding = (wcag: string, issue: string, evidence: string) => void;
+/**
+ * Report a finding. The fourth argument is its ACT requirement mapping, and it DEFAULTS to `secondary`.
+ *
+ * Defaulting to the weaker claim is the point: asserting that a criterion is not satisfied has to be an
+ * explicit, deliberate act at the call site, so a rule added later cannot accidentally start making
+ * accusations. `"conformance"` is spelled out where it is meant, and reads as itself.
+ */
+type AddFinding =
+  (wcag: string, issue: string, evidence: string, mapping?: RequirementMapping) => void;
 
 /**
  * Flag controls announced with a role but no accessible name. In the transcript
@@ -173,7 +181,13 @@ function addUnnamedControls(entries: string[], requireMarker: boolean, add: AddF
     const unnamed = requireMarker
       ? hasEmptyName(entry)
       : accessibleName(entry) === "" || beginsWithRole(entry);
-    if (unnamed) add("4.1.2 Name, Role, Value", "Control announced with a role but no accessible name", entry);
+    // CONFORMANCE-mapped: 4.1.2 requires a programmatically determinable NAME for every user-interface
+    // component, and a control the screen reader announces as a bare role has none. The announcement is not
+    // a proxy for the failure, it IS the failure — a user meets a control they cannot identify.
+    if (unnamed) {
+      add("4.1.2 Name, Role, Value", "Control announced with a role but no accessible name", entry,
+        "conformance");
+    }
   }
 }
 
@@ -267,11 +281,11 @@ function addUnnamedGraphics(input: RuleInput, add: AddFinding): void {
 export function ruleFindings(input: RuleInput): Finding[] {
   const findings: Finding[] = [];
   const seen = new Set<string>();
-  const add = (wcag: string, issue: string, evidence: string): void => {
+  const add: AddFinding = (wcag, issue, evidence, mapping = "secondary"): void => {
     const key = `${wcag}|${evidence}`;
     if (seen.has(key)) return;
     seen.add(key);
-    findings.push({ issue, wcag, severity: "serious", evidence, confidence: 1 });
+    findings.push({ issue, wcag, severity: "serious", evidence, confidence: 1, mapping });
   };
 
   // 1.1.1 — images with no text alternative: announced "unlabelled", an empty
@@ -279,7 +293,10 @@ export function ruleFindings(input: RuleInput): Finding[] {
   for (const line of input.transcript) {
     if (!isImage(line)) continue;
     if (UNLABELLED_RE.test(line) || NO_DESCRIPTION_HINT_RE.test(line)) {
-      add("1.1.1 Non-text Content", "Image announced as unlabelled (no text alternative)", line);
+      // CONFORMANCE-mapped: NVDA said "Unlabeled graphic" in so many words. The screen reader is reporting
+      // non-text content with no text alternative, which is the criterion stated directly.
+      add("1.1.1 Non-text Content", "Image announced as unlabelled (no text alternative)", line,
+        "conformance");
     } else if (hasEmptyName(line)) {
       add("1.1.1 Non-text Content", "Image announced with no text alternative", line);
     } else if (FILENAME_RE.test(accessibleName(line))) {

@@ -49,13 +49,49 @@ test("criteria no assessor covers are UNTESTED, not passed", () => {
   assert.match(find(outcomes, "1.4.3").reason, /unchecked, not clean/);
 });
 
-test("a finding makes the criterion FAILED", () => {
+test("a CONFORMANCE-mapped finding makes the criterion FAILED", () => {
+  // Only a rule whose evidence establishes the criterion is unsatisfied may assert it — here, NVDA
+  // announcing "Unlabeled graphic", which is 1.1.1 stated directly.
   const outcomes = criterionOutcomes({
     capture: RICH,
-    findings: [{ wcag: "1.1.1 Non-text Content" }, { wcag: "1.1.1 Non-text Content" }],
+    findings: [
+      { wcag: "1.1.1 Non-text Content", mapping: "conformance" as const },
+      { wcag: "1.1.1 Non-text Content", mapping: "conformance" as const },
+    ],
   });
   assert.equal(find(outcomes, "1.1.1").outcome, "failed");
   assert.match(find(outcomes, "1.1.1").reason, /2 finding/);
+});
+
+test("a SECONDARY-mapped finding is reported but does NOT assert non-conformance", () => {
+  // The whole point of ACT's two mapping kinds. Our "click here" rule is stricter than 2.4.4, which lets
+  // the link's surrounding context supply its purpose — so the finding is real and worth showing, and
+  // claiming the criterion is unsatisfied from it would be an accusation the standard does not support.
+  const outcomes = criterionOutcomes({
+    capture: RICH, findings: [{ wcag: "2.4.4 Link Purpose (In Context)", mapping: "secondary" as const }],
+  });
+  assert.equal(find(outcomes, "2.4.4").outcome, "cantTell");
+  assert.match(find(outcomes, "2.4.4").reason, /needs human confirmation/);
+});
+
+test("a finding with NO mapping is treated as secondary, never as an assertion", () => {
+  // The default has to be the weaker claim: a new finding source must opt IN to asserting non-conformance,
+  // or the next rule added quietly starts making them.
+  const outcomes = criterionOutcomes({ capture: RICH, findings: [{ wcag: "2.4.4 Link Purpose" }] });
+  assert.equal(find(outcomes, "2.4.4").outcome, "cantTell");
+});
+
+test("one conformance finding outranks several secondary ones on the same criterion", () => {
+  const outcomes = criterionOutcomes({
+    capture: RICH,
+    findings: [
+      { wcag: "1.1.1 Non-text Content" },
+      { wcag: "1.1.1 Non-text Content", mapping: "conformance" as const },
+      { wcag: "1.1.1 Non-text Content" },
+    ],
+  });
+  assert.equal(find(outcomes, "1.1.1").outcome, "failed");
+  assert.match(find(outcomes, "1.1.1").reason, /1 finding/, "only the asserted one is counted as proof");
 });
 
 test("an empty channel is INAPPLICABLE, never passed", () => {
@@ -114,7 +150,7 @@ test("a finding still outranks abstention and truncation", () => {
   // cantTell would discard a confirmed failure.
   const outcomes = criterionOutcomes({
     capture: RICH,
-    findings: [{ wcag: "1.1.1 Non-text Content" }],
+    findings: [{ wcag: "1.1.1 Non-text Content", mapping: "conformance" as const }],
     abstained: true,
     truncatedSweeps: [{ type: "graphic" }],
   });
@@ -141,7 +177,10 @@ test("truncation outranks inapplicable — 'we stopped early' is not 'there are 
 
 test("every outcome carries a reason", () => {
   // Including `passed`. An outcome a reader cannot interpret is a number to be quoted out of context.
-  for (const outcome of criterionOutcomes({ capture: RICH, findings: [{ wcag: "1.1.1" }] })) {
+  const withBoth = [
+    { wcag: "1.1.1", mapping: "conformance" as const }, { wcag: "2.4.4", mapping: "secondary" as const },
+  ];
+  for (const outcome of criterionOutcomes({ capture: RICH, findings: withBoth })) {
     assert.ok(outcome.reason.trim().length > 20,
       `${outcome.criterion} (${outcome.outcome}) must explain itself`);
   }
@@ -150,7 +189,9 @@ test("every outcome carries a reason", () => {
 test("a criterion number is parsed from the full WCAG label", () => {
   // Findings carry "1.1.1 Non-text Content"; the outcome list is keyed on "1.1.1". Getting this wrong
   // would match nothing and silently downgrade every failure to passed.
-  const outcomes = criterionOutcomes({ capture: RICH, findings: [{ wcag: "4.1.2 Name, Role, Value" }] });
+  const outcomes = criterionOutcomes({
+    capture: RICH, findings: [{ wcag: "4.1.2 Name, Role, Value", mapping: "conformance" as const }],
+  });
   assert.equal(find(outcomes, "4.1.2").outcome, "failed");
 });
 

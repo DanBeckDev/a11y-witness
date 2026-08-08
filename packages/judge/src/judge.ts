@@ -82,12 +82,33 @@ export interface JudgeInput {
   };
 }
 
+/**
+ * Does a failure here PROVE the criterion is unsatisfied, or only indicate it might be?
+ *
+ * The W3C's ACT Rules Format draws exactly this line, and it is the difference between an assertion and an
+ * accusation. A rule maps to a criterion either as a *conformance requirement* — failed means the criterion
+ * is not satisfied — or as a *secondary requirement*, where the rule correlates but is stricter or looser
+ * than the criterion itself.
+ *
+ * `2.4.4 Link Purpose (In Context)` is the clearest case. Our rule flags "click here", but the criterion
+ * permits the purpose to come from the link's CONTEXT — so "To apply for a permit, click here" conforms,
+ * and flagging it is stricter than WCAG. The finding is still worth reporting; asserting non-conformance
+ * from it is not.
+ *
+ * Absent means `secondary`, deliberately: a new finding source has to opt IN to asserting non-conformance.
+ *
+ * https://www.w3.org/TR/act-rules-format/#accessibility-requirements-mapping
+ */
+export type RequirementMapping = "conformance" | "secondary";
+
 export interface Finding {
   issue: string;
   wcag: string; // e.g. "1.3.1 Info and Relationships"
   severity: Severity;
   evidence: string; // the announced text that shows the problem
   confidence: number; // 0 to 1
+  /** See `RequirementMapping`. Absent is treated as `secondary` everywhere that reads it. */
+  mapping?: RequirementMapping;
 }
 
 export interface Judgment {
@@ -457,6 +478,17 @@ function keepRealCriteria(findings: Finding[]): Finding[] {
   return kept;
 }
 
+/**
+ * Find a criterion number ANYWHERE in a string, or return the string.
+ *
+ * Deliberately NOT `criterionNumber` from `coverage.ts`, which takes the first token of a label we produced
+ * ourselves. This one parses an LLM's output, which may write "Criterion 1.1.1" or "WCAG 1.1.1 Non-text
+ * Content", and it exists to catch INVENTED criteria — so it has to be lenient about position and fall back
+ * to the raw string so an unrecognisable citation is dropped rather than silently rewritten.
+ *
+ * The two look alike and serve different callers. Merging them would either make the strict one lenient
+ * (findings matching the wrong criterion) or the lenient one strict (valid LLM findings dropped).
+ */
 function criterionOf(wcag: string): string {
   const m = wcag.match(/(\d+\.\d+\.\d+)/);
   return m ? m[1] : wcag.trim();

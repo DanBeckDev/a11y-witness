@@ -37,3 +37,16 @@ export const RULE_CRITERIA = ["1.1.1", "1.3.1", "2.4.4", "4.1.2"] as const;
 export function assessedCriteria(): string[] {
   return [...new Set([...SCORED_CRITERIA, ...RULE_CRITERIA])].sort();
 }
+
+/**
+ * The criterion NUMBER from a finding's WCAG label: "1.1.1 Non-text Content" -> "1.1.1".
+ *
+ * Here, and exported, because three call sites had grown three spellings — `split(" ")[0]`,
+ * `split(/\s+/)[0]` and a `startsWith` prefix test — which disagree the moment a label contains a tab or
+ * a double space. Divergence would not fail loudly: a finding that stops matching its criterion silently
+ * downgrades that criterion from `failed` to `passed`, which is the one direction this project cannot
+ * afford to be wrong in.
+ */
+export function criterionNumber(wcag: string | undefined): string {
+  return String(wcag ?? "").trim().split(/\s+/)[0];
+}
