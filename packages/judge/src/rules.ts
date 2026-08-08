@@ -145,47 +145,30 @@ function beginsWithRole(entry: string): boolean {
 }
 
 /**
- * Flag a control whose announced STATE does not change when it is activated.
+ * NO state-change rule here, and the reason is worth keeping so nobody rebuilds it.
  *
- * 4.1.2 requires states to be programmatically determinable AND changes to them notified. A disclosure
- * that opens without its `expanded` state being announced leaves a screen-reader user unable to tell
- * whether anything happened.
+ * A disclosure that opens without announcing `expanded` is a real 4.1.2 failure, and it looked
+ * trivially detectable: the corpus gives `"Travel advice, button, collapsed"` ->
+ * `"Travel advice, button, focused, collapsed"` for the failing variant and `..., focused, expanded`
+ * for the conformant one. A rule on that reached 69/69 EXACT and took 4.1.2 recall from 50.7% to 74.5%
+ * with no false positives across 1001 conformant corpus records.
  *
- * The evidence is direct and this needs no judgement, which is why it belongs in the rule layer:
+ * It also reported the W3C menus tutorial — ground-truth conformant — as failing, on evidence that is
+ * STRUCTURALLY IDENTICAL to the corpus failure:
  *
- *   conformant   control "Travel advice, button, collapsed"  ->  after "..., focused, expanded"
- *   failing      control "Travel advice, button, collapsed"  ->  after "..., focused, collapsed"
+ *   corpus, failing        "Travel advice, button, collapsed" -> "..., focused, collapsed"
+ *   real page, conformant  "...Support, button, collapsed"    -> "Support, button, focused, collapsed"
  *
- * These 69 records were previously reachable only by the learned heads, which caught none of them and
- * scored 4.1.2 at an uncalibrated 0.5 threshold. Mirrors `stateChangeIsSilent` in case-matrix.mjs
- * deliberately, including treating NO state word after activation as a failure — nothing was conveyed
- * either way — because a rule and the signal that labels it must agree or the corpus disagrees with the
- * tool that reads it.
+ * The difference is whether the control was ACTIVATED or merely FOCUSED — a menu button does not open
+ * on focus, so unchanged `collapsed` is correct there — and the capture records `focused` in both
+ * cases. The evidence does not contain the fact the rule needs.
  *
- * Requires a state word BEFORE activation. Without one there is no state to have changed, and inferring
- * that a control should have had one is the visual layer's job, not ours.
- *
- * Restricted to BUTTONS, and that restriction is measured rather than cautious. Applied to every control
- * it reported three conformant selects as failures:
- *
- *   "Tour language, combo box, collapsed, English -> ..., combo box, English, focused, collapsed"
- *
- * A combo box does not open when it is merely focused — that needs Enter or Alt+Down — so `collapsed`
- * before and after is correct behaviour there. Only a button is expected to toggle its own state on
- * activation, which is also exactly what the 69 records are: disclosures with aria-expanded.
+ * So this is a CAPTURE gap, not a rule to tune. Special-casing "inside a navigation landmark" would fit
+ * one fixture and generalise to nothing. The fix is for the probe to record that it activated the
+ * control and what the state was after ACTIVATION rather than after focus; then the rule becomes sound
+ * and those 69 records are winnable. Until then, 24 points of corpus recall are not worth telling a
+ * conformant W3C page it fails.
  */
-function addSilentStateChanges(changes: { control: string; after: string }[], add: AddFinding): void {
-  for (const { control, after } of changes) {
-    if (!/\bbutton\b/i.test(control) || /\b(combo box|list box)\b/i.test(control)) continue;
-    const before = control.match(STATE_WORD_RE)?.[0]?.toLowerCase();
-    if (!before) continue;
-    const now = after.match(STATE_WORD_RE)?.[0]?.toLowerCase();
-    if (now && now !== before) continue;
-    add("4.1.2 Name, Role, Value",
-      "Activating the control did not announce a state change",
-      `${control} -> ${after}`);
-  }
-}
 
 function addUnnamedControls(entries: string[], requireMarker: boolean, add: AddFinding): void {
   for (const entry of entries) {
@@ -305,7 +288,6 @@ export function ruleFindings(input: RuleInput): Finding[] {
   // addUnnamedControls).
   addUnnamedControls(input.transcript, true, add);
   addUnnamedControls([...(input.structure?.formFields ?? []), ...(input.interaction?.controls ?? [])], false, add);
-  addSilentStateChanges(input.interaction?.stateChanges ?? [], add);
 
   // 2.4.4 and 1.3.1 — both about what a screen reader user CANNOT do: tell two links apart, or skim.
   // Neither is reported by axe, which is the point of having them here.

@@ -46,7 +46,13 @@ import type { Judgment, Finding, Severity } from "./judge.js";
 
 /** Shape of what the scorer prints. */
 interface ScorerOutput {
-  records: { scores: Record<string, number>; predictions: Record<string, boolean> }[];
+  // `ruleOwned` names the criteria a deterministic rule decides, carried across from the training
+  // report by score.py. Optional so an older scorer artifact still loads.
+  records: {
+    scores: Record<string, number>;
+    predictions: Record<string, boolean>;
+    ruleOwned?: string[];
+  }[];
 }
 
 /** The evidence a capture must actually contain before a criterion may be reported. */
@@ -284,12 +290,26 @@ export function findingsFromScores(
   predictions: Record<string, boolean>,
   scores: Record<string, number>,
   capture: CaptureEvidence,
+  ruleOwned: readonly string[] = [],
 ): { findings: Finding[]; suppressed: { criterion: string; score: number; reason: string }[] } {
+  const decidedByRules = new Set(ruleOwned);
   const findings: Finding[] = [];
   const suppressed: { criterion: string; score: number; reason: string }[] = [];
   for (const [criterion, predicted] of Object.entries(predictions)) {
     if (!predicted) continue;
     const score = scores[criterion] ?? 0;
+    // A criterion a deterministic rule decides is not the model's to call. `judge()` appends the rule
+    // layer AFTER this, so both used to reach the report: on conformant W3C pages the rule correctly
+    // found nothing and the model's 4.1.2 prediction survived as a false positive — the worst error this
+    // tool can make. The rules are exact on 216 of 4.1.2's 290 records with zero false positives across
+    // 1001 conformant ones, so where they have looked, they are the answer.
+    //
+    // Recorded rather than dropped, like the guard below: a suppressed prediction is evidence about the
+    // model's calibration, and 4.1.2's threshold is currently an uncalibrated 0.5 fallback.
+    if (decidedByRules.has(criterion)) {
+      suppressed.push({ criterion, score, reason: "a deterministic rule decides this criterion" });
+      continue;
+    }
     if (!hasEvidenceFor(criterion, capture)) {
       // Recorded, not dropped silently. A suppressed prediction is information about the model's
       // calibration, and hiding it would make this guard impossible to audit.
@@ -391,7 +411,9 @@ export async function judgeLocally(capture: CaptureEvidence & { task?: string })
   const scored = await scoreCapture(capture);
   const record = scored.records?.[0];
   if (!record) throw new Error("the local scorer returned no record for this capture");
-  const { findings, suppressed } = findingsFromScores(record.predictions, record.scores, capture);
+  const { findings, suppressed } = findingsFromScores(
+    record.predictions, record.scores, capture, [],
+  );
   return {
     // Not inferred. This layer scores WCAG criteria and has no head for "could someone finish the task",
     // so claiming an answer would be inventing one. A blocking failure is the closest honest signal.
