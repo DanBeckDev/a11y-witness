@@ -485,7 +485,12 @@ independently as 37 (2.0, after the removed 4.1.1) + 12 (2.1) + 6 (2.2), the 2.2
 2.4.11, 2.5.7, 2.5.8, 3.2.6, 3.3.7, 3.3.8. §5.6/5.7 Privacy and Security Considerations are INFORMATIVE
 lists, not extra obligations.
 
-- [ ] **ACT: report all FIVE outcomes per criterion, not just failures.** The ACT Rules Format defines
+- [x] **DONE 2026-08-08. ACT's five outcomes, per criterion.** `packages/judge/src/outcomes.ts`, in the
+  printed report and the JSON. Measured: a conformant real page is failed 0 / cantTell 8 / passed 0 /
+  untested 47, because the scorer abstains on every real page — the ADR 0010 gap, now visible per
+  criterion instead of hidden behind an empty findings list.
+
+- [ ] ~~ACT: report all FIVE outcomes per criterion, not just failures.~~ The ACT Rules Format defines
   `inapplicable`, `passed`, `failed`, `cantTell`, `untested`. We emit findings, i.e. `failed` only — so
   "0 findings" silently conflates *four different states*: checked and fine, no matching content on the
   page, could not determine, and never evaluated. This is this repo's own "unchecked is not clean" rule,
@@ -493,18 +498,30 @@ lists, not extra obligations.
   found the same night: a sweep that stopped at `deadline` is **`cantTell`**, not silence. Highest value
   item on this list, and it subsumes two others.
 
-- [ ] **ACT: declare, per rule, whether a failure MEANS non-conformance.** ACT distinguishes a rule mapped
+- [x] **DONE 2026-08-08.** `mapping: "conformance" | "secondary"` on every finding, defaulting to the
+  weaker claim so asserting is opt-in. A criterion whose only failures are indicators is `cantTell`, not
+  `failed`. The report prints ASSERTED or INDICATOR per finding.
+
+- [ ] ~~ACT: declare, per rule, whether a failure MEANS non-conformance.~~ ACT distinguishes a rule mapped
   to a criterion as a *conformance requirement* (failed => criterion not satisfied) from one mapped as a
   *secondary requirement* (correlates, but the rule is stricter or looser than the criterion). Several of
   ours are heuristics — "click here" for 2.4.4, the census count for 1.1.1 — and should be declared
   SECONDARY, so a hit is evidence rather than proof. Cheap, and it is the standards-sanctioned answer to
   the false-accusation risk that governs this whole project.
 
-- [ ] **ACT: structured rule metadata.** A rule needs an identifier, version, description, applicability,
+- [x] **DONE 2026-08-08.** `packages/judge/src/act-rules.ts`, seven rules with applicability,
+  expectation, assumptions and accessibility-support limits. Tests drive the real `ruleFindings` and check
+  the descriptions against what it PRODUCES. It caught its first omission within the hour: 1.4.2 shipped
+  before its description and the test refused it by name.
+
+- [ ] ~~ACT: structured rule metadata.~~ A rule needs an identifier, version, description, applicability,
   expectations, **assumptions**, **accessibility-support limitations**, and worked examples for passed /
   failed / inapplicable. We hold all of that knowledge in prose comments and none of it machine-readably.
 
-- [ ] **Six honesty gaps in the conformance statements**, all text, no new capability:
+- [x] **DONE 2026-08-08.** All six closed, plus a `notAConformanceClaim()` statement printed last and
+  unconditionally.
+
+- [ ] ~~Six honesty gaps in the conformance statements~~, all text, no new capability:
   1. **Responsive variations each conform individually** (CR2). We capture at one viewport and do not say so.
   2. **A "web page" includes an AJAX app at a single URI**, so for an SPA every state reachable without a
      URI change is part of the SAME page. The current "content behind interaction was not examined" line
@@ -520,7 +537,10 @@ lists, not extra obligations.
      "relied upon" is the author's determination, not ours. Silence lets a reader mistake the report for a
      claim.
 
-- [ ] **WCAG-EM positioning, and one standing decision.** WCAG-EM requires an accessibility-support
+- [x] **DONE 2026-08-08.** README states the positioning; `report.test.ts` asserts no score, grade or
+  percentage is ever printed.
+
+- [ ] ~~WCAG-EM positioning, and one standing decision.~~ WCAG-EM requires an accessibility-support
   BASELINE in scope (ours is NVDA + Edge + Windows, now stated under CR4 — label it as a baseline), and
   evaluates a whole product via structured sampling plus a random 10%. We are a single-page tool, so we
   ASSIST an evaluator and are not an evaluation; the README should say so. **Standing decision: never emit
