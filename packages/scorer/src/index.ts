@@ -61,7 +61,12 @@ export function encoderPresent(): boolean {
 
 export interface ScorerProvenance {
   featureSchema?: string;
+  /** The TRAINER's verdict on its own calibration, over the development split. Not generalisation. */
   releaseEligible?: boolean;
+  /** Whether the held-out acceptance set has passed for THESE weights. Only that evaluator sets it. */
+  generalisationVerified?: boolean;
+  /** Why release is blocked, empty when it is not. Absent evidence and failed evidence must differ. */
+  releaseBlockedBy?: string[];
   encoderSha256?: string;
   trainedAt?: string;
 }
