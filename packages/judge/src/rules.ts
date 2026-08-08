@@ -54,7 +54,7 @@ const ROLE_TOKENS = [
 ].sort((a, b) => b.length - a.length);
 
 const STATE_RE =
-  /\b(not checked|checked|not pressed|pressed|collapsed|expanded|not selected|selected|read only|required|invalid entry|out of list|out of region|clickable|level \d+)\b/gi;
+  /\b(not checked|checked|not pressed|pressed|collapsed|expanded|not selected|selected|read only|required|invalid entry|out of list|out of region|clickable|multi ?line|level \d+)\b/gi;
 
 // A spoken or written file name used as alt text: "IMG 4821", "photo dot jpg", "logo.png".
 const FILENAME_RE = /\b(img[\s_]?\d+|\S+\s+dot\s+(jpe?g|png|gif|svg|webp|bmp)|\S+\.(jpe?g|png|gif|svg|webp|bmp))\b/i;
@@ -112,10 +112,30 @@ type AddFinding = (wcag: string, issue: string, evidence: string) => void;
  * unambiguous — NVDA announces an unnamed button as just "button" (verified
  * against a real capture, 2026-06-29).
  */
+/**
+ * True when a sweep announcement BEGINS with its own role, which means it has no accessible name.
+ *
+ * NVDA puts the name first: a labelled select is "Passenger type, combo box, collapsed, Adult" and an
+ * unlabelled one is "combo box, collapsed, Adult". Stripping roles and states from the second leaves
+ * "Adult" — the selected VALUE — which `accessibleName` cannot tell from a name, so the rule read every
+ * unlabelled select and textarea as named and missed them. Measured: 109 of 115 rule-owned records,
+ * which `rules:gate` correctly calls a defect.
+ *
+ * Only sound for the structural sweep, where each entry is ONE control's complete announcement. In the
+ * read-through a role and its name can wrap onto separate lines, so a leading role proves nothing —
+ * which is why the marker is still required there.
+ */
+function beginsWithRole(entry: string): boolean {
+  const start = entry.trim().toLowerCase();
+  return ROLE_TOKENS.some((role) => start.startsWith(role));
+}
+
 function addUnnamedControls(entries: string[], requireMarker: boolean, add: AddFinding): void {
   for (const entry of entries) {
     if (!isControl(entry)) continue;
-    const unnamed = requireMarker ? hasEmptyName(entry) : accessibleName(entry) === "";
+    const unnamed = requireMarker
+      ? hasEmptyName(entry)
+      : accessibleName(entry) === "" || beginsWithRole(entry);
     if (unnamed) add("4.1.2 Name, Role, Value", "Control announced with a role but no accessible name", entry);
   }
 }
