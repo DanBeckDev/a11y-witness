@@ -52,6 +52,7 @@ interface ScorerOutput {
     scores: Record<string, number>;
     predictions: Record<string, boolean>;
     ruleOwned?: string[];
+    novelty?: { nearestTrainingCosine?: number | null; inSupport?: boolean | null; floor?: number };
   }[];
 }
 
@@ -411,6 +412,36 @@ export async function judgeLocally(capture: CaptureEvidence & { task?: string })
   const scored = await scoreCapture(capture);
   const record = scored.records?.[0];
   if (!record) throw new Error("the local scorer returned no record for this capture");
+    // ABSTAIN outside the training distribution rather than predict and be confidently wrong.
+    //
+    // Measured: every training record sits at cosine 0.847-0.99 from its nearest neighbour, while 28 of
+    // 32 real eval pages sit at 0.50-0.84. A linear head on a frozen embedding cannot tell it is
+    // extrapolating -- it returned 0.97 and 0.99 for 4.1.2 on two CONFORMANT W3C pages. For an
+    // accessibility tool a false positive is an accusation someone may act on or be challenged over, so
+    // declining is the only defensible answer where there is no basis to predict.
+    //
+    // Selective prediction with a reject option (Chow) over a k-NN feature-space novelty score
+    // (Sun et al., ICML 2022) -- not a bespoke mechanism. UNCHECKED, never clean: the same distinction
+    // the VoiceOver branch makes. The rule layer still runs, so deterministic findings survive.
+    //
+    // `=== false` only: null means an older artifact shipped no reference, and unknown must not read as
+    // out-of-support any more than as safe.
+    if (record.novelty?.inSupport === false) {
+      const nearest = record.novelty.nearestTrainingCosine ?? "unknown";
+      return {
+        taskCompletable: true,
+        summary: `This page is unlike anything the trained scorer was validated on (nearest training `
+          + `similarity ${nearest}, below the ${record.novelty.floor ?? "?"} support floor), so it was `
+          + "NOT scored. These criteria are unchecked, not clean.",
+        findings: [],
+        confidence: 0,
+        suppressed: Object.entries(record.predictions).filter(([, p]) => p).map(([criterion]) => ({
+          criterion,
+          score: record.scores[criterion] ?? 0,
+          reason: "the page is outside the distribution this scorer was validated on",
+        })),
+      };
+    }
   const { findings, suppressed } = findingsFromScores(
     record.predictions, record.scores, capture, [],
   );

@@ -685,5 +685,12 @@
   "warnings": [
     "4.1.2: no threshold reaches zero false positives; falling back to 0.5, which nobody chose \u2014 this criterion is not calibrated",
     "4.1.2: grouped calibration has 10 false positives and 2 false negatives"
-  ]
+  ],
+  "outOfDistribution": {
+    "method": "knn-cosine-document-embedding",
+    "reference": "ood_reference",
+    "referenceCount": 512,
+    "inDistributionFloor": 0.847,
+    "calibration": "derived from the training set's own nearest-neighbour minimum; NOT conformally calibrated against a target error rate, because no labelled real-page set exists yet"
+  }
 }
