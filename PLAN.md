@@ -436,9 +436,90 @@ cost ~184s each to recover; the read now stops after
   (`postSubmitFields` discriminates), so the evidence is nearly there; the signal just needs the error,
   not the instruction. Needs the VM and a timing look, which is why it is not a signal tweak.
 
+### Found 2026-08-08 (night): W3C standards audit — read the specs, found six gaps
+
+Prompted by a fair challenge: the conformance work shipped earlier that evening was written from MEMORY of
+WCAG §5.2, not from the specs. Reading them found real gaps, two of them in code committed an hour before.
+Sources read: [WCAG 2.2](https://www.w3.org/TR/WCAG22/),
+[Understanding Conformance](https://www.w3.org/WAI/WCAG22/Understanding/conformance),
+[ACT Rules Format 1.0](https://www.w3.org/TR/act-rules-format/), [WCAG-EM](https://www.w3.org/TR/WCAG-EM/),
+[EARL](https://www.w3.org/WAI/standards-guidelines/earl/).
+
+**What checked out**, so nobody re-verifies it: the five requirements and their order; the four
+non-interference criteria (1.4.2, 2.1.2, 2.2.2, 2.3.1); and `WCAG_22_AA`'s count of 55, confirmed
+independently as 37 (2.0, after the removed 4.1.1) + 12 (2.1) + 6 (2.2), the 2.2 additions being exactly
+2.4.11, 2.5.7, 2.5.8, 3.2.6, 3.3.7, 3.3.8. §5.6/5.7 Privacy and Security Considerations are INFORMATIVE
+lists, not extra obligations.
+
+- [ ] **ACT: report all FIVE outcomes per criterion, not just failures.** The ACT Rules Format defines
+  `inapplicable`, `passed`, `failed`, `cantTell`, `untested`. We emit findings, i.e. `failed` only — so
+  "0 findings" silently conflates *four different states*: checked and fine, no matching content on the
+  page, could not determine, and never evaluated. This is this repo's own "unchecked is not clean" rule,
+  and ACT supplies the standard vocabulary for it. It also gives the correct answer for the truncation
+  found the same night: a sweep that stopped at `deadline` is **`cantTell`**, not silence. Highest value
+  item on this list, and it subsumes two others.
+
+- [ ] **ACT: declare, per rule, whether a failure MEANS non-conformance.** ACT distinguishes a rule mapped
+  to a criterion as a *conformance requirement* (failed => criterion not satisfied) from one mapped as a
+  *secondary requirement* (correlates, but the rule is stricter or looser than the criterion). Several of
+  ours are heuristics — "click here" for 2.4.4, the census count for 1.1.1 — and should be declared
+  SECONDARY, so a hit is evidence rather than proof. Cheap, and it is the standards-sanctioned answer to
+  the false-accusation risk that governs this whole project.
+
+- [ ] **ACT: structured rule metadata.** A rule needs an identifier, version, description, applicability,
+  expectations, **assumptions**, **accessibility-support limitations**, and worked examples for passed /
+  failed / inapplicable. We hold all of that knowledge in prose comments and none of it machine-readably.
+
+- [ ] **Six honesty gaps in the conformance statements**, all text, no new capability:
+  1. **Responsive variations each conform individually** (CR2). We capture at one viewport and do not say so.
+  2. **A "web page" includes an AJAX app at a single URI**, so for an SPA every state reachable without a
+     URI change is part of the SAME page. The current "content behind interaction was not examined" line
+     understates this: it is a CR2 gap, not a nicety.
+  3. **Third-party content** (ads, embeds, widgets) is indistinguishable from the author's own, so findings
+     may target content they cannot control — which is exactly what §5.4 exists for.
+  4. **Language versions** each need conformance; we capture one, with one NVDA synthesiser. Ties to 3.1.2,
+     already recorded as needing synth-level observation.
+  5. **CR5 is broader than its four criteria** — it also requires conformance with the technology on, off,
+     and unsupported. We test one configuration.
+  6. **Say the report is NOT a conformance claim.** §5.3 requires date, URI(s), version+level, technologies
+     relied upon, and technologies used but not relied upon. We hold three of those in `environment`;
+     "relied upon" is the author's determination, not ours. Silence lets a reader mistake the report for a
+     claim.
+
+- [ ] **WCAG-EM positioning, and one standing decision.** WCAG-EM requires an accessibility-support
+  BASELINE in scope (ours is NVDA + Edge + Windows, now stated under CR4 — label it as a baseline), and
+  evaluates a whole product via structured sampling plus a random 10%. We are a single-page tool, so we
+  ASSIST an evaluator and are not an evaluation; the README should say so. **Standing decision: never emit
+  an aggregated score or percentage** — WCAG-EM warns they "can be misleading", and a number is the thing
+  a reader will quote out of context.
+
+- [ ] **EARL export (optional, low priority).** The recommended machine-readable report format, and the
+  natural interop story with other tools — but a non-normative W3C Working Group Note, so an opportunity
+  rather than a requirement. Worth doing only after the outcomes model above exists, since EARL needs the
+  per-criterion outcomes to express anything.
+
 ### Found 2026-08-08 (evening): the census-based 1.1.1 rule accuses decorative images
 
-- [ ] **FALSE POSITIVE on ubiquitous markup: `addUnnamedGraphics` fires on `alt=""` images.** Measured
+- [x] **FIXED 2026-08-08. It was never the `alt=""` images — it was CSS list bullets.** Instrumented
+  `censusFromAXTree`, then reproduced the AX tree locally with Playwright in seconds instead of a
+  deploy-and-capture loop. The two offending nodes are `role=image` with a NEGATIVE synthetic nodeId, no
+  properties and **no `backendDOMNodeId`**, parented to a `<::marker>` pseudo-element: the page sets
+  `list-style-image`, and Chromium exposes each bullet as an unnamed image. 6 real images + 2 bullets = the
+  8 the census reported. **The four `alt=""` images were ignored by Chromium correctly the whole time, so
+  the existing comment was right and the note below calling it wrong was itself wrong.**
+
+  Fix: `classifyAXNode` skips nodes with no backing DOM node — generated content is not page content, and
+  quick navigation cannot visit a bullet. Measured through the worker with Edge and NVDA: `after/home`
+  2 unnamed -> 0 (census and sweep now agree exactly at 6), `after/survey` 2 -> 0, and `before/home` keeps
+  ALL 33, because every real `<img>` carries a `backendDOMNodeId`. Evidence-neutral, verified exactly
+  rather than sampled: 0 of 2,122 corpus pages have any counted node lacking a DOM node, so no
+  `CAPTURE_PROTOCOL_VERSION` bump and no recapture. Guarded by `action-smoke` on the live pages, both
+  directions.
+
+  Original report follows, including the diagnosis that was wrong — three theories were, and the record of
+  which is worth more than a tidy entry.
+
+- [ ] ~~FALSE POSITIVE on ubiquitous markup: `addUnnamedGraphics` fires on `alt=""` images.~~ Measured
   against the live W3C BAD "after" home page, which the W3C publishes as fully WCAG 2.0 AA conformant:
 
       1.1.1 Non-text Content [serious] confidence 1
