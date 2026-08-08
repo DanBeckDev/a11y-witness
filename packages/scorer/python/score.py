@@ -231,6 +231,17 @@ def verify_artifact(args: argparse.Namespace, training: Any) -> tuple[dict[str, 
             if weight_key not in keys or bias_key not in keys:
                 raise RuntimeError(f"missing head weights for {subtype}")
             head_dimensions[head] = (1, embedding_size + len(expected_features))
+    # The out-of-distribution reference is an expected tensor, NAMED here rather than the check being
+    # loosened: this guard exists so an artifact cannot smuggle in weights nobody verified, and the way
+    # to add a tensor is to declare it. Only when the report says it should be there.
+    reference_key = (report.get("outOfDistribution") or {}).get("reference")
+    if reference_key:
+        expected_keys.add(reference_key)
+        if reference_key not in keys:
+            raise RuntimeError(
+                f"report declares an out-of-distribution reference '{reference_key}' that the weights "
+                "do not contain, so novelty could not be measured and every page would read as in-support"
+            )
     unexpected = sorted(keys - expected_keys)
     if unexpected:
         raise RuntimeError("scorer artifact contains unexpected tensors: " + ", ".join(unexpected))
@@ -254,6 +265,42 @@ def verify_artifact(args: argparse.Namespace, training: Any) -> tuple[dict[str, 
     return report, weights, artifact
 
 
+def out_of_distribution_scores(records, report, weights, args, max_length):
+    """For each record, its similarity to the nearest training embedding, and whether that is in support.
+
+    k-nearest-neighbour distance in feature space (Sun et al., ICML 2022): non-parametric, no
+    distributional assumption, and stronger than the Mahalanobis alternative. The reference sample and
+    the floor are both shipped by the trainer, so this makes no judgement of its own.
+
+    Why it exists: every training record sits at cosine 0.847-0.99 from its nearest neighbour, while 28
+    of 32 real eval pages sit at 0.50-0.84 — outside the support. A linear head on a frozen embedding
+    cannot tell it is extrapolating, and returned 0.97 and 0.99 on two CONFORMANT W3C pages. For an
+    accessibility tool a false positive is an accusation, so it must be able to decline.
+
+    Absent reference (an older artifact) reports `inSupport: None` rather than True. Unknown must not
+    read as safe.
+    """
+    import torch
+
+    settings = report.get("outOfDistribution") or {}
+    reference = weights.get(settings.get("reference", "ood_reference"))
+    floor = settings.get("inDistributionFloor")
+    if reference is None or floor is None:
+        return [{"nearestTrainingCosine": None, "inSupport": None,
+                 "reason": "this artifact ships no out-of-distribution reference"} for _ in records]
+    embedded, _ = feature_pipeline.encode_documents(records, args.encoder, max_length)
+    vectors = embedded[:, : reference.shape[1]]
+    nearest = (vectors @ reference.t()).max(dim=1).values
+    return [
+        {
+            "nearestTrainingCosine": round(float(value), 4),
+            "inSupport": bool(float(value) >= float(floor)),
+            "floor": float(floor),
+        }
+        for value in nearest
+    ]
+
+
 def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights: Any, training: Any, args: argparse.Namespace) -> dict[str, Any]:
     import torch
 
@@ -266,6 +313,7 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
     # Scored once per head for the whole batch rather than per record inside the loop below: the old
     # shape sliced one row per record, which no longer identifies a bag.
     offsets = feature_pipeline.bag_offsets(records)
+    novelty = out_of_distribution_scores(records, report, weights, args, max_length)
     criteria = report["criteria"]
     # Each head is scored on the view it was TRAINED on, read from the report rather than assumed.
     # Local signals ("a control with a role and no name") are scored per announcement; contextual ones
@@ -309,6 +357,9 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
             "variant": provenance.get("variant"),
             "scores": scores,
             "predictions": predictions,
+            # How far this page sits from anything the scorer was trained on, and whether that is
+            # outside the training set's own support. `unchecked` is NOT `clean`: it means we declined.
+            "novelty": novelty[index],
             # Which criteria a deterministic rule decides. Carried across because the judge appends the
             # rule layer's findings AFTER the model's and had no way to know the two overlap: on a
             # conformant page the rule correctly found nothing and the model's prediction survived as a
