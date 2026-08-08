@@ -244,6 +244,13 @@ const MIN_CONTENT_LINES = 15;
  * never reaches the counter. A non-ignored graphic with no name is an image a user meets and cannot
  * identify — which is the criterion, stated directly.
  *
+ * It also skips GENERATED content, and that guard exists because this rule accused a conformant page.
+ * Chromium exposes a CSS `list-style-image` bullet as an unnamed role=image node, so two bullets became
+ * "2 images have no text alternative" against the W3C BAD "after" pages — which W3C publishes as fully
+ * WCAG 2.0 AA conformant. Measured after the fix: 0 unnamed on both of those, all 33 still found on the
+ * inaccessible "before" page. The guard belongs in `censusFromAXTree`, which is the only place holding the
+ * AX node needed to judge it, but this is where the accusation is made, so it is recorded here too.
+ *
  * The tree is the oracle and never the evidence. It answers "is there something here", and what the screen
  * reader said remains what is quoted.
  */
