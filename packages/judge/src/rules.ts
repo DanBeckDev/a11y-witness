@@ -125,9 +125,20 @@ type AddFinding = (wcag: string, issue: string, evidence: string) => void;
  * read-through a role and its name can wrap onto separate lines, so a leading role proves nothing —
  * which is why the marker is still required there.
  */
+const CONTROL_ROLE_TOKENS = ROLE_TOKENS.filter((role) => !role.endsWith("landmark"));
+const LEADING_LANDMARKS = /^(?:(?:navigation|main|banner|complementary|contentinfo|region|search)\s+landmark\s*,\s*)+/i;
+
 function beginsWithRole(entry: string): boolean {
-  const start = entry.trim().toLowerCase();
-  return ROLE_TOKENS.some((role) => start.startsWith(role));
+  // A leading LANDMARK is context, not the control's own role. NVDA prefixes the enclosing landmark, so
+  // "main landmark, Web Accessibility Perspectives, region, Video, frame, clickable, Copy link, button"
+  // is a NAMED button inside a landmark — and matching "main landmark" here reported three conformant
+  // W3C pages as 4.1.2 failures, which is the worst error this tool can make.
+  //
+  // This is the same landmark-prefix trap as `heading_name` in screenreader_features.py, found twice in
+  // one session in two layers. When NVDA prepends context to an announcement, every parser of that
+  // announcement has to strip it.
+  const start = entry.trim().toLowerCase().replace(LEADING_LANDMARKS, "");
+  return CONTROL_ROLE_TOKENS.some((role) => start.startsWith(role));
 }
 
 function addUnnamedControls(entries: string[], requireMarker: boolean, add: AddFinding): void {
