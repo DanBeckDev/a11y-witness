@@ -418,6 +418,24 @@ settle). And a **mute NVDA** (stochastic; ~55% of instances die before their 25-
 cost ~184s each to recover; the read now stops after
 8 silent advances, bringing that to ~86s. Both are detailed in `CLAUDE.md`.
 
+- [ ] **`check-signals` is red on 2 of 1,061 cases, and the cause is narrowed.**
+  `form-error-silent` and `form-error-silent-hall` report CONTAMINATED — `validation-error-silent` fires
+  on both variants — which blocks the pre-push hook. Diagnosed 2026-08-08:
+
+  The good page's script sets `aria-invalid="true"` and unhides the error element on submit, so NVDA
+  should announce "invalid entry" plus the message. `ANNOUNCED_ERROR` is `/invalid|\berror\b/i` and the
+  signal already reads `postSubmitFields`, so the matcher and the channel are both fine. What is captured
+  is the field's INSTRUCTION, not the error:
+
+      good  postSubmitFields: ["form, Reference number, edit, Enter the reference number before submitting.", ...]
+      bad   postSubmitFields: ["form, Reference number, edit", ...]
+      both  formChanges.after: ""      <- the fallback CLAUDE.md calls useless, empty on both
+
+  So **the post-submit sweep is not seeing `aria-invalid`** — either it re-reads before the DOM updates,
+  or the error element is not reaching the field's description. Note the pair DOES differ
+  (`postSubmitFields` discriminates), so the evidence is nearly there; the signal just needs the error,
+  not the instruction. Needs the VM and a timing look, which is why it is not a signal tweak.
+
 ### Found 2026-08-08: the scorer abstains on real pages, and one asset unblocks three things
 
 - [ ] **Build the real-page calibration corpus — see `docs/adr/0010-real-page-calibration-corpus.md`.**
