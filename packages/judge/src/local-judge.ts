@@ -435,6 +435,10 @@ export async function judgeLocally(capture: CaptureEvidence & { task?: string })
           + "NOT scored. These criteria are unchecked, not clean.",
         findings: [],
         confidence: 0,
+        // The machine-readable half of the sentence above, so no consumer has to parse prose to learn
+        // that nothing was scored. `criterionOutcomes` turns this into `cantTell` per criterion, which is
+        // what stops an unassessed page reading as a passing one.
+        abstained: true,
         suppressed: Object.entries(record.predictions).filter(([, p]) => p).map(([criterion]) => ({
           criterion,
           score: record.scores[criterion] ?? 0,
