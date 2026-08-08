@@ -418,6 +418,39 @@ settle). And a **mute NVDA** (stochastic; ~55% of instances die before their 25-
 cost ~184s each to recover; the read now stops after
 8 silent advances, bringing that to ~86s. Both are detailed in `CLAUDE.md`.
 
+### Found 2026-08-08: the scorer abstains on real pages, and one asset unblocks three things
+
+- [ ] **Build the real-page calibration corpus — see `docs/adr/0010-real-page-calibration-corpus.md`.**
+  Measured: 28 of 32 real eval fixtures fall outside the training corpus's own k-NN support (real pages
+  0.50-0.84 cosine, corpus 0.847-0.99). The scorer now abstains rather than extrapolating, which took
+  false positives on conformant pages from 2 to **0** and eval recall from 90% to **59%**. The missing
+  31 points were the model predicting beyond its competence.
+
+  The same missing asset blocks the conformal abstention threshold, ADR 0009's realism tier, and any
+  real-page recall claim above 59%. Sources must publish their own conformance (W3C WAI Tutorial
+  sub-examples, W3C BAD), because a corpus we label ourselves only measures our agreement with
+  ourselves. **Inventory finding: all six top-level tutorials are already test fixtures, so expansion is
+  the sub-examples within them.** Labelling is the cost; capture is mechanical.
+
+  Note the self-inflicted part: ADR 0009 shrank page sizes 40 links -> 6 for affordability, widening the
+  gap that causes abstention, and named the realism tier as mitigation without building it.
+
+- [ ] **Decide the error rate to defend.** It sets the abstention rate, so it decides how much the tool
+  reports versus declines. A product and legal judgement, and the required input to conformal
+  calibration — only answerable once the calibration set exists.
+
+- [ ] **`4.1.2:missing-role` (74 records) is out of scope for a screen-reader-only tool, and should say
+  so.** A div styled as a button: `formFields` is empty and "button" never appears, so from
+  screen-reader output on a single page it is indistinguishable from prose. Knowing it should be a
+  control needs the visual/DOM layer — axe-core's job, and why this tool sits alongside it. Claiming
+  those 74 is what produced false positives.
+
+- [ ] **A state-change rule needs the probe to record ACTIVATION, not focus.** Reverted (see the comment
+  where it lived in `packages/judge/src/rules.ts`): it reached 69/69 on the corpus, took 4.1.2 recall
+  50.7% -> 74.5%, and reported the conformant W3C menus tutorial as failing, because a menu button that
+  does not open on focus produces evidence structurally identical to a disclosure that never announces
+  its state. Capture gap, not a rule to tune. Worth 69 records once fixed.
+
 ### Found 2026-08-07 during the recapture, all open
 
 Five defects surfaced by actually running the thing. Recorded because four of them are tooling that
