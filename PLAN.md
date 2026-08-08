@@ -436,6 +436,41 @@ cost ~184s each to recover; the read now stops after
   (`postSubmitFields` discriminates), so the evidence is nearly there; the signal just needs the error,
   not the instruction. Needs the VM and a timing look, which is why it is not a signal tweak.
 
+### Found 2026-08-08 (evening): the census-based 1.1.1 rule accuses decorative images
+
+- [ ] **FALSE POSITIVE on ubiquitous markup: `addUnnamedGraphics` fires on `alt=""` images.** Measured
+  against the live W3C BAD "after" home page, which the W3C publishes as fully WCAG 2.0 AA conformant:
+
+      1.1.1 Non-text Content [serious] confidence 1
+      "2 of 8 images expose no accessible name; the screen reader reached 6"
+
+  The page has 10 `<img>`. Six are named and the sweep reached exactly those six. The other FOUR are
+  `alt=""` — `panda-sm.jpg`, `oldenburgstudentviolin34.jpg`, `BrainInJar.jpg` and a piwik tracking pixel.
+  All four load (HTTP 200, so not the broken-image case) and three are plain
+  `<p class="image"><img src alt=""></p>`, textbook decorative markup, not inside links.
+
+  So the finding is two decorative images being reported as missing a text alternative. `alt=""` IS a
+  text alternative: it declares the image conveys nothing, NVDA skips it, and that is conformant.
+
+  **The rule's own safety assumption is what fails.** Both `addUnnamedGraphics` and `censusFromAXTree`
+  state it: "Chromium marks a decorative `alt=""` image as ignored, so it never reaches this counter."
+  `classifyAXNode` does correctly skip `node.ignored`, so the code matches its comment — Chromium simply
+  does not mark these as ignored, and 2 of the 4 arrive as non-ignored graphics with no name. Why 2 of 4
+  rather than 0 or 4 is not yet known.
+
+  Why it matters more than one page: decorative images are on nearly every site, this fires at severity
+  `serious` with confidence 1, and a false positive is an accusation someone may act on. `npm run eval`
+  reports 0 false positives on conformant pages, so the FIXTURES do not contain this case — the same
+  corpus-versus-real-page gap that hid the landmark-prefix bug.
+
+  Next step is bounded: instrument `censusFromAXTree` to record identifying details for unnamed graphics
+  (src, role, ignored, parent), deploy, capture that one page, and see which two and why. Only then
+  choose between excluding DOM-decorative images in the worker or requiring sweep corroboration — the
+  latter would defeat the census's stated purpose, which is catching graphics the sweep walks past.
+
+  Do NOT guess a fix. The comment already encodes one confident assumption about Chromium that turned
+  out to be wrong.
+
 ### Found 2026-08-08: the scorer abstains on real pages, and one asset unblocks three things
 
 - [ ] **Build the real-page calibration corpus — see `docs/adr/0010-real-page-calibration-corpus.md`.**
