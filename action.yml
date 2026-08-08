@@ -228,41 +228,15 @@ runs:
 
     # The capture runs through the worker rather than in-process, because that is the path the project
     # tests: `capture:check`, `evidence:check` and the whole dataset pipeline all drive it over HTTP.
-    - name: Start the capture worker
-      shell: pwsh
-      working-directory: ${{ github.action_path }}
-      run: |
-        # `-WindowStyle Hidden`, NOT `-NoNewWindow`. -NoNewWindow attaches the worker to THIS step's
-        # console, and the runner destroys that console when the step ends — so the worker died between
-        # becoming ready and the capture step using it. Measured: "worker ready" at 14:18:03, then
-        # ECONNREFUSED 127.0.0.1:8765 at 14:18:10. Its own console lets it outlive the step that spawned it.
-        Start-Process -FilePath "node" -ArgumentList "packages/nvda-worker/src/server.mjs" `
-          -RedirectStandardOutput "$env:RUNNER_TEMP\worker.log" `
-          -RedirectStandardError "$env:RUNNER_TEMP\worker.err" -WindowStyle Hidden
-        # Poll for READY, never sleep a guess. `ok` only means the HTTP server is answering -- a worker
-        # answered it once while NVDA could not start, which is how the pool's dominant failure hid for a
-        # day. `ready` is the environment check, and it is false-then-true on a cold start by design.
-        $deadline = (Get-Date).AddSeconds(180)
-        while ((Get-Date) -lt $deadline) {
-          try {
-            $h = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 5
-            if ($h.ready) { Write-Host "worker ready"; $ok = $true; break }
-          } catch { }
-          Start-Sleep -Milliseconds 500
-        }
-        if (-not $ok) {
-          Write-Host "--- worker stdout ---"; Get-Content "$env:RUNNER_TEMP\worker.log" -ErrorAction SilentlyContinue
-          Write-Host "--- worker stderr ---"; Get-Content "$env:RUNNER_TEMP\worker.err" -ErrorAction SilentlyContinue
-          throw "The capture worker never became ready."
-        }
-        # Ready is not enough: the worker must still be answering AFTER this step's console closes, which
-        # is exactly what -NoNewWindow broke. Re-checking here turns that into a named failure in the step
-        # that owns it, rather than an ECONNREFUSED in the capture step that reads like a network fault.
-        Start-Sleep -Seconds 2
-        try { $null = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 5 }
-        catch { throw "The worker stopped answering right after starting - it did not survive its own step." }
-        Write-Host "worker still answering after the step that started it"
-
+    # Worker AND capture in ONE step, deliberately. The runner kills a step's process tree at the step
+    # boundary, so a worker started in its own step cannot be used by the next one — measured twice:
+    # "worker ready" then ECONNREFUSED 127.0.0.1:8765 six seconds later, and again after switching from
+    # -NoNewWindow to -WindowStyle Hidden, which proved it is the step boundary and not the console. An
+    # explicit survival check inside the starting step even passed, then it died anyway. Rather than keep
+    # fighting the runner's process management, the worker now only has to live for one step.
+    #
+    # Still over HTTP rather than in-process: that is the path `capture:check`, `evidence:check` and the
+    # whole dataset pipeline drive, so it is the path that is actually tested.
     - name: Capture and judge
       id: capture
       shell: bash
@@ -277,6 +251,28 @@ runs:
         A11Y_PYTHON: python
       run: |
         set -o pipefail
+        node packages/nvda-worker/src/server.mjs \
+          > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
+        worker=$!
+        trap 'kill $worker 2>/dev/null || true' EXIT
+
+        # Poll for READY, never sleep a guess. `ok` only means the HTTP server is answering — a worker
+        # answered it once while NVDA could not start, which is how the pool's dominant failure hid for a
+        # day. `ready` is the environment check, and it is false-then-true on a cold start by design.
+        ready=""
+        for _ in $(seq 1 360); do
+          health=$(curl -fsS --max-time 5 http://127.0.0.1:8765/health 2>/dev/null || true)
+          case "$health" in *'"ready":true'*) ready=1; break ;; esac
+          sleep 0.5
+        done
+        if [ -z "$ready" ]; then
+          echo "--- worker stdout ---"; cat "$RUNNER_TEMP/worker.log" 2>/dev/null || true
+          echo "--- worker stderr ---"; cat "$RUNNER_TEMP/worker.err" 2>/dev/null || true
+          echo "::error::The capture worker never became ready. Last /health: $health" >&2
+          exit 1
+        fi
+        echo "worker ready"
+
         out="$RUNNER_TEMP/a11y-witness-result.json"
         args=("${{ inputs.url }}" --task "${{ inputs.task }}" --json)
         [ "${{ inputs.probe-forms }}" = "true" ] && args+=(--probe-forms)
