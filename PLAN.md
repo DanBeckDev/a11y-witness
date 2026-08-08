@@ -436,6 +436,40 @@ cost ~184s each to recover; the read now stops after
   (`postSubmitFields` discriminates), so the evidence is nearly there; the signal just needs the error,
   not the instruction. Needs the VM and a timing look, which is why it is not a signal tweak.
 
+### Found 2026-08-08 (night): NVDA read the PREVIOUS page's content while reporting the new page's title
+
+Found while A/B-testing the capture budget, not while looking for it. A capture of
+`https://www.w3.org/WAI/demos/bad/after/survey.html`, issued immediately after `capture:check` finished a
+run against the local page server, returned:
+
+    documentReady   title = "Citylights Survey Accessible Survey Page"   <- the page I asked for
+    readFirstItem   "Newsletter sign-up"                                 <- capture-check's LAST page
+    readThrough     count 1, stopReason maxSteps, ~2.5 s per step        <- 40 advances, nothing kept
+
+So the browser had navigated (the title is right) while the content NVDA read came from the previous
+document, and every subsequent advance produced nothing. Normal is ~0.7 s per step and 41 phrases on that
+page — measured on the same guest minutes later, twice.
+
+**Not caused by the budget change**, which was the suspicion. Deployed the pre-change worker, captured the
+same URL after a reboot: 41 phrases. Restored the change, redeployed, captured again: 41 phrases, byte-for
+byte the same first phrase. The earlier failure needed the preceding SEQUENCE of captures to reproduce, and
+the first A/B was confounded because a deploy reboots the guest and therefore hands you a fresh Edge.
+
+- [ ] **Diagnose the stale virtual buffer after a sequence of captures.** Mechanism NOT established — do
+  not guess. Candidates: browser reuse navigating the window while NVDA's virtual buffer keeps the old
+  document; `anchorToTop` moving within the stale buffer; or Edge being quit and relaunched underneath a
+  live NVDA. `A11Y_REUSE_BROWSER=0` is the obvious first experiment because it isolates reuse, and reuse is
+  ON by default.
+
+  Why it matters beyond one capture: the evidence described a DIFFERENT PAGE than the one requested. The
+  CLI's `captureMentionsTitle` guard would catch this particular instance (transcript never mentions the
+  title, so `captureVerified` goes false), but a page whose stale content happens to share a word with the
+  new title would slip through, and the worker returned HTTP 200 throughout. `/health` reported
+  `failures: 0, recoveries: 0` the whole time — the worker has no idea.
+
+  Worth checking whether this is what made `capture:check` fail once tonight while passing on either side
+  of it, since that run drives many pages in sequence through one reused Edge.
+
 ### Found 2026-08-08 (night): W3C standards audit — read the specs, found six gaps
 
 Prompted by a fair challenge: the conformance work shipped earlier that evening was written from MEMORY of
