@@ -1,0 +1,82 @@
+# Does the ACTION work? Nothing verified this before, and the action is the entire adoption path.
+#
+# `capture-regression.yml` runs on Windows and calls the harness directly, re-implementing the action's
+# setup by hand. So the steps in `action.yml` — NVDA install, Speech Viewer off, Edge first-run
+# suppression, the local scorer — had never once been executed as written, and the two step lists can
+# drift with nothing to notice. A consumer's first experience of this project runs code no test touches.
+#
+# This job is deliberately a CONSUMER's usage: `uses: ./`, inputs only, no repo knowledge. If it passes,
+# a stranger can add five lines to a workflow and get a report. If it fails, nothing else about the
+# release matters.
+name: action-smoke
+
+on:
+  push:
+    paths:
+      - "action.yml"
+      - ".github/workflows/action-smoke.yml"
+      - "packages/cli/**"
+      - "packages/judge/**"
+      - "packages/scorer/**"
+      - "packages/nvda-worker/**"
+      - "package.json"
+  workflow_dispatch:
+
+jobs:
+  consumer:
+    # Windows because NVDA is Windows-only; the action refuses other runners by design.
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # A stable, small, publicly reachable page with real structure. Deliberately not a page from the
+      # eval fixtures: this asserts the ACTION runs, not what it finds, and reusing a fixture would
+      # invite someone to start asserting findings here and couple the smoke test to judge quality.
+      - name: Run a11y-witness as a consumer would
+        id: witness
+        uses: ./
+        with:
+          url: https://www.w3.org/WAI/demos/bad/after/home.html
+          task: "Find the page's main navigation and reach the survey."
+          judge-backend: local
+
+      # The action's own outputs are part of its contract, so an empty one is a failure even when the
+      # run "succeeded" — a green job that produced no report is the silent pass this repo keeps finding.
+      - name: The action must produce a report
+        shell: bash
+        run: |
+          if [ -z "${{ steps.witness.outputs.result-json }}" ]; then
+            echo "::error::the action produced no result-json output" >&2
+            exit 1
+          fi
+          path="${{ steps.witness.outputs.result-json }}"
+          test -s "$path" || { echo "::error::result-json path '$path' is empty or missing" >&2; exit 1; }
+          node -e "
+            const j = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+            // Exactly the fields packages/cli/src/action/run.ts already depends on, so this asserts the
+            // real contract rather than a shape I assumed. Guessing it wrong once already produced a
+            // test that would have failed for the wrong reason.
+            if (!j.url) throw new Error('report has no url');
+            if (!j.verdict || !Array.isArray(j.verdict.findings)) {
+              throw new Error('report has no verdict.findings — the judge did not run');
+            }
+            // Findings MAY be empty: this is a conformant page and the scorer abstains off-distribution.
+            // What must NOT be true is that the capture itself was unverified, because then nothing was
+            // actually checked and a green job would mean nothing.
+            if (j.captureVerified === false) {
+              throw new Error('captureVerified is false: the screen reader ran but its evidence was rejected');
+            }
+            console.log('  url:', j.url);
+            console.log('  announcements:', j.announcements ?? '(not reported)');
+            console.log('  findings:', j.verdict.findings.length);
+            console.log('  captureVerified:', j.captureVerified);
+          " "$path"
+
+      - name: Keep the report when this fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: action-smoke-report
+          path: ${{ steps.witness.outputs.result-json }}
+          if-no-files-found: ignore
