@@ -30,7 +30,7 @@ import type { Finding } from "./judge.js";
 export interface RuleInput {
   transcript: string[];
   structure?: { formFields?: string[]; headings?: string[]; links?: string[]; graphics?: string[] };
-  interaction?: { controls?: string[] };
+  interaction?: { controls?: string[]; stateChanges?: { control: string; after: string }[] };
   /**
    * What the PAGE exposes, from the accessibility tree, as an oracle only.
    *
@@ -97,6 +97,9 @@ function hasEmptyName(announcement: string): boolean {
   return announcement.includes(EMPTY_NAME) && accessibleName(announcement) === "";
 }
 
+// The state words NVDA announces for a control, matched singly so "before" and "after" are comparable.
+const STATE_WORD_RE = /\b(expanded|collapsed|not pressed|pressed|not checked|checked|not selected|selected)\b/i;
+
 const isImage = (line: string): boolean => /\b(graphic|image)\b/i.test(line);
 const isControl = (entry: string): boolean =>
   /\b(button|edit|radio|checkbox|combo box|list box|menu button|link)\b/i.test(entry);
@@ -139,6 +142,49 @@ function beginsWithRole(entry: string): boolean {
   // announcement has to strip it.
   const start = entry.trim().toLowerCase().replace(LEADING_LANDMARKS, "");
   return CONTROL_ROLE_TOKENS.some((role) => start.startsWith(role));
+}
+
+/**
+ * Flag a control whose announced STATE does not change when it is activated.
+ *
+ * 4.1.2 requires states to be programmatically determinable AND changes to them notified. A disclosure
+ * that opens without its `expanded` state being announced leaves a screen-reader user unable to tell
+ * whether anything happened.
+ *
+ * The evidence is direct and this needs no judgement, which is why it belongs in the rule layer:
+ *
+ *   conformant   control "Travel advice, button, collapsed"  ->  after "..., focused, expanded"
+ *   failing      control "Travel advice, button, collapsed"  ->  after "..., focused, collapsed"
+ *
+ * These 69 records were previously reachable only by the learned heads, which caught none of them and
+ * scored 4.1.2 at an uncalibrated 0.5 threshold. Mirrors `stateChangeIsSilent` in case-matrix.mjs
+ * deliberately, including treating NO state word after activation as a failure — nothing was conveyed
+ * either way — because a rule and the signal that labels it must agree or the corpus disagrees with the
+ * tool that reads it.
+ *
+ * Requires a state word BEFORE activation. Without one there is no state to have changed, and inferring
+ * that a control should have had one is the visual layer's job, not ours.
+ *
+ * Restricted to BUTTONS, and that restriction is measured rather than cautious. Applied to every control
+ * it reported three conformant selects as failures:
+ *
+ *   "Tour language, combo box, collapsed, English -> ..., combo box, English, focused, collapsed"
+ *
+ * A combo box does not open when it is merely focused — that needs Enter or Alt+Down — so `collapsed`
+ * before and after is correct behaviour there. Only a button is expected to toggle its own state on
+ * activation, which is also exactly what the 69 records are: disclosures with aria-expanded.
+ */
+function addSilentStateChanges(changes: { control: string; after: string }[], add: AddFinding): void {
+  for (const { control, after } of changes) {
+    if (!/\bbutton\b/i.test(control) || /\b(combo box|list box)\b/i.test(control)) continue;
+    const before = control.match(STATE_WORD_RE)?.[0]?.toLowerCase();
+    if (!before) continue;
+    const now = after.match(STATE_WORD_RE)?.[0]?.toLowerCase();
+    if (now && now !== before) continue;
+    add("4.1.2 Name, Role, Value",
+      "Activating the control did not announce a state change",
+      `${control} -> ${after}`);
+  }
 }
 
 function addUnnamedControls(entries: string[], requireMarker: boolean, add: AddFinding): void {
@@ -259,6 +305,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   // addUnnamedControls).
   addUnnamedControls(input.transcript, true, add);
   addUnnamedControls([...(input.structure?.formFields ?? []), ...(input.interaction?.controls ?? [])], false, add);
+  addSilentStateChanges(input.interaction?.stateChanges ?? [], add);
 
   // 2.4.4 and 1.3.1 — both about what a screen reader user CANNOT do: tell two links apart, or skim.
   // Neither is reported by axe, which is the point of having them here.
