@@ -13,7 +13,8 @@ import type { Judgment } from "@a11y-witness/judge";
 import { taskVerdictLabel } from "@a11y-witness/judge";
 import type { AxeFinding } from "./scan/axe.js";
 import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11y-witness/judge/layers";
-import type { ConformanceRequirement } from "@a11y-witness/evidence/conformance";
+import { notAConformanceClaim, type ConformanceRequirement }
+  from "@a11y-witness/evidence/conformance";
 import { outcomeTally, type CriterionOutcome } from "@a11y-witness/judge/outcomes";
 
 /** How much offending markup to quote as evidence. Enough to recognise the element, not the page. */
@@ -93,6 +94,12 @@ function conformanceSection(requirements: ConformanceRequirement[] | undefined):
     lines.push(`     established: ${requirement.establishes}`);
     lines.push(`     limit:       ${requirement.limitation}`);
   }
+  // Last, and unconditional. A document listing WCAG criteria, evidence and a date looks exactly like a
+  // conformance claim to a reader who has not read §5.3 — and being mistaken for a certificate is the most
+  // damaging way this output could be misread.
+  const disclaimer = notAConformanceClaim();
+  lines.push(`  ${disclaimer.name}`);
+  lines.push(`     ${disclaimer.limitation}`);
   return lines;
 }
 
