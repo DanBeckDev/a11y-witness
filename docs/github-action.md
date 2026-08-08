@@ -185,17 +185,19 @@ Less than its name suggests, and worth knowing before you agonise over the wordi
 
 | setting | does the task matter? |
 |---|---|
-| `probe-forms: true` | **Yes — it changes the capture.** A button whose announced name shares a meaningful word with the task is activated, and what the screen reader says next is recorded. The word match is the safety guard: "show only bags" activates a *Bags* button, never *Delete account*. |
+| `probe-forms: true` (**the default here**) | **Yes — it changes the capture.** A button whose announced name shares a meaningful word with the task is activated, and what the screen reader says next is recorded. The word match is the safety guard: "show only bags" activates a *Bags* button, never *Delete account*. Asserted in `probe-choice.test.ts`. |
 | `judge-backend: anthropic` / `openai` | **Yes — it changes the verdict.** The LLM reads it and answers "could a screen-reader user finish this?" |
-| `judge-backend: local` (default) | **No.** The scorer has no head for task completion and never sees the task — `docs/local-model.md` bars it as a model feature. `task-completable` is derived from whether anything scored as a blocker. |
+| `judge-backend: local` (default) | **Not for the verdict.** The scorer has no head for task completion and never sees the task — `docs/local-model.md` bars it as a model feature. The report deliberately does not claim your task was completable. |
 
-So on the defaults (`local`, `probe-forms: false`) the task string is carried through the pipeline and
-consumed by nothing. Verified: a run against `news.ycombinator.com` with the task "Read the top story"
-recorded `formChanges: []`, so no control was activated, and the scorer never received the text.
+So on the defaults the task **does** shape what gets captured, because `probe-forms` is on: it selects
+which control is operated, and therefore whether 3.3.1 and 4.1.3 evidence exists at all. It does not
+shape the judgement, because the default scorer never reads it.
 
-It stays a required input because it belongs in the report, and because it becomes load-bearing the moment
-you enable `probe-forms` or switch backend. This entry exists because the input was previously documented
-as driving the judgement — which is true only for a backend that is no longer the default.
+This section previously said the task was inert on the defaults, which was true when `probe-forms`
+defaulted to false. It changed deliberately: reviewing a page means checking what is on it, and an error
+message nobody hears is only reachable by submitting. **The CLI still defaults it off**, because a
+workflow tests your own application while `witness <url>` can be aimed at anyone's — see ADR 0002 and
+`probe-choice.test.ts`, which asserts both defaults.
 
 ## Outputs
 

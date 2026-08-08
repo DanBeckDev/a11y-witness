@@ -328,7 +328,12 @@ in, and — the part that matters — **what we do not drive yet**, with the gui
 each. Read it before adding a probe, and update it when you do. A behaviour missing from that
 table is not a missing feature; it is a claim this project cannot currently make.
 
-Probes beyond the default set are opt-in over the wire (`probeForms`, `probeFocus`) so a capture
+`probeForms` defaults **ON in the GitHub Action and OFF in the CLI** — the split follows who owns the
+page, not what the tool prefers. A workflow runs against your own app, where submitting is intended and
+3.3.1/4.1.3 are otherwise structurally unreachable; the CLI can be aimed at any URL, and pressing *Book*
+on a stranger's site is not a review. `chooseProbe` is exported and unit-tested for exactly that gate.
+
+Other probes beyond the default set are opt-in over the wire (`probeFocus`) so a capture
 never pays for evidence nobody asked for. `focusOrder` costs ~8 s on top of a ~15 s capture.
 
 ## Captures are cached — and the cache is keyed on more than the page

@@ -20,17 +20,15 @@ inputs:
     description: >-
       What a user is trying to DO on this page, in plain words ("Complete the checkout").
 
-      Be aware of what this actually affects, because it is less than it looks. With `probe-forms: true`
-      it changes the CAPTURE: a button whose announced name shares a meaningful word with the task gets
+      This changes the CAPTURE: a button whose announced name shares a meaningful word with the task gets
       activated, and whatever the screen reader says next is recorded. That word match is the safety
-      guard — "show only bags" activates a *Bags* button and never a *Delete account* one.
+      guard — "show only bags" activates a *Bags* button and never a *Delete account* one. Since
+      `probe-forms` now defaults to true here, the task is load-bearing on a default run.
 
-      It does NOT affect the default `local` judge's assessment at all. That scorer has no head for task
-      completion and never sees the task; `task-completable` is derived from whether anything scored as a
-      blocker. Only the `anthropic`/`openai` backends read the task and answer "could someone finish
-      this?" So with the defaults (`local`, `probe-forms: false`) the task is currently inert — kept
-      required because it belongs in the report, and because it becomes load-bearing the moment you turn
-      either of those on.
+      It does NOT affect the default `local` judge's assessment. That scorer has no head for task
+      completion and never sees the task; findings come from the evidence, and the report deliberately
+      does not claim your task was completable. Only the `anthropic`/`openai` backends read the task and
+      answer "could someone finish this?"
     required: true
   judge-backend:
     description: >-
@@ -64,10 +62,24 @@ inputs:
     default: never
   probe-forms:
     description: >-
-      Submit forms with no valid input to hear whether errors are announced (3.3.1, 4.1.3). Opt-in
-      because submitting a form has side effects on the page under test.
+      Submit forms with no valid input to hear whether errors are announced (3.3.1, 4.1.3), and activate
+      the button your task names.
+
+      ON by default here, and OFF by default in the CLI — deliberately, because the two are pointed at
+      different things. Reviewing a page means checking what is ON it, and an error message nobody hears
+      is only reachable by submitting. A workflow in your own repository is testing your own application,
+      where submitting a form is the intended act. The CLI can be aimed at any URL on the internet, and
+      pressing *Book* on somebody else's production site is not a review, so there it stays explicit.
+
+      Set false to skip it. Note what that costs: with no activation, 3.3.1 and 4.1.3 become
+      structurally unreachable rather than clean, because the evidence for them only exists after a
+      control is operated.
+
+      Two guards on what gets pressed. A submit-like name (`submit`, `sign in`, `save`, `send`, ...) is
+      activated, and any other button only if its announced name shares a meaningful word with your task
+      — so "show only bags" presses *Bags* and never *Delete account*.
     required: false
-    default: "false"
+    default: "true"
   axe:
     description: >-
       Also run axe-core for the visual and rule-based criteria a screen reader cannot perceive, such as
