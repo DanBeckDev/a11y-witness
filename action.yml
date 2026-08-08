@@ -131,6 +131,9 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
+        # Built-in npm cache, keyed on the lockfile it installs from. `npm ci` was 18 s of every run.
+        cache: npm
+        cache-dependency-path: ${{ github.action_path }}/package-lock.json
 
     # Installed into the ACTION's own checkout, not the caller's workspace: `github.action_path` is where
     # this action's package.json lives, and the caller's repository has nothing to do with it.
@@ -143,6 +146,18 @@ runs:
       run: npm ci
       env:
         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+    # Cache the NVDA install (31 s). Keyed on the LOCKFILE, deliberately tightly: guidepup parses NVDA's
+    # speech before this project ever sees it, so its version is EVIDENCE — upgrading 0.29.2 -> 0.31.0
+    # changed what captures said. A cache that served a different screen reader than the manifest pins
+    # would silently corrupt evidence, which is far worse than paying 31 s. Any dependency change misses
+    # the key and reinstalls, which is the conservative direction.
+    - name: Cache the NVDA install
+      id: nvda-cache
+      uses: actions/cache@v4
+      with:
+        path: ~\AppData\Local\guidepup
+        key: a11y-witness-nvda-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
     # Install NVDA with the repo's OWN guidepup rather than guidepup/setup-action. The action predates
     # the @guidepup/setup 0.24.0 CLI rewrite and installs the pre-0.29 layout (registry pointer +
@@ -184,6 +199,26 @@ runs:
         New-Item -Path $key -Force | Out-Null
         Set-ItemProperty -Path $key -Name "HideFirstRunExperience" -Value 1 -Type DWord
         Set-ItemProperty -Path $key -Name "BrowserSignin" -Value 0 -Type DWord
+
+    # Cache the pip wheels. torch is a 400 MB download and measured 102 s — 34% of a cold run — to run
+    # a 6-layer MiniLM and fourteen dot products. Nothing was cached in this action at all, so every
+    # invocation paid it again. Keyed on the interpreter and the pinned set, so a stale cache cannot
+    # serve a different torch than the one asked for.
+    - name: Cache the scorer's Python wheels
+      if: ${{ inputs.judge-backend == 'local' }}
+      uses: actions/cache@v4
+      with:
+        path: ~\AppData\Local\pip\Cache
+        key: a11y-witness-pip-${{ runner.os }}-torch-cpu-transformers-safetensors-numpy
+
+    # Cache the pinned encoder (87 MB). fetch-encoder.py hash-checks it, so a poisoned cache is caught
+    # rather than trusted — which is why caching it is safe at all.
+    - name: Cache the pinned encoder
+      if: ${{ inputs.judge-backend == 'local' }}
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.action_path }}/packages/scorer/models/encoders
+        key: a11y-witness-encoder-${{ hashFiles('packages/scorer/python/fetch-encoder.py') }}
 
     # Only for the local scorer. An LLM backend skips all of it and pays nothing.
     #
