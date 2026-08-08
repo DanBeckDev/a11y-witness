@@ -116,8 +116,10 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
       name: "Full pages",
       establishes: "Every structural sweep ran until the page ran out of elements, so the parts of the "
         + "page a screen reader can reach were examined in full.",
-      limitation: "Content inside iframes is not entered, and content that appears only after "
-        + "interaction we did not perform was not examined.",
+      limitation: "One viewport, one state, one document. Responsive VARIATIONS each have to conform "
+        + "separately and only one was rendered; content inside iframes is not entered; and WCAG counts "
+        + "an application at a single URI as ONE page, so every state reachable without a URL change — "
+        + "menus, dialogs, steps of a wizard — is part of this page and was not examined.",
     };
   }
   const detail = truncated.map((s) => `${s.type} (${s.stop})`).join(", ");
@@ -129,7 +131,8 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
     // "we stopped early" must never be reported as "there was nothing more".
     limitation: `Examination was INCOMPLETE — these sweeps stopped before the page did: ${detail}. `
       + "Elements beyond that point were never reached, so an absence of findings among them is not "
-      + "evidence they are correct.",
+      + "evidence they are correct. Separately: one viewport only, iframes not entered, and any state "
+      + "reachable without a URL change is part of this same page and was not examined.",
   };
 }
 
@@ -140,7 +143,10 @@ function completeProcesses(): ConformanceRequirement {
     establishes: "Findings are scoped to this single page.",
     limitation: "If this page is one step of a process — signing in, checking out, completing a "
       + "multi-step form — the other steps were not assessed, and WCAG conformance for the process "
-      + "cannot be claimed from this run. See docs/adr/0011-task-journeys.md.",
+      + "cannot be claimed from this run. See docs/adr/0011-task-journeys.md. Third-party content "
+      + "(embeds, adverts, widgets) is also not distinguished from the author's own, so a finding may "
+      + "concern content they cannot control — the case WCAG §5.4 covers with a statement of partial "
+      + "conformance.",
   };
 }
 
@@ -154,7 +160,10 @@ function accessibilitySupported(input: ConformanceScopeInput): ConformanceRequir
     establishes: `Evidence is what ${stack} actually announced, so support is demonstrated rather than `
       + "inferred from markup.",
     limitation: "Accessibility support was demonstrated for that one combination only. Other screen "
-      + "readers, browsers and platforms behave differently and were not assessed.",
+      + "readers, browsers and platforms behave differently and were not assessed, and one language "
+      + "version was read with one synthesiser — §5.5 requires each language offered to conform on its "
+      + "own. Nor was this page checked with the technology it relies on turned OFF or unsupported, "
+      + "which §5.2.5 also requires.",
   };
 }
 
@@ -181,6 +190,31 @@ function nonInterference(input: ConformanceScopeInput): ConformanceRequirement {
       ? `NOT assessed: ${uncovered.join(", ")}. These apply to all content on the page whether or not `
         + `it is relied upon, so they cannot be assumed satisfied. ${visualNote}`
       : `All four were assessed. ${visualNote}`,
+  };
+}
+
+/**
+ * Why this report is NOT a conformance claim, and what a claim would additionally need.
+ *
+ * WCAG §5.3 makes claims optional but specifies exactly what one must carry: the date, the URIs covered,
+ * the version and level claimed, the accessibility-supported technologies RELIED UPON, and the technologies
+ * used but not relied upon. We hold the first three; the last two are the author's determination about
+ * their own site, not an observation a tool can make — "relied upon" means the content would not conform
+ * with that technology turned off, which only the author knows they intended.
+ *
+ * Stated out loud because a document listing WCAG criteria, evidence and a date looks exactly like a claim
+ * to a reader who has not read §5.3, and a report mistaken for a certificate is the most damaging way this
+ * output could be misread.
+ */
+export function notAConformanceClaim(): ConformanceRequirement {
+  return {
+    number: 1,
+    name: "This report is not a conformance claim (§5.3)",
+    establishes: "It records what a screen reader announced, on one page, on one date, with the tool and "
+      + "browser versions named above.",
+    limitation: "A WCAG conformance claim additionally requires the technologies RELIED UPON and those "
+      + "used but not relied upon, which only the site's author can determine. Nothing here should be "
+      + "quoted as a claim, and no level is asserted.",
   };
 }
 

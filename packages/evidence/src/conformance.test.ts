@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 
 import {
   conformanceScope,
+  notAConformanceClaim,
   NON_INTERFERENCE_CRITERIA,
   sweepOutcomes,
   truncatedSweeps,
@@ -151,4 +152,37 @@ test("requirement 5 says whether the layer that owns 2.3.1 actually ran", () => 
 test("the four non-interference criteria are the ones WCAG names", () => {
   // Pinned against the spec, so an edit cannot quietly drop one.
   assert.deepEqual([...NON_INTERFERENCE_CRITERIA], ["1.4.2", "2.1.2", "2.2.2", "2.3.1"]);
+});
+
+test("the report says plainly that it is NOT a conformance claim", () => {
+  // §5.3 specifies what a claim must carry, and two of the five components are the author's determination
+  // about their own site rather than anything a tool can observe. A document listing WCAG criteria,
+  // evidence and a date looks exactly like a claim to a reader who has not read §5.3.
+  const disclaimer = notAConformanceClaim();
+  assert.match(disclaimer.name, /not a conformance claim/i);
+  assert.match(disclaimer.limitation, /relied upon/i, "must name the components only the author can supply");
+  assert.match(disclaimer.limitation, /no level is asserted/i);
+});
+
+test("requirement 2 admits one viewport, iframes, and single-URI application states", () => {
+  // Three separate things WCAG counts as part of "the full page" that we do not reach. The third is the
+  // least obvious: an application at one URI is ONE page, so its dialogs and wizard steps belong to it.
+  const [, fullPages] = conformanceScope(CLEAN);
+  assert.match(fullPages.limitation, /viewport/i);
+  assert.match(fullPages.limitation, /iframes/i);
+  assert.match(fullPages.limitation, /without a URL change/i);
+});
+
+test("requirement 3 admits third-party content, which §5.4 exists for", () => {
+  const [, , processes] = conformanceScope(CLEAN);
+  assert.match(processes.limitation, /third-party/i);
+  assert.match(processes.limitation, /cannot control/i);
+});
+
+test("requirement 4 admits one language and one technology configuration", () => {
+  // §5.5 requires each language offered to conform on its own, and §5.2.5 requires conformance with the
+  // technology turned off or unsupported. We do neither, and silence about them would read as coverage.
+  const [, , , supported] = conformanceScope(CLEAN);
+  assert.match(supported.limitation, /language/i);
+  assert.match(supported.limitation, /turned OFF|unsupported/i);
 });
