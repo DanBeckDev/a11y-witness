@@ -1,0 +1,39 @@
+/**
+ * WHICH WCAG criteria the shipped assessors can return a finding for.
+ *
+ * Needed because WCAG Conformance Requirement 1 is about a LEVEL: to say anything about Level AA you must
+ * have assessed every AA criterion. We assess eight of fifty-five, so the only honest statement is the
+ * count plus "the rest are unchecked, not clean" — and that statement is worthless if this list drifts
+ * from what actually ships.
+ *
+ * So it is pinned by `coverage.test.ts` against two things at once: the trained model's own
+ * `training-report.json`, and the criteria the deterministic rules can emit. Retrain with a new head and
+ * the test fails until this list is updated. That is the point — a coverage claim maintained by hand is a
+ * coverage claim that goes stale, and this one is load-bearing for every conformance statement we print.
+ *
+ * Deliberately NOT derived at runtime from the scorer's output: the scorer abstains on pages unlike its
+ * training data and returns nothing at all, and the criteria it COULD have scored must still be reported
+ * on such a page. Coverage is a property of the shipped model, not of one run.
+ */
+
+/**
+ * Criteria the trained scorer has a head for. Must equal the keys of `criteria` in the shipped
+ * `training-report.json`.
+ */
+export const SCORED_CRITERIA = [
+  "1.1.1", "1.3.1", "2.4.4", "2.4.6", "3.3.1", "3.3.2", "4.1.2", "4.1.3",
+] as const;
+
+/**
+ * Criteria the deterministic rule layer can emit, which is a strict subset of the above.
+ *
+ * Pinned separately so the subset relationship is asserted rather than assumed: a rule that emitted a
+ * criterion missing from `SCORED_CRITERIA` would produce a finding for something the report simultaneously
+ * described as unassessed.
+ */
+export const RULE_CRITERIA = ["1.1.1", "1.3.1", "2.4.4", "4.1.2"] as const;
+
+/** Everything the shipped judge can return a finding for, deduplicated and sorted. */
+export function assessedCriteria(): string[] {
+  return [...new Set([...SCORED_CRITERIA, ...RULE_CRITERIA])].sort();
+}
