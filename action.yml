@@ -203,6 +203,29 @@ runs:
         test -f packages/scorer/models/screenreader-scorer/model.safetensors \
           || { echo "::error::The trained scorer is missing from the action checkout." >&2; exit 1; }
 
+    # ForegroundLockTimeout = 0, or /health.ready NEVER becomes true and this action cannot work.
+    #
+    # `ready` gates on the ENVIRONMENT — is there a browser, can it take the foreground, are we free —
+    # and a non-zero foreground lock means Windows refuses to let Edge be forced forward, so NVDA has
+    # nothing to read. The VM provisioning has always applied this; the action never did, so every run
+    # burned the full 180 s poll and threw "The capture worker never became ready" while the worker's own
+    # log said "NVDA is up and answering; the worker is ready". The worker was right.
+    #
+    # Nothing caught it because nothing had ever run this action: capture-regression.yml re-implements the
+    # setup by hand and calls the harness directly, so the copy a consumer's first run uses was untested.
+    #
+    # A registry write alone is not enough — the value is cached per session and Windows does not reliably
+    # consume it at logon either. The script uses SystemParametersInfo, which is the supported live route,
+    # and must run in the interactive session, which a composite action step does.
+    - name: Allow Edge to be forced into the foreground
+      shell: pwsh
+      working-directory: ${{ github.action_path }}
+      run: |
+        ./packages/worker-fleet/src/provisioning/apply-foreground-lock-timeout.ps1
+        $v = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name ForegroundLockTimeout -ErrorAction SilentlyContinue).ForegroundLockTimeout
+        if ($v -ne 0) { throw "ForegroundLockTimeout is '$v', not 0 - the capture would return 0 phrases with no error." }
+        Write-Host "ForegroundLockTimeout = 0"
+
     # The capture runs through the worker rather than in-process, because that is the path the project
     # tests: `capture:check`, `evidence:check` and the whole dataset pipeline all drive it over HTTP.
     - name: Start the capture worker
