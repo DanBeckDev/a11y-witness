@@ -86,6 +86,19 @@ test("a task the user cannot complete is stated plainly", () => {
   const out = renderSummary(result({
     verdict: { taskCompletable: false, summary: "s", findings: [], confidence: 0.9 },
   }));
+  // Two things, because this line is posted on a pull request in bold. The DEFAULT wording must be
+  // the honest one for the shipped local scorer, which never sees the task — and asserting the task
+  // question here is what pinned the overclaim in place, so it is now refused outright.
+  assert.match(out, /No blocking findings:\*\*\s+\*\*No\*\*/);
+  assert.doesNotMatch(out, /complete the task/,
+    "the default renderer must not ask a task question the local scorer cannot answer");
+});
+
+test("an LLM backend CAN state the task verdict, so the option is not decorative", () => {
+  // The anthropic/openai judges do read the task and answer it, so the wording is theirs to pass.
+  const out = renderSummary(result({
+    verdict: { taskCompletable: false, summary: "s", findings: [], confidence: 0.9 },
+  }), { taskQuestion: "Could a screen-reader user complete the task?" });
   assert.match(out, /complete the task\?\*\*\s+\*\*No\*\*/);
 });
 

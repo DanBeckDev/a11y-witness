@@ -202,7 +202,10 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     `**Task:** ${result.task}`,
     `**Screen reader:** ${result.screenReader}${result.transcript ? ` · ${result.transcript.length} announcements` : ""}`,
     "",
-    `**Could a screen-reader user complete the task?** ${verdict.taskCompletable ? "Yes" : "**No**"}`,
+    // See SummaryOptions.taskQuestion. This is posted on a PULL REQUEST in bold, and with the shipped
+    // local scorer it asked "could a screen-reader user complete the task?" and answered from a signal
+    // that never saw the task.
+    `**${taskQuestion}** ${verdict.taskCompletable ? "Yes" : "**No**"}`,
     "",
     verdict.summary,
     "",
