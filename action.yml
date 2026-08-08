@@ -131,6 +131,11 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
+        # `cache: npm` WITHOUT cache-dependency-path. The path variant needs ${{ github.action_path }},
+        # which is "." for a local action and makes actions/cache reject ".//package-lock.json". Bare
+        # `cache: npm` caches ~/.npm only — never node_modules — so a key derived from a consumer's
+        # lockfile can at worst be a cache miss, never the wrong dependencies.
+        cache: npm
 
     # Installed into the ACTION's own checkout, not the caller's workspace: `github.action_path` is where
     # this action's package.json lives, and the caller's repository has nothing to do with it.
