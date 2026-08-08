@@ -131,9 +131,6 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
-        # Built-in npm cache, keyed on the lockfile it installs from. `npm ci` was 18 s of every run.
-        cache: npm
-        cache-dependency-path: ${{ github.action_path }}/package-lock.json
 
     # Installed into the ACTION's own checkout, not the caller's workspace: `github.action_path` is where
     # this action's package.json lives, and the caller's repository has nothing to do with it.
@@ -211,20 +208,12 @@ runs:
         path: ~\AppData\Local\pip\Cache
         key: a11y-witness-pip-${{ runner.os }}-torch-cpu-transformers-safetensors-numpy
 
-    # Cache the pinned encoder (87 MB). fetch-encoder.py hash-checks it, so a poisoned cache is caught
-    # rather than trusted — which is why caching it is safe at all.
-    - name: Cache the pinned encoder
-      if: ${{ inputs.judge-backend == 'local' }}
-      uses: actions/cache@v4
-      with:
-        path: ${{ github.action_path }}/packages/scorer/models/encoders
-        key: a11y-witness-encoder-${{ hashFiles('packages/scorer/python/fetch-encoder.py') }}
+    # NO encoder cache (87 MB), and no npm cache (18 s). Both needed `${{ github.action_path }}` in a
+    # path, and that is "." when the action is used locally (`uses: ./`) — actions/cache then rejects
+    # ".//..." with "Relative pathing '.' and '..' is not allowed" and the action dies in 6 s. The two
+    # caches that remain use HOME-relative paths, which is why they work, and they are 133 s of the 151 s.
+    # Caching the encoder needs it downloaded somewhere home-relative first.
 
-    # Only for the local scorer. An LLM backend skips all of it and pays nothing.
-    #
-    # torch is a few hundred MB to INSTALL (~1-2 min); inference itself is milliseconds — one 6-layer
-    # MiniLM pass plus fourteen dot products. The heads ship in the repo at 27 KB; only the encoder is
-    # fetched, and it is pinned and hash-checked by the fetch script rather than pulled loose from the hub.
     - name: Set up the local scorer
       if: ${{ inputs.judge-backend == 'local' }}
       shell: bash
