@@ -26,12 +26,18 @@ test("SCORED_CRITERIA equals the shipped model's own criteria", () => {
     "SCORED_CRITERIA must match training-report.json — retraining changed what ships");
 });
 
-test("the rule layer cannot emit a criterion the coverage list omits", () => {
-  // Otherwise a report could carry a 2.4.6 finding while stating that 2.4.6 was not assessed.
+test("the rule layer cannot emit a criterion outside the DECLARED coverage", () => {
+  // Was: every rule criterion must also be a scorer criterion. That stopped being true when 1.4.2 Audio
+  // Control arrived — read from the DOM, with no scorer head — so the invariant is now against the UNION.
+  // The property that matters is unchanged: a report must never carry a finding for a criterion it
+  // simultaneously describes as unassessed.
+  const covered = new Set(assessedCriteria());
   for (const num of RULE_CRITERIA) {
-    assert.ok((SCORED_CRITERIA as readonly string[]).includes(num),
-      `${num} is emitted by a rule but missing from SCORED_CRITERIA`);
+    assert.ok(covered.has(num), `${num} is emitted by a rule but missing from assessedCriteria()`);
   }
+  // And at least one rule-only criterion exists, or the union above is being tested vacuously.
+  assert.ok(RULE_CRITERIA.some((num) => !(SCORED_CRITERIA as readonly string[]).includes(num)),
+    "expected at least one rule-only criterion; if that changed, simplify this back to a subset check");
 });
 
 test("every criterion we claim to assess is a real WCAG 2.2 A/AA criterion", () => {

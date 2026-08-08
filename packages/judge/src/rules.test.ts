@@ -229,3 +229,45 @@ test("every finding declares a mapping, so none defaults by accident at the type
       `${finding.issue} has no requirement mapping`);
   }
 });
+
+/**
+ * 1.4.2 Audio Control — one of WCAG's four NON-INTERFERENCE criteria, which apply to ALL content on a page
+ * whether or not it is relied upon for anything else. Autoplaying audio is worse for this tool's users than
+ * the criterion's wording suggests: it competes directly with the synthetic speech they are listening to.
+ */
+test("audio that starts on its own with no controls is reported", () => {
+  const findings = ruleFindings({
+    transcript: [],
+    media: [{ tag: "audio", autoplay: true, muted: false, controls: false, loop: true }],
+  } as never);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].wcag, /^1\.4\.2/);
+  assert.match(findings[0].evidence, /<audio autoplay loop>/);
+  assert.equal(findings[0].mapping, "secondary",
+    "we cannot see the 3-second threshold or a custom pause control elsewhere on the page");
+});
+
+test("muted or controllable media is not a 1.4.2 finding", () => {
+  // Muted media makes no sound, so there is nothing to control; `controls` IS the pause/stop mechanism the
+  // criterion asks for. Flagging either would be a false accusation on ordinary, correct markup.
+  const findings = ruleFindings({
+    transcript: [],
+    media: [
+      { tag: "audio", autoplay: true, muted: true, controls: false, loop: false },
+      { tag: "video", autoplay: true, muted: false, controls: true, loop: false },
+      { tag: "audio", autoplay: false, muted: false, controls: false, loop: false },
+    ],
+  } as never);
+  assert.equal(findings.length, 0);
+});
+
+test("a capture with NO media field makes no 1.4.2 claim at all", () => {
+  // The field arrived with a probe, so every capture taken before it has none. Treating absence as "no
+  // autoplaying audio" would turn all of them into silent passes — the unchecked-is-not-clean rule, in the
+  // one place where the evidence is a DOM query rather than something the screen reader said.
+  const findings = ruleFindings({ transcript: ["heading, level 1, News"] } as never);
+  assert.equal(findings.filter((f) => f.wcag.startsWith("1.4.2")).length, 0);
+  const probed = ruleFindings({ transcript: [], media: [] } as never);
+  assert.equal(probed.filter((f) => f.wcag.startsWith("1.4.2")).length, 0,
+    "an empty probe result is also not a finding — it is a page with no media");
+});

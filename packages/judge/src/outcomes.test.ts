@@ -14,7 +14,8 @@ import assert from "node:assert/strict";
 import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
 
 import { assessedCriteria } from "./coverage.js";
-import { criterionOutcomes, outcomeTally, type CriterionOutcome } from "./outcomes.js";
+import { criterionOutcomes, NOT_SWEEP_DERIVED, outcomeTally, type CriterionOutcome }
+  from "./outcomes.js";
 
 /** A capture with images, links, headings and an editable field, so most channels are non-empty. */
 const RICH = {
@@ -209,12 +210,20 @@ test("every criterion we assess has an entry in SWEEPS_FEEDING", () => {
   // Asserted through the public behaviour rather than by importing the table: for each criterion, claiming
   // its sweeps truncated must change the outcome. If it does not, the criterion is missing from the table.
   for (const criterion of assessedCriteria()) {
+    if (NOT_SWEEP_DERIVED.includes(criterion)) continue; // declared explicitly, so not a silent gap
     const everySweep = ["heading", "landmark", "list", "link", "formField", "graphic", "postSubmit"]
       .map((type) => ({ type }));
     const outcome = find(criterionOutcomes({ capture: RICH, findings: [], truncatedSweeps: everySweep }),
       criterion);
     assert.equal(outcome.outcome, "cantTell",
       `${criterion} ignored a truncated sweep — it is probably missing from SWEEPS_FEEDING`);
+  }
+  // Nothing may fall through BOTH tables: that is the silent gap this guard exists for.
+  for (const criterion of assessedCriteria()) {
+    const known = NOT_SWEEP_DERIVED.includes(criterion)
+      || criterionOutcomes({ capture: RICH, findings: [], truncatedSweeps: [] }).some(
+        (o) => o.criterion === criterion);
+    assert.ok(known, `${criterion} is in neither SWEEPS_FEEDING nor NOT_SWEEP_DERIVED`);
   }
 });
 
