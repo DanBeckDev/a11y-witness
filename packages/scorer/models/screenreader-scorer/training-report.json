@@ -242,7 +242,7 @@
       }
     },
     "2.4.4": {
-      "decisionOwner": "deterministic-rules",
+      "decisionOwner": "learned-screenreader-scorer",
       "threshold": 0.1,
       "subtypes": {
         "2.4.4:regex": {
@@ -307,7 +307,7 @@
       }
     },
     "2.4.6": {
-      "decisionOwner": "deterministic-rules",
+      "decisionOwner": "learned-screenreader-scorer",
       "threshold": 0.1,
       "subtypes": {
         "2.4.6:regex": {
