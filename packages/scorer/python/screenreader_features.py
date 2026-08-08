@@ -50,7 +50,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
     "form_field_named": 2.0,
 }
 
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v5"
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v6"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -102,6 +102,17 @@ LANDMARK_ROLES = {
 STATE_WORD = re.compile(r"\b(expanded|collapsed|open|closed|pressed|checked)\b", re.IGNORECASE)
 
 HEADING_ANNOUNCEMENT = re.compile(r"^heading\s*,\s*level\s+\d+\b", re.IGNORECASE)
+
+# NVDA prepends the enclosing landmark when a heading is the FIRST element inside it, announcing
+# "main landmark, Welcome, heading, level 2" rather than "heading, level 2, Welcome". Without stripping
+# that, `heading_name` returned "main landmark, welcome", which is not in GENERIC_HEADINGS -- so
+# `generic_heading_present` read FALSE on exactly those pages, and 2.4.6 lost its only engineered
+# feature on 50 of 100 pairs. The feature, its vocabulary and its exact-match semantics were all
+# correct; an announcement quirk defeated the lookup.
+LANDMARK_PREFIX = re.compile(
+    r"^(?:" + "|".join(sorted(LANDMARK_ROLES)) + r")\s+landmark\s*,\s*",
+    re.IGNORECASE,
+)
 
 TABLE_DATA_ROW = re.compile(r"\brow\s+(?!1\b)(?P<row>\d+)\b(?P<between>.*?)\bcolumn\b", re.IGNORECASE)
 
@@ -178,7 +189,20 @@ def state_word(value: str) -> str:
     return match.group(1).lower() if match else ""
 
 def heading_name(value: str) -> str:
-    return value.split(", heading", 1)[0].strip().lower()
+    """The heading's own text, with any landmark announcement NVDA prefixed to it removed.
+
+    See LANDMARK_PREFIX: a heading that opens a landmark is announced with the landmark first, so the
+    naive split left "main landmark, welcome" and every exact-match lookup against it failed.
+    """
+    # NVDA announces a heading in TWO orders and this must handle both. The structural sweep gives
+    # "Welcome, heading, level 2"; the read-through gives "heading, level 2, Welcome". Only the first
+    # was handled, so a transcript line returned the whole string and every lookup against it failed.
+    # Today the caller passes sweep entries, so this half is defensive rather than a live bug -- but the
+    # landmark half of this function was exactly such a latent case until it silently cost 2.4.6 half
+    # its feature coverage.
+    name = value.split(", heading", 1)[0].strip()
+    name = LANDMARK_PREFIX.sub("", name).strip()
+    return HEADING_ANNOUNCEMENT.sub("", name).lstrip(" ,").strip().lower()
 
 def plain_heading_candidate(value: str, following_value: str) -> bool:
     """Find a likely spoken section title that has no heading announcement.
