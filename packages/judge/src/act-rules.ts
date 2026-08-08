@@ -1,0 +1,182 @@
+/**
+ * Our deterministic rules, described in the form the W3C's ACT Rules Format requires.
+ *
+ * ACT specifies what a rule must state before anyone can judge whether its output means anything:
+ * applicability, expectation, assumptions, accessibility-support limitations, and examples of each
+ * outcome. We had all of that as prose comments beside the code — which is where it belongs for a reader
+ * of the code, and nowhere at all for a reader of a report.
+ *
+ * The two fields that earn this file are `assumptions` and `accessibilitySupport`. Every wrong finding
+ * this project has shipped traces to an assumption nobody had written down: that Chromium marks decorative
+ * images as ignored (it does, but it also exposes CSS bullets as images), that a submit always stays on the
+ * page (Wikipedia navigates), that a leading role token means an unnamed control (true only in the sweep,
+ * not in a wrapped read-through). Writing them down is how the next one gets caught in review.
+ *
+ * These are OUR rules, not a claim to implement the ACT rules published by the community — those have
+ * their own identifiers and test cases, and adopting them is a separate piece of work.
+ *
+ * https://www.w3.org/TR/act-rules-format/
+ */
+import type { RequirementMapping } from "./judge.js";
+
+export interface ActRuleDescription {
+  /** Stable identifier. Namespaced, because ACT identifiers must be unique within a rule set. */
+  id: string;
+  /** Bumped when applicability or expectation changes, so a report can say which version judged it. */
+  version: string;
+  name: string;
+  /** What the rule checks, in plain language. */
+  description: string;
+  /** All of ours are atomic: none is composed from other rules' outcomes. */
+  ruleType: "atomic";
+  /** Which criteria this maps to, and whether a failure asserts non-conformance. */
+  accessibilityRequirements: { criterion: string; mapping: RequirementMapping }[];
+  /** What the rule reads. ACT calls these input aspects; ours are all screen-reader output. */
+  inputAspects: string[];
+  /** Which parts of the page the rule applies to. An empty set means `inapplicable`. */
+  applicability: string;
+  /** What must be true of a test target for it to pass. */
+  expectation: string;
+  /** What must hold for the rule to be correct — the field that catches the next wrong finding. */
+  assumptions: string[];
+  /** Where accessibility support limits what this rule can conclude. */
+  accessibilitySupport: string;
+}
+
+const NVDA_EDGE = "Evidence is NVDA's announcements in Edge on Windows. Another screen reader may announce "
+  + "the same markup differently, so an outcome here does not transfer to JAWS, VoiceOver or Orca.";
+
+export const ACT_RULES: ActRuleDescription[] = [
+  {
+    id: "a11y-witness:unnamed-control",
+    version: "2026-08-08",
+    name: "Control announced with a role but no accessible name",
+    description: "A user-interface component the screen reader announces as a bare role — \"combo box, "
+      + "collapsed\" — has no accessible name, so a user cannot tell what it is for.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "4.1.2", mapping: "conformance" }],
+    inputAspects: ["structure.formFields", "interaction.controls", "transcript"],
+    applicability: "Every control announced in the structural form-field sweep, and every transcript line "
+      + "carrying a control role together with the empty-name marker (U+FFFC).",
+    expectation: "After removing role and state tokens, something remains — that remainder is the name.",
+    assumptions: [
+      "NVDA announces the accessible name BEFORE the role, so an announcement beginning with its own role "
+        + "has no name. Verified against real captures; it is why the sweep and the read-through are "
+        + "treated differently.",
+      "In the read-through a role and its name can wrap onto separate lines, so a leading role proves "
+        + "nothing there — the U+FFFC marker is required instead. Assuming otherwise would flag every "
+        + "labelled field on a narrow window.",
+      "The role and state token lists are complete enough that a real name is never mistaken for a role. "
+        + "A missing state token would leave a residue that reads as a name and hide a real failure.",
+    ],
+    accessibilitySupport: NVDA_EDGE,
+  },
+  {
+    id: "a11y-witness:unlabelled-image",
+    version: "2026-08-08",
+    name: "Image announced as having no text alternative",
+    description: "The screen reader itself reports the image as unlabelled, or the browser offers to "
+      + "generate a description for it — which it only does when there is no text alternative.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "1.1.1", mapping: "conformance" }],
+    inputAspects: ["transcript"],
+    applicability: "Every transcript line announcing a graphic or image.",
+    expectation: "The line neither says \"unlabelled\" nor carries Edge's missing-description prompt.",
+    assumptions: [
+      "Edge's \"To get missing image descriptions, open the context menu\" prompt appears BECAUSE there is "
+        + "no text alternative. Measured as the stable signal: the word \"unlabeled\" itself was present in "
+        + "only 2 of 3 captures of the same unchanged image, so keying on it alone missed a third of them.",
+      "An image the screen reader announces at all is one the user meets. A decorative image correctly "
+        + "marked `alt=\"\"` is ignored by the browser and never reaches this rule.",
+    ],
+    accessibilitySupport: NVDA_EDGE + " The missing-description prompt is specific to Edge; another browser "
+      + "would need its own signal.",
+  },
+  {
+    id: "a11y-witness:alt-text-is-a-filename",
+    version: "2026-08-08",
+    name: "Image alternative text is a file name",
+    description: "Alt text like \"IMG 4821\" or \"logo.png\" is present but does not describe the image.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "1.1.1", mapping: "secondary" }],
+    inputAspects: ["transcript"],
+    applicability: "Every transcript line announcing a graphic whose accessible name survives role and "
+      + "state stripping.",
+    expectation: "The remaining name does not look like a file name.",
+    assumptions: [
+      "A file name cannot serve the equivalent purpose of the image. SECONDARY rather than conformance "
+        + "because the criterion asks whether the alternative serves an equivalent PURPOSE, and a string "
+        + "that looks like a file name could legitimately be the right description — a product code, or a "
+        + "screenshot of a file listing.",
+    ],
+    accessibilitySupport: NVDA_EDGE,
+  },
+  {
+    id: "a11y-witness:unnamed-graphic-count",
+    version: "2026-08-08",
+    name: "The page exposes images with no accessible name",
+    description: "The accessibility tree reports images the screen reader never announced a name for, "
+      + "including ones quick navigation walks straight past.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "1.1.1", mapping: "secondary" }],
+    inputAspects: ["accessibility tree (census)"],
+    applicability: "Runs when the tree census reports a non-zero count of images. Absent census means no "
+      + "oracle, and the rule makes no claim.",
+    expectation: "No image in the tree is both exposed to assistive technology and nameless.",
+    assumptions: [
+      "An image node the browser exposes with no name is content a user meets. This rule has already been "
+        + "WRONG once on exactly that assumption: Chromium exposes a CSS `list-style-image` bullet as an "
+        + "unnamed image, and two bullets were reported as missing text alternatives on a page W3C "
+        + "publishes as fully AA conformant. Generated content is now excluded — which is why this reads a "
+        + "COUNT, not an announcement, and stays secondary.",
+      "The census reflects the same document the screen reader read. A stale virtual buffer would break "
+        + "that; see the open item in PLAN.md.",
+    ],
+    accessibilitySupport: "The census comes from Chromium's accessibility tree over DevTools, not from the "
+      + "screen reader, so it reports what the BROWSER exposes. It is an oracle for completeness and is "
+      + "never quoted as what a user heard.",
+  },
+  {
+    id: "a11y-witness:vague-link-text",
+    version: "2026-08-08",
+    name: "Link text does not indicate where the link goes",
+    description: "A link announced as \"click here\" or \"read more\" tells a user navigating by link "
+      + "nothing about its destination.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "2.4.4", mapping: "secondary" }],
+    inputAspects: ["structure.links"],
+    applicability: "Every link announced in the structural link sweep.",
+    expectation: "The link's accessible name is not one of the known non-descriptive phrases.",
+    assumptions: [
+      "SECONDARY, and this is the clearest case in the set. 2.4.4 permits the purpose to be determined "
+        + "from the link's programmatically determined CONTEXT — its sentence, paragraph, list item or "
+        + "table cell — so \"To apply for a permit, click here\" conforms. This rule cannot see that "
+        + "context, so it is stricter than the criterion and closer to 2.4.9, which is AAA.",
+      "A screen-reader user listening to a links list hears the name alone, which is why the finding is "
+        + "still worth reporting even when the page conforms.",
+    ],
+    accessibilitySupport: NVDA_EDGE,
+  },
+  {
+    id: "a11y-witness:no-headings",
+    version: "2026-08-08",
+    name: "A page of content with no headings",
+    description: "There is no heading structure to skim, so reaching any part of the page means reading "
+      + "all of it.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "1.3.1", mapping: "secondary" }],
+    inputAspects: ["structure.headings", "accessibility tree (census)", "transcript"],
+    applicability: "Pages with substantial content — at least 15 announced lines — where the tree CONFIRMS "
+      + "zero headings. A fragment or an error page legitimately has none.",
+    expectation: "The page exposes at least one heading.",
+    assumptions: [
+      "SECONDARY. 1.3.1 is about structure conveyed visually being programmatically determinable, and this "
+        + "layer cannot see the visual side: a page with genuinely no headings conveys no heading structure "
+        + "to lose. Having none is strong evidence that styled text stands in for headings; proof needs the "
+        + "visual layer.",
+      "The tree must corroborate. A sweep alone cannot tell \"this page has no headings\" from \"we could "
+        + "not ask\" — the distinction this project spent 2,122 captures failing to make.",
+    ],
+    accessibilitySupport: NVDA_EDGE,
+  },
+];

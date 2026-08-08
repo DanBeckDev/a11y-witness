@@ -79,3 +79,39 @@ test("a clean verdict reports no findings without inventing a section", () => {
     "the local scorer must not claim task completion — it never sees the task");
   assert.match(output, /0 finding\(s\)/);
 });
+
+test("the report never prints a score, grade or percentage", () => {
+  // A STANDING commitment, asserted rather than remembered. WCAG-EM warns that aggregated scores "can be
+  // misleading", and the reason is specific: a single number absorbs exactly the criteria we could not
+  // check. `cantTell` and `untested` are the honest answer, and they cannot survive being averaged.
+  //
+  // Asserted over a report carrying findings, outcomes and conformance statements, because a score would
+  // most plausibly be added next to one of those.
+  const lines = reportLines({
+    url: "https://example.com/page",
+    task: "Complete the checkout",
+    screenReader: "NVDA 2026.1.1",
+    announcements: 42,
+    verdict: {
+      taskCompletable: false,
+      summary: "Confirmed failures below.",
+      confidence: 1,
+      findings: [{
+        issue: "Control announced with a role but no accessible name",
+        wcag: "4.1.2 Name, Role, Value",
+        severity: "serious",
+        evidence: "combo box, collapsed",
+        confidence: 1,
+        mapping: "conformance",
+      }],
+    },
+    axe: null,
+  }).join("\n");
+
+  assert.doesNotMatch(lines, /\b\d{1,3}\s?%/, "no percentage");
+  assert.doesNotMatch(lines, /\bscore\b/i, "no score");
+  assert.doesNotMatch(lines, /\bgrade\b|\brating\b/i, "no grade or rating");
+  // The confidence numbers ARE allowed and are not a score: they are per-finding, never aggregated into
+  // one figure for the page. Asserting their presence keeps this test honest about what it forbids.
+  assert.match(lines, /confidence 1/);
+});

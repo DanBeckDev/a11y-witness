@@ -28,6 +28,10 @@
     "./outcomes": {
       "types": "./dist/outcomes.d.ts",
       "default": "./dist/outcomes.js"
+    },
+    "./act-rules": {
+      "types": "./dist/act-rules.d.ts",
+      "default": "./dist/act-rules.js"
     }
   },
   "files": [
