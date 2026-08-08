@@ -4,11 +4,17 @@
 [![capture-regression](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml)
 [![licence: AGPL-3.0-or-later](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](./LICENSE)
 
-**a11y-witness drives a real screen reader through a web page and has an AI judge assess whether the experience was actually usable.** Every finding cites a WCAG criterion and quotes the announcement it rests on, so you can check it yourself.
+**a11y-witness drives a real screen reader (NVDA) through a web page and reports the barriers a screen-reader user would hit.** Every finding cites a WCAG criterion and quotes the announcement it rests on, so you can check it yourself.
 
-It is three things: a testing pipeline, the reproducible screen-reader infrastructure that makes it runnable by anyone, and an accessibility model of our own being trained on the evidence the first two produce.
+The findings it is *for* are the ones a rule scanner structurally cannot produce, because they need a screen reader and an interaction — not markup analysis:
 
-It is not a rule scanner, and it is not a wrapper around one. Rule engines automate the mechanical layer well — Deque reports [axe-core](https://github.com/dequelabs/axe-core) finds about 57% of WCAG issues automatically and flags the rest for human review. That remainder is largely the **lived experience**: whether what a screen reader announces, as someone reads and operates the page, adds up to something a person can use. Automating that judgment is what this project is for.
+> axe tells you an ARIA attribute is wrong. This tells you your form rejects input and **never announces why**, or your filter updates results and **says nothing**.
+
+Those come from the deterministic rule layer, which is exact on every criterion it owns with **zero false positives across 1,003 conformant records**. There is also a trained scorer of our own, and it is honest about its limits: it **abstains** on pages unlike its training data — which today is most real pages — and reports those criteria as *unchecked, not clean*, rather than guessing. See [Known limitations](./RELEASE.md#known-limitations-stated-plainly).
+
+It is three things: a testing pipeline, the reproducible screen-reader infrastructure that makes it runnable by anyone, and an accessibility model of our own being trained on the evidence the first two produce. The first two are what ships and works; the third is real, measured, and not yet carrying real pages.
+
+It is not a rule scanner, and it is not a wrapper around one. Rule engines automate the mechanical layer well — Deque reports [axe-core](https://github.com/dequelabs/axe-core) finds about 57% of WCAG issues automatically and flags the rest for human review. That remainder is largely the **lived experience**: whether what a screen reader announces, as someone reads and operates the page, adds up to something a person can use. Automating that judgment is what this project is for — and where it cannot yet do so honestly, it says so instead of inventing an answer.
 
 ## What it produces
 
@@ -97,10 +103,10 @@ feature, it is a claim this project cannot yet make.
 
 No single model handles every WCAG criterion well, so a generative pass drafts findings from the transcript and two layers refine them:
 
-- **Deterministic rules** (always on, [`src/spike/rules.ts`](./src/spike/rules.ts)) own the *absence-of-name* criteria — an image announced with no alternative text (1.1.1), a control announced as a bare role with no accessible name (4.1.2). These are facts, not judgement calls, so a rule catches them exactly, for free, with no false positives.
-- **A discriminative gate** (opt-in, [`src/spike/verify-gate.ts`](./src/spike/verify-gate.ts)) re-scores the *semantic* findings — vague link text (2.4.4), non-descriptive headings (2.4.6) — with a small encoder (DeBERTa-v3 NLI, ONNX) via [transformers.js](https://github.com/huggingface/transformers.js). A discriminative model *scores* a candidate rather than *generating* one, so it cannot invent a finding, which removes the over-flagging small generative models show on clean pages.
+- **Deterministic rules** (always on, [`src/spike/rules.ts`](./packages/judge/src/rules.ts)) own the *absence-of-name* criteria — an image announced with no alternative text (1.1.1), a control announced as a bare role with no accessible name (4.1.2). These are facts, not judgement calls, so a rule catches them exactly, for free, with no false positives.
+- **A discriminative gate** (opt-in, [`src/spike/verify-gate.ts`](./packages/judge/src/verify-gate.ts)) re-scores the *semantic* findings — vague link text (2.4.4), non-descriptive headings (2.4.6) — with a small encoder (DeBERTa-v3 NLI, ONNX) via [transformers.js](https://github.com/huggingface/transformers.js). A discriminative model *scores* a candidate rather than *generating* one, so it cannot invent a finding, which removes the over-flagging small generative models show on clean pages.
 
-The model call itself is one seam (`ask()` in [`src/spike/judge.ts`](./src/spike/judge.ts)):
+The model call itself is one seam (`ask()` in [`src/spike/judge.ts`](./packages/judge/src/judge.ts)):
 
 | `JUDGE_BACKEND` | needs | notes |
 |---|---|---|
@@ -268,7 +274,7 @@ Deliberately **not** a general-purpose language model. The project already produ
 
 That model can *score* a candidate finding but cannot invent one, which is the property that matters: a generator that hallucinates a violation destroys the trust the whole project depends on. The division of labour stays as it is — deterministic rules keep the exact absence cases, the scorer takes the judgment calls, and the explanation is rendered from captured evidence and a fixed WCAG template.
 
-It slots into the existing `applyGate` seam in [`src/spike/verify-gate.ts`](./src/spike/verify-gate.ts), so it can run as an opt-in gate alongside the current judge and be measured against it before it replaces anything. **The acceptance bar is pre-registered**: it may only replace a model-generated finding once it meets the holdout bar for that criterion with zero false positives on the clean paired pages. Until then it is an independently measured signal and the current judge remains the fallback.
+It slots into the existing `applyGate` seam in [`src/spike/verify-gate.ts`](./packages/judge/src/verify-gate.ts), so it can run as an opt-in gate alongside the current judge and be measured against it before it replaces anything. **The acceptance bar is pre-registered**: it may only replace a model-generated finding once it meets the holdout bar for that criterion with zero false positives on the clean paired pages. Until then it is an independently measured signal and the current judge remains the fallback.
 
 There is a concrete reason this needs its own dataset. Link purpose (2.4.4) is a known weak spot: the zero-shot entailment gate does not separate vague from descriptive link text reliably — validated, they score in overlapping ranges. That is a fine-tune target, not something more prompt-engineering will fix.
 
