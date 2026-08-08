@@ -97,9 +97,6 @@ function hasEmptyName(announcement: string): boolean {
   return announcement.includes(EMPTY_NAME) && accessibleName(announcement) === "";
 }
 
-// The state words NVDA announces for a control, matched singly so "before" and "after" are comparable.
-const STATE_WORD_RE = /\b(expanded|collapsed|not pressed|pressed|not checked|checked|not selected|selected)\b/i;
-
 const isImage = (line: string): boolean => /\b(graphic|image)\b/i.test(line);
 const isControl = (entry: string): boolean =>
   /\b(button|edit|radio|checkbox|combo box|list box|menu button|link)\b/i.test(entry);
