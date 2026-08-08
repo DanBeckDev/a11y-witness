@@ -309,6 +309,14 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
             "variant": provenance.get("variant"),
             "scores": scores,
             "predictions": predictions,
+            # Which criteria a deterministic rule decides. Carried across because the judge appends the
+            # rule layer's findings AFTER the model's and had no way to know the two overlap: on a
+            # conformant page the rule correctly found nothing and the model's prediction survived as a
+            # false positive. The report has always known this; nothing passed it on.
+            "ruleOwned": sorted(
+                c for c, r in criteria.items()
+                if r.get("decisionOwner", "learned-screenreader-scorer") != "learned-screenreader-scorer"
+            ),
         })
     positives = {
         criterion: sum(item["predictions"][criterion] for item in scored)
