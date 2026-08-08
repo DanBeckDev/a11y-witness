@@ -30,84 +30,55 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # A stable, small, publicly reachable page with real structure. Deliberately not a page from the
-      # eval fixtures: this asserts the ACTION runs, not what it finds, and reusing a fixture would
-      # invite someone to start asserting findings here and couple the smoke test to judge quality.
+      # TWO runs, each guarding one DIRECTION, because for an accessibility tool the two failures are not
+      # symmetrical. A missed finding costs a user; an invented one is an accusation someone may be
+      # challenged over. Both pages are published by W3C WITH their own conformance claim, so the expected
+      # answer is not our opinion.
+      #
+      # Run 1 — a page W3C publishes as fully WCAG 2.0 AA conformant. It must produce NO 1.1.1 finding.
+      # This is a live regression test for a real defect: Chromium exposes a CSS `list-style-image` bullet
+      # as an unnamed role=image node, and the census counted two of them, so this tool accused a
+      # conformant page of having images with no text alternative. Measured 0 rule findings after the fix,
+      # with probing ON.
       - name: Run a11y-witness as a consumer would
         id: witness
         uses: ./
         with:
-          url: https://www.w3.org/WAI/demos/bad/after/home.html
-          task: "Find the page's main navigation and reach the survey."
-          judge-backend: local
-
-      # The action's own outputs are part of its contract, so an empty one is a failure even when the
-      # run "succeeded" — a green job that produced no report is the silent pass this repo keeps finding.
-      - name: The action must produce a report
-        shell: bash
-        run: |
-          if [ -z "${{ steps.witness.outputs.result-json }}" ]; then
-            echo "::error::the action produced no result-json output" >&2
-            exit 1
-          fi
-          path="${{ steps.witness.outputs.result-json }}"
-          test -s "$path" || { echo "::error::result-json path '$path' is empty or missing" >&2; exit 1; }
-          node -e "
-            const j = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
-            // Exactly the fields packages/cli/src/action/run.ts already depends on, so this asserts the
-            // real contract rather than a shape I assumed. Guessing it wrong once already produced a
-            // test that would have failed for the wrong reason.
-            if (!j.url) throw new Error('report has no url');
-            if (!j.verdict || !Array.isArray(j.verdict.findings)) {
-              throw new Error('report has no verdict.findings — the judge did not run');
-            }
-            // Findings MAY be empty: this is a conformant page and the scorer abstains off-distribution.
-            // What must NOT be true is that the capture itself was unverified, because then nothing was
-            // actually checked and a green job would mean nothing.
-            if (j.captureVerified === false) {
-              throw new Error('captureVerified is false: the screen reader ran but its evidence was rejected');
-            }
-            console.log('  url:', j.url);
-            console.log('  announcements:', j.announcements ?? '(not reported)');
-            console.log('  findings:', j.verdict.findings.length);
-            console.log('  captureVerified:', j.captureVerified);
-          " "$path"
-
-      # The run above uses the DEFAULTS, which is deliberately the weakest configuration: with
-      # `probe-forms: false` nothing is activated, so the task is inert and the interaction probes — the
-      # findings this tool is actually for — never run. That proves the plumbing and not the value.
-      #
-      # This second run turns them on against a page with a form, so the path that produces 3.3.1 and
-      # 4.1.3 evidence is exercised too. A different URL on purpose: activating controls has side effects,
-      # and the W3C BAD "before" page is a published inaccessible demo, which is what that is for.
-      - name: Run with the interaction probes ON
-        id: probed
-        uses: ./
-        with:
-          url: https://www.w3.org/WAI/demos/bad/before/survey.html
+          url: https://www.w3.org/WAI/demos/bad/after/survey.html
           task: "Submit the survey without filling it in and see what is announced."
           judge-backend: local
-          probe-forms: "true"
 
-      - name: The probed run must record an interaction
+      - name: A conformant page must produce a report, an interaction, and NO 1.1.1 accusation
         shell: bash
         run: |
-          path="${{ steps.probed.outputs.result-json }}"
-          test -s "$path" || { echo "::error::probed run produced no result-json" >&2; exit 1; }
-          node -e "
-            const j = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
-            // The POINT of probe-forms is that something got activated and the screen reader's response
-            // was recorded. An empty interaction here means the probe silently did nothing, which would
-            // make every 3.3.1 and 4.1.3 finding unreachable while the run still looked green.
-            const i = j.capture?.interaction ?? j.interaction;
-            if (!i) throw new Error('no interaction evidence at all — probe-forms did nothing');
-            const activated = (i.formChanges ?? []).length + (i.stateChanges ?? []).length;
-            if (activated === 0) {
-              throw new Error('probe-forms activated no control: formChanges and stateChanges are both empty');
-            }
-            console.log('  controls activated:', activated);
-            console.log('  findings:', j.verdict.findings.length);
-          " "$path"
+          path="${{ steps.witness.outputs.result-json }}"
+          if [ -z "$path" ]; then echo "::error::the action produced no result-json output" >&2; exit 1; fi
+          test -s "$path" || { echo "::error::result-json path '$path' is empty or missing" >&2; exit 1; }
+          # --expect-activation because `probe-forms` DEFAULTS on here: a default run that operates nothing
+          # means the default silently regressed and every 3.3.1/4.1.3 finding is unreachable while this
+          # job stays green. --forbid-wcag because W3C publishes this page as conformant, so any 1.1.1
+          # finding is a false accusation by their own claim.
+          node packages/lab/src/harnesses/assert-action-report.mjs "$path" \
+            --expect-activation --forbid-wcag=1.1.1
+
+      # Run 2 — the mirror, and the reason run 1 cannot stand alone. A guard that silences real findings
+      # would pass run 1 perfectly. This is W3C's published INACCESSIBLE demo, whose home page exposes 33
+      # images with no accessible name, so 1.1.1 MUST fire. Measured: 8 rule findings, including
+      # "33 of 39 images expose no accessible name".
+      - name: The inaccessible demo must still be caught
+        id: inaccessible
+        uses: ./
+        with:
+          url: https://www.w3.org/WAI/demos/bad/before/home.html
+          task: "Find the main navigation and reach the survey."
+          judge-backend: local
+
+      - name: 1.1.1 must fire on the page that really fails it
+        shell: bash
+        run: |
+          path="${{ steps.inaccessible.outputs.result-json }}"
+          test -s "$path" || { echo "::error::the inaccessible run produced no result-json" >&2; exit 1; }
+          node packages/lab/src/harnesses/assert-action-report.mjs "$path" --require-wcag=1.1.1
 
       - name: Keep the report when this fails
         if: failure()

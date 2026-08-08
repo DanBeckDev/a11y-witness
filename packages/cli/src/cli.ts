@@ -61,6 +61,11 @@ function defaultArgs(): Args {
     after: parsedAfterRun(),
     json: false,
     debug: false,
+    // OFF here, ON in the GitHub Action, and the asymmetry is deliberate. `--probe-forms` ACTIVATES
+    // controls: a submit-like button, or one your task names. A workflow runs against your own
+    // application, where submitting is the intended act and an unannounced error is only reachable by
+    // submitting. This CLI can be aimed at any URL on the internet, and pressing *Book* or *Send* on
+    // somebody else's production site is not a review. So the risky default follows who owns the page.
     probeForms: false,
     axe: process.env.A11Y_AXE !== "0",
     axeResults: process.env.A11Y_AXE_RESULTS ?? null,
