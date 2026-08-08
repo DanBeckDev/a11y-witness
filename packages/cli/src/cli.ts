@@ -25,9 +25,10 @@ import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fleet";
 import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
-import { conformanceScope, sweepOutcomes, type ConformanceRequirement }
+import { conformanceScope, sweepOutcomes, truncatedSweeps, type ConformanceRequirement }
   from "@a11y-witness/evidence/conformance";
 import { assessedCriteria } from "@a11y-witness/judge/coverage";
+import { criterionOutcomes, type CriterionOutcome } from "@a11y-witness/judge/outcomes";
 
 interface Args {
   url: string;
@@ -304,11 +305,22 @@ async function runWitness({ url, task, worker, json, debug, probeForms, axe: wan
   });
 
   const conformance = conformanceFor(cap, ruleFindings);
-  if (json) printJson({ url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance });
-  else {
+  // Per-criterion ACT outcomes. `truncatedSweeps` is what turns Conformance Requirement 2 into something
+  // per-criterion: a link sweep that stopped at its cap makes 2.4.4 `cantTell`, not `passed`.
+  const outcomes = criterionOutcomes({
+    capture: cap,
+    findings: verdict.findings,
+    abstained: verdict.abstained === true,
+    truncatedSweeps: truncatedSweeps(sweepOutcomes(cap.diagnostics ?? [])),
+  });
+  if (json) {
+    printJson({
+      url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
+    });
+  } else {
     printReport({
       url, task, screenReader: cap.screenReader, announcements: cap.transcript.length,
-      verdict, axe: ruleFindings, conformance,
+      verdict, axe: ruleFindings, conformance, outcomes,
     });
   }
 }
@@ -347,10 +359,10 @@ function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): Conform
  * and the local judge's evidence guard, given exactly that, suppressed a correct 4.1.2 finding scored at 0.993.
  */
 function printJson(
-  { url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance }: {
+  { url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes }: {
     url: string; task: string; cap: CaptureResponse; verdict: Report["verdict"];
     ruleFindings: AxeFinding[] | null; captureVerified: boolean; unverifiedReason?: CaptureDoubt;
-    conformance: ConformanceRequirement[];
+    conformance: ConformanceRequirement[]; outcomes: CriterionOutcome[];
   },
 ): void {
   const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
@@ -369,6 +381,10 @@ function printJson(
     // whether to fail a build needs the limits as much as a human does — and a consumer that sees only
     // `findings: []` is the reader most likely to conclude the page is fine.
     conformance,
+    // Per-criterion ACT outcomes: failed / cantTell / passed / inapplicable / untested. This matters most
+    // in the MACHINE-readable output, because a CI job reading `findings: []` has no other way to tell
+    // "clean" from "we could not check it" — and it will fail or pass a build on that difference.
+    outcomes,
   }, null, 2));
 }
 

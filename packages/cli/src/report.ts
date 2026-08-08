@@ -14,6 +14,7 @@ import { taskVerdictLabel } from "@a11y-witness/judge";
 import type { AxeFinding } from "./scan/axe.js";
 import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11y-witness/judge/layers";
 import type { ConformanceRequirement } from "@a11y-witness/evidence/conformance";
+import { outcomeTally, type CriterionOutcome } from "@a11y-witness/judge/outcomes";
 
 /** How much offending markup to quote as evidence. Enough to recognise the element, not the page. */
 const EVIDENCE_CHARS = 100;
@@ -33,6 +34,11 @@ export interface Report {
    * missing limit is exactly what makes a findings list read as a clean bill of health.
    */
   conformance?: ConformanceRequirement[];
+  /**
+   * Per-criterion ACT outcomes. Optional so an older caller still renders, but its absence is stated
+   * rather than skipped — see `outcomesSection`.
+   */
+  outcomes?: CriterionOutcome[];
 }
 
 /**
@@ -90,6 +96,35 @@ function conformanceSection(requirements: ConformanceRequirement[] | undefined):
   return lines;
 }
 
+/**
+ * Per-criterion outcomes in the W3C ACT vocabulary.
+ *
+ * The reason this is worth printing next to the findings: a findings list answers "what is wrong", and
+ * says nothing about the difference between checked-and-fine, nothing-of-that-kind-here, could-not-
+ * determine, and never-evaluated. Four states, previously all rendered as the absence of a line.
+ *
+ * `passed` criteria are counted but not listed — the tally carries them, and listing 8 passes invites
+ * exactly the "so the page is fine" reading the rest of this section exists to prevent. Everything that
+ * is NOT a pass is named, because those are the ones a reader has to act on or account for.
+ */
+function outcomesSection(outcomes: CriterionOutcome[] | undefined): string[] {
+  if (!outcomes?.length) {
+    return ["-- Per-criterion outcomes (W3C ACT) --",
+      "  NOT REPORTED for this run, so an absence of findings below distinguishes nothing."];
+  }
+  const tally = outcomeTally(outcomes);
+  const lines = [
+    "-- Per-criterion outcomes (W3C ACT vocabulary) --",
+    `  failed ${tally.failed}   cantTell ${tally.cantTell}   passed ${tally.passed}   `
+      + `inapplicable ${tally.inapplicable}   untested ${tally.untested}`,
+    "  (cantTell = we could not determine it. untested = no assessor of ours covers it. Neither is clean.)",
+  ];
+  for (const outcome of outcomes.filter((o) => o.outcome === "failed" || o.outcome === "cantTell")) {
+    lines.push(`    [${outcome.outcome}] ${outcome.criterion} — ${outcome.reason}`);
+  }
+  return lines;
+}
+
 function findingsSection(verdict: Judgment, screenReader: string, announcements: number): string[] {
   const lines = [
     // Names what actually assessed the page rather than claiming "AI judge". The shipped default is
@@ -119,7 +154,7 @@ function findingsSection(verdict: Judgment, screenReader: string, announcements:
 
 /** The whole report, ready to print. */
 export function reportLines(
-  { url, task, screenReader, announcements, verdict, axe, conformance }: Report,
+  { url, task, screenReader, announcements, verdict, axe, conformance, outcomes }: Report,
 ): string[] {
   return [
     "",
@@ -131,6 +166,8 @@ export function reportLines(
     ...axeSection(axe),
     "",
     ...findingsSection(verdict, screenReader, announcements),
+    "",
+    ...outcomesSection(outcomes),
     "",
     ...conformanceSection(conformance),
     "",

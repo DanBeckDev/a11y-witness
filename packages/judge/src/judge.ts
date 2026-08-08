@@ -95,6 +95,17 @@ export interface Judgment {
   summary: string;
   findings: Finding[];
   confidence: number;
+  /**
+   * True when the trained scorer DECLINED to score this capture, because the page is unlike anything it
+   * was validated on. Nothing was scored, so an empty `findings` here means "undetermined", not "clean".
+   *
+   * A flag rather than something a caller infers from `summary` or from `confidence: 0`. This repo already
+   * learned that lesson once with recovery keyed on error-message text: reword the sentence and every
+   * consumer silently starts reporting an unassessed page as a passing one, while the tests keep passing
+   * because the string they assert on lives in the test file. Optional so the LLM backends, which have no
+   * support region and never abstain, simply omit it.
+   */
+  abstained?: boolean;
 }
 
 interface Candidate {
