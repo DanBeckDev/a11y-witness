@@ -483,6 +483,18 @@ Three defects in this file share one shape, and it is worth naming so the next o
 | guidepup 0.31 throws on `start()` of a live NVDA | `startScreenReader`'s catch, which adopts it | `ensureSpeechChannel`'s restart, which called `startFreshWithRetry` directly |
 | speech must be settled before a delta baseline is read | `waitForAnnouncement`, at the END of the delta | the START — late speech credited to the activation |
 
+A fourth has the same shape read from one step further back: the remedy was reachable from the right path
+and **its trigger was never set**. `refreshBrowseBuffer` rebuilds NVDA's browse-mode buffer after a reused
+window is re-pointed — the buffer belongs to the WINDOW, so navigation alone does not rebuild it — and it
+guards on `navigatedExistingWindow`, which nothing ever assigned `true`. So it returned early on every
+capture ever taken. Then three `capture:check` runs passed and it would have been natural to call the fix
+confirmed, by results it had no part in producing.
+
+**Confirm a capture-path change by its diagnostic MARK, not by a green result and not by a matching
+`/health.code`.** Both were present while the remedy was inert. `refreshBrowseBuffer` now marks
+`browseBufferFresh` when it skips, so "did not need to refresh" and "never ran" can never again be the same
+silence — the same rule as *unchecked is not clean*, applied to a remedy rather than to evidence.
+
 Each remedy was correct, commented, and reachable from only one of the paths that needed it. In two of
 the three cases the comment at the working call site **already described the behaviour**, so the knowledge
 was present and the coverage was not.
@@ -1006,6 +1018,13 @@ Verification is layered; pick the layers your change touches:
   `packages/lab/scripts/bench-capture.mjs` too if you touched timing. The VM capture is its test; the book's rule is
   "refactor under test".
 - **Count-based checks cannot see content rot — assert what was heard, not how much.** capture-check now gates on probe *values* (`disclosure-good` must reach `expanded`, `disclosure-bad` must stay `collapsed`) and on the read-through still carrying roles, because both lessons were learned the hard way. A readiness gate once overwrote the first line of every page with the document title, deleting the h1's `"heading, level 1, ..."` announcement everywhere: `"heading, level N"` phrases fell from 105 to 15 across 90 captures and **every check stayed green**, because the phrase count had not moved. If you change capture, compare evidence quality against a previous run, not just line counts.
+- `npm run identity:rate -- --worker=<url> [--rounds=20]` — **does a capture ever read the wrong page?**
+  Rotates three pages with mutually exclusive signatures so a stale read names which page it came from, and
+  every capture after the first navigates an already-open window, because a freshly launched browser has no
+  previous document and therefore cannot express the fault. Reports wrong-page, silent and unrecognised
+  separately — collapsing the first two is what sent an afternoon after a stale buffer that was really a mute
+  screen reader. Exits 1 on any wrong page. A zero count is printed as a 95% upper bound (rule of three), not
+  as proof of absence.
 - `npm run evidence:check <worker>` — after ANY change to the capture pipeline, asks whether the
   evidence moved rather than whether the timing did. Exit 0 = ship without invalidating the cache,
   1 = evidence CHANGED, bump `CAPTURE_PROTOCOL_VERSION` and recapture. This is what makes a capture
