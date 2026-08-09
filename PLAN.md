@@ -178,6 +178,60 @@ that name.
 
 ---
 
+## `evidence:check` said CHANGED after the capture fix — the triage, so nobody redoes it
+
+Exit 1 on 48 sampled pairs: 43 same, 2 drift, 3 changed. **None of the three was caused by the fix.** Two
+were the CACHE carrying artefacts already diagnosed and fixed, and one is a screen-reader token this codebase
+already treats as unstable.
+
+| changed | cached → fresh | what it was |
+|---|---|---|
+| `icon-button-unnamed.bad` | `"￼, button"` → `"button"` | **U+FFFC**, Edge autofill |
+| `icon-button-unnamed.good` | `"o, button"` → `"open account search, button"` | **focus-mode key echo** |
+| `image-missing-alt.bad` | `"graphic"` → `"unlabeled graphic"` | an unstable NVDA token |
+
+**The first two: measured before acting.** A scan of all 2,122 cached captures found 4 with U+FFFC, 1 with a
+one-or-two-character control name, and 0 with the doubled quick-nav signature. Five files, so a full
+four-hour recapture would have been the wrong response to a 0.2% residue. They were quarantined under
+`captures/contaminated-20260809/` and recaptured — 6 captures, 0 failed, each pair from the same worker. The
+hand scan is now `verify.corpus.test.ts`, which was verified failing against the corpus that carried them.
+
+Two of the five had the artefact on **one variant only**, which is the shape that matters: an accessible form
+focuses the field it rejected, so only the conformant half echoes — the contaminant then correlates with the
+property under test and is available to the scorer as a shortcut feature.
+
+**The third needs no action, and the reason is already in the code.** `rules.ts` records that `"unlabeled"` is
+the UNSTABLE token — it was missing 1.1.1 on a third of captures of an image with no alt text — so the rule
+keys on the STABLE hint (`"To get missing image descriptions, open the context menu."`) which both versions
+carry. Worth knowing that the corpus is internally consistent here: 214 of 2,122 graphic-bearing captures use
+the bare form and **0** use `"unlabeled graphic"`, because the corpus was captured on a different guest
+(`192.168.64.6`) from the one that produced the fresh comparison (`.4`).
+
+**Conclusion: the capture fix is evidence-neutral. No `CAPTURE_PROTOCOL_VERSION` bump, no recapture.** That
+is what `evidence:check` exists to establish — the cache key is a proxy, the field-by-field diff is the direct
+measurement — and it is also a reminder that a CHANGED verdict is the start of a triage, not a verdict on the
+change under test.
+
+**Re-run after the recapture: 48 compared, 46 same, 1 drift, 1 changed** — down from 43/2/3, with the one
+remaining change being the unstable `"unlabeled graphic"` token above.
+
+### The one thing this uncovered that is still open: the fleet-consistency guard is inert
+
+Two guests appear to announce an unnamed graphic differently — `.6` (which captured the corpus) says
+`"graphic"`, `.4` (which produced the fresh comparison) says `"unlabeled graphic"` — and **they share a cache
+key**, so nothing prevents their evidence from blending. The key covers NVDA and Edge versions, the Windows
+build, the architecture and `provisionRevision`, and the last of those reads **`"unstamped"`** on these
+guests, exactly as `CLAUDE.md` warns for guests created before the stamp existed. A guard whose
+discriminating field is a constant is not a guard.
+
+It is **not** a live production defect: `rules.ts` already keys 1.1.1 on the stable hint rather than the
+`"unlabeled"` token, for this precise reason, and the corpus is internally consistent (214 bare, 0
+`"unlabeled"`). But it means the fleet cannot currently prove its guests are interchangeable, and the remedy
+is the one already documented — **re-provision the pool together** so both stamp a real revision, rather than
+one at a time, which would let two differently prepared guests share an `"unstamped"` key. Not attempted here:
+`a11y-worker-3` was in a running-but-not-answering state (a real fault by `worker:ctl`'s own reckoning) and was
+stopped, so a two-guest comparison could not be made.
+
 ## Risks we are choosing to accept, and must therefore state
 
 These are not blockers. They ARE things a reader must be told, and every one is already written into
