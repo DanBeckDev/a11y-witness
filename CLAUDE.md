@@ -48,7 +48,7 @@ npm run worker:deploy -- --vm=a11y-worker-2
 npm run worker:code                       # each worker's /health.code vs this checkout
 ```
 
-It pushes **every hashed file** (13 now, defined once in `packages/lab/src/capture/nvda/worker-files.mjs` — the
+It pushes **every hashed file** (13 now, defined once in `packages/nvda-worker/src/worker-files.mjs` — the
 list used to be duplicated in `server.mjs` and `check-worker-code.mjs` with a third derived by regex in the
 deploy script), reboots each guest — mandatory, because
 `utmctl exec` cannot be trusted to restart the worker — and verifies `/health.code` over HTTP, which
@@ -361,7 +361,7 @@ NVDA and Edge versions, **the Windows build and architecture**, the provisioning
   revision changes every key it produces and invalidates its cache — the behaviour you want, and
   unit-tested. Re-provision the pool together rather than one at a time so two differently prepared
   guests cannot silently share an `"unstamped"` key.
-- **Bump `CAPTURE_PROTOCOL_VERSION`** (`packages/lab/src/capture/nvda/capture-core.mjs`) when a change alters what
+- **Bump `CAPTURE_PROTOCOL_VERSION`** (`packages/nvda-worker/src/capture-core.mjs`) when a change alters what
   the evidence *means* — a new field a signal reads, a probe that announces differently. It forces a
   full recapture; that is the point. Do **not** reach for it on a refactor.
 - The worker's code hash is deliberately **not** in the key. It changes when a comment changes, and
@@ -987,7 +987,7 @@ Verification is layered; pick the layers your change touches:
   `packages/lab/src/capture/**`, so it does **not** fire for changes under `packages/lab/src/training/**` — which is exactly
   where the guard bug above lived.
 - `npm run eval [-- <substring>]` — judge quality against 34 labelled fixtures, **against our own scorer** (`JUDGE_BACKEND` defaults to `local`). Needs the Python venv, so it **cannot run in CI**; run it when you touch the judge, prompts, criteria, or fixtures. Do **not** quote its numbers as a headline: `docs/METHODOLOGY.md` records that the guards were tuned against these cases, scoring is single-run, and there is no expert baseline yet. Report with those caveats or not at all.
-- **`packages/lab/src/capture/nvda/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test.
+- **`packages/nvda-worker/src/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test.
   After changing it, deploy (above) and then:
 
   ```bash

@@ -98,7 +98,7 @@ opt-in per capture. **[`docs/screenreader-coverage.md`](./docs/screenreader-cove
 map of what we drive and what we do not** — a behaviour missing from that table is not a missing
 feature, it is a claim this project cannot yet make.
 
-- **Capture worker** (Windows): drives **NVDA** via [Guidepup](https://github.com/guidepup/guidepup) through real navigation and returns the announcement transcript over HTTP. Speech is read over NVDA's Remote Access channel, not audio, so the machine needs no sound device. See [`packages/lab/src/capture/nvda/`](./packages/lab/src/capture/nvda/).
+- **Capture worker** (Windows): drives **NVDA** via [Guidepup](https://github.com/guidepup/guidepup) through real navigation and returns the announcement transcript over HTTP. Speech is read over NVDA's Remote Access channel, not audio, so the machine needs no sound device. See [`packages/nvda-worker/src/`](./packages/nvda-worker/src/).
 - **Control plane** (anywhere): the `witness` CLI runs the capture and — if the optional axe layer is installed — axe-core concurrently, then judges the transcript and prints the report. Architecture rationale: [`docs/adr/0001-capture-architecture.md`](./docs/adr/0001-capture-architecture.md) and [`0002-layered-coverage.md`](./docs/adr/0002-layered-coverage.md).
 
 ### The judge is a hybrid
@@ -242,7 +242,7 @@ unit-tested, since a real screen reader on a real desktop is the thing under tes
 | `npm run lint` / `npm run typecheck` | mechanical; both gate CI |
 | `npm run eval` | judge quality against **34 labelled fixtures** — W3C tutorial pages and paired good/bad cases. Runs against our own scorer by default; needs the Python venv, so it cannot run in CI |
 | `npm run rules-check` | the deterministic rules in isolation. Exits non-zero on **any** false positive against a conformant page — precision is the entire point of a rule |
-| `node packages/lab/src/capture/nvda/capture-check.mjs` | the capture half, on the worker itself. Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
+| `node packages/nvda-worker/src/capture-check.mjs` | the capture half, on the worker itself. Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
 | `capture-regression.yml` | real NVDA on a GitHub-hosted Windows runner |
 
 **On the numbers.** The suite currently reports full recall on the observable failure cases with a small number of false positives, concentrated in the subjective link-purpose (2.4.4) and descriptive-heading (2.4.6) criteria. Treat that as *promising, not validated*, and read [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) before quoting it anywhere: the guards were iteratively tuned against these cases, scoring is single-run with no test-retest interval, and **there is no expert human-agreement baseline yet**. That document sets the bar for "trustworthy enough" *before* measuring against it, and lists what is still missing — deliberately, so the goalposts cannot move.

@@ -1,5 +1,14 @@
 # M0 — can a consumer install and run one package in isolation?
 
+> **Historical record, 2026-08.** This was the M0 throwaway spike that tested whether a consumer could
+> install and run one package in isolation. Its findings are now enforced automatically by
+> `npm run gate:isolation`, which runs in `release:gate` — so this file is the REASONING behind that gate
+> rather than a live task list.
+>
+> Paths below predate the multi-package migration (`scripts/score-screenreader-model.py` is now
+> `packages/scorer/python/score.py`, and the encoder fetcher is `packages/scorer/python/fetch-encoder.py`).
+> They are left as written, because rewriting a record of what was true then makes it a worse record.
+
 `PLAN.md`'s multi-package plan rests on one unproven claim: **that a consumer can install and run this code
 in isolation.** M0 is the throwaway spike that tests it before any file moves. It was expected to fail; the
 deliverable is the enumerated failure list below.

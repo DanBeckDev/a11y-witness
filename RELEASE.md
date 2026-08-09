@@ -27,7 +27,7 @@ deferred; every other stage above was run individually.
 The judge runs on **our own trained scorer** (`judge-backend: local`) — 27 KB of heads over an 87 MB
 encoder. No LLM, no API key, nothing leaves the runner.
 
-> **Corrected 5 Aug.** The figures above were first recorded while `scripts/score-screenreader-model.py`
+> **Corrected 5 Aug.** The figures above were first recorded while `packages/scorer/python/score.py`
 > — the program that *is* this backend — had never been committed. It existed only in one working tree,
 > so a fresh clone could not run its own default judge, and the numbers were produced by a file no
 > consumer received. `npm pack` includes untracked files, which is why installing it appeared to work.
@@ -125,6 +125,12 @@ findings.
 
 ## Deferred, with the reason
 
+- **Where a corpus snapshot lives long-term.** `npm run corpus:snapshot` writes a timestamped archive of
+  `runs/`, which is gitignored and represents hours of worker time. It deliberately does NOT sync anywhere:
+  a snapshot on the same disk protects against `rm -rf runs/` and a bad recapture, not against losing the
+  machine, and a repo that silently uploaded a user's captures somewhere would be making that decision for
+  them. Syncing it is an operator choice.
+
 Not bugs being hidden — work consciously not done before shipping.
 
 | item | why deferred |
@@ -162,7 +168,7 @@ those 418 contributed transcripts from larger pages than the corpus now generate
 
 ## The red CI job is FIXED
 
-`.github/workflows/lint.yml` used to fail on 6 files under `packages/lab/src/capture/nvda/`, and the cause was one line:
+`.github/workflows/lint.yml` used to fail on 6 files under `packages/nvda-worker/src/`, and the cause was one line:
 
 ```
 Error: No available supported screen readers

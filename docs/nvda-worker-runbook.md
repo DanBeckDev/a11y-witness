@@ -143,7 +143,7 @@ curl -X POST http://<worker>:8765/capture -H 'content-type: application/json' \
 # 3. full capture regression (6 real captures, ~5 min).
 #    MUST run in the console session -- via a scheduled task, not bare SSH.
 #    There is now a task and a launcher for exactly this; see below.
-node packages/lab/src/capture/nvda/capture-check.mjs
+node packages/nvda-worker/src/capture-check.mjs
 ```
 
 ### Running the gate for real
