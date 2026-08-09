@@ -436,6 +436,32 @@ cost ~184s each to recover; the read now stops after
   (`postSubmitFields` discriminates), so the evidence is nearly there; the signal just needs the error,
   not the instruction. Needs the VM and a timing look, which is why it is not a signal tweak.
 
+### Corrected 2026-08-09: `a11y-worker-3` was never broken — the DEPLOY was
+
+The backlog said rebuild that guest, after `worker:deploy` reported it "NOT ready after 180s". Timed from
+a cold start: **it answers `/health` with `ready:true` in 33 seconds.** Nothing was wrong with it.
+
+The cause is in `deploy-worker.mjs`, and it cascades. `deployTo` restored a VM's original state only on the
+SUCCESS path — the `if (!back?.ip) throw` came first — so a guest whose health check failed was left
+RUNNING, and the loop then started the next VM on top of it. `doctor` reports this host as having room for
+one worker of two, so the second was guaranteed to time out and be printed as "stale or failed", which
+reads as a broken guest.
+
+A second route to the same overlap: `ctl stop` returns before the guest has released its memory. One VM
+was observed sitting in `stopping` for over half an hour.
+
+Both fixed — restore moved into a `finally`, and a bounded `waitUntilSettled` between VMs. Demonstrated on
+a real pool deploy immediately afterwards: the wait fired and said so out loud
+(`note: a11y-worker is still stopping; continuing anyway`), and `a11y-worker-3` then deployed and verified
+cleanly. Under the old code the healthy guest would have been starved and blamed.
+
+- [ ] **`a11y-worker` is wedged in UTM's `stopping` state and needs a human.** `utmctl` refuses both start
+  and stop with OSStatus -2700 ("The virtual machine is not running" while listing it as `stopping`), so
+  UTM's bookkeeping is stale rather than the guest being busy. Quitting UTM to reset it returned
+  `User cancelled (-128)`, which usually means a dialog is waiting for a click. NOT forced: this file
+  records that a dirty Windows guest cost an afternoon once, and the fleet is functional on
+  `a11y-worker-3` meanwhile. `doctor` reports READY.
+
 ### Found 2026-08-08 (night): NVDA read the PREVIOUS page's content while reporting the new page's title
 
 Found while A/B-testing the capture budget, not while looking for it. A capture of
