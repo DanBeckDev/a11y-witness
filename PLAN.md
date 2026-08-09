@@ -79,21 +79,61 @@ trusting a negative result.
 **Done looks like.** A mechanism, or a bound. The v3 scan in `docs/history-2026-08.md` is the shape to
 reuse.
 
-### B4. The error rate to defend, decided
+**Progress, 2026-08-09 — a mechanism found and remedied, but not yet a bound.**
 
-**Why it blocks.** The abstention floor (0.847) is **derived** from the training corpus's own
-nearest-neighbour minimum, not conformally calibrated, so no error-rate guarantee is claimed. The
-calibration data now exists (ADR 0010, 26 pages captured). What is missing is a decision: what error rate
-among accepted predictions are we willing to defend?
+NVDA's virtual buffer belongs to the *window*, not to the navigation. Browser reuse re-points an existing
+window over the DevTools Protocol, which does **not** rebuild that buffer — so the buffer can still hold the
+previous page while `document.title` is already the new one. That is exactly the reported signature: correct
+title, previous page's content. `refreshBrowseBuffer` now issues NVDA+F5 (`refreshBrowseDocument`) on the
+reuse path only, and absorbs the re-announcement so it cannot be miscounted as read-through movement.
 
-That number sets how much the tool reports versus declines. It is a product and legal judgement, not a
-technical one, and picking it to make a metric look better is the mistake this project refuses everywhere
-else.
+Two things about this are worth more than the fix:
 
-**Done looks like.** A stated error rate, a threshold fitted to it on the calibration split, and
-`RELEASE.md` saying what guarantee that does and does not buy.
+- **The remedy shipped dead the first time.** The guard read a flag that nothing ever set to `true`, so it
+  returned early on every capture. Three `capture:check` runs then passed, and it would have been natural to
+  credit the fix — while it had never once executed. What found it was asking for the *diagnostic mark*
+  rather than the green result. The function now marks `browseBufferFresh` when it skips, so "did not need to
+  refresh" and "never ran" can never again be the same silence.
+- **A deploy reported success without landing the file.** `worker:deploy` printed a matching `/health.code`
+  while the guest was still running the previous `capture-core.mjs`; the following deploy went `1/2` with the
+  second guest stale. So a hash match is necessary and not sufficient — confirm behaviour through a mark.
 
-**Whose call.** Yours.
+Still open: 2 reused-window captures of the page that failed and 40/40 `capture:check` on a quiet host is
+**not a rate**. The one identity failure seen this session was on a host saturated by a concurrent retrain,
+and presented as an *empty* read rather than a wrong page — which the harness used to report as "read the
+wrong content" for both. It now names which. B2 wants a number; nobody has measured one yet.
+
+### B4. ~~The error rate to defend, decided~~ — ANSWERED BY MEASUREMENT, 2026-08-09
+
+**This was going to be your judgement call. It is not one any more: the data answers it, and the answer is
+do not lower the floor.**
+
+`node packages/lab/scripts/calibrate-abstention.mjs` sweeps candidate floors over the 7 calibration pages
+and reports what each one costs. Measured:
+
+| floor | pages scored | conformant scored | FALSE POSITIVES | inaccessible caught |
+|---|---|---|---|---|
+| **0.847 (shipped)** | 0 | 0 | **0** | 0 of 0 |
+| 0.75 | 1 | 1 | **1** | 0 of 0 |
+| 0.70 | 4 | 4 | **3** | 0 of 0 |
+| 0.55 | 7 | 4 | **3** | **0 of 3** |
+| 0 (accept everything) | 7 | 4 | **3** | **0 of 3** |
+
+Read the bottom row. Accepting every real page would have the scorer accuse **3 of 4 pages W3C publishes as
+conformant** of 4.1.2 failures, while catching **0 of the 3** it publishes as inaccessible. Our own
+deterministic rules find nothing on those conformant pages, so "false positive" is the right label.
+
+On real pages this model is not merely uncertain — its output is **anti-correlated with the truth**: findings
+where there are none, silence where there are real failures. Abstention is not conservatism here, it is the
+only defensible behaviour, and the shipped floor of 0.847 is doing exactly the job it was added for.
+
+**What this changes.** The realism tier stops being desirable polish and becomes the fix for a specific
+measured defect. And no error rate needs choosing until a model exists whose accepted predictions are worth
+having — asking "what error rate do we accept?" of this one is the wrong question.
+
+**Honest bound on the analysis.** Seven calibration pages support an error-rate granularity of about 1/(n+1)
+≈ 12.5% and nothing finer, so this is not a conformal calibration; it is the measurement a conformal
+calibration would need. The script says so in its own output.
 
 ### B5. The name, and publishing
 
@@ -112,7 +152,24 @@ These are not blockers. They ARE things a reader must be told, and every one is 
 
 - **Six criteria on a real page.** The trained scorer abstains on pages unlike its training data, so on
   real sites the deterministic rules are what find things. Widening this needs a realism tier trained on
-  real-page structure; 19 training pages is a start, not a tier.
+  real-page structure, and **19 pages has now been measured rather than assumed: it is not enough.**
+
+  `build-realism-tier.mjs` adds the 19 training-role real pages as `clean` records (W3C's own published
+  claim, never our label) and `A11Y_SCORER_MODEL=/tmp/realism-model calibrate-abstention.mjs` measures the
+  retrain against the 7 held-out calibration pages. Result:
+
+  | | shipped | + realism tier |
+  |---|---|---|
+  | false positives on conformant real pages (floor 0) | 3 of 4 | **2 of 4** |
+  | inaccessible real pages caught | 0 of 3 | **0 of 3** |
+  | nearest-neighbour cosines | — | **identical, to 4 dp** |
+  | 4.1.2 on the generated corpus | 10 FP / 2 FN | **11 FP** / 2 FN |
+
+  So it removes one accusation, catches nothing new, does not move the novelty distribution at all, and is
+  slightly worse on the corpus. At the shipped floor of 0.847 neither model scores any real page, so it would
+  change nothing a user sees while costing a weights commit and an artifact-contract bump. **Not shipped, on
+  purpose** — the measurement is the deliverable, and it says a tier needs materially more than 19 pages
+  before it can pay for itself.
 - **The gap is unfavourably shaped.** Pages published as inaccessible sit FURTHER from the training
   distribution (~0.59) than conformant ones (~0.73). The scorer is least at home where a finding matters
   most.
