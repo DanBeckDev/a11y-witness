@@ -526,8 +526,10 @@ def bag_gather(offsets: list[int]) -> tuple[Any, Any]:
     """
     import numpy as np
 
-    # Numpy, unconditionally: these are INDICES, not values, so nothing here ever needs a gradient. Torch
-    # indexes happily with a numpy array, so the trainer is unaffected and there is still one implementation.
+    # Numpy, unconditionally: these are INDICES, not values, so nothing here ever needs a gradient, and
+    # inference must stay torch-free. Torch indexes happily with a numpy array, but `masked_fill` requires
+    # a real Tensor mask -- so the TRAINER converts both at its own boundary (`bag_gather_tensors`), the
+    # same way it converts the feature matrix. Do not convert here; that would import torch into inference.
     sizes = [end - start for start, end in zip(offsets[:-1], offsets[1:])]
     widest = max(sizes) if sizes else 1
     gather = np.zeros((len(sizes), widest), dtype=np.int64)
