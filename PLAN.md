@@ -523,7 +523,32 @@ Note also that the original occurrence followed a `capture:check` RUN — many c
 page server, with the page server then stopped — not a simple alternation between two public pages. That
 context may be load-bearing and the next attempt should reproduce it.
 
-- [ ] **Diagnose the stale virtual buffer after a sequence of captures.** Mechanism still NOT established
+**Second attempt 2026-08-09, NOT REPRODUCED over 25 consecutive page transitions — and the detector was
+wrong twice before it was right.** The real-page corpus capture (ADR 0010) is a 26-capture sequence against
+live pages, which is a far better test than a bespoke two-page alternation, so it was scanned for the fault
+rather than a new experiment being written.
+
+Result: **0 whole-transcript staleness, 0 degenerate reads, over 25 consecutive transitions.** Every page
+produced a distinct transcript, its own title, and a sensible stop reason.
+
+The detector needed two corrections, and both are the same lesson:
+
+- v1 checked each transcript for a phrase from the page it requested — it measured the REGEX, not the bug,
+  and reported `after/home` as WRONG PAGE three times when the transcript was correct.
+- v2 compared the FIRST LINE of consecutive captures and reported 4 of 6 stale. All false: every page of the
+  W3C BAD demo opens with the same skip link because they share a site template, and a shared header is not
+  a stale buffer. The phrase counts (103 / 58 / 64) and distinct titles disproved it immediately.
+- v3 compares the WHOLE transcript and separately flags a degenerate one-phrase read, which are the two
+  signatures the real occurrence actually had. **Proven to fire** on a constructed fault fixture before the
+  negative result was accepted — otherwise "0 stale" means nothing.
+
+So the fault remains real (it was observed once, with the correct title and the previous page's content) and
+rare enough not to appear in 25 transitions. It is no longer blocking: `capture:check`'s identity guard
+catches it, the CLI's `captureMentionsTitle` marks such a capture unverified, and the v3 scan can be pointed
+at any capture directory to check a sequence retrospectively.
+
+- [ ] **Diagnose the stale virtual buffer after a sequence of captures.** LOW priority now — not reproduced
+  in 25 transitions. Mechanism still NOT established
   — do not guess. Candidates: browser reuse navigating the window while NVDA's virtual buffer keeps the old
   document; `anchorToTop` moving within the stale buffer; or Edge being quit and relaunched underneath a
   live NVDA. `A11Y_REUSE_BROWSER=0` is the obvious first experiment because it isolates reuse, and reuse is
