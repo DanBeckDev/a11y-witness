@@ -20,6 +20,10 @@
     "./conformance": {
       "types": "./dist/conformance.d.ts",
       "default": "./dist/conformance.js"
+    },
+    "./earl": {
+      "types": "./dist/earl.d.ts",
+      "default": "./dist/earl.js"
     }
   },
   "files": [

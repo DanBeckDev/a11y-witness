@@ -28,6 +28,7 @@ import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
 import { conformanceScope, sweepOutcomes, truncatedSweeps, type ConformanceRequirement }
   from "@a11y-witness/evidence/conformance";
 import { assessedCriteria } from "@a11y-witness/judge/coverage";
+import { earlReport } from "@a11y-witness/evidence/earl";
 import { criterionOutcomes, type CriterionOutcome } from "@a11y-witness/judge/outcomes";
 
 interface Args {
@@ -397,6 +398,20 @@ function printJson(
     // in the MACHINE-readable output, because a CI job reading `findings: []` has no other way to tell
     // "clean" from "we could not check it" — and it will fail or pass a build on that difference.
     outcomes,
+    // The same outcomes as EARL, the W3C's vendor-neutral vocabulary for test results, so a team already
+    // aggregating axe or Lighthouse can merge these without writing a parser for our shape. Emitted
+    // always rather than behind a flag, because an export nobody can reach is the defect this session
+    // already found twice: `probeFocus` and `focusOrder` were both exactly that.
+    earl: earlReport({
+      url,
+      date: new Date().toISOString(),
+      environment: [
+        cap.environment?.screenReader, cap.environment?.screenReaderVersion,
+        cap.environment?.browser, cap.environment?.browserVersion,
+      ].filter(Boolean).join(" "),
+      toolVersion: process.env.npm_package_version ?? "0.1.0",
+      outcomes,
+    }),
   }, null, 2));
 }
 

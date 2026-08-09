@@ -455,8 +455,29 @@ same URL after a reboot: 41 phrases. Restored the change, redeployed, captured a
 byte the same first phrase. The earlier failure needed the preceding SEQUENCE of captures to reproduce, and
 the first A/B was confounded because a deploy reboots the guest and therefore hands you a fresh Edge.
 
-- [ ] **Diagnose the stale virtual buffer after a sequence of captures.** Mechanism NOT established — do
-  not guess. Candidates: browser reuse navigating the window while NVDA's virtual buffer keeps the old
+**Attempted 2026-08-09, INCONCLUSIVE — and the first experiment was wrong.** `reuseBrowser` is now a
+per-request capture option (mirroring `reuseScreenReader`), so reuse can be isolated without editing the
+guest's scheduled task. Result with reuse ON: **6 alternating captures across two pages, 0 stale, 0
+errors** — the bug did not reproduce. The reuse-OFF arm did not complete; a fresh browser per capture is
+far heavier on this guest and the requests began failing.
+
+Two things worth keeping from the attempt:
+
+- **The first experiment measured its own regex, not the bug.** It checked each transcript for a phrase
+  from the page it requested, and reported `after/home` as WRONG PAGE three times. The transcript was
+  correct — "same page, link, Skip to accessible demo page" IS that page's first line — but the words
+  "CityLights" do not appear within 12 read steps. A check that cannot express the fault is worthless,
+  which this repo already knew and I re-learned.
+- **The corrected design needs no page knowledge.** Staleness is THIS capture reading what the PREVIOUS
+  one read while the URLs differ, so comparing consecutive captures detects exactly that and nothing else.
+  The script is the shape to reuse.
+
+Note also that the original occurrence followed a `capture:check` RUN — many captures through the local
+page server, with the page server then stopped — not a simple alternation between two public pages. That
+context may be load-bearing and the next attempt should reproduce it.
+
+- [ ] **Diagnose the stale virtual buffer after a sequence of captures.** Mechanism still NOT established
+  — do not guess. Candidates: browser reuse navigating the window while NVDA's virtual buffer keeps the old
   document; `anchorToTop` moving within the stale buffer; or Edge being quit and relaunched underneath a
   live NVDA. `A11Y_REUSE_BROWSER=0` is the obvious first experiment because it isolates reuse, and reuse is
   ON by default.
