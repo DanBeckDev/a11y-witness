@@ -16,8 +16,9 @@ are recorded.
 
 ## Where we actually are
 
-Verified at `2a85ad8`: 571 tests, lint and typecheck clean, `release:gate` passing end to end, CI green,
-the GitHub Action exercised as a consumer would use it. The infrastructure is in good shape.
+Verified at `be9ea07`: 579 tests, lint and typecheck clean, `release:gate` passing end to end, CI green,
+`capture:check` 40/40 against a real worker, and the GitHub Action exercised as a consumer would use it. The
+infrastructure is in good shape.
 
 The honest shape of the product today:
 
@@ -26,6 +27,8 @@ The honest shape of the product today:
 | criteria assessed **on a real page** | **6** of WCAG 2.2's 55 A/AA — 1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.4, 4.1.2 |
 | criteria the trained scorer covers | 8, but it **abstains on most real pages** (0 of 7 calibration pages in support) |
 | false positives on conformant pages | **0**, measured |
+| captures that read the **wrong page** | **0 of 54** on the path that can produce it — ceiling ≈5.6% |
+| capture reliability | 4 errors in 60 back-to-back captures, clustered at the end (speech-channel decay) |
 | people other than the author who have run it | **0** |
 
 That last row is the one that matters most, and no amount of green CI substitutes for it.
