@@ -30,7 +30,7 @@ that silently produces a permanently green check is the failure nobody notices, 
 what they expected.
 
 **No rented judge by default.** `judge-backend: local` uses the scorer trained on this project's own
-1,061-pair corpus. It covers **eight criteria** and is silent on everything else — narrower than an LLM,
+1,061-pair corpus. It scores **eight criteria** and is silent on everything else — narrower than an LLM,
 and measured at zero false positives across 1,034 conformant records. `anthropic` and `openai` remain
 available for broader, noisier coverage; the action refuses at once if you name one without a key or an
 endpoint, rather than discovering it after a 20-minute capture.

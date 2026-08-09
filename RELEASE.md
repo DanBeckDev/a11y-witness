@@ -73,6 +73,15 @@ findings.
 
 ## Known limitations, stated plainly
 
+- **On a real page, six criteria are actually assessed.** Ten in total can produce a finding, but four of
+  them (2.4.6, 3.3.1, 3.3.2, 4.1.3) come only from the trained scorer, which abstains on pages unlike its
+  training data — which today is most real pages. The six that always work are the deterministic rules:
+  **1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.4, 4.1.2**. Everything else comes back `cantTell` or `untested`, and
+  the report says which. Measured on the eval fixtures: `abstained 14 of 16 failure cases`.
+  - This is the single most important number for deciding whether the tool is worth running, and it had
+    never been stated in one place before. Six of WCAG 2.2's 55 A/AA criteria, plus whatever axe-core adds
+    for the visual layer.
+
 - **The trained scorer ABSTAINS on real pages, and says so rather than guessing.** Measured with a
   k-NN feature-space novelty score (Sun et al., ICML 2022): every training record sits at cosine
   **0.847–0.99** from its nearest neighbour, while **28 of 32** real eval fixtures sit at **0.50–0.84** —
@@ -86,16 +95,28 @@ findings.
     scorer abstains.
   - The abstention floor (0.847) is **derived** from the corpus's own nearest-neighbour minimum, not
     chosen — but it is **not conformally calibrated**, so no error-rate guarantee is claimed. The
-    defensible form calibrates against a stated error rate on a labelled real-page set, which does not
-    exist yet and is the same missing asset as ADR 0009's realism tier. One asset blocks three things.
+    defensible form calibrates against a stated error rate on a labelled real-page set.
+  - **That real-page set now EXISTS** (ADR 0010): 26 pages, 7 calibration and 19 training, every one from a
+    source that publishes its own conformance claim, captured and disjoint from the eval fixtures. Its first
+    measurement confirms the limitation above on fresh, independent pages — **0 of 7 calibration pages fall
+    inside support** (cosine 0.586–0.757 against the 0.847 floor). What is still missing is not data but a
+    DECISION: fitting a conformal threshold requires stating the error rate to defend, which sets how much
+    the tool reports versus declines and is a product judgement rather than a technical one.
+  - The gap is not uniform, and the shape is unfavourable: pages published as INACCESSIBLE sit further from
+    the training distribution (~0.59) than conformant ones (~0.73). The scorer is least at home exactly
+    where a finding would matter most.
 
   **The generator half of the fix has landed** (`6d5fcae`): the corpus now generates a median of 14 links and
   a maximum of 40, and a capture was measured reaching 25 of 25 links on a rescaled page. What remains is
   mechanical and expensive — recapture 848 pairs and retrain. Until that runs, the SHIPPED model is exactly
   as limited as this paragraph describes, because it is still the model trained on the old corpus.
-- **`task` does nothing on the defaults.** With `judge-backend: local` and `probe-forms: false` it is
-  carried through and consumed by nothing. It becomes load-bearing the moment you enable `probe-forms` (it
-  selects which control is activated) or switch backend. Documented in `docs/github-action.md`.
+- **`task` shapes the CAPTURE but never the verdict.** This entry used to say the task did nothing on the
+  defaults; that stopped being true when `probe-forms` began defaulting to **true** in the GitHub Action. On
+  a default Action run the task now selects which control gets activated, and therefore whether 3.3.1 and
+  4.1.3 evidence exists at all. It still does not affect the default `local` scorer's assessment — that
+  scorer never sees it — so the report deliberately makes no claim about whether your task was completable.
+  The CLI keeps `probe-forms` off, because it can be aimed at a page you do not own. See
+  `docs/github-action.md`.
 - **`taskCompletable` is a coarse proxy** — derived from "did anything score as a blocker", because this
   layer has no head for task completion.
 - **A page behind a consent wall is refused, not reported.** The screen reader is held inside the modal, so
