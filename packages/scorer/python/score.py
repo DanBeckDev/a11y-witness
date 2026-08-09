@@ -148,9 +148,12 @@ def json_metadata(value: str | None, name: str) -> Any:
 
 
 def verify_artifact(args: argparse.Namespace, training: Any) -> tuple[dict[str, Any], Any, dict[str, Any]]:
-    import torch
+    # numpy, not torch: safetensors ships a numpy loader, and inference has nothing to differentiate. The
+    # frozen encoder now runs under ONNX Runtime, so dropping this import is what actually removes a 400 MB
+    # torch wheel from the GitHub Action rather than merely making it smaller.
+    import numpy as np
     from safetensors import safe_open
-    from safetensors.torch import load_file
+    from safetensors.numpy import load_file
 
     model_root = args.model
     model_file = model_root / "model.safetensors"
@@ -172,7 +175,11 @@ def verify_artifact(args: argparse.Namespace, training: Any) -> tuple[dict[str, 
     if actual_encoder_hash != expected_encoder_hash:
         raise RuntimeError("encoder SHA-256 does not match the training report")
 
-    with safe_open(str(model_file), framework="pt", device="cpu") as handle:
+    # `framework="np"`, not "pt". This reads METADATA and key names only — no tensor is materialised — but
+    # "pt" makes safetensors import torch anyway, which was the last thing forcing a 400 MB wheel into the
+    # Action after the encoder moved to ONNX. Caught by running the scorer with torch made unimportable;
+    # every other check passed happily with it still installed.
+    with safe_open(str(model_file), framework="np") as handle:
         metadata = handle.metadata() or {}
         keys = set(handle.keys())
     expected_features = list(feature_pipeline.FEATURE_NAMES)
@@ -251,7 +258,7 @@ def verify_artifact(args: argparse.Namespace, training: Any) -> tuple[dict[str, 
         bias = weights[head + ".bias"]
         if tuple(weight.shape) != (rows, columns) or tuple(bias.shape) != (rows,):
             raise RuntimeError(f"head dimension mismatch for {head}")
-        if not torch.isfinite(weight).all() or not torch.isfinite(bias).all():
+        if not np.isfinite(weight).all() or not np.isfinite(bias).all():
             raise RuntimeError(f"non-finite weights for {head}")
     artifact = {
         "screenReader": SUPPORTED_SCREEN_READER,
@@ -280,7 +287,7 @@ def out_of_distribution_scores(records, report, weights, args, max_length):
     Absent reference (an older artifact) reports `inSupport: None` rather than True. Unknown must not
     read as safe.
     """
-    import torch
+    import numpy as np
 
     settings = report.get("outOfDistribution") or {}
     reference = weights.get(settings.get("reference", "ood_reference"))
@@ -290,7 +297,7 @@ def out_of_distribution_scores(records, report, weights, args, max_length):
                  "reason": "this artifact ships no out-of-distribution reference"} for _ in records]
     embedded, _ = feature_pipeline.encode_documents(records, args.encoder, max_length)
     vectors = embedded[:, : reference.shape[1]]
-    nearest = (vectors @ reference.t()).max(dim=1).values
+    nearest = (vectors @ reference.T).max(axis=1)
     return [
         {
             "nearestTrainingCosine": round(float(value), 4),
@@ -302,7 +309,7 @@ def out_of_distribution_scores(records, report, weights, args, max_length):
 
 
 def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights: Any, training: Any, args: argparse.Namespace) -> dict[str, Any]:
-    import torch
+    import numpy as np
 
     max_length = int(report["representation"]["maxLength"])
     features, _, _ = feature_pipeline.encode_records(records, args.encoder, max_length)
@@ -347,7 +354,7 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
             for subtype_report in criterion_report["subtypes"].values():
                 head = subtype_report["head"]
                 subtype_scores.append(head_scores[head][index])
-            score = float(torch.stack(subtype_scores).amax())
+            score = float(np.max(np.stack(subtype_scores)))
             scores[criterion] = score
             predictions[criterion] = score >= float(criterion_report["threshold"])
         provenance = record.get("provenance", {})

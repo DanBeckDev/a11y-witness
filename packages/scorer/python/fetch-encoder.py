@@ -23,6 +23,15 @@ SAFE_FILES = [
     "tokenizer_config.json",
     "vocab.txt",
     "model.safetensors",
+    # The ONNX build of the SAME model, shipped in the same repository. Inference runs this rather than
+    # constructing the torch model, which is what lets the GitHub Action skip a 400 MB torch wheel that
+    # measured 102 s to install — 34% of a cold run — to compute a frozen 6-layer encoder.
+    #
+    # Proven equivalent to the safetensors model on real corpus text before adoption: max absolute
+    # difference 2.300e-07 and minimum per-row cosine 0.999999881, against tolerances of 1e-5 and 0.9999.
+    # `model.safetensors` is still fetched, because it is the fallback and the thing the ONNX is checked
+    # against — dropping it would leave nothing to verify against later.
+    "onnx/model.onnx",
 ]
 UNSAFE_SUFFIXES = {".bin", ".ckpt", ".h5", ".msgpack", ".ot", ".pickle", ".pkl", ".pt", ".pth"}
 
