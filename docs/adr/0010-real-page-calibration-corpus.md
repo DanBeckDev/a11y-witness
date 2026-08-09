@@ -86,6 +86,43 @@ fetched by the guest, which the existing probes already do. ~30 s per capture on
 - Labelling is the cost. Capture is mechanical; deciding what each page fails is the work, which is
   precisely why the sources above were chosen — they have already decided.
 
+
+## Built 2026-08-09 — the corpus exists, and its first measurement confirms the premise
+
+`packages/lab/src/training/real-page-corpus.mjs` defines 26 pages (7 calibration, 19 training) and
+`capture-real-pages.mjs` captures them uncached. Roles are enforced by `real-page-corpus.test.ts`, which
+derives the TEST set by reading `packages/lab/src/eval/fixtures` rather than from a copied list — a copied
+list is one that goes stale the first time a fixture is added.
+
+The 7 calibration pages captured 7/7 and were scored. Measured against the shipped support floor of 0.847:
+
+| published claim | nearest-training cosine |
+|---|---|
+| conformant (`after/*`) | 0.7055 – 0.757 |
+| inaccessible (`before/*`) | 0.5863 – 0.6038 |
+
+**0 of 7 in support**, on a set disjoint from the fixtures this ADR originally measured — so the premise
+reproduces independently rather than resting on one sample.
+
+The new information is the SHAPE of the gap. The pages published as inaccessible sit measurably further
+from the training distribution than the ones published as conformant (~0.59 vs ~0.73), which is the wrong
+way round for us: the scorer is least at home exactly where a finding would matter most. A plausible
+reading is that the synthetic corpus's failures are single, clean, generated defects while a real broken
+page fails in several ways at once and carries the surrounding structure too — but that is inference from
+seven pages, not a result.
+
+Two things this does NOT yet do, and neither should be glossed:
+
+- **The threshold is still derived, not conformal.** Calibration data now exists; fitting a threshold to a
+  stated error rate is the next step, and it needs the error rate to defend — a product and legal
+  judgement, not a technical one.
+- **19 training pages will not lift real recall on their own.** They are enough to teach the encoder what
+  real page structure looks like relative to nothing; they are not a realism tier.
+
+Split by SOURCE FAMILY rather than at random, deliberately: `images/decorative` and `images/informative`
+share a template, navigation and footer, so a random split would calibrate a threshold against structure
+the model had already been trained on. Asserted in the tests.
+
 ## Alternatives rejected
 
 - **Add real pages to the OOD reference without training on them.** Fastest way to stop abstaining and
