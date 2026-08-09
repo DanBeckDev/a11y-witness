@@ -103,10 +103,31 @@ Two things about this are worth more than the fix:
   diagnostic mark, not by a green result or a matching hash**, because both were present while the remedy
   was inert.
 
-Still open: 2 reused-window captures of the page that failed and 40/40 `capture:check` on a quiet host is
-**not a rate**. The one identity failure seen this session was on a host saturated by a concurrent retrain,
-and presented as an *empty* read rather than a wrong page — which the harness used to report as "read the
-wrong content" for both. It now names which. B2 wants a number; nobody has measured one yet.
+**The number B2 asked for, measured 2026-08-09:** `npm run identity:rate -- --worker=<url> --rounds=20`
+
+| | |
+|---|---|
+| captures | 60, of which **54 navigated an already-open window** — the only ones that can express the fault |
+| buffer refreshed | 54 of 54 |
+| **wrong page** | **0** — 95% upper bound about **5.6%** by the rule of three |
+| silent / unrecognised | 0 / 0 |
+| capture errors | 4 (6.7%), **all four consecutive at the end of the run** |
+
+So: a mechanism, a remedy verified firing by its own mark, and a bound. **B3 is closed** — the mechanism is
+known and eliminated rather than detected. **B2 is bounded, not proven absent:** 5.6% is a weak ceiling, and
+the honest statement is that the fault has been observed exactly once ever and not once in 54 attempts on the
+path that produces it. Raise `--rounds` if a tighter number is wanted; each round is three captures.
+
+Two things the run says that the headline does not:
+
+- **The four errors are the documented speech-channel decay, not this fault.** One hard timeout followed by
+  three consecutive `NVDA is running but not speaking`, after 56 unbroken captures — the survival curve in
+  `CLAUDE.md`, arriving on schedule. They are reported separately and excluded from the rate, because a
+  capture that failed did not read the wrong page; counting them would inflate the fault under test with the
+  worker's reliability.
+- **The earlier identity failure was this, not staleness.** The single `capture:check` failure this session
+  came on a host saturated by a concurrent retrain and was an *empty* read. The harness reported "read the
+  wrong content" for both cases, which is why it looked like a stale buffer; it now names which.
 
 ### B4. ~~The error rate to defend, decided~~ — ANSWERED BY MEASUREMENT, 2026-08-09
 
