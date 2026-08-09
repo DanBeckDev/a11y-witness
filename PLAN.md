@@ -34,6 +34,10 @@ That last row is the one that matters most, and no amount of green CI substitute
 
 ## Blockers — a general release should not happen until these are closed
 
+**Status, 2026-08-09: B2, B3 and B4 are closed by measurement. B1 and B5 are yours — neither can be done
+from inside the project.** B1 is a stranger running it on an app they own; B5 is the name and the first
+publish. Everything technical that a release was waiting on has a number against it now.
+
 ### B1. Someone other than the author runs it on an app they own
 
 **Why it blocks.** Every verification in this repo is one person's, on one Mac, against W3C's own pages.
@@ -47,7 +51,7 @@ a bug list.
 
 **Whose call.** Yours. This cannot be done from inside.
 
-### B2. The intermittent capture failure is explained or bounded
+### B2. ~~The intermittent capture failure is explained or bounded~~ — BOUNDED, 2026-08-09
 
 **Why it blocks.** `capture:check` failed 5 checks, then 1, then passed twice, on unchanged code. A
 consumer whose CI goes red for a reason we cannot explain uninstalls the tool — this repo's own note says a
@@ -61,7 +65,7 @@ same as bounded.
 **Done looks like.** Either a diagnosis, or a measured failure rate with a retry that makes it invisible to
 a consumer. A number, not a hope.
 
-### B3. The stale virtual buffer, diagnosed
+### B3. ~~The stale virtual buffer, diagnosed~~ — DIAGNOSED AND REMEDIED, 2026-08-09
 
 **Why it blocks.** It can put evidence from the WRONG PAGE into a report. For a tool making accessibility
 claims that is the most damaging failure available to it, however rare.
