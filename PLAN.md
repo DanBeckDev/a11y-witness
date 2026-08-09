@@ -462,6 +462,27 @@ cleanly. Under the old code the healthy guest would have been starved and blamed
   records that a dirty Windows guest cost an afternoon once, and the fleet is functional on
   `a11y-worker-3` meanwhile. `doctor` reports READY.
 
+### Done 2026-08-09: ONNX inference — torch is no longer installed by the Action
+
+torch was 400 MB and 102 s of every cold Action run (34% of it) to compute a frozen 6-layer MiniLM and
+fourteen dot products. Inference is now ONNX Runtime plus numpy; torch remains a TRAINING dependency and
+training never runs in CI. No new hosting: HuggingFace ships the ONNX build in the same repository the
+encoder is already fetched from.
+
+Proven at three levels, because an encoder swap silently changes every embedding:
+
+    encoder     vs safetensors on real corpus text — max abs 2.300e-07, min cosine 0.999999881
+    scores      same fixture — worst difference 1.12e-08, predictions identical, novelty identical
+    end-to-end  `npm run eval` unchanged at recall 59% / 0 FP; `release:gate` passes; action-smoke green
+
+Two near-misses worth keeping, both found by RUNNING it rather than reasoning about it. `safe_open(...,
+framework="pt")` imports torch even when only metadata is read, and it survived the swap invisibly because
+every other check ran with torch still installed. And the first torch-free test was a FALSE failure: a fake
+`torch` module that raises makes `transformers` see torch as present-but-broken, where a genuinely
+torch-free virtualenv works fine and scores identically.
+
+Guarded by two static tests, both shown to fail when the condition is reintroduced.
+
 ### Found 2026-08-08 (night): NVDA read the PREVIOUS page's content while reporting the new page's title
 
 Found while A/B-testing the capture budget, not while looking for it. A capture of
