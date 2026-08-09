@@ -23,6 +23,7 @@ import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "@a11y-witness/judge/layers";
 import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fleet";
+import { CAPTURE_HARD_TIMEOUT_DEFAULT_MS } from "@a11y-witness/nvda-worker";
 import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
 import { conformanceScope, sweepOutcomes, truncatedSweeps, type ConformanceRequirement }
@@ -455,14 +456,38 @@ interface CaptureRequest {
   probeFocus: boolean;
 }
 
+/**
+ * How long to wait for a capture, measured against the WORKER's own bound rather than guessed.
+ *
+ * `fetch`'s default headers timeout is ~300 s, which is barely above the worker's 280 s hard timeout — so on
+ * a large real page the client lost the race and the run died with `UND_ERR_HEADERS_TIMEOUT`, throwing away
+ * the diagnosis the worker had already worked out and was about to return. The margin is deliberate: the
+ * worker is the component that knows why a capture failed, and it must always be the one that gets to say so.
+ */
+const CLIENT_TIMEOUT_MARGIN_MS = 40_000;
+const CAPTURE_CLIENT_TIMEOUT_MS = CAPTURE_HARD_TIMEOUT_DEFAULT_MS + CLIENT_TIMEOUT_MARGIN_MS;
+
 async function captureViaWorker(
   url: string, { task, worker, probeForms, probeFocus }: CaptureRequest,
 ): Promise<CaptureResponse> {
-  const res = await fetch(`${worker}/capture`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ url, task, probeForms, probeFocus }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${worker}/capture`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url, task, probeForms, probeFocus }),
+      signal: AbortSignal.timeout(CAPTURE_CLIENT_TIMEOUT_MS),
+    });
+  } catch (error) {
+    // A transport failure is not an accessibility finding, and it must not read like one.
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Could not reach the capture worker at ${worker} (${reason}).\n`
+      + `The page was not examined, so this report would say nothing about it. Check the worker is `
+      + `answering: curl ${worker}/health`,
+      { cause: error },
+    );
+  }
   if (!res.ok) {
     throw new Error(`Worker error ${res.status}: ${await res.text()}`);
   }
@@ -473,7 +498,13 @@ function printReport(report: Report): void {
   console.log(reportLines(report).join("\n"));
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((err: unknown) => {
+  // `console.error(err)` printed a Node stack trace as the entire user-facing output on the first real
+  // website this was pointed at. A stack is for whoever is fixing the tool; a user needs the reason.
+  const message = err instanceof Error ? err.message : String(err);
+  process.stderr.write(`\n${message}\n`);
+  if (process.argv.includes("--debug") && err instanceof Error && err.stack) {
+    process.stderr.write(`\n${err.stack}\n`);
+  }
   process.exit(1);
 });
