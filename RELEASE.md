@@ -99,9 +99,24 @@ findings.
   - **That real-page set now EXISTS** (ADR 0010): 26 pages, 7 calibration and 19 training, every one from a
     source that publishes its own conformance claim, captured and disjoint from the eval fixtures. Its first
     measurement confirms the limitation above on fresh, independent pages — **0 of 7 calibration pages fall
-    inside support** (cosine 0.586–0.757 against the 0.847 floor). What is still missing is not data but a
-    DECISION: fitting a conformal threshold requires stating the error rate to defend, which sets how much
-    the tool reports versus declines and is a product judgement rather than a technical one.
+    inside support** (cosine 0.586–0.757 against the 0.847 floor).
+  - **Lowering the floor has now been measured, and it is not defensible.** This used to read "what is missing
+    is not data but a DECISION". The data answered it. `packages/lab/scripts/calibrate-abstention.mjs` sweeps
+    candidate floors over the 7 calibration pages: accepting every real page would have the scorer accuse
+    **3 of the 4 pages W3C publishes as conformant** of 4.1.2 failures while catching **0 of the 3** it
+    publishes as inaccessible. Our own deterministic rules find nothing on those conformant pages, so those
+    are false positives. On real pages this model's output is not merely uncertain, it is **anti-correlated
+    with the truth** — so abstention is the only defensible behaviour, and the shipped floor stays.
+  - **A realism tier of 19 real pages was built, measured and NOT shipped.** Training on real-page structure
+    is the obvious fix, and it was tried: false positives on conformant pages fell 3→2, pages caught stayed
+    **0 of 3**, the nearest-neighbour cosines did not move at all, and 4.1.2 on the generated corpus got
+    slightly worse (10→11 false positives). At the shipped floor neither model scores any real page, so it
+    would change nothing a user sees. Recorded because a limitation that has survived a serious attempt to
+    remove it is a different claim from one nobody has tried.
+  - Seven calibration pages support an error-rate granularity of about 1/(n+1) ≈ **12.5%** and nothing finer,
+    so no conformal guarantee is claimed or claimable from this set. Widening it means finding more publishers
+    who state their own conformance, because labelling pages ourselves would make the measurement our own
+    opinion.
   - The gap is not uniform, and the shape is unfavourable: pages published as INACCESSIBLE sit further from
     the training distribution (~0.59) than conformant ones (~0.73). The scorer is least at home exactly
     where a finding would matter most.
@@ -119,6 +134,17 @@ findings.
   `docs/github-action.md`.
 - **`taskCompletable` is a coarse proxy** — derived from "did anything score as a blocker", because this
   layer has no head for task completion.
+- **One screen reader, one browser, one operating system.** Every finding is NVDA in Microsoft Edge on
+  Windows, and WCAG conformance depends on what a page does with the assistive technology actually in use. So
+  this tool demonstrates accessibility support for **that combination and no other** — it is not evidence
+  about JAWS, VoiceOver, Narrator, TalkBack, Orca, or NVDA in a different browser. Most desktop screen-reader
+  users are on Windows with NVDA or JAWS, which is why this combination came first; JAWS is the gap that
+  matters most and is the hardest to automate. Each report names the combination that produced it.
+- **Page-scoped, not process-scoped — and WCAG claims conformance for PROCESSES.** WCAG 2.2 §5.2.4 requires
+  every page in a multi-step process to conform, so a tool that examines one URL structurally cannot assess
+  sign-in, checkout or booking as a whole — ours or anyone's. Findings are about the page given to it, and **a
+  clean report on one page is not a conformance claim for the process that page belongs to.** ADR 0011 records
+  what changing this would take.
 - **A page behind a consent wall is refused, not reported.** The screen reader is held inside the modal, so
   the capture describes the dialog rather than the page; the run exits 2 and says so. Correct, but it means
   many EU-facing commercial sites cannot be measured without dismissing consent first.

@@ -197,16 +197,16 @@ This is not a footnote to the interesting work — it *is* some of the work. Scr
 | a Windows box | [`packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1`](./packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1) | One idempotent script, then `A11Y_WORKER=http://host:8765` |
 | neither | [`capture-regression.yml`](./.github/workflows/capture-regression.yml) | Real NVDA on a GitHub-hosted runner, so a contributor needs no infrastructure at all |
 
-Because a Windows guest is never genuinely idle, the pipeline manages it **on demand**: with a local VM and no `A11Y_WORKER` set, a run starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15 s. Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`worker-ctl.sh`](./scripts/local-worker/worker-ctl.sh) does `up | pause | stop | status | idle-pause`.
+Because a Windows guest is never genuinely idle, the pipeline manages it **on demand**: with a local VM and no `A11Y_WORKER` set, a run starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15 s. Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`worker-ctl.sh`](./packages/worker-fleet/src/local-worker/worker-ctl.sh) does `up | pause | stop | status | idle-pause`.
 
 **Scaling past one worker.** Because captures serialise per machine, throughput comes from
 more machines. On a Mac that is one command, and the lifecycle is handled for you:
 
 ```bash
 ./scripts/local-worker/clone-worker.sh          # add a worker (handles a MAC-copying trap)
-./scripts/local-worker/worker-ctl.sh pool       # what have I got
+./packages/worker-fleet/src/local-worker/worker-ctl.sh pool       # what have I got
 npm run training:capture                        # uses them all, then puts them back
-./scripts/local-worker/worker-ctl.sh pool-stop  # or release them yourself
+./packages/worker-fleet/src/local-worker/worker-ctl.sh pool-stop  # or release them yourself
 ```
 
 Measured: **1.90x on two workers, 2.36x on three**, with byte-identical evidence at each step —
