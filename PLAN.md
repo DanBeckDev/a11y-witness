@@ -94,9 +94,14 @@ Two things about this are worth more than the fix:
   credit the fix — while it had never once executed. What found it was asking for the *diagnostic mark*
   rather than the green result. The function now marks `browseBufferFresh` when it skips, so "did not need to
   refresh" and "never ran" can never again be the same silence.
-- **A deploy reported success without landing the file.** `worker:deploy` printed a matching `/health.code`
-  while the guest was still running the previous `capture-core.mjs`; the following deploy went `1/2` with the
-  second guest stale. So a hash match is necessary and not sufficient — confirm behaviour through a mark.
+- **One deploy remains unexplained, and is recorded as unexplained.** After a deploy that reported
+  `2/2 worker(s)` on the expected hash, neither refresh mark appeared on a reused window — not the success
+  and not the failure. The obvious theory, that `/health.code` proves only that the files landed, is
+  **wrong**: `CODE_VERSION` is computed once at module load (`server.mjs:172`), so the hash does reflect the
+  code the process loaded, and a push without a restart would report stale. No mechanism has been
+  established. What is established is the practice that found it — **confirm a capture-path change by its
+  diagnostic mark, not by a green result or a matching hash**, because both were present while the remedy
+  was inert.
 
 Still open: 2 reused-window captures of the page that failed and 40/40 `capture:check` on a quiet host is
 **not a rate**. The one identity failure seen this session was on a host saturated by a concurrent retrain,
