@@ -127,7 +127,7 @@ npm run doctor
 `doctor` reporting `3 worker(s), all stopped` is a READY state. Follow its `next` line rather
 than trying to get everything running first.
 
-**If you changed anything under `packages/lab/src/capture/nvda/`, check the workers are running it:**
+**If you changed anything under `packages/nvda-worker/src/`, check the workers are running it:**
 
 ```bash
 npm run worker:code    # each worker's /health.code vs this checkout; exits 1 if any is stale

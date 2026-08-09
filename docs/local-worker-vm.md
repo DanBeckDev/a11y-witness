@@ -431,7 +431,7 @@ started a capture while the first was finishing.
 | a remote worker, no VM management | `--worker http://host:8765` or `A11Y_WORKER=...` |
 | the old behaviour (localhost:8765) | `A11Y_LOCAL_VM=0` |
 
-Everything UTM-specific stays in `worker-ctl.sh`; `packages/lab/src/capture/local-vm.ts` only reads its
+Everything UTM-specific stays in `worker-ctl.sh`; `packages/worker-fleet/src/` only reads its
 `json` output, so the control plane never learns about utmctl, bundles or bookmarks.
 
 `npm run training:capture` uses the same lease (it runs under `tsx` so it can import the
@@ -564,7 +564,7 @@ While iterating on `capture-core.mjs` specifically, it is faster to copy the sin
 file and restart the worker than to commit and pull:
 
 ```bash
-scp packages/lab/src/capture/nvda/capture-core.mjs user@vm:C:/Users/user/a11y-witness/packages/lab/src/capture/nvda/
+scp packages/nvda-worker/src/capture-core.mjs user@vm:C:/Users/user/a11y-witness/packages/nvda-worker/src/
 # Prefer a REBOOT over a task restart. Stop/Start-ScheduledTask silently fails to replace the
 # running process when the guest agent is not ready, and two workers once served stale code for
 # an hour that way. `worker-ctl.sh stop && up` always picks up a pushed file, and
@@ -576,11 +576,11 @@ Verify the copy landed with a hash on both sides — a stale worker silently run
 code looks exactly like a logic bug, and costs far more time than the check:
 
 ```bash
-shasum -a 256 packages/lab/src/capture/nvda/capture-core.mjs
+shasum -a 256 packages/nvda-worker/src/capture-core.mjs
 ssh user@vm "powershell -NoProfile -Command \"(Get-FileHash 'C:\Users\user\a11y-witness\src\capture\nvda\capture-core.mjs' -Algorithm SHA256).Hash\""
 ```
 
-Then re-validate with `node packages/lab/src/capture/nvda/capture-check.mjs` **in the VM's console
+Then re-validate with `node packages/nvda-worker/src/capture-check.mjs` **in the VM's console
 session** (via a scheduled task, not bare SSH — SSH has no interactive desktop).
 
 ## Sources
