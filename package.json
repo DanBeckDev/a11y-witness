@@ -52,7 +52,8 @@
     "pretest": "npm run build",
     "pretypecheck": "npm run build",
     "worker:ctl": "packages/worker-fleet/src/local-worker/worker-ctl.sh",
-    "coverage": "c8 npx tsx --test \"packages/*/src/**/*.test.ts\""
+    "coverage": "c8 npx tsx --test \"packages/*/src/**/*.test.ts\"",
+    "identity:rate": "tsx packages/lab/src/harnesses/page-identity-rate.mjs"
   },
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
