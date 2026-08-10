@@ -509,6 +509,33 @@ and attaches a fault code, so an error with neither cannot have come from there.
 **When you find a screen-reader behaviour worth a comment, grep every path that can reach it.** Lint and
 `tsc` cannot see this — it is `.mjs` and the paths are unrelated functions.
 
+### A comment that names an ambiguity, above code that resolves it by assumption
+
+The sharpest version of the pattern above, and it cost the most on the first real website this tool was aimed
+at. Three examples, all found in one session:
+
+| the comment said | the code did | measured cost |
+|---|---|---|
+| "an unchanged phrase is ambiguous between 'did not move' and 'moved to something announced the same way'" | stopped the sweep on the FIRST repeated phrase | **graphics 5 of 66** on a page with four identical avatar alts |
+| (same function) "silence is unambiguous evidence of not moving" — true on an idle guest only | ended the sweep on one silent step | **headings 3 of 10**, no error anywhere |
+| `beginsWithRole`: "a leading LANDMARK is context, not the control's own role … reported three conformant W3C pages as 4.1.2 failures" | stripped landmarks, not CONTAINERS | **a false 4.1.2 against a named button**, because every real nav bar is a list inside a landmark |
+
+The fix is the same each time: find the signal that is NOT ambiguous. NVDA **announces** the end of a page —
+"no next heading" — so `exhausted` is the sound terminus and both repetition and silence are guesses. A log
+delta proves speech is new, so it proves movement. Prefer the screen reader's own answer over an inference
+about its behaviour.
+
+> **A number beats a word.** "Examination was INCOMPLETE" cannot tell you whether two links were missed or two
+> hundred. `crossCheckStructure` had been computing exactly that comparison into a diagnostic every run, unread
+> — the same shape as the 604 silent `sweepLog` crashes. The report now states `link 51/58, graphic 59/66`, and
+> a residual gap between the sweep and the AX tree is a question about this tool, not a finding about the page.
+
+**Guest sizing is measured, not assumed: the VMs had 2 of the host's 14 vCPUs.** Raising them to 6 took a real
+marketing page from "abandoned at the 280 s hard timeout" to 2:33, and `example.com` from 90 s to 19 s. The
+symptom of CPU starvation is that `/health` and `/progress` stop answering **while the port stays open** — a
+memory-starved server is slow, a CPU-starved one is silent. `config.plist` → `System.CPUCount`; UTM caches
+configs, so stop every guest and quit UTM before editing.
+
 ### Two blind spots let a 1-in-125 contaminant into the corpus
 
 `gate:stability` reported every canary stable while one capture of `filter-status-silent/bad` recorded
