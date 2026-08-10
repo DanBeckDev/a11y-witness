@@ -232,6 +232,52 @@ one at a time, which would let two differently prepared guests share an `"unstam
 `a11y-worker-3` was in a running-but-not-answering state (a real fault by `worker:ctl`'s own reckoning) and was
 stopped, so a two-guest comparison could not be made.
 
+## B6. ~~Captures must survive a heavy real-world page~~ — CLOSED, 2026-08-10
+
+Opened when the first real website this tool was ever pointed at produced a Node stack trace and no report.
+Eleven defects, all found by pointing it at that one page, and **not one of them is reachable by the
+2,122-capture corpus** — which is the argument for B1 demonstrated rather than asserted.
+
+| what was wrong | how it presented |
+|---|---|
+| `windowsActivate` unbounded at a second call site | hung 234 s inside a 280 s budget |
+| `powershellValue` `execFileSync`, no timeout, in `/health` | `/health` dead for 150 s; "the worker is dead" |
+| `findFile` walked the disk on every `/health` | same, from a different syscall |
+| `RECOVERABLE` was a regex that could not match `ECONNRESET` | worker EXITED when NVDA's socket closed as instructed |
+| boot hygiene ran synchronously inside `listen` | `NOT ready` for 147 s, worse with every capture |
+| fallback launcher never passed `--remote-debugging-port` | census impossible, reported as a timeout |
+| `MAX_SWEEP_STEPS = 40` — the corpus maximum | page sampled, not validated |
+| **one repeated announcement ended a sweep** | **graphics 5 of 66 on a page with duplicate alt text** |
+| **one silent step ended a sweep** | **headings 3 of 10, no error anywhere** |
+| CLI had no timeout below the worker's own | stack trace instead of the worker's diagnosis |
+| `worker:deploy` verified once, immediately | "stale or failed" on guests that had deployed fine |
+
+**Every sweep now ends on `exhausted` — NVDA's own "no next heading" — in both directions**, and the report
+states reach as a number: `heading 10/10, landmark 5/4, link 51/58, graphic 59/66`. `evidence:check` reads 46
+same, 1 drift, 1 changed, and that one change is the pre-existing cross-guest token difference, so the sweep
+work is **evidence-neutral: no protocol bump, no recapture.**
+
+**Two vCPUs was the enabler.** The guests were configured with 2 of the host's 14 cores. Raising them to 6 took
+a capture of that page from "abandoned at 280 s" to 2:33, and `example.com` from 90 s to 19 s. Diagnosed by
+elimination after a RAM hypothesis was proposed and refuted — memory pressure makes a server slow, and this one
+went completely silent while the port stayed open, which is starvation, not swapping.
+
+### The pattern all eleven share, and the rule that falls out
+
+**An ambiguous signal was treated as definitive, and the ambiguity was usually already documented.**
+`sweepInDirection`'s own comment said "an unchanged phrase is ambiguous between 'did not move' and 'moved to
+something announced the same way'" — and then stopped on the first repeat. `beginsWithRole`'s comment recorded
+the landmark-prefix trap twice, and did not strip containers. The remedy was present as prose and absent as
+code.
+
+> **When a comment names an ambiguity, the code below it must not resolve that ambiguity by assumption.**
+> Every one of these cost a real finding, and every one was cheap to fix once the page that could express it
+> existed.
+
+The residual `link 51/58` and `graphic 59/66` are NOT known defects: both sweeps end on NVDA's own signal, so
+the gap is between two instruments — the AX tree counts nodes NVDA's quick-navigation does not visit, such as a
+graphic inside a link announced as one item. Stated as a number so a reader can judge it.
+
 ## Risks we are choosing to accept, and must therefore state
 
 These are not blockers. They ARE things a reader must be told, and every one is already written into
