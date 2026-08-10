@@ -152,7 +152,34 @@ type AddFinding =
  * which is why the marker is still required there.
  */
 const CONTROL_ROLE_TOKENS = ROLE_TOKENS.filter((role) => !role.endsWith("landmark"));
+
+/** Bounded so a pathological announcement cannot spin: deeper nesting than this is not real page structure. */
+const MAX_CONTEXT_PREFIXES = 8;
 const LEADING_LANDMARKS = /^(?:(?:navigation|main|banner|complementary|contentinfo|region|search)\s+landmark\s*,\s*)+/i;
+
+/**
+ * CONTAINER context NVDA prepends that is not a landmark and not the control's own role.
+ *
+ * Found on a real website, and it is the THIRD instance of the prefix trap the comment below already describes
+ * twice. This announcement is a button NAMED "Community":
+ *
+ *   "banner landmark, navigation landmark, list, with 6 items, Community, button"
+ *
+ * Stripping the landmarks leaves `list, with 6 items, Community, button`, which begins with the role token
+ * "list" — so the control was reported as having no accessible name, and reported as ASSERTED, the strongest
+ * claim this tool makes. A false 4.1.2 against a named control is the worst output this project can produce.
+ *
+ * Every navigation bar on every real site is a list inside a landmark, so this fires constantly out there and
+ * never once on the generated corpus, whose announcements have no container nesting. That asymmetry is the
+ * whole argument for blocker B1: the defect is only reachable on pages nobody wrote for the test suite.
+ */
+const LEADING_CONTAINERS =
+  /^(?:(?:list|table|grouping|group|region|frame|dialog|tree view|menu bar|tab control)\b(?:\s+with\s+\d+\s+\w+)?(?:\s*,\s*with\s+\d+\s+\w+)?\s*,\s*)+/i;
+// The item count sits on EITHER side of the comma depending on the container: NVDA says
+// "list, with 6 items, ..." but "table with 3 rows, ...". The first version of this handled only the second
+// form, so "list," was consumed and "with 6 items," was left behind — which happened to silence the false
+// positive while ALSO silencing a genuinely unnamed button in a list, because the leftover no longer began
+// with a role. A guard that stops firing for the wrong reason looks fixed and is not.
 
 function beginsWithRole(entry: string): boolean {
   // A leading LANDMARK is context, not the control's own role. NVDA prefixes the enclosing landmark, so
@@ -163,7 +190,16 @@ function beginsWithRole(entry: string): boolean {
   // This is the same landmark-prefix trap as `heading_name` in screenreader_features.py, found twice in
   // one session in two layers. When NVDA prepends context to an announcement, every parser of that
   // announcement has to strip it.
-  const start = entry.trim().toLowerCase().replace(LEADING_LANDMARKS, "");
+  // Strip context REPEATEDLY and in either order: NVDA nests them arbitrarily deep, so
+  // "banner landmark, navigation landmark, list, with 6 items, ..." needs landmarks then a container, while
+  // "list, with 3 items, main landmark, ..." needs the reverse. One pass in a fixed order leaves a prefix
+  // behind, and a leftover prefix is exactly the false positive this function exists to prevent.
+  let start = entry.trim().toLowerCase();
+  for (let pass = 0; pass < MAX_CONTEXT_PREFIXES; pass += 1) {
+    const shorter = start.replace(LEADING_LANDMARKS, "").replace(LEADING_CONTAINERS, "");
+    if (shorter === start) break;
+    start = shorter;
+  }
   return CONTROL_ROLE_TOKENS.some((role) => start.startsWith(role));
 }
 

@@ -331,3 +331,37 @@ test("a trap claim needs corroboration from the sweep, not just a repeat", () =>
   } as never);
   assert.equal(findings.filter((f) => f.wcag.startsWith("2.1.2")).length, 0);
 });
+
+/**
+ * Container context, found on a real website — the THIRD instance of NVDA's prefix trap.
+ *
+ * `beginsWithRole`'s comment already records this twice: a leading landmark is context, not the control's own
+ * role, and matching it "reported three conformant W3C pages as 4.1.2 failures, which is the worst error this
+ * tool can make". It stripped landmarks. It did not strip CONTAINERS, and every navigation bar on every real
+ * site is a list inside a landmark — so a named button reported as unnamed, ASSERTED, on the first real page
+ * this tool was ever aimed at. Zero captures in the 2,122-record corpus can express it, because generated
+ * announcements have no container nesting.
+ */
+test("does NOT flag a named control behind landmark AND container context (real site)", () => {
+  const line = "banner landmark, navigation landmark, list, with 6 items, Community, button";
+  assert.deepEqual(ruleFindings({ transcript: [], interaction: { controls: [line] } } as never), [],
+    "the button is named 'Community'; asserting 4.1.2 here is a false accessibility accusation");
+});
+
+test("does NOT flag a named control behind a table container", () => {
+  // The item count sits on the other side of the comma for tables ("table with 3 rows") than for lists
+  // ("list, with 6 items"), and handling only one form is what silenced the guard below for the wrong reason.
+  assert.deepEqual(ruleFindings({ transcript: [], interaction: { controls: ["table with 3 rows, Read the docs, link"] } } as never),
+    []);
+});
+
+test("STILL flags a genuinely unnamed control behind that same context", () => {
+  // The pair that matters. Stripping context must not become "never fire": the first fix to this consumed
+  // "list," and left "with 6 items," behind, which silenced the false positive AND this true positive at once.
+  for (const line of [
+    "banner landmark, navigation landmark, list, with 6 items, button",
+    "table with 3 rows, link",
+  ]) {
+    assert.deepEqual(criteria(ruleFindings({ transcript: [], interaction: { controls: [line] } } as never)), ["4.1.2"], line);
+  }
+});
