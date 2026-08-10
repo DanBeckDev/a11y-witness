@@ -151,10 +151,18 @@ function coverageSentence(input: ConformanceScopeInput): string {
         + "page the sweeps reached is unknown."
       : "";
   }
-  const parts = coverage.map((c) => `${c.type} ${c.reached} of ${c.present}`);
+  const parts = coverage.map((c) => `${c.type} ${c.reached}/${c.present}`);
   const gaps = coverage.filter((c) => !c.complete);
-  return ` Measured reach against the browser's own element count: ${parts.join(", ")}.`
-    + (gaps.length ? "" : " Every type with ground truth was reached in full.");
+  // Say WHAT the numerator is. The sweep de-duplicates by announcement (`seenKeys`), so two images with the
+  // same alt text collapse to one entry, while the census counts elements. On a page with 66 images and 47
+  // distinct alt values those are different denominators, and reporting "5 of 66" as though it were elements
+  // reached overstates the gap — understating our own coverage is the safe direction to be wrong in, but it is
+  // still wrong, and a reader acting on the number deserves to know which number it is.
+  return " Reach, as DISTINCT announcements the screen reader produced against elements the browser reports"
+    + ` (the two differ where identical announcements collapse): ${parts.join(", ")}.`
+    + (gaps.length
+      ? " A shortfall here is a coverage question about this tool, not a finding about the page."
+      : " Every type with ground truth was reached in full.");
 }
 
 /** Sweeps that stopped before the page did, i.e. examined only part of it. */
