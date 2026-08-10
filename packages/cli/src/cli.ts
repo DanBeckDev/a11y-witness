@@ -26,7 +26,7 @@ import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fle
 import { CAPTURE_HARD_TIMEOUT_DEFAULT_MS } from "@a11y-witness/nvda-worker";
 import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
-import { conformanceScope, sweepOutcomes, truncatedSweeps, type ConformanceRequirement }
+import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics, type ConformanceRequirement }
   from "@a11y-witness/evidence/conformance";
 import { assessedCriteria } from "@a11y-witness/judge/coverage";
 import { earlReport } from "@a11y-witness/evidence/earl";
@@ -355,12 +355,30 @@ function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): Conform
   const env = (cap as { environment?: Record<string, string> }).environment ?? {};
   const version = (name: string, ver: string): string | null =>
     env[name] ? `${env[name]}${env[ver] ? ` ${env[ver]}` : ""}` : null;
+  // Read from the DIAGNOSTIC MARK, not from a capture field, and deliberately so. The census is the AX tree's
+  // own element count, and `capture-core` keeps it out of the evidence on purpose: "a completeness ORACLE and
+  // never evidence -- the accessibility tree is barred from being a model feature". Promoting it to a field
+  // would breach that boundary and invalidate every cached capture for a number already on the wire.
+  //
+  // `crossCheckStructure` computes the same sweep-versus-census comparison for the diagnostics. This is the
+  // REPORTING path for it, and it existed unread: the disagreement that answers "how much of the page did you
+  // examine?" was being written to a diagnostic every run and shown to nobody.
+  const census = censusFromDiagnostics((cap as { diagnostics?: unknown[] }).diagnostics ?? []);
+  const structure = (cap.structure ?? {}) as Record<string, unknown[] | undefined>;
   return conformanceScope({
     assessedCriteria: assessedCriteria(),
     sweeps: sweepOutcomes((cap as { diagnostics?: unknown[] }).diagnostics ?? []),
     screenReader: version("screenReader", "screenReaderVersion") ?? cap.screenReader,
     browser: version("browser", "browserVersion"),
     ruleLayerRan: axe !== null,
+    census: census ?? null,
+    // Singular keys to match the census vocabulary; the structure fields are plural.
+    swept: {
+      heading: structure.headings?.length ?? 0,
+      landmark: structure.landmarks?.length ?? 0,
+      link: structure.links?.length ?? 0,
+      graphic: structure.graphics?.length ?? 0,
+    },
   });
 }
 

@@ -15,8 +15,7 @@ import {
   notAConformanceClaim,
   NON_INTERFERENCE_CRITERIA,
   sweepOutcomes,
-  truncatedSweeps,
-} from "./conformance.js";
+  truncatedSweeps, sweepCoverage } from "./conformance.js";
 
 const CLEAN = {
   assessedCriteria: ["1.1.1", "1.3.1", "2.4.4", "2.4.6", "3.3.1", "4.1.2", "4.1.3", "2.1.2"],
@@ -196,4 +195,57 @@ test("a truncated FOCUS probe is reported like a truncated sweep", () => {
   ]);
   assert.deepEqual(outcomes, [{ type: "focusOrder", stop: "cap" }]);
   assert.equal(truncatedSweeps(outcomes).length, 1);
+});
+
+/**
+ * Measured coverage — the number that replaces the word "INCOMPLETE".
+ *
+ * A real page reported `link (cap)` and the report could only say examination was incomplete. A reader cannot
+ * act on that: missing two links and missing two hundred are the same sentence. The census is the browser's own
+ * element count, so the reach can be stated — and when the census is absent that must read as UNKNOWN, never as
+ * full coverage, which is this project's first rule applied to its own reporting.
+ */
+test("states reach per type against the browser's own count", () => {
+  const coverage = sweepCoverage({
+    assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true,
+    census: { heading: 10, landmark: 5, link: 57, graphic: 12 },
+    swept: { heading: 10, landmark: 5, link: 46, graphic: 12 },
+  });
+  assert.deepEqual(coverage.find((c) => c.type === "link"),
+    { type: "link", reached: 46, present: 57, complete: false });
+  assert.equal(coverage.every((c) => c.type === "link" || c.complete), true);
+});
+
+test("a missing census yields NO coverage claim, not a claim of full coverage", () => {
+  assert.deepEqual(sweepCoverage({
+    assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true,
+    census: null, swept: { link: 46 },
+  }), []);
+});
+
+test("a failed census makes the report say coverage is UNKNOWN", () => {
+  const [, fullPages] = conformanceScope({
+    assessedCriteria: ["1.1.1"], screenReader: "NVDA", ruleLayerRan: true,
+    sweeps: [{ type: "link", stop: "exhausted" }], census: null, swept: { link: 46 },
+  });
+  assert.match(fullPages.establishes + fullPages.limitation, /coverage could not be measured/i);
+});
+
+test("reaching MORE than the census counted is not a coverage gap", () => {
+  // The two walk different trees: the sweep walks what the screen reader exposes, the census walks the AX
+  // tree, and a link inside a list can be announced twice. Calling that incomplete would report a defect in
+  // the page for a disagreement between two measuring instruments.
+  const [link] = sweepCoverage({
+    assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true,
+    census: { link: 40 }, swept: { link: 46 },
+  });
+  assert.equal(link.complete, true);
+});
+
+test("types with no census entry are omitted rather than given an invented denominator", () => {
+  const coverage = sweepCoverage({
+    assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true,
+    census: { link: 10 }, swept: { link: 10, formField: 13, list: 4 },
+  });
+  assert.deepEqual(coverage.map((c) => c.type), ["link"]);
 });

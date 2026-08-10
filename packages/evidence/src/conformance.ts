@@ -67,6 +67,94 @@ export interface ConformanceScopeInput {
   browser?: string | null;
   /** Did the rule-based (axe) layer run? It owns the visual criteria this one cannot perceive. */
   ruleLayerRan: boolean;
+  /**
+   * The browser's own count of elements per type, from the AX tree over CDP — the GROUND TRUTH.
+   *
+   * Without it, "examination was INCOMPLETE" is the strongest statement available, and that is a word where a
+   * number belongs: a reader cannot tell whether a sweep missed two links or two hundred. `null` when the
+   * census could not be taken, which must read as "coverage unknown" rather than as full coverage.
+   */
+  census?: Readonly<Record<string, number>> | null;
+  /** How many DISTINCT items each sweep actually reached, from the capture's structure fields. */
+  swept?: Readonly<Record<string, number>>;
+}
+
+/** One element type's reach: how many the screen reader got to, against how many exist. */
+export interface TypeCoverage {
+  type: string;
+  reached: number;
+  present: number;
+  complete: boolean;
+}
+
+/**
+ * Census key for each swept type. The two vocabularies differ, and mapping them wrongly would compare a
+ * count to an unrelated one — which is worse than reporting nothing, because it looks authoritative.
+ */
+const CENSUS_KEY: Readonly<Record<string, string>> = {
+  heading: "heading", landmark: "landmark", link: "link", graphic: "graphic",
+};
+
+/**
+ * What fraction of the page each sweep reached, for the types where ground truth exists.
+ *
+ * Only types present in BOTH vocabularies are reported. `formField`, `list` and `tableCell` have no census
+ * entry, so nothing is claimed about them — an omission is honest, an invented denominator is not.
+ *
+ * `reached > present` is possible and is NOT treated as an error: a sweep walks what the screen reader
+ * exposes, the census walks the AX tree, and the two disagree legitimately (a link inside a list may be
+ * announced twice). It is reported as complete, because reaching more than the census counted is not a
+ * coverage gap.
+ */
+export function sweepCoverage(input: ConformanceScopeInput): TypeCoverage[] {
+  const census = input.census;
+  if (!census) return [];
+  const swept = input.swept ?? {};
+  return Object.entries(CENSUS_KEY)
+    .filter(([type, key]) => typeof census[key] === "number" && typeof swept[type] === "number")
+    .map(([type, key]) => ({
+      type,
+      reached: swept[type] as number,
+      present: census[key] as number,
+      complete: (swept[type] as number) >= (census[key] as number),
+    }));
+}
+
+/**
+ * The AX-tree element census, pulled out of a capture's diagnostics.
+ *
+ * It lives in a diagnostic rather than an evidence field because `capture-core` bars the accessibility tree
+ * from becoming a model feature, and that boundary is worth keeping: a scorer that can read the DOM stops
+ * being a screen-reader scorer. Reporting is a different consumer from scoring, so it reads the mark.
+ *
+ * Returns `null` when the census was attempted and failed (the mark carries an `error`), and `null` when there
+ * is no mark at all — both mean "coverage unknown", which must never render as full coverage.
+ */
+export function censusFromDiagnostics(diagnostics: readonly unknown[]): Record<string, number> | null {
+  const mark = diagnostics.find(
+    (d): d is Record<string, unknown> =>
+      typeof d === "object" && d !== null && (d as { event?: unknown }).event === "structureCensus");
+  if (!mark || typeof mark.error === "string") return null;
+  const counts: Record<string, number> = {};
+  for (const [key, value] of Object.entries(mark)) {
+    if (key !== "event" && key !== "atMs" && typeof value === "number") counts[key] = value;
+  }
+  return Object.keys(counts).length > 0 ? counts : null;
+}
+
+/** The coverage sentence, or "" when there is no ground truth to state it against. */
+function coverageSentence(input: ConformanceScopeInput): string {
+  const coverage = sweepCoverage(input);
+  if (coverage.length === 0) {
+    return input.census === null
+      ? " Coverage could not be measured: the browser's element census was unavailable, so how much of the "
+        + "page the sweeps reached is unknown."
+      : "";
+  }
+  const parts = coverage.map((c) => `${c.type} ${c.reached} of ${c.present}`);
+  const gaps = coverage.filter((c) => !c.complete);
+  return ` Measured reach against the browser's own element count: ${parts.join(", ")}.`
+    + (gaps.length ? "" : " Every type with ground truth was reached in full.");
 }
 
 /** Sweeps that stopped before the page did, i.e. examined only part of it. */
@@ -125,7 +213,7 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
       number: 2,
       name: "Full pages",
       establishes: "Every structural sweep ran until the page ran out of elements, so the parts of the "
-        + "page a screen reader can reach were examined in full.",
+        + "page a screen reader can reach were examined in full." + coverageSentence(input),
       limitation: "One viewport, one state, one document. Responsive VARIATIONS each have to conform "
         + "separately and only one was rendered; content inside iframes is not entered; and WCAG counts "
         + "an application at a single URI as ONE page, so every state reachable without a URL change — "
@@ -141,7 +229,8 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
     // "we stopped early" must never be reported as "there was nothing more".
     limitation: `Examination was INCOMPLETE — these sweeps stopped before the page did: ${detail}. `
       + "Elements beyond that point were never reached, so an absence of findings among them is not "
-      + "evidence they are correct. Separately: one viewport only, iframes not entered, and any state "
+      + "evidence they are correct." + coverageSentence(input)
+      + " Separately: one viewport only, iframes not entered, and any state "
       + "reachable without a URL change is part of this same page and was not examined.",
   };
 }
