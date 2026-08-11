@@ -278,6 +278,49 @@ The residual `link 51/58` and `graphic 59/66` are NOT known defects: both sweeps
 the gap is between two instruments — the AX tree counts nodes NVDA's quick-navigation does not visit, such as a
 graphic inside a link announced as one item. Stated as a number so a reader can judge it.
 
+## Direction, settled by measurement on 2026-08-11
+
+Three candidate directions were tested against evidence rather than argued about. Two are closed.
+
+**A fast announcement ORACLE — closed, because it already exists.** `@guidepup/virtual-screen-reader`
+is a shipping screen-reader simulator for unit tests: jsdom, testing-library, jest/vitest matchers,
+Storybook. Searching for prior art before building cost an hour and saved the build.
+
+The spike is still worth having, and `packages/nvda-speech` records it: NVDA's composition IS portable —
+**6,703 of 6,704 headings reproduced from page source with no screen reader**, and symbol expansion
+reproduces `alt="Logo.svg"` → "Logo dot svg" exactly. That is a publishable result and the strongest
+evidence-of-contribution this project has produced. It is not a product.
+
+Note what Virtual Screen Reader deliberately is NOT: it targets an idealised spec-compliant AT, validated
+against Web Platform Tests, and its heading output is `heading, X, level 1` where NVDA says
+`X, heading, level 1`. It answers "what does the spec imply?". It explicitly models no aria-live, no
+timing, no interruption, and says "there is no substitute for testing with real screen readers".
+
+**OCCURRENCE — open, unclaimed, and now measured as viable.** Did the page TELL the user what happened?
+No existing tool answers it: axe has no AT, Virtual Screen Reader has no live regions or agency, an
+LLM-on-DOM sees markup rather than speech, and ARIA-AT tests screen readers against a spec rather than
+testing your app through one.
+
+The open risk was reliability, and the argument was that flakiness wrecks ENUMERATION but not VERDICTS.
+Measured on the `form-error-silent` pair, three runs each (`npm run verdict:stability`):
+
+| variant | runs | verdict | correct |
+|---|---|---|---|
+| good — announces its error | 3 | informed, identical announcement each time | yes |
+| bad — announces nothing | 3 | not informed, empty each time | yes |
+
+**6 of 6, stable and correct**, on the same infrastructure that produced 3/8/12/13 form fields and
+5/59/60 graphics the night before. The reason is structural rather than lucky: a verdict needs one bit,
+and an announcement either happened or it did not — variance in HOW MUCH was captured cannot change
+WHETHER the error was spoken. Enumeration needs completeness; occurrence needs a witness.
+
+So the reliability problem that dominated 2026-08-09/10 is a problem for the half of the product that is
+already commoditised, and much less of one for the half that is not.
+
+**What follows.** Task journeys (ADR 0011) stop being out-of-scope-for-release and become the direction;
+breadth of criteria stops being the axis to optimise. The VM fleet stops being an embarrassment and
+becomes the reason the unique claim is hard to copy.
+
 ## Risks we are choosing to accept, and must therefore state
 
 These are not blockers. They ARE things a reader must be told, and every one is already written into
