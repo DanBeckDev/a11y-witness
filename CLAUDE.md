@@ -48,7 +48,7 @@ npm run worker:deploy -- --vm=a11y-worker-2
 npm run worker:code                       # each worker's /health.code vs this checkout
 ```
 
-It pushes **every hashed file** (13 now, defined once in `packages/nvda-worker/src/worker-files.mjs` — the
+It pushes **every hashed file** (18 now, defined once in `packages/nvda-worker/src/worker-files.mjs` — the
 list used to be duplicated in `server.mjs` and `check-worker-code.mjs` with a third derived by regex in the
 deploy script), reboots each guest — mandatory, because
 `utmctl exec` cannot be trusted to restart the worker — and verifies `/health.code` over HTTP, which
@@ -320,6 +320,53 @@ once swept up 19 files, 16 of them another agent's half-finished work, and pushe
   `git apply --cached your.patch`, then `git commit` with **no path arguments** (a path argument
   makes git commit the working tree, not your staged hunk).
 - `git status` before you start. Files already modified are not yours to commit.
+
+## Which browser a capture drives
+
+`packages/nvda-worker/src/browsers.mjs` holds one plain-object preset per browser — exe search paths,
+launch flags, profile directory, process image, window title. It exists because the browser was spread
+across **eight** sites, which is this repo's most expensive recurring shape: a change applied at seven of
+them and missed at the eighth is a capture that launches Chrome and kills Edge.
+
+```bash
+A11Y_BROWSER=chrome          # what this GUEST has (set once in run-server.cmd)
+{"url": "...", "browser": "chrome"}          # per REQUEST, for a comparison run
+npm run evidence:check -- <worker> --browser=chrome     # does Chrome announce the same as Edge?
+npm run training:repeat -- --url=<page> --browser=chrome --times=5
+```
+
+**The browser is EVIDENCE, not configuration.** `environmentKey()` has always keyed the cache on
+`browser`/`browserVersion` — for the same documented reason it keys on `os` and `architecture`, *"a fleet
+can have more than one image"* — but that value was the literal string `"Microsoft Edge"`, a constant
+standing in for a variable. It now comes from the preset, so the key does the job it was written for. Two
+consequences follow and neither is optional:
+
+- **Edge's preset must stay byte-identical.** Its `name` is `"Microsoft Edge"` and its flag list is the
+  same flags in the same order, because that is what makes all 2,122 cached captures still valid. A tidier
+  `"edge"` would invalidate the corpus for a rename. `browser-args.test.ts` asserts the whole command line
+  against a literal — individual per-flag assertions cannot see a flag that was *added*.
+- **Profiles are per browser, never shared.** Chromium refuses two builds on one `--user-data-dir`, and the
+  quieter half is worse: a profile Edge warmed carries Edge's learned autofill into a Chrome capture.
+
+**Nothing falls back.** A guest whose configured browser is missing reports `browserAvailable: false` and
+says which browser and which paths — it does not quietly capture in whatever else is installed. A silent
+fallback puts two browsers' evidence in one corpus, which is the failure the cache key exists to prevent
+arriving by a different door. A tiny11 image ships without Edge; `A11Y_BROWSER=chrome` is how it says so.
+
+**The Chrome preset has never taken a capture** — there is no Chrome guest yet. It is the Chromium
+switches Edge shares plus `--disable-search-engine-choice-screen` (Chrome's `msEdgeWelcomePage`, and worse:
+since Chrome 127 it is a MODAL, which is the fault class that blocks input while `/health` stays green).
+Treat every Chrome line as a hypothesis until `evidence:check --browser=chrome` has compared them. That
+comparison is the point: *does NVDA announce the same thing in the two Chromium browsers?* Nobody has
+published it, and the Edge corpus on disk is the baseline that makes it a one-command question.
+
+Two things deliberately need **no** preset. `window-focus.mjs` matches the window CLASS, and Chromium names
+its top-level windows `Chrome_WidgetWin_1` whatever the branding — the code that focuses Edge focuses Chrome
+unchanged. And `pointer.mjs`'s park is browser-agnostic, so Chrome inherits the real magnifier remedy even
+though it has no such feature to disable.
+
+**Firefox does not fit a preset.** No CDP, so the structural census, `bringPageToFront` and window reuse all
+have no equivalent — it needs a separate capture backend, not another entry in this map. See ADR 0001.
 
 ## What the screen reader drives
 
