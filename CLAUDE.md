@@ -56,12 +56,25 @@ rather than file-pushed, so they deploy by pulling:
 ```bash
 cd packages/worker-fleet/ansible && ansible-playbook deploy.yml     # pull + install + restart + PROVE it
 eval "$(npm run --silent fleet:env)"                                # A11Y_WORKERS from inventory.yml
+npm run fleet:status                                                # what every box is doing, right now
 ```
+
+`fleet:status` is the "which box is the problem" answer: per worker, its state, its `/health.code`, and —
+for a busy one — the case it is on, how long it has been there and the phase it is IN, read from
+`/progress`, which every worker has served since forever and nothing consumed. It surfaces a **degraded**
+guest, which is the fault that produces zero failures: the worker's own retry absorbs every recovery, so
+`failures` stays 0 while that box runs at three times its neighbours' cost.
 
 `packages/worker-fleet/ansible/README.md` is the map: why SSH and not WinRM (the blank-password guard),
 why not an `/admin/update` route (the worker has no auth and binds all interfaces), and the two Windows
 gotchas that otherwise cost an afternoon — `administrators_authorized_keys` and OpenSSH's `DefaultShell`.
 The fleet is defined **once**, in `inventory.yml`.
+
+**A new box needs no console visit.** `packages/worker-fleet/src/provisioning/bare-metal/` is an x64
+`autounattend.xml` for the PXE server: Windows installs, the account is created, sshd comes up with your
+key already planted, and the worker serves. `roles/worker/` is provisioning ported to Ansible modules and
+runs alongside `provision-nvda-worker.ps1` until parity is proven — see that README before deleting
+either, because `provisionRevision` is a **capture cache key** and retiring the script moves it.
 
 It pushes **every hashed file** (18 now, defined once in `packages/nvda-worker/src/worker-files.mjs` — the
 list used to be duplicated in `server.mjs` and `check-worker-code.mjs` with a third derived by regex in the
