@@ -424,6 +424,45 @@ npm run training:repeat -- --url=<page> --times=5 [--probe-tables]   # is a fiel
 node packages/lab/scripts/bench-capture.mjs --from-disk                          # p50/p95 per phase, per worker
 ```
 
+## A capture survives a lost socket — name it, then ask for it again
+
+`send(res, 200, {...})` wrote the result to a socket and the worker then kept **nothing**, so any socket
+loss between "NVDA finished reading the page" and "the host parsed the JSON" destroyed 12–520 s of real
+screen-reader work. The host cannot tell that from a worker that never answered, so it retried and paid
+for the whole capture again — and three failures in a row on one worker **evicts a machine that was never
+faulty**.
+
+On three UTM guests sharing one Mac the socket was a virtual bridge and effectively lossless, which is why
+this never mattered. A fleet of bare-metal mini PCs is real Ethernet with real power management, and the
+incident is already in provisioning: a worker answered `EHOSTUNREACH` for **48 straight requests** in one
+evidence-check run, then answered a curl thirty seconds later.
+
+```
+POST /capture  { url, ..., captureId }     # the host NAMES the capture
+GET  /capture/<captureId>                  # 404 unknown | 202 running | the original response, verbatim
+```
+
+- **The id comes from the CLIENT, and it has to.** A worker-minted id would be returned in the response —
+  the very thing being lost. This is the idempotency-key shape, for the reason payment APIs use it.
+- **404 and 202 are different answers and must stay that way.** "Never heard of it" means re-issue the
+  case; "still running" means wait. Producing one where the other is true is this repo's most expensive
+  recurring shape.
+- **A failed capture is stored exactly like a successful one**, with its original status, so a replay is
+  indistinguishable from the original response and the worker's `fault` code survives. Losing that
+  response replaces a diagnosis with "no answer" — which this project has repeatedly misread as a dead
+  machine.
+- **The host asks only after `waitForWorker` returns**, which waits for `busy` to clear. So the capture it
+  lost the socket to has necessarily finished and its outcome is stored. One request, no polling loop.
+- **In memory, bounded at 8, never persisted.** Eviction skips anything still running — dropping a live
+  capture would recreate the bug at the moment the store exists to prevent it. Persisting would mean
+  serving results captured under a different `codeVersion` after a restart.
+
+This adds a route and an optional request field, so it does **not** bump `CAPTURE_PROTOCOL_VERSION` —
+nothing about what the evidence *means* changed, and a bump would invalidate 2,122 captures for a
+recovery path. It does change `codeVersion()`, so redeploy. An older worker ignores `captureId`
+(`captureOptions` reads known fields only) and 404s the GET from its router fallback, which the host reads
+as "nothing to recover" and captures again — the behaviour it had before. Additive, exactly like `fault`.
+
 ## Readiness: `ready`, not `ok`
 
 `/health` reports `ready` alongside `ok`. **Dispatch on `ready`.** `ok` only ever meant "the HTTP
