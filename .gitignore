@@ -6,6 +6,13 @@ __pycache__/
 *.log
 .DS_Store
 runs/
+# The same path again without the slash, because on the lab container `runs` is a SYMLINK onto a
+# mounted volume (/srv/a11y-runs) so the corpus survives a container rebuild -- and git's trailing
+# slash means "directory", which a symlink is not. So `runs/` matches on a developer's Mac, where it
+# is a real directory, and silently does not match on the box that actually holds the corpus: it
+# showed as untracked in every `git status` there, one `git add -A` away from committing a symlink
+# pointing at a path that exists on exactly one machine.
+/runs
 # Downloaded encoders and scratch artefacts are not ours to version. The TRAINED SCORER is: it is 27 KB,
 # it is this project's actual output, and without it in the repo the LLM-free judge cannot run for anyone
 # but the machine that trained it — which is exactly how a shipped Action would have had no model at all.
