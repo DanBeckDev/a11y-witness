@@ -40,13 +40,28 @@ found it** — so a VM you started yourself is left running. `--after stop|pause
 overrides. `--no-axe` skips the optional rule layer; `--axe-results file.json` imports one you
 already ran.
 
-**Changing any worker file means deploying to the guests. One command:**
+**Changing any worker file means deploying to the guests. One command — but WHICH command depends on
+what the worker is.**
 
 ```bash
-npm run worker:deploy                     # every local worker, one at a time
+npm run worker:deploy                     # UTM VMs on this Mac only — utmctl file push, keyed on a VM UUID
 npm run worker:deploy -- --vm=a11y-worker-2
-npm run worker:code                       # each worker's /health.code vs this checkout
+npm run worker:code                       # each worker's /health.code vs this checkout — works for both
 ```
+
+`worker:deploy` **cannot reach a bare-metal worker**: it is `utmctl file push` plus a `utmctl` reboot, it
+takes a VM UUID rather than a host, and it fails immediately off macOS. Physical boxes are git-cloned
+rather than file-pushed, so they deploy by pulling:
+
+```bash
+cd packages/worker-fleet/ansible && ansible-playbook deploy.yml     # pull + install + restart + PROVE it
+eval "$(npm run --silent fleet:env)"                                # A11Y_WORKERS from inventory.yml
+```
+
+`packages/worker-fleet/ansible/README.md` is the map: why SSH and not WinRM (the blank-password guard),
+why not an `/admin/update` route (the worker has no auth and binds all interfaces), and the two Windows
+gotchas that otherwise cost an afternoon — `administrators_authorized_keys` and OpenSSH's `DefaultShell`.
+The fleet is defined **once**, in `inventory.yml`.
 
 It pushes **every hashed file** (18 now, defined once in `packages/nvda-worker/src/worker-files.mjs` — the
 list used to be duplicated in `server.mjs` and `check-worker-code.mjs` with a third derived by regex in the
