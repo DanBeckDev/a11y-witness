@@ -339,9 +339,24 @@ def _onnx_encode(texts: list[str], encoder_root: Path, max_length: int):
     if not onnx_path.exists():
         return _torch_encode(texts, encoder_root, max_length, tokenizer)
 
+    import os
+
     import onnxruntime as ort
 
-    session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+    # Set the thread count EXPLICITLY. Left unset, onnxruntime pins each worker thread to a core, and
+    # `pthread_setaffinity_np` fails inside an LXC container, which restricts CPU affinity. That is one
+    # `E:` line per session -- so on the lab container it would be logged on every scoring call, and an
+    # error-level line that is always present is one nobody reads when it matters.
+    #
+    # Evidence-neutral, measured rather than assumed: the same 56 role/name phrases encode to
+    # BIT-IDENTICAL float32 at 1, 2 and 4 threads (max abs diff 0.000e+00), so this changes log noise
+    # and nothing that reaches the trained heads or the thresholds calibrated against them.
+    options = ort.SessionOptions()
+    options.intra_op_num_threads = os.cpu_count() or 1
+
+    session = ort.InferenceSession(
+        str(onnx_path), sess_options=options, providers=["CPUExecutionProvider"]
+    )
     wanted = {spec.name for spec in session.get_inputs()}
     out = []
     for start in range(0, len(texts), 16):
