@@ -103,6 +103,27 @@ fleet's SSH key. It prints the public half — that is what workers must trust.
 
 It is idempotent: re-run it after any change and every step skips itself when already done.
 
+## The corpus is its own private repo
+
+`git@github.com:DanBeckDev/a11y-corpus.git` — 2,122 captures, the pages they describe, and the manifest.
+The lab bootstrap clones it; `A11Y_CORPUS_URL` overrides, and accepts a tarball URL for a box without
+access to the private repo.
+
+**Private, and the main repo is public** — committing these there would publish the internal test pages
+the tool is validated against, and anything public is eventually trained on. The publishable artifact is
+external-page evidence instead; see ADR 0010.
+
+**Versioned rather than regenerated**, because a capture is not reproducible: `browserVersion` is in the
+capture cache key precisely so evidence taken under one Edge release is not confused with another's.
+Recapturing after an update gives a *different* corpus. It is also 3 h 46 m of fleet time.
+
+Git suits it: 42 MB of pretty-printed JSON packs to 4 MB, and `git diff` shows exactly which
+announcements changed between recaptures — a research capability, not just recovery.
+
+`npm run corpus:backup` remains the belt to that repo's braces: a local verified archive, so the corpus
+does not depend on one vendor. It refuses to report success without a destination and verifies by
+reading the copy back.
+
 ## The key lives here now
 
 The bootstrap generates `~/.ssh/a11y-witness_ed25519` **on this box**, deliberately rather than copying
