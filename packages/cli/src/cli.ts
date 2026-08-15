@@ -23,6 +23,7 @@ import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "@a11y-witness/judge/layers";
 import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fleet";
+import { requestJson } from "@a11y-witness/worker-fleet/worker-http";
 import { CAPTURE_HARD_TIMEOUT_DEFAULT_MS } from "@a11y-witness/nvda-worker";
 import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
@@ -477,10 +478,13 @@ interface CaptureRequest {
 /**
  * How long to wait for a capture, measured against the WORKER's own bound rather than guessed.
  *
- * `fetch`'s default headers timeout is ~300 s, which is barely above the worker's 280 s hard timeout — so on
- * a large real page the client lost the race and the run died with `UND_ERR_HEADERS_TIMEOUT`, throwing away
- * the diagnosis the worker had already worked out and was about to return. The margin is deliberate: the
- * worker is the component that knows why a capture failed, and it must always be the one that gets to say so.
+ * The margin is deliberate: the worker is the component that knows why a capture failed, and it must always
+ * be the one that gets to say so — a client that gives up first replaces a diagnosis with "no answer".
+ *
+ * This comment used to state the real defect and then not fix it: `fetch`'s ~300 s headers timeout sits BELOW
+ * the worker's 520 s hard timeout, so `scan` died with `UND_ERR_HEADERS_TIMEOUT` on any page that took longer
+ * than five minutes, and the number below never applied. `AbortSignal.timeout()` does not govern that cap;
+ * only a different client does. Measured, and the reason `requestJson` exists — see worker-http.mjs.
  */
 const CLIENT_TIMEOUT_MARGIN_MS = 40_000;
 const CAPTURE_CLIENT_TIMEOUT_MS = CAPTURE_HARD_TIMEOUT_DEFAULT_MS + CLIENT_TIMEOUT_MARGIN_MS;
@@ -488,13 +492,12 @@ const CAPTURE_CLIENT_TIMEOUT_MS = CAPTURE_HARD_TIMEOUT_DEFAULT_MS + CLIENT_TIMEO
 async function captureViaWorker(
   url: string, { task, worker, probeForms, probeFocus }: CaptureRequest,
 ): Promise<CaptureResponse> {
-  let res: Response;
+  let res: { status: number; ok: boolean; text: string; json: unknown };
   try {
-    res = await fetch(`${worker}/capture`, {
+    res = await requestJson(`${worker}/capture`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url, task, probeForms, probeFocus }),
-      signal: AbortSignal.timeout(CAPTURE_CLIENT_TIMEOUT_MS),
+      body: { url, task, probeForms, probeFocus },
+      timeoutMs: CAPTURE_CLIENT_TIMEOUT_MS,
     });
   } catch (error) {
     // A transport failure is not an accessibility finding, and it must not read like one.
@@ -507,9 +510,9 @@ async function captureViaWorker(
     );
   }
   if (!res.ok) {
-    throw new Error(`Worker error ${res.status}: ${await res.text()}`);
+    throw new Error(`Worker error ${res.status}: ${res.text}`);
   }
-  return (await res.json()) as CaptureResponse;
+  return res.json as CaptureResponse;
 }
 
 function printReport(report: Report): void {
