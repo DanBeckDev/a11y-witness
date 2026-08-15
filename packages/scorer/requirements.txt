@@ -2,6 +2,13 @@
 # training runner refuses pickle-style checkpoints.
 huggingface-hub>=0.30,<1
 numpy>=2.0,<3
+# The encoder's DEFAULT path, not an optional accelerator. `_encode` takes the ONNX branch whenever
+# `onnx/model.onnx` exists -- which is whenever the encoder has been fetched -- and its torch fallback
+# is guarded on the FILE being absent, not on the MODULE being importable. So an undeclared
+# onnxruntime does not degrade to the slower path, it raises ModuleNotFoundError and the lab cannot
+# score at all. It went unnoticed because it was installed by hand in one developer's venv and
+# declared nowhere; the first box built from this file found it immediately.
+onnxruntime>=1.20,<2
 safetensors>=0.5,<1
 torch>=2.7,<3
 transformers>=4.50,<6
