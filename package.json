@@ -44,6 +44,7 @@
     "fleet:normalise": "node packages/worker-fleet/src/normalise-fleet.mjs",
     "fleet:env": "node packages/worker-fleet/src/fleet-env.mjs",
     "fleet:status": "node packages/worker-fleet/src/fleet-status.mjs",
+    "fleet:discover": "node packages/worker-fleet/src/fleet-discover.mjs",
     "corpus:snapshot": "node packages/lab/scripts/corpus-snapshot.mjs",
     "training:repeat": "tsx packages/lab/src/training/repeat-capture.mjs",
     "rules:score": "tsx packages/lab/scripts/score-rules.ts",
