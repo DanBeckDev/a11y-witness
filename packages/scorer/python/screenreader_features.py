@@ -468,7 +468,7 @@ def score_head(features: Any, weight: Any, bias: Any) -> Any:
 # evidence that instance scoring helps are listed here.
 INSTANCE_POOLED_SUBTYPES = frozenset({
     "4.1.2:missing-role",
-    "4.1.2:regex",
+    "4.1.2:unnamed-control",
     "4.1.2:state-change-silent",
 })
 
