@@ -466,8 +466,18 @@ def score_head(features: Any, weight: Any, bias: Any) -> Any:
 # So pooling is a property of the SIGNAL, not of the pipeline. Local findings pool by max over
 # instances; contextual findings keep the whole capture. Default is document-mean: only subtypes with
 # evidence that instance scoring helps are listed here.
+# `4.1.2:missing-role` is DELIBERATELY absent, and it used to be here.
+#
+# The measurement above that put 4.1.2's heads on instance-max reasoned about "a control announced with
+# a role and no name" -- which was, at the time, 115 of `missing-role`'s 189 positives, and they have
+# since moved to `4.1.2:unnamed-control` where that reasoning actually applies. What is left is the
+# opposite failure: a styled div announced as nothing at all, with `formFields: []` and `controls: []`.
+#
+# You cannot detect an ABSENCE by taking a max over instances. There is no announcement containing the
+# evidence, because the evidence IS that no such announcement exists -- so instance-max asks each line
+# "are you a missing button?" when the fact is a property of the whole capture. Document-mean is the
+# only view that can express it.
 INSTANCE_POOLED_SUBTYPES = frozenset({
-    "4.1.2:missing-role",
     "4.1.2:unnamed-control",
     "4.1.2:state-change-silent",
 })
