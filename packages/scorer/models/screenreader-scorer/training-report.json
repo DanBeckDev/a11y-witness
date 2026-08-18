@@ -1,12 +1,12 @@
 {
   "schema": "a11y-witness/screenreader-scorer-training",
   "encoder": {
-    "path": "/Users/danielbeck/Documents/repos/personal/a11y-witness/packages/scorer/models/encoders/all-MiniLM-L6-v2",
+    "path": "/opt/a11y/packages/scorer/models/encoders/all-MiniLM-L6-v2",
     "hiddenSize": 384,
     "modelSha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db"
   },
   "representation": {
-    "schema": "screenreader-structured-v6",
+    "schema": "screenreader-structured-v7",
     "text": "channel-tagged screen-reader evidenceUnits",
     "embeddingSize": 384,
     "structuredFeatureSize": 29,
@@ -52,31 +52,33 @@
   },
   "dataset": {
     "path": "runs/screenreader-dataset/screenreader-evidence.jsonl",
-    "sha256": "86caa3c7aa22f612d6124e74ecd0036698545e90c9da31c4f436f723b373aacb",
-    "records": 2002
+    "sha256": "91c5e8a32731ff3455444aa6ccb704cd3a1f44948f5a18322ed2a687d5105e3c",
+    "records": 2006
   },
   "split": {
-    "train": 1392,
+    "train": 1394,
     "validation": 300,
-    "test": 310
+    "test": 312
   },
   "calibration": {
     "method": "grouped-out-of-fold-threshold-calibration",
     "folds": 5,
-    "developmentRecords": 1692
+    "developmentRecords": 1694
   },
   "criteria": {
     "1.1.1": {
-      "decisionOwner": "deterministic-rules",
-      "threshold": 0.4,
+      "decisionOwner": "mixed",
       "subtypes": {
         "1.1.1:filename-alt": {
           "head": "subtype_1_1_1_filename_alt",
           "pooling": "document-mean",
+          "threshold": 0.4,
+          "decisionOwner": "deterministic-rules",
+          "ruleReportsAs": "1.1.1",
           "development": {
-            "records": 1692,
+            "records": 1694,
             "positive": 27,
-            "clean": 1665,
+            "clean": 1667,
             "truePositive": 27,
             "falsePositive": 0,
             "falseNegative": 0,
@@ -88,10 +90,12 @@
         "1.1.1:generic-alt": {
           "head": "subtype_1_1_1_generic_alt",
           "pooling": "document-mean",
+          "threshold": 0.25,
+          "decisionOwner": "learned-screenreader-scorer",
           "development": {
-            "records": 1692,
+            "records": 1694,
             "positive": 23,
-            "clean": 1669,
+            "clean": 1671,
             "truePositive": 23,
             "falsePositive": 0,
             "falseNegative": 0,
@@ -103,10 +107,13 @@
         "1.1.1:missing-alt": {
           "head": "subtype_1_1_1_missing_alt",
           "pooling": "document-mean",
+          "threshold": 0.2,
+          "decisionOwner": "deterministic-rules",
+          "ruleReportsAs": "1.1.1",
           "development": {
-            "records": 1692,
+            "records": 1694,
             "positive": 76,
-            "clean": 1616,
+            "clean": 1618,
             "truePositive": 76,
             "falsePositive": 0,
             "falseNegative": 0,
@@ -117,9 +124,9 @@
         }
       },
       "calibration": {
-        "records": 1692,
+        "records": 1694,
         "positive": 126,
-        "clean": 1566,
+        "clean": 1568,
         "truePositive": 126,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -128,15 +135,15 @@
         "f1": 1.0
       },
       "train": {
-        "records": 1392,
+        "records": 1394,
         "positive": 101,
-        "clean": 1291,
+        "clean": 1293,
         "truePositive": 101,
-        "falsePositive": 0,
+        "falsePositive": 1,
         "falseNegative": 0,
-        "precision": 1.0,
+        "precision": 0.9901960784313726,
         "recall": 1.0,
-        "f1": 1.0
+        "f1": 0.9950738916256158
       },
       "validation": {
         "records": 300,
@@ -150,9 +157,9 @@
         "f1": 1.0
       },
       "test": {
-        "records": 310,
+        "records": 312,
         "positive": 24,
-        "clean": 286,
+        "clean": 288,
         "truePositive": 24,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -163,15 +170,16 @@
     },
     "1.3.1": {
       "decisionOwner": "learned-screenreader-scorer",
-      "threshold": 0.25,
       "subtypes": {
         "1.3.1:fake-heading": {
           "head": "subtype_1_3_1_fake_heading",
           "pooling": "document-mean",
+          "threshold": 0.25,
+          "decisionOwner": "learned-screenreader-scorer",
           "development": {
-            "records": 1692,
+            "records": 1694,
             "positive": 23,
-            "clean": 1669,
+            "clean": 1671,
             "truePositive": 23,
             "falsePositive": 0,
             "falseNegative": 0,
@@ -183,10 +191,12 @@
         "1.3.1:unassociated-table": {
           "head": "subtype_1_3_1_unassociated_table",
           "pooling": "document-mean",
+          "threshold": 0.1,
+          "decisionOwner": "learned-screenreader-scorer",
           "development": {
-            "records": 1692,
+            "records": 1694,
             "positive": 54,
-            "clean": 1638,
+            "clean": 1640,
             "truePositive": 54,
             "falsePositive": 0,
             "falseNegative": 0,
@@ -197,9 +207,9 @@
         }
       },
       "calibration": {
-        "records": 1692,
+        "records": 1694,
         "positive": 77,
-        "clean": 1615,
+        "clean": 1617,
         "truePositive": 77,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -208,9 +218,9 @@
         "f1": 1.0
       },
       "train": {
-        "records": 1392,
+        "records": 1394,
         "positive": 63,
-        "clean": 1329,
+        "clean": 1331,
         "truePositive": 63,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -230,9 +240,9 @@
         "f1": 1.0
       },
       "test": {
-        "records": 310,
+        "records": 312,
         "positive": 10,
-        "clean": 300,
+        "clean": 302,
         "truePositive": 10,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -243,15 +253,16 @@
     },
     "2.4.4": {
       "decisionOwner": "learned-screenreader-scorer",
-      "threshold": 0.1,
       "subtypes": {
         "2.4.4:regex": {
           "head": "subtype_2_4_4_regex",
           "pooling": "document-mean",
+          "threshold": 0.1,
+          "decisionOwner": "learned-screenreader-scorer",
           "development": {
-            "records": 1692,
+            "records": 1694,
             "positive": 81,
-            "clean": 1611,
+            "clean": 1613,
             "truePositive": 81,
             "falsePositive": 0,
             "falseNegative": 0,
@@ -262,9 +273,9 @@
         }
       },
       "calibration": {
-        "records": 1692,
+        "records": 1694,
         "positive": 81,
-        "clean": 1611,
+        "clean": 1613,
         "truePositive": 81,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -273,9 +284,9 @@
         "f1": 1.0
       },
       "train": {
-        "records": 1392,
+        "records": 1394,
         "positive": 69,
-        "clean": 1323,
+        "clean": 1325,
         "truePositive": 69,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -295,9 +306,9 @@
         "f1": 1.0
       },
       "test": {
-        "records": 310,
+        "records": 312,
         "positive": 19,
-        "clean": 291,
+        "clean": 293,
         "truePositive": 19,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -308,15 +319,16 @@
     },
     "2.4.6": {
       "decisionOwner": "learned-screenreader-scorer",
-      "threshold": 0.1,
       "subtypes": {
         "2.4.6:regex": {
           "head": "subtype_2_4_6_regex",
           "pooling": "document-mean",
+          "threshold": 0.1,
+          "decisionOwner": "learned-screenreader-scorer",
           "development": {
-            "records": 1692,
+            "records": 1694,
             "positive": 87,
-            "clean": 1605,
+            "clean": 1607,
             "truePositive": 87,
             "falsePositive": 0,
             "falseNegative": 0,
@@ -327,9 +339,9 @@
         }
       },
       "calibration": {
-        "records": 1692,
+        "records": 1694,
         "positive": 87,
-        "clean": 1605,
+        "clean": 1607,
         "truePositive": 87,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -338,9 +350,9 @@
         "f1": 1.0
       },
       "train": {
-        "records": 1392,
+        "records": 1394,
         "positive": 70,
-        "clean": 1322,
+        "clean": 1324,
         "truePositive": 70,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -360,9 +372,9 @@
         "f1": 1.0
       },
       "test": {
-        "records": 310,
+        "records": 312,
         "positive": 13,
-        "clean": 297,
+        "clean": 299,
         "truePositive": 13,
         "falsePositive": 1,
         "falseNegative": 0,
@@ -373,16 +385,17 @@
     },
     "3.3.1": {
       "decisionOwner": "learned-screenreader-scorer",
-      "threshold": 0.3,
       "subtypes": {
         "3.3.1:validation-error-silent": {
           "head": "subtype_3_3_1_validation_error_silent",
           "pooling": "document-mean",
+          "threshold": 0.3,
+          "decisionOwner": "learned-screenreader-scorer",
           "development": {
-            "records": 1692,
-            "positive": 102,
-            "clean": 1590,
-            "truePositive": 102,
+            "records": 1694,
+            "positive": 103,
+            "clean": 1591,
+            "truePositive": 103,
             "falsePositive": 0,
             "falseNegative": 0,
             "precision": 1.0,
@@ -392,10 +405,10 @@
         }
       },
       "calibration": {
-        "records": 1692,
-        "positive": 102,
-        "clean": 1590,
-        "truePositive": 102,
+        "records": 1694,
+        "positive": 103,
+        "clean": 1591,
+        "truePositive": 103,
         "falsePositive": 0,
         "falseNegative": 0,
         "precision": 1.0,
@@ -403,10 +416,10 @@
         "f1": 1.0
       },
       "train": {
-        "records": 1392,
-        "positive": 83,
-        "clean": 1309,
-        "truePositive": 83,
+        "records": 1394,
+        "positive": 84,
+        "clean": 1310,
+        "truePositive": 84,
         "falsePositive": 0,
         "falseNegative": 0,
         "precision": 1.0,
@@ -425,10 +438,10 @@
         "f1": 1.0
       },
       "test": {
-        "records": 310,
-        "positive": 21,
-        "clean": 289,
-        "truePositive": 21,
+        "records": 312,
+        "positive": 22,
+        "clean": 290,
+        "truePositive": 22,
         "falsePositive": 0,
         "falseNegative": 0,
         "precision": 1.0,
@@ -438,43 +451,47 @@
     },
     "3.3.2": {
       "decisionOwner": "learned-screenreader-scorer",
-      "threshold": 0.85,
       "subtypes": {
         "3.3.2:placeholder-only": {
           "head": "subtype_3_3_2_placeholder_only",
           "pooling": "document-mean",
+          "threshold": 0.65,
+          "decisionOwner": "learned-screenreader-scorer",
           "development": {
-            "records": 1692,
+            "records": 1694,
             "positive": 20,
-            "clean": 1672,
+            "clean": 1674,
             "truePositive": 20,
-            "falsePositive": 3,
+            "falsePositive": 0,
             "falseNegative": 0,
-            "precision": 0.8695652173913043,
+            "precision": 1.0,
             "recall": 1.0,
-            "f1": 0.9302325581395349
+            "f1": 1.0
           }
         },
         "3.3.2:unnamed-form-field": {
           "head": "subtype_3_3_2_unnamed_form_field",
           "pooling": "document-mean",
+          "threshold": 0.85,
+          "decisionOwner": "learned-screenreader-scorer",
+          "ruleReportsAs": "4.1.2",
           "development": {
-            "records": 1692,
+            "records": 1694,
             "positive": 92,
-            "clean": 1600,
+            "clean": 1602,
             "truePositive": 92,
-            "falsePositive": 10,
+            "falsePositive": 0,
             "falseNegative": 0,
-            "precision": 0.9019607843137255,
+            "precision": 1.0,
             "recall": 1.0,
-            "f1": 0.9484536082474228
+            "f1": 1.0
           }
         }
       },
       "calibration": {
-        "records": 1692,
+        "records": 1694,
         "positive": 112,
-        "clean": 1580,
+        "clean": 1582,
         "truePositive": 112,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -483,15 +500,15 @@
         "f1": 1.0
       },
       "train": {
-        "records": 1392,
+        "records": 1394,
         "positive": 94,
-        "clean": 1298,
+        "clean": 1300,
         "truePositive": 94,
-        "falsePositive": 0,
+        "falsePositive": 1,
         "falseNegative": 0,
-        "precision": 1.0,
+        "precision": 0.9894736842105263,
         "recall": 1.0,
-        "f1": 1.0
+        "f1": 0.9947089947089947
       },
       "validation": {
         "records": 300,
@@ -505,9 +522,9 @@
         "f1": 1.0
       },
       "test": {
-        "records": 310,
+        "records": 312,
         "positive": 29,
-        "clean": 281,
+        "clean": 283,
         "truePositive": 29,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -517,111 +534,118 @@
       }
     },
     "4.1.2": {
-      "decisionOwner": "deterministic-rules",
-      "threshold": 0.5,
+      "decisionOwner": "mixed",
       "subtypes": {
         "4.1.2:missing-role": {
           "head": "subtype_4_1_2_missing_role",
           "pooling": "instance-max",
+          "threshold": 0.9,
+          "decisionOwner": "learned-screenreader-scorer",
           "development": {
-            "records": 1692,
-            "positive": 160,
-            "clean": 1532,
-            "truePositive": 158,
-            "falsePositive": 9,
-            "falseNegative": 2,
-            "precision": 0.9461077844311377,
-            "recall": 0.9875,
-            "f1": 0.9663608562691132
-          }
-        },
-        "4.1.2:regex": {
-          "head": "subtype_4_1_2_regex",
-          "pooling": "instance-max",
-          "development": {
-            "records": 1692,
-            "positive": 25,
-            "clean": 1667,
-            "truePositive": 25,
-            "falsePositive": 3,
-            "falseNegative": 0,
-            "precision": 0.8928571428571429,
-            "recall": 1.0,
-            "f1": 0.9433962264150945
+            "records": 1694,
+            "positive": 68,
+            "clean": 1626,
+            "truePositive": 56,
+            "falsePositive": 0,
+            "falseNegative": 12,
+            "precision": 1.0,
+            "recall": 0.8235294117647058,
+            "f1": 0.9032258064516129
           }
         },
         "4.1.2:state-change-silent": {
           "head": "subtype_4_1_2_state_change_silent",
           "pooling": "instance-max",
+          "threshold": 0.95,
+          "decisionOwner": "learned-screenreader-scorer",
           "development": {
-            "records": 1692,
+            "records": 1694,
             "positive": 59,
-            "clean": 1633,
+            "clean": 1635,
             "truePositive": 59,
-            "falsePositive": 2,
+            "falsePositive": 0,
             "falseNegative": 0,
-            "precision": 0.9672131147540983,
+            "precision": 1.0,
             "recall": 1.0,
-            "f1": 0.9833333333333333
+            "f1": 1.0
+          }
+        },
+        "4.1.2:unnamed-control": {
+          "head": "subtype_4_1_2_unnamed_control",
+          "pooling": "instance-max",
+          "threshold": 0.05,
+          "decisionOwner": "deterministic-rules",
+          "ruleReportsAs": "4.1.2",
+          "development": {
+            "records": 1694,
+            "positive": 117,
+            "clean": 1577,
+            "truePositive": 117,
+            "falsePositive": 0,
+            "falseNegative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
           }
         }
       },
       "calibration": {
-        "records": 1692,
+        "records": 1694,
         "positive": 244,
-        "clean": 1448,
-        "truePositive": 242,
-        "falsePositive": 10,
-        "falseNegative": 2,
-        "precision": 0.9603174603174603,
-        "recall": 0.9918032786885246,
-        "f1": 0.9758064516129032
+        "clean": 1450,
+        "truePositive": 232,
+        "falsePositive": 0,
+        "falseNegative": 12,
+        "precision": 1.0,
+        "recall": 0.9508196721311475,
+        "f1": 0.9747899159663865
       },
       "train": {
-        "records": 1392,
+        "records": 1394,
         "positive": 201,
-        "clean": 1191,
-        "truePositive": 201,
-        "falsePositive": 5,
-        "falseNegative": 0,
-        "precision": 0.9757281553398058,
-        "recall": 1.0,
-        "f1": 0.9877149877149877
+        "clean": 1193,
+        "truePositive": 198,
+        "falsePositive": 0,
+        "falseNegative": 3,
+        "precision": 1.0,
+        "recall": 0.9850746268656716,
+        "f1": 0.9924812030075187
       },
       "validation": {
         "records": 300,
         "positive": 43,
         "clean": 257,
-        "truePositive": 42,
-        "falsePositive": 2,
-        "falseNegative": 1,
-        "precision": 0.9545454545454546,
-        "recall": 0.9767441860465116,
-        "f1": 0.9655172413793104
+        "truePositive": 41,
+        "falsePositive": 0,
+        "falseNegative": 2,
+        "precision": 1.0,
+        "recall": 0.9534883720930233,
+        "f1": 0.9761904761904763
       },
       "test": {
-        "records": 310,
+        "records": 312,
         "positive": 46,
-        "clean": 264,
+        "clean": 266,
         "truePositive": 46,
-        "falsePositive": 2,
+        "falsePositive": 0,
         "falseNegative": 0,
-        "precision": 0.9583333333333334,
+        "precision": 1.0,
         "recall": 1.0,
-        "f1": 0.9787234042553191
+        "f1": 1.0
       }
     },
     "4.1.3": {
       "decisionOwner": "learned-screenreader-scorer",
-      "threshold": 0.3,
       "subtypes": {
         "4.1.3:form-activation-silent": {
           "head": "subtype_4_1_3_form_activation_silent",
           "pooling": "document-mean",
+          "threshold": 0.3,
+          "decisionOwner": "learned-screenreader-scorer",
           "development": {
-            "records": 1692,
+            "records": 1694,
             "positive": 109,
-            "clean": 1583,
+            "clean": 1585,
             "truePositive": 109,
             "falsePositive": 0,
             "falseNegative": 0,
@@ -632,9 +656,9 @@
         }
       },
       "calibration": {
-        "records": 1692,
+        "records": 1694,
         "positive": 109,
-        "clean": 1583,
+        "clean": 1585,
         "truePositive": 109,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -643,9 +667,9 @@
         "f1": 1.0
       },
       "train": {
-        "records": 1392,
+        "records": 1394,
         "positive": 93,
-        "clean": 1299,
+        "clean": 1301,
         "truePositive": 93,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -665,9 +689,9 @@
         "f1": 1.0
       },
       "test": {
-        "records": 310,
+        "records": 312,
         "positive": 16,
-        "clean": 294,
+        "clean": 296,
         "truePositive": 16,
         "falsePositive": 0,
         "falseNegative": 0,
@@ -677,14 +701,16 @@
       }
     }
   },
-  "calibrationClean": true,
-  "generalisationVerified": true,
-  "releaseBlockedBy": [],
-  "releaseEligible": true,
+  "calibrationClean": false,
+  "generalisationVerified": false,
+  "releaseBlockedBy": [
+    "calibration: 4.1.2: grouped calibration has 0 false positives and 12 false negatives",
+    "held-out acceptance has not been evaluated for these weights"
+  ],
+  "releaseEligible": false,
   "modelReleaseEligible": false,
   "warnings": [
-    "4.1.2: no threshold reaches zero false positives; falling back to 0.5, which nobody chose \u2014 this criterion is not calibrated",
-    "4.1.2: grouped calibration has 10 false positives and 2 false negatives"
+    "4.1.2: grouped calibration has 0 false positives and 12 false negatives"
   ],
   "outOfDistribution": {
     "method": "knn-cosine-document-embedding",
