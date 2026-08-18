@@ -50,7 +50,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
     "form_field_named": 2.0,
 }
 
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v6"
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v7"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -88,6 +88,27 @@ LEADING_ROLE = re.compile(
     r"^(?:\uFFFC\s*,\s*)?(edit(?:\s+text)?|button|checkbox|radio|combo\s*box|list\s*box|slider|spin\s*button)\b",
     re.IGNORECASE,
 )
+
+# Roles for which pressing Enter IS the activation, so "its state did not change" is a real 4.1.2
+# finding rather than an artefact of which key the probe used.
+#
+# `probeDisclosure` presses Enter (`nvda.act()`) on whatever control it is aimed at. For a native
+# `<select>` Enter is simply not the key that opens the list -- so a combo box that stays `collapsed`
+# afterwards is behaving CORRECTLY and the observation is not a state-change test at all. The evidence
+# is identical to a broken disclosure's, character for character apart from the role:
+#
+#     bad  disclosure  "Travel advice, button, collapsed"       -> "Travel advice, button, focused, collapsed"
+#     ok   combo box   "Passenger type, combo box, collapsed"   -> "Passenger type, combo box, focused, collapsed"
+#
+# The corpus has 69 conformant and 69 failing disclosures against SIX combo-box records, so the head
+# cannot learn the exception statistically -- and should not have to, because it is a fact about the
+# control rather than a tendency in the data. Measured cost of leaving it implicit: 3 false positives on
+# conformant pages, which is this tool's worst error, and the reason 4.1.2 fell back to an uncalibrated
+# 0.5 threshold "which nobody chose".
+#
+# A POSITIVE list, deliberately. Enumerating the excluded roles instead would make an unseen role fire,
+# and the safe direction of failure here is to miss rather than to accuse.
+TOGGLE_ROLE = re.compile(r"\b(button|checkbox|radio\s*button|menu\s*item|tab)\b", re.IGNORECASE)
 
 LANDMARK_ROLES = {
     "banner",
@@ -277,11 +298,24 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
 
     values["state_change_present"] = float(bool(state_changes))
     state_pairs = [
-        (state_word(change.get("control", "")), state_word(change.get("after", "")))
+        (state_word(change.get("control") or ""), state_word(change.get("after") or ""))
         for change in state_changes
     ]
     values["state_changed"] = float(any(after and before != after for before, after in state_pairs))
-    values["state_unchanged"] = float(any(not after or before == after for before, after in state_pairs))
+    # Two corrections over `any(not after or before == after)`, both of which turned a non-finding into
+    # failure evidence:
+    #
+    # `not after` fired when the probe ERRORED and recorded no state. capture-core goes to deliberate
+    # trouble to keep those distinguishable -- "a failed measurement is not silence, and must never be
+    # recorded as one", written after 1 in 20 captures of a CORRECT page was made to look broken -- and
+    # this line quietly converted the distinction back into a failure. Zero such entries exist in the
+    # corpus today, so this is latent rather than active, which is exactly when it is cheap to fix.
+    #
+    # And the control must be one Enter actually activates; see TOGGLE_ROLE.
+    values["state_unchanged"] = float(any(
+        after and before == after and TOGGLE_ROLE.search(change.get("control") or "")
+        for change, (before, after) in zip(state_changes, state_pairs)
+    ))
 
     values["form_change_present"] = float(bool(form_changes))
     values["form_change_nonempty"] = float(any(change.get("after", "").strip() for change in form_changes))
