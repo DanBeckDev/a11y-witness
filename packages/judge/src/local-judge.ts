@@ -53,6 +53,7 @@ interface ScorerOutput {
     scores: Record<string, number>;
     predictions: Record<string, boolean>;
     ruleOwned?: string[];
+    subtypePredictions?: Record<string, boolean>;
     novelty?: { nearestTrainingCosine?: number | null; inSupport?: boolean | null; floor?: number };
   }[];
 }
@@ -301,6 +302,7 @@ export function findingsFromScores(
   scores: Record<string, number>,
   capture: CaptureEvidence,
   ruleOwned: readonly string[] = [],
+  subtypePredictions: Record<string, boolean> = {},
 ): { findings: Finding[]; suppressed: { criterion: string; score: number; reason: string }[] } {
   const decidedByRules = new Set(ruleOwned);
   const findings: Finding[] = [];
@@ -316,8 +318,28 @@ export function findingsFromScores(
     //
     // Recorded rather than dropped, like the guard below: a suppressed prediction is evidence about the
     // model's calibration, and 4.1.2's threshold is currently an uncalibrated 0.5 fallback.
-    if (decidedByRules.has(criterion)) {
-      suppressed.push({ criterion, score, reason: "a deterministic rule decides this criterion" });
+    // Suppress per SUBTYPE, not per criterion. `rules:score` measures that the rules decide
+    // `4.1.2:regex` and `4.1.2:unnamed-form-field` exactly, and never look at `4.1.2:missing-role` or
+    // `4.1.2:state-change-silent` -- 143 records for that criterion alone. Suppressing the whole
+    // criterion would hand those to nobody; suppressing none of it leaves the model duplicating the
+    // rules on the half they own, which is the false positive this guard exists to stop.
+    //
+    // So a prediction is the model's to make unless EVERY subtype behind it is rule-owned.
+    const firedSubtypes = Object.entries(subtypePredictions)
+      .filter(([subtype, fired]) => fired && subtype.startsWith(`${criterion}:`))
+      .map(([subtype]) => subtype);
+    const allRuleOwned = firedSubtypes.length > 0 && firedSubtypes.every((s) => decidedByRules.has(s));
+    // With no subtype detail the criterion-level answer is all there is, and the old behaviour is the
+    // safe one: an older scorer artifact reports nothing here rather than double-reporting.
+    const criterionRuleOwned = firedSubtypes.length === 0 && decidedByRules.has(criterion);
+    if (allRuleOwned || criterionRuleOwned) {
+      suppressed.push({
+        criterion,
+        score,
+        reason: firedSubtypes.length
+          ? `a deterministic rule decides ${firedSubtypes.join(", ")}`
+          : "a deterministic rule decides this criterion",
+      });
       continue;
     }
     if (!hasEvidenceFor(criterion, capture)) {
@@ -455,8 +477,12 @@ export async function judgeLocally(capture: CaptureEvidence & { task?: string })
         })),
       };
     }
+  // `record.ruleOwned` was parsed from the scorer output, documented as preventing "the worst error
+  // this tool can make", and then passed as `[]` -- so the guard inside has never once run. The same
+  // shape as `refreshBrowseBuffer` guarding on a flag nothing assigned: a remedy that is reachable,
+  // commented, and inert.
   const { findings, suppressed } = findingsFromScores(
-    record.predictions, record.scores, capture, [],
+    record.predictions, record.scores, capture, record.ruleOwned ?? [], record.subtypePredictions ?? {},
   );
   return {
     // Not inferred. This layer scores WCAG criteria and has no head for "could someone finish the task",
