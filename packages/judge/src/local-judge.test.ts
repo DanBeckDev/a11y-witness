@@ -26,9 +26,7 @@ const unnamedButton = {
 
 test("link purpose is unreportable on a page with no links", () => {
   assert.equal(hasEvidenceFor("2.4.4", unnamedButton), false);
-  const { findings, suppressed } = findingsFromScores(
-    { "2.4.4": true, "4.1.2": true }, { "2.4.4": 0.19, "4.1.2": 0.993 }, unnamedButton,
-  );
+  const { findings, suppressed } = findingsFromScores({ predictions: { "2.4.4": true, "4.1.2": true }, scores: { "2.4.4": 0.19, "4.1.2": 0.993 } }, unnamedButton);
   assert.deepEqual(findings.map((f) => f.wcag), ["4.1.2 Name, Role, Value (A)"]);
   assert.equal(suppressed.length, 1);
   assert.equal(suppressed[0].criterion, "2.4.4");
@@ -50,7 +48,7 @@ test("error identification needs a form to have been submitted", () => {
 test("suppression is RECORDED, never silent", () => {
   // A suppressed prediction is information about the model's calibration. Hiding it would make the guard
   // impossible to audit, which is how a workaround quietly becomes a permanent blind spot.
-  const { suppressed } = findingsFromScores({ "2.4.4": true }, { "2.4.4": 0.9 }, unnamedButton);
+  const { suppressed } = findingsFromScores({ predictions: { "2.4.4": true }, scores: { "2.4.4": 0.9 } }, unnamedButton);
   assert.equal(suppressed.length, 1);
   assert.match(suppressed[0].reason, /no evidence of the kind/);
   assert.equal(suppressed[0].score, 0.9);
@@ -58,12 +56,12 @@ test("suppression is RECORDED, never silent", () => {
 
 test("a criterion that is NOT predicted produces nothing, however much evidence exists", () => {
   const rich = { structure: { links: ["link, Read more"], formFields: ["Email, edit"] } };
-  assert.deepEqual(findingsFromScores({ "2.4.4": false }, { "2.4.4": 0.14 }, rich).findings, []);
+  assert.deepEqual(findingsFromScores({ predictions: { "2.4.4": false }, scores: { "2.4.4": 0.14 } }, rich).findings, []);
 });
 
 test("the evidence is QUOTED from the capture, not composed", () => {
   // The entire value of this tool is that a finding points at what a user would really have heard.
-  const { findings } = findingsFromScores({ "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton);
+  const { findings } = findingsFromScores({ predictions: { "4.1.2": true }, scores: { "4.1.2": 0.99 } }, unnamedButton);
   assert.equal(findings[0].evidence, "button");
   assert.equal(evidenceFor("2.4.4", { structure: { links: ["link, click here", "link, more"] } }), "link, click here · link, more");
 });
@@ -71,12 +69,11 @@ test("the evidence is QUOTED from the capture, not composed", () => {
 test("severity follows the conformance level, and the score sharpens it", () => {
   // 4.1.2 is level A, 4.1.3 is AA. An A failure blocks more people, so it outranks an AA one at the same
   // confidence rather than both being "serious".
-  const a = findingsFromScores({ "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton).findings[0];
-  const aa = findingsFromScores({ "4.1.3": true }, { "4.1.3": 0.99 },
-    { interaction: { formChanges: [{ control: "Submit, button", after: "" }] } }).findings[0];
+  const a = findingsFromScores({ predictions: { "4.1.2": true }, scores: { "4.1.2": 0.99 } }, unnamedButton).findings[0];
+  const aa = findingsFromScores({ predictions: { "4.1.3": true }, scores: { "4.1.3": 0.99 } }, { interaction: { formChanges: [{ control: "Submit, button", after: "" }] } }).findings[0];
   assert.equal(a.severity, "blocker");
   assert.equal(aa.severity, "serious");
-  const lowA = findingsFromScores({ "4.1.2": true }, { "4.1.2": 0.8 }, unnamedButton).findings[0];
+  const lowA = findingsFromScores({ predictions: { "4.1.2": true }, scores: { "4.1.2": 0.8 } }, unnamedButton).findings[0];
   assert.equal(lowA.severity, "serious", "a less confident level-A prediction should not claim blocker");
 });
 
@@ -84,7 +81,7 @@ test("an unknown criterion is never reportable", () => {
   // The scorer has heads for eight criteria. If a ninth key ever appears, inventing a finding for it
   // would be claiming coverage this layer does not have.
   assert.equal(hasEvidenceFor("2.5.8", unnamedButton), false);
-  assert.deepEqual(findingsFromScores({ "2.5.8": true }, { "2.5.8": 0.99 }, unnamedButton).findings, []);
+  assert.deepEqual(findingsFromScores({ predictions: { "2.5.8": true }, scores: { "2.5.8": 0.99 } }, unnamedButton).findings, []);
 });
 
 test("1.1.1 can be evidenced from the transcript when the graphics sweep is empty", () => {
@@ -114,7 +111,7 @@ test("a capture with no structure is UNREPORTABLE, not deferred to the model", (
   assert.equal(hasEvidenceFor("4.1.2", transcriptOnly), false);
   assert.equal(hasEvidenceFor("2.4.4", transcriptOnly), false);
 
-  const { findings } = findingsFromScores({ "4.1.2": true }, { "4.1.2": 0.993 }, transcriptOnly);
+  const { findings } = findingsFromScores({ predictions: { "4.1.2": true }, scores: { "4.1.2": 0.993 } }, transcriptOnly);
   assert.equal(findings.length, 0,
     "a starved model must not report, however confident its score looks — the confidence is an artefact " +
     "of the features it could not read");
@@ -132,7 +129,7 @@ test("the summary states no COUNT, because rules are appended after it", () => {
   // `judge()` calls `withRuleFindings` after this layer returns, so a number written into the summary is
   // stale before anyone reads it. Caught on a real site: the prose said "1 confirmed failure(s)" above a
   // table listing three. The renderer counts the findings; the prose must not compete with it.
-  const { findings } = findingsFromScores({ "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton);
+  const { findings } = findingsFromScores({ predictions: { "4.1.2": true }, scores: { "4.1.2": 0.99 } }, unnamedButton);
   assert.equal(findings.length, 1);
   for (const summary of [
     "No failures were confirmed for the eight criteria this layer scores. Other criteria are unchecked, not clean.",
@@ -155,7 +152,7 @@ test("a form that NAVIGATED cannot evidence a silent validation error", () => {
     },
   };
   assert.equal(hasEvidenceFor("3.3.1", navigated), false);
-  assert.deepEqual(findingsFromScores({ "3.3.1": true }, { "3.3.1": 0.9 }, navigated).findings, []);
+  assert.deepEqual(findingsFromScores({ predictions: { "3.3.1": true }, scores: { "3.3.1": 0.9 } }, navigated).findings, []);
 
   // ...and a form that stayed put is still judged normally, or the guard would blind the criterion.
   const stayed = {
@@ -165,7 +162,7 @@ test("a form that NAVIGATED cannot evidence a silent validation error", () => {
     },
   };
   assert.equal(hasEvidenceFor("3.3.1", stayed), true);
-  assert.equal(findingsFromScores({ "3.3.1": true }, { "3.3.1": 0.9 }, stayed).findings.length, 1);
+  assert.equal(findingsFromScores({ predictions: { "3.3.1": true }, scores: { "3.3.1": 0.9 } }, stayed).findings.length, 1);
 });
 
 // --- 3.3.1 and 4.1.3 after the keystroke-leak investigation ---
@@ -319,46 +316,59 @@ test("a non-NVDA capture is out of SCOPE, which is neither a failure nor a pass"
  * production call site passed `[]` — so the guard had never once run. Nothing failed, because nothing
  * asked it to. These tests ask.
  *
- * The granularity is the substance. `rules:score` measures, over the 2,006-record corpus, that the rules
- * decide `4.1.2:regex` and `4.1.2:unnamed-form-field` exactly (147/147, zero false positives over 1,003
- * conformant records) and never look at `4.1.2:missing-role` or `4.1.2:state-change-silent` — 143 records
- * for that criterion alone. Suppressing the whole criterion hands those to nobody; suppressing none of it
- * leaves the model duplicating the rules where they are already exact.
+ * The granularity is the substance. `rules:score` measures, over the 2,002-record corpus, that the rules
+ * decide `4.1.2:regex` exactly (32/32, zero false positives over 1,001 conformant records) and never look
+ * at `4.1.2:missing-role` or `4.1.2:state-change-silent` — 143 records for that criterion alone.
+ * Suppressing the whole criterion hands those to nobody; suppressing none of it leaves the model
+ * duplicating the rules where they are already exact.
+ *
+ * The subtype names here are the corpus's own `target.subtypes` vocabulary, checked against
+ * `packages/lab/rule-ownership.json`. They used to include `4.1.2:unnamed-form-field`, which no record
+ * has — a fixture asserting on a key invented by the test rather than by the data, which is how a
+ * hardcoded list stays green while being wrong.
  */
 test("a prediction whose every fired subtype is rule-owned is suppressed", () => {
-  const { findings, suppressed } = findingsFromScores(
-    { "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton,
-    ["4.1.2:regex", "4.1.2:unnamed-form-field"],
-    { "4.1.2:unnamed-form-field": true, "4.1.2:missing-role": false },
-  );
+  const { findings, suppressed } = findingsFromScores({ predictions: { "4.1.2": true }, scores: { "4.1.2": 0.99 }, ruleOwned: ["4.1.2:regex"], subtypePredictions: { "4.1.2:regex": true, "4.1.2:missing-role": false } }, unnamedButton);
   assert.deepEqual(findings, []);
   assert.equal(suppressed.length, 1);
-  assert.match(suppressed[0].reason, /4\.1\.2:unnamed-form-field/);
+  assert.match(suppressed[0].reason, /4\.1\.2:regex/);
 });
 
 test("a prediction driven by a subtype the rules never look at survives", () => {
-  const { findings, suppressed } = findingsFromScores(
-    { "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton,
-    ["4.1.2:regex", "4.1.2:unnamed-form-field"],
-    { "4.1.2:missing-role": true, "4.1.2:unnamed-form-field": false },
-  );
+  const { findings, suppressed } = findingsFromScores({ predictions: { "4.1.2": true }, scores: { "4.1.2": 0.99 }, ruleOwned: ["4.1.2:regex"], subtypePredictions: { "4.1.2:missing-role": true, "4.1.2:regex": false } }, unnamedButton);
   assert.deepEqual(findings.map((f) => f.wcag), ["4.1.2 Name, Role, Value (A)"]);
   assert.deepEqual(suppressed, []);
 });
 
 test("a mixed prediction survives, because one half is nobody else's to call", () => {
-  const { findings } = findingsFromScores(
-    { "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton,
-    ["4.1.2:regex", "4.1.2:unnamed-form-field"],
-    { "4.1.2:missing-role": true, "4.1.2:unnamed-form-field": true },
-  );
+  const { findings } = findingsFromScores({ predictions: { "4.1.2": true }, scores: { "4.1.2": 0.99 }, ruleOwned: ["4.1.2:regex"], subtypePredictions: { "4.1.2:missing-role": true, "4.1.2:regex": true } }, unnamedButton);
   assert.equal(findings.length, 1);
 });
 
+/**
+ * The rules decide `3.3.2:unnamed-form-field` outright and report it as a **4.1.2** failure, so it is
+ * deliberately absent from `ruleOwned` — see `score.py`, which filters on `ruleReportsAs == criterion`.
+ *
+ * Without that filter, adopting the corpus vocabulary would have recreated the very bug the per-subtype
+ * work removed, one level down: the model's 3.3.2 suppressed because a rule answers a different
+ * criterion, and 3.3.2 then decided by neither layer. This test is what stops `ruleOwned` being widened
+ * back to "every subtype a rule decides", which reads like a correction and is a regression.
+ */
+test("a rule that answers a DIFFERENT criterion does not silence the model's own", () => {
+  // An editable field, because 3.3.2 is about fields: `unnamedButton` would be suppressed by the
+  // evidence guard instead, and the test would pass for a reason unrelated to what it is checking.
+  const unnamedField = {
+    transcript: ["edit"],
+    structure: { headings: [], formFields: ["edit"], links: [], graphics: [], landmarks: [], lists: [], tableCells: [] },
+    interaction: { controls: ["edit"], stateChanges: [], formChanges: [], postSubmitFields: [] },
+  };
+  const { findings, suppressed } = findingsFromScores({ predictions: { "3.3.2": true }, scores: { "3.3.2": 0.97 }, ruleOwned: ["4.1.2:regex"], subtypePredictions: { "3.3.2:unnamed-form-field": true } }, unnamedField);
+  assert.equal(findings.length, 1, "the rules supply a 4.1.2 finding, not a 3.3.2 one");
+  assert.deepEqual(suppressed, []);
+});
+
 test("with no subtype detail it falls back to the criterion, so older artifacts still suppress", () => {
-  const { findings, suppressed } = findingsFromScores(
-    { "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton, ["4.1.2"], {},
-  );
+  const { findings, suppressed } = findingsFromScores({ predictions: { "4.1.2": true }, scores: { "4.1.2": 0.99 }, ruleOwned: ["4.1.2"] }, unnamedButton);
   assert.deepEqual(findings, []);
   assert.equal(suppressed[0].reason, "a deterministic rule decides this criterion");
 });
