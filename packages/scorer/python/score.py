@@ -218,18 +218,26 @@ def verify_artifact(args: argparse.Namespace, training: Any) -> tuple[dict[str, 
     for criterion, criterion_report in criteria.items():
         if not isinstance(criterion_report, dict):
             raise RuntimeError(f"invalid report for criterion {criterion}")
-        try:
-            threshold = float(criterion_report["threshold"])
-        except (KeyError, TypeError, ValueError) as error:
-            raise RuntimeError(f"invalid threshold for {criterion}") from error
-        if not 0.0 <= threshold <= 1.0:
-            raise RuntimeError(f"threshold for {criterion} is outside [0, 1]")
+        # Thresholds are per SUBTYPE. A criterion-level threshold was a single cut applied to a maximum
+        # over heads on different scales; refusing a report that still carries one is deliberate, because
+        # silently ignoring it would let old weights score under new aggregation and nothing would say so.
+        if "threshold" in criterion_report:
+            raise RuntimeError(
+                f"{criterion}: report carries a criterion-level threshold. These weights predate "
+                "per-subtype calibration and must be retrained before they can be scored."
+            )
         if not criterion_report.get("subtypes"):
             raise RuntimeError(f"criterion {criterion} has no scorer heads")
         for subtype, subtype_report in criterion_report.get("subtypes", {}).items():
             head = subtype_report.get("head")
             if not isinstance(head, str) or not head:
                 raise RuntimeError(f"missing head name for {subtype}")
+            try:
+                subtype_threshold = float(subtype_report["threshold"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise RuntimeError(f"invalid threshold for {subtype}") from error
+            if not 0.0 <= subtype_threshold <= 1.0:
+                raise RuntimeError(f"threshold for {subtype} is outside [0, 1]")
             if head in head_dimensions:
                 raise RuntimeError(f"scorer head {head} is referenced more than once")
             weight_key = head + ".weight"
@@ -349,14 +357,25 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
     for index, record in enumerate(records):
         scores: dict[str, float] = {}
         predictions: dict[str, bool] = {}
+        subtype_predictions: dict[str, bool] = {}
+        subtype_scores_out: dict[str, float] = {}
         for criterion, criterion_report in criteria.items():
-            subtype_scores = []
-            for subtype_report in criterion_report["subtypes"].values():
-                head = subtype_report["head"]
-                subtype_scores.append(head_scores[head][index])
-            score = float(np.max(np.stack(subtype_scores)))
-            scores[criterion] = score
-            predictions[criterion] = score >= float(criterion_report["threshold"])
+            # Each subtype is decided on its OWN threshold, and the criterion is the OR of those
+            # decisions. It used to be max-over-heads against one criterion threshold, which cannot be
+            # calibrated: the heads are on different scales, so the highest-scoring subtype set the cut
+            # for all of them and 4.1.2 fell back to an uncalibrated 0.5.
+            decided = False
+            highest = 0.0
+            for subtype, subtype_report in criterion_report["subtypes"].items():
+                value = float(head_scores[subtype_report["head"]][index])
+                predicted = value >= float(subtype_report["threshold"])
+                subtype_scores_out[subtype] = value
+                subtype_predictions[subtype] = predicted
+                decided = decided or predicted
+                highest = max(highest, value)
+            # Reported so a finding can still be ranked, but it is no longer what decides anything.
+            scores[criterion] = highest
+            predictions[criterion] = decided
         provenance = record.get("provenance", {})
         scored.append({
             "caseId": provenance.get("caseId"),
@@ -371,9 +390,16 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
             # rule layer's findings AFTER the model's and had no way to know the two overlap: on a
             # conformant page the rule correctly found nothing and the model's prediction survived as a
             # false positive. The report has always known this; nothing passed it on.
+            "subtypeScores": subtype_scores_out,
+            "subtypePredictions": subtype_predictions,
+            # Which SUBTYPES a deterministic rule decides. This was per criterion, which suppressed the
+            # model on every subtype of 1.1.1 and 4.1.2 -- including the 174 records `rules:score` shows
+            # the rules never look at, leaving them decided by neither layer.
             "ruleOwned": sorted(
-                c for c, r in criteria.items()
-                if r.get("decisionOwner", "learned-screenreader-scorer") != "learned-screenreader-scorer"
+                subtype
+                for r in criteria.values()
+                for subtype, sr in (r.get("subtypes") or {}).items()
+                if sr.get("decisionOwner", "learned-screenreader-scorer") != "learned-screenreader-scorer"
             ),
         })
     positives = {

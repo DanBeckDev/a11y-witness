@@ -311,3 +311,54 @@ test("a non-NVDA capture is out of SCOPE, which is neither a failure nor a pass"
     assert.equal(verdict.confidence, 0, "nothing was assessed, so there is no confidence to report");
   });
 });
+
+/**
+ * Suppression is per SUBTYPE, and it has to be exercised or it is not a guard.
+ *
+ * `ruleOwned` was parsed from the scorer output, `findingsFromScores` accepted and used it, and the sole
+ * production call site passed `[]` — so the guard had never once run. Nothing failed, because nothing
+ * asked it to. These tests ask.
+ *
+ * The granularity is the substance. `rules:score` measures, over the 2,006-record corpus, that the rules
+ * decide `4.1.2:regex` and `4.1.2:unnamed-form-field` exactly (147/147, zero false positives over 1,003
+ * conformant records) and never look at `4.1.2:missing-role` or `4.1.2:state-change-silent` — 143 records
+ * for that criterion alone. Suppressing the whole criterion hands those to nobody; suppressing none of it
+ * leaves the model duplicating the rules where they are already exact.
+ */
+test("a prediction whose every fired subtype is rule-owned is suppressed", () => {
+  const { findings, suppressed } = findingsFromScores(
+    { "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton,
+    ["4.1.2:regex", "4.1.2:unnamed-form-field"],
+    { "4.1.2:unnamed-form-field": true, "4.1.2:missing-role": false },
+  );
+  assert.deepEqual(findings, []);
+  assert.equal(suppressed.length, 1);
+  assert.match(suppressed[0].reason, /4\.1\.2:unnamed-form-field/);
+});
+
+test("a prediction driven by a subtype the rules never look at survives", () => {
+  const { findings, suppressed } = findingsFromScores(
+    { "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton,
+    ["4.1.2:regex", "4.1.2:unnamed-form-field"],
+    { "4.1.2:missing-role": true, "4.1.2:unnamed-form-field": false },
+  );
+  assert.deepEqual(findings.map((f) => f.wcag), ["4.1.2 Name, Role, Value (A)"]);
+  assert.deepEqual(suppressed, []);
+});
+
+test("a mixed prediction survives, because one half is nobody else's to call", () => {
+  const { findings } = findingsFromScores(
+    { "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton,
+    ["4.1.2:regex", "4.1.2:unnamed-form-field"],
+    { "4.1.2:missing-role": true, "4.1.2:unnamed-form-field": true },
+  );
+  assert.equal(findings.length, 1);
+});
+
+test("with no subtype detail it falls back to the criterion, so older artifacts still suppress", () => {
+  const { findings, suppressed } = findingsFromScores(
+    { "4.1.2": true }, { "4.1.2": 0.99 }, unnamedButton, ["4.1.2"], {},
+  );
+  assert.deepEqual(findings, []);
+  assert.equal(suppressed[0].reason, "a deterministic rule decides this criterion");
+});
