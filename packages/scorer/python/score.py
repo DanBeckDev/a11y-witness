@@ -396,20 +396,20 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
             # model on every subtype of 1.1.1 and 4.1.2 -- including the 174 records `rules:score` shows
             # the rules never look at, leaving them decided by neither layer.
             #
-            # `ruleReportsAs == criterion` is the second half of the same idea, and without it this list
-            # recreates the bug at a finer grain. The rules decide `3.3.2:unnamed-form-field` outright and
-            # report it as a 4.1.2 failure, so listing it here would silence the model's 3.3.2 while
-            # nothing supplies one -- a criterion decided by neither layer, again. Suppression is only
-            # sound where the rule's finding SUBSTITUTES for the model's, which means same criterion.
+            # Read straight off `decisionOwner`, which the TRAINER computes from one condition: the rules
+            # own a subtype here only when their finding SUBSTITUTES for the head's, meaning they report
+            # it under the head's own criterion. `3.3.2:unnamed-form-field` is decided by the rules and
+            # reported as 4.1.2, so it is NOT owned here -- suppressing it would silence the model's
+            # 3.3.2 while nothing supplies one, a criterion decided by neither layer.
             #
-            # An older artifact has no `ruleReportsAs`; defaulting to the criterion reproduces exactly
-            # what it used to do, so a report predating this field behaves as it always did.
+            # That test deliberately does NOT get re-derived here from `ruleReportsAs`. It was, briefly,
+            # and that is a second encoding of the same rule in a second language -- the exact defect
+            # `rule-ownership.json` exists to remove. One place decides; this reads the decision.
             "ruleOwned": sorted(
                 subtype
-                for criterion, r in criteria.items()
+                for r in criteria.values()
                 for subtype, sr in (r.get("subtypes") or {}).items()
                 if sr.get("decisionOwner", "learned-screenreader-scorer") != "learned-screenreader-scorer"
-                and sr.get("ruleReportsAs", criterion) == criterion
             ),
         })
     positives = {
