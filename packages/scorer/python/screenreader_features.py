@@ -466,18 +466,28 @@ def score_head(features: Any, weight: Any, bias: Any) -> Any:
 # So pooling is a property of the SIGNAL, not of the pipeline. Local findings pool by max over
 # instances; contextual findings keep the whole capture. Default is document-mean: only subtypes with
 # evidence that instance scoring helps are listed here.
-# `4.1.2:missing-role` is DELIBERATELY absent, and it used to be here.
+# `4.1.2:missing-role` stays instance-max, and the alternative was MEASURED rather than reasoned about.
 #
-# The measurement above that put 4.1.2's heads on instance-max reasoned about "a control announced with
-# a role and no name" -- which was, at the time, 115 of `missing-role`'s 189 positives, and they have
-# since moved to `4.1.2:unnamed-control` where that reasoning actually applies. What is left is the
-# opposite failure: a styled div announced as nothing at all, with `formFields: []` and `controls: []`.
+# The argument for moving it to document-mean was good and half of it was right. Instance-max cannot
+# express an ABSENCE: there is no announcement carrying the evidence, because the evidence IS that no
+# such announcement exists, and all 74 of this subtype's records have `formFields: []` and
+# `controls: []`. Document-mean can see the whole capture, and recall duly went 0.809 -> 1.000.
 #
-# You cannot detect an ABSENCE by taking a max over instances. There is no announcement containing the
-# evidence, because the evidence IS that no such announcement exists -- so instance-max asks each line
-# "are you a missing button?" when the fact is a property of the whole capture. Document-mean is the
-# only view that can express it.
+# But precision went 1.000 -> 0.782, taking 4.1.2's grouped calibration from FP 2 / FN 13 to FP 21 /
+# FN 0. That is the predicted cost: 437 of the corpus's 1,003 CONFORMANT records also announce no
+# controls, because a page about images or tables has none either. The document view can represent
+# "nothing was announced" and cannot tell it apart from "there was nothing to announce".
+#
+# So neither view is right, and the choice is between error TYPES. For this tool a false accusation on
+# a conformant page is the worst error it can make, which is why the judge suppresses the model where a
+# rule already decides. 14 misses at precision 1.000 beats 21 false alarms.
+#
+# What this subtype actually needs is a FEATURE that separates "a page that should have a control here"
+# from "a page with no controls at all" -- the bad variant is a styled div announced as plain text where
+# a button belongs. That is a different piece of work from choosing a pooling view, and this comment
+# exists so nobody re-runs the pooling experiment expecting a different answer.
 INSTANCE_POOLED_SUBTYPES = frozenset({
+    "4.1.2:missing-role",
     "4.1.2:unnamed-control",
     "4.1.2:state-change-silent",
 })
