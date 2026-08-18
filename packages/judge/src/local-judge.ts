@@ -46,16 +46,21 @@ import { SCORED_CRITERIA } from "./coverage.js";
 import type { Judgment, Finding, Severity } from "./judge.js";
 
 /** Shape of what the scorer prints. */
+/** One record's worth of the scorer's output — named, because `findingsFromScores` takes it whole. */
+export interface ScoredRecord {
+  scores: Record<string, number>;
+  predictions: Record<string, boolean>;
+  // `ruleOwned` names the SUBTYPES whose finding a deterministic rule already supplies under the same
+  // criterion, carried across from the training report by score.py. Optional so an older scorer
+  // artifact still loads. Not "the criteria the rules decide": that was the shape, and it silenced the
+  // model on 174 records the rules never look at.
+  ruleOwned?: readonly string[];
+  subtypePredictions?: Record<string, boolean>;
+  novelty?: { nearestTrainingCosine?: number | null; inSupport?: boolean | null; floor?: number };
+}
+
 interface ScorerOutput {
-  // `ruleOwned` names the criteria a deterministic rule decides, carried across from the training
-  // report by score.py. Optional so an older scorer artifact still loads.
-  records: {
-    scores: Record<string, number>;
-    predictions: Record<string, boolean>;
-    ruleOwned?: string[];
-    subtypePredictions?: Record<string, boolean>;
-    novelty?: { nearestTrainingCosine?: number | null; inSupport?: boolean | null; floor?: number };
-  }[];
+  records: ScoredRecord[];
 }
 
 /** The evidence a capture must actually contain before a criterion may be reported. */
@@ -296,14 +301,17 @@ const criterionLabel = (num: string): string => {
  * Turn the scorer's per-criterion predictions into findings.
  *
  * Pure, so the guard and the templating are testable without Python, a model, or a network.
+ *
+ * Takes ONE scored record rather than its four fields spread out. They were separate parameters with
+ * `[]` and `{}` defaults, and the call site spelled out `record.ruleOwned ?? []` -- which is how the
+ * suppression guard came to be passed an empty list and sit inert for the life of the corpus. A record
+ * is a cohesive whole; splitting it made it possible to hand over three quarters of one.
  */
 export function findingsFromScores(
-  predictions: Record<string, boolean>,
-  scores: Record<string, number>,
+  scored: ScoredRecord,
   capture: CaptureEvidence,
-  ruleOwned: readonly string[] = [],
-  subtypePredictions: Record<string, boolean> = {},
 ): { findings: Finding[]; suppressed: { criterion: string; score: number; reason: string }[] } {
+  const { predictions, scores, ruleOwned = [], subtypePredictions = {} } = scored;
   const decidedByRules = new Set(ruleOwned);
   const findings: Finding[] = [];
   const suppressed: { criterion: string; score: number; reason: string }[] = [];
@@ -318,11 +326,17 @@ export function findingsFromScores(
     //
     // Recorded rather than dropped, like the guard below: a suppressed prediction is evidence about the
     // model's calibration, and 4.1.2's threshold is currently an uncalibrated 0.5 fallback.
-    // Suppress per SUBTYPE, not per criterion. `rules:score` measures that the rules decide
-    // `4.1.2:regex` and `4.1.2:unnamed-form-field` exactly, and never look at `4.1.2:missing-role` or
-    // `4.1.2:state-change-silent` -- 143 records for that criterion alone. Suppressing the whole
-    // criterion would hand those to nobody; suppressing none of it leaves the model duplicating the
-    // rules on the half they own, which is the false positive this guard exists to stop.
+    // Suppress per SUBTYPE, not per criterion. `rules:score` measures that the rules decide `4.1.2:regex`
+    // exactly and never look at `4.1.2:missing-role` or `4.1.2:state-change-silent` -- 143 records for
+    // that criterion alone. Suppressing the whole criterion would hand those to nobody; suppressing none
+    // of it leaves the model duplicating the rules on the half they own, which is the false positive
+    // this guard exists to stop.
+    //
+    // `ruleOwned` is narrower than "every subtype a rule decides", and the narrowing happens in
+    // `score.py`: a subtype only appears here when the rule reports it under the SAME criterion the
+    // model would. `3.3.2:unnamed-form-field` is rule-decided and reported as 4.1.2, so it is absent
+    // and the model's 3.3.2 stands -- otherwise the criterion would be suppressed here and supplied by
+    // nobody. `packages/lab/rule-ownership.json` is where that mapping is declared, once.
     //
     // So a prediction is the model's to make unless EVERY subtype behind it is rule-owned.
     const firedSubtypes = Object.entries(subtypePredictions)
@@ -481,9 +495,7 @@ export async function judgeLocally(capture: CaptureEvidence & { task?: string })
   // this tool can make", and then passed as `[]` -- so the guard inside has never once run. The same
   // shape as `refreshBrowseBuffer` guarding on a flag nothing assigned: a remedy that is reachable,
   // commented, and inert.
-  const { findings, suppressed } = findingsFromScores(
-    record.predictions, record.scores, capture, record.ruleOwned ?? [], record.subtypePredictions ?? {},
-  );
+  const { findings, suppressed } = findingsFromScores(record, capture);
   return {
     // Not inferred. This layer scores WCAG criteria and has no head for "could someone finish the task",
     // so claiming an answer would be inventing one. A blocking failure is the closest honest signal.
