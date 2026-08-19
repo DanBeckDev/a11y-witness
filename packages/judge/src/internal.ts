@@ -12,3 +12,5 @@
  */
 export { hasEvidenceFor, evidenceFor, findingsFromScores, scoreCapture } from "./local-judge.js";
 export { applyGate } from "./verify-gate.js";
+export { CRITERION_COVERAGE } from "./criterion-coverage.js";
+export type { CriterionCoverage, EvidenceSource } from "./criterion-coverage.js";
