@@ -418,6 +418,56 @@ What is actually next, once the blockers above are closed:
    > optimistic. The next publisher should be structurally UNLIKE these rather than a thirteenth page from
    > the same site — that is what buys real granularity, and it is the same mistake as one publisher, one
    > level down.
+   >
+   > **The realism tier was then TESTED, 2026-08-19, and it is a null result at this scale.** 19 W3C
+   > training pages, retrained to a scratch output and swept against the calibration split:
+   >
+   > | page | base (1,858) | +19 real (1,877) |
+   > |---|---|---|
+   > | after/template | 0.7217 | 0.7293 ↑ |
+   > | after/news | 0.7347 | 0.7247 ↓ |
+   > | design-system/details | 0.6764 | 0.6721 ↓ |
+   >
+   > Net zero inside ±0.01, and the floor stays at 0.847 in both. Accuracy is unchanged — 0 false
+   > accusations over 16 conformant pages, 3 of 3 inaccessible caught — so the tier costs nothing and buys
+   > nothing. Two mechanisms explain it: the 19 pages are all W3C, so they made W3C pages slightly more
+   > familiar and a DIFFERENT publisher's pages slightly less; and the reference is capped at 512 rows, so
+   > adding real pages EVICTS synthetic ones and can lower a page's similarity.
+   >
+   > ### Why more data of the same kind cannot work, with the number
+   >
+   > Nearest-neighbour similarity across the 1,877 training records:
+   >
+   > ```
+   > min (= the shipped floor)   0.847      <- ONE record sets it
+   > 1st percentile              0.8804
+   > 5th percentile              0.9191
+   > median                      0.993
+   > records below 0.70          0 of 1877
+   > ```
+   >
+   > Real pages sit at **0.59–0.73**. The two distributions do not overlap at all, so **no threshold
+   > derived from this corpus can admit a real page** — every possible cut lands on the wrong side.
+   > Lowering the floor to 0.55 is not calibration, it is abandoning the statistic.
+   >
+   > Note also that `inDistributionFloor` is a MINIMUM, which is an extreme-value statistic set by one
+   > record and insensitive to volume. A quantile is the defensible construction — ADR 0010's own "finite
+   > sample control of the error rate among accepted predictions" is a quantile — but it would RAISE the
+   > floor to ≥0.88 and make abstention stricter. That is a correctness fix, not a coverage fix, and the
+   > two must not be confused.
+   >
+   > ### What this specifies for the dataset work
+   >
+   > The corpus's defect is that it is TOO SELF-SIMILAR: a median of 0.993 means every synthetic page has a
+   > near-twin. For real pages to fall in support, the training distribution has to reach down into
+   > 0.6–0.75, which takes genuinely heterogeneous pages. The requirement is precise and it is about
+   > VARIETY, not volume:
+   >
+   > **One or a few pages from MANY different sites — not many pages from few sites.** Measured three
+   > times over: 19 pages from one publisher moved nothing; 12 Design System pages produced nine identical
+   > cosines to four decimal places; adding a cluster gives each of its members a near-twin and leaves the
+   > distribution unchanged. A hundred sites at one page each would do more than a thousand pages from
+   > fifty sites.
 2. **Task journeys** (ADR 0011). WCAG claims conformance for complete PROCESSES, so a page-at-a-time tool
    structurally cannot assess sign-in or checkout — ours or anyone's. The largest single gap in what this
    category of tool can honestly claim.
