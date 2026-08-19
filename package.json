@@ -21,6 +21,8 @@
     "training:generate-acceptance": "node packages/lab/src/training/generate-screenreader-acceptance.mjs",
     "training:preflight": "node packages/lab/src/training/preflight-screenreader-dataset.mjs",
     "training:preflight-acceptance": "DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance node packages/lab/src/training/preflight-screenreader-dataset.mjs",
+    "training:capture-acceptance": "DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_PAGES_PORT=5051 DATASET_CAPTURE_ROOT=captures/${REPEAT:-repeat-1} tsx packages/lab/src/training/capture-screenreader-dataset.mjs",
+    "training:export-acceptance": "DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_CAPTURE_ROOT=captures/${REPEAT:-repeat-1} node packages/lab/src/training/export-screenreader-dataset.mjs --out=runs/screenreader-acceptance/${REPEAT:-repeat-1}.jsonl",
     "training:capture": "tsx packages/lab/src/training/capture-screenreader-dataset.mjs",
     "training:status": "node packages/lab/src/training/capture-status.mjs",
     "training:wait": "node packages/lab/src/training/wait-for-capture.mjs",
