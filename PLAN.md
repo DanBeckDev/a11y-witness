@@ -398,8 +398,26 @@ What is actually next, once the blockers above are closed:
    > So the checks are now CORRECT on real markup, and the shipped floor of 0.847 scores **none** of these
    > pages — every one sits at cosine 0.59–0.76. The tool is correct and silent, which is a different
    > problem from the one this item was written for: it is no longer "the scorer is not ready for real
-   > pages", it is "we cannot yet justify where to set the floor". Seven pages support a granularity of
-   > about 12.5% and no finer, so widening the corpus is what unblocks the decision, not more training.
+   > pages", it is "we cannot yet justify where to set the floor".
+   >
+   > **Re-run the same day on 19 calibration pages**, after adding twelve GOV.UK Design System components
+   > as a second publisher — 16 conformant claims and 3 inaccessible:
+   >
+   > ```
+   > floor   scored  conformant scored  FALSE POSITIVES  inaccessible caught
+   > 0.847   0       0                  0                0 of 0     <- shipped: says nothing
+   > 0.7     4       4                  0                0 of 0
+   > 0.65    16      16                 0                0 of 0
+   > 0.55    19      16                 0                3 of 3     <- everything, still no accusations
+   > ```
+   >
+   > Perfect separation across two publishers. **But the effective sample is smaller than 19**: nine of the
+   > twelve Design System pages score an identical nearest-neighbour cosine to four decimal places (0.6624)
+   > and all twelve fall in 0.6564–0.6624, because a shared header, nav and footer dominate the embedding.
+   > Twelve near-identical points are not twelve independent ones, so the harness's "5% granularity" is
+   > optimistic. The next publisher should be structurally UNLIKE these rather than a thirteenth page from
+   > the same site — that is what buys real granularity, and it is the same mistake as one publisher, one
+   > level down.
 2. **Task journeys** (ADR 0011). WCAG claims conformance for complete PROCESSES, so a page-at-a-time tool
    structurally cannot assess sign-in or checkout — ours or anyone's. The largest single gap in what this
    category of tool can honestly claim.
