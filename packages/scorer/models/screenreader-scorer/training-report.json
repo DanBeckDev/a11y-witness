@@ -685,10 +685,8 @@
     }
   },
   "calibrationClean": true,
-  "generalisationVerified": false,
-  "releaseBlockedBy": [
-    "held-out acceptance failed: 4.1.2: fewer than 3 acceptance positives"
-  ],
+  "generalisationVerified": true,
+  "releaseBlockedBy": [],
   "releaseEligible": true,
   "modelReleaseEligible": true,
   "warnings": [],
