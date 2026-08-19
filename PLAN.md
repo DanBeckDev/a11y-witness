@@ -386,6 +386,20 @@ What is actually next, once the blockers above are closed:
 1. **A realism tier.** Train on real-page structure so the scorer stops abstaining. The corpus exists
    (ADR 0010); 19 training pages is a start, and widening it means finding more publishers who state their
    own conformance rather than labelling pages ourselves.
+
+   > **Measured 2026-08-19, and it changes this item's premise.** `calibrate-abstention.mjs` against the
+   > current weights, on the seven W3C calibration pages, scoring with the floor bypassed:
+   >
+   > | | 2026-08-18 weights | current |
+   > |---|---|---|
+   > | false accusations on pages their publisher calls conformant | 3 of 4 | **0 of 4** |
+   > | deliberately inaccessible pages noticed | 0 of 3 | **3 of 3** |
+   >
+   > So the checks are now CORRECT on real markup, and the shipped floor of 0.847 scores **none** of these
+   > pages — every one sits at cosine 0.59–0.76. The tool is correct and silent, which is a different
+   > problem from the one this item was written for: it is no longer "the scorer is not ready for real
+   > pages", it is "we cannot yet justify where to set the floor". Seven pages support a granularity of
+   > about 12.5% and no finer, so widening the corpus is what unblocks the decision, not more training.
 2. **Task journeys** (ADR 0011). WCAG claims conformance for complete PROCESSES, so a page-at-a-time tool
    structurally cannot assess sign-in or checkout — ours or anyone's. The largest single gap in what this
    category of tool can honestly claim.
@@ -394,6 +408,25 @@ What is actually next, once the blockers above are closed:
    obvious next one and the automation is known-fragile; JAWS is the most representative and the hardest.
 5. **An expert-agreement baseline.** The one number that would turn "0 false positives against our own
    labels" into "0 false positives against an auditor".
+6. **Assessors as a plug-in point, rather than three hardcoded layers.** There are already three — the
+   trained scorer, the deterministic rules, and axe — and only the first two participate in the
+   per-criterion picture. axe is bolted on beside them: it gets its own section of the report and
+   `criterionOutcomes` still prints `untested` for criteria it assessed seconds earlier in the same run.
+
+   The rule that turns this into an extension point is that **an assessor must declare which criteria it
+   COVERS, not just report what it found.** "axe found nothing on contrast" and "axe never looked at
+   contrast" are indistinguishable from findings alone, and confusing them is the failure this project is
+   organised against. `CRITERION_COVERAGE` is already that shape and is hardcoded to our two layers.
+
+   The payoff is that the visual and DOM criteria become someone else's problem BY DESIGN rather than by
+   apology: a contrast checker, a reflow checker or an in-house rule pack each declares its criteria,
+   returns criterion-tagged findings, and the coverage picture assembles itself. The claim stops being
+   "we check 10 of 55" and becomes "here is the complete picture for this page, from whatever assessors
+   were plugged in, and here is exactly what is left for a human".
+
+   Explicitly NOT a reason to reimplement DOM checks here: four of the five DOM-reachable criteria
+   (1.3.5, 3.1.1, 3.1.2, 2.5.3) are existing axe rules, and running them through the NVDA fleet would
+   spend ~12 s of Windows VM time per page to read an HTML attribute that needs no screen reader at all.
 
 ## Known risks
 
