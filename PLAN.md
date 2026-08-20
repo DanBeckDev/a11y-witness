@@ -468,6 +468,44 @@ What is actually next, once the blockers above are closed:
    > cosines to four decimal places; adding a cluster gives each of its members a near-twin and leaves the
    > distribution unchanged. A hundred sites at one page each would do more than a thousand pages from
    > fifty sites.
+   >
+   > ### RESOLVED 2026-08-20: the realism tier works, and most of the gap was the STATISTIC
+   >
+   > Both earlier null results were artefacts. `build-realism-tier.mjs` wrote SEVEN wrong channel names, so
+   > real and synthetic records were featurised into different channels and a linear head could separate the
+   > two populations on channel tokens alone; and the OOD reference counted RECORDS, including the test
+   > split. With both fixed:
+   >
+   > | | baseline | + 5 real training pages |
+   > |---|---|---|
+   > | support floor (derived) | **0.7192** | 0.7192 |
+   > | held-out real page cosine | 0.7013–0.7251 | **0.8137–0.8309** |
+   > | false positives, at every floor | 0 | 0 |
+   > | pages scored at the derived floor | 0 | **4, all correct** |
+   >
+   > **The floor fell 0.847 → 0.7192 with NO new data**, purely from measuring distinct page STRUCTURES
+   > rather than records and excluding the test split. That was roughly 70% of the gap to real pages: it was
+   > mostly a wrong statistic, not missing data.
+   >
+   > **And five real training pages moved held-out real pages +0.10 to +0.13 closer.** The floor did not
+   > budge, because a floor is a minimum over structures and five pages cannot be the minimum — which is
+   > why "did the floor move" was the wrong question all along. The deployment question is whether an
+   > UNSEEN real page gets closer, and it does, decisively. `distinctStructures` 763 → 767.
+   >
+   > So the scorer now speaks on real pages and is correct on them, which it has never done before.
+   >
+   > **One honest asymmetry qualifies that.** At the derived floor the four CONFORMANT W3C pages are in
+   > support (0.81+) and score clean; the three deliberately INACCESSIBLE ones sit at 0.588–0.602 and are
+   > still abstained. So the tool can now say "this page is fine" about a real page and cannot yet say
+   > "this page is broken". A claim of *fine* without the ability to make its opposite is a false-assurance
+   > risk, not a win. The before/after demos are structurally unusual (table layouts, no landmarks), so
+   > closing it needs training pages that are structurally unusual too — the evidence-backed argument for
+   > collecting for VARIETY rather than volume.
+   >
+   > Also measured: `captureWasTruncated` condemns **26 of 26** real captures unscoped, and 16 of 26 scoped
+   > to channels the model reads. **9 of those 16 are `read-through:capped`** — the 150-line `DEFAULT_STEPS`
+   > cap, sized for a corpus whose largest page is 2,118 bytes. Real-page captures are never cached, so
+   > raising it for them is free, and it should recover most of the 14 rejected training pages.
 2. **Task journeys** (ADR 0011). WCAG claims conformance for complete PROCESSES, so a page-at-a-time tool
    structurally cannot assess sign-in or checkout — ours or anyone's. The largest single gap in what this
    category of tool can honestly claim.
