@@ -349,3 +349,90 @@ export function captureDoubt(capture: CapturedAnnouncements, title: string | und
 export function titleOf(html: string): string {
   return html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1].trim() ?? "";
 }
+
+/**
+ * Why a channel's evidence is incomplete. Four kinds, because they need four different responses.
+ *
+ *   starved   the shared capture deadline ran out before this sweep ran. The evidence is missing.
+ *   capped    the per-direction step cap was reached. Often the cursor RE-WALKING rather than a big page:
+ *             250 steps yielding 41 unique links is a dedupe fault, not a large document. A different bug
+ *             from starvation and it must not be collapsed into it.
+ *   faulted   the sweep or the read-through errored, or focus mode could not be escaped.
+ *   inferred  the sweep stopped on a repeated phrase or a silent step -- which are GUESSES that it had
+ *             reached the end, not the screen reader's own answer. Both have cost real evidence here:
+ *             stopping on a repeat gave "graphics 5 of 66" on a page with four identical avatar alts, and
+ *             stopping on silence gave "headings 3 of 10, no error anywhere". NVDA announces the end of a
+ *             page ("no next heading"), which is `exhausted`; anything else is an inference.
+ */
+export type TruncationKind = "starved" | "capped" | "faulted" | "inferred";
+
+export interface IncompleteChannel {
+  /** The sweep type ("link", "list", ...) or "read-through". */
+  channel: string;
+  /** The raw stop reason the capture recorded, unmodified. */
+  reason: string;
+  kind: TruncationKind;
+}
+
+/** Sweep terminations that mean the channel was genuinely examined to its end. */
+const SWEEP_COMPLETE = new Set(["exhausted"]);
+/** Read-through terminations that mean the document was read to its end. */
+const READ_COMPLETE = new Set(["repeatBottom", "wrap"]);
+
+const KIND_BY_REASON: Record<string, TruncationKind> = {
+  deadline: "starved",
+  cap: "capped",
+  maxSteps: "capped",
+  error: "faulted",
+  stepError: "faulted",
+  focusModeStuck: "faulted",
+  repeat: "inferred",
+  silent: "inferred",
+};
+
+const kindOf = (reason: string): TruncationKind => KIND_BY_REASON[reason] ?? "faulted";
+
+/**
+ * Which of a capture's evidence channels were NOT examined to the end.
+ *
+ * Needed because **truncation is indistinguishable from absence** in the evidence itself, and on real pages
+ * it is the common case rather than the exception. Measured over 26 real-page captures: 9 reported
+ * `lists: 0`, and every one of those had a list sweep whose stop was `deadline` -- the sweep never ran. A
+ * record built from such a capture teaches a scorer "real pages have no lists", which is precisely the
+ * spurious correlation a real-page corpus exists to remove.
+ *
+ * `crossCheckStructure` cannot answer this and is not meant to: it compares four buckets
+ * (heading/landmark/link/graphic) against the accessibility tree, omits `lists` and `formFields` entirely,
+ * and its `landmark` bucket disagrees on essentially every capture because quick-nav cannot reach a
+ * landmark enclosing the caret. Measured `agrees === false` on 26 of 26 -- saturated, so useless as a gate.
+ * It reports; this decides.
+ *
+ * Pure, and reads only `diagnostics`, so a caller can gate an export without a worker or a browser.
+ */
+export function captureWasTruncated(diagnostics: unknown): IncompleteChannel[] {
+  const marks = Array.isArray(diagnostics) ? diagnostics as Record<string, unknown>[] : [];
+  const incomplete: IncompleteChannel[] = [];
+  for (const mark of marks) {
+    if (mark?.event === "sweep") incomplete.push(...sweepGaps(mark));
+    if (mark?.event === "readThrough") incomplete.push(...readThroughGaps(mark));
+  }
+  return incomplete;
+}
+
+/**
+ * BOTH directions, reported separately. A sweep that exhausted backwards and starved forwards has seen part
+ * of the page, and calling that complete is how a partial count becomes a finding.
+ */
+function sweepGaps(mark: Record<string, unknown>): IncompleteChannel[] {
+  const channel = String(mark.type ?? "unknown");
+  return (["prevStop", "nextStop"] as const)
+    .map((key) => (typeof mark[key] === "string" ? mark[key] as string : ""))
+    .filter((reason) => reason && !SWEEP_COMPLETE.has(reason))
+    .map((reason) => ({ channel, reason, kind: kindOf(reason) }));
+}
+
+function readThroughGaps(mark: Record<string, unknown>): IncompleteChannel[] {
+  const reason = typeof mark.stopReason === "string" ? mark.stopReason : "";
+  if (!reason || READ_COMPLETE.has(reason)) return [];
+  return [{ channel: "read-through", reason, kind: kindOf(reason) }];
+}
