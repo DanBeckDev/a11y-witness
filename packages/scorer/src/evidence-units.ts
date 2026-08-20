@@ -122,3 +122,26 @@ export function evidenceUnits(capture: ScorableCapture): EvidenceUnit[] {
 export function captureEvidenceText(capture: ScorableCapture): string {
   return evidenceUnits(capture).map(({ text }) => text).join("\n");
 }
+
+/**
+ * Which capture PRODUCER populates each channel — the sweep type, or the read-through.
+ *
+ * Needed to answer "was the evidence the model sees complete?". `captureWasTruncated`
+ * (`@a11y-witness/evidence/verify`) reports incomplete channels by sweep type, and most of what it reports
+ * never reaches a model: of 26 real-page captures ALL 26 were truncated somewhere, but only 16 on a channel
+ * the model reads. `link`, `list`, `graphic` and `landmark` sweeps starve first on a big page and none of
+ * them is an input, so gating on them would discard the whole corpus for evidence nobody consumes.
+ *
+ * Keyed by producer rather than by channel because that is the direction a caller needs: it holds a
+ * truncation report keyed on sweep type and has to decide whether to care.
+ */
+export const CHANNEL_BY_PRODUCER: Readonly<Record<string, string>> = Object.freeze({
+  "read-through": "transcript",
+  heading: "heading-navigation",
+  formField: "form-navigation",
+  tableCell: "table-cell-navigation",
+});
+
+/** True when this producer's truncation would leave a gap in what the model reads. */
+export const producerFeedsModel = (producer: string): boolean =>
+  Object.hasOwn(CHANNEL_BY_PRODUCER, producer);
