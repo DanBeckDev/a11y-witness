@@ -506,6 +506,37 @@ What is actually next, once the blockers above are closed:
    > to channels the model reads. **9 of those 16 are `read-through:capped`** — the 150-line `DEFAULT_STEPS`
    > cap, sized for a corpus whose largest page is 2,118 bytes. Real-page captures are never cached, so
    > raising it for them is free, and it should recover most of the 14 rejected training pages.
+   >
+   > ### RESOLVED 2026-08-20 (Increment 1): the scorer speaks on real pages, and is right
+   >
+   > Raising the read-through cap to 600 for real-page captures removed **every** truncation: 38 clean / 0
+   > truncated, up from 20 / 18, and the realism tier went 5 usable pages to 19 of 19. Retrained and swept
+   > against a freshly recaptured baseline, so the cap change cannot take the tier's credit:
+   >
+   > | | baseline | +19 real pages |
+   > |---|---|---|
+   > | conformant real pages | 0.70–0.73 | **0.816–0.835** |
+   > | INACCESSIBLE real pages | 0.578–0.586 | **0.698–0.729** |
+   > | derived support floor | 0.7192 | 0.7192 |
+   > | false positives, any floor | 0 | 0 |
+   >
+   > At the derived floor the scorer now scores **5 of the 7 W3C calibration pages and is correct on all
+   > five** — four conformant clean, and `before/template.html` at 0.7292 caught as a 4.1.2 failure. It can
+   > say "this page is fine" AND "this page is broken", so the false-assurance asymmetry recorded above is
+   > substantially closed. `before/news` misses the floor by 0.0006, so the floor is now the binding
+   > constraint at the margin rather than a chasm.
+   >
+   > ### The ceiling is PUBLISHERS, not pages — quantified
+   >
+   > 19 real pages contribute **6 distinct structures**, because `family` groups them by W3C tutorial topic
+   > (images 5, forms 5, tables 4, page-structure 2, menus 2, carousels 1) and those pages genuinely share
+   > templates. `distinctStructures` moved 763 → 768.
+   >
+   > So going from 5 pages to 19 — 14 extra pages inside the same six families — bought **+0.004**. The
+   > +0.11 came from the structures. The marginal value of a new PUBLISHER is roughly two orders of
+   > magnitude above a new page from one already present, measured rather than argued.
+   >
+   > That fixes Increment 2's specification: **40–60 different publishers, one page each.** Not 40–60 pages.
 2. **Task journeys** (ADR 0011). WCAG claims conformance for complete PROCESSES, so a page-at-a-time tool
    structurally cannot assess sign-in or checkout — ours or anyone's. The largest single gap in what this
    category of tool can honestly claim.
