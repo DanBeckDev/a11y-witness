@@ -190,6 +190,20 @@ def read_records(path: Path) -> list[dict[str, Any]]:
             raise RuntimeError(f"record {index} labels a clean example with a violation subtype")
         if target["label"] == "violation" and not target["subtypes"]:
             raise RuntimeError(f"record {index} has a violation with no subtype label")
+        # `unknownSubtypes` is OPTIONAL and additive, so an older export loads unchanged. It means "the
+        # label's source says nothing about this subtype for this page", which is not the same as clean --
+        # a `clean` record is a hard negative for every head, and that is only sound when the source
+        # actually claimed every criterion. A "partially compliant" statement with an enumerated failure
+        # list claims the rest and says nothing about those, which is exactly what this expresses.
+        unknown = target.get("unknownSubtypes", [])
+        if not isinstance(unknown, list):
+            raise RuntimeError(f"record {index} has a non-list unknownSubtypes")
+        # Both present and unknown is a contradiction, and the direction it fails in matters: a head would
+        # train on it as a positive while its mask excluded it, so the record would silently do nothing.
+        overlap = sorted(set(unknown).intersection(target["subtypes"]))
+        if overlap:
+            raise RuntimeError(
+                f"record {index} lists {', '.join(overlap)} as both a violation and unknown")
         if not record.get("provenance", {}).get("family"):
             raise RuntimeError(f"record {index} has no grouping family")
     return records
