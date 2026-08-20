@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./evidence-units": {
+      "types": "./dist/evidence-units.d.ts",
+      "default": "./dist/evidence-units.js"
     }
   },
   "bin": {
