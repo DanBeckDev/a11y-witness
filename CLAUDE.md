@@ -492,12 +492,34 @@ size); the memo's purpose was never the version but keeping a blocking PowerShel
   an injected `stat`/`read` off Windows — the `refreshBrowseBuffer` rule applied to a value rather than a
   remedy.
 
-**Edge's auto-update policy is SET and did not hold.** `UpdateDefault=0` and
-`AutoUpdateCheckPeriodMinutes=0` read back correctly on all four guests (verified by Ansible against the
-registry), the `MicrosoftEdgeUpdateTaskMachine{Core,UA}` tasks are `Ready`, and worker-2 updated anyway.
-So the appliance claim about the auto-updater is **not drift — it is insufficiency**, and the mechanism is
-not yet identified. Note `/diagnostics.edgePolicy` reports only `StartupBoostEnabled` and
-`BackgroundModeEnabled`, so the update policies it does not read cannot be seen to drift there either.
+**Edge's auto-update policy never applied, and the reason is documented.** `UpdateDefault=0` and
+`AutoUpdateCheckPeriodMinutes=0` read back correctly on all four guests and worker-2 updated anyway. Twelve
+EdgeUpdate policies — `UpdateDefault`, the per-app `Update{56EB18F8-…}` and `TargetVersionPrefix{…}` among
+them — carry the same line in [Microsoft's docs](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-update-policies):
+*"available only on Windows instances that are joined to a Microsoft Active Directory domain."* **These boxes
+are standalone.** So the values are stored and never honoured, and `policy.yml`'s read-back — the "prove it"
+half of every other concern in that role — could only ever prove they were STORED. A verification that
+cannot tell *set* from *in effect* is this repo's usual defect one layer further out.
+
+**So the build is pinned instead** (`roles/worker/tasks/edge-version.yml`): declared in
+`worker_edge_version`, installed from Microsoft's enterprise MSI by SHA256, and the updater's scheduled
+tasks and services stopped and disabled — the only lever that works on a non-domain-joined box.
+
+**Installing Edge takes three steps, and the middle one is not optional.** A Chromium install stages the new
+launcher as `new_msedge.exe` and leaves `msedge.exe` alone, because the running browser holds it; the rename
+is a separate operation performed later **by the updater we just disabled**. Measured on a11y-worker-3:
+`win_package` reported success and left `.93` in place, a **full reboot did not complete it**, and
+`setup.exe --rename-chrome-exe --system-level` finished it in one call. So: stop Edge, install, rename.
+Note also that Edge's own ClientState `pv` read `.101` while the binary read `.93` — the vendor's
+bookkeeping disagreeing with the file, the same shape as the memo above. **Trust the binary.**
+
+And gate the rename on the VERSION being wrong, never on `install is changed`: once an earlier attempt has
+installed the MSI, `win_package` is a no-op reporting unchanged, so a `changed`-gated follow-up skips and
+the box stays on the old build while the play reports success.
+
+Note `/diagnostics.edgePolicy` reports only `StartupBoostEnabled` and `BackgroundModeEnabled`, so the update
+policies it does not read cannot be seen to drift there either — though on a standalone box they were never
+the mechanism anyway.
 
 **Consequence for a corpus run: check `fleet:status` for consistency BEFORE starting one.** Two guests on
 different Edge builds must never share a cache entry, and the corpus on disk is already cache-invalid
