@@ -155,7 +155,34 @@ const CONTROL_ROLE_TOKENS = ROLE_TOKENS.filter((role) => !role.endsWith("landmar
 
 /** Bounded so a pathological announcement cannot spin: deeper nesting than this is not real page structure. */
 const MAX_CONTEXT_PREFIXES = 8;
-const LEADING_LANDMARKS = /^(?:(?:navigation|main|banner|complementary|contentinfo|region|search)\s+landmark\s*,\s*)+/i;
+/**
+ * A landmark prefix, WITH its optional accessible name.
+ *
+ * The name is the part this missed, and it is the common case: naming a landmark is best practice as soon as
+ * a page has more than one of a type, so real announcements are `<name>, <role> landmark,` and not
+ * `<role> landmark,`. Matching only the bare role left the NAME behind — and when that name happens to begin
+ * with a role word, the leftover reads as a control announced by role alone. Measured on the real-page
+ * corpus, three distinct announcements (six occurrences) were reported as unnamed when every one was named:
+ *
+ *   "edit consent, complementary landmark, form, accept all, button"        -> button named "accept all"
+ *   "banner landmark, Navigation menu, navigation landmark, Show search menu, button, collapsed"
+ *   "banner landmark, Navigation menu, navigation landmark, Show navigation menu, button, collapsed"
+ *
+ * The first is flagged because the LANDMARK is called "edit consent" and `edit` is a role token; the other
+ * two because it is called "Navigation menu" and `navigation` is one. A false 4.1.2 against a named control
+ * is, in this function's own words, the worst error this tool can make, and all three are on real pages —
+ * the only pages where a landmark gets a name.
+ *
+ * Verified over 3,082 real announcements: this flags SIX FEWER and not one more. The generated corpus is
+ * unaffected because its announcements carry no landmark nesting at all, which is exactly why the whole
+ * family of prefix defects is only ever reachable on real pages.
+ *
+ * `[^,]+` is deliberately greedy-to-the-comma rather than clever: NVDA announces a landmark as name-then-role
+ * and a control the same way, so everything before `<role> landmark` belongs to the landmark. A bare role
+ * after it therefore IS an unnamed control, and stripping the name is what makes that case reachable too.
+ */
+const LEADING_LANDMARKS =
+  /^(?:(?:[^,]+,\s*)?(?:navigation|main|banner|complementary|contentinfo|region|search)\s+landmark\s*,\s*)+/i;
 
 /**
  * CONTAINER context NVDA prepends that is not a landmark and not the control's own role.
@@ -204,47 +231,55 @@ function beginsWithRole(entry: string): boolean {
 }
 
 /**
- * NO state-change rule here, and the reason is worth keeping so nobody rebuilds it.
+ * NO state-change rule here — but NOT for the reason this comment gave until 2026-08-21, which was wrong
+ * and expensive.
  *
- * A disclosure that opens without announcing `expanded` is a real 4.1.2 failure, and it looked
- * trivially detectable: the corpus gives `"Travel advice, button, collapsed"` ->
- * `"Travel advice, button, focused, collapsed"` for the failing variant and `..., focused, expanded`
- * for the conformant one. A rule on that reached 69/69 EXACT and took 4.1.2 recall from 50.7% to 74.5%
+ * A disclosure that opens without announcing `expanded` is a real 4.1.2 failure, and it is trivially
+ * detectable: the corpus gives `"Travel advice, button, collapsed"` -> `"..., focused, collapsed"` for the
+ * failing variant and `..., focused, expanded` for the conformant one. A rule on that reached 69/69 EXACT
  * with no false positives across 1001 conformant corpus records.
  *
- * It also reported the W3C menus tutorial — ground-truth conformant — as failing, on evidence that is
- * STRUCTURALLY IDENTICAL to the corpus failure:
+ * ## The retracted claim: "the evidence does not contain the fact the rule needs"
  *
- *   corpus, failing        "Travel advice, button, collapsed" -> "..., focused, collapsed"
- *   real page, conformant  "...Support, button, collapsed"    -> "Support, button, focused, collapsed"
+ * This comment used to argue that the capture could not distinguish a control that was ACTIVATED from one
+ * merely FOCUSED, because the announcement says `focused` either way — and concluded the rule was unsound
+ * until the probe recorded post-activation state.
  *
- * The difference is whether the control was ACTIVATED or merely FOCUSED — a menu button does not open
- * on focus, so unchanged `collapsed` is correct there — and the capture records `focused` in both
- * cases. The evidence does not contain the fact the rule needs.
+ * **That is not what the probe does, and never was.** `probeDisclosure` calls `nvda.act()` — Enter on the
+ * control — and only THEN calls `reportFocusedControlWithRetry`. So `after` is already the post-activation
+ * state. The word `focused` appears because `reportCurrentFocus` reports the focused control; it is not
+ * evidence that focus was all that happened. The state token sits beside it.
  *
- * So this is a CAPTURE gap, not a rule to tune. Special-casing "inside a navigation landmark" would fit
- * one fixture and generalise to nothing. The fix is for the probe to record that it activated the
- * control and what the state was after ACTIVATION rather than after focus; then the rule becomes sound
- * and those 69 records are winnable. Until then, 24 points of corpus recall are not worth telling a
- * conformant W3C page it fails.
+ * Proved by capture, not by reading: when `menus-good.html` was given a working toggle, the recapture
+ * recorded `"Support, button, focused, expanded"`. If the probe only focused, `aria-expanded` would still
+ * be false and it would have said `collapsed`.
  *
- * ## The TRAINED SCORER has no such restraint, and that is still true
+ * The real cause of that "conformant page reported as failing" was the FIXTURE. It carried
+ * `aria-expanded="false"` with no script and a submenu that was never hidden, so `collapsed` was a false
+ * statement and activation genuinely changed nothing. The page was mis-authored and the finding was correct.
  *
- * Declining to build the rule kept this layer honest and did nothing for the other one.
- * `4.1.2:state-change-silent` learned the same evidence shape from the corpus, and on 2026-08-21 it scored
- * the W3C menus fixture at **0.9873** against a 0.9 threshold — the exact page this comment predicted it
- * would, by the exact mechanism described above.
+ * This mattered beyond tidiness: a stale comment describing a capture gap that did not exist talked a
+ * later reader into planning a `CAPTURE_PROTOCOL_VERSION` bump and a full 2,122-capture recapture to fix it.
+ * When a comment names a limitation, check the code still has it.
  *
- * That particular false positive is gone, but not because the ambiguity was resolved: the fixture page
- * turned out to carry `aria-expanded="false"` with no script and an unhidden panel, so it was genuinely
- * mis-authored and the scorer was right for a reason nobody intended. The page now toggles properly and the
- * evidence shows `collapsed -> expanded`.
+ * ## Why there is still no rule here
  *
- * **The underlying gap is untouched.** A control that legitimately does NOT change state when activated —
- * a menu that opens on hover, a toggle that is disabled, a button whose panel was already open — still
- * produces evidence indistinguishable from a real failure, and the model will still call it one. The
- * remedy is the same one named above and it belongs in the probe, not in either judge layer. Recorded here
- * rather than in a plan, because this is the comment somebody reads when the next such report arrives.
+ * The reason is now ownership, not evidence. `4.1.2:state-change-silent` is model-owned
+ * (`rule-ownership.json`) and scores **59 true positives, 0 false positives, 0 false negatives** on
+ * development. A deterministic rule would duplicate a decision that already holds, and this repo's whole
+ * ownership declaration exists so exactly one layer decides each subtype.
+ *
+ * The one argument that survives is narrow and worth testing before acting on: rules still run when the
+ * scorer ABSTAINS, and it abstains on 5 of 16 eval failure cases. A rule would reach those pages. Note the
+ * "50.7% to 74.5%" figure this comment used to quote predates the current model and must not be reused as
+ * the expected gain — measure it against today's scorer or not at all.
+ *
+ * ## What IS still true: the ambiguity, in the other direction
+ *
+ * A control that legitimately does not change state when activated — a menu that opens on hover, a disabled
+ * toggle, a panel already open — produces evidence indistinguishable from a failure, and the model will
+ * call it one. That is a real limit on both layers. It is not a capture gap: the capture records exactly
+ * what happened. It is that "nothing changed" has two causes and the page cannot tell you which.
  */
 
 function addUnnamedControls(entries: string[], requireMarker: boolean, add: AddFinding): void {

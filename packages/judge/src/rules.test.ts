@@ -365,3 +365,57 @@ test("STILL flags a genuinely unnamed control behind that same context", () => {
     assert.deepEqual(criteria(ruleFindings({ transcript: [], interaction: { controls: [line] } } as never)), ["4.1.2"], line);
   }
 });
+
+/**
+ * A landmark's NAME is not the control's role — the FOURTH instance of NVDA's prefix trap.
+ *
+ * The first three were: a leading landmark read as a role (three conformant W3C pages reported as 4.1.2
+ * failures), a leading container read as one (a named button on the first real site this tool was aimed at),
+ * and the item count sitting on either side of the comma. This one is the landmark's own accessible NAME,
+ * which the prefix pattern did not consume — so when that name begins with a role word, the leftover reads as
+ * a control announced by role alone.
+ *
+ * Measured on 3,082 real announcements: three distinct cases (six occurrences) were reported as unnamed while
+ * every one was named. Zero of the 2,122 generated captures can express it, because generated announcements
+ * carry no landmark nesting — which is why every member of this family has been found on a real page and
+ * never by the corpus.
+ *
+ * Naming a landmark is best practice as soon as a page has more than one of a type, so `<name>, <role>
+ * landmark,` is the COMMON shape out there and the bare `<role> landmark,` the exception.
+ */
+test("does NOT flag a named control when the LANDMARK's name begins with a role word", () => {
+  // "edit consent" is the landmark; `edit` is a role token. The button is named "accept all".
+  assert.deepEqual(ruleFindings({
+    transcript: [], interaction: { controls: ["edit consent, complementary landmark, form, accept all, button"] },
+  } as never), [], "the button is named 'accept all'; asserting 4.1.2 here is a false accusation");
+
+  // "Navigation menu" is the landmark; `navigation` is a role token. The button is named "Show search menu".
+  assert.deepEqual(ruleFindings({
+    transcript: [],
+    interaction: { controls: ["banner landmark, Navigation menu, navigation landmark, Show search menu, button, collapsed"] },
+  } as never), [], "the button is named 'Show search menu'");
+});
+
+test("DOES flag a genuinely unnamed control behind a NAMED landmark", () => {
+  // The other half, and the half that makes the fix more than a suppression: stripping the landmark's name is
+  // what makes this case reachable at all. Before, the name stood in for the control's and the failure was
+  // missed — a rule that stops firing for the wrong reason looks fixed and is not.
+  const findings = ruleFindings({
+    transcript: [], interaction: { controls: ["Main, navigation landmark, list, with 3 items, button"] },
+  } as never);
+  assert.equal(findings.length, 1, "an unnamed button is an unnamed button, whatever encloses it");
+  assert.match(findings[0].wcag, /4\.1\.2/);
+});
+
+test("the unnamed cases the rule already caught still fire", () => {
+  // Guarding against a fix that buys its false-positive reduction by going quiet. Each of these was caught
+  // before the landmark-name change and must still be.
+  for (const line of [
+    "button",
+    "navigation landmark, list, with 3 items, button",
+    "banner landmark, navigation landmark, list, with 6 items, button",
+  ]) {
+    const findings = ruleFindings({ transcript: [], interaction: { controls: [line] } } as never);
+    assert.equal(findings.length, 1, `should still flag: ${line}`);
+  }
+});
