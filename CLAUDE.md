@@ -462,6 +462,49 @@ NVDA and Edge versions, **the Windows build and architecture**, the provisioning
   revision changes every key it produces and invalidates its cache — the behaviour you want, and
   unit-tested. Re-provision the pool together rather than one at a time so two differently prepared
   guests cannot silently share an `"unstamped"` key.
+### A cache key that was MEMOISED, and lied for five days
+
+**Edge updates itself under a running worker, and `browserVersion` did not notice.** The worker read it
+through `bootConstant`, whose comment stated the premise outright — *"an executable's version (updating Edge
+or NVDA restarts this process)"*. Nothing makes that true: Edge's updater replaces files on disk and the
+worker is a separate scheduled task. Measured on a11y-worker-2, same box both sides:
+
+```
+/health.environment.browserVersion   151.0.4129.93    uptimeMinutes 7205 (5 days)
+msedge.exe on disk                   151.0.4129.101   written 20 Aug 12:13 — four days INTO that uptime
+```
+
+So captures were stamped with a version they were not captured under, and **shared a cache key with
+evidence from a different browser build** — the exact failure the key exists to prevent, arriving through
+the memo instead of through the key. `fileProductVersion` now memoises on the file's identity (path, mtime,
+size); the memo's purpose was never the version but keeping a blocking PowerShell child off polled
+`/health`, and a `statSync` preserves that.
+
+**Two lessons worth more than the fix.**
+
+- **It defeated the check that was built for it.** `browserVersion` is the FIRST entry in
+  `fleet-consistency.mjs`'s `MUST_MATCH`, with exactly this rationale — and every guest reported the same
+  stale `.93`, so a split fleet looked consistent. The moment the memo was fixed, `fleet:status` said:
+  `fleet INCONSISTENT — browserVersion: .107=151.0.4129.101 .59/.175/.224=151.0.4129.93`. **Only ONE guest
+  had actually updated.** A correct check fed a value that cannot express the fault is not a check.
+- **A deploy would have HIDDEN it.** Restarting a worker rebuilds the memo, so a correct version after a
+  deploy proves the restart worked and vouches for nothing. Hence `file-version-memo.test.ts`, which drives
+  an injected `stat`/`read` off Windows — the `refreshBrowseBuffer` rule applied to a value rather than a
+  remedy.
+
+**Edge's auto-update policy is SET and did not hold.** `UpdateDefault=0` and
+`AutoUpdateCheckPeriodMinutes=0` read back correctly on all four guests (verified by Ansible against the
+registry), the `MicrosoftEdgeUpdateTaskMachine{Core,UA}` tasks are `Ready`, and worker-2 updated anyway.
+So the appliance claim about the auto-updater is **not drift — it is insufficiency**, and the mechanism is
+not yet identified. Note `/diagnostics.edgePolicy` reports only `StartupBoostEnabled` and
+`BackgroundModeEnabled`, so the update policies it does not read cannot be seen to drift there either.
+
+**Consequence for a corpus run: check `fleet:status` for consistency BEFORE starting one.** Two guests on
+different Edge builds must never share a cache entry, and the corpus on disk is already cache-invalid
+against every guest — `provenance.browserVersion` on the 18 Aug captures reads `151.0.4129.86`, a value
+that was itself produced by the memo and therefore cannot be trusted to describe what those captures ran
+under.
+
 - **Bump `CAPTURE_PROTOCOL_VERSION`** (`packages/nvda-worker/src/capture-core.mjs`) when a change alters what
   the evidence *means* — a new field a signal reads, a probe that announces differently. It forces a
   full recapture; that is the point. Do **not** reach for it on a refactor.
@@ -1102,7 +1145,14 @@ Anything a human has to remember is something that does not happen. What runs it
 
 - **Worker VMs** — a run starts what it needs and puts each back as it found it. Stopped is the
   correct resting state.
-- **The dataset page server** — leased the same way (`packages/lab/src/training/page-server.mjs`). A run starts it
+- **The dataset page server** — leased the same way (`packages/lab/src/training/page-server.mjs`), and the
+  lease is **refcounted**, because it had to be: the header's rule ("a long run must not shut down something
+  another run is using") protected the ADOPTER and not the STARTER, so a one-case capture run killed the
+  server a 48-capture `evidence:check` was still using, 46 captures read a dead port, and they all
+  "succeeded" because Edge serves its own error page. Holders are recorded on disk with the server's pid, so
+  the last one out stops it whether or not it started it, and `kill(pid, 0)` liveness means a crashed holder
+  cannot pin a server forever. `EPERM` counts as ALIVE — after pid reuse a recorded holder may be somebody
+  else's process. A run starts it
   if missing and stops it afterwards, including on SIGINT; a server somebody else started is used and
   left alone. This replaced a manual `npx serve` that had leaked four processes onto this host, one of
   which was a stray that could 404 an entire run while it reported success.
@@ -1194,7 +1244,13 @@ Verification is layered; pick the layers your change touches:
   as proof of absence.
 - `npm run evidence:check <worker>` — after ANY change to the capture pipeline, asks whether the
   evidence moved rather than whether the timing did. Exit 0 = ship without invalidating the cache,
-  1 = evidence CHANGED, bump `CAPTURE_PROTOCOL_VERSION` and recapture. This is what makes a capture
+  1 = evidence CHANGED, bump `CAPTURE_PROTOCOL_VERSION` and recapture, **2 = INCONCLUSIVE, which now
+  includes PARTIAL coverage and not only zero**. It reported `2 compared: 2 same ... evidence unchanged —
+  safe to ship` and exited 0 on 2 of 48, because a concurrent run stopped the page server two captures in.
+  The `examinedNothing` guard's own comment named the general rule and then covered only `compared === 0`,
+  calling that "the extreme case rather than a different one" — 2 of 48 is the middle it left open. The
+  sample is stratified one case per family, so an uncompared capture is a FAMILY with no opinion attached,
+  while the question being answered is "may I keep 2,122 cached captures?". This is what makes a capture
   optimisation affordable to evaluate; before it, every one "cost a full recapture" to find out.
 - `npm run training:check-signals` — proves every dataset `badSignal` fires on the bad page and stays silent on the good one, against captures already on disk (no worker needed). Run it after ANY change to a probe's output shape: a probe and its signal are coupled, and 8 cases once went silently blind when a probe changed. `npm run training:status` reports a long capture run; `--resume` picks up where one stopped.
 - **Worker broken? Don't debug from first principles** — `docs/nvda-worker-runbook.md` has the error-string → real-cause table (the messages are misleading: `"NVDA not installed"` usually means a version mismatch, not a missing install), and `packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1` applies it automatically. `packages/worker-fleet/src/provisioning/provision-nvda-worker.ps1` is the idempotent repair.
