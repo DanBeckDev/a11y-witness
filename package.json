@@ -12,6 +12,7 @@
     "eval": "A11Y_PYTHON=.venv/bin/python tsx packages/lab/src/eval/run.ts",
     "rules-check": "tsx packages/lab/src/eval/rules-check.ts",
     "test": "tsx --test \"packages/*/src/**/*.test.ts\"",
+    "eval:capture": "A11Y_PYTHON=.venv/bin/python node packages/lab/src/harnesses/capture-fixtures.mjs",
     "eval:gate": "A11Y_PYTHON=.venv/bin/python EVAL_GATE=1 EVAL_RUNS=3 tsx packages/lab/src/eval/run.ts",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build-packages.mjs",
