@@ -15,7 +15,7 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 | `gate:isolation` | **6/6 packages usable when installed**, 1 private package skipped and announced |
 | `rules:gate` | **PASS** — every rule-owned subtype exact on real captured evidence, **0 false positives across 1,003 conformant records** |
 | held-out acceptance | **PASS** — `"passed": true`, no failure reasons |
-| `npm run eval` (judge quality) | **recall 59%, 0 false positives on conformant pages**, 16 failure-case runs. Was 90% recall with 3 false positives, 2 of them accusing conformant W3C pages; the scorer now ABSTAINS outside its training distribution rather than extrapolating, and 59% is what it can honestly claim. See the limitation below. |
+| `npm run eval:gate` (judge quality) | **FAILS. Recall 78%, but 1 false positive on a conformant page** (`tut-menus-good`, 4.1.2), against a gate whose limit is 0. Abstained on 5 of 16 failure cases; 48 failure-case runs (16 cases x 3). Recall was 59% before the realism tier and 90% before abstention existed, when it carried 3 false positives, 2 of them accusing conformant W3C pages. **This failure is PRE-EXISTING and not caused by the shipped model**: the previously shipped weights (`fb49862`) produce the identical false positive, verified by A/B on the same fixture, and it is not the abstention floor either — it reproduces with the floor at its old 0.7192. See below. |
 | `verify.corpus.test.ts` | 6/6 |
 | CI (`lint` + `capture-regression`) | **both green** — first time since 1 August; the fix was `capture-pure.mjs` |
 | shipped model | `calibrationClean: true`, `generalisationVerified: true` (held-out, 0 errors), `releaseBlockedBy: []` |
@@ -32,8 +32,34 @@ encoder. No LLM, no API key, nothing leaves the runner.
 > so a fresh clone could not run its own default judge, and the numbers were produced by a file no
 > consumer received. `npm pack` includes untracked files, which is why installing it appeared to work.
 > The program is now tracked, resolves from `import.meta.url` rather than the process cwd, and
-> `npm run eval:gate` reproduces these exact figures from the committed tree. A test now asserts that
+> `npm run eval:gate` runs from the committed tree. A test now asserts that
 > every `scripts/…` program referenced by `package.json` or `action.yml` is tracked in git.
+>
+> **It does not reproduce the figures this table used to quote, and that sentence used to claim it did.**
+> Measured 2026-08-21: recall 78%, and **one false positive on a conformant page**, so the gate exits
+> non-zero. The old row said "0 false positives", which was the number this project most needed to be true
+> and had stopped checking — the same shape as the acceptance gate that sat failing while three others were
+> green.
+
+### `eval:gate` fails, it failed before, and that is recorded rather than smoothed over
+
+One false positive: `tut-menus-good`, a conformant W3C menus tutorial page, reported as 4.1.2. For an
+accessibility tool a false positive is an accusation, so the gate's limit is 0 and this is a real block on
+claiming judge quality.
+
+Two things were ruled out by measurement rather than argument, because the obvious suspects were both mine:
+
+- **Not the abstention floor.** Setting it back to the previous 0.7192 reproduces the false positive exactly,
+  so that page was always inside scoring range and lowering the floor to 0.70 did not admit it.
+- **Not the new weights.** Restoring the previously shipped model from `fb49862` reproduces the false
+  positive exactly. So the realism tier, the publisher mask and the `4.1.2:unnamed-control` threshold move
+  from 0.05 to 0.9 are all innocent of it.
+
+What the shipped model DOES pass is what its artifact claims: per-subtype calibration clean, and held-out
+acceptance with 58 true positives and 0 false positives across all 8 criteria. `releaseEligible: true` in
+`training-report.json` means those, and it has never meant `eval:gate`. Keeping both statements visible
+matters more than a tidy table: a green flag beside a failing gate is how this project has previously come
+to believe something was verified.
 
 ### The claim this project exists to make, demonstrated
 
