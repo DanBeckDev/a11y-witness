@@ -65,6 +65,32 @@ for a busy one — the case it is on, how long it has been there and the phase i
 guest, which is the fault that produces zero failures: the worker's own retry absorbs every recovery, so
 `failures` stays 0 while that box runs at three times its neighbours' cost.
 
+**Long lab work runs through Ansible, not through a shell.** Training, dataset builds, abstention sweeps and
+real-page captures are named jobs, dispatched with fixed argv and supervised by systemd:
+
+```bash
+npm run lab:job -- -e job=train                 # the catalogue is in ansible/lab-job.yml
+npm run lab:job -- -e job=capture-real-pages -e worker=a11y-worker-2 -e role=training -e shard=0/4
+npm run lab:status                              # every a11y-job-* unit and its state
+npm run lab:status -- -e job=train              # systemd's view + the journal + the run's own progress file
+```
+
+This replaced `ssh root@<pve> 'pct exec 121 -- bash -lc "..."'`, which existed nowhere in the source tree —
+so the way this project's most expensive operations were started was untested and unreviewable. `command`
+with `argv:` never invokes a shell, which removes the quoting class that sent four capture shards at
+`--worker=http://:8765` for 29 minutes. **The lab is reached DIRECTLY at its own IP; there is no `pct exec`
+hop**, and that second hop was the whole source of the quoting problem.
+
+**Three systemd facts, measured, that any status check must respect.** Poll `SubState`, **never
+`systemctl is-active`** — under `--remain-after-exit` an exited unit reads `active (exited)` forever, so a
+waiter on `is-active` hangs indefinitely reporting "still running" for a finished job. `Result` and
+`ExecMainStatus` are populated **while the job is still running**, so they mean nothing until `SubState`
+leaves `running`. And use `--remain-after-exit` rather than `--collect`, or the exit code is discarded at the
+moment it matters. `lab-job.test.ts` pins all three.
+
+**A job of a given name is refused, not killed, while one is running.** The unit name is the lock and it
+holds against the ssh path too, which an in-process flag could not.
+
 `packages/worker-fleet/ansible/README.md` is the map: why SSH and not WinRM (the blank-password guard),
 why not an `/admin/update` route (the worker has no auth and binds all interfaces), and the two Windows
 gotchas that otherwise cost an afternoon — `administrators_authorized_keys` and OpenSSH's `DefaultShell`.
