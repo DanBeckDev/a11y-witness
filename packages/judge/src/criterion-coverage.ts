@@ -68,7 +68,22 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   },
 
   // ---- reachable from evidence we already have, or could capture -------------------------------
-  // MEASURED 2026-08-21, and the conclusion reversed: cheap to build, worthless to ship.
+  // MEASURED 2026-08-21. First conclusion was "cheap to build, worthless to ship" on the strength of
+  // "zero failures in 4,895 captures" — and that number proves nothing, because NEITHER population can
+  // produce the fault:
+  //
+  //   - the 4,822 corpus captures come from `page()` in case-matrix.mjs, which hardcodes `<title>`, so a
+  //     titleless generated page is impossible BY CONSTRUCTION;
+  //   - the 77 real captures are UK public-sector pages, the most templated and most audited on the web.
+  //
+  // That is this repo's own "a canary that cannot express the fault is worthless" rule, applied to the
+  // criterion when it belonged to the measurement. The evidence was never the problem: the title is
+  // captured reliably, with an `ok` flag, on 98.3% of everything on disk.
+  //
+  // The claim survives on THIRD-PARTY data instead. WebAIM's 2026 Million report tests 1,000,000 home pages
+  // and names six categories covering 96% of all errors — contrast 83.9%, alt text 53.1%, form labels 51%,
+  // empty links 46.3%, empty buttons 30.6%, document LANGUAGE 13.5%. Missing document TITLE is not among
+  // them, and since they do measure document-level attributes, title absence sits well below 13.5%.
   //
   // The evidence is genuinely there — 4,818 of 4,899 corpus captures and 77 of 77 real ones carry a
   // `documentReady` diagnostic with NVDA's SPOKEN title, and the 81 without have `ok: false`, so "we could
@@ -86,7 +101,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   //
   // So a rule here would fire only on pages authored to trip it, and would add a row to this table without
   // adding any detection. That is the "canary that cannot express the fault" shape, sold as coverage.
-  "2.4.2": { status: "reachable", needs: ["screen-reader"], note: "The title IS captured (`documentReady.title`, with an `ok` flag separating a failed measurement from a missing title) and a rule is trivial. But measured across 4,895 captures there are ZERO missing or placeholder titles, and the documented real-world failures are the 'does not describe' kind, which is judgement — W3C flags 2.4.2 on a page whose title reads 'Welcome to CityLights! [Inaccessible Survey Page]'. Buildable, unvalidatable, and it would detect nothing. Not worth shipping until a case exists that is not one we wrote for it." },
+  "2.4.2": { status: "reachable", needs: ["screen-reader"], note: "The title IS captured (`documentReady.title`, with an `ok` flag separating a failed measurement from a missing title) and a rule is trivial. But measured across 4,895 captures there are ZERO missing or placeholder titles, and the documented real-world failures are the 'does not describe' kind, which is judgement — W3C flags 2.4.2 on a page whose title reads 'Welcome to CityLights! [Inaccessible Survey Page]'. Buildable, and the detectable subset (absence) is rare on third-party evidence too — WebAIM's million-page survey does not list missing title among the failures covering 96% of errors, while it does list missing document LANGUAGE at 13.5%. The subset worth catching is different and we cannot reach it: a single-page app that changes route without changing `document.title`, so the user hears the previous page's name. That needs a NAVIGATION probe — a capture reads the title once, at entry — and it is the failure mode a screen-reader tool would be uniquely placed to prove." },
   "2.4.1": { status: "reachable", needs: ["screen-reader"], note: "MEASURED 2026-08-21: `focusOrder` is present on 74 of 77 REAL captures and **0 of 4,899 corpus captures**, because `probeFocus` is opt-in and the dataset runner never sets it. So `rules:gate`, which validates against 1,003 conformant corpus records, cannot see this criterion at all — and the real pages that do carry the evidence have no per-criterion ground truth. Needs synthetic cases captured WITH the focus probe before it is assessable. Bypass blocks. A skip link is the first focusable element and announces as one; `focusOrder` already records what focus reaches first." },
   "2.4.3": { status: "reachable", needs: ["screen-reader"], note: "MEASURED 2026-08-21: same blocker as 2.4.1 — `focusOrder` exists on real captures and on none of the 4,899 corpus captures, so there is nothing to validate a rule against. Focus order. `focusOrder` is captured and already assessed for 2.1.2 but feeds no 2.4.3 rule. A clearly broken order is detectable; whether an order 'preserves meaning' in the general case is human judgement, so expect partial coverage." },
   "2.1.1": { status: "reachable", needs: ["screen-reader", "accessibility-tree"], note: "MEASURED 2026-08-21: both halves exist only on REAL captures. `focusOrder` is on 0 of 4,899 corpus captures and `structureCensus` on 2,165 of them, so the set difference this criterion depends on cannot be computed over the corpus. Keyboard operability. A control present in the AX tree that Tab never reaches is exactly this failure, and both halves are already captured — `structuralCensus` and `focusOrder`." },
