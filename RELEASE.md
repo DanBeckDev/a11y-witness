@@ -15,7 +15,7 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 | `gate:isolation` | **6/6 packages usable when installed**, 1 private package skipped and announced |
 | `rules:gate` | **PASS** — every rule-owned subtype exact on real captured evidence, **0 false positives across 1,003 conformant records** |
 | held-out acceptance | **PASS** — `"passed": true`, no failure reasons |
-| `npm run eval:gate` (judge quality) | **FAILS. Recall 78%, but 1 false positive on a conformant page** (`tut-menus-good`, 4.1.2), against a gate whose limit is 0. Abstained on 5 of 16 failure cases; 48 failure-case runs (16 cases x 3). Recall was 59% before the realism tier and 90% before abstention existed, when it carried 3 false positives, 2 of them accusing conformant W3C pages. **This failure is PRE-EXISTING and not caused by the shipped model**: the previously shipped weights (`fb49862`) produce the identical false positive, verified by A/B on the same fixture, and it is not the abstention floor either — it reproduces with the floor at its old 0.7192. See below. |
+| `npm run eval:gate` (judge quality) | **PASS — recall 78%, 0 false positives on conformant pages**, abstained on 5 of 16 failure cases, 48 failure-case runs (16 cases x 3). Recall was 59% before the realism tier, and 90% before abstention existed, when it carried 3 false positives, 2 of them accusing conformant W3C pages. It failed at one false positive until 2026-08-21; the cause was a mis-authored fixture, not the scorer. See below. |
 | `verify.corpus.test.ts` | 6/6 |
 | CI (`lint` + `capture-regression`) | **both green** — first time since 1 August; the fix was `capture-pure.mjs` |
 | shipped model | `calibrationClean: true`, `generalisationVerified: true` (held-out, 0 errors), `releaseBlockedBy: []` |
@@ -35,31 +35,50 @@ encoder. No LLM, no API key, nothing leaves the runner.
 > `npm run eval:gate` runs from the committed tree. A test now asserts that
 > every `scripts/…` program referenced by `package.json` or `action.yml` is tracked in git.
 >
-> **It does not reproduce the figures this table used to quote, and that sentence used to claim it did.**
-> Measured 2026-08-21: recall 78%, and **one false positive on a conformant page**, so the gate exits
-> non-zero. The old row said "0 false positives", which was the number this project most needed to be true
-> and had stopped checking — the same shape as the acceptance gate that sat failing while three others were
-> green.
+> **The figures this table quotes were wrong until 2026-08-21, and the sentence above used to claim this
+> gate reproduced them.** It said "recall 59%, 0 false positives" while the gate actually reported 78% and
+> **one** false positive — the number this project most needs to be true was the one that had stopped being
+> checked, which is the same shape as the acceptance gate that sat failing while three others were green.
 
-### `eval:gate` fails, it failed before, and that is recorded rather than smoothed over
+### The one false positive, and why it was the fixture rather than the scorer
 
-One false positive: `tut-menus-good`, a conformant W3C menus tutorial page, reported as 4.1.2. For an
-accessibility tool a false positive is an accusation, so the gate's limit is 0 and this is a real block on
-claiming judge quality.
+`tut-menus-good` was reported as 4.1.2 at **0.9873** on `4.1.2:state-change-silent`, against a 0.9
+threshold, while `unnamed-control` sat at 0.0003. For an accessibility tool a false positive is an
+accusation, so a gate limit of 0 is right and this was a real block.
 
-Two things were ruled out by measurement rather than argument, because the obvious suspects were both mine:
+The obvious suspects were both recent changes of ours, so both were eliminated by measurement rather than
+argument:
 
-- **Not the abstention floor.** Setting it back to the previous 0.7192 reproduces the false positive exactly,
-  so that page was always inside scoring range and lowering the floor to 0.70 did not admit it.
-- **Not the new weights.** Restoring the previously shipped model from `fb49862` reproduces the false
-  positive exactly. So the realism tier, the publisher mask and the `4.1.2:unnamed-control` threshold move
-  from 0.05 to 0.9 are all innocent of it.
+- **Not the abstention floor.** Novelty cosine 0.8131, far inside support, and it reproduced with the floor
+  set back to its previous 0.7192.
+- **Not the new weights.** The previously shipped model from `fb49862` reproduced it exactly, so the realism
+  tier, the publisher mask and the threshold move from 0.05 to 0.9 were all innocent.
+- **Not the deterministic rules.** `rules.ts` produces no findings at all on that page.
 
-What the shipped model DOES pass is what its artifact claims: per-subtype calibration clean, and held-out
-acceptance with 58 true positives and 0 false positives across all 8 criteria. `releaseEligible: true` in
-`training-report.json` means those, and it has never meant `eval:gate`. Keeping both statements visible
-matters more than a tidy table: a green flag beside a failing gate is how this project has previously come
-to believe something was verified.
+The page was wrong. It carried `<button aria-expanded="false">Support</button>` with **no script** and a
+submenu that was never hidden, so "collapsed" was never true, activating the button changed nothing, and the
+recorded evidence was structurally identical to a genuine state-change failure. The scorer was reporting a
+real defect — just not the one the fixture was written to test, since that pair tests NAMING and the bad
+variant is an unnamed icon button with no state changes at all.
+
+`rules.ts` had already diagnosed this exact page and declined to build a rule for it, concluding that "the
+evidence does not contain the fact the rule needs". That was the right call about a rule, and it is why the
+fixture stood: the rule layer abstained, and the model has no such restraint.
+
+Fixing it needed the page to toggle `aria-expanded` and the panel's `hidden` — the way `disclosure-good.html`
+and the generated corpus both express a conformant disclosure — and then a recapture, because a fixture IS a
+recorded capture. A second defect surfaced in that recapture: the panel was still being read out, because the
+page's own `nav ul{display:flex}` outranks the `hidden` attribute. Both fixed; `tut-menus-good` now reports
+nothing and `tut-menus-bad` is still caught at 100% recall.
+
+**Recapturing it was not previously possible.** `capture-books.mjs` wrote to
+`resolve(process.cwd(), "src/eval/fixtures/books")`, a path the `packages/` restructure moved, so it would
+have created that directory wherever you stood and written fixtures nothing reads — while reporting success.
+`capture-fixtures.mjs` replaces it, resolves from `import.meta.url`, and captures over a live worker instead
+of only in-process on the guest.
+
+`releaseEligible: true` in `training-report.json` still means calibration and held-out acceptance, and has
+never meant `eval:gate`. Both are stated here rather than one implying the other.
 
 ### The claim this project exists to make, demonstrated
 
