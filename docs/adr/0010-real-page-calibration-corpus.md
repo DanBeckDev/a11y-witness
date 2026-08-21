@@ -123,6 +123,36 @@ Split by SOURCE FAMILY rather than at random, deliberately: `images/decorative` 
 share a template, navigation and footer, so a random split would calibrate a threshold against structure
 the model had already been trained on. Asserted in the tests.
 
+## Measured 2026-08-21 — the corpus did lift real recall, and both caveats above are now answered
+
+The corpus is **77 pages (55 training, 22 calibration) from 39 publishers**, up from 26 pages from one. Two
+things this ADR listed as "NOT yet done" are done, and the third is still open.
+
+**The threshold is no longer derived.** `train-screenreader-model.py` takes `--in-distribution-floor` and
+records `derivedFloor` and `floorSource` beside the operating value. The floor is now **0.70, chosen on the
+22-page calibration set**; the training set's own nearest-neighbour minimum was 0.5587. It is still **not
+conformal** — 22 pages support a granularity of about 1/(n+1) ≈ 4.3% and no finer — so this is a policy
+choice made on held-out data, not an error-rate guarantee. What changed is that it is now *chosen and
+recorded* rather than falling out of a statistic nobody selected.
+
+**"19 training pages will not lift real recall on their own" was right, and 53 do.** On the same 22
+calibration pages: **20 of 22 scored with 0 false positives**, against 4–6 of 22 for the previous model.
+Held-out acceptance passes on these weights — 58 TP, 0 FP, 0 FN across all 8 criteria, all stable.
+
+**The unfavourable SHAPE of the gap persists and is the reason for the one remaining miss.** Pages published
+as inaccessible still sit further from the training distribution than conformant ones. `before/tickets.html`
+sits at cosine 0.6978 and is therefore abstained on at floor 0.70 — honestly, rather than being scored and
+cleared, which is what the derived floor of 0.5587 would have done. That margin is **0.0022**, so the
+principle (prefer abstention to a false negative) is doing the work here, not the precision of the number.
+More publisher-declared *inaccessible* pages is the single highest-value addition to this corpus.
+
+**A limit this ADR did not anticipate: two criteria cannot be calibrated on real pages at all.** 3.3.1 and
+4.1.3 read only what the form-submission probe produces, and that probe is off for pages we do not own.
+Measured: **0 of 77 real captures carry `formChanges` or `postSubmitFields`**. They are therefore masked on
+every real page rather than trained as clean from absent evidence, and any "0 false positives on real pages"
+claim is silent about them. Enabling the probe for pages that exist to be tested — W3C's own demos — is the
+obvious way to reach them, and is a per-page policy this corpus does not yet carry.
+
 ## Alternatives rejected
 
 - **Add real pages to the OOD reference without training on them.** Fastest way to stop abstaining and

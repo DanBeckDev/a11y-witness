@@ -57,9 +57,9 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "2.1.2": { status: "assessed", note: "Keyboard trap, from `focusOrder`: focus repeating and never reaching the rest of the page." },
   "2.4.4": { status: "assessed", note: "Vague link text. Rules cover a six-phrase subset (19 of 100 corpus records, a declared overlap); the head owns the rest." },
   "2.4.6": { status: "assessed", note: "Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the page, so this head is document-pooled." },
-  "3.3.1": { status: "assessed", note: "A validation error that is displayed but never announced. Needs the form probe, which is on by default in the Action and off in the CLI." },
+  "3.3.1": { status: "assessed", note: "A validation error that is displayed but never announced. Needs the form probe, which is on by default in the Action and off in the CLI -- and therefore OFF for every real-page capture, because submitting a form on a site we do not own is not a review. Measured: 0 of 77 real captures carry `formChanges`, so on a real page this criterion cannot fire in either direction." },
   "3.3.2": { status: "assessed", note: "Unlabelled fields and placeholder-only labels." },
-  "4.1.3": { status: "assessed", note: "A status message after form activation that the screen reader never speaks." },
+  "4.1.3": { status: "assessed", note: "A status message after form activation that the screen reader never speaks. Same probe dependency as 3.3.1 and the same consequence, which was recorded there and not here: it reads `postSubmitFields`, and 0 of 77 real captures carry any, so it cannot fire on a real page." },
 
   "4.1.2": {
     status: "partial",
