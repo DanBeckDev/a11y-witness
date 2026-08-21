@@ -68,10 +68,28 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   },
 
   // ---- reachable from evidence we already have, or could capture -------------------------------
-  "2.4.2": { status: "reachable", needs: ["screen-reader"], note: "NVDA announces '<title>, document' on entering every page, so the title is already in every capture on disk. The cheapest criterion available: a rule over evidence already captured, no protocol bump." },
-  "2.4.1": { status: "reachable", needs: ["screen-reader"], note: "Bypass blocks. A skip link is the first focusable element and announces as one; `focusOrder` already records what focus reaches first." },
-  "2.4.3": { status: "reachable", needs: ["screen-reader"], note: "Focus order. `focusOrder` is captured and already assessed for 2.1.2 but feeds no 2.4.3 rule. A clearly broken order is detectable; whether an order 'preserves meaning' in the general case is human judgement, so expect partial coverage." },
-  "2.1.1": { status: "reachable", needs: ["screen-reader", "accessibility-tree"], note: "Keyboard operability. A control present in the AX tree that Tab never reaches is exactly this failure, and both halves are already captured — `structuralCensus` and `focusOrder`." },
+  // MEASURED 2026-08-21, and the conclusion reversed: cheap to build, worthless to ship.
+  //
+  // The evidence is genuinely there — 4,818 of 4,899 corpus captures and 77 of 77 real ones carry a
+  // `documentReady` diagnostic with NVDA's SPOKEN title, and the 81 without have `ok: false`, so "we could
+  // not measure" is distinguishable from "the page has no title". That distinction is the one this criterion
+  // would live or die on.
+  //
+  // What killed it is the failure rate. The detectable subset is ABSENCE — no title, or a placeholder like
+  // "Untitled" or "index.html" — and across 4,895 measurable captures there are **zero** of either. Every
+  // CMS template on earth emits a title.
+  //
+  // And the documented failures are the other kind. W3C's own report for the BAD survey page lists 2.4.2 as
+  // "page title doesn't describe content", yet the page's actual title is
+  // "Welcome to CityLights! [Inaccessible Survey Page]" — descriptive by any reading. Whether a title
+  // describes its topic is human judgement, the same wall 2.4.6 stops at.
+  //
+  // So a rule here would fire only on pages authored to trip it, and would add a row to this table without
+  // adding any detection. That is the "canary that cannot express the fault" shape, sold as coverage.
+  "2.4.2": { status: "reachable", needs: ["screen-reader"], note: "The title IS captured (`documentReady.title`, with an `ok` flag separating a failed measurement from a missing title) and a rule is trivial. But measured across 4,895 captures there are ZERO missing or placeholder titles, and the documented real-world failures are the 'does not describe' kind, which is judgement — W3C flags 2.4.2 on a page whose title reads 'Welcome to CityLights! [Inaccessible Survey Page]'. Buildable, unvalidatable, and it would detect nothing. Not worth shipping until a case exists that is not one we wrote for it." },
+  "2.4.1": { status: "reachable", needs: ["screen-reader"], note: "MEASURED 2026-08-21: `focusOrder` is present on 74 of 77 REAL captures and **0 of 4,899 corpus captures**, because `probeFocus` is opt-in and the dataset runner never sets it. So `rules:gate`, which validates against 1,003 conformant corpus records, cannot see this criterion at all — and the real pages that do carry the evidence have no per-criterion ground truth. Needs synthetic cases captured WITH the focus probe before it is assessable. Bypass blocks. A skip link is the first focusable element and announces as one; `focusOrder` already records what focus reaches first." },
+  "2.4.3": { status: "reachable", needs: ["screen-reader"], note: "MEASURED 2026-08-21: same blocker as 2.4.1 — `focusOrder` exists on real captures and on none of the 4,899 corpus captures, so there is nothing to validate a rule against. Focus order. `focusOrder` is captured and already assessed for 2.1.2 but feeds no 2.4.3 rule. A clearly broken order is detectable; whether an order 'preserves meaning' in the general case is human judgement, so expect partial coverage." },
+  "2.1.1": { status: "reachable", needs: ["screen-reader", "accessibility-tree"], note: "MEASURED 2026-08-21: both halves exist only on REAL captures. `focusOrder` is on 0 of 4,899 corpus captures and `structureCensus` on 2,165 of them, so the set difference this criterion depends on cannot be computed over the corpus. Keyboard operability. A control present in the AX tree that Tab never reaches is exactly this failure, and both halves are already captured — `structuralCensus` and `focusOrder`." },
   "3.3.3": { status: "reachable", needs: ["screen-reader"], note: "Error suggestion. The form probe already submits and re-reads; whether the announced error names a REMEDY rather than only a problem is a judgement a head could learn." },
   "3.2.1": { status: "reachable", needs: ["screen-reader"], note: "On Focus. Requires focusing each control and detecting a context change — a probe this tool has the machinery for but does not drive." },
   "3.2.2": { status: "reachable", needs: ["screen-reader"], note: "On Input. Same shape as 3.2.1, on change rather than focus." },
