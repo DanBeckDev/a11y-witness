@@ -227,6 +227,24 @@ function beginsWithRole(entry: string): boolean {
  * control and what the state was after ACTIVATION rather than after focus; then the rule becomes sound
  * and those 69 records are winnable. Until then, 24 points of corpus recall are not worth telling a
  * conformant W3C page it fails.
+ *
+ * ## The TRAINED SCORER has no such restraint, and that is still true
+ *
+ * Declining to build the rule kept this layer honest and did nothing for the other one.
+ * `4.1.2:state-change-silent` learned the same evidence shape from the corpus, and on 2026-08-21 it scored
+ * the W3C menus fixture at **0.9873** against a 0.9 threshold — the exact page this comment predicted it
+ * would, by the exact mechanism described above.
+ *
+ * That particular false positive is gone, but not because the ambiguity was resolved: the fixture page
+ * turned out to carry `aria-expanded="false"` with no script and an unhidden panel, so it was genuinely
+ * mis-authored and the scorer was right for a reason nobody intended. The page now toggles properly and the
+ * evidence shows `collapsed -> expanded`.
+ *
+ * **The underlying gap is untouched.** A control that legitimately does NOT change state when activated —
+ * a menu that opens on hover, a toggle that is disabled, a button whose panel was already open — still
+ * produces evidence indistinguishable from a real failure, and the model will still call it one. The
+ * remedy is the same one named above and it belongs in the probe, not in either judge layer. Recorded here
+ * rather than in a plan, because this is the comment somebody reads when the next such report arrives.
  */
 
 function addUnnamedControls(entries: string[], requireMarker: boolean, add: AddFinding): void {
