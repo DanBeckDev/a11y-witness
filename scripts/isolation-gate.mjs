@@ -113,6 +113,17 @@ export function checkIsolation(packageDir) {
     return { ok: true, stage: "smoke", name, detail: output.trim().split("\n").slice(-1)[0] ?? "" };
   } catch (error) {
     const stderr = String(error.stderr ?? error.stdout ?? error.message);
+    // Exit 3 is the smoke test DECLINING a check this machine cannot make: guidepup refusing to import where
+    // there is no screen reader, a macOS-only host-capacity read on Linux. That is a platform limit, not a
+    // packaging defect, and it gets the same treatment private packages already get here — announced, not
+    // counted as a pass, and not a failure.
+    //
+    // It was a failure until 2026-08-21, and the cost was not cosmetic: `gate:isolation` is the FIRST leg of
+    // `release:gate`, so on the Linux control plane — the only machine with the Python venv the judge needs —
+    // its failure stopped the chain and every model-quality gate behind it silently never ran.
+    if (error.status === 3) {
+      return { skipped: true, stage: "smoke", name, detail: stderr.trim().split("\n").slice(-1)[0] ?? "declined" };
+    }
     // The first line that looks like a cause, not the whole npm essay.
     const cause = stderr.split("\n").find((l) => /Error|error|Cannot find|ERR_/.test(l))?.trim();
     return { ok: false, stage: "smoke", name, detail: cause ?? stderr.trim().split("\n")[0] ?? "failed" };
@@ -166,11 +177,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(0);
   }
   let failed = 0;
+  let declined = 0;
   for (const target of targets) {
     const verdict = checkIsolation(target);
-    if (!verdict.ok) failed += 1;
-    process.stdout.write(`  ${verdict.ok ? "ok  " : "FAIL"}  ${verdict.name ?? target}  ${verdict.detail}\n`);
+    if (verdict.skipped) declined += 1;
+    else if (!verdict.ok) failed += 1;
+    const tag = verdict.skipped ? "SKIP" : verdict.ok ? "ok  " : "FAIL";
+    process.stdout.write(`  ${tag}  ${verdict.name ?? target}  ${verdict.detail}\n`);
   }
-  process.stdout.write(`\n${targets.length - failed}/${targets.length} package(s) usable when installed\n`);
+  // A declined package is NOT in the numerator. Counting it as usable is exactly the "reports success having
+  // examined nothing" failure this file exists to prevent, so the coverage is stated rather than rounded up.
+  process.stdout.write(`\n${targets.length - failed - declined}/${targets.length} package(s) usable when installed`
+    + (declined ? `, ${declined} declined on ${process.platform} — run the gate on macOS for those\n` : "\n"));
   process.exit(failed ? 1 : 0);
 }
