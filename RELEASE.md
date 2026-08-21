@@ -82,44 +82,67 @@ findings.
     never been stated in one place before. Six of WCAG 2.2's 55 A/AA criteria, plus whatever axe-core adds
     for the visual layer.
 
-- **The trained scorer ABSTAINS on real pages, and says so rather than guessing.** Measured with a
-  k-NN feature-space novelty score (Sun et al., ICML 2022): every training record sits at cosine
-  **0.847–0.99** from its nearest neighbour, while **28 of 32** real eval fixtures sit at **0.50–0.84** —
-  outside the corpus's own support. A linear head on a frozen embedding cannot tell it is extrapolating,
-  and it returned **0.97 and 0.99 for 4.1.2 on two conformant W3C pages**. For an accessibility tool a
-  false positive is an accusation, so the scorer now declines outside its support and reports those
-  criteria as **unchecked, not clean**.
+- **The trained scorer DECLINES outside its support, and says so rather than guessing.** Measured with a
+  k-NN feature-space novelty score (Sun et al., ICML 2022). The problem it solves: a linear head on a
+  frozen embedding cannot tell it is extrapolating, and it returned **0.97 and 0.99 for 4.1.2 on two
+  conformant W3C pages**. For an accessibility tool a false positive is an accusation, so outside its
+  support the scorer reports those criteria as **unchecked, not clean**.
+  - **The support has since been widened rather than merely respected, and the numbers below moved with
+    it.** When the corpus was generated pages only, every training record sat at cosine **0.847–0.99** from
+    its nearest neighbour while **28 of 32** real eval fixtures sat at **0.50–0.84** — entirely outside it,
+    which is why abstention was the whole answer. Adding 53 real pages to the training set moved the
+    training minimum to **0.5587**, so that 0.847 figure describes a corpus that no longer exists. Quoted
+    here because it is the measurement that justified abstention, not a current statistic.
   - That is why eval recall reads 59% rather than 90%: the missing 31 points were the model predicting
     beyond its competence and sometimes being right. Not a capability, and not separable from the score.
   - **On real sites the deterministic rule layer is what finds things**, and it still runs when the
     scorer abstains.
-  - The abstention floor (0.847) is **derived** from the corpus's own nearest-neighbour minimum, not
-    chosen — but it is **not conformally calibrated**, so no error-rate guarantee is claimed. The
-    defensible form calibrates against a stated error rate on a labelled real-page set.
-  - **That real-page set now EXISTS** (ADR 0010): 26 pages, 7 calibration and 19 training, every one from a
-    source that publishes its own conformance claim, captured and disjoint from the eval fixtures. Its first
-    measurement confirms the limitation above on fresh, independent pages — **0 of 7 calibration pages fall
-    inside support** (cosine 0.586–0.757 against the 0.847 floor).
-  - **Lowering the floor has now been measured, and it is not defensible.** This used to read "what is missing
-    is not data but a DECISION". The data answered it. `packages/lab/scripts/calibrate-abstention.mjs` sweeps
-    candidate floors over the 7 calibration pages: accepting every real page would have the scorer accuse
-    **3 of the 4 pages W3C publishes as conformant** of 4.1.2 failures while catching **0 of the 3** it
-    publishes as inaccessible. Our own deterministic rules find nothing on those conformant pages, so those
-    are false positives. On real pages this model's output is not merely uncertain, it is **anti-correlated
-    with the truth** — so abstention is the only defensible behaviour, and the shipped floor stays.
-  - **A realism tier of 19 real pages was built, measured and NOT shipped.** Training on real-page structure
-    is the obvious fix, and it was tried: false positives on conformant pages fell 3→2, pages caught stayed
-    **0 of 3**, the nearest-neighbour cosines did not move at all, and 4.1.2 on the generated corpus got
-    slightly worse (10→11 false positives). At the shipped floor neither model scores any real page, so it
-    would change nothing a user sees. Recorded because a limitation that has survived a serious attempt to
-    remove it is a different claim from one nobody has tried.
-  - Seven calibration pages support an error-rate granularity of about 1/(n+1) ≈ **12.5%** and nothing finer,
-    so no conformal guarantee is claimed or claimable from this set. Widening it means finding more publishers
+  - **The realism tier IS now shipped, and it reversed the two conclusions this section used to state.**
+    Those were: "lowering the floor is not defensible" and "a realism tier of 19 real pages was built,
+    measured and NOT shipped". Both were true of a 19-page tier from one publisher. At **53 pages from 39
+    publishers** they are not, and the reversal is the deliverable — a limitation that survived a serious
+    attempt to remove it is a different claim from one that has now fallen to a bigger attempt.
+  - **The real-page corpus is 77 pages** (55 training, 22 calibration) from **39 publishers**, every one
+    carrying its own published accessibility statement, captured and disjoint from the eval fixtures.
+  - **Abstention on real pages fell from ~4–6 of 22 scored to 20 of 22, with 0 false positives.** Measured
+    on the held-out calibration set, same 22 pages both times:
+
+    | model | floor | real pages scored | false positives | inaccessible caught |
+    |---|---|---|---|---|
+    | previous | 0.7192 (derived) | 4–6 of 22 | 0 | 2 of 2 in support |
+    | **shipped now** | **0.70 (calibration)** | **20 of 22** | **0** | **2 of 2 in support** |
+
+  - **The floor is now CHOSEN on held-out data, not derived from the training set's own minimum.** The
+    trainer takes `--in-distribution-floor` and records `derivedFloor` and `floorSource` alongside it, so a
+    reader can always see both what the data implied and what was picked. This mattered: the derived value
+    (0.5587) scored 21 of 22 with 0 false positives but turned an honest abstention into a **miss** on
+    W3C's own "purchase form, broken" demo, which the previous model caught as 4.1.2. For an accessibility
+    tool "I cannot assess this page" is a safe answer and "no findings" on a broken form is a wrong one.
+  - **Held-out acceptance passes on these weights**: 58 true positives, **0 false positives, 0 false
+    negatives** across all 8 criteria, every one stable across repeated captures, and disjointness asserted
+    against the realism tier rather than only the base corpus.
+  - **What the realism tier actually caught, and no synthetic corpus could.** `4.1.2:unnamed-control` moved
+    its threshold from **0.05 to 0.9**. Since the trainer picks the lowest threshold reaching zero false
+    positives, that means every threshold below 0.9 false-positives on real conformant pages — an 18x error
+    that only generated data ever made look safe.
+  - **A publisher's disclosed exceptions are honoured, per head.** 53 of 53 real pages carry at least one
+    exception; usable real pages per head range 0–41. Where a publisher states in writing that it fails a
+    criterion, that head does not train the page as conformant. This was **inert for its whole existence**
+    until 2026-08-21 — the join read a key the captured file never wrote — and a failed join was
+    indistinguishable from a publisher with nothing to disclose.
+  - **Two of the eight criteria cannot be evaluated on a real page at all.** 3.3.1 and 4.1.3 read only what
+    the form-submission probe produces, and that probe is off for pages we do not own, because pressing
+    *Book* on a stranger's site is not a review. Measured: **0 of 77 real captures carry `formChanges` or
+    `postSubmitFields`**. So they are masked on every real page — they were previously trained as clean on
+    41 and 39 pages from evidence that was never gathered, which is indistinguishable from a failed capture.
+    They keep perfect held-out performance (8/8 each), because those records carried nothing for them.
+  - **Caveats, and they are load-bearing.** 22 calibration pages support an error-rate granularity of about
+    1/(n+1) ≈ **4.3%** and nothing finer, so no conformal guarantee is claimed or claimable. The choice of
+    0.70 over 0.65 rests on **one page sitting 0.0022 below the threshold** — the principle (prefer
+    abstention to a false negative) is sound, its effectiveness on that page is partly luck, and more
+    known-inaccessible real pages are what would firm it up. Widening the set means finding more publishers
     who state their own conformance, because labelling pages ourselves would make the measurement our own
     opinion.
-  - The gap is not uniform, and the shape is unfavourable: pages published as INACCESSIBLE sit further from
-    the training distribution (~0.59) than conformant ones (~0.73). The scorer is least at home exactly
-    where a finding would matter most.
 
   **The generator half of the fix has landed** (`6d5fcae`): the corpus now generates a median of 14 links and
   a maximum of 40, and a capture was measured reaching 25 of 25 links on a rescaled page. What remains is

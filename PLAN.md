@@ -136,10 +136,22 @@ Two things the run says that the headline does not:
   came on a host saturated by a concurrent retrain and was an *empty* read. The harness reported "read the
   wrong content" for both cases, which is why it looked like a stale buffer; it now names which.
 
-### B4. ~~The error rate to defend, decided~~ — ANSWERED BY MEASUREMENT, 2026-08-09
+### B4. ~~The error rate to defend, decided~~ — ANSWERED 2026-08-09, **SUPERSEDED 2026-08-21**
 
-**This was going to be your judgement call. It is not one any more: the data answers it, and the answer is
-do not lower the floor.**
+> **UPDATE: the floor WAS lowered, and the section below is out of date.** Everything here is a correct
+> measurement of a model trained on generated pages only. Once the realism tier reached 53 pages from 39
+> publishers, the same sweep on a 22-page calibration set reports **20 of 22 real pages scored with 0 false
+> positives** at floor **0.70** — so "do not lower the floor" and "anti-correlated with the truth" describe
+> a scorer that no longer exists.
+>
+> Two things below are worth keeping rather than deleting. The *reasoning* still holds exactly: a floor is
+> only lowerable if the model's accepted predictions are worth having, and that has to be measured on
+> held-out pages rather than argued. And the 3-of-4 false-positive rate is why the realism tier was built at
+> all. What changed is the model, not the standard.
+>
+> Note also that the floor is no longer *derived*: it is chosen on the calibration set and passed to the
+> trainer, which records `derivedFloor` and `floorSource` beside it. The derived value would have scored one
+> more page and turned an honest abstention into a miss.
 
 `node packages/lab/scripts/calibrate-abstention.mjs` sweeps candidate floors over the 7 calibration pages
 and reports what each one costs. Measured:
@@ -326,26 +338,42 @@ becomes the reason the unique claim is hard to copy.
 These are not blockers. They ARE things a reader must be told, and every one is already written into
 `RELEASE.md` — this list exists so nobody quietly stops mentioning them.
 
-- **Six criteria on a real page.** The trained scorer abstains on pages unlike its training data, so on
-  real sites the deterministic rules are what find things. Widening this needs a realism tier trained on
-  real-page structure, and **19 pages has now been measured rather than assumed: it is not enough.**
+- **RESOLVED 2026-08-21: the realism tier is shipped, and "19 pages is not enough" was right about 19 and
+  wrong as a conclusion.** The tier is now **53 pages from 39 publishers** and the scorer scores **20 of 22**
+  held-out real pages with **0 false positives**, against 4–6 of 22 before. The superseded measurement is
+  kept below because it is why the bigger attempt was made.
 
-  `build-realism-tier.mjs` adds the 19 training-role real pages as `clean` records (W3C's own published
-  claim, never our label) and `A11Y_SCORER_MODEL=/tmp/realism-model calibrate-abstention.mjs` measures the
-  retrain against the 7 held-out calibration pages. Result:
-
-  | | shipped | + realism tier |
+  | | previous | shipped now |
   |---|---|---|
-  | false positives on conformant real pages (floor 0) | 3 of 4 | **2 of 4** |
-  | inaccessible real pages caught | 0 of 3 | **0 of 3** |
-  | nearest-neighbour cosines | — | **identical, to 4 dp** |
-  | 4.1.2 on the generated corpus | 10 FP / 2 FN | **11 FP** / 2 FN |
+  | realism tier | 19 pages, 1 publisher | **53 pages, 39 publishers** |
+  | abstention floor | 0.7192 (derived) | **0.70 (chosen on calibration)** |
+  | real pages scored, of 22 | 4–6 | **20** |
+  | false positives on conformant real pages | 0 | **0** |
+  | inaccessible caught (of those in support) | 2 of 2 | **2 of 2** |
+  | held-out acceptance | 58 TP / 0 FP / 0 FN | **58 TP / 0 FP / 0 FN** |
 
-  So it removes one accusation, catches nothing new, does not move the novelty distribution at all, and is
-  slightly worse on the corpus. At the shipped floor of 0.847 neither model scores any real page, so it would
-  change nothing a user sees while costing a weights commit and an artifact-contract bump. **Not shipped, on
-  purpose** — the measurement is the deliverable, and it says a tier needs materially more than 19 pages
-  before it can pay for itself.
+  Three things made the difference, and only the first is "more data":
+
+  1. **39 publishers rather than one.** The old tier was all W3C, so it made W3C pages marginally more
+     familiar and moved nothing else — which is exactly what "identical cosines, to 4 dp" was reporting.
+  2. **The publisher's disclosed exceptions were finally honoured.** The mask had been INERT for its whole
+     existence: the join read `claimExcludes` off the captured file, which never wrote that key, so every
+     page trained every head as conformant — including criteria the publisher states in writing that it
+     fails. 53 of 53 pages now carry an exception.
+  3. **The floor is chosen on held-out data instead of derived from the training set's own minimum.** The
+     derived value scored one more page but converted an honest abstention into a MISS on W3C's own
+     "purchase form, broken" demo.
+
+  What the tier caught that no generated corpus could: `4.1.2:unnamed-control` moved its threshold from
+  **0.05 to 0.9**. The trainer picks the lowest threshold reaching zero false positives, so every value
+  below 0.9 false-positives on real conformant pages — an 18x error that synthetic data made look safe.
+
+  > **Superseded (kept deliberately).** With a 19-page single-publisher tier: false positives on conformant
+  > real pages 3 of 4 → 2 of 4, inaccessible caught 0 of 3 → 0 of 3, nearest-neighbour cosines identical to
+  > 4 dp, and 4.1.2 on the generated corpus slightly worse (10 → 11 FP). At the then-shipped floor of 0.847
+  > neither model scored any real page, so it would have changed nothing a user sees. The conclusion drawn
+  > was that a tier needs materially more than 19 pages before it pays for itself. That was correct, and it
+  > is what motivated going to 39 publishers.
 - **The gap is unfavourably shaped.** Pages published as inaccessible sit FURTHER from the training
   distribution (~0.59) than conformant ones (~0.73). The scorer is least at home where a finding matters
   most.
