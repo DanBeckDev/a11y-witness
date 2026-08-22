@@ -550,9 +550,28 @@ function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
  */
 const FOCUS_ONLY_STATES = /\b(focused|blank|visited|same page|has auto complete|autocomplete)\b/gi;
 
+/**
+ * A CONTAINER the sweep names before the control, which the focus channel does not.
+ *
+ * The structural sweep announces the first control inside a container with that container's name attached —
+ * `"form, Full name, edit"` — where focusing the same control says `"Full name, edit, focused"`. Compared
+ * raw, the two channels never match on that control, and a rule keyed on "reached or not" then reports a
+ * conformant page as failing. Measured: the 2.1.1 rule fired on BOTH variants of its own pair, naming
+ * `"form Full name"` as never focused on the page where it plainly was.
+ *
+ * This is the fourth appearance of one lesson, and `beginsWithRole` already carries it: *"a leading LANDMARK
+ * is context, not the control's own role … reported three conformant W3C pages as 4.1.2 failures"*. The fix
+ * there was to strip CONTAINERS rather than landmarks specifically, and every real nav bar is a list inside
+ * a landmark. Same correction, applied where two channels are compared rather than where a role is read.
+ */
+const LEADING_CONTAINER =
+  /^(?:(?:[^,]+\s+)?(?:landmark|form|list(?:\s+with\s+\d+\s+items?)?|table(?:\s+with[^,]*)?|group|region|dialog)\s*,\s*)+/i;
+
 function comparableNames(entries: string[] | undefined): string[] {
   return (entries ?? [])
-    .map((entry) => accessibleName(String(entry).replace(FOCUS_ONLY_STATES, " ")))
+    .map((entry) => accessibleName(
+      String(entry).replace(LEADING_CONTAINER, "").replace(FOCUS_ONLY_STATES, " "),
+    ))
     .filter(Boolean);
 }
 
