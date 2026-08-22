@@ -678,6 +678,67 @@ Rules that follow:
   post-submit re-read, which is exactly why that was the one sweep that never broke. When a comment names
   a browser or screen-reader behaviour, check every path that behaviour can reach.
 
+### A FACT STATED TWICE, and the copies drifted — five of these in one day
+
+The section below is about a remedy reaching one of several paths. This is its sibling and it cost more on
+2026-08-22: one fact written down in two or more places, where nothing compared them. Every instance was
+silent, and three were found only because something unrelated failed.
+
+| the fact | the copies | what it looked like |
+|---|---|---|
+| which probe a case wants | **six** hand-written hops: `pair()`, the manifest, the host runner, `server.mjs`, `capture-core`, and `evidence-check` | the probe never ran; the field it writes was simply absent, which is what a page with nothing to report looks like |
+| what an announcement's accessible NAME is | `namesOf` (case-matrix.mjs) and `comparableNames` (rules.ts) | `check-signals` said CONTAMINATED — the signal firing on the conformant page while the rule stayed silent on the same capture |
+| which rules ship | `rules.ts` source and `packages/judge/dist/rules.js` | `rules:gate` scored a rule the compiled bundle did not contain and reported `0/1 MISSING EVIDENCE` |
+| which signal types exist | the `if`-chain in `signalMatches` and a REGEX in `acceptance-matrix.test.ts` that scraped it | the scrape matched nothing after a refactor, so the test asserted over an empty set — and passed |
+| a case's page furniture | `withRealisticScale` keys it on ARRAY POSITION | inserting a case re-sized every case after it; `check-signals` reported `1 stale` |
+
+**The fix is never "be careful", it is to make the copies unable to disagree.** In order of preference:
+
+1. **Delete a copy.** `SIGNAL_TYPES` is now exported as a value, so the test reads the list instead of
+   scraping the source it is testing.
+2. **Derive one from the other.** The probe hops forward every `probe*` key by PREFIX rather than by name.
+3. **Pin them equal with a test** when the duplication is forced. `namesOf` cannot import TypeScript — the
+   corpus generator runs under plain `node`, and making it depend on a build is how the stale `dist` above
+   happened — so `name-normalisation.test.ts` asserts both reduce real announcements identically. It failed
+   twice on its first run, on cases nobody had considered.
+
+Two rules that fall out and are cheap to apply:
+
+- **A test must not derive its expectations from source TEXT.** Both the signal-type scrape and an earlier
+  `sweepLog` guard passed while examining nothing. Read an exported value, or assert against a fixture.
+- **APPEND new cases to `CASES`, never insert.** One stale capture is cheap; the same insertion into the
+  middle of a generated family invalidates hundreds, silently, and the only symptom is a count nobody was
+  watching.
+
+### Three criteria a static analyser structurally cannot reach
+
+Added 2026-08-22, and they are the clearest statement so far of what this tool is for. Each is recorded as
+PARTIAL in `criterion-coverage.ts`, naming which failure mode it covers and which it does not.
+
+| | assessed | why markup cannot answer it |
+|---|---|---|
+| 2.4.1 | a skip link that is present and **inert** | a checker sees a link and a plausible `href` and passes it |
+| 2.4.2 | the route changes and the **title does not** | the markup is valid at every instant; the failure is the TRANSITION |
+| 2.4.3 | the tab order **contradicts the reading order** | the DOM has no reading order to contradict until something walks the page |
+
+**Each one's scope was settled against the spec, and one of them changed as a result.** 2.4.1's note here used
+to say "a skip link is the first focusable element and announces as one" — i.e. detect its absence. W3C's
+Understanding page is explicit that a skip link is NOT required: headings alone satisfy it (H69), landmarks
+alone satisfy it (ARIA11). Every corpus page has an `h1`, so that rule would have fired on conformant pages.
+**Read the criterion before building the rule**, and prefer the mode no other layer can see.
+
+Three measurement traps, all found by capturing rather than reasoning:
+
+- **The tab order is a CYCLE.** Past the last control Tab returns to the first, so a faithful recording ends
+  by repeating what it began with — and comparing it raw made the CONFORMANT variant differ from itself.
+  Compare each control's first visit.
+- **The focus probe truncates at 12 stops on every corpus page.** So "absent from `focusOrder`" almost never
+  means "unreachable". 2.1.1 is positional for this reason: a control counts as unreachable only when
+  something LATER in reading order was reached.
+- **Silence is not the signal you want.** The stale-title page announced `"visited"` — the link's own state,
+  which names nothing about where the user is. A rule keyed on "nothing was announced" would have stayed
+  mute on the exact page it was written for.
+
 ### A fix applied at ONE call site when the behaviour reaches several
 
 Three defects in this file share one shape, and it is worth naming so the next one is caught by pattern:
