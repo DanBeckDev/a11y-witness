@@ -459,7 +459,7 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
  */
 function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
   const reading = comparableNames(input.structure?.formFields);
-  const tabbed = withoutConsecutiveRepeats(comparableNames(input.interaction?.focusOrder));
+  const tabbed = firstVisitEach(comparableNames(input.interaction?.focusOrder));
   if (reading.length < 2 || tabbed.length < 2) return; // absent or too short proves nothing
   const shared = new Set(reading.filter((name) => tabbed.includes(name)));
   if (shared.size < 2) return;
@@ -477,9 +477,20 @@ function comparableNames(entries: string[] | undefined): string[] {
   return (entries ?? []).map((entry) => accessibleName(entry)).filter(Boolean);
 }
 
-/** Tab wrapping past the last control repeats the first; a repeat is not a reordering. */
-function withoutConsecutiveRepeats(names: string[]): string[] {
-  return names.filter((name, i) => i === 0 || name !== names[i - 1]);
+/**
+ * Each control's FIRST visit, in order.
+ *
+ * The tab order is a CYCLE: past the last control Tab wraps to the first, so a faithful recording ends by
+ * repeating something it began with. Measured on the conformant variant — five fields, six links, then
+ * "Full name" again — and comparing that raw against the reading order made the correct page differ from
+ * itself. Deduplicating only CONSECUTIVE repeats was not enough, because the wrap is separated from the
+ * original by everything in between.
+ *
+ * First visit is also the right question: 2.4.3 is about the order in which controls are REACHED.
+ */
+function firstVisitEach(names: string[]): string[] {
+  const seen = new Set<string>();
+  return names.filter((name) => (seen.has(name) ? false : (seen.add(name), true)));
 }
 
 /** 2.4.4 — a link whose announced name says nothing about where it goes. */
