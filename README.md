@@ -10,7 +10,7 @@ The findings it is *for* are the ones a rule scanner structurally cannot produce
 
 > axe tells you an ARIA attribute is wrong. This tells you your form rejects input and **never announces why**, or your filter updates results and **says nothing**.
 
-Those come from the deterministic rule layer, which is exact on every criterion it owns with **zero false positives across 1,003 conformant records**. There is also a trained scorer of our own, and it is honest about its limits: it **abstains** on pages unlike its training data — which today is most real pages — and reports those criteria as *unchecked, not clean*, rather than guessing. See [Known limitations](./RELEASE.md#known-limitations-stated-plainly).
+Those come from the deterministic rule layer, which is exact on every criterion it owns with **zero false positives across 934 conformant records**. There is also a trained scorer of our own, and it is honest about its limits: it **abstains** on pages unlike its training data — which today is most real pages — and reports those criteria as *unchecked, not clean*, rather than guessing. See [Known limitations](./RELEASE.md#known-limitations-stated-plainly).
 
 It is three things: a testing pipeline, the reproducible screen-reader infrastructure that makes it runnable by anyone, and an accessibility model of our own being trained on the evidence the first two produce. The first two are what ships and works; the third is real, measured, and not yet carrying real pages.
 
@@ -264,9 +264,17 @@ The strongest evidence so far is structural rather than a number: the judge sees
 
 ## Part 3: the accessibility model we are building
 
-A frontier model calling an API is the current engine, not the destination. The goal is **our own model of the screen-reader experience** — and the reason it can exist is that parts 1 and 2 manufacture something no public dataset contains: paired captures of *what a screen reader actually announced* on pages that differ by one deliberate accessibility defect.
+**Our own model is the engine, not a rented one.** `JUDGE_BACKEND` defaults to `local`: the trained heads in
+`packages/scorer/models/screenreader-scorer/` over a frozen MiniLM encoder. No API key, no metered call, no
+data leaving the machine. `codex`, `anthropic` and `openai` remain available for comparison and are never
+the default. The reason a model of our own can exist is that parts 1 and 2 manufacture something no public
+dataset contains: paired captures of *what a screen reader actually announced* on pages that differ by one
+deliberate accessibility defect.
 
-**The local scorer is not integrated yet.** The repository has a reproducible frozen-encoder runner and a safetensors scorer, but the last diagnostic export contains 1,996 records from an interrupted protocol-2 capture. The source matrix has 1,061 pairs; 58 missing-landmark pairs remain in the structural layer because that absence is not reliably inferable from screen-reader output alone. The current page/provenance guard correctly rejects those older captures as stale, so a fresh export is empty until the matrix is recaptured. The current report is not release-eligible: grouped calibration has one 3.3.1 false negative and the unnamed-form-field subtype lacks sufficient positive coverage. The plan of record is [`docs/local-model.md`](./docs/local-model.md).
+**It is honest about where it stops.** On pages unlike its training data it **abstains** and reports those
+criteria as *unchecked, not clean*. At the shipped floor that still means it declines on many real pages —
+see [Known limitations](./RELEASE.md#known-limitations-stated-plainly). The plan of record is
+[`docs/local-model.md`](./docs/local-model.md).
 
 ### Now: a scorer over captured evidence
 
@@ -282,7 +290,7 @@ There is a concrete reason this needs its own dataset. Link purpose (2.4.4) is a
 
 ### Building the training set
 
-`packages/lab/src/training/` collects screen-reader-only evidence from a source matrix of **1,061 controlled page pairs** (2,122 potential NVDA records), each a known-good page and a mutated one that breaks a single criterion, so a label comes from the contrast rather than from anyone's opinion. Model input is deliberately limited to what a screen reader produced — **no HTML, DOM, CSS, URL or axe findings** — so a model trained on it cannot learn to cheat by reading the markup. The pages are instruments for producing captures and labels; they are not training input.
+`packages/lab/src/training/` collects screen-reader-only evidence from a source matrix of **1,066 controlled page pairs** (2,132 NVDA records), each a known-good page and a mutated one that breaks a single criterion, so a label comes from the contrast rather than from anyone's opinion. Model input is deliberately limited to what a screen reader produced — **no HTML, DOM, CSS, URL or axe findings** — so a model trained on it cannot learn to cheat by reading the markup. The pages are instruments for producing captures and labels; they are not training input.
 
 ```bash
 npm run training:generate      # write the page pairs + manifest
@@ -310,7 +318,11 @@ updates go cold past one capture timeout it exits 3. Exit codes are the contract
 
 `training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. A stale run reports `running: false`, `stale: true`, and no misleading ETA. `--resume` picks up only captures whose page identity and provenance still match. See [`packages/lab/src/training/README.md`](./packages/lab/src/training/README.md).
 
-The source matrix now contains 1,061 pairs: the original 836 plus 225 targeted calibration pairs for image alternatives, fake headings, placeholder-only fields, unnamed icon buttons, validation errors, live status updates, missing-role controls, and silent state changes. The last diagnostic export has 1,996 records; 58 observable missing-landmark pairs are retained for the structural/signal layer but excluded from the local scorer because their expected landmark is not present in the screen-reader evidence. The current page/provenance guard rejects the old captures as stale, so the matrix must be recaptured before training. The scorer combines channel-tagged screen-reader evidence with 29 screen-reader-derived structural features, including field-name/role and table-header relationships, then uses one head per violation subtype and max-pools those subtype scores into a criterion score. Thresholds are selected from grouped out-of-fold development predictions rather than in-sample scores. Grouped calibration still has one false negative, so this remains a diagnostic artifact until recapture, independent acceptance, and repeated-capture stability checks pass. `docs/local-model.md` sets out the planning bands honestly — roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality. Splits must be grouped by page family, template and source so a good and bad version of the same template never straddle train and test, and repeated captures of one page do not count as independent examples. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by [`packages/lab/scripts/verify-safetensors.mjs`](./packages/lab/scripts/verify-safetensors.mjs).
+The source matrix contains **1,066 controlled page pairs — 2,132 captures** — the original 836 plus targeted calibration pairs for image alternatives, fake headings, placeholder-only fields, unnamed icon buttons, validation errors, live status updates, missing-role controls, silent state changes, and the keyboard and navigation cases added for 2.1.1, 2.1.2, 2.4.1, 2.4.2 and 2.4.3. 58 observable missing-landmark pairs are retained for the structural/signal layer but excluded from the scorer, because that absence is not reliably inferable from screen-reader output alone.
+
+The scorer combines channel-tagged screen-reader evidence with 29 screen-reader-derived structural features, including field-name/role and table-header relationships, then uses one head per violation subtype and max-pools those subtype scores into a criterion score. Thresholds are selected from grouped out-of-fold development predictions rather than in-sample scores, and splits are grouped by page family, template and source so a good and bad version of the same template never straddle train and test — repeated captures of one page do not count as independent examples.
+
+`docs/local-model.md` sets out the planning bands honestly: roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by [`packages/lab/scripts/verify-safetensors.mjs`](./packages/lab/scripts/verify-safetensors.mjs).
 
 ### Later, and unproven: predicting the announcement
 

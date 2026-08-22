@@ -13,7 +13,7 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 | typecheck | clean — and now actually covering the package tests: `tsc --listFiles` showed **0** of them in the program before M5, 24 after |
 | lint | 0 errors (337 warnings, all `no-magic-numbers`, non-blocking by design) |
 | `gate:isolation` | **6/6 packages usable when installed**, 1 private package skipped and announced |
-| `rules:gate` | **PASS** — every rule-owned subtype exact on real captured evidence, **0 false positives across 1,003 conformant records** |
+| `rules:gate` | **PASS** — every rule-owned subtype exact on real captured evidence, **0 false positives across 934 conformant records** |
 | held-out acceptance | **PASS** — `"passed": true`, no failure reasons |
 | `npm run eval:gate` (judge quality) | **PASS — recall 78%, 0 false positives on conformant pages**, abstained on 5 of 16 failure cases, 48 failure-case runs (16 cases x 3). Recall was 59% before the realism tier, and 90% before abstention existed, when it carried 3 false positives, 2 of them accusing conformant W3C pages. It failed at one false positive until 2026-08-21; the cause was a mis-authored fixture, not the scorer. See below. |
 | `verify.corpus.test.ts` | 6/6 |
@@ -118,11 +118,19 @@ findings.
 
 ## Known limitations, stated plainly
 
-- **On a real page, six criteria are actually assessed.** Ten in total can produce a finding, but four of
-  them (2.4.6, 3.3.1, 3.3.2, 4.1.3) come only from the trained scorer, which abstains on pages unlike its
-  training data — which today is most real pages. The six that always work are the deterministic rules:
-  **1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.4, 4.1.2**. Everything else comes back `cantTell` or `untested`, and
-  the report says which. Measured on the eval fixtures: `abstained 14 of 16 failure cases`.
+- **On a real page, ten criteria are actually assessed — five of them partially.** Fourteen in total can
+  produce a finding, but four (2.4.6, 3.3.1, 3.3.2, 4.1.3) come only from the trained scorer, which abstains
+  on pages unlike its training data — which today is still many real pages. The ones that always work are the
+  deterministic rules:
+  - **In full: 1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.4.**
+  - **Partially: 2.1.1, 2.4.1, 2.4.2, 2.4.3, 4.1.2** — each covers one failure mode of several, and
+    `criterion-coverage.ts` records which mode and why the others are out. Three of them (2.4.1, 2.4.2,
+    2.4.3, added 2026-08-22) are failures a static analyser structurally cannot reach: a skip link that is
+    present and inert, a route that changes without the title changing, and a tab order that contradicts the
+    reading order.
+
+  Everything else comes back `cantTell` or `untested`, and the report says which. Measured on the eval
+  fixtures: `abstained 5 of 16 failure cases`, recall 78%, 0 false positives.
   - This is the single most important number for deciding whether the tool is worth running, and it had
     never been stated in one place before. Six of WCAG 2.2's 55 A/AA criteria, plus whatever axe-core adds
     for the visual layer.
