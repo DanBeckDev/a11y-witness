@@ -155,3 +155,37 @@ test("no line above the findings makes a claim the findings contradict", () => {
   // The scope sentence itself is the JUDGE's, not the renderer's — `verdict.summary` is passed through.
   // Asserted where it is produced, in local-judge's own test, so this one does not pin fixture data.
 });
+
+test("the report says how far the page sat from what the scorer was validated on", () => {
+  // The number that decides whether the scorer was ENTITLED to an opinion was reported only when it
+  // declined. So "I looked and found nothing" and "I was never validated on anything like this" produced
+  // identical output — measured on developer.mozilla.org, whose report showed no abstention, no scorer
+  // findings, and nothing saying which of the two had happened.
+  //
+  // It is also the measurement the realism tier needs: widening the corpus means knowing which real pages
+  // sit near the boundary, and this was computed on every run and thrown away.
+  const scored = {
+    ...verdict,
+    findings: [],
+    novelty: { nearestTrainingCosine: 0.82, inSupport: true, floor: 0.7 },
+  } as Report["verdict"];
+  assert.match(render({ verdict: scored }), /Support: within the scorer's validated range \(nearest training similarity 0\.82, floor 0\.7\)/);
+
+  const outside = {
+    ...verdict,
+    findings: [],
+    novelty: { nearestTrainingCosine: 0.61, inSupport: false, floor: 0.7 },
+  } as Report["verdict"];
+  assert.match(render({ verdict: outside }), /Support: OUTSIDE the scorer's validated range/);
+
+  // An artifact with no reference must not read as safe.
+  const unmeasured = {
+    ...verdict,
+    findings: [],
+    novelty: { nearestTrainingCosine: null, inSupport: null },
+  } as Report["verdict"];
+  assert.match(render({ verdict: unmeasured }), /Support: NOT MEASURED/);
+
+  // And the LLM backends, which have no support region, must not grow a line about one.
+  assert.doesNotMatch(render({ verdict: { ...verdict, findings: [] } as Report["verdict"] }), /Support:/);
+});

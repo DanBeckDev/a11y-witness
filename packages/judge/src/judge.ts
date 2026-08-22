@@ -127,6 +127,25 @@ export interface Judgment {
    * support region and never abstain, simply omit it.
    */
   abstained?: boolean;
+
+  /**
+   * How close this page was to the evidence the scorer was validated on, and the floor it was compared
+   * against — reported whether or not the scorer declined.
+   *
+   * It used to be visible ONLY when abstention fired, so a reader could see the basis for "I decline" and
+   * never the basis for "I looked and found nothing". Those are the two answers a support region exists to
+   * separate, and one of them was unfalsifiable: a page scored at the very edge of the distribution and a
+   * page comfortably inside it produced identical output. Measured on developer.mozilla.org, whose report
+   * showed no abstention and no findings from the scorer, and nothing in the run said which of the two had
+   * happened.
+   *
+   * It is also the measurement the realism tier needs. Widening the corpus means knowing which real pages
+   * sit near the boundary, and that number was computed on every run and thrown away.
+   *
+   * Absent for the LLM backends, which have no support region, and when an older artifact ships no
+   * reference — `inSupport: null` there, because unknown must not read as safe.
+   */
+  novelty?: { nearestTrainingCosine?: number | null; inSupport?: boolean | null; floor?: number };
 }
 
 interface Candidate {
