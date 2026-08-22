@@ -1,0 +1,45 @@
+# Architecture decision records
+
+One file per decision, numbered in the order it was taken. An ADR records **what was decided, what it cost,
+and what would falsify it** — so a future reader can tell a considered choice from an accident, and knows
+which measurement to repeat before overturning it.
+
+Several of these were changed by later evidence. That is recorded *in the original*, as a dated update,
+rather than by quietly editing the decision — a decision record that only shows the final answer cannot tell
+you which arguments have already been tried.
+
+## Index
+
+| # | decision | status |
+|---|---|---|
+| [0001](./0001-capture-architecture.md) | Capture workers as network services, Windows/NVDA first | accepted; judge half substantially proven |
+| [0002](./0002-layered-coverage.md) | Layered coverage — rule-based (axe-core) **plus** lived experience | proposed; axe layer shipped |
+| [0003](./0003-testing-and-distribution.md) | Reproducible testing in CI, GitHub Action as primary distribution | accepted |
+| [0004](./0004-package-boundaries.md) | Package boundaries and per-package public API | accepted |
+| [0005](./0005-workspaces-build-and-linking.md) | npm workspaces, per-package `tsc` build, semver-range linking | accepted |
+| [0006](./0006-naming-registry-and-licensing.md) | Naming scheme, public npm as registry, and the licence split | accepted |
+| [0007](./0007-versioning-and-release.md) | Independent semver via Changesets, and the isolation gate | accepted |
+| [0008](./0008-what-stays-internal.md) | What is deliberately **not** split, and what stays internal | accepted |
+| [0009](./0009-dataset-tiers.md) | Split the corpus into tiers rather than making every page realistic | accepted 2026-08-06 |
+| [0010](./0010-real-page-calibration-corpus.md) | A real-page calibration corpus, and why one asset unblocks three things | accepted 2026-08-08; measured 2026-08-21 |
+| [0011](./0011-task-journeys.md) | Task journeys — testing what a user is trying to DO | accepted as direction, not scheduled for 1.0 |
+| [0012](./0012-control-plane-split.md) | Split fleet CONTROL from the LAB, along the credential boundary | accepted |
+| [0013](./0013-lab-job-control.md) | Drive long lab jobs through Ansible and systemd, not a remote shell | accepted 2026-08-21 |
+| [0014](./0014-idle-workers-power-themselves-down.md) | Idle workers power themselves down, and only they may decide it | **proposed, not implemented** — the wake gate passed; the power draw is unmeasured |
+| [0015](./0015-one-defect-per-page-taught-the-scorer-to-veto.md) | One defect per page taught every head to veto on other criteria's evidence | accepted 2026-08-22 |
+
+## If you read only one
+
+**[0015](./0015-one-defect-per-page-taught-the-scorer-to-veto.md)** is the clearest example of what these
+records are for. It starts from a single missed page, follows three whys into a measured cause — the same
+announcement scoring 0.924042 on two pages and 0.452519 on a third — and ends with a corpus change and a
+gate. It also corrects an inference in 0010 rather than leaving the older record to be believed.
+
+## Writing a new one
+
+Number it next, and keep the shape the existing ones use: **Context** (what forced a decision), **Decision**
+(what, in the imperative), **Consequences** (including the ones you do not like), **Alternatives rejected**
+(with the reason each was rejected — this is the section future readers actually use), and where it applies,
+**what would falsify this**.
+
+Prefer a measurement to an argument. If a number here is not measured, say so in the sentence that uses it.
