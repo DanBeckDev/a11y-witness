@@ -376,7 +376,7 @@ function buildVerifyPrompt(input: JudgeInput, candidates: Candidate[]): string {
 }
 
 /** Run one model pass against a prompt and return its raw text. Dispatches to
- * the selected backend (Codex by default; Anthropic API when JUDGE_BACKEND is
+ * the selected backend (our own local scorer by default — see BACKEND above; Anthropic API when JUDGE_BACKEND is
  * set). Both return text; extractJson handles either one's output. */
 function ask(label: string, prompt: string, schema?: unknown): Promise<string> {
   if (BACKEND === "anthropic") return askAnthropic(label, prompt);
