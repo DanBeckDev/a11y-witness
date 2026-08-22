@@ -69,6 +69,9 @@ const SWEEPS_FEEDING: Record<string, readonly string[]> = {
   // Also not a quick-nav sweep. The route probe reaches a navigation control with `moveToNextLink`, so a
   // page whose link sweep starved is one where it may never have found a link to activate — and "we did
   // not reach a link" must read as unchecked, not as a page that navigates correctly.
+  // The link sweep reaches the skip link, and the focus probe supplies the ordinary tab order it is compared
+  // against. Starve either and the two sequences stop describing the same page.
+  "2.4.1": ["link", "focusOrder", "routeChange"],
   "2.4.2": ["link", "routeChange"],
   // Both channels it compares. A starved formField sweep means the reading order is a PREFIX, and a
   // truncated focus probe means the tab order is — either way the two sequences are no longer describing

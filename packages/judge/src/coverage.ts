@@ -33,7 +33,7 @@ export const SCORED_CRITERIA = [
  * covered by a rule alone is still covered, and reporting it as untested would be the mirror of the
  * over-claim this file exists to prevent.
  */
-export const RULE_CRITERIA = ["1.1.1", "1.3.1", "1.4.2", "2.1.2", "2.4.2", "2.4.3", "2.4.4", "4.1.2"] as const;
+export const RULE_CRITERIA = ["1.1.1", "1.3.1", "1.4.2", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "2.4.4", "4.1.2"] as const;
 
 /** Everything the shipped judge can return a finding for, deduplicated and sorted. */
 export function assessedCriteria(): string[] {

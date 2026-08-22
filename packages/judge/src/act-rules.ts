@@ -293,4 +293,37 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "the one a screen-reader user experiences, which can differ from raw browser tab order. Names are "
       + "compared after stripping the states only the focus channel announces ('focused', 'blank').",
   },
+  {
+    id: "a11y-witness:inert-skip-link",
+    version: "2026-08-22",
+    name: "The skip link does not skip anything",
+    description: "Activating the page's skip link left focus exactly where the next Tab would have gone "
+      + "anyway, so the repeated block still has to be tabbed through.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "2.4.1", mapping: "secondary" }],
+    inputAspects: ["interaction.routeChange", "interaction.focusOrder"],
+    applicability: "Captures where the navigation probe activated a link whose announced name contains "
+      + "'skip' or 'jump', and the focus probe recorded an ordinary tab order to compare against. Anything "
+      + "else is unchecked rather than clean.",
+    expectation: "After activating the skip link, focus is somewhere other than the second stop of the "
+      + "ordinary tab order.",
+    assumptions: [
+      "A skip link is NOT required by 2.4.1 — headings alone satisfy it (H69) and landmarks alone satisfy "
+        + "it (ARIA11) — so this rule never fires on its absence. It reports only a mechanism that is "
+        + "present and does nothing, which is the part no markup inspection can reach: a checker sees a "
+        + "link and a plausible fragment href and passes the page.",
+      "The activated control must announce as a skip link. The probe takes the FIRST link on the page, "
+        + "which on a real site is as likely to be a logo, and focus not moving after activating a logo "
+        + "says nothing about bypassing blocks.",
+      "'Did nothing' is stated against the SECOND stop of the ordinary tab order, so the claim is that the "
+        + "next Tab landed where it would have without the link. That is stronger than 'focus is near the "
+        + "top' and needs no knowledge of where the repeated block ends.",
+      "SECONDARY because 2.4.1 is satisfied by any sufficient mechanism. A broken skip link on a page that "
+        + "also has good landmarks may still pass the criterion; what this reports is that the mechanism "
+        + "the author provided is not one.",
+    ],
+    accessibilitySupport: NVDA_EDGE + " Focus is read immediately after activation and before any command "
+      + "that rewinds the caret — measured, because taking it later recorded the first link on the page "
+      + "for every variant and made a working skip link indistinguishable from an inert one.",
+  },
 ];
