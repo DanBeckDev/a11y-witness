@@ -16,20 +16,37 @@ are recorded.
 
 ## Where we actually are
 
-Verified at `be9ea07`: 579 tests, lint and typecheck clean, `release:gate` passing end to end, CI green,
-`capture:check` 40/40 against a real worker, and the GitHub Action exercised as a consumer would use it. The
-infrastructure is in good shape.
+Verified at `39ecc3b` (2026-08-22): 805 tests, lint and typecheck clean, `release:gate` passing end to end
+against the recaptured corpus, CI green, `capture:check` passing against a real worker, and the GitHub Action
+exercised as a consumer would use it. The infrastructure is in good shape.
 
 The honest shape of the product today:
 
 | | |
 |---|---|
 | criteria assessed **on a real page** | **6** of WCAG 2.2's 55 A/AA — 1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.4, 4.1.2 |
-| criteria the trained scorer covers | 8, but it **abstains on most real pages** (0 of 7 calibration pages in support) |
-| false positives on conformant pages | **0**, measured |
+| criteria the trained scorer covers | 8; at floor **0.70** it scores **20 of 22** calibration pages with **0** false accusations (was: abstained on almost all of them) |
+| false positives on conformant pages | **0**, measured — `release:gate` 2026-08-22: recall 78% over 48 failure-case runs, 0 false positives |
 | captures that read the **wrong page** | **0 of 54** on the path that can produce it — ceiling ≈5.6% |
-| capture reliability | 4 errors in 60 back-to-back captures, clustered at the end (speech-channel decay) |
+| capture reliability | **0 failures in 2,124 captures** — the full corpus recapture, 4 bare-metal workers, 4 h 34 m, no evictions and no degraded workers retired |
 | people other than the author who have run it | **0** |
+
+> **Two of those rows were wrong until 2026-08-21/22, in opposite directions.**
+>
+> **Capture reliability was pessimistic**: "4 errors in 60 back-to-back captures, clustered at the end
+> (speech-channel decay)" described the UTM pool before `ensureSpeechChannel`'s probe and before the fleet
+> was bare metal. The current figure is a full corpus run.
+>
+> **The criteria count was optimistic, and 2.1.2 is why.** It was listed as assessed on a real page while
+> `addKeyboardTrap` had never once fired against known evidence: no case targeted 2.1.2, it was absent from
+> `rule-ownership.json` so `rules:gate` did not cover it, and it reads `interaction.focusOrder`, which no
+> capture carried because `probeFocus` was dropped at the third of three hops that each enumerate case
+> fields by hand. The rule shipped, was correct, and was unreachable. It is now validated end to end —
+> `2.1.2:focus-trapped 1/1 rules: EXACT` — so the **6** is honest for the first time.
+>
+> The lesson generalises past this row: **a criterion in a coverage table is a claim, and a claim needs a
+> case, a capture, a signal and an owner.** `criteriaAssessableFrom` (`criterion-coverage.ts`) exists to
+> make that answerable mechanically rather than by reading four files.
 
 That last row is the one that matters most, and no amount of green CI substitutes for it.
 
@@ -227,7 +244,7 @@ change under test.
 **Re-run after the recapture: 48 compared, 46 same, 1 drift, 1 changed** — down from 43/2/3, with the one
 remaining change being the unstable `"unlabeled graphic"` token above.
 
-### The one thing this uncovered that is still open: the fleet-consistency guard is inert
+### ~~The one thing this uncovered that is still open: the fleet-consistency guard is inert~~ — CLOSED, 2026-08-22
 
 Two guests appear to announce an unnamed graphic differently — `.6` (which captured the corpus) says
 `"graphic"`, `.4` (which produced the fresh comparison) says `"unlabeled graphic"` — and **they share a cache
@@ -235,6 +252,30 @@ key**, so nothing prevents their evidence from blending. The key covers NVDA and
 build, the architecture and `provisionRevision`, and the last of those reads **`"unstamped"`** on these
 guests, exactly as `CLAUDE.md` warns for guests created before the stamp existed. A guard whose
 discriminating field is a constant is not a guard.
+
+> **CLOSED, and by a different route than the one proposed here.** The remedy below — re-provision the pool
+> together so both stamp a real revision — is done: all four bare-metal workers report
+> `provisionRevision: 67d7a53-7bfec1a8cd547b47`, and `fleet:status` now ends with
+> `fleet CONSISTENT — these workers are interchangeable for capture`. The guest pair this section describes
+> (`.4` and `.6`, UTM VMs on a Mac) is not the fleet any more.
+>
+> **But the interesting part is why the guard stayed inert after that was fixed, and it was not
+> `provisionRevision`.** `browserVersion` is the FIRST entry in `fleet-consistency.mjs`'s `MUST_MATCH`, and
+> the worker memoised it for the life of its process on a premise its own comment stated: *"an executable's
+> version (updating Edge or NVDA restarts this process)"*. Nothing makes that true. Measured on
+> a11y-worker-2: `/health` reporting Edge `151.0.4129.93` at five days' uptime while `msedge.exe` on disk
+> was `.101`, written four days INTO that uptime. Every guest agreed on the same stale value, so a split
+> fleet read as consistent — **a guard whose discriminating field is a constant**, exactly as this section
+> says, arriving through a memo rather than through an unstamped key.
+>
+> Fixing the memo made `fleet:status` say it in one line, and revealed that only ONE of the four guests had
+> actually updated. The fleet is now pinned to one Edge build by `roles/worker/tasks/edge-version.yml`,
+> because the EdgeUpdate registry policies provisioning was relying on are documented as domain-join only
+> and these boxes are standalone. The whole corpus was recaptured against the aligned fleet on 2026-08-21:
+> 2,124 captures, one `browserVersion`, 0 failures, and `release:gate` PASS afterwards.
+>
+> The rule worth keeping from all of this: **a correct check fed a value that cannot express the fault is
+> not a check** — and this section was right about the shape a year before the cause was found.
 
 It is **not** a live production defect: `rules.ts` already keys 1.1.1 on the stable hint rather than the
 `"unlabeled"` token, for this precise reason, and the corpus is internally consistent (214 bare, 0
