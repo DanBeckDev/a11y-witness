@@ -147,7 +147,30 @@ def json_metadata(value: str | None, name: str) -> Any:
         raise RuntimeError(f"model metadata {name} is not JSON") from error
 
 
-def verify_artifact(args: argparse.Namespace, training: Any) -> tuple[dict[str, Any], Any, dict[str, Any]]:
+def verify_artifact(
+    args: argparse.Namespace,
+    training: Any,
+    *,
+    require_release_eligible: bool = True,
+) -> tuple[dict[str, Any], Any, dict[str, Any]]:
+    """Load and check a scorer artifact.
+
+    `require_release_eligible` exists because THREE callers need opposite things from the same guard, and
+    treating them alike produced a circular deadlock that made a candidate impossible to evaluate:
+
+      - INFERENCE must refuse an ineligible model. Scoring somebody's page with unvetted weights is the
+        error this whole guard is for, and it stays the default.
+      - THE ACCEPTANCE EVALUATOR must accept one. It exists to produce the evidence that DECIDES
+        eligibility, and the trainer marks every fresh candidate ineligible precisely because acceptance
+        has not run yet. So the gate that would qualify a candidate refused to run on an unqualified one,
+        and no candidate could ever pass. Measured 2026-08-23 on the first candidate anyone evaluated
+        through the lab interface; the shipped model predates it and was made by hand.
+      - THE HARDENING CHECK is the same case: examining a candidate is not shipping it.
+
+    Declared by the CALLER at the call site rather than passed as a flag at the command line. A job that
+    must always pass `--allow-ineligible` is a guard nobody has — the same reasoning that kept `train` from
+    always passing `--allow-overwrite`.
+    """
     # numpy, not torch: safetensors ships a numpy loader, and inference has nothing to differentiate. The
     # frozen encoder now runs under ONNX Runtime, so dropping this import is what actually removes a 400 MB
     # torch wheel from the GitHub Action rather than merely making it smaller.
@@ -166,8 +189,12 @@ def verify_artifact(args: argparse.Namespace, training: Any) -> tuple[dict[str, 
     criteria = report.get("criteria")
     if not isinstance(criteria, dict) or not criteria:
         raise RuntimeError("scorer report has no criteria")
-    if report.get("releaseEligible") is not True and not args.allow_ineligible:
-        raise RuntimeError("scorer report is not releaseEligible; use --allow-ineligible only for diagnostics")
+    ineligible = report.get("releaseEligible") is not True
+    if require_release_eligible and ineligible and not getattr(args, "allow_ineligible", False):
+        raise RuntimeError("scorer report is not releaseEligible, so it must not score a real page. "
+                           "If you are EVALUATING this candidate rather than using it, the caller should "
+                           "pass require_release_eligible=False; --allow-ineligible is the escape hatch "
+                           "for inference only.")
 
     encoder_file = feature_pipeline.assert_encoder(args.encoder)
     actual_encoder_hash = feature_pipeline.sha256(encoder_file)
