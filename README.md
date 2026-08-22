@@ -16,6 +16,14 @@ It is three things: a testing pipeline, the reproducible screen-reader infrastru
 
 It is not a rule scanner, and it is not a wrapper around one. Rule engines automate the mechanical layer well — Deque reports [axe-core](https://github.com/dequelabs/axe-core) finds about 57% of WCAG issues automatically and flags the rest for human review. That remainder is largely the **lived experience**: whether what a screen reader announces, as someone reads and operates the page, adds up to something a person can use. Automating that judgment is what this project is for — and where it cannot yet do so honestly, it says so instead of inventing an answer.
 
+## Contents
+
+**Using it** · [What it produces](#what-it-produces) · [Quickstart](#quickstart) · [Using it](#using-it) · [What it does not do](#what-it-does-not-do)
+
+**Understanding it** · [Three parts](#three-parts) · [The testing pipeline](#part-1-the-testing-pipeline) · [Running a real screen reader](#part-2-getting-a-real-screen-reader-to-run-repeatably) · [The model we are building](#part-3-the-accessibility-model-we-are-building) · [How we know it works](#how-we-know-it-works)
+
+**Working on it** · [Repository map](#repository-map) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) · [Documentation](#documentation) · [Status and roadmap](#status-and-roadmap)
+
 ## What it produces
 
 A real run against `https://example.com`:
@@ -275,16 +283,30 @@ The strongest evidence so far is structural rather than a number: the judge sees
 
 ## Repository map
 
-| path | what lives there |
-|---|---|
-| `src/cli.ts` | the `witness` pipeline: capture → axe → judge → report |
-| `packages/lab/src/capture/` | capture backend interface, the NVDA worker, local-VM lifecycle |
-| `src/spike/` | the judge, deterministic rules, the discriminative gate, layering |
-| `src/scan/` | axe-core via Playwright |
-| `packages/lab/src/eval/` | labelled fixtures and the eval harness |
-| `packages/lab/src/training/` | the dataset pipeline |
-| `scripts/` | worker provisioning, diagnosis, and the scripted local VM |
-| `docs/adr/` | why the architecture is the way it is |
+A monorepo: everything a consumer installs is under `packages/`, one directory per published package.
+`packages/README.md` has the split and the licence of each.
+
+```
+packages/
+  cli/            the `witness` pipeline — capture -> axe -> judge -> report. Published as `a11y-witness`
+  judge/          the deterministic WCAG rules, criterion coverage, and experience-layer ordering
+  scorer/         the trained heads, the feature contract, and the Python scoring program
+  evidence/       wire types, verification predicates, the WCAG 2.2 AA list. Zero deps, no I/O
+  nvda-worker/    the Windows capture worker. Plain `.mjs`, no build step — it runs on the guest
+  nvda-speech/    the speech-channel client
+  worker-fleet/   host-side lease, health and capacity; provisioning; the Ansible fleet definition
+  lab/            PRIVATE. The corpus, the training pipeline, the gates. Ships nothing
+
+docs/             guides, runbooks, and the ADRs.  Start at docs/README.md
+scripts/          repo-level tooling — the isolation gate, git hooks
+examples/         runnable examples
+action.yml        the GitHub Action entry point
+```
+
+Two things a newcomer usually looks for:
+
+- **the CLI's entry point** is `packages/cli/src/cli.ts`
+- **the deterministic rules** — the layer with zero false positives — are `packages/judge/src/rules.ts`
 
 ## Part 3: the accessibility model we are building
 
@@ -370,16 +392,22 @@ Working end to end, and under active development. The core bet is demonstrated: 
 
 ## Documentation
 
+**[`docs/README.md`](./docs/README.md) is the index** — every guide, runbook and reference, grouped by what
+you are trying to do. The four you are most likely to want:
+
 | document | what it is for |
 |---|---|
 | [`docs/getting-started.md`](./docs/getting-started.md) | **start here**: install, set up a worker by whichever route fits, run your first report, and what to do when it fails |
-| [`PLAN.md`](./PLAN.md) | the working backlog and milestones, with what is proven and what is not |
-| [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) | how we use AI, audited against LLM-as-judge practice; the biases we are exposed to; the pre-registered bar; what is out of scope and why |
-| [`docs/local-model.md`](./docs/local-model.md) | the local discriminative-scorer plan: model shape, data sources, how much data is enough, split rules, weight-handling policy, acceptance bar |
-| [`docs/local-worker-vm.md`](./docs/local-worker-vm.md) | building a Windows worker VM on a Mac, fully scripted, plus the traps that cost real time |
-| [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) | when a worker breaks: error string → actual cause. The messages are misleading and this table is faster than first principles |
-| [`docs/nvda-correctness-audit.md`](./docs/nvda-correctness-audit.md) | a review of how we drive NVDA against the official user guide, and the root-cause pass that followed |
-| [`docs/adr/`](./docs/adr/) | why the architecture is the way it is: capture as a network service, layered coverage, testing and distribution |
+| [`docs/adr/README.md`](./docs/adr/README.md) | 15 architecture decision records, indexed — the *why*, including the alternatives that were rejected |
+| [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) | how the numbers were produced, the biases we are exposed to, and why the eval figures must not be quoted as a headline |
+| [`docs/screenreader-coverage.md`](./docs/screenreader-coverage.md) | every behaviour we drive — and **what we do not drive yet**, which bounds what this tool can claim |
+
+For contributors: [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`SECURITY.md`](./SECURITY.md). Read the second
+one before pointing this at a page you do not own — it operates controls, and one probe presses buttons.
+
+[`PLAN.md`](./PLAN.md) is the working backlog with what is proven and what is not; [`RELEASE.md`](./RELEASE.md)
+carries the known limitations, stated plainly. `CLAUDE.md` is operational instruction for anyone working
+*on* the repo rather than using it.
 
 ## Licence
 
