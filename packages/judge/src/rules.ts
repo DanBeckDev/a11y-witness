@@ -442,6 +442,24 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
 }
 
 /**
+ * Names that identify exactly ONE control in a sequence.
+ *
+ * Two controls can announce identically — MDN has a sidebar toggle and a theme toggle, both "Toggle" — and
+ * a comparison between two sequences cannot then tell "the same control moved" from "a different control
+ * with the same name". Everything built on matching names has to drop those, or it invents findings on any
+ * page with a repeated control name, which is most real pages.
+ *
+ * Found by running the tool on MDN: 2.4.3 reported a reordering whose entire evidence was
+ * `reads ["Toggle","Search the site","Toggle",...]` against `tabs ["Search the site","Toggle",...]`. Once
+ * ambiguous names are dropped the two sequences are IDENTICAL. The report's own §2 already names the
+ * mechanism — "the two differ where identical announcements collapse" — as a limit of coverage; it is also
+ * a source of false positives.
+ */
+function unambiguous(names: string[]): Set<string> {
+  return new Set(names.filter((name) => names.indexOf(name) === names.lastIndexOf(name)));
+}
+
+/**
  * 2.1.1 — a control the page announces as operable that the keyboard never reaches.
  *
  * The failure a screen-reader user meets as "I can hear it and I cannot press it": a `div role="button"`
@@ -457,10 +475,16 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
  */
 function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void {
   const reading = comparableNames(input.structure?.formFields);
-  const tabbed = new Set(comparableNames(input.interaction?.focusOrder));
+  const tabbedNames = comparableNames(input.interaction?.focusOrder);
+  const tabbed = new Set(tabbedNames);
   if (reading.length < 2 || tabbed.size === 0) return;
+  // A control whose announced name is shared with another cannot be said to have been missed: its name
+  // appearing in the tab order may be the OTHER control, and its absence may mean the other one was
+  // reached. Same reasoning as 2.4.3 — see `unambiguous`.
+  const trackable = unambiguous(reading);
   const lastReached = reading.reduce((last, name, i) => (tabbed.has(name) ? i : last), -1);
-  const missed = reading.slice(0, lastReached).filter((name) => !tabbed.has(name));
+  const missed = reading.slice(0, lastReached)
+    .filter((name) => trackable.has(name) && !tabbed.has(name));
   if (!missed.length) return;
   add("2.1.1 Keyboard",
     "The page announces a control the keyboard cannot reach: Tab passed the point where it sits and never "
@@ -525,7 +549,10 @@ function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
   const reading = comparableNames(input.structure?.formFields);
   const tabbed = firstVisitEach(comparableNames(input.interaction?.focusOrder));
   if (reading.length < 2 || tabbed.length < 2) return; // absent or too short proves nothing
-  const shared = new Set(reading.filter((name) => tabbed.includes(name)));
+  // Only names that identify one control in BOTH sequences. A repeated name cannot be tracked between
+  // them, and comparing it invents a reordering — see `unambiguous`.
+  const readingOnce = unambiguous(reading), tabbedOnce = unambiguous(tabbed);
+  const shared = new Set([...readingOnce].filter((name) => tabbedOnce.has(name)));
   if (shared.size < 2) return;
   const readingOrder = reading.filter((name) => shared.has(name));
   const tabOrder = tabbed.filter((name) => shared.has(name));
