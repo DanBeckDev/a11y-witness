@@ -39,6 +39,20 @@ export interface RuleInput {
      * Action input. Absent must therefore make no claim.
      */
     focusOrder?: string[];
+    /**
+     * What the screen reader said the page was called, and what its first heading was, before and after
+     * activating a navigation control. Absent unless `probeNavigation` was asked for — and absence must
+     * make no claim, because a page nobody probed and a page that navigated silently are different facts.
+     */
+    routeChange?: {
+      control?: string | null;
+      titleBefore?: string | null;
+      titleAfter?: string | null;
+      headingBefore?: string | null;
+      headingAfter?: string | null;
+      navigated?: boolean;
+      error?: string;
+    };
   };
   /**
    * What the PAGE exposes, from the accessibility tree, as an oracle only.
@@ -389,6 +403,42 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
     `focus stopped at "${stops[stops.length - 1]}" after reaching ${reached} of ${onPage} controls`);
 }
 
+/**
+ * 2.4.2 — the route changed and the title did not, so the page still announces the previous one.
+ *
+ * The half of Page Titled worth detecting. Absence of a title is vanishingly rare in the wild (zero across
+ * 4,895 captures here, and WebAIM's million-page survey does not list it among the failures covering 96% of
+ * errors), and "does the title DESCRIBE its topic" is human judgement — W3C flags 2.4.2 on a page titled
+ * "Welcome to CityLights! [Inaccessible Survey Page]".
+ *
+ * This is the single-page-app case, and a static analyser cannot reach it at all: the markup is valid at
+ * every instant and the failure is the TRANSITION. A screen reader can, because the title is something the
+ * user asks for and hears.
+ *
+ * TWO signals, like `addKeyboardTrap`, and the second one was chosen the hard way. "Nothing was announced"
+ * seems the natural corroboration and is wrong: measured, the failing page announced `"visited"` — NVDA
+ * reporting the link's own state, which is not silence and names nothing about where the user now is. So
+ * the rule would have been silent on the page it was written for. What actually separates the failure is
+ * that the VIEW MOVED while the title stood still.
+ *
+ * That also handles the probe's real limitation. It activates the first link on the page, which on a real
+ * site may be a skip link or a plain fragment jump — and then the heading does not change either, so this
+ * correctly makes no claim.
+ */
+function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
+  const route = input.interaction?.routeChange;
+  if (!route || route.error || !route.navigated) return; // not probed, or the probe could not answer
+  const { titleBefore, titleAfter, headingBefore, headingAfter } = route;
+  if (!titleBefore || !titleAfter) return;
+  if (headingBefore === headingAfter) return; // nothing navigated; there is no transition to judge
+  if (titleBefore !== titleAfter) return;
+  add("2.4.2 Page Titled",
+    "Navigating changed the page but not its title, so the screen reader still announces the previous "
+      + "page — a user who checks where they are is told the wrong thing",
+    `after activating "${route.control}" the page moved to ${JSON.stringify(headingAfter)} `
+      + `while the title stayed ${JSON.stringify(titleAfter)}`);
+}
+
 /** 2.4.4 — a link whose announced name says nothing about where it goes. */
 function addVagueLinks(entries: string[], add: AddFinding): void {
   for (const line of entries) {
@@ -495,6 +545,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addUnnamedGraphics(input, add);
   addAutoplayingAudio(input, add);
   addKeyboardTrap(input, add);
+  addStaleRouteTitle(input, add);
 
   return findings;
 }
