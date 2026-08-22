@@ -169,8 +169,10 @@ findings.
     trainer takes `--in-distribution-floor` and records `derivedFloor` and `floorSource` alongside it, so a
     reader can always see both what the data implied and what was picked. This mattered: the derived value
     (0.5587) scored 21 of 22 with 0 false positives but turned an honest abstention into a **miss** on
-    W3C's own "purchase form, broken" demo, which the previous model caught as 4.1.2. For an accessibility
-    tool "I cannot assess this page" is a safe answer and "no findings" on a broken form is a wrong one.
+    W3C's `before/tickets.html`, which the previous model caught as 4.1.2. For an accessibility tool
+    "I cannot assess this page" is a safe answer and "no findings" on a page its publisher calls
+    inaccessible is a wrong one. **Why that page is missed is now known, and it is not the floor** — see
+    the operating limitation below.
   - **Held-out acceptance passes on these weights**: 58 true positives, **0 false positives, 0 false
     negatives** across all 8 criteria, every one stable across repeated captures, and disjointness asserted
     against the realism tier rather than only the base corpus.
@@ -189,6 +191,19 @@ findings.
     `postSubmitFields`**. So they are masked on every real page — they were previously trained as clean on
     41 and 39 pages from evidence that was never gathered, which is indistinguishable from a failed capture.
     They keep perfect held-out performance (8/8 each), because those records carried nothing for them.
+  - **OPERATING LIMITATION on 4.1.2, measured 2026-08-22 and not yet fixed.** The scorer reports an
+    unnamed control **only on a page where no control is correctly named, and not at all on a page
+    containing a table.** Both are learned vetoes, and both are causal — ablation on unedited real
+    captures moves `before/tickets.html` from 0.4525 (silent) to 0.9752 (finding) by zeroing three table
+    features, and adding one properly named field to `before/news.html` drops it from 0.9240 to 0.1688.
+    The cause is the corpus: of 147 training records carrying an unnamed form field, **none has a table
+    and none has a named field**, so the penalties cost nothing to learn and no held-out split can see
+    them. `npm run scorer:shortcuts` finds **225 such free vetoes across all 13 heads**. The remedy is
+    multi-defect pages, not a retrain. ADR 0015 has the full measurement. Anyone running this tool on
+    their own site should read that envelope before reading a clean 4.1.2 result.
+  - **The "2 of 3 inaccessible pages caught" figure is ONE defect observed three times.** Every form
+    control on all three W3C BAD `before` pages is the same unnamed navigation combo box in the shared
+    site chrome of one template. Real-page recall must be quoted in distinct defects, never page counts.
   - **Caveats, and they are load-bearing.** 22 calibration pages support an error-rate granularity of about
     1/(n+1) ≈ **4.3%** and nothing finer, so no conformal guarantee is claimed or claimable. The choice of
     0.70 over 0.65 rests on **one page sitting 0.0022 below the threshold** — the principle (prefer
