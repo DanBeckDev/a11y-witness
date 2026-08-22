@@ -42,6 +42,26 @@ large the diff.
 - **`@a11y-witness/lab` and `@a11y-witness/nvda-speech` are `private`** and are skipped automatically.
   `lab` ships nothing by design — what ships is its output.
 
+## Promoting a trained model is a release, and it writes its own changeset
+
+`npm run promote:model -- --from=<candidate>` is the only supported route from a trained candidate into
+`packages/scorer/models/screenreader-scorer`. It exists because **promoting a model IS a release of
+`@a11y-witness/scorer`** — the weights are that package's API — so it belongs in this machinery rather
+than beside it.
+
+It refuses unless the candidate's OWN reports say it earned promotion: `releaseEligible` in the training
+report, and `passed` in the acceptance report. Both are read back; neither is a flag you can set. The
+failure that prevents is promoting a model because you believe it is good, which is exactly the state of
+mind in which the belief is wrong.
+
+Then it writes the changeset at **major**, with the provenance filled in from the training report — the
+records, the floor and its source, the encoder, and every per-subtype threshold. ADR 0007 requires that
+provenance "because 'which model scored this' is the question a disputed finding turns on", and until this
+existed it was a human remembering to type it.
+
+Weights and changeset are left **uncommitted**. Review both and commit them together; publishing is
+`release.yml`'s business and is guarded separately.
+
 ## The npm-workspaces trap
 
 `changeset version` does **not** update `package-lock.json`. Run `npm install` immediately afterwards, in

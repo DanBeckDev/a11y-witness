@@ -60,6 +60,7 @@
     "rules:score": "tsx packages/lab/scripts/score-rules.ts",
     "rules:gate": "tsx packages/lab/scripts/score-rules.ts --gate",
     "scorer:shortcuts": ".venv/bin/python packages/lab/scripts/audit-scorer-shortcuts.py",
+    "promote:model": "node packages/lab/scripts/promote-model.mjs",
     "docs:coverage": "tsx packages/lab/scripts/generate-coverage-doc.ts",
     "corpus:starvation": "node packages/lab/scripts/audit-corpus-starvation.mjs",
     "changeset": "changeset",
