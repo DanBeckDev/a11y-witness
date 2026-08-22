@@ -132,6 +132,32 @@ function outcomesSection(outcomes: CriterionOutcome[] | undefined): string[] {
   return lines;
 }
 
+/**
+ * The one-line verdict, which must not appear to contradict the list underneath it.
+ *
+ * It printed `No blocking findings: yes` directly above three findings marked `[SERIOUS]`. Both were
+ * accurate — `taskCompletable` is `!findings.some(f => f.severity === "blocker")`, and `serious` is a rung
+ * below `blocker` — but nothing on the page said so, and a reader seeing "yes" over three SERIOUS lines has
+ * to decide which of them is lying. Observed on the first real page this was ever pointed at.
+ *
+ * So the line states the count it is actually about. A number cannot contradict a list of the same things
+ * the way a bare "yes" can.
+ *
+ * The LLM backends are untouched: there `taskCompletable` really does answer "could a screen-reader user
+ * complete the task?", which is a yes/no question and reads correctly as one.
+ */
+function verdictHeadline(verdict: Judgment): string {
+  const label = taskVerdictLabel();
+  const confidence = `(overall confidence ${verdict.confidence})`;
+  if (label.isTaskClaim) {
+    return `${label.question}: ${verdict.taskCompletable ? "yes" : "no"} ${confidence}`;
+  }
+  const blockers = verdict.findings.filter((f) => f.severity === "blocker").length;
+  const rest = verdict.findings.length - blockers;
+  const others = rest ? `; ${rest} finding(s) below that severity` : "";
+  return `Findings at BLOCKER severity: ${blockers === 0 ? "none" : blockers}${others} ${confidence}`;
+}
+
 function findingsSection(verdict: Judgment, screenReader: string, announcements: number): string[] {
   const lines = [
     // Names what actually assessed the page rather than claiming "AI judge". The shipped default is
@@ -141,7 +167,7 @@ function findingsSection(verdict: Judgment, screenReader: string, announcements:
     `-- Lived-experience layer (${screenReader} + ${judgeLabel()}): ${announcements} announcements --`,
     // See taskVerdictLabel: with the default local scorer this is "no finding was a blocker", not a
     // task verdict — that scorer never sees the task. Only the LLM backends actually answer it.
-    `${taskVerdictLabel().question}: ${verdict.taskCompletable ? "yes" : "no"} (overall confidence ${verdict.confidence})`,
+    verdictHeadline(verdict),
     verdict.summary,
     `${verdict.findings.length} finding(s):`,
     // Stated once, above the list, rather than repeated per finding. Without it "INDICATOR" is jargon; with

@@ -42,7 +42,7 @@ import { spawn } from "node:child_process";
 import { scorerPaths as artefact } from "@a11y-witness/scorer";
 
 import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
-import { SCORED_CRITERIA } from "./coverage.js";
+import { SCORED_CRITERIA, RULE_CRITERIA, assessedCriteria } from "./coverage.js";
 import type { Judgment, Finding, Severity } from "./judge.js";
 
 /** Shape of what the scorer prints. */
@@ -427,6 +427,26 @@ Promise<ScorerOutput> {
 }
 
 /**
+ * What this layer covers, in words, above the findings list.
+ *
+ * Counted, not spelled out: "eight" was hardcoded here and in two consumer-facing docs, and went stale the
+ * day 1.4.2 and 2.1.2 arrived — a number in prose is a number that stops being true.
+ *
+ * And it counts the LAYER, not this scorer. It used `SCORED_CRITERIA.length` — the trained heads, 8 — while
+ * the same section prints findings the deterministic rules produced. On the first real page this was ever
+ * pointed at, a 2.4.3 and a 2.1.1 finding appeared directly beneath a sentence claiming the layer scores
+ * eight criteria that include neither, and three different totals were readable in one report: 8 here, 10
+ * rule-assessed, and "Assessed 14 of 55" in the conformance section, with nothing saying which was which.
+ */
+function layerSummary(findingCount: number): string {
+  const scope = `${assessedCriteria().length} criteria (${RULE_CRITERIA.length} by deterministic rules, `
+    + `${SCORED_CRITERIA.length} by the trained scorer, overlapping)`;
+  return findingCount === 0
+    ? `No failures were confirmed for the ${scope} this layer covers. Other criteria are unchecked, not clean.`
+    : `Findings below. This layer covers ${scope}. Other criteria are unchecked, not clean.`;
+}
+
+/**
  * The local judge: scorer + guard + template, returning the SAME `Judgment` the LLM judge returns.
  *
  * Keeping the shape identical is the point — the CLI, the report and the Action all work unchanged, so
@@ -504,13 +524,7 @@ export async function judgeLocally(capture: CaptureEvidence & { task?: string })
     // returns (`withRuleFindings`), so any number written here is stale by the time it is read: on a real
     // site this said "1 confirmed failure(s)" above a table listing three. The renderer counts the actual
     // findings, so the count has exactly one source of truth and the prose cannot contradict the table.
-    summary: findings.length === 0
-      // Counted, not spelled out. "eight" was hardcoded here and in two consumer-facing docs, and went
-      // stale the day 1.4.2 and 2.1.2 arrived — a number in prose is a number that stops being true.
-      ? `No failures were confirmed for the ${SCORED_CRITERIA.length} criteria this layer scores. `
-        + "Other criteria are unchecked, not clean."
-      : `Confirmed failures below, scored against the ${SCORED_CRITERIA.length} criteria this layer `
-        + "covers. Other criteria are unchecked, not clean.",
+    summary: layerSummary(findings.length),
     findings,
     // The layer's own confidence is the weakest finding's: a report is only as good as its shakiest claim.
     confidence: findings.length === 0 ? 1 : Math.min(...findings.map((f) => f.confidence)),
