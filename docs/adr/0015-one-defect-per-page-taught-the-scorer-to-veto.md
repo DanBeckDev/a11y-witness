@@ -343,3 +343,53 @@ accuracy is not**, and the splice probe above could not answer it: it took 3.3.2
 input". Real multi-defect pages are the experiment that separates those, and the reading is
 `scorer:shortcuts` plus held-out acceptance — not the starvation count, which by then will only be
 confirming what was designed in.
+
+## Correction 2026-08-22 — the layer split contains most of this, and this ADR overstated the consequence
+
+This ADR's worked example is `4.1.2:unnamed-control`, and its "What this corrects" section says the
+limitation is "that the flagship criterion is silent on most real pages". **That is true of the head and
+false of the product**, and the difference is a fact that was in the repository the whole time.
+
+`rule-ownership.json` declares `4.1.2:unnamed-control` as `decidedBy: "rules"`. `findingsFromScores`
+suppresses the model per SUBTYPE for anything a rule owns — its own comment explains why: on conformant W3C
+pages the rule correctly found nothing while the model's 4.1.2 prediction survived as a false positive, "the
+worst error this tool can make". So the exact rule answers that subtype, at 0 false positives across 934
+conformant records, and the head's veto never reaches a report.
+
+Verified rather than reasoned. `ruleFindings` run against the three unedited W3C `before` captures:
+
+```
+before/news.html      -> 4.1.2: combo box, collapsed, QUICKMENU ---- greater
+before/template.html  -> 4.1.2: combo box, collapsed, QUICKMENU ---- greater
+before/tickets.html   -> 4.1.2: combo box, collapsed, QUICKMENU ---- greater   <- the one the scorer misses
+```
+
+**All three, including the page this ADR opens by calling a miss.** The product catches it; the scorer does
+not; the abstention sweep measures the scorer alone, which is correct for calibrating a floor and wrong to
+read as what a user gets.
+
+### What survives, and what does not
+
+**Survives, unchanged.** The measurement, the mechanism, the 225 free vetoes, the cause (one defect per
+page), and the remedy (multi-defect pages, not a retrain). Nothing in the diagnosis was wrong.
+
+**Does not survive.** The consequence. The vetoes reach a report only on the **nine subtypes the model
+decides alone**: `1.1.1:generic-alt`, `1.3.1:fake-heading`, `1.3.1:unassociated-table`, `2.4.4:regex`,
+`2.4.6:regex`, `3.3.1:validation-error-silent`, `3.3.2:placeholder-only`, `3.3.2:unnamed-form-field`,
+`4.1.2:state-change-silent`, `4.1.3:form-activation-silent`. Those heads carry 12–21 vetoes each, so the
+problem is real — it is just not the criterion this ADR used to illustrate it, which is the one place the
+architecture already protects.
+
+### The lesson, which is the same one one level up
+
+**A defect in a component is not a defect in the product until you check what the product does with it.** I
+measured a head, wrote its behaviour into the README and RELEASE.md as a user-facing limitation, and
+published that before asking which layer answers that subtype — a question `rule-ownership.json` exists to
+answer and does, in one line.
+
+This is the sibling of the rule at the top of this ADR. There, a metric could not see a defect because it
+shared the data's structure. Here, a measurement saw a real defect and I attributed it to the wrong layer
+because I did not follow it to the output. **Both are failures to ask what the check can actually observe.**
+
+The corrected statement is in RELEASE.md's operating-limitation bullet, and the earlier wording is quoted
+there rather than deleted.
