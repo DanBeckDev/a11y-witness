@@ -235,4 +235,33 @@ export const ACT_RULES: ActRuleDescription[] = [
     accessibilitySupport: NVDA_EDGE + " Tab is pressed through the screen reader, so what is reported is "
       + "the focus order a screen-reader user experiences, which can differ from raw browser tab order.",
   },
+  {
+    id: "a11y-witness:stale-route-title",
+    version: "2026-08-22",
+    name: "The route changed and the page title did not",
+    description: "Activating a navigation control moved the page to different content while the title the "
+      + "screen reader announces stayed the same, so a user who checks where they are is told the name of "
+      + "the page they left.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "2.4.2", mapping: "secondary" }],
+    inputAspects: ["interaction.routeChange"],
+    applicability: "Captures where the navigation probe ran, reached a link, and activated it. A capture "
+      + "with no `routeChange`, or one whose probe recorded an error, is unchecked rather than clean.",
+    expectation: "If the page's first heading changes after activating a navigation control, the title "
+      + "reported by the screen reader changes too.",
+    assumptions: [
+      "A changed first heading means the view moved. This is the corroborating signal because the obvious "
+        + "one is wrong: the failing page announced 'visited' — the link's own state — so a rule keyed on "
+        + "silence would never fire on the page it was written for.",
+      "The probe activates the FIRST link on the page. On a real site that may be a skip link or a plain "
+        + "fragment jump, in which case the heading does not change either and this rule makes no claim. "
+        + "That is a limit on what it can DETECT, never a source of false positives.",
+      "SECONDARY because 2.4.2 requires a title that describes topic or purpose, and whether a given title "
+        + "does so is human judgement. This rule proves only that the title no longer describes the content "
+        + "on screen, which is a sufficient failure and not the whole criterion.",
+    ],
+    accessibilitySupport: NVDA_EDGE + " Both readings come from NVDA's own report-title command, the same "
+      + "one that supplies the title on entry, so this is what a user hears when they ask where they are — "
+      + "not an inference from the DOM, which is valid at every instant in this failure.",
+  },
 ];

@@ -66,6 +66,10 @@ const SWEEPS_FEEDING: Record<string, readonly string[]> = {
   // Not a quick-nav sweep, but it truncates the same way: the probe stops after a fixed number of Tab
   // presses, and a trap past that point was never looked for.
   "2.1.2": ["focusOrder"],
+  // Also not a quick-nav sweep. The route probe reaches a navigation control with `moveToNextLink`, so a
+  // page whose link sweep starved is one where it may never have found a link to activate — and "we did
+  // not reach a link" must read as unchecked, not as a page that navigates correctly.
+  "2.4.2": ["link", "routeChange"],
   "1.3.1": ["heading", "landmark", "list"],
   "2.4.4": ["link"],
   "2.4.6": ["heading", "formField"],
