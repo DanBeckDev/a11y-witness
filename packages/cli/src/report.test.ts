@@ -74,10 +74,29 @@ test("a clean verdict reports no findings without inventing a section", () => {
   // The DEFAULT local scorer has no head for task completion and never sees the task, so the report
   // must not claim one. This test used to assert "Task completable: yes" — it was pinning the
   // overclaim in place. Now it pins the honest label, and refuses the claim, so reintroducing it fails.
-  assert.match(output, /No blocking findings: yes/);
+  // The headline states a COUNT, not a yes/no. `No blocking findings: yes` printed directly above three
+  // `[SERIOUS]` findings on the first real page this was pointed at — accurate (serious is a rung below
+  // blocker) and unreadable, because nothing on the page said what "blocking" meant.
+  assert.match(output, /Findings at BLOCKER severity: none/);
   assert.doesNotMatch(output, /Task completable/,
     "the local scorer must not claim task completion — it never sees the task");
   assert.match(output, /0 finding\(s\)/);
+});
+
+test("the headline cannot contradict the findings listed under it", () => {
+  // The MDN shape: findings present, none at blocker severity. The old line said "yes" over them.
+  const serious = {
+    ...verdict,
+    taskCompletable: true,
+    findings: [
+      { ...verdict.findings[0], severity: "serious", wcag: "2.4.3 Focus Order" },
+      { ...verdict.findings[0], severity: "serious", wcag: "1.1.1 Non-text Content" },
+    ],
+  } as Report["verdict"];
+  const output = render({ verdict: serious });
+  assert.match(output, /Findings at BLOCKER severity: none; 2 finding\(s\) below that severity/,
+    "the headline must account for findings it is not counting, or it reads as a clean bill of health");
+  assert.doesNotMatch(output, /No blocking findings: yes/, "the wording that caused the contradiction");
 });
 
 test("the report never prints a score, grade or percentage", () => {
