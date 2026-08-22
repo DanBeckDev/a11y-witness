@@ -1,0 +1,57 @@
+# Does this PR say what it does to a consumer?
+#
+# ADR 0007 decided this rule — "a PR that changes any `packages/*` source **must** include a changeset. CI
+# fails" — in 2026-08, and nothing enforced it until 2026-08-22. The decision existed; the check did not.
+# That is this project's most expensive recurring shape, here applied to its own release process.
+#
+# It runs on PULL REQUESTS ONLY, never on push. Pushing straight to main is how this repo currently works
+# and blocking that would make the check something to be bypassed rather than obeyed.
+name: changeset-check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  changeset:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: `changeset status --since` compares against the base branch and cannot do that from
+      # a shallow clone. A shallow checkout here fails with a confusing "no commits in common".
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+
+      - run: npm ci
+
+      # Only for changes that reach a CONSUMER. Docs, the lab, CI config and the corpus are not published,
+      # so demanding a changeset for them would train everyone to write empty ones — which is worse than no
+      # check, because it makes the file meaningless where it matters.
+      - name: Which published packages does this PR touch
+        id: touched
+        run: |
+          changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep -E '^packages/(cli|judge|scorer|evidence|nvda-worker|worker-fleet)/(src|python|models|bin)/' \
+            || true)
+          if [ -z "$changed" ]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "No published-package source touched; a changeset is not required."
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "Published-package source touched:"; echo "$changed"
+          fi
+
+      - name: A consumer-visible change must say what it does to a consumer
+        if: steps.touched.outputs.needed == 'true'
+        run: |
+          if ! npx changeset status --since=origin/${{ github.base_ref }}; then
+            echo "::error::This PR changes a published package and carries no changeset."
+            echo "Run 'npm run changeset', pick the packages and bump levels, and write one sentence a"
+            echo "CONSUMER would want to read. See .changeset/README.md — the bump level does NOT follow"
+            echo "from the size of the diff, and for the scorer any retrain is a MAJOR."
+            echo "If the change genuinely cannot affect a consumer, 'npx changeset add --empty' records"
+            echo "that decision explicitly rather than leaving it to be inferred from silence."
+            exit 1
+          fi

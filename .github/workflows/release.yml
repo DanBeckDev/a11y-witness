@@ -1,0 +1,102 @@
+# The publish path. IT PUBLISHES NOTHING TODAY, AND CANNOT BE TRIGGERED BY ACCIDENT.
+#
+# The name is undecided (PLAN.md, B5) and nothing has been pushed to any registry. This workflow exists so
+# that when the name is settled, releasing is a reviewed config change rather than someone improvising
+# `npm publish` across six interdependent packages at the moment they are least able to check the result.
+# npm versions cannot be unpublished after 72 hours, only deprecated, so a wrong first release is permanent.
+#
+# FOUR INDEPENDENT THINGS must all be true before a single byte is published. They are independent on
+# purpose: any one of them alone would be a single point of failure, and this repo's own rule is that a
+# verification must not share a failure mode with the action it guards.
+#
+#   1. `workflow_dispatch` only. There is no push, tag or schedule trigger, so nothing can start it.
+#   2. `dry-run` defaults to true. The default path builds, versions and PACKS, and stops.
+#   3. `confirm` must be typed exactly. A dropdown or a boolean can be clicked by mistake.
+#   4. `.changeset/config.json` must say `"access": "public"`. It currently says `restricted`, so even a
+#      correctly-confirmed real run fails at the publish step rather than publishing privately under a
+#      name we may not keep.
+#
+# Removing any of the four is a deliberate act. Do not remove them in the same change that first uses this.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Build, version and pack — publish nothing. Leave true unless you are releasing.
+        type: boolean
+        default: true
+      confirm:
+        description: 'To publish for real, type: publish-for-real'
+        type: string
+        default: ''
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, registry-url: https://registry.npmjs.org }
+
+      - run: npm ci
+
+      # The full gate, not a subset. `release:gate` is ordered cheapest-first so a cheap failure does not
+      # wait behind an expensive one, and it starts with `scorer:shortcuts` — the one check that can see a
+      # head penalising a feature it was never shown.
+      #
+      # NOT `continue-on-error`. A release that ships past its own gate is the thing this file exists to
+      # prevent; if the gate cannot run in CI, fix the gate rather than skipping it here.
+      - name: The release gate
+        run: npm run release:gate
+
+      # `changeset version` does NOT update package-lock.json under npm workspaces. Without the install
+      # that follows, the lockfile ships describing the PREVIOUS versions — invisible until a consumer's
+      # clean install resolves the wrong tree. `npm run release:version` does both; see .changeset/README.md.
+      - name: Apply the pending changesets
+        run: npm run release:version
+
+      - name: What this would publish
+        run: |
+          npx changeset status
+          git --no-pager diff --stat
+
+      # PACK, not publish. This is the last step on the default path and it is the one that would have
+      # caught the failures M0 found: `npm pack` includes untracked files, so "it worked locally" was never
+      # evidence, and a package with no `prepack` ships an empty `dist` on any machine that has not built.
+      - name: Pack every package, which is what a consumer receives
+        run: npm run gate:isolation
+
+      - name: Refuse to publish unless all four guards agree
+        if: inputs.dry-run == false
+        run: |
+          if [ "${{ inputs.confirm }}" != "publish-for-real" ]; then
+            echo "::error::dry-run is false but confirm was not typed exactly. Nothing published."
+            exit 1
+          fi
+          access=$(node -p "require('./.changeset/config.json').access")
+          if [ "$access" != "public" ]; then
+            echo "::error::.changeset/config.json has access=$access. Until the name is settled (PLAN.md B5)"
+            echo "this is deliberately 'restricted' so an accidental release cannot claim a name. Change it"
+            echo "in a reviewed commit, not here."
+            exit 1
+          fi
+
+      - name: Publish
+        if: inputs.dry-run == false && inputs.confirm == 'publish-for-real'
+        run: npx changeset publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Say plainly what happened
+        run: |
+          if [ "${{ inputs.dry-run }}" = "false" ] && [ "${{ inputs.confirm }}" = "publish-for-real" ]; then
+            echo "Published. npm versions cannot be unpublished after 72 hours, only deprecated."
+          else
+            echo "DRY RUN — versioned and packed, published nothing. This is the default and correct path"
+            echo "until PLAN.md B5 (the name) is settled."
+          fi
