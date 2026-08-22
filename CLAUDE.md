@@ -2,6 +2,17 @@
 
 Guidance for Claude Code (and humans) working in this repo.
 
+## Where else to look
+
+This file is for working ON the repo, and it is long because it is a record of what specific mistakes cost.
+Three shorter documents came first for a reason, and they are not duplicated here:
+
+| | |
+|---|---|
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | the 60-second orientation, and the question that decides everything: **does your change need a Windows worker?** Most of the repo does not. |
+| [`SECURITY.md`](SECURITY.md) | what this tool does that somebody must know before running it — `probeForms` presses buttons, the worker has no authentication, `A11Y_PYTHON` is executable |
+| [`docs/README.md`](docs/README.md) | the index to every guide and runbook, grouped by task, with [`docs/adr/README.md`](docs/adr/README.md) for the 15 decision records |
+
 ## What this is
 
 a11y-witness drives a **real screen reader (NVDA)** through real navigation and uses **our own trained scorer** (`judge-backend: local`, the default everywhere — no rented LLM, no metered API) to assess the lived assistive-technology experience: the judgment-based WCAG failures that rule scanners miss. It sits **alongside** axe-core (the rule/visual layer), not instead of it. See `README.md`, `PLAN.md`, and `docs/adr/`.
@@ -73,7 +84,13 @@ npm run lab:job -- -e job=train                 # the catalogue is in ansible/la
 npm run lab:job -- -e job=capture-real-pages -e worker=a11y-worker-2 -e role=training -e shard=0/4
 npm run lab:status                              # every a11y-job-* unit and its state
 npm run lab:status -- -e job=train              # systemd's view + the journal + the run's own progress file
+npm run lab:stop -- -e job=capture              # end one deliberately; reports what it discards first
 ```
+
+`lab:stop` exists because the unit name is the lock, so `lab:job` REFUSES a second job of that name — and
+until 2026-08-22 the only way to end one was `systemctl stop` over ssh, which is the exact hole ADR 0013
+was written to close. It refuses a unit that is not running and names the state it found instead, because
+"it was already finished" and "I stopped your job" are different outcomes.
 
 This replaced `ssh root@<pve> 'pct exec 121 -- bash -lc "..."'`, which existed nowhere in the source tree —
 so the way this project's most expensive operations were started was untested and unreviewable. `command`
@@ -690,7 +707,7 @@ silent, and three were found only because something unrelated failed.
 | what an announcement's accessible NAME is | `namesOf` (case-matrix.mjs) and `comparableNames` (rules.ts) | `check-signals` said CONTAMINATED — the signal firing on the conformant page while the rule stayed silent on the same capture |
 | which rules ship | `rules.ts` source and `packages/judge/dist/rules.js` | `rules:gate` scored a rule the compiled bundle did not contain and reported `0/1 MISSING EVIDENCE` |
 | which signal types exist | the `if`-chain in `signalMatches` and a REGEX in `acceptance-matrix.test.ts` that scraped it | the scrape matched nothing after a refactor, so the test asserted over an empty set — and passed |
-| a case's page furniture | `withRealisticScale` keys it on ARRAY POSITION | inserting a case re-sized every case after it; `check-signals` reported `1 stale` |
+| a case's page furniture | `withRealisticScale` keyed it on ARRAY POSITION — **fixed 2026-08-22**, it is now an FNV-1a hash of the case ID | inserting a case re-sized every case after it; `check-signals` reported `1 stale` |
 
 **The fix is never "be careful", it is to make the copies unable to disagree.** In order of preference:
 
@@ -706,9 +723,13 @@ Two rules that fall out and are cheap to apply:
 
 - **A test must not derive its expectations from source TEXT.** Both the signal-type scrape and an earlier
   `sweepLog` guard passed while examining nothing. Read an exported value, or assert against a fixture.
-- **APPEND new cases to `CASES`, never insert.** One stale capture is cheap; the same insertion into the
-  middle of a generated family invalidates hundreds, silently, and the only symptom is a count nobody was
-  watching.
+- ~~**APPEND new cases to `CASES`, never insert.**~~ **No longer true, and the fix is the better lesson.**
+  Furniture is keyed on an FNV-1a hash of the case ID, so a case's pages depend on nothing but its own
+  name — insert, reorder or delete freely. Verified by doing it: adding 60 cases left `check-signals`
+  reporting the same 860 stale pairs as before, so zero existing pages moved. Renaming a case still
+  re-buckets that one case, which is correct: a renamed case is a different case.
+  **A rule that asks a human to remember something is a rule that gets broken** — this file's own
+  housekeeping principle, applied to itself.
 
 ### Three criteria a static analyser structurally cannot reach
 
@@ -1129,6 +1150,45 @@ This was got wrong three times in one day, and each time the clean result was re
 **Reproduce the fault with your test before trusting the test's verdict.** Every canary in
 `stability-gate.mjs` records the mechanism it exercises; add new ones the same way.
 
+## A metric computed on data that shares the flaw cannot see the flaw
+
+The most expensive thing learned on 2026-08-22, and it outranks every individual defect below because it
+says which of our checks were ever capable of finding them.
+
+The trained heads see 384 encoder dimensions of ONE announcement plus **29 document-level features of the
+whole capture**. When a feature is 0 on every training positive of a subtype, the head may give it a large
+negative weight at no cost — and no held-out split can punish it, because the split has the same structure.
+Measured on the shipped weights: `4.1.2:unnamed-control` scored the byte-identical announcement
+`"combo box, collapsed, QUICKMENU ---- greater"` at **0.924042** on two W3C pages and **0.452519** on a
+third, because the third is 14 layout tables and `table_present` is worth −1.26 logits. Not one of the 147
+training records carrying an unnamed form field has a table.
+
+**225 such free vetoes across all 13 heads.** The one that matters most: `form_field_named` at −4.33 means
+the scorer reports an unnamed control **only on a page where nothing is correctly named**, which describes
+almost no real site. Held-out acceptance (58 TP / 0 FP / 0 FN), `npm run eval` and `rules:gate` are all
+blind to this *by construction*. See `docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md`.
+
+Two audits now ask the question, at the two times it can be asked:
+
+```bash
+npm run corpus:starvation      # the CASE DEFINITIONS: which features will be constant? No capture needed.
+npm run scorer:shortcuts       # the TRAINED WEIGHTS: which did a head penalise for free? In release:gate.
+```
+
+- **The corpus-side one is the design tool.** The weights-side one arrives after a capture run, an export
+  and a train — correct, and too late to steer anything.
+- **The remedy is the corpus, never the weights.** A retrain on unchanged data reproduces the vetoes
+  faithfully; they are a correct fit to what it was shown.
+- **Furniture plateaus, for a definitional reason.** Conformant page furniture fixed 263 starved pairs down
+  to 178. It cannot go further, because a feature that IS a failure — a vague link, an unnamed graphic, a
+  position-only table cell — never appears on a conformant page. Below 178 needs pages that fail TWICE.
+- **The abstention floor saved this from being a false clean**, without knowing why. The missed page is out
+  of support at 0.6978, so the tool abstained rather than scoring it and returning "no findings" on a page
+  its own publisher calls inaccessible. Do not lower the floor to make a recall number look better.
+
+**Generalise it.** Before trusting any accuracy figure here, ask what would have to be true of the data for
+that figure to be uninformative — and then check whether it is.
+
 ## The rule that cost the most to learn
 
 **A check must never reject evidence whose absence is the finding.**
@@ -1254,7 +1314,7 @@ manual step left is acting on what it tells you.
 
 ```bash
 git push                      # pre-push hook: lint, typecheck, tests, check-signals, rules:gate (~5s)
-npm run release:gate          # signals -> rules -> held-out acceptance -> judge quality, cheapest first
+npm run release:gate          # shortcuts -> signals -> rules -> held-out acceptance -> judge quality, cheapest first
 npm run capture:check -- --worker=http://192.168.64.4:8765    # the capture layer, ~2 min
 ```
 
