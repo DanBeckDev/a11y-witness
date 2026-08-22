@@ -25,11 +25,13 @@ The honest shape of the product today:
 | | |
 |---|---|
 | criteria assessed **on a real page** | **10** of WCAG 2.2's 55 A/AA — 1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.4 in full; 2.1.1, 2.4.1, 2.4.2, 2.4.3, 4.1.2 **partially**, each with its boundary recorded in `criterion-coverage.ts` |
-| criteria the trained scorer covers | 8; at floor **0.70** it scores **20 of 22** calibration pages with **0** false accusations (was: abstained on almost all of them) |
+| criteria the trained scorer covers | 8; at floor **0.70** it scores **20 of 22** calibration pages with **0** false accusations. **Read the positive side as ONE defect, not three** — every form control on all three publisher-declared inaccessible pages is the same unnamed combo box in one template's shared chrome (ADR 0015) |
 | false positives on conformant pages | **0**, measured — `release:gate` 2026-08-22: recall 78% over 48 failure-case runs, 0 false positives |
 | captures that read the **wrong page** | **0 of 54** on the path that can produce it — ceiling ≈5.6% |
 | capture reliability | **0 failures in 2,124 captures** — the full corpus recapture, 4 bare-metal workers, 4 h 34 m, no evictions and no degraded workers retired |
 | people other than the author who have run it | **0** |
+| free vetoes in the shipped weights | **225** across all 13 heads — a head penalising a feature that is 0 on every one of its training positives, learned at no cost because one page demonstrates one thing. `npm run scorer:shortcuts` (ADR 0015) |
+| 4.1.2 on a page that also has a table, or any correctly named control | **not reported** — measured, causal, and being fixed by the corpus rather than the weights |
 
 > **Two of those rows were wrong until 2026-08-21/22, in opposite directions.**
 >
@@ -401,6 +403,22 @@ becomes the reason the unique claim is hard to copy.
 
 These are not blockers. They ARE things a reader must be told, and every one is already written into
 `RELEASE.md` — this list exists so nobody quietly stops mentioning them.
+
+- **QUALIFIED 2026-08-22 by ADR 0015 — read the entry below with these two corrections.**
+
+  **"2 of 2 inaccessible caught" is ONE defect, observed twice.** Every form control on all three
+  publisher-declared inaccessible pages is the same unnamed combo box in the site chrome three pages of one
+  W3C template share. The findings are real; they are not three failures, and real-page recall must be
+  quoted in distinct defects from now on.
+
+  **And the reason the third is missed is not the abstention floor.** The shipped weights produce NO finding
+  on it at any floor. The head penalises `table_present` (-1.26 logits) and `form_field_named` (-4.33) —
+  features that are 0 on all 147 of its training positives, so the weights were free — and that page is
+  built from 14 layout tables. Ablation on the unedited capture moves it 0.4525 -> 0.9752. Measured across
+  all 13 heads: **225 free vetoes** (`npm run scorer:shortcuts`).
+
+  So the numbers below are correct as measurements and describe a narrower competence than they read as.
+  The fix is the corpus, not the weights, and it is in flight.
 
 - **RESOLVED 2026-08-21: the realism tier is shipped, and "19 pages is not enough" was right about 19 and
   wrong as a conclusion.** The tier is now **53 pages from 39 publishers** and the scorer scores **20 of 22**
