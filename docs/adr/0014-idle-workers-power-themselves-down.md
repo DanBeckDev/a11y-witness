@@ -4,8 +4,12 @@
 
 Proposed. Not implemented. Depends on ADR 0012's credential split and does not change it.
 
-**Do not implement the sleep half before the gate in "Prerequisites" passes, per box.** Auto-sleep on a
-machine that cannot be woken does not save power, it removes a worker from the fleet permanently.
+**The wake gate has PASSED on all four boxes (2026-08-22)** — see "Prerequisites". The threshold is now
+measured too. What is still missing is the number that decides whether to build it at all: nobody has
+measured what these machines draw idle, and that needs a plug meter, not a remote query.
+
+**Do not implement the sleep half for a box that has not passed the wake gate.** Auto-sleep on a machine
+that cannot be woken does not save power, it removes a worker from the fleet permanently.
 
 ## Context
 
@@ -67,8 +71,28 @@ Four properties, each of which exists because of a specific way this could go wr
    the same reason `fleet:status` now distinguishes a finished capture from a running one.
 
 4. **The threshold is measured, not chosen.** It must exceed the longest realistic inter-case gap by a
-   wide margin. Tonight's full recapture is the sample that sizes it; picking a number before reading that
-   distribution is how a fixed sleep gets it wrong in the direction that destroys evidence.
+   wide margin. Picking a number before reading that distribution is how a fixed sleep gets it wrong in the
+   direction that destroys evidence.
+
+   **Measured on the 2026-08-21 full recapture** — 2,120 captures, four workers, 4 h 34 m — as the gap
+   between consecutive captures on the *same* worker:
+
+   ```
+   worker           n     p50     p95     p99     max
+   .224           531   31.9s   44.6s   45.7s   106.1s
+   .107           539   31.6s   44.7s   45.8s    91.7s
+   .59            533   31.8s   45.1s   46.6s   103.8s
+   .175           517   32.6s   45.6s   46.8s   121.0s
+   ```
+
+   So under full load a worker is never un-contacted for more than **~2 minutes**, and typically 32 s. Note
+   this is the *capture*-to-capture gap and therefore an over-estimate of true idleness: keying on any HTTP
+   request means a run's `/health` polling resets the timer far more often than this.
+
+   **A threshold of 20–30 minutes therefore carries an order of magnitude of headroom over the worst
+   observed gap**, which is the right shape for a timer whose failure mode is losing a worker mid-run. Do
+   not tune it down to chase savings without re-measuring: the tail here is a retry, and a retry is the
+   case that matters.
 
 Waking stays as it is: `npm run fleet:wake`, from the lab, holding nothing.
 
@@ -85,7 +109,21 @@ Waking stays as it is: `npm run fleet:wake`, from the lab, holding nothing.
 
 **Therefore: prove each box wakes before enabling self-sleep on it.** Sleep it deliberately, wake it with
 `fleet:wake`, confirm it serves `/health`, and record that it did. A box that has not passed that test must
-keep the feature off. The failure mode of getting this wrong is not a slow run — it is a machine that is
+keep the feature off.
+
+**Run 2026-08-22, all four, one at a time so a failure would cost one worker rather than four.** Slept via
+`sleep.yml` from the control container, confirmed down by both HTTP and ICMP, then woken **from the lab**
+with `npm run fleet:wake` — the path that holds no credential, and the one a run would use:
+
+```
+a11y-worker-2    36 s     a11y-worker-4   125 s
+a11y-worker-5    38 s     a11y-worker-3   191 s
+```
+
+All four came back `ready`, serving, and still on the pinned Edge build. **The spread is the finding**: 36 s
+to 191 s for the same operation on nominally identical hardware, and the time includes a full Windows boot
+and NVDA warm-up, not just the packet. Anything that wakes a worker must therefore wait on `/health` rather
+than on a fixed delay — the same rule as everywhere else in this pipeline — and budget minutes, not seconds. The failure mode of getting this wrong is not a slow run — it is a machine that is
 off, unreachable, and needs someone physically present, which is the one outcome this fleet's whole remote
 design exists to avoid.
 
@@ -113,6 +151,8 @@ design exists to avoid.
   If the request-keyed timer does not prevent this, the design is wrong, not the threshold.
 - **WoL proves unreliable on some board.** Then that box keeps the feature off permanently; it does not get
   a shorter timer or a retry loop.
-- **The saving may not be worth it.** Nobody has measured what these boxes draw idle. If it is small, the
-  correct outcome of this ADR is to record that and do nothing — a feature that adds a way to lose a worker
-  should have to earn its place with a number.
+- **The saving may not be worth it, and this is now the ONLY thing blocking a decision.** Nobody has
+  measured what these boxes draw idle, and it cannot be measured remotely — `/health` reports uptime, not
+  watts. It needs a plug meter on one machine for an hour. If the number is small, the correct outcome of
+  this ADR is to record that and do nothing: a feature that adds a way to lose a worker should have to earn
+  its place with a number, and every other question about it has now been answered.
