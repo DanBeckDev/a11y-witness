@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/DanBeckDev/a11y-witness/security/advisories/new
+    about: Please report privately, not as a public issue. See SECURITY.md.
+  - name: Commercial licensing
+    url: https://github.com/DanBeckDev/a11y-witness/blob/main/README.md#licence
+    about: The project is AGPL-3.0-or-later. A separate commercial licence is available.
