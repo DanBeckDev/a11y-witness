@@ -58,3 +58,36 @@ test("an UNAMBIGUOUS reordering is still reported", () => {
   assert.ok(found.some((w) => w.startsWith("2.4.3")),
     "dropping ambiguous names must not stop the rule reporting a real reordering");
 });
+
+test("2.1.1 makes no claim when the tab cycle was never observed to close", () => {
+  // THE ROOT CAUSE, from developer.mozilla.org: 18 controls read, 12 tab stops, truncated, and the cycle
+  // never returned to its first control. The rule used to reason "something LATER IN READING ORDER was
+  // reached, so the probe got past this point" — a reading-order proxy for tab-order progress, unsound for
+  // exactly the reason 2.4.3 exists: the two orders can differ. MDN's theme switch, language picker and
+  // sidebar toggle read early and tab late, so the probe stopped before them and they were reported as
+  // keyboard-unreachable on a well-built page.
+  //
+  // Tab wraps, so a recording that revisits its own starting control has seen every focusable there is.
+  // Only then does "announced but never focused" mean unreachable.
+  const truncated = {
+    transcript: [],
+    structure: {
+      formFields: ["Switch color theme, button", "Toggle sidebar, button", "HTML, link", "CSS, link"],
+    },
+    // Starts somewhere else and stops without returning: a partial view of the cycle.
+    interaction: { focusOrder: ["Skip to search, link, focused", "HTML, link, focused", "CSS, link, focused"] },
+  };
+  assert.deepEqual(ruleFindings(truncated as never).filter((f) => f.wcag.startsWith("2.1.1")), [],
+    "a truncated tab order cannot distinguish an unreachable control from one the probe never got to");
+
+  // And the claim survives when the cycle IS closed: same missing control, tab order wraps to its start.
+  const complete = {
+    ...truncated,
+    interaction: {
+      focusOrder: ["HTML, link, focused", "CSS, link, focused", "Toggle sidebar, button, focused",
+        "HTML, link, focused"],
+    },
+  };
+  assert.ok(ruleFindings(complete as never).some((f) => f.wcag.startsWith("2.1.1")),
+    "with the whole cycle observed, a control announced and never focused IS unreachable");
+});
