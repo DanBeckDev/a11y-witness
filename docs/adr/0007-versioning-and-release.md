@@ -183,3 +183,59 @@ check all over again.
    OIDC; if that is not set up, provenance silently does not happen.
 4. Nobody has yet consumed any of these APIs, so every `0.x` boundary is a guess.
    The `0.x` window is the mitigation, not a claim that the guess is good.
+
+## Re-validated 2026-08-22 — challenged, researched, and the decision holds for a stronger reason
+
+The choice above was made in 2026-08 and had never been checked against the field. It was challenged
+directly ("is Changesets the best solution — have you researched?"), so here is the answer, with the
+evidence that was not in the original.
+
+### What the alternatives actually are
+
+| tool | verdict for THIS repo |
+|---|---|
+| **semantic-release** | **Out.** It assumes one repo = one package and has no monorepo support. The community `semantic-release-monorepo` plugin has not been committed to since March 2022 and is not built for npm workspaces. |
+| **release-please** | **Viable, and fatally commit-driven** (see below). Its `node-workspace` plugin does handle cross-package dependency updates under npm workspaces. Against it: the original action was archived in August 2024, the v3→v4 upgrade was breaking, and there are reports of release PRs silently ceasing to be created. |
+| **Nx release / Lerna** | Both bring an orchestration layer this repo does not otherwise need. ADR 0005 already chose plain npm workspaces over a heavier toolchain, and adding one for versioning alone inverts that. |
+| **Changesets** | **Kept.** Actively maintained — `@changesets/cli` 3.0.1, published 2026-08-19, days before this review. npm workspaces are supported. It has the most mature independent-versioning story of the three and is what Vercel and Radix use. |
+
+### The decisive argument, which the original ADR asserted and did not measure
+
+The original said "bump level is an explicit choice per package, which is necessary because in this repo
+the levels do not follow from the code". That is the reason release-please is unusable here, and it is now
+**measured on this repository's own history** rather than argued:
+
+```
+breaking-change markers in the entire history (`!:` or `BREAKING CHANGE:`)   0
+commits that changed the shipped weights                                    14
+   ... how a conventional-commit parser would read those 14:
+       fix   -> patch      6
+       feat  -> minor      4
+       chore -> NO RELEASE 3
+       revert              1
+```
+
+By this ADR's own semver rules, **every one of those 14 is a major** — "any retrain, any threshold change,
+any encoder swap. A consumer's build goes from passing to failing with no code change; that is breaking,
+whatever the diff looks like."
+
+So a commit-message-driven tool would have shipped **zero majors where fourteen were required**, and for
+three of them **no release at all** — the weights would have changed under consumers on a `chore`. That is
+not a stylistic preference between tools. It is the difference between a version number that means
+something and one that lies, on the package where lying costs the most.
+
+The generalisable form: **a tool that derives the release from the commit can only be correct when the
+diff predicts the impact.** In this repo it does not, in both directions — a retrain changes no API and is
+breaking, while a 40-line refactor of `capture-core.mjs` that `evidence:check` reports as SAME is a patch.
+
+### One thing to carry into the implementation
+
+With npm workspaces specifically, `changeset version` does not update `package-lock.json`. **Run
+`npm install` immediately after it, in the same job**, or the lockfile ships describing the previous
+versions — a stale-artefact failure of exactly the kind this project keeps paying for, and one that would
+be invisible until a consumer's clean install resolved the wrong tree.
+
+Sources: [changesets.dev](https://changesets.dev/),
+[@changesets/cli on npm](https://www.npmjs.com/package/@changesets/cli),
+[npm release automation compared](https://oleksiipopov.com/blog/npm-release-automation/),
+[why release-please over semantic-release](https://blog.hazya.dev/why-i-swapped-semantic-release-for-release-please).
