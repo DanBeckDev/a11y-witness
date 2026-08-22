@@ -24,7 +24,7 @@ The honest shape of the product today:
 
 | | |
 |---|---|
-| criteria assessed **on a real page** | **9** of WCAG 2.2's 55 A/AA — 1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.1, 2.4.2, 2.4.3, 2.4.4, 4.1.2 |
+| criteria assessed **on a real page** | **9** of WCAG 2.2's 55 A/AA — 1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.4 in full; 2.4.1, 2.4.2, 2.4.3, 4.1.2 **partially**, each with its boundary recorded in `criterion-coverage.ts` |
 | criteria the trained scorer covers | 8; at floor **0.70** it scores **20 of 22** calibration pages with **0** false accusations (was: abstained on almost all of them) |
 | false positives on conformant pages | **0**, measured — `release:gate` 2026-08-22: recall 78% over 48 failure-case runs, 0 false positives |
 | captures that read the **wrong page** | **0 of 54** on the path that can produce it — ceiling ≈5.6% |
@@ -48,7 +48,21 @@ The honest shape of the product today:
 > case, a capture, a signal and an owner.** `criteriaAssessableFrom` (`criterion-coverage.ts`) exists to
 > make that answerable mechanically rather than by reading four files.
 >
-> **2.4.2 was added on 2026-08-22 and is recorded as PARTIAL, which is the honest shape.** Page Titled has
+> **Four of the nine are PARTIAL, and that is the honest shape rather than a shortfall.** Three of them —
+> 2.4.1, 2.4.2, 2.4.3 — were added on 2026-08-22, and in each case the criterion has several failure modes
+> of which a screen reader can prove one. Naming which one, in `criterion-coverage.ts`, is what stops a
+> partial claim being read as a whole one.
+>
+> **All three are failures a static analyser structurally cannot reach**, which is the clearest statement so
+> far of what this tool is for:
+>
+> | | the mode assessed | why markup cannot answer it |
+> |---|---|---|
+> | 2.4.1 | a skip link that is present and **inert** | a checker sees a link and a plausible href and passes it |
+> | 2.4.2 | the route changes and the **title does not** | the markup is valid at every instant; the failure is the transition |
+> | 2.4.3 | the tab order **contradicts the reading order** | the DOM has no reading order to contradict until something walks it |
+>
+> **2.4.2 is recorded as PARTIAL, which is the honest shape.** Page Titled has
 > three failure modes and only one is worth a screen reader. A missing title is vanishingly rare — zero
 > across 4,895 captures, and absent from the failures covering 96% of WebAIM's million-page survey — and
 > whether a title *describes* its topic is judgement, the wall 2.4.6 also stops at. What is now assessed is
