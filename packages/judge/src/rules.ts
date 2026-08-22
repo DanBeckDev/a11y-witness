@@ -442,6 +442,33 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
 }
 
 /**
+ * 2.1.1 — a control the page announces as operable that the keyboard never reaches.
+ *
+ * The failure a screen-reader user meets as "I can hear it and I cannot press it": a `div role="button"`
+ * with a click handler and no `tabindex`. Perfectly perceivable, entirely unusable.
+ *
+ * NOT the roleless `<div onclick>` of the custom-control family — that one is invisible to the screen
+ * reader, which is its 4.1.2 finding, and a capture cannot tell it from a page with no button at all.
+ *
+ * POSITIONAL, because the focus probe truncates: measured, every corpus page stops at 12 tab stops, so
+ * "absent from `focusOrder`" usually just means the probe stopped. A control counts as unreachable only
+ * when something LATER in reading order was reached — the probe demonstrably got past it and never landed
+ * on it. That makes the claim sound at the tail, where the evidence runs out.
+ */
+function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void {
+  const reading = comparableNames(input.structure?.formFields);
+  const tabbed = new Set(comparableNames(input.interaction?.focusOrder));
+  if (reading.length < 2 || tabbed.size === 0) return;
+  const lastReached = reading.reduce((last, name, i) => (tabbed.has(name) ? i : last), -1);
+  const missed = reading.slice(0, lastReached).filter((name) => !tabbed.has(name));
+  if (!missed.length) return;
+  add("2.1.1 Keyboard",
+    "The page announces a control the keyboard cannot reach: Tab passed the point where it sits and never "
+      + "landed on it, so a keyboard user can hear it and not operate it",
+    `never focused: ${JSON.stringify(missed)} — while later controls were reached`);
+}
+
+/**
  * 2.4.1 — the skip link is there and it does nothing.
  *
  * NOT "the page has no skip link", which would be wrong: W3C's Understanding page is explicit that headings
@@ -654,6 +681,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addStaleRouteTitle(input, add);
   addBrokenFocusOrder(input, add);
   addInertSkipLink(input, add);
+  addKeyboardUnreachableControl(input, add);
 
   return findings;
 }
