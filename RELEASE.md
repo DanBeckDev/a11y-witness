@@ -23,10 +23,14 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 
 > **Read this before the table above reassures you.** Every gate in it evaluates on data that shares the
 > corpus's structure, so none of them can see a head penalising a feature that is 0 on all of its training
-> positives. Measured 2026-08-22: **225 such free penalties**, one of which means the scorer reports an
-> unnamed control only on a page where nothing is correctly named. A green row is evidence about the thing
-> it measures, not a general assurance — see *OPERATING LIMITATION on 4.1.2* below and
+> positives. Measured 2026-08-22: **225 such free penalties across 13 heads**. A green row is evidence about
+> the thing it measures, not a general assurance — see *OPERATING LIMITATION* below and
 > [ADR 0015](./docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md).
+>
+> **The layer split contains it, and that is measured rather than assumed.** Where a deterministic rule owns
+> a subtype the scorer is suppressed for it, so `4.1.2:unnamed-control`, `1.1.1:missing-alt`,
+> `1.1.1:filename-alt` and every keyboard/navigation criterion are unaffected. The nine subtypes the model
+> decides alone are where a veto reaches a report.
 
 Measured on a tree containing only committed content, which is what CI and a consumer see. `release:gate`
 itself stops at `check-signals` for the 418 stale captures recorded below — a corpus-state item, deliberately
@@ -199,16 +203,28 @@ findings.
     `postSubmitFields`**. So they are masked on every real page — they were previously trained as clean on
     41 and 39 pages from evidence that was never gathered, which is indistinguishable from a failed capture.
     They keep perfect held-out performance (8/8 each), because those records carried nothing for them.
-  - **OPERATING LIMITATION on 4.1.2, measured 2026-08-22 and not yet fixed.** The scorer reports an
-    unnamed control **only on a page where no control is correctly named, and not at all on a page
-    containing a table.** Both are learned vetoes, and both are causal — ablation on unedited real
-    captures moves `before/tickets.html` from 0.4525 (silent) to 0.9752 (finding) by zeroing three table
-    features, and adding one properly named field to `before/news.html` drops it from 0.9240 to 0.1688.
-    The cause is the corpus: of 147 training records carrying an unnamed form field, **none has a table
-    and none has a named field**, so the penalties cost nothing to learn and no held-out split can see
-    them. `npm run scorer:shortcuts` finds **225 such free vetoes across all 13 heads**. The remedy is
-    multi-defect pages, not a retrain. ADR 0015 has the full measurement. Anyone running this tool on
-    their own site should read that envelope before reading a clean 4.1.2 result.
+  - **OPERATING LIMITATION: the scorer's heads carry 225 free vetoes, measured 2026-08-22, not yet fixed.**
+    A head penalises features that are 0 on every one of its training positives — free to learn, and
+    invisible to every accuracy metric here, because each shares the corpus's structure. Causal, by
+    ablation on unedited real captures: `4.1.2:unnamed-control` moves `before/tickets.html` from 0.4525 to
+    0.9752 when three table features are zeroed, and adding one properly named field to `before/news.html`
+    drops it 0.9240 → 0.1688. Of the 147 training records carrying an unnamed form field, none has a table
+    and none has a named field.
+
+    **How much reaches a report is bounded by the layer split, and this correction matters.** An earlier
+    version of this bullet said the *tool* reports an unnamed control only where nothing else is named.
+    That is true of the HEAD and not of the product: `4.1.2:unnamed-control` is `decidedBy: "rules"` in
+    `rule-ownership.json`, so the scorer is suppressed for it and the exact rule answers — 0 false
+    positives across 934 conformant records. Verified on the three W3C pages where the head scores worst:
+    the rule layer reports `4.1.2: combo box, collapsed, QUICKMENU ---- greater` on **all three**,
+    including the one the scorer misses entirely.
+
+    The vetoes that DO reach a report are on the nine subtypes the model decides alone —
+    `1.1.1:generic-alt`, `1.3.1:fake-heading`, `1.3.1:unassociated-table`, `2.4.4:regex`, `2.4.6:regex`,
+    `3.3.1:validation-error-silent`, `3.3.2:placeholder-only`, `3.3.2:unnamed-form-field`,
+    `4.1.2:state-change-silent`, `4.1.3:form-activation-silent`. Those heads carry 12–21 vetoes each.
+
+    The remedy is multi-defect pages, not a retrain. ADR 0015 has the full measurement.
   - **The "2 of 3 inaccessible pages caught" figure is ONE defect observed three times.** Every form
     control on all three W3C BAD `before` pages is the same unnamed navigation combo box in the shared
     site chrome of one template. Real-page recall must be quoted in distinct defects, never page counts.

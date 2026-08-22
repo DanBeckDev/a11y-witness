@@ -10,7 +10,7 @@ The findings it is *for* are the ones a rule scanner structurally cannot produce
 
 > axe tells you an ARIA attribute is wrong. This tells you your form rejects input and **never announces why**, or your filter updates results and **says nothing**.
 
-Those come from the deterministic rule layer, which is exact on every criterion it owns with **zero false positives across 934 conformant records** — re-verified by `npm run rules:gate` on every push. There is also a trained scorer of our own, and it is honest about its limits: it **abstains** on pages unlike its training data and reports those criteria as *unchecked, not clean*, rather than guessing. It has a **known blind spot on 4.1.2** that is measured, not suspected — see [Known limitations](./RELEASE.md#known-limitations-stated-plainly), which you should read before trusting a clean result from it.
+Those come from the deterministic rule layer, which is exact on every criterion it owns with **zero false positives across 934 conformant records** — re-verified by `npm run rules:gate` on every push. There is also a trained scorer of our own, and it is honest about its limits: it **abstains** on pages unlike its training data and reports those criteria as *unchecked, not clean*, rather than guessing. It also has **measured blind spots**, on the criteria it rather than the rules decides — see [Known limitations](./RELEASE.md#known-limitations-stated-plainly).
 
 It is three things: a testing pipeline, the reproducible screen-reader infrastructure that makes it runnable by anyone, and an accessibility model of our own being trained on the evidence the first two produce. The first two are what ships and works; the third is real, measured, and not yet carrying real pages.
 
@@ -325,13 +325,19 @@ criteria as **unchecked, not clean**. Since the realism tier it scores **20 of 2
 **0 false accusations**, up from 4–6; the pages it still declines are genuinely out of its range, and
 declining is the right answer for them.
 
-*The blind spot is the one it does not.* Measured 2026-08-22: on 4.1.2 the scorer reports an unnamed control
-**only on a page where nothing else is correctly named, and not at all on a page containing a table**. Both
-are learned penalties on features that were 0 on every one of the 147 relevant training examples, so they
-cost nothing to learn and no accuracy metric we compute can see them. `npm run scorer:shortcuts` counts
-**225** such free penalties across all 13 heads. This is a corpus problem with a corpus fix, and it is in
-progress — the full measurement is
-[ADR 0015](./docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md).
+*The blind spot is the one it does not.* Measured 2026-08-22, the scorer's heads have learned to penalise
+features that were 0 on every one of their training examples — a penalty that costs nothing to learn and
+that no accuracy metric we compute can see, because every held-out split shares the corpus's structure.
+`npm run scorer:shortcuts` counts **225** of them across all 13 heads.
+
+**How much of that reaches you depends on which layer answers.** Where a deterministic rule owns a subtype,
+the rule answers and the scorer is suppressed — so 1.1.1's missing and filename alternatives, 4.1.2's
+unnamed controls, and every keyboard and navigation criterion are unaffected. Measured on the three W3C
+pages where the scorer's own score is weakest, the rule layer reports the failure on **all three**. The
+blind spots land on the nine subtypes the model decides alone, among them vague link text (2.4.4), vague
+headings (2.4.6), silent validation errors (3.3.1) and silent state changes (4.1.2). This is a corpus
+problem with a corpus fix, and it is in progress —
+[ADR 0015](./docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md) has the measurement.
 
 The plan of record is [`docs/local-model.md`](./docs/local-model.md).
 
