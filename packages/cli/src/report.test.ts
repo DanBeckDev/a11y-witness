@@ -134,3 +134,24 @@ test("the report never prints a score, grade or percentage", () => {
   // one figure for the page. Asserting their presence keeps this test honest about what it forbids.
   assert.match(lines, /confidence 1/);
 });
+
+test("no line above the findings makes a claim the findings contradict", () => {
+  // Two lines did, one after the other. The headline said "No blocking findings: yes" over three [SERIOUS]
+  // items; the summary underneath said "No failures were confirmed" over `1 finding(s)`, because it counted
+  // the SCORER's findings while the deterministic rules' are merged into the same layer afterwards.
+  //
+  // Both were accurate about the quantity they measured and wrong about the section they headed. The rule
+  // that falls out: only the line that LISTS the findings states how many there are.
+  const withFinding = {
+    ...verdict,
+    taskCompletable: true,
+    findings: [{ ...verdict.findings[0], severity: "serious", wcag: "1.1.1 Non-text Content" }],
+  } as Report["verdict"];
+  const output = render({ verdict: withFinding });
+  const header = output.slice(0, output.indexOf("1 finding(s):"));
+  assert.doesNotMatch(header, /No failures were confirmed/,
+    "the summary must state scope, not a count it does not own");
+  assert.doesNotMatch(header, /No blocking findings: yes/);
+  // The scope sentence itself is the JUDGE's, not the renderer's — `verdict.summary` is passed through.
+  // Asserted where it is produced, in local-judge's own test, so this one does not pin fixture data.
+});
