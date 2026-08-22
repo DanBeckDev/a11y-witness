@@ -51,6 +51,8 @@ export interface RuleInput {
       headingBefore?: string | null;
       headingAfter?: string | null;
       navigated?: boolean;
+      /** What one Tab landed on immediately after the activation, before anything rewound the caret. */
+      nextFocusAfter?: string | null;
       error?: string;
     };
   };
@@ -440,6 +442,41 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
 }
 
 /**
+ * 2.4.1 — the skip link is there and it does nothing.
+ *
+ * NOT "the page has no skip link", which would be wrong: W3C's Understanding page is explicit that headings
+ * alone satisfy this criterion (H69) and landmarks alone satisfy it (ARIA11), so absence is not a failure —
+ * and every page in this corpus has an h1, so such a rule would fire on conformant pages. Whether any
+ * mechanism EXISTS is a DOM fact the static layer answers better than we can.
+ *
+ * What no markup inspection can answer is whether the mechanism works. A checker sees a link, a plausible
+ * fragment href and a page full of content, and passes it. Measured here on a pair differing only in the
+ * target id:
+ *
+ *   works   activating it →  "Search the archive, edit"   (past the block, in the content)
+ *   inert   activating it →  "News and updates, link"     (the first nav link — where Tab went anyway)
+ *
+ * "Did nothing" is stated against the SECOND item of the ordinary tab order, so the claim is that the next
+ * Tab landed exactly where it would have landed without ever touching the link. That is stronger than
+ * "focus is still near the top" and needs no knowledge of where the block ends.
+ */
+function addInertSkipLink(input: RuleInput, add: AddFinding): void {
+  const route = input.interaction?.routeChange;
+  if (!route || route.error || !route.navigated) return;
+  // It has to BE a skip link. The probe activates the first link on the page, which elsewhere is a logo or
+  // a cookie banner — finding focus unmoved after activating one of those says nothing about bypassing.
+  if (!/\b(skip|jump)\b/i.test(String(route.control ?? ""))) return;
+  const landed = comparableNames([route.nextFocusAfter ?? ""])[0];
+  if (!landed) return; // not measured, or focus went somewhere silent — no claim either way
+  const ordinary = comparableNames(input.interaction?.focusOrder)[1];
+  if (!ordinary || landed !== ordinary) return;
+  add("2.4.1 Bypass Blocks",
+    "The skip link does not skip anything: activating it left focus exactly where the next Tab would have "
+      + "gone anyway, so the repeated block still has to be tabbed through",
+    `activating ${JSON.stringify(String(route.control).slice(0, 40))} left focus on ${JSON.stringify(landed)}`);
+}
+
+/**
  * 2.4.3 — Tab visits the controls in a different order from the one the page reads in.
  *
  * PARTIAL coverage, and the boundary is the honest one: whether an order "preserves meaning" in general is
@@ -616,6 +653,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addKeyboardTrap(input, add);
   addStaleRouteTitle(input, add);
   addBrokenFocusOrder(input, add);
+  addInertSkipLink(input, add);
 
   return findings;
 }

@@ -24,7 +24,7 @@ The honest shape of the product today:
 
 | | |
 |---|---|
-| criteria assessed **on a real page** | **8** of WCAG 2.2's 55 A/AA — 1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.2, 2.4.3, 2.4.4, 4.1.2 |
+| criteria assessed **on a real page** | **9** of WCAG 2.2's 55 A/AA — 1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.1, 2.4.2, 2.4.3, 2.4.4, 4.1.2 |
 | criteria the trained scorer covers | 8; at floor **0.70** it scores **20 of 22** calibration pages with **0** false accusations (was: abstained on almost all of them) |
 | false positives on conformant pages | **0**, measured — `release:gate` 2026-08-22: recall 78% over 48 failure-case runs, 0 false positives |
 | captures that read the **wrong page** | **0 of 54** on the path that can produce it — ceiling ≈5.6% |
