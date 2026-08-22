@@ -22,10 +22,38 @@ is real.
 | Hear link text out of context | `K` / `Shift+K` | `structure.links` | 2.4.4, 2.4.9 |
 | Meet a list | `L` / `Shift+L` | `structure.lists` | 1.3.1 |
 | Read a table cell by cell | `T`, then `Ctrl+Alt+Arrow` (**opt-in, see caveat**) | `structure.tableCells` | 1.3.1 |
-| Tab through the page | `Tab` + report focus (on by default) | `interaction.focusOrder` | 2.1.2 |
+| Tab through the page | `Tab` + report focus (on by default) | `interaction.focusOrder` | 2.1.2, **2.1.1**, **2.4.1**, **2.4.3** |
+| Follow a link and re-read the title | activate a navigation control, ask NVDA for the title before and after (**opt-in**) | `interaction.routeChange` | **2.4.2**, 2.4.1 |
 
-The first nine are on by default and cost ~15–17 s per capture. The last two are opt-in per
-capture — `"probeFocus": true` (adds ~8 s) and `"probeTables": true` (see the caveat below).
+The first nine are on by default and cost ~15–17 s per capture. The last three are opt-in per
+capture — `"probeFocus": true` (adds ~8 s), `"probeNavigation": true`, and `"probeTables": true` (see the
+caveat below).
+
+### Added 2026-08-22: four criteria a static analyser structurally cannot reach
+
+The same two probes now feed four more criteria. Each is recorded as PARTIAL in `criterion-coverage.ts`
+with the failure mode it covers and the one it does not, and each was scoped against W3C's own guidance
+rather than assumed — **2.4.1's scope changed as a result**, because a skip link is not required (H69 and
+ARIA11 satisfy it alone), so detecting its absence would have fired on conformant pages.
+
+| criterion | what is assessed | why markup cannot answer it |
+|---|---|---|
+| **2.1.1** Keyboard | a control present in reading order that Tab never reaches | reachability is a runtime property of focus, not of the DOM |
+| **2.4.1** Bypass Blocks | a skip link that is present and **inert** | a checker sees a link and a plausible `href` and passes it |
+| **2.4.2** Page Titled | the route changes and the title does **not** | the markup is valid at every instant; the failure is the TRANSITION |
+| **2.4.3** Focus Order | the tab order **contradicts** the reading order | the DOM has no reading order to contradict until something walks the page |
+
+Three measurement traps, all found by capturing rather than reasoning:
+
+- **The tab order is a CYCLE.** Past the last control, Tab returns to the first, so a faithful recording
+  ends by repeating what it began with — comparing raw made the CONFORMANT variant differ from itself.
+  Compare each control's first visit.
+- **The focus probe truncates at 12 stops** on every corpus page, so "absent from `focusOrder`" almost
+  never means "unreachable". 2.1.1 is positional for that reason: a control counts as unreachable only when
+  something LATER in reading order was reached.
+- **Silence is not the signal you want.** The stale-title page announced `"visited"` — the link's own
+  state, which names nothing about where the user is. A rule keyed on "nothing was announced" would have
+  stayed mute on the exact page it was written for.
 
 ### Resolved 2026-08-08: `focusOrder` is now assessed, and reachable
 
