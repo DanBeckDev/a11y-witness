@@ -460,6 +460,18 @@ function unambiguous(names: string[]): Set<string> {
 }
 
 /**
+ * Did the tab order return to where it started?
+ *
+ * Tab cycles: past the last focusable it wraps to the first. So a recording that revisits its own starting
+ * control has seen the COMPLETE set — and only then does "announced but never focused" mean unreachable
+ * rather than "the probe stopped". The focus probe truncates at a fixed number of stops on every page of
+ * any size, so without this the cap is indistinguishable from a keyboard trap of the whole page.
+ */
+function cycleClosed(tabOrder: string[]): boolean {
+  return tabOrder.length > 1 && tabOrder.lastIndexOf(tabOrder[0]) > 0;
+}
+
+/**
  * 2.1.1 — a control the page announces as operable that the keyboard never reaches.
  *
  * The failure a screen-reader user meets as "I can hear it and I cannot press it": a `div role="button"`
@@ -478,18 +490,27 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
   const tabbedNames = comparableNames(input.interaction?.focusOrder);
   const tabbed = new Set(tabbedNames);
   if (reading.length < 2 || tabbed.size === 0) return;
+  // THE WHOLE TAB CYCLE, OR NO CLAIM. Tab wraps: past the last control it returns to the first, so a
+  // recording that revisits its own starting control has observed every focusable there is — and a control
+  // the page announces but that cycle never contains is genuinely unreachable, whatever the stop cap.
+  //
+  // This replaced a READING-ORDER proxy ("something later in reading order was reached, so the probe got
+  // past this point"), which is unsound for the exact reason 2.4.3 exists: the two orders can differ.
+  // Measured on developer.mozilla.org — 18 controls read, 12 stops, truncated, cycle never closed — the
+  // proxy reported the theme switch, language picker and sidebar toggle as keyboard-unreachable. They sit
+  // early in READING order and late in TAB order, so the probe simply stopped before them. A well-built
+  // page, accused on the first run.
+  if (!cycleClosed(tabbedNames)) return;
   // A control whose announced name is shared with another cannot be said to have been missed: its name
   // appearing in the tab order may be the OTHER control, and its absence may mean the other one was
   // reached. Same reasoning as 2.4.3 — see `unambiguous`.
   const trackable = unambiguous(reading);
-  const lastReached = reading.reduce((last, name, i) => (tabbed.has(name) ? i : last), -1);
-  const missed = reading.slice(0, lastReached)
-    .filter((name) => trackable.has(name) && !tabbed.has(name));
+  const missed = reading.filter((name) => trackable.has(name) && !tabbed.has(name));
   if (!missed.length) return;
   add("2.1.1 Keyboard",
     "The page announces a control the keyboard cannot reach: Tab passed the point where it sits and never "
       + "landed on it, so a keyboard user can hear it and not operate it",
-    `never focused: ${JSON.stringify(missed)} — while later controls were reached`);
+    `never focused: ${JSON.stringify(missed)} — while Tab completed a full cycle of the page`);
 }
 
 /**
