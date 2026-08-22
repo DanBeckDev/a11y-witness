@@ -121,29 +121,53 @@ The `openai` backend makes a self-hosted, zero-cost judge realistic. Measured ag
 
 ## Quickstart
 
-**→ [Full getting-started guide](./docs/getting-started.md)** — zero to your first report, including setting up a worker.
+**The shortest path needs no hardware: a GitHub Action on a Windows runner.** A screen reader is an
+OS-bound desktop application, so something has to run Windows — but it does not have to be yours.
 
-**Check the environment first — one command, and every failure names its own fix:**
+```yaml
+jobs:
+  a11y:
+    runs-on: windows-2022          # NVDA needs Windows; GitHub hosts these
+    steps:
+      - uses: DanBeckDev/a11y-witness@main
+        with:
+          url: https://example.com/checkout
+          task: Complete the checkout
+```
+
+That is the whole thing. **No API key and no account** — `judge-backend` defaults to `local`, this
+project's own trained scorer, which ships in the repo and never sends your page anywhere. Findings appear as
+a PR comment; `fail-on` decides whether they also fail the build, and defaults to `never` so adding it
+cannot break your pipeline on day one. `.github/workflows/action-smoke.yml` runs exactly this shape against
+two W3C pages on every push, as a consumer would.
+
+**→ [Full getting-started guide](./docs/getting-started.md)** — including running it locally.
+
+### Locally instead
+
+Local runs need a capture worker: a Windows machine running NVDA that you control. Check what you have —
+every failure names its own fix:
 
 ```bash
 npm run doctor              # VM, worker, page server, judge, unfinished runs
 npm run doctor -- --json    # same, machine-readable
 ```
 
-The short version, which assumes you have a capture worker already:
-
 ```bash
 npm install                        # Node 20+
-codex login                        # or JUDGE_BACKEND=anthropic|openai
 npm run witness -- https://example.com --task "Find the contact details"
 ```
+
+No login step: the default judge is local. `JUDGE_BACKEND=anthropic|openai` swaps in a rented model and
+needs a key of your own.
 
 **If that last command cannot reach a worker, nothing happens** — and a worker is a
 Windows machine running NVDA, not a flag you can pass. That is inherent: screen readers
 are OS-bound desktop applications, so there is no Docker image that runs this whole
 product. Getting one takes ~20 minutes on a Windows box you already have, or 1.5–2 hours
 to build a VM from scratch on a Mac. [The guide](./docs/getting-started.md) walks all
-three routes, including CI.
+three routes. **If you have no Windows machine, use the Action above** — a GitHub-hosted
+runner is one.
 
 Add `--json` for machine-readable output and `--debug` for per-phase capture diagnostics.
 
@@ -334,7 +358,7 @@ That is a materially harder claim than scoring evidence, and it is stated here a
 
 Working end to end, and under active development. The core bet is demonstrated: a real screen reader is driven through a real page, and the judge produces grounded, WCAG-cited findings that separate broken pages from accessible ones. What is still open is written down rather than glossed over — the full backlog is [`PLAN.md`](./PLAN.md), the honest evaluation audit is [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md).
 
-**Next: making it consumable.** The primary distribution vector is a **GitHub Action** ([`ADR 0003`](./docs/adr/0003-testing-and-distribution.md)) — teams drop it into their workflow and get findings on the PR, where accessibility regressions actually happen. The groundwork is done: real NVDA runs on a GitHub-hosted Windows runner, and the judge backend is pluggable so it can use the team's own key. A hosted layer on top of the open core comes only if the Action proves demand.
+**The GitHub Action ships** ([`ADR 0003`](./docs/adr/0003-testing-and-distribution.md)) and is the primary distribution vector — teams drop it into their workflow and get findings on the PR, where accessibility regressions actually happen. Real NVDA runs on a GitHub-hosted Windows runner, the default judge is local so no key is needed, and `action-smoke.yml` exercises it as a consumer would on every push. **What it has not had is a stranger**: nobody outside this project has run it on an application they own, which is the one thing no amount of green CI substitutes for. A hosted layer on top of the open core comes only if the Action proves demand.
 
 **Trust work, in priority order:** an expert-labelled human-agreement baseline (the single biggest gap), confidence calibration measured against outcomes, reported test-retest reliability, and schema-enforced judge output with the model and prompt version pinned per run.
 
