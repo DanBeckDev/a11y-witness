@@ -81,3 +81,39 @@ test("the totals quoted to strangers match what the judge can return", () => {
       `${file} does not state the total as "${spelled}" — the judge can return ${total}`);
   }
 });
+
+test("the README's quickstart workflow is one a stranger can actually paste", () => {
+  // The single most consequential snippet in the repo: B1 is someone outside the project running this on an
+  // app they own, and for most readers this is the ONLY path that needs no hardware — a screen reader is an
+  // OS-bound desktop application, but the Windows machine can be GitHub's.
+  //
+  // Checked against `action.yml` rather than eyeballed, because a snippet that names an input the action
+  // does not have, or omits a required one, fails on a stranger's runner with a message about our repo.
+  //
+  // Parsed by hand rather than with a YAML library: this package has ZERO dependencies and that is worth
+  // more than the convenience. The snippet is ten lines of fixed shape, and `action-smoke.yml` runs the
+  // real thing on every push — this guards the COPY, not the mechanism.
+  const readme = readFileSync(fileURLToPath(new URL("../../../README.md", import.meta.url)), "utf8");
+  const snippet = /```yaml\n([\s\S]*?)```/.exec(readme)?.[1];
+  assert.ok(snippet, "the quickstart no longer contains a yaml block");
+
+  assert.match(snippet!, /runs-on:\s*windows-/,
+    "NVDA needs Windows; a snippet on ubuntu-latest fails after the reader has committed it");
+  assert.match(snippet!, /uses:\s*\S+\/a11y-witness@/, "the snippet must reference this action");
+
+  const withBlock = /with:\n([\s\S]*)$/.exec(snippet!)?.[1] ?? "";
+  const given = new Set([...withBlock.matchAll(/^\s{8,}([a-z-]+):/gm)].map((m) => m[1]));
+  assert.ok(given.size > 0, "no inputs parsed out of the snippet — the shape changed and this guard went blind");
+
+  const action = readFileSync(fileURLToPath(new URL("../../../action.yml", import.meta.url)), "utf8");
+  const declared = new Set([...action.matchAll(/^  ([a-z-]+):\n\s+description:/gm)].map((m) => m[1]));
+  const required = [...action.matchAll(/^  ([a-z-]+):\n(?:[\s\S]*?)\n    required: true/gm)].map((m) => m[1]);
+  assert.ok(declared.size > 0 && required.length > 0, "action.yml no longer parses — this guard went blind");
+
+  for (const name of required) {
+    assert.ok(given.has(name), `the quickstart omits the required input "${name}"`);
+  }
+  for (const name of given) {
+    assert.ok(declared.has(name), `the quickstart passes "${name}", which action.yml does not accept`);
+  }
+});
