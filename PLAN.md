@@ -79,9 +79,71 @@ That last row is the one that matters most, and no amount of green CI substitute
 
 ## Blockers — a general release should not happen until these are closed
 
-**Status, 2026-08-09: B2, B3 and B4 are closed by measurement. B1 and B5 are yours — neither can be done
-from inside the project.** B1 is a stranger running it on an app they own; B5 is the name and the first
-publish. Everything technical that a release was waiting on has a number against it now.
+**Status, 2026-08-22.** The line below is kept because it was true when written and is a useful record of
+what closing a blocker by measurement looks like. It is no longer the whole list: a re-audit on 2026-08-22
+found **two technical blockers nobody had written down**, and one of them means no stranger can install the
+CLI at all.
+
+> *2026-08-09: B2, B3 and B4 are closed by measurement. B1 and B5 are yours — neither can be done from
+> inside the project. Everything technical that a release was waiting on has a number against it now.*
+
+**The current list is B1, B5, B7 and B8.** B1 and B5 remain yours. B7 and B8 are ours, and B7 partly
+blocks B1 — a stranger can use the Action from `@main`, but cannot `npx a11y-witness`, so half the
+documented product is unreachable from outside this checkout.
+
+| | blocker | whose | state |
+|---|---|---|---|
+| **B1** | someone outside the project runs it on an app they own | yours | open; partly blocked by B7 |
+| **B5** | the name, and the first publish | yours | open |
+| **B7** | **the release machinery decided in ADR 0007 does not exist** | ours | open, and cheap |
+| **B8** | **the scorer's 225 free vetoes** | ours | fix in flight |
+
+### B7. Nothing can be installed, and the mechanism to change that was decided and never built
+
+**Why it blocks.** ADR 0007 chose Changesets, independent per-package semver, and a rule that "a PR that
+changes any `packages/*` source **must** include a changeset. CI fails" otherwise. Measured 2026-08-22,
+none of it is present:
+
+| | |
+|---|---|
+| `@changesets/cli` in `package.json` | **absent** |
+| `.changeset/` | **does not exist** |
+| a CI job that enforces the changeset rule | **none** |
+| a publish workflow | **none** |
+| git tags / GitHub releases | **zero** |
+| `npm view a11y-witness` | **E404 — nothing is published** |
+
+Two consequences that are already visible in the documentation, and both were found by checking rather
+than reported:
+
+- `packages/cli/README.md` opens with `npx a11y-witness https://example.com` — a command that cannot
+  work for anyone, and which is what npm would show as the package's front page.
+- The Action was documented as `a11y-witness/a11y-witness@v1` in two files: the wrong owner and a tag
+  nobody has cut. Fixed 2026-08-22 to `@main`, which resolves but moves under consumers.
+
+**Done looks like.** Changesets installed and wired, a publish workflow, and a first tag — at which point
+the Action can be pinned and the CLI can be installed. **It does not require deciding the name (B5):**
+the packages can be published under the current name or held until B5 resolves, but the machinery should
+exist either way, because building it under time pressure on release day is how a bad version number
+becomes permanent.
+
+**Note it is genuinely cheap** — one dependency, one config file, one workflow — which is precisely why it
+went unnoticed. Nothing was hard enough to become a visible task.
+
+### B8. The trained scorer penalises features it was never shown, and 225 of them
+
+**Why it blocks.** Not because the product is wrong today — the layer split contains most of it, and the
+deterministic rules are exact where they own a subtype. It blocks because **the defect class is invisible
+to every quality gate this project has**, so shipping without closing it means shipping a number nobody
+can defend. See [ADR 0015](./docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md).
+
+**Done looks like.** `npm run scorer:shortcuts` materially lower after a retrain on the multi-defect
+corpus, **and** held-out acceptance no better than it was. The second half matters more than the first:
+the splice probe removed vetoes and cost 3.3.2 eight false positives, and could not distinguish "the veto
+was load-bearing" from "spliced input is incoherent". Real pages are the experiment.
+
+**State.** Corpus rebuilt (furniture plus 60 two-defect pages), recapture in flight 2026-08-22. Starved
+feature/subtype pairs 263 → 178 by construction, with the rest awaiting the retrain.
 
 ### B1. Someone other than the author runs it on an app they own
 

@@ -9,6 +9,12 @@ see — the ones that need to know what a blind user actually heard, and whether
 npx a11y-witness https://example.com --task "Find the opening hours"
 ```
 
+> **Not published yet.** `npx a11y-witness` returns E404 today — no package has been pushed to npm, and the
+> name is still undecided (PLAN.md, B5). Until it is, the working paths are the **GitHub Action**
+> (`uses: DanBeckDev/a11y-witness@main`, no install and no Windows machine of your own) or a clone of the
+> repo. The command above is what the CLI *is*, and it works from a checkout; it is written here as the
+> package's front page because that is where it will be true. Tracked as PLAN.md B7.
+
 ## What "a rule scanner cannot see" means, concretely
 
 Measured against the University of Washington "Accessible University" demo — a third-party, expert-built
