@@ -5,12 +5,18 @@ Drive a real screen reader over a page in CI and report what it announced.
 ```yaml
 runs-on: windows-2022          # NVDA is Windows-only; the action fails fast and says so otherwise
 steps:
-  - uses: a11y-witness/a11y-witness@v1
+  - uses: DanBeckDev/a11y-witness@main
     with:
       url: https://example.com/checkout
       task: Complete the checkout with a saved card
       fail-on: never           # report first; gate when your team asks for it
 ```
+
+> **Pin this deliberately.** There is no tagged release yet, so `@main` is the only ref that resolves —
+> and it moves. If your CI must not change under you, pin the full commit SHA
+> (`uses: DanBeckDev/a11y-witness@<sha>`), which is what GitHub itself recommends for third-party actions.
+> A `@v1` tag is a release decision this project has not taken; see
+> [ADR 0007](./adr/0007-versioning-and-release.md).
 
 No API key. The default judge is this project's **own trained scorer** — 27 KB of heads shipped in the
 repo, over an 87 MB encoder fetched at setup — so nothing leaves the runner and nothing is billed.
