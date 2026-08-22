@@ -264,4 +264,33 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "one that supplies the title on entry, so this is what a user hears when they ask where they are — "
       + "not an inference from the DOM, which is valid at every instant in this failure.",
   },
+  {
+    id: "a11y-witness:tab-order-contradicts-reading-order",
+    version: "2026-08-22",
+    name: "Tab visits the controls in a different order from the one the page reads in",
+    description: "The sequence a keyboard user moves through does not match the sequence the content "
+      + "implies, so the form operates in a different order from the one it presents.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "2.4.3", mapping: "secondary" }],
+    inputAspects: ["interaction.focusOrder", "structure.formFields"],
+    applicability: "Captures where the focus probe ran and both sequences contain at least two of the same "
+      + "controls. Fewer than two in common is unchecked, not clean.",
+    expectation: "The controls appearing in both sequences appear in the same relative order.",
+    assumptions: [
+      "The structural sweep visits the page in document order, so it stands for the order the content is "
+        + "READ in. That is the comparison a screen reader can make and a static checker cannot: the DOM "
+        + "has no reading order to contradict until something has walked it.",
+      "Each control's FIRST visit is what counts. The tab order is a cycle — past the last control Tab "
+        + "returns to the first — so a faithful recording ends by repeating what it began with, and "
+        + "comparing it raw makes a conformant page differ from itself.",
+      "Controls in only one sequence are ignored. `focusOrder` also holds links and anything else "
+        + "focusable, and the form-field sweep holds controls Tab may never reach; counting either absence "
+        + "would fire on every page with a nav bar.",
+      "SECONDARY because 2.4.3 asks whether an order preserves MEANING, which is human judgement. A tab "
+        + "order that contradicts the reading order is a sufficient failure and not the whole criterion.",
+    ],
+    accessibilitySupport: NVDA_EDGE + " Tab is pressed through the screen reader, so the order recorded is "
+      + "the one a screen-reader user experiences, which can differ from raw browser tab order. Names are "
+      + "compared after stripping the states only the focus channel announces ('focused', 'blank').",
+  },
 ];
