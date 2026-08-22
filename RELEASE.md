@@ -19,6 +19,14 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 | `verify.corpus.test.ts` | 6/6 |
 | CI (`lint` + `capture-regression`) | **both green** — first time since 1 August; the fix was `capture-pure.mjs` |
 | shipped model | `calibrationClean: true`, `generalisationVerified: true` (held-out, 0 errors), `releaseBlockedBy: []` |
+| `npm run scorer:shortcuts` | **225 free vetoes across 13 heads** — the one number in this table that is not a pass. See the 4.1.2 operating limitation below; every other check here is blind to it by construction |
+
+> **Read this before the table above reassures you.** Every gate in it evaluates on data that shares the
+> corpus's structure, so none of them can see a head penalising a feature that is 0 on all of its training
+> positives. Measured 2026-08-22: **225 such free penalties**, one of which means the scorer reports an
+> unnamed control only on a page where nothing is correctly named. A green row is evidence about the thing
+> it measures, not a general assurance — see *OPERATING LIMITATION on 4.1.2* below and
+> [ADR 0015](./docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md).
 
 Measured on a tree containing only committed content, which is what CI and a consumer see. `release:gate`
 itself stops at `check-signals` for the 418 stale captures recorded below — a corpus-state item, deliberately
