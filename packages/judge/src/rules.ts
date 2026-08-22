@@ -548,7 +548,7 @@ function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
  * shared helper to fix one comparison would change what 2.4.4 and 4.1.2 consider a name, and "blank" is a
  * plausible fragment of a real label in a way "collapsed" is not.
  */
-const FOCUS_ONLY_STATES = /\b(focused|blank|visited|same page|has auto complete|autocomplete)\b/gi;
+const FOCUS_ONLY_STATES = /\b(focused|blank|visited|same page|linked|has auto ?complete|autocomplete|clickable|selected|required|invalid entry)\b/gi;
 
 /**
  * A CONTAINER the sweep names before the control, which the focus channel does not.
@@ -565,7 +565,14 @@ const FOCUS_ONLY_STATES = /\b(focused|blank|visited|same page|has auto complete|
  * a landmark. Same correction, applied where two channels are compared rather than where a role is read.
  */
 const LEADING_CONTAINER =
-  /^(?:(?:[^,]+\s+)?(?:landmark|form|list(?:\s+with\s+\d+\s+items?)?|table(?:\s+with[^,]*)?|group|region|dialog)\s*,\s*)+/i;
+  /^(?:(?:[^,]+\s+)?(?:landmark|form|list|table|group|region|dialog)(?:\s*,\s*with\s+\d+\s+items?)?\s*,\s*)+/i;
+
+/**
+ * Exported ONLY so `name-normalisation.test.ts` can pin this equal to the dataset signals' own copy in
+ * `case-matrix.mjs`. The two encode one rule in two languages and drifted within an hour of being
+ * written; that test is what makes the duplication safe.
+ */
+export const comparableNamesForTest = (entries: string[] | undefined): string[] => comparableNames(entries);
 
 function comparableNames(entries: string[] | undefined): string[] {
   return (entries ?? [])
