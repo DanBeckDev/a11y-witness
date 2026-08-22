@@ -15,7 +15,7 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import { evidenceFor, findingsFromScores, hasEvidenceFor, judgeLocally } from "./local-judge.js";
+import { evidenceFor, findingsFromScores, hasEvidenceFor, judgeLocally, layerSummary } from "./local-judge.js";
 
 /** The real capture that exposed the drift: heading + an unnamed button, nothing else. */
 const unnamedButton = {
@@ -131,12 +131,18 @@ test("the summary states no COUNT, because rules are appended after it", () => {
   // table listing three. The renderer counts the findings; the prose must not compete with it.
   const { findings } = findingsFromScores({ predictions: { "4.1.2": true }, scores: { "4.1.2": 0.99 } }, unnamedButton);
   assert.equal(findings.length, 1);
-  for (const summary of [
-    "No failures were confirmed for the eight criteria this layer scores. Other criteria are unchecked, not clean.",
-    "Confirmed failures below, scored against the eight criteria this layer covers. Other criteria are unchecked, not clean.",
-  ]) {
-    assert.doesNotMatch(summary, /\d+\s+(confirmed|finding|failure)/i, `summary must not embed a count: ${summary}`);
-  }
+
+  // THE REAL FUNCTION, not strings written here. This test asserted against two hardcoded sentences it had
+  // invented, so it passed for weeks while the shipped summary said "No failures were confirmed for the N
+  // criteria this layer covers" — a claim about counts, computed from the SCORER's findings, printed above
+  // findings the RULES had added. Precisely the staleness this test was written to prevent, invisible to it
+  // because it never read the code it was guarding.
+  const summary = layerSummary();
+  assert.doesNotMatch(summary, /\d+\s+(confirmed|finding|failure)/i, `summary must not embed a count: ${summary}`);
+  assert.doesNotMatch(summary, /no failures were confirmed/i,
+    "the summary must not claim an outcome either — rules are appended after it returns");
+  assert.match(summary, /covers \d+ criteria/, "it states SCOPE, which is the one thing it owns");
+  assert.match(summary, /unchecked, not clean/, "and silence must never read as a pass");
 });
 
 test("a form that NAVIGATED cannot evidence a silent validation error", () => {
