@@ -326,4 +326,32 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "that rewinds the caret — measured, because taking it later recorded the first link on the page "
       + "for every variant and made a working skip link indistinguishable from an inert one.",
   },
+  {
+    id: "a11y-witness:announced-control-keyboard-unreachable",
+    version: "2026-08-22",
+    name: "A control the page announces as operable that the keyboard never reaches",
+    description: "The screen reader announces an interactive control, and Tab passed the point where it "
+      + "sits without ever landing on it — so a keyboard user can hear the control and cannot operate it.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "2.1.1", mapping: "secondary" }],
+    inputAspects: ["structure.formFields", "interaction.focusOrder"],
+    applicability: "Captures where the focus probe ran and the structural sweep found at least two "
+      + "controls. Neither sequence alone supports a claim.",
+    expectation: "Every announced control that precedes a control Tab DID reach is itself reached.",
+    assumptions: [
+      "POSITIONAL on purpose. The focus probe stops after a fixed number of Tab presses — measured, every "
+        + "corpus page truncates at 12 stops — so absence from the tab order usually means the probe "
+        + "stopped rather than that the control is unreachable. Only a control skipped while something "
+        + "LATER was reached is evidence, which keeps the claim sound exactly where the evidence runs out.",
+      "Names are compared after stripping the container the sweep announces before the first control in it "
+        + "('form, Full name, edit' against 'Full name, edit, focused'). Without that the two channels "
+        + "share no name for that control and the rule fires on a page where it was reached.",
+      "A control the screen reader does not announce at all is out of scope: it is indistinguishable from "
+        + "no control, and its absence is a 4.1.2 finding rather than this one.",
+      "SECONDARY because 2.1.1 covers operation by any keyboard interface, and only Tab is pressed here. A "
+        + "control reachable by arrow keys within a composite widget would be reported and should not be.",
+    ],
+    accessibilitySupport: NVDA_EDGE + " Tab is pressed through the screen reader, so what is recorded is "
+      + "the reachability a screen-reader user experiences.",
+  },
 ];

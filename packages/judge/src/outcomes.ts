@@ -66,6 +66,9 @@ const SWEEPS_FEEDING: Record<string, readonly string[]> = {
   // Not a quick-nav sweep, but it truncates the same way: the probe stops after a fixed number of Tab
   // presses, and a trap past that point was never looked for.
   "2.1.2": ["focusOrder"],
+  // Both sequences it compares. A starved formField sweep shortens the reading order and a truncated focus
+  // probe shortens the tab order; either way "never reached" stops meaning "unreachable".
+  "2.1.1": ["formField", "focusOrder"],
   // Also not a quick-nav sweep. The route probe reaches a navigation control with `moveToNextLink`, so a
   // page whose link sweep starved is one where it may never have found a link to activate — and "we did
   // not reach a link" must read as unchecked, not as a page that navigates correctly.
