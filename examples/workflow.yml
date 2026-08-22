@@ -30,7 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: a11y-witness/a11y-witness@v1
+      # No tagged release exists yet, so `@main` is the only ref that resolves — and it moves.
+      # Pin the full commit SHA instead if your CI must not change under you.
+      - uses: DanBeckDev/a11y-witness@main
         id: witness
         with:
           url: https://example.com/checkout
