@@ -266,3 +266,80 @@ property of the local acceptance set, present in the control too, and unrelated 
 cost that must be measured on real pages rather than assumed. Decision 1 stands and is now evidence-backed.
 The next measurement is the same table after a real multi-defect capture, and `scorer:shortcuts` plus the
 SPREAD/DELTA figures are how it will be read.
+
+## Built 2026-08-22 — decision 1, and what each step actually bought
+
+Decision 1 said the corpus must produce multi-defect pages. It was built in three steps, each measured by
+`npm run corpus:starvation` — the audit written for this, which asks the CASE DEFINITIONS which features
+will be constant across a subtype's positives. That question is decided by the pages, not by the training,
+so it is answerable before a capture run rather than after an export and a train.
+
+| step | starved feature/subtype pairs |
+|---|---|
+| before | **263** |
+| + a labelled input and a conformant data table, as furniture buckets | 209 |
+| + a conformant disclosure, as a fourth bucket | 178 |
+| + 60 pages that fail two ways at once | **~6 residual** (measurable once captured) |
+
+**Furniture reaches less than half of it, and the reason is definitional.** A feature that IS a failure —
+`vague_link_present`, `generic_heading_present`, `unnamed_graphic_present`, `table_position_only`,
+`bare_edit_present` — cannot appear on a conformant page. So furniture cannot supply it at any size, and
+only a page that fails twice can. That is why the third step exists and why the first two plateau.
+
+The disclosure is the boundary case worth remembering: it is interaction evidence, which normally needs a
+probe a case opts into, but `probeKindFor` activates a disclosure **unconditionally** — "expanding
+something is side-effect-free". So it is the one piece of interaction evidence reachable from markup. The
+rest of that group (`form_change_*`, `status_update_announced`, `validation_error_*`) needs `probeForms`,
+which is a per-case capture cost and a policy decision, not furniture.
+
+### Three things this cost that the plan did not predict
+
+**The checker was enforcing the separation.** `placeholderOnlyIsPresent` began
+`if (formFields.length > 0) return false` — if the form sweep announced any named field anywhere, the page
+could not be the placeholder case. Every real page has a labelled field, so the corpus was *structurally
+unable* to contain a page carrying both. ADR 0015's defect, one layer out, in the code that decides whether
+a case discriminates. Fixed to ask the per-field question; verified unchanged against all 1,061 captures.
+
+**A guard passed with the bug reintroduced.** The first collision test compared a conformant base with and
+without furniture and asked whether any signal flipped. It cannot see blinding: a signal can only be
+observed going silent on a capture where it FIRES, and the conformant base fires nothing. I reverted the
+placeholder fix deliberately and watched the test stay green. The replacement replays every firing bad
+capture on disk with the furniture merged in — 2,122 real captures instead of one invented one — and it
+fails with the bug and passes without it.
+
+**NVDA's wording collides across criteria.** `image-generic-alt` is `1.1.1:generic-alt`, signal
+`/graphic.*\bimage\b/`. The unnamed-graphic snippet is `1.1.1:missing-alt`, a different subtype, so a
+subtype-level guard allowed the pairing — but NVDA announces an unnamed graphic as *"graphic, to get
+missing image descriptions"*, satisfying the host's own signal. The page would have reported its
+neighbour's failure as its own, and `check-signals` would have said CONTAMINATED only after the captures
+were paid for. Pairings are now excluded by CRITERION, which is the better rule regardless: a second
+failure of the same criterion adds no cross-criterion evidence.
+
+That exclusion leaves **six residual cells** — `1.1.1:generic-alt` and `:filename-alt` without an unnamed
+graphic, `1.3.1:fake-heading` without a position-only table, `3.3.2:placeholder-only`,
+`4.1.2:missing-role` and `:state-change-silent` without a bare edit. Those heads can still veto for free.
+No pairing fixes them, because NVDA's wording is what collides; they need a host written for the purpose
+with a signal that cannot be confused with its neighbour's. Recorded at the rotation table so
+`corpus:starvation` never reports them as an unexplained gap.
+
+### Two side effects worth keeping
+
+**Furniture is keyed on the case ID, not the array position.** The old rule — "APPEND to `CASES`, never
+insert" — was enforced by nothing and remembered by nobody, and CLAUDE.md records it re-sizing every case
+after an insertion with a stale count as the only symptom. Proved by the change itself: adding 60 cases
+left `check-signals` reporting the same 860 stale pairs as before, so **zero existing pages moved**.
+
+**The cost model is measured.** A first pass charged the furniture in invented "elements". It is now taken
+from median total capture time across all 2,122 corpus captures — a form field +3.7 s, a disclosure +3.9 s,
+a table +7.9 s — and charged in milliseconds, because a sweep and a probe activation are not more list
+items. Stated as confounded (each figure comes from that feature's own cases), so they are upper bounds,
+which is the safe direction for a budget.
+
+### What is not yet known
+
+The starvation count is a property of the corpus. **Whether removing the vetoes improves or costs
+accuracy is not**, and the splice probe above could not answer it: it took 3.3.2 from precision 1.000 to
+0.429 and could not distinguish "the veto was load-bearing" from "spliced transcripts are incoherent
+input". Real multi-defect pages are the experiment that separates those, and the reading is
+`scorer:shortcuts` plus held-out acceptance — not the starvation count, which by then will only be
+confirming what was designed in.
