@@ -59,6 +59,7 @@
     "rules:score": "tsx packages/lab/scripts/score-rules.ts",
     "rules:gate": "tsx packages/lab/scripts/score-rules.ts --gate",
     "scorer:shortcuts": ".venv/bin/python packages/lab/scripts/audit-scorer-shortcuts.py",
+    "corpus:starvation": "node packages/lab/scripts/audit-corpus-starvation.mjs",
     "release:gate": "npm run scorer:shortcuts && npm run gate:isolation && npm run training:check-signals && npm run rules:gate && npm run training:evaluate-acceptance && npm run eval:gate",
     "capture:check": "tsx packages/lab/src/harnesses/capture-check.mjs",
     "layers:compare": "A11Y_PYTHON=.venv/bin/python node packages/lab/scripts/compare-layers.mjs",
