@@ -4,9 +4,11 @@
 
 Proposed. Not implemented. Depends on ADR 0012's credential split and does not change it.
 
-**The wake gate has PASSED on all four boxes (2026-08-22)** — see "Prerequisites". The threshold is now
-measured too. What is still missing is the number that decides whether to build it at all: nobody has
-measured what these machines draw idle, and that needs a plug meter, not a remote query.
+**The wake gate has PASSED on all four boxes (2026-08-22)** — see "Prerequisites" — and the threshold is
+measured. Every question this ADR raised is answered except one, and that one is **deferred rather than
+answered**: nobody has measured what these machines draw idle, it needs a plug meter rather than a remote
+query, and it was deprioritised on 2026-08-22. Do not read the silence as "measured and found small"; it
+means the justification for building this has not been established either way, so the ADR stays proposed.
 
 **Do not implement the sleep half for a box that has not passed the wake gate.** Auto-sleep on a machine
 that cannot be woken does not save power, it removes a worker from the fleet permanently.
