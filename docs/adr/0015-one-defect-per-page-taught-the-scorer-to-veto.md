@@ -215,3 +215,54 @@ visible act.
 | Lower the abstention floor so the third page is scored | It would have scored **no findings** on it. See above. |
 | Regularise the heads toward zero on structured features | Fits a coefficient penalty to a data problem, and would equally suppress the features that work. |
 | Report it as a known limitation and move on | The limitation is that the flagship criterion is silent on most real pages. That is not a footnote. |
+
+## Proved 2026-08-22 — the mechanism reverses, and it is not free
+
+Decision 1 says the corpus must produce multi-defect pages. That is days of capture, so the cheap question
+came first: **would breaking the separation actually remove the vetoes?** Two models trained from the same
+data with the same trainer, differing only in composition.
+
+`compose-multi-defect-probe.py` splices each record with a clean donor from another family — and, for the
+three markers no conformant page carries (`vague_link_present`, `generic_heading_present`,
+`unnamed_graphic_present`, which *are* 2.4.4, 2.4.6 and 1.1.1 failures), with a failing donor under a union
+label. That gives 1,868 original + 1,868 composed records.
+
+**Neither scratch model has the realism tier** (its input is built from real-page captures that live on the
+lab), so their thresholds are not comparable to the shipped model's — RELEASE.md records that the realism
+tier is exactly what moved `4.1.2:unnamed-control` from 0.05 to 0.9. A "finding / silent" verdict from
+either would be meaningless. **So the measurement is threshold-free**: the three W3C BAD `before` pages
+announce the identical control, so a model without the veto must score them the same.
+
+```
+  model           news  template   tickets    SPREAD    news+named     DELTA
+  shipped       0.9240    0.9240    0.4525    0.4715        0.1688   -0.7553
+  control       0.9509    0.9509    0.5370    0.4139        0.3481   -0.6028
+  composed      0.9951    0.9951    0.9425    0.0526        0.9433   -0.0518
+```
+
+SPREAD is the same announcement scored across three pages; DELTA is what adding one properly named field
+to `before/news.html` does. Both should be ~0. The **control reproduces the defect**, which is what makes
+this an experiment rather than a demonstration — it is the data, not a training accident. The composed
+model reduces both by about 90%, and the veto audit falls from **279 pairs to 113**, with
+`1.1.1:missing-alt`, `2.4.4:regex` and `2.4.6:regex` reaching **zero**.
+
+**It cost 8 held-out false positives on 3.3.2** (precision 1.000 → 0.429; every other criterion held at
+TP 50, FP 0, FN 0 across both models). `3.3.2:placeholder-only`'s largest veto was `form_field_unnamed` at
+−5.29, so removing it makes that head fire on pages with unnamed fields. Two readings, and this probe
+**cannot** distinguish them:
+
+- the veto was carrying real discriminative work, or
+- spliced transcripts are not coherent pages, so the model generalises worse to real captures.
+
+The false positives are on **unmodified acceptance records**, so it is the trained model misjudging real
+evidence either way. That ambiguity is the argument for generating real multi-defect pages rather than
+shipping the splice, and it is why this script is named a probe and its output must never train a shipped
+model.
+
+**Both scratch models fail the acceptance gate** on `4.1.2: fewer than 3 acceptance positives`. That is a
+property of the local acceptance set, present in the control too, and unrelated to this change.
+
+**What this settles:** the vetoes are caused by corpus composition and are removable by changing it, at a
+cost that must be measured on real pages rather than assumed. Decision 1 stands and is now evidence-backed.
+The next measurement is the same table after a real multi-defect capture, and `scorer:shortcuts` plus the
+SPREAD/DELTA figures are how it will be read.
