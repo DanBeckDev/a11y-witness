@@ -25,6 +25,7 @@ human or agent, *working on* the repo rather than using it.
 
 | doc | what it settles |
 |---|---|
+| [**coverage.md**](./coverage.md) | **all 55 WCAG 2.2 A/AA criteria and which of four states each is in** — assessed, partial, reachable, or out of scope. Generated from the code and pinned against it, so it cannot drift |
 | [screenreader-coverage.md](./screenreader-coverage.md) | every user behaviour we drive, the field it lands in, and — the part that matters — **what we do not drive yet**. A behaviour missing from that table is a claim this project cannot make |
 | [METHODOLOGY.md](./METHODOLOGY.md) | how the numbers were produced, and why the eval figures must not be quoted as a headline |
 | [glossary.md](./glossary.md) | the vocabulary — capture, probe, sweep, signal, criterion, subtype |
