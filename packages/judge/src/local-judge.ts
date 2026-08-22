@@ -522,6 +522,9 @@ export async function judgeLocally(capture: CaptureEvidence & { task?: string })
   // commented, and inert.
   const { findings, suppressed } = findingsFromScores(record, capture);
   return {
+    // Carried whether or not it declined. See `Judgment.novelty`: reported only on abstention, it made
+    // "scored at the edge of the distribution" and "scored comfortably inside it" the same output.
+    ...(record.novelty ? { novelty: record.novelty } : {}),
     // Not inferred. This layer scores WCAG criteria and has no head for "could someone finish the task",
     // so claiming an answer would be inventing one. A blocking failure is the closest honest signal.
     taskCompletable: !findings.some((f) => f.severity === "blocker"),

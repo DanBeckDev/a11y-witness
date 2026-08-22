@@ -158,6 +158,28 @@ function verdictHeadline(verdict: Judgment): string {
   return `Findings at BLOCKER severity: ${blockers === 0 ? "none" : blockers}${others} ${confidence}`;
 }
 
+/**
+ * How far this page sat from the evidence the scorer was validated on.
+ *
+ * Printed whether or not the scorer declined, because those are the two answers a support region exists to
+ * separate and only one of them used to be visible. A page scored at the very edge of the distribution and
+ * one comfortably inside it produced identical reports.
+ *
+ * Silent for the LLM backends, which have no support region, and it says so when an artifact ships no
+ * reference — unknown must not read as safe.
+ */
+function noveltyLine(verdict: Judgment): string[] {
+  const novelty = verdict.novelty;
+  if (!novelty) return [];
+  if (novelty.inSupport === null || novelty.nearestTrainingCosine == null) {
+    return ["Support: NOT MEASURED — this scorer artifact ships no reference distribution, so nothing "
+      + "checked whether the page resembles what it was validated on."];
+  }
+  const verdictWord = novelty.inSupport ? "within" : "OUTSIDE";
+  return [`Support: ${verdictWord} the scorer's validated range `
+    + `(nearest training similarity ${novelty.nearestTrainingCosine}, floor ${novelty.floor ?? "?"}).`];
+}
+
 function findingsSection(verdict: Judgment, screenReader: string, announcements: number): string[] {
   const lines = [
     // Names what actually assessed the page rather than claiming "AI judge". The shipped default is
@@ -169,6 +191,7 @@ function findingsSection(verdict: Judgment, screenReader: string, announcements:
     // task verdict — that scorer never sees the task. Only the LLM backends actually answer it.
     verdictHeadline(verdict),
     verdict.summary,
+    ...noveltyLine(verdict),
     `${verdict.findings.length} finding(s):`,
     // Stated once, above the list, rather than repeated per finding. Without it "INDICATOR" is jargon; with
     // it, a reader knows exactly which lines they can quote as a failure and which need a human.
