@@ -439,6 +439,49 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
       + `while the title stayed ${JSON.stringify(titleAfter)}`);
 }
 
+/**
+ * 2.4.3 — Tab visits the controls in a different order from the one the page reads in.
+ *
+ * PARTIAL coverage, and the boundary is the honest one: whether an order "preserves meaning" in general is
+ * human judgement, the same wall 2.4.6 stops at. What is not a judgement call is a tab sequence that
+ * contradicts the reading sequence for the very same controls — the shape a positive `tabindex` produces,
+ * and the way this criterion is failed in practice.
+ *
+ * **Only a screen reader can make this comparison.** A static checker can flag `tabindex="1"` as a smell,
+ * but the DOM has no "reading order" to compare it against — the order a screen reader walks the page is
+ * the thing being contradicted, and that only exists once something has walked it.
+ *
+ * Compared on accessible NAME, because the two channels announce the same control differently: the sweep
+ * says "Postcode, edit" and focus says "Postcode, edit, focused, blank". And restricted to controls present
+ * in BOTH sequences — `focusOrder` also holds links and anything else focusable, while the form-field sweep
+ * holds controls Tab may never reach. Neither absence is a 2.4.3 failure, and counting it as one would fire
+ * on every page with a nav bar.
+ */
+function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
+  const reading = comparableNames(input.structure?.formFields);
+  const tabbed = withoutConsecutiveRepeats(comparableNames(input.interaction?.focusOrder));
+  if (reading.length < 2 || tabbed.length < 2) return; // absent or too short proves nothing
+  const shared = new Set(reading.filter((name) => tabbed.includes(name)));
+  if (shared.size < 2) return;
+  const readingOrder = reading.filter((name) => shared.has(name));
+  const tabOrder = tabbed.filter((name) => shared.has(name));
+  if (readingOrder.join("|") === tabOrder.join("|")) return;
+  add("2.4.3 Focus Order",
+    "Tab moves through the controls in a different order from the one the page reads in, so the sequence "
+      + "a keyboard user experiences does not match the sequence the content implies",
+    `reads as ${JSON.stringify(readingOrder)} but tabs as ${JSON.stringify(tabOrder)}`);
+}
+
+/** Announcements reduced to accessible names, so the sweep and the focus probe can be compared. */
+function comparableNames(entries: string[] | undefined): string[] {
+  return (entries ?? []).map((entry) => accessibleName(entry)).filter(Boolean);
+}
+
+/** Tab wrapping past the last control repeats the first; a repeat is not a reordering. */
+function withoutConsecutiveRepeats(names: string[]): string[] {
+  return names.filter((name, i) => i === 0 || name !== names[i - 1]);
+}
+
 /** 2.4.4 — a link whose announced name says nothing about where it goes. */
 function addVagueLinks(entries: string[], add: AddFinding): void {
   for (const line of entries) {
@@ -546,6 +589,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addAutoplayingAudio(input, add);
   addKeyboardTrap(input, add);
   addStaleRouteTitle(input, add);
+  addBrokenFocusOrder(input, add);
 
   return findings;
 }
