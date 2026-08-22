@@ -472,9 +472,24 @@ function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
     `reads as ${JSON.stringify(readingOrder)} but tabs as ${JSON.stringify(tabOrder)}`);
 }
 
-/** Announcements reduced to accessible names, so the sweep and the focus probe can be compared. */
+/**
+ * Announcements reduced to accessible names, so the sweep and the focus probe can be compared.
+ *
+ * The focus channel adds words the sweep never says — NVDA announces a focused empty field as
+ * "Postcode, edit, focused, blank" where the sweep says "Postcode, edit". `accessibleName` does not strip
+ * them, so without this the two channels share NO names, the shared set is empty, and the rule silently
+ * makes no claim on the very pages it exists for. Measured: it fired on neither variant.
+ *
+ * Stripped HERE rather than added to `STATE_RE`, which `accessibleName` applies for every rule. Widening a
+ * shared helper to fix one comparison would change what 2.4.4 and 4.1.2 consider a name, and "blank" is a
+ * plausible fragment of a real label in a way "collapsed" is not.
+ */
+const FOCUS_ONLY_STATES = /\b(focused|blank|visited|same page|has auto complete|autocomplete)\b/gi;
+
 function comparableNames(entries: string[] | undefined): string[] {
-  return (entries ?? []).map((entry) => accessibleName(entry)).filter(Boolean);
+  return (entries ?? [])
+    .map((entry) => accessibleName(String(entry).replace(FOCUS_ONLY_STATES, " ")))
+    .filter(Boolean);
 }
 
 /**
