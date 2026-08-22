@@ -15,6 +15,21 @@
  * drift from what ships in either direction: a criterion that starts being assessed and is still recorded
  * as unreachable fails the test, and so does the reverse.
  *
+ * **A SECOND boundary this file did not record until 2026-08-22, and it cuts across every entry below.**
+ *
+ * Where a subtype is decided by a deterministic RULE (`packages/lab/rule-ownership.json`), the answer is
+ * exact and the trained head is suppressed for it. Where the head decides alone, the answer inherits the
+ * head's blind spots — and those are measured: `npm run scorer:shortcuts` counts **225 features a head
+ * penalises for free**, because they are 0 on every one of its training positives and therefore cost
+ * nothing to learn. A page carrying such a feature can go silent on a criterion it genuinely fails.
+ *
+ * So `status: "assessed"` means "we have evidence and a decider", never "this answer is exact". Which it
+ * is depends on the owner, and `rule-ownership.json` is where that is declared. The nine subtypes the head
+ * decides alone are 1.1.1:generic-alt, 1.3.1:fake-heading, 1.3.1:unassociated-table, 2.4.4:regex,
+ * 2.4.6:regex, 3.3.1:validation-error-silent, 3.3.2:placeholder-only, 3.3.2:unnamed-form-field,
+ * 4.1.2:state-change-silent and 4.1.3:form-activation-silent. See
+ * `docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md`.
+ *
  * **`needs` is a claim about EVIDENCE, not about difficulty.** It says which source could decide the
  * criterion, and the honest ordering is that `screen-reader` items are reachable with a probe,
  * `accessibility-tree` items with the CDP socket the capture already opens, `dom` items only by crossing
@@ -115,7 +130,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "4.1.2": {
     status: "partial",
     needs: ["dom"],
-    channels: ["controls", "formFields", "stateChanges", "structureCensus"], note: "Two of three failure modes are covered: a control announced with a role and no name (rules, exact on 147 records) and a state change that is never announced (head, calibrated). The third — a role-less `<div onclick>` styled as a button — is NOT, and cannot be from screen-reader evidence: the screen reader cannot perceive it, which IS the failure, so a page with a fake button and a page with no button are identical to NVDA. Declared `unavailable` in rule-ownership.json. Note `hasEvidenceFor('4.1.2')` also suppresses any finding on such a page, since it requires controls to exist.",
+    channels: ["controls", "formFields", "stateChanges", "structureCensus"], note: "Two of three failure modes are covered: a control announced with a role and no name (rules, exact on 147 records) and a state change that is never announced (head, calibrated). The third — a role-less `<div onclick>` styled as a button — is NOT, and cannot be from screen-reader evidence: the screen reader cannot perceive it, which IS the failure, so a page with a fake button and a page with no button are identical to NVDA. Declared `unavailable` in rule-ownership.json. Note `hasEvidenceFor('4.1.2')` also suppresses any finding on such a page, since it requires controls to exist. THE TWO COVERED MODES ARE NOT EQUALLY RELIABLE, measured 2026-08-22: the unnamed-control mode is rule-decided and therefore exact, while `state-change-silent` is head-decided and carries 18 free vetoes — a page presenting one of those features can go silent on a state change it genuinely fails to announce. The head's own score on an unnamed control is worse still (the identical announcement scores 0.9240 on a page without a table and 0.4525 on one with), but that mode never reaches a report because the rule owns it. See ADR 0015.",
   },
 
   // ---- reachable from evidence we already have, or could capture -------------------------------

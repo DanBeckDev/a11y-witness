@@ -88,3 +88,49 @@ while every capture still appears to succeed, so the one to watch.
 **wedge** — a worker whose `/health` answers but whose every capture returns 429
 because a previous capture hung and never released `busy`. Indistinguishable from a
 dead machine from outside.
+
+## Corpus and scoring
+
+**case / pair** — one accessibility defect, as two pages that differ *only* by it: a
+conformant `good` and a mutated `bad`. The label comes from the contrast, not from
+anyone's opinion, which is why the pair must not differ in any other way.
+
+**badSignal** — the machine-checkable statement of what a case demonstrates. It must
+fire on the bad capture and stay silent on the good one; `check-signals` scores every
+case on that and reports **BLIND** (it fires on neither) or **CONTAMINATED** (it fires
+on both).
+
+**furniture** — realistic page structure — links, headings, a labelled field, a data
+table, a disclosure — injected **identically into both variants** of every case. It
+exists to stop a feature being constant across a subtype's examples, and being
+identical in both halves is what keeps the pair a controlled comparison.
+
+**veto (free veto)** — a feature a trained head penalises at no cost, because it is 0
+on every one of that head's training positives. Nothing in the data punishes the
+weight, and no held-out split can either, since the split shares the corpus's
+structure. `npm run scorer:shortcuts` counts them; there are 225.
+
+**starvation** — the corpus-side view of the same thing, asked *before* a capture run:
+which features will be constant across a subtype's positives, and therefore free to
+veto? `npm run corpus:starvation` reads the case definitions and answers without
+capturing anything.
+
+**subtype** — the unit a head and a rule actually decide, finer than a WCAG criterion.
+4.1.2 has three: `unnamed-control`, `state-change-silent`, `missing-role`. Ownership is
+declared per subtype in `packages/lab/rule-ownership.json`, not per criterion — a
+criterion can be part rule-decided and part head-decided, and 4.1.2 is.
+
+**suppression** — where a rule owns a subtype, the trained head is dropped for it and
+the rule's answer stands. This is why a head's blind spot is not automatically a
+product blind spot, and checking which layer answers is the difference between a
+component defect and a user-facing one.
+
+**abstention / in-distribution floor** — the scorer declines on a capture whose nearest
+training neighbour is further than the floor (currently 0.70 cosine), and reports those
+criteria as **unchecked, not clean**. Chosen on a held-out calibration set, recorded
+beside the value the training data would have implied.
+
+**witnessable** — of a real page in the calibration corpus: its published failure would
+fire a criterion the scorer has a head for, through a probe that actually runs on pages
+we do not own. A page that fails only in ways this evidence cannot express adds a row to
+the denominator and no signal.
