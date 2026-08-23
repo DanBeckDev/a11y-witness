@@ -47,7 +47,22 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
     # A named field is direct counter-evidence for the unnamed-field subtype;
     # strengthen that explicit screen-reader relation so prose around the
     # field cannot turn a conforming field into a violation prediction.
-    "form_field_named": 2.0,
+    #
+    # 2.0 -> 6.0 on 2026-08-23, because 2.0 demonstrably was not enough. Measured on the
+    # `3.3.2:unnamed-form-field` head: the 384 encoder dimensions carry |w| summing to 248.0
+    # against 5.98 across all 29 document features, so the explicit relation is a minority
+    # vote by two orders of magnitude. `form_field_named` landed at -0.232 (effective -0.463
+    # at x2.0) while `form_field_unnamed` reached +0.653 (effective +1.960 at x3.0) — the
+    # counter-evidence was a quarter the strength of the evidence it exists to answer.
+    #
+    # The cost was four CONFORMANT form pages scored as 3.3.2 violations. Their features were
+    # correct (`form_field_named=1.0`, `form_field_unnamed=0.0`); the embedding outvoted them,
+    # because a conforming page legitimately announces the field bare once ("edit, Example
+    # value") before announcing it named, and document-mean pooling averages the two.
+    #
+    # 6.0 puts it above `form_field_unnamed`'s 3.0, which is the ordering the comment above
+    # always implied: counter-evidence for a subtype should be at least as loud as the evidence.
+    "form_field_named": 6.0,
 }
 
 # v8, 2026-08-23: `link_name` and `graphic_name` stopped anchoring the role at the start of the phrase.
