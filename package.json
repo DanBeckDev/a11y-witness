@@ -55,6 +55,7 @@
     "fleet:wake": "node packages/worker-fleet/src/fleet-wake.mjs",
     "lab:job": "ANSIBLE_CONFIG=packages/worker-fleet/ansible/ansible.cfg ansible-playbook -i packages/worker-fleet/ansible/inventory.yml packages/worker-fleet/ansible/lab-job.yml",
     "lab:status": "ANSIBLE_CONFIG=packages/worker-fleet/ansible/ansible.cfg ansible-playbook -i packages/worker-fleet/ansible/inventory.yml packages/worker-fleet/ansible/lab-status.yml",
+    "fleet:tailscale": "ANSIBLE_CONFIG=packages/worker-fleet/ansible/ansible.cfg ansible-playbook -i packages/worker-fleet/ansible/inventory.yml packages/worker-fleet/ansible/tailscale.yml",
     "lab:fetch": "ANSIBLE_CONFIG=packages/worker-fleet/ansible/ansible.cfg ansible-playbook -i packages/worker-fleet/ansible/inventory.yml packages/worker-fleet/ansible/lab-fetch.yml",
     "lab:stop": "ANSIBLE_CONFIG=packages/worker-fleet/ansible/ansible.cfg ansible-playbook -i packages/worker-fleet/ansible/inventory.yml packages/worker-fleet/ansible/lab-stop.yml",
     "corpus:snapshot": "node packages/lab/scripts/corpus-snapshot.mjs",
