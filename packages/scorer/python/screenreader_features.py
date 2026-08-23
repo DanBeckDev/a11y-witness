@@ -74,7 +74,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # every weight file trained under v7 was fitted to a different function of the same captures. Bumping is
 # what stops a v7 model being scored with v8 features and the difference being read as model behaviour.
 # Measured before bumping: 73 corpus records change, all of them labelled `violation`, none clean.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v9"
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v10"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -276,10 +276,25 @@ def heading_name(value: str) -> str:
 # Third instance today of one shape: a heuristic written without accounting for how NVDA PREFIXES ROLES.
 # `link_name` anchored the role at the start and missed 98% of link announcements; `graphic_name` shared
 # it; this one forgot roles exist at all. When a rule reasons about announcement text, enumerate the roles.
+# ANY NUMBER of context prefixes, not one. NVDA stacks them: "bullet, same page, link, Overview" is a list
+# bullet, then an in-page anchor, then the link — three before the role. A single optional prefix matched
+# one, so 12 of the 32 remaining false positives on the corpus were that exact shape, and 3 more were
+# "complementary landmark, Note" where the role's own qualifier is the prefix.
+#
+# This is the SAME fault as `link_name`'s original `^link,` anchor, one layer along: both assumed NVDA puts
+# the role near the front. Measured: false positives 32 -> 14 on 2,349 records, with true positives and
+# false negatives unchanged at 82 and 13 — precision 0.719 -> 0.854 at no recall cost.
+#
+# `{0,4}` and `[^,]{1,48}` bound the repetition so it cannot backtrack pathologically on a long line.
 ANNOUNCED_ROLE = re.compile(
-    r"^(?:out of\s+)?(?:\w[\w\s'-]*,\s*)?(button|link|graphic|edit(?:\s+text)?|checkbox|radio|"
-    r"combo\s*box|list\s*box|slider|spin\s*button|table|list|banner|navigation|main|region|landmark|"
-    r"form|article|separator|menu|tab|dialog|progress\s*bar|status)\b",
+    r"^(?:out of\s+)?(?:[^,]{1,48},\s*){0,4}"
+    r"(?:button|link|graphic|edit(?:\s+text)?|checkbox|radio|combo\s*box|list\s*box|slider|spin\s*button|"
+    r"table|list|banner|navigation|main|region|landmark|form|article|separator|menu|tab|dialog|"
+    r"progress\s*bar|status|bullet|blank|row|column|cell|heading|clickable|"
+    # NVDA names a landmark by its TYPE then the word: "complementary landmark, Note". Enumerated rather
+    # than allowing any word before a role, because `(\w+\s+)*role` would also swallow ordinary prose that
+    # happens to end in one — "the archive is a table" — and over-exclusion is how a feature goes blind.
+    r"(?:complementary|banner|content\s*info|navigation|main|search|form|region)\s+landmark)\b",
     re.IGNORECASE,
 )
 

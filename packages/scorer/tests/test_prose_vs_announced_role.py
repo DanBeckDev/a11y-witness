@@ -38,6 +38,12 @@ ANNOUNCED = [
     "combo box, collapsed, QUICKMENU ---- greater",
     "list, with 6 items, bullet, same page, link, Opening times",
     "out of form, heading, level 1, Coastal clinic 079 form",
+    # NVDA STACKS prefixes. These were 15 of the 32 false positives left after the first fix, because the
+    # pattern allowed exactly one prefix and these carry two or three.
+    "bullet, same page, link, Overview",
+    "complementary landmark, Note",
+    "column 3, 3",
+    "blank",
 ]
 
 # Genuine prose lines, which a section-title heuristic SHOULD be able to match.
@@ -76,4 +82,4 @@ def test_the_role_vocabulary_covers_what_the_featurizer_itself_knows_about():
 def test_the_schema_version_moved_with_the_meaning():
     # The same capture now yields a different `plain_heading_candidate_present`, so weights fitted under v8
     # were fitted to a different function of the same evidence.
-    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v9"
+    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v10"
