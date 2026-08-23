@@ -42,3 +42,14 @@ scripts/tsconfig-fixtures/*/tsconfig.tsbuildinfo
 # Package build output (npm run build)
 packages/*/dist/
 packages/*/tsconfig.tsbuildinfo
+
+# OUR tailnet, not the project's. This repo is generic; the Tailscale policy below is one deployment's
+# access rules and one home network's addresses, and neither belongs to anyone else using this tool.
+# `tailscale.yml` is kept because it derives everything from `inventory.yml` and so works for any fleet —
+# the POLICY is what is specific, not the mechanism.
+packages/worker-fleet/tailscale-acl.hujson
+
+# Hosts that are ours and are not capture infrastructure. `tailscale.yml` merges this with the inventory
+# when it exists, so a personal machine can be reachable over the tailnet without being published in a
+# public repo as though it were part of the fleet.
+packages/worker-fleet/ansible/*.local.yml
