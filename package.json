@@ -30,6 +30,7 @@
     "training:capture:fresh": "npm run training:generate && npm run training:capture",
     "training:status": "node packages/lab/src/training/capture-status.mjs",
     "training:wait": "node packages/lab/src/training/wait-for-capture.mjs",
+    "scorer:explain": "node packages/lab/scripts/explain-scorer.mjs",
     "training:check-signals": "node packages/lab/src/training/check-signals.mjs",
     "training:check-signals:complete": "node packages/lab/src/training/check-signals.mjs --require-complete",
     "training:build-realism": "node packages/lab/scripts/build-realism-tier.mjs --out=runs/screenreader-dataset/with-realism.jsonl",

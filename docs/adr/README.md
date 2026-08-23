@@ -28,6 +28,7 @@ you which arguments have already been tried.
 | [0014](./0014-idle-workers-power-themselves-down.md) | Idle workers power themselves down, and only they may decide it | **proposed, not implemented** — the wake gate passed; the power draw is unmeasured |
 | [0015](./0015-one-defect-per-page-taught-the-scorer-to-veto.md) | One defect per page taught every head to veto on other criteria's evidence | accepted 2026-08-22 |
 | [0016](./0016-publishing-the-screen-reader-evidence.md) | Publish the screen-reader evidence, not the pages, and not the synthetic corpus | accepted 2026-08-23 |
+| [0017](./0017-the-rule-reports-the-criterion-it-already-decides.md) | A rule that decides evidence must report every criterion that evidence fails | accepted 2026-08-23 |
 
 ## If you read only one
 

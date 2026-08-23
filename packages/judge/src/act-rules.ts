@@ -54,7 +54,19 @@ export const ACT_RULES: ActRuleDescription[] = [
     description: "A user-interface component the screen reader announces as a bare role — \"combo box, "
       + "collapsed\" — has no accessible name, so a user cannot tell what it is for.",
     ruleType: "atomic",
-    accessibilityRequirements: [{ criterion: "4.1.2", mapping: "conformance" }],
+    accessibilityRequirements: [
+      { criterion: "4.1.2", mapping: "conformance" },
+      // 3.3.2 as well, but only for an INPUT. W3C describes this failure as a screen reader announcing
+      // "edit text" with no indication of the field's purpose, which fails 1.3.1, 3.3.2 and 4.1.2 together:
+      // the user is asked to enter something and has not been told what. An unnamed BUTTON is 4.1.2 alone —
+      // there is no label to be missing, only a name.
+      //
+      // The claim is bounded on purpose. A control can pass 4.1.2 with an `aria-label` and still fail 3.3.2
+      // when no label is visible to sighted users, and a screen-reader transcript cannot see that case: the
+      // name is announced either way. So this rule witnesses "no name at all" and says nothing about the
+      // partial case, which is why `criterion-coverage.ts` records 3.3.2 as PARTIAL rather than assessed.
+      { criterion: "3.3.2", mapping: "conformance" },
+    ],
     inputAspects: ["structure.formFields", "interaction.controls", "transcript"],
     applicability: "Every control announced in the structural form-field sweep, and every transcript line "
       + "carrying a control role together with the empty-name marker (U+FFFC).",

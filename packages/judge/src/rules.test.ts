@@ -6,7 +6,10 @@ const criteria = (findings: { wcag: string }[]): string[] =>
   findings.map((f) => f.wcag.match(/(\d+\.\d+\.\d+)/)?.[1] ?? f.wcag);
 
 test("flags a control announced with a role but no name (￼ marker)", () => {
-  assert.deepEqual(criteria(ruleFindings({ transcript: ["edit, ￼"] })), ["4.1.2"]);
+  // An unnamed INPUT is both: 4.1.2 has no accessible name, and 3.3.2 has no label — the user is asked
+  // to enter something and not told what. An unnamed BUTTON stays 4.1.2 alone, because there is no label
+  // to be missing, only a name.
+  assert.deepEqual(criteria(ruleFindings({ transcript: ["edit, ￼"] })), ["4.1.2", "3.3.2"]);
 });
 
 test("does not flag a control that has an accessible name", () => {
@@ -52,7 +55,7 @@ test("does not flag a named control in the sweep", () => {
 test("reads unlabelled fields from structure.formFields too", () => {
   assert.deepEqual(
     criteria(ruleFindings({ transcript: [], structure: { formFields: ["￼, radio button, not checked"] } })),
-    ["4.1.2"],
+    ["4.1.2", "3.3.2"],
   );
 });
 
@@ -166,7 +169,7 @@ test("the UW inaccessible page produces the findings a rule scanner cannot", () 
   };
   const found = criteria(ruleFindings(uwBefore)).sort();
   // 1.1.1 the logo's alt text is its own filename; 2.4.4 "click here"; 1.3.1 no headings; 4.1.2 bare roles.
-  assert.deepEqual(found, ["1.1.1", "1.3.1", "2.4.4", "4.1.2"]);
+  assert.deepEqual(found, ["1.1.1", "1.3.1", "2.4.4", "3.3.2", "4.1.2"]);
 });
 
 /**
