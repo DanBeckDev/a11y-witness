@@ -50,7 +50,16 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
     "form_field_named": 2.0,
 }
 
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v7"
+# v8, 2026-08-23: `link_name` and `graphic_name` stopped anchoring the role at the start of the phrase.
+# NVDA prefixes an announcement with the context the cursor entered or left, so `^link,` matched 230 of
+# 11,275 link announcements in the corpus — the feature was blind to 98% of them, and `vague_link_present`
+# read 0.0 on every page whose vague link was an in-page anchor.
+#
+# This is a MEANING change, not a refactor: the same evidence now produces different feature values, so
+# every weight file trained under v7 was fitted to a different function of the same captures. Bumping is
+# what stops a v7 model being scored with v8 features and the difference being read as model behaviour.
+# Measured before bumping: 73 corpus records change, all of them labelled `violation`, none clean.
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v8"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -256,13 +265,40 @@ def plain_heading_candidate(value: str, following_value: str) -> bool:
     words = re.findall(r"[A-Za-z0-9][A-Za-z0-9'’-]*", candidate)
     return 1 <= len(words) <= 8
 
-def link_name(value: str) -> str:
-    match = re.match(r"link\s*,\s*(.*)$", value.strip(), re.IGNORECASE)
+# NVDA prefixes an announcement with the context the cursor just entered or left, so the ROLE is very
+# rarely the first thing in the string:
+#
+#   "link, Read the planting guide"                                    <- the shape these used to match
+#   "same page, link, Details"                                         <- an in-page anchor
+#   "out of table, same page, link, Details"                           <- leaving a table, into an anchor
+#   "list, with 6 items, bullet, same page, link, Opening times ..."   <- inside a list
+#
+# Anchoring at `^` therefore saw almost nothing. Measured across the corpus: 11,045 link announcements
+# carry a prefix and 230 do not, so `link_name` was blind to **98%** of them — and `vague_link_present`,
+# the highest-weighted feature on the 2.4.4 head (+1.247, ×2.0), read 0.0 on every page whose vague link
+# was an in-page anchor. The head then decided from the frozen embedding alone: 0.0131 on a page that HAS
+# a vague link, 0.9856 on the same page without one.
+#
+# This exact NVDA behaviour was found and fixed once already, in `dedupeKey`, where `CONTAINER_PREFIX`
+# strips the leading container before keying a sweep. The remedy went to the sweep and never here — the
+# shape CLAUDE.md calls "a fix applied at ONE call site when the behaviour reaches several".
+#
+# `\b` plus an explicit comma is what keeps this from matching a NAME containing the word: "out of links,
+# same page, link, Details" needs `link` followed by a comma, so "links," cannot match.
+ROLE_NAME = r"\b{role}\s*,\s*(.*)$"
+
+
+def role_name(role: str, value: str) -> str:
+    """The accessible name NVDA announced for `role`, wherever the role appears in the phrase."""
+    match = re.search(ROLE_NAME.format(role=role), value.strip(), re.IGNORECASE)
     return match.group(1).strip().lower() if match else ""
 
+
+def link_name(value: str) -> str:
+    return role_name("link", value)
+
 def graphic_name(value: str) -> str:
-    match = re.match(r"graphic\s*,\s*(.*)$", value.strip(), re.IGNORECASE)
-    return match.group(1).strip().lower() if match else ""
+    return role_name("graphic", value)
 
 def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     """Extract only relations and presence facts observable in screen-reader output."""
