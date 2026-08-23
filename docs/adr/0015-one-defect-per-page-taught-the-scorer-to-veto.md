@@ -456,3 +456,49 @@ and a way to run acceptance on a candidate at all. That last one was a **circula
 marked a fresh candidate ineligible because acceptance had not run, and the evaluator refused any
 ineligible model. Nothing could ever pass. It went unnoticed because the shipped model was made by hand,
 outside the pipeline — which had, until this week, never produced a releasable model end to end.
+
+## Confirmed on held-out data, 2026-08-23 — the veto is measurable, and the shipped model has it
+
+This ADR argued the mechanism from the WEIGHTS: 225 features scored 0 on every training positive of a
+subtype, so a head could give them a large negative weight for free, and no held-out split could punish it
+because the split shared the corpus's structure. That argument was correct and it was still an inference.
+
+It now has a direct measurement, and it arrived by accident. The shipped model was scored against a fresh
+held-out acceptance set — the first one containing MULTI-DEFECT pages, built the same morning — and failed:
+
+| case | primary defect (detected) | second defect on the same page | result |
+|---|---|---|---|
+| `field-company+also-vague-link` | 3.3.2 unnamed form field | 2.4.4 vague link | **missed** |
+| `generic-lantern+also-vague-link` | 1.1.1 generic alt | 2.4.4 vague link | **missed** |
+| `table-bus+also-vague-link` | 1.3.1 unassociated table | 2.4.4 vague link | **missed** |
+| `disclosure-access+also-generic-heading` | 4.1.2 silent state change | 2.4.6 generic heading | **missed** |
+| `fake-hours+also-bare-edit` | 1.3.1 fake heading | 3.3.2 bare edit | **both missed** |
+
+**Every failing case is a multi-defect page, and four of five are misses of the SECOND defect only.** The
+model finds the primary failure on each page and does not report the other one. 2.4.4 is missed three times,
+every time the vague link is not what the page is "about".
+
+The evidence is not in question, which was the first thing checked: NVDA announced
+`"Details, same page, link"` and `"Details, heading, level 2"`, both present in the exported records. A link
+called *Details* is a 2.4.4 failure and a heading called *Details* is a 2.4.6 failure. The page has two
+defects, the transcript carries both, and one head goes quiet.
+
+That is the veto, doing exactly what this ADR said it would: **a head trained only on pages whose sole
+defect is its own learns that another criterion's evidence means "not mine".** The remedy this ADR proposed
+— pages that fail twice — is what exposed it.
+
+Three consequences worth stating plainly.
+
+- **The shipped weights have this defect.** They were trained before the multi-defect corpus existed, so
+  this is not a regression; it is the first measurement capable of seeing it. A page with one problem is
+  assessed well. A real page with several is assessed once.
+- **It was invisible for a second, independent reason**, and that reason is the more embarrassing one:
+  `alsoFails` was dropped by the acceptance manifest writer, so a multi-defect page was LABELLED with its
+  primary criterion alone. With that label the model looked *better* than it is — its correct detection of
+  the accompanying 2.4.6 was scored a false POSITIVE. Fixing the label turned one phantom false positive
+  into eight real false negatives. A corpus that cannot express a defect cannot measure it, and a label that
+  omits one measures the label.
+- **`npm run scorer:shortcuts` did not catch this**, and could not: it audits the weights against the
+  training corpus, and the training corpus is where the blind spot comes from. This ADR's own headline —
+  *a metric computed on data that shares the flaw cannot see the flaw* — applies to the audit built for it.
+  The held-out multi-defect set is the first thing that could, and it works.
