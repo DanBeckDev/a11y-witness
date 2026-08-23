@@ -106,8 +106,8 @@ test("the README's quickstart workflow is one a stranger can actually paste", ()
   assert.ok(given.size > 0, "no inputs parsed out of the snippet — the shape changed and this guard went blind");
 
   const action = readFileSync(fileURLToPath(new URL("../../../action.yml", import.meta.url)), "utf8");
-  const declared = new Set([...action.matchAll(/^  ([a-z-]+):\n\s+description:/gm)].map((m) => m[1]));
-  const required = [...action.matchAll(/^  ([a-z-]+):\n(?:[\s\S]*?)\n    required: true/gm)].map((m) => m[1]);
+  const declared = new Set([...action.matchAll(/^ {2}([a-z-]+):\n\s+description:/gm)].map((m) => m[1]));
+  const required = [...action.matchAll(/^ {2}([a-z-]+):\n(?:[\s\S]*?)\n {4}required: true/gm)].map((m) => m[1]);
   assert.ok(declared.size > 0 && required.length > 0, "action.yml no longer parses — this guard went blind");
 
   for (const name of required) {
