@@ -62,7 +62,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
     #
     # 6.0 puts it above `form_field_unnamed`'s 3.0, which is the ordering the comment above
     # always implied: counter-evidence for a subtype should be at least as loud as the evidence.
-    "form_field_named": 6.0,
+    "form_field_named": 2.0,
 }
 
 # v8, 2026-08-23: `link_name` and `graphic_name` stopped anchoring the role at the start of the phrase.
