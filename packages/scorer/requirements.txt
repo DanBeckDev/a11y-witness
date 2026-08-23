@@ -12,3 +12,10 @@ onnxruntime>=1.20,<2
 safetensors>=0.5,<1
 torch>=2.7,<3
 transformers>=4.50,<6
+
+# Test runner. Added 2026-08-23, and the reason is worth recording: `packages/nvda-speech/tests/
+# test_symbols.py` was written in pytest style, pytest was never installed, and `npm test` globbed
+# only `packages/*/src/**/*.test.ts` — so that file had NEVER RUN. A test that does not run is a
+# comment with a docstring, and this one guards symbol expansion against announcements a real
+# screen reader produced.
+pytest
