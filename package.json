@@ -29,6 +29,8 @@
     "training:status": "node packages/lab/src/training/capture-status.mjs",
     "training:wait": "node packages/lab/src/training/wait-for-capture.mjs",
     "training:check-signals": "node packages/lab/src/training/check-signals.mjs",
+    "training:build-realism": "node packages/lab/scripts/build-realism-tier.mjs --out=runs/screenreader-dataset/with-realism.jsonl",
+    "lab:retrain": "node packages/lab/scripts/retrain-pipeline.mjs",
     "training:export": "node packages/lab/src/training/export-screenreader-dataset.mjs",
     "training:analyze-errors": ".venv/bin/python packages/lab/scripts/report-screenreader-errors.py",
     "training:evaluate-acceptance": ".venv/bin/python packages/lab/scripts/evaluate-screenreader-acceptance.py --data runs/screenreader-acceptance/repeat-1.jsonl --data runs/screenreader-acceptance/repeat-2.jsonl",
