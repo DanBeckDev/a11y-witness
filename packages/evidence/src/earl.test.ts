@@ -28,12 +28,27 @@ const INPUT = {
 const graph = (report: object): Record<string, unknown>[] =>
   (report as { "@graph": Record<string, unknown>[] })["@graph"];
 
+/**
+ * The exported assertions, and there must be one per input outcome.
+ *
+ * The count is asserted HERE rather than in one test, because three tests below assert only from inside a
+ * `for` over this list — so an `earlReport` that emitted nothing would satisfy all three in silence, and
+ * their protection would consist of a different test happening to still exist. Deriving both from one
+ * accessor is this repo's standing fix for a fact stated twice.
+ */
+function assertions(): Record<string, unknown>[] {
+  const found = graph(earlReport(INPUT)).filter((n) => n["@type"] === "earl:Assertion");
+  assert.equal(found.length, INPUT.outcomes.length,
+    `EARL exported ${found.length} assertions for ${INPUT.outcomes.length} outcomes — an outcome was `
+    + "dropped at the interop boundary, which is the one failure this file exists to catch");
+  return found;
+}
+
 test("all five outcomes survive the export, not just failures", () => {
   // The reason this file could not be written before the outcomes model: EARL's vocabulary IS ACT's, so a
   // tool reporting only failures has nothing to say for four of the five.
-  const assertions = graph(earlReport(INPUT)).filter((n) => n["@type"] === "earl:Assertion");
-  assert.equal(assertions.length, 5);
-  const outcomes = assertions.map((a) =>
+  const assertions_ = assertions();
+  const outcomes = assertions_.map((a) =>
     ((a["earl:result"] as Record<string, { "@id": string }>)["earl:outcome"])["@id"]);
   assert.deepEqual(outcomes, [
     "earl:failed", "earl:cantTell", "earl:untested", "earl:inapplicable", "earl:passed",
@@ -43,7 +58,7 @@ test("all five outcomes survive the export, not just failures", () => {
 test("every assertion cites a resolvable WCAG criterion URI", () => {
   // An assertion whose `earl:test` is a bare string is not interoperable — the point of the format is that
   // another tool can resolve what was tested.
-  for (const node of graph(earlReport(INPUT)).filter((n) => n["@type"] === "earl:Assertion")) {
+  for (const node of assertions()) {
     const test = node["earl:test"] as { "@id": string };
     assert.match(test["@id"], /^https:\/\/www\.w3\.org\/TR\/WCAG22\/#\d+\.\d+\.\d+$/);
   }
@@ -52,7 +67,7 @@ test("every assertion cites a resolvable WCAG criterion URI", () => {
 test("the reason travels WITH the outcome", () => {
   // A bare `cantTell` is a token. Separating it from what could not be determined recreates exactly the
   // ambiguity this project spent the day removing.
-  for (const node of graph(earlReport(INPUT)).filter((n) => n["@type"] === "earl:Assertion")) {
+  for (const node of assertions()) {
     const result = node["earl:result"] as Record<string, string>;
     assert.ok(String(result["dct:description"]).length > 10);
   }
@@ -61,7 +76,7 @@ test("the reason travels WITH the outcome", () => {
 test("the assertion declares itself AUTOMATIC", () => {
   // True, and worth stating: a consumer should weigh a machine `failed` differently from a human
   // evaluator's, and EARL has the vocabulary to say which this is.
-  for (const node of graph(earlReport(INPUT)).filter((n) => n["@type"] === "earl:Assertion")) {
+  for (const node of assertions()) {
     assert.deepEqual(node["earl:mode"], { "@id": "earl:automatic" });
   }
 });
