@@ -1,0 +1,5097 @@
+{
+  "schema": "a11y-witness/screenreader-scorer-acceptance",
+  "data": [
+    {
+      "path": "runs/screenreader-acceptance/repeat-1.jsonl",
+      "records": 80
+    },
+    {
+      "path": "runs/screenreader-acceptance/repeat-2.jsonl",
+      "records": 80
+    }
+  ],
+  "artifact": {
+    "screenReader": "NVDA",
+    "encoderSha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db",
+    "modelSha256": "31c5d0ec2220af199dd2119285e4c050b9cd29b8aa2acb5ae8f4a256328a9f92",
+    "reportSha256": "9ff1e70320603f9cfbb291e47598bba028aa271093ab0d0937ad9b21be97f0bc",
+    "trainingDatasetSha256": "f29d40abfcb7457d62f6435744a53e1d71c4b62c3c828b14d98819135522d4cf",
+    "modelPath": "packages/scorer/models/screenreader-scorer/model.safetensors",
+    "reportPath": "packages/scorer/models/screenreader-scorer/training-report.json"
+  },
+  "criteria": {
+    "1.1.1": {
+      "decisionOwner": "mixed",
+      "modelEvaluated": true,
+      "subtypeThresholds": {
+        "1.1.1:generic-alt": 0.3
+      },
+      "ruleDecidedSubtypes": [
+        "1.1.1:filename-alt",
+        "1.1.1:missing-alt"
+      ],
+      "excluded": 4,
+      "records": 156,
+      "positive": 6,
+      "clean": 150,
+      "truePositive": 6,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "1.3.1": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "modelEvaluated": true,
+      "subtypeThresholds": {
+        "1.3.1:fake-heading": 0.25,
+        "1.3.1:unassociated-table": 0.1
+      },
+      "ruleDecidedSubtypes": [],
+      "excluded": 0,
+      "records": 160,
+      "positive": 10,
+      "clean": 150,
+      "truePositive": 8,
+      "falsePositive": 0,
+      "falseNegative": 2,
+      "precision": 1.0,
+      "recall": 0.8
+    },
+    "2.4.4": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "modelEvaluated": true,
+      "subtypeThresholds": {
+        "2.4.4:regex": 0.15
+      },
+      "ruleDecidedSubtypes": [],
+      "excluded": 0,
+      "records": 160,
+      "positive": 10,
+      "clean": 150,
+      "truePositive": 10,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "2.4.6": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "modelEvaluated": true,
+      "subtypeThresholds": {
+        "2.4.6:regex": 0.2
+      },
+      "ruleDecidedSubtypes": [],
+      "excluded": 0,
+      "records": 160,
+      "positive": 8,
+      "clean": 152,
+      "truePositive": 8,
+      "falsePositive": 2,
+      "falseNegative": 0,
+      "precision": 0.8,
+      "recall": 1.0
+    },
+    "3.3.1": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "modelEvaluated": true,
+      "subtypeThresholds": {
+        "3.3.1:validation-error-silent": 0.55
+      },
+      "ruleDecidedSubtypes": [],
+      "excluded": 0,
+      "records": 160,
+      "positive": 8,
+      "clean": 152,
+      "truePositive": 8,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "3.3.2": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "modelEvaluated": true,
+      "subtypeThresholds": {
+        "3.3.2:placeholder-only": 0.45,
+        "3.3.2:unnamed-form-field": 0.8
+      },
+      "ruleDecidedSubtypes": [],
+      "excluded": 0,
+      "records": 160,
+      "positive": 12,
+      "clean": 148,
+      "truePositive": 12,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "4.1.2": {
+      "decisionOwner": "mixed",
+      "modelEvaluated": true,
+      "subtypeThresholds": {
+        "4.1.2:state-change-silent": 0.9
+      },
+      "ruleDecidedSubtypes": [
+        "4.1.2:unnamed-control"
+      ],
+      "excluded": 4,
+      "records": 156,
+      "positive": 10,
+      "clean": 146,
+      "truePositive": 10,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "4.1.3": {
+      "decisionOwner": "learned-screenreader-scorer",
+      "modelEvaluated": true,
+      "subtypeThresholds": {
+        "4.1.3:form-activation-silent": 0.55
+      },
+      "ruleDecidedSubtypes": [],
+      "excluded": 0,
+      "records": 160,
+      "positive": 8,
+      "clean": 152,
+      "truePositive": 8,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    }
+  },
+  "stability": {
+    "1.1.1": {
+      "measured": true,
+      "passed": true,
+      "unstableSubtypes": [],
+      "subtypes": {
+        "1.1.1:generic-alt": {
+          "groups": 78,
+          "repeatedGroups": 78,
+          "unstableGroups": 0,
+          "measured": true,
+          "passed": true,
+          "details": {
+            "acceptance-generic-lantern/good": {
+              "captures": 2,
+              "scoreMinimum": 0.02665768191218376,
+              "scoreMaximum": 0.02665768191218376,
+              "unstable": false
+            },
+            "acceptance-generic-lantern/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9613754153251648,
+              "scoreMaximum": 0.9613754153251648,
+              "unstable": false
+            },
+            "acceptance-generic-rain/good": {
+              "captures": 2,
+              "scoreMinimum": 0.009741189889609814,
+              "scoreMaximum": 0.009741189889609814,
+              "unstable": false
+            },
+            "acceptance-generic-rain/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9080435633659363,
+              "scoreMaximum": 0.9080435633659363,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/good": {
+              "captures": 2,
+              "scoreMinimum": 0.020398003980517387,
+              "scoreMaximum": 0.020398003980517387,
+              "unstable": false
+            },
+            "acceptance-missing-banners/good": {
+              "captures": 2,
+              "scoreMinimum": 0.08192680031061172,
+              "scoreMaximum": 0.08192680031061172,
+              "unstable": false
+            },
+            "acceptance-fake-hours/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0029432717710733414,
+              "scoreMaximum": 0.0029432717710733414,
+              "unstable": false
+            },
+            "acceptance-fake-hours/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0004605304275173694,
+              "scoreMaximum": 0.0004605304275173694,
+              "unstable": false
+            },
+            "acceptance-fake-access/good": {
+              "captures": 2,
+              "scoreMinimum": 0.016424510627985,
+              "scoreMaximum": 0.016424510627985,
+              "unstable": false
+            },
+            "acceptance-fake-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0026666487101465464,
+              "scoreMaximum": 0.0026666487101465464,
+              "unstable": false
+            },
+            "acceptance-table-bus/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0003703789843712002,
+              "scoreMaximum": 0.0003703789843712002,
+              "unstable": false
+            },
+            "acceptance-table-bus/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00034649219014681876,
+              "scoreMaximum": 0.00034649219014681876,
+              "unstable": false
+            },
+            "acceptance-link-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.012711511924862862,
+              "scoreMaximum": 0.012711511924862862,
+              "unstable": false
+            },
+            "acceptance-link-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0003921537718269974,
+              "scoreMaximum": 0.0003921537718269974,
+              "unstable": false
+            },
+            "acceptance-link-appointments/good": {
+              "captures": 2,
+              "scoreMinimum": 0.007470384240150452,
+              "scoreMaximum": 0.007470384240150452,
+              "unstable": false
+            },
+            "acceptance-link-appointments/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00013440412294585258,
+              "scoreMaximum": 0.00013440412294585258,
+              "unstable": false
+            },
+            "acceptance-link-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.04903516545891762,
+              "scoreMaximum": 0.04903516545891762,
+              "unstable": false
+            },
+            "acceptance-link-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0010735644027590752,
+              "scoreMaximum": 0.0010735644027590752,
+              "unstable": false
+            },
+            "acceptance-link-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0009268257999792695,
+              "scoreMaximum": 0.0009268257999792695,
+              "unstable": false
+            },
+            "acceptance-link-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.9212666049716063e-05,
+              "scoreMaximum": 2.9212666049716063e-05,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.012402116321027279,
+              "scoreMaximum": 0.012402116321027279,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0007248461479321122,
+              "scoreMaximum": 0.0007248461479321122,
+              "unstable": false
+            },
+            "acceptance-heading-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.006092059891670942,
+              "scoreMaximum": 0.006092059891670942,
+              "unstable": false
+            },
+            "acceptance-heading-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0002158715797122568,
+              "scoreMaximum": 0.0002158715797122568,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.014766574837267399,
+              "scoreMaximum": 0.014766574837267399,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0009098874870687723,
+              "scoreMaximum": 0.0009098874870687723,
+              "unstable": false
+            },
+            "acceptance-heading-visits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0033716910984367132,
+              "scoreMaximum": 0.0033716910984367132,
+              "unstable": false
+            },
+            "acceptance-heading-visits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00017794744053389877,
+              "scoreMaximum": 0.00017794744053389877,
+              "unstable": false
+            },
+            "acceptance-error-name/good": {
+              "captures": 2,
+              "scoreMinimum": 1.1924193131562788e-05,
+              "scoreMaximum": 1.1924193131562788e-05,
+              "unstable": false
+            },
+            "acceptance-error-name/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.0821841897268314e-05,
+              "scoreMaximum": 1.0821841897268314e-05,
+              "unstable": false
+            },
+            "acceptance-error-date/good": {
+              "captures": 2,
+              "scoreMinimum": 3.2555931284150574e-06,
+              "scoreMaximum": 3.2555931284150574e-06,
+              "unstable": false
+            },
+            "acceptance-error-date/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.1286235753213987e-06,
+              "scoreMaximum": 3.1286235753213987e-06,
+              "unstable": false
+            },
+            "acceptance-error-code/good": {
+              "captures": 2,
+              "scoreMinimum": 3.2099662348628044e-05,
+              "scoreMaximum": 3.2099662348628044e-05,
+              "unstable": false
+            },
+            "acceptance-error-code/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.8804701539920643e-05,
+              "scoreMaximum": 1.8804701539920643e-05,
+              "unstable": false
+            },
+            "acceptance-error-phone/good": {
+              "captures": 2,
+              "scoreMinimum": 1.2967914699402172e-05,
+              "scoreMaximum": 1.2967914699402172e-05,
+              "unstable": false
+            },
+            "acceptance-error-phone/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.794986231601797e-06,
+              "scoreMaximum": 7.794986231601797e-06,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0003910859813913703,
+              "scoreMaximum": 0.0003910859813913703,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.03211795538663864,
+              "scoreMaximum": 0.03211795538663864,
+              "unstable": false
+            },
+            "acceptance-field-company/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0006938927108421922,
+              "scoreMaximum": 0.0006938927108421922,
+              "unstable": false
+            },
+            "acceptance-field-company/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.754216206492856e-05,
+              "scoreMaximum": 4.754216206492856e-05,
+              "unstable": false
+            },
+            "acceptance-field-ticket/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0006055724807083607,
+              "scoreMaximum": 0.0006055724807083607,
+              "unstable": false
+            },
+            "acceptance-field-ticket/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.8526177377207205e-05,
+              "scoreMaximum": 3.8526177377207205e-05,
+              "unstable": false
+            },
+            "acceptance-field-route/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0004769157967530191,
+              "scoreMaximum": 0.0004769157967530191,
+              "unstable": false
+            },
+            "acceptance-field-route/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.3335287298541516e-05,
+              "scoreMaximum": 3.3335287298541516e-05,
+              "unstable": false
+            },
+            "acceptance-icon-settings/good": {
+              "captures": 2,
+              "scoreMinimum": 2.4786480935290456e-05,
+              "scoreMaximum": 2.4786480935290456e-05,
+              "unstable": false
+            },
+            "acceptance-icon-settings/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0001775786222424358,
+              "scoreMaximum": 0.0001775786222424358,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/good": {
+              "captures": 2,
+              "scoreMinimum": 1.7147853213828057e-05,
+              "scoreMaximum": 1.7147853213828057e-05,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/bad": {
+              "captures": 2,
+              "scoreMinimum": 9.944417979568243e-05,
+              "scoreMaximum": 9.944417979568243e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/good": {
+              "captures": 2,
+              "scoreMinimum": 4.0490653191227466e-05,
+              "scoreMaximum": 4.0490653191227466e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.756497946800664e-05,
+              "scoreMaximum": 4.756497946800664e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/good": {
+              "captures": 2,
+              "scoreMinimum": 8.894198253983632e-05,
+              "scoreMaximum": 8.894198253983632e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00010968823335133493,
+              "scoreMaximum": 0.00010968823335133493,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/good": {
+              "captures": 2,
+              "scoreMinimum": 4.968079156242311e-05,
+              "scoreMaximum": 4.968079156242311e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.750444688601419e-05,
+              "scoreMaximum": 5.750444688601419e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00022830763191450387,
+              "scoreMaximum": 0.00022830763191450387,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0002586455666460097,
+              "scoreMaximum": 0.0002586455666460097,
+              "unstable": false
+            },
+            "acceptance-status-red/good": {
+              "captures": 2,
+              "scoreMinimum": 5.249429705145303e-06,
+              "scoreMaximum": 5.249429705145303e-06,
+              "unstable": false
+            },
+            "acceptance-status-red/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.292694651056081e-05,
+              "scoreMaximum": 1.292694651056081e-05,
+              "unstable": false
+            },
+            "acceptance-status-large/good": {
+              "captures": 2,
+              "scoreMinimum": 6.903649591549765e-06,
+              "scoreMaximum": 6.903649591549765e-06,
+              "unstable": false
+            },
+            "acceptance-status-large/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.6718360711820424e-05,
+              "scoreMaximum": 1.6718360711820424e-05,
+              "unstable": false
+            },
+            "acceptance-status-new/good": {
+              "captures": 2,
+              "scoreMinimum": 5.451357992569683e-06,
+              "scoreMaximum": 5.451357992569683e-06,
+              "unstable": false
+            },
+            "acceptance-status-new/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.3129036233294755e-05,
+              "scoreMaximum": 1.3129036233294755e-05,
+              "unstable": false
+            },
+            "acceptance-status-local/good": {
+              "captures": 2,
+              "scoreMinimum": 3.662417157102027e-06,
+              "scoreMaximum": 3.662417157102027e-06,
+              "unstable": false
+            },
+            "acceptance-status-local/bad": {
+              "captures": 2,
+              "scoreMinimum": 8.761239769228268e-06,
+              "scoreMaximum": 8.761239769228268e-06,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0003910859813913703,
+              "scoreMaximum": 0.0003910859813913703,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.0457704522414133e-05,
+              "scoreMaximum": 2.0457704522414133e-05,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0006938927108421922,
+              "scoreMaximum": 0.0006938927108421922,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.964247636962682e-05,
+              "scoreMaximum": 4.964247636962682e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 4.0490653191227466e-05,
+              "scoreMaximum": 4.0490653191227466e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.735430133630871e-07,
+              "scoreMaximum": 6.735430133630871e-07,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 0.012711511924862862,
+              "scoreMaximum": 0.012711511924862862,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.577466592716519e-06,
+              "scoreMaximum": 6.577466592716519e-06,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0003703789843712002,
+              "scoreMaximum": 0.0003703789843712002,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00033678385079838336,
+              "scoreMaximum": 0.00033678385079838336,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0029432717710733414,
+              "scoreMaximum": 0.0029432717710733414,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.276432256730914e-07,
+              "scoreMaximum": 7.276432256730914e-07,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.02665768191218376,
+              "scoreMaximum": 0.02665768191218376,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.940233588218689,
+              "scoreMaximum": 0.940233588218689,
+              "unstable": false
+            }
+          }
+        }
+      }
+    },
+    "1.3.1": {
+      "measured": true,
+      "passed": true,
+      "unstableSubtypes": [],
+      "subtypes": {
+        "1.3.1:fake-heading": {
+          "groups": 80,
+          "repeatedGroups": 80,
+          "unstableGroups": 0,
+          "measured": true,
+          "passed": true,
+          "details": {
+            "acceptance-generic-lantern/good": {
+              "captures": 2,
+              "scoreMinimum": 0.004226398654282093,
+              "scoreMaximum": 0.004226398654282093,
+              "unstable": false
+            },
+            "acceptance-generic-lantern/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00028368181665427983,
+              "scoreMaximum": 0.00028368181665427983,
+              "unstable": false
+            },
+            "acceptance-generic-rain/good": {
+              "captures": 2,
+              "scoreMinimum": 0.006477192509919405,
+              "scoreMaximum": 0.006477192509919405,
+              "unstable": false
+            },
+            "acceptance-generic-rain/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0002904054708778858,
+              "scoreMaximum": 0.0002904054708778858,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/good": {
+              "captures": 2,
+              "scoreMinimum": 0.006589918397367001,
+              "scoreMaximum": 0.006589918397367001,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00025822172756306827,
+              "scoreMaximum": 0.00025822172756306827,
+              "unstable": false
+            },
+            "acceptance-missing-banners/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0033489621710032225,
+              "scoreMaximum": 0.0033489621710032225,
+              "unstable": false
+            },
+            "acceptance-missing-banners/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00027338965446688235,
+              "scoreMaximum": 0.00027338965446688235,
+              "unstable": false
+            },
+            "acceptance-fake-hours/good": {
+              "captures": 2,
+              "scoreMinimum": 0.03970453888177872,
+              "scoreMaximum": 0.03970453888177872,
+              "unstable": false
+            },
+            "acceptance-fake-hours/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9645175933837891,
+              "scoreMaximum": 0.9645175933837891,
+              "unstable": false
+            },
+            "acceptance-fake-access/good": {
+              "captures": 2,
+              "scoreMinimum": 0.029112709686160088,
+              "scoreMaximum": 0.029112709686160088,
+              "unstable": false
+            },
+            "acceptance-fake-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9679426550865173,
+              "scoreMaximum": 0.9679426550865173,
+              "unstable": false
+            },
+            "acceptance-table-bus/good": {
+              "captures": 2,
+              "scoreMinimum": 4.623061613528989e-05,
+              "scoreMaximum": 4.623061613528989e-05,
+              "unstable": false
+            },
+            "acceptance-table-bus/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.888361970894039e-05,
+              "scoreMaximum": 3.888361970894039e-05,
+              "unstable": false
+            },
+            "acceptance-link-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.03381556645035744,
+              "scoreMaximum": 0.03381556645035744,
+              "unstable": false
+            },
+            "acceptance-link-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0002317105099791661,
+              "scoreMaximum": 0.0002317105099791661,
+              "unstable": false
+            },
+            "acceptance-link-appointments/good": {
+              "captures": 2,
+              "scoreMinimum": 0.01567796990275383,
+              "scoreMaximum": 0.01567796990275383,
+              "unstable": false
+            },
+            "acceptance-link-appointments/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00019310874631628394,
+              "scoreMaximum": 0.00019310874631628394,
+              "unstable": false
+            },
+            "acceptance-link-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.011823746375739574,
+              "scoreMaximum": 0.011823746375739574,
+              "unstable": false
+            },
+            "acceptance-link-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.000137575640110299,
+              "scoreMaximum": 0.000137575640110299,
+              "unstable": false
+            },
+            "acceptance-link-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.19637084007263184,
+              "scoreMaximum": 0.19637084007263184,
+              "unstable": false
+            },
+            "acceptance-link-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0018473794916644692,
+              "scoreMaximum": 0.0018473794916644692,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.026537945494055748,
+              "scoreMaximum": 0.026537945494055748,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00015101775352377445,
+              "scoreMaximum": 0.00015101775352377445,
+              "unstable": false
+            },
+            "acceptance-heading-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0959753766655922,
+              "scoreMaximum": 0.0959753766655922,
+              "unstable": false
+            },
+            "acceptance-heading-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.000596839701756835,
+              "scoreMaximum": 0.000596839701756835,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.03170361742377281,
+              "scoreMaximum": 0.03170361742377281,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.000245399191044271,
+              "scoreMaximum": 0.000245399191044271,
+              "unstable": false
+            },
+            "acceptance-heading-visits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.017141832038760185,
+              "scoreMaximum": 0.017141832038760185,
+              "unstable": false
+            },
+            "acceptance-heading-visits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0002071332128252834,
+              "scoreMaximum": 0.0002071332128252834,
+              "unstable": false
+            },
+            "acceptance-error-name/good": {
+              "captures": 2,
+              "scoreMinimum": 2.2908602659299504e-06,
+              "scoreMaximum": 2.2908602659299504e-06,
+              "unstable": false
+            },
+            "acceptance-error-name/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.893025670251518e-07,
+              "scoreMaximum": 6.893025670251518e-07,
+              "unstable": false
+            },
+            "acceptance-error-date/good": {
+              "captures": 2,
+              "scoreMinimum": 1.6811303567010327e-06,
+              "scoreMaximum": 1.6811303567010327e-06,
+              "unstable": false
+            },
+            "acceptance-error-date/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.083259904698934e-07,
+              "scoreMaximum": 6.083259904698934e-07,
+              "unstable": false
+            },
+            "acceptance-error-code/good": {
+              "captures": 2,
+              "scoreMinimum": 2.2104923118604347e-06,
+              "scoreMaximum": 2.2104923118604347e-06,
+              "unstable": false
+            },
+            "acceptance-error-code/bad": {
+              "captures": 2,
+              "scoreMinimum": 8.328001399604545e-07,
+              "scoreMaximum": 8.328001399604545e-07,
+              "unstable": false
+            },
+            "acceptance-error-phone/good": {
+              "captures": 2,
+              "scoreMinimum": 1.4431155932470574e-06,
+              "scoreMaximum": 1.4431155932470574e-06,
+              "unstable": false
+            },
+            "acceptance-error-phone/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.816945645165106e-07,
+              "scoreMaximum": 5.816945645165106e-07,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/good": {
+              "captures": 2,
+              "scoreMinimum": 8.277320011984557e-05,
+              "scoreMaximum": 8.277320011984557e-05,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.005594780668616295,
+              "scoreMaximum": 0.005594780668616295,
+              "unstable": false
+            },
+            "acceptance-field-company/good": {
+              "captures": 2,
+              "scoreMinimum": 6.347605085466057e-05,
+              "scoreMaximum": 6.347605085466057e-05,
+              "unstable": false
+            },
+            "acceptance-field-company/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.489188086154172e-06,
+              "scoreMaximum": 4.489188086154172e-06,
+              "unstable": false
+            },
+            "acceptance-field-ticket/good": {
+              "captures": 2,
+              "scoreMinimum": 7.342780008912086e-05,
+              "scoreMaximum": 7.342780008912086e-05,
+              "unstable": false
+            },
+            "acceptance-field-ticket/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.952447736490285e-06,
+              "scoreMaximum": 5.952447736490285e-06,
+              "unstable": false
+            },
+            "acceptance-field-route/good": {
+              "captures": 2,
+              "scoreMinimum": 6.518480950035155e-05,
+              "scoreMaximum": 6.518480950035155e-05,
+              "unstable": false
+            },
+            "acceptance-field-route/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.9946220315177925e-06,
+              "scoreMaximum": 4.9946220315177925e-06,
+              "unstable": false
+            },
+            "acceptance-icon-settings/good": {
+              "captures": 2,
+              "scoreMinimum": 1.3923302049079211e-06,
+              "scoreMaximum": 1.3923302049079211e-06,
+              "unstable": false
+            },
+            "acceptance-icon-settings/bad": {
+              "captures": 2,
+              "scoreMinimum": 9.781159860722255e-06,
+              "scoreMaximum": 9.781159860722255e-06,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/good": {
+              "captures": 2,
+              "scoreMinimum": 1.0498303026906797e-06,
+              "scoreMaximum": 1.0498303026906797e-06,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/bad": {
+              "captures": 2,
+              "scoreMinimum": 9.73474197962787e-06,
+              "scoreMaximum": 9.73474197962787e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/good": {
+              "captures": 2,
+              "scoreMinimum": 3.636404926510295e-06,
+              "scoreMaximum": 3.636404926510295e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.839611053990666e-06,
+              "scoreMaximum": 3.839611053990666e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/good": {
+              "captures": 2,
+              "scoreMinimum": 3.443799187152763e-06,
+              "scoreMaximum": 3.443799187152763e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.5886935165763134e-06,
+              "scoreMaximum": 3.5886935165763134e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/good": {
+              "captures": 2,
+              "scoreMinimum": 3.3772196275094757e-06,
+              "scoreMaximum": 3.3772196275094757e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.5056621072726557e-06,
+              "scoreMaximum": 3.5056621072726557e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/good": {
+              "captures": 2,
+              "scoreMinimum": 7.092313580869813e-07,
+              "scoreMaximum": 7.092313580869813e-07,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.786492233208264e-07,
+              "scoreMaximum": 7.786492233208264e-07,
+              "unstable": false
+            },
+            "acceptance-status-red/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0002528456680011004,
+              "scoreMaximum": 0.0002528456680011004,
+              "unstable": false
+            },
+            "acceptance-status-red/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0008118639816530049,
+              "scoreMaximum": 0.0008118639816530049,
+              "unstable": false
+            },
+            "acceptance-status-large/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00030939257703721523,
+              "scoreMaximum": 0.00030939257703721523,
+              "unstable": false
+            },
+            "acceptance-status-large/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0009945669444277883,
+              "scoreMaximum": 0.0009945669444277883,
+              "unstable": false
+            },
+            "acceptance-status-new/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00022527754481416196,
+              "scoreMaximum": 0.00022527754481416196,
+              "unstable": false
+            },
+            "acceptance-status-new/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.000738511560484767,
+              "scoreMaximum": 0.000738511560484767,
+              "unstable": false
+            },
+            "acceptance-status-local/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00023107662855181843,
+              "scoreMaximum": 0.00023107662855181843,
+              "unstable": false
+            },
+            "acceptance-status-local/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0007696233224123716,
+              "scoreMaximum": 0.0007696233224123716,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 8.277320011984557e-05,
+              "scoreMaximum": 8.277320011984557e-05,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.4683088213350857e-06,
+              "scoreMaximum": 2.4683088213350857e-06,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 6.347605085466057e-05,
+              "scoreMaximum": 6.347605085466057e-05,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.023995643365197e-06,
+              "scoreMaximum": 4.023995643365197e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 3.636404926510295e-06,
+              "scoreMaximum": 3.636404926510295e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.460414342906006e-08,
+              "scoreMaximum": 5.460414342906006e-08,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 0.03381556645035744,
+              "scoreMaximum": 0.03381556645035744,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.858299922081642e-06,
+              "scoreMaximum": 2.858299922081642e-06,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 4.623061613528989e-05,
+              "scoreMaximum": 4.623061613528989e-05,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.5165506890043616e-05,
+              "scoreMaximum": 4.5165506890043616e-05,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.03970453888177872,
+              "scoreMaximum": 0.03970453888177872,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.009424837306141853,
+              "scoreMaximum": 0.009424837306141853,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.004226398654282093,
+              "scoreMaximum": 0.004226398654282093,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00030082566081546247,
+              "scoreMaximum": 0.00030082566081546247,
+              "unstable": false
+            }
+          }
+        },
+        "1.3.1:unassociated-table": {
+          "groups": 80,
+          "repeatedGroups": 80,
+          "unstableGroups": 0,
+          "measured": true,
+          "passed": true,
+          "details": {
+            "acceptance-generic-lantern/good": {
+              "captures": 2,
+              "scoreMinimum": 0.004723688587546349,
+              "scoreMaximum": 0.004723688587546349,
+              "unstable": false
+            },
+            "acceptance-generic-lantern/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0005693690036423504,
+              "scoreMaximum": 0.0005693690036423504,
+              "unstable": false
+            },
+            "acceptance-generic-rain/good": {
+              "captures": 2,
+              "scoreMinimum": 0.004397433716803789,
+              "scoreMaximum": 0.004397433716803789,
+              "unstable": false
+            },
+            "acceptance-generic-rain/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0007461420027539134,
+              "scoreMaximum": 0.0007461420027539134,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0037674102932214737,
+              "scoreMaximum": 0.0037674102932214737,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0005080749397166073,
+              "scoreMaximum": 0.0005080749397166073,
+              "unstable": false
+            },
+            "acceptance-missing-banners/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0036031438503414392,
+              "scoreMaximum": 0.0036031438503414392,
+              "unstable": false
+            },
+            "acceptance-missing-banners/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0004644706496037543,
+              "scoreMaximum": 0.0004644706496037543,
+              "unstable": false
+            },
+            "acceptance-fake-hours/good": {
+              "captures": 2,
+              "scoreMinimum": 0.002850691555067897,
+              "scoreMaximum": 0.002850691555067897,
+              "unstable": false
+            },
+            "acceptance-fake-hours/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0008216206333599985,
+              "scoreMaximum": 0.0008216206333599985,
+              "unstable": false
+            },
+            "acceptance-fake-access/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0024785506539046764,
+              "scoreMaximum": 0.0024785506539046764,
+              "unstable": false
+            },
+            "acceptance-fake-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0007611655164510012,
+              "scoreMaximum": 0.0007611655164510012,
+              "unstable": false
+            },
+            "acceptance-table-bus/good": {
+              "captures": 2,
+              "scoreMinimum": 0.024086596444249153,
+              "scoreMaximum": 0.024086596444249153,
+              "unstable": false
+            },
+            "acceptance-table-bus/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9975295662879944,
+              "scoreMaximum": 0.9975295662879944,
+              "unstable": false
+            },
+            "acceptance-link-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00455645564943552,
+              "scoreMaximum": 0.00455645564943552,
+              "unstable": false
+            },
+            "acceptance-link-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00014179617573972791,
+              "scoreMaximum": 0.00014179617573972791,
+              "unstable": false
+            },
+            "acceptance-link-appointments/good": {
+              "captures": 2,
+              "scoreMinimum": 0.003379636909812689,
+              "scoreMaximum": 0.003379636909812689,
+              "unstable": false
+            },
+            "acceptance-link-appointments/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00012147398956585675,
+              "scoreMaximum": 0.00012147398956585675,
+              "unstable": false
+            },
+            "acceptance-link-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.009640702046453953,
+              "scoreMaximum": 0.009640702046453953,
+              "unstable": false
+            },
+            "acceptance-link-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0003607877588365227,
+              "scoreMaximum": 0.0003607877588365227,
+              "unstable": false
+            },
+            "acceptance-link-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0036253747530281544,
+              "scoreMaximum": 0.0036253747530281544,
+              "unstable": false
+            },
+            "acceptance-link-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00010492138972040266,
+              "scoreMaximum": 0.00010492138972040266,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0028050693217664957,
+              "scoreMaximum": 0.0028050693217664957,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00017469286103732884,
+              "scoreMaximum": 0.00017469286103732884,
+              "unstable": false
+            },
+            "acceptance-heading-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0017126812599599361,
+              "scoreMaximum": 0.0017126812599599361,
+              "unstable": false
+            },
+            "acceptance-heading-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00010410368849989027,
+              "scoreMaximum": 0.00010410368849989027,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.002551128389313817,
+              "scoreMaximum": 0.002551128389313817,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00013847097579855472,
+              "scoreMaximum": 0.00013847097579855472,
+              "unstable": false
+            },
+            "acceptance-heading-visits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0014590020291507244,
+              "scoreMaximum": 0.0014590020291507244,
+              "unstable": false
+            },
+            "acceptance-heading-visits/bad": {
+              "captures": 2,
+              "scoreMinimum": 8.321108907693997e-05,
+              "scoreMaximum": 8.321108907693997e-05,
+              "unstable": false
+            },
+            "acceptance-error-name/good": {
+              "captures": 2,
+              "scoreMinimum": 4.624675966624636e-06,
+              "scoreMaximum": 4.624675966624636e-06,
+              "unstable": false
+            },
+            "acceptance-error-name/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.26528220284672e-06,
+              "scoreMaximum": 3.26528220284672e-06,
+              "unstable": false
+            },
+            "acceptance-error-date/good": {
+              "captures": 2,
+              "scoreMinimum": 9.971354302251711e-06,
+              "scoreMaximum": 9.971354302251711e-06,
+              "unstable": false
+            },
+            "acceptance-error-date/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.347455837385496e-06,
+              "scoreMaximum": 6.347455837385496e-06,
+              "unstable": false
+            },
+            "acceptance-error-code/good": {
+              "captures": 2,
+              "scoreMinimum": 4.964486379321897e-06,
+              "scoreMaximum": 4.964486379321897e-06,
+              "unstable": false
+            },
+            "acceptance-error-code/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.5704711081052665e-06,
+              "scoreMaximum": 3.5704711081052665e-06,
+              "unstable": false
+            },
+            "acceptance-error-phone/good": {
+              "captures": 2,
+              "scoreMinimum": 4.065163466293598e-06,
+              "scoreMaximum": 4.065163466293598e-06,
+              "unstable": false
+            },
+            "acceptance-error-phone/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.5142664981103735e-06,
+              "scoreMaximum": 2.5142664981103735e-06,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/good": {
+              "captures": 2,
+              "scoreMinimum": 8.967719622887671e-05,
+              "scoreMaximum": 8.967719622887671e-05,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.004203295335173607,
+              "scoreMaximum": 0.004203295335173607,
+              "unstable": false
+            },
+            "acceptance-field-company/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001468203990953043,
+              "scoreMaximum": 0.0001468203990953043,
+              "unstable": false
+            },
+            "acceptance-field-company/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.1312616152281407e-05,
+              "scoreMaximum": 1.1312616152281407e-05,
+              "unstable": false
+            },
+            "acceptance-field-ticket/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00011974109656875953,
+              "scoreMaximum": 0.00011974109656875953,
+              "unstable": false
+            },
+            "acceptance-field-ticket/bad": {
+              "captures": 2,
+              "scoreMinimum": 9.110791324928869e-06,
+              "scoreMaximum": 9.110791324928869e-06,
+              "unstable": false
+            },
+            "acceptance-field-route/good": {
+              "captures": 2,
+              "scoreMinimum": 8.838218491291627e-05,
+              "scoreMaximum": 8.838218491291627e-05,
+              "unstable": false
+            },
+            "acceptance-field-route/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.966088676563231e-06,
+              "scoreMaximum": 6.966088676563231e-06,
+              "unstable": false
+            },
+            "acceptance-icon-settings/good": {
+              "captures": 2,
+              "scoreMinimum": 6.8418107730394695e-06,
+              "scoreMaximum": 6.8418107730394695e-06,
+              "unstable": false
+            },
+            "acceptance-icon-settings/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.974721089936793e-05,
+              "scoreMaximum": 1.974721089936793e-05,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/good": {
+              "captures": 2,
+              "scoreMinimum": 8.033080121094827e-06,
+              "scoreMaximum": 8.033080121094827e-06,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.3777121896273457e-05,
+              "scoreMaximum": 2.3777121896273457e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/good": {
+              "captures": 2,
+              "scoreMinimum": 9.886758562061004e-06,
+              "scoreMaximum": 9.886758562061004e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.0758055395854171e-05,
+              "scoreMaximum": 1.0758055395854171e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/good": {
+              "captures": 2,
+              "scoreMinimum": 9.65008348430274e-06,
+              "scoreMaximum": 9.65008348430274e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.0684052540455014e-05,
+              "scoreMaximum": 1.0684052540455014e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/good": {
+              "captures": 2,
+              "scoreMinimum": 1.9189559679944068e-05,
+              "scoreMaximum": 1.9189559679944068e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.0997329556848854e-05,
+              "scoreMaximum": 2.0997329556848854e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/good": {
+              "captures": 2,
+              "scoreMinimum": 1.1890590940311085e-05,
+              "scoreMaximum": 1.1890590940311085e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.2915190382045694e-05,
+              "scoreMaximum": 1.2915190382045694e-05,
+              "unstable": false
+            },
+            "acceptance-status-red/good": {
+              "captures": 2,
+              "scoreMinimum": 1.9988867734355154e-06,
+              "scoreMaximum": 1.9988867734355154e-06,
+              "unstable": false
+            },
+            "acceptance-status-red/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.809264282812364e-06,
+              "scoreMaximum": 4.809264282812364e-06,
+              "unstable": false
+            },
+            "acceptance-status-large/good": {
+              "captures": 2,
+              "scoreMinimum": 2.534916575314128e-06,
+              "scoreMaximum": 2.534916575314128e-06,
+              "unstable": false
+            },
+            "acceptance-status-large/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.1076038946339395e-06,
+              "scoreMaximum": 6.1076038946339395e-06,
+              "unstable": false
+            },
+            "acceptance-status-new/good": {
+              "captures": 2,
+              "scoreMinimum": 2.2002666355547262e-06,
+              "scoreMaximum": 2.2002666355547262e-06,
+              "unstable": false
+            },
+            "acceptance-status-new/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.3888093134446535e-06,
+              "scoreMaximum": 5.3888093134446535e-06,
+              "unstable": false
+            },
+            "acceptance-status-local/good": {
+              "captures": 2,
+              "scoreMinimum": 1.918539965117816e-06,
+              "scoreMaximum": 1.918539965117816e-06,
+              "unstable": false
+            },
+            "acceptance-status-local/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.6602858674305025e-06,
+              "scoreMaximum": 4.6602858674305025e-06,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 8.967719622887671e-05,
+              "scoreMaximum": 8.967719622887671e-05,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 8.100980267045088e-06,
+              "scoreMaximum": 8.100980267045088e-06,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001468203990953043,
+              "scoreMaximum": 0.0001468203990953043,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.1717975212377496e-05,
+              "scoreMaximum": 1.1717975212377496e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 9.886758562061004e-06,
+              "scoreMaximum": 9.886758562061004e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.324852168087091e-07,
+              "scoreMaximum": 5.324852168087091e-07,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00455645564943552,
+              "scoreMaximum": 0.00455645564943552,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.19226045475807e-06,
+              "scoreMaximum": 7.19226045475807e-06,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.024086596444249153,
+              "scoreMaximum": 0.024086596444249153,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9979981780052185,
+              "scoreMaximum": 0.9979981780052185,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.002850691555067897,
+              "scoreMaximum": 0.002850691555067897,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.5259413430612767e-06,
+              "scoreMaximum": 1.5259413430612767e-06,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.004723688587546349,
+              "scoreMaximum": 0.004723688587546349,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0005570459179580212,
+              "scoreMaximum": 0.0005570459179580212,
+              "unstable": false
+            }
+          }
+        }
+      }
+    },
+    "2.4.4": {
+      "measured": true,
+      "passed": true,
+      "unstableSubtypes": [],
+      "subtypes": {
+        "2.4.4:regex": {
+          "groups": 80,
+          "repeatedGroups": 80,
+          "unstableGroups": 0,
+          "measured": true,
+          "passed": true,
+          "details": {
+            "acceptance-generic-lantern/good": {
+              "captures": 2,
+              "scoreMinimum": 0.022425739094614983,
+              "scoreMaximum": 0.022425739094614983,
+              "unstable": false
+            },
+            "acceptance-generic-lantern/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.001888519967906177,
+              "scoreMaximum": 0.001888519967906177,
+              "unstable": false
+            },
+            "acceptance-generic-rain/good": {
+              "captures": 2,
+              "scoreMinimum": 0.019732613116502762,
+              "scoreMaximum": 0.019732613116502762,
+              "unstable": false
+            },
+            "acceptance-generic-rain/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0026370373088866472,
+              "scoreMaximum": 0.0026370373088866472,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/good": {
+              "captures": 2,
+              "scoreMinimum": 0.03410128876566887,
+              "scoreMaximum": 0.03410128876566887,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.002753807930275798,
+              "scoreMaximum": 0.002753807930275798,
+              "unstable": false
+            },
+            "acceptance-missing-banners/good": {
+              "captures": 2,
+              "scoreMinimum": 0.029125479981303215,
+              "scoreMaximum": 0.029125479981303215,
+              "unstable": false
+            },
+            "acceptance-missing-banners/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0021382602863013744,
+              "scoreMaximum": 0.0021382602863013744,
+              "unstable": false
+            },
+            "acceptance-fake-hours/good": {
+              "captures": 2,
+              "scoreMinimum": 0.012917577289044857,
+              "scoreMaximum": 0.012917577289044857,
+              "unstable": false
+            },
+            "acceptance-fake-hours/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.003427437273785472,
+              "scoreMaximum": 0.003427437273785472,
+              "unstable": false
+            },
+            "acceptance-fake-access/good": {
+              "captures": 2,
+              "scoreMinimum": 0.026661207899451256,
+              "scoreMaximum": 0.026661207899451256,
+              "unstable": false
+            },
+            "acceptance-fake-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.011709502898156643,
+              "scoreMaximum": 0.011709502898156643,
+              "unstable": false
+            },
+            "acceptance-table-bus/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0007234166259877384,
+              "scoreMaximum": 0.0007234166259877384,
+              "unstable": false
+            },
+            "acceptance-table-bus/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0005688063101843,
+              "scoreMaximum": 0.0005688063101843,
+              "unstable": false
+            },
+            "acceptance-link-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.04209692031145096,
+              "scoreMaximum": 0.04209692031145096,
+              "unstable": false
+            },
+            "acceptance-link-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9946770668029785,
+              "scoreMaximum": 0.9946770668029785,
+              "unstable": false
+            },
+            "acceptance-link-appointments/good": {
+              "captures": 2,
+              "scoreMinimum": 0.053949400782585144,
+              "scoreMaximum": 0.053949400782585144,
+              "unstable": false
+            },
+            "acceptance-link-appointments/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9945559501647949,
+              "scoreMaximum": 0.9945559501647949,
+              "unstable": false
+            },
+            "acceptance-link-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.12323884665966034,
+              "scoreMaximum": 0.12323884665966034,
+              "unstable": false
+            },
+            "acceptance-link-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9980953335762024,
+              "scoreMaximum": 0.9980953335762024,
+              "unstable": false
+            },
+            "acceptance-link-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.019375599920749664,
+              "scoreMaximum": 0.019375599920749664,
+              "unstable": false
+            },
+            "acceptance-link-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9897312521934509,
+              "scoreMaximum": 0.9897312521934509,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.015281380154192448,
+              "scoreMaximum": 0.015281380154192448,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0005103617440909147,
+              "scoreMaximum": 0.0005103617440909147,
+              "unstable": false
+            },
+            "acceptance-heading-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.009981491602957249,
+              "scoreMaximum": 0.009981491602957249,
+              "unstable": false
+            },
+            "acceptance-heading-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00038009992567822337,
+              "scoreMaximum": 0.00038009992567822337,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.008113414980471134,
+              "scoreMaximum": 0.008113414980471134,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0008092529606074095,
+              "scoreMaximum": 0.0008092529606074095,
+              "unstable": false
+            },
+            "acceptance-heading-visits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.010903984308242798,
+              "scoreMaximum": 0.010903984308242798,
+              "unstable": false
+            },
+            "acceptance-heading-visits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00042291489080525935,
+              "scoreMaximum": 0.00042291489080525935,
+              "unstable": false
+            },
+            "acceptance-error-name/good": {
+              "captures": 2,
+              "scoreMinimum": 2.4377370209549554e-05,
+              "scoreMaximum": 2.4377370209549554e-05,
+              "unstable": false
+            },
+            "acceptance-error-name/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.2445786524040159e-05,
+              "scoreMaximum": 1.2445786524040159e-05,
+              "unstable": false
+            },
+            "acceptance-error-date/good": {
+              "captures": 2,
+              "scoreMinimum": 4.891996013611788e-06,
+              "scoreMaximum": 4.891996013611788e-06,
+              "unstable": false
+            },
+            "acceptance-error-date/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.075423253700137e-06,
+              "scoreMaximum": 2.075423253700137e-06,
+              "unstable": false
+            },
+            "acceptance-error-code/good": {
+              "captures": 2,
+              "scoreMinimum": 6.910388037795201e-06,
+              "scoreMaximum": 6.910388037795201e-06,
+              "unstable": false
+            },
+            "acceptance-error-code/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.97879523714073e-06,
+              "scoreMaximum": 2.97879523714073e-06,
+              "unstable": false
+            },
+            "acceptance-error-phone/good": {
+              "captures": 2,
+              "scoreMinimum": 1.4455658856604714e-05,
+              "scoreMaximum": 1.4455658856604714e-05,
+              "unstable": false
+            },
+            "acceptance-error-phone/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.364330718293786e-06,
+              "scoreMaximum": 5.364330718293786e-06,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/good": {
+              "captures": 2,
+              "scoreMinimum": 7.297038246179e-05,
+              "scoreMaximum": 7.297038246179e-05,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.005939267110079527,
+              "scoreMaximum": 0.005939267110079527,
+              "unstable": false
+            },
+            "acceptance-field-company/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00015721605450380594,
+              "scoreMaximum": 0.00015721605450380594,
+              "unstable": false
+            },
+            "acceptance-field-company/bad": {
+              "captures": 2,
+              "scoreMinimum": 8.714125215192325e-06,
+              "scoreMaximum": 8.714125215192325e-06,
+              "unstable": false
+            },
+            "acceptance-field-ticket/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001019869014271535,
+              "scoreMaximum": 0.0001019869014271535,
+              "unstable": false
+            },
+            "acceptance-field-ticket/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.449688498832984e-06,
+              "scoreMaximum": 6.449688498832984e-06,
+              "unstable": false
+            },
+            "acceptance-field-route/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00013970625877846032,
+              "scoreMaximum": 0.00013970625877846032,
+              "unstable": false
+            },
+            "acceptance-field-route/bad": {
+              "captures": 2,
+              "scoreMinimum": 8.541758688807022e-06,
+              "scoreMaximum": 8.541758688807022e-06,
+              "unstable": false
+            },
+            "acceptance-icon-settings/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00010310949437553063,
+              "scoreMaximum": 0.00010310949437553063,
+              "unstable": false
+            },
+            "acceptance-icon-settings/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.000236710169701837,
+              "scoreMaximum": 0.000236710169701837,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/good": {
+              "captures": 2,
+              "scoreMinimum": 7.945912511786446e-05,
+              "scoreMaximum": 7.945912511786446e-05,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00020247451902832836,
+              "scoreMaximum": 0.00020247451902832836,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/good": {
+              "captures": 2,
+              "scoreMinimum": 3.8015747122699395e-05,
+              "scoreMaximum": 3.8015747122699395e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.306305345380679e-05,
+              "scoreMaximum": 4.306305345380679e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/good": {
+              "captures": 2,
+              "scoreMinimum": 4.302947854739614e-05,
+              "scoreMaximum": 4.302947854739614e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.7569326852681115e-05,
+              "scoreMaximum": 4.7569326852681115e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/good": {
+              "captures": 2,
+              "scoreMinimum": 6.35726100881584e-05,
+              "scoreMaximum": 6.35726100881584e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.880609726067632e-05,
+              "scoreMaximum": 6.880609726067632e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/good": {
+              "captures": 2,
+              "scoreMinimum": 8.885263378033414e-05,
+              "scoreMaximum": 8.885263378033414e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/bad": {
+              "captures": 2,
+              "scoreMinimum": 9.969760867534205e-05,
+              "scoreMaximum": 9.969760867534205e-05,
+              "unstable": false
+            },
+            "acceptance-status-red/good": {
+              "captures": 2,
+              "scoreMinimum": 3.501428636809578e-06,
+              "scoreMaximum": 3.501428636809578e-06,
+              "unstable": false
+            },
+            "acceptance-status-red/bad": {
+              "captures": 2,
+              "scoreMinimum": 8.953210453910287e-06,
+              "scoreMaximum": 8.953210453910287e-06,
+              "unstable": false
+            },
+            "acceptance-status-large/good": {
+              "captures": 2,
+              "scoreMinimum": 4.8046977099147625e-06,
+              "scoreMaximum": 4.8046977099147625e-06,
+              "unstable": false
+            },
+            "acceptance-status-large/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.2068925570929423e-05,
+              "scoreMaximum": 1.2068925570929423e-05,
+              "unstable": false
+            },
+            "acceptance-status-new/good": {
+              "captures": 2,
+              "scoreMinimum": 6.3957504607969895e-06,
+              "scoreMaximum": 6.3957504607969895e-06,
+              "unstable": false
+            },
+            "acceptance-status-new/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.6898853573366068e-05,
+              "scoreMaximum": 1.6898853573366068e-05,
+              "unstable": false
+            },
+            "acceptance-status-local/good": {
+              "captures": 2,
+              "scoreMinimum": 7.061563337629195e-06,
+              "scoreMaximum": 7.061563337629195e-06,
+              "unstable": false
+            },
+            "acceptance-status-local/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.8351536709815264e-05,
+              "scoreMaximum": 1.8351536709815264e-05,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 7.297038246179e-05,
+              "scoreMaximum": 7.297038246179e-05,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.062724994786549e-06,
+              "scoreMaximum": 5.062724994786549e-06,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00015721605450380594,
+              "scoreMaximum": 0.00015721605450380594,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.3763263268629089e-05,
+              "scoreMaximum": 1.3763263268629089e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 3.8015747122699395e-05,
+              "scoreMaximum": 3.8015747122699395e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.2922843356809608e-07,
+              "scoreMaximum": 2.2922843356809608e-07,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 0.04209692031145096,
+              "scoreMaximum": 0.04209692031145096,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.34292274713516235,
+              "scoreMaximum": 0.34292274713516235,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0007234166259877384,
+              "scoreMaximum": 0.0007234166259877384,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0010118300560861826,
+              "scoreMaximum": 0.0010118300560861826,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.012917577289044857,
+              "scoreMaximum": 0.012917577289044857,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.138742385999649e-06,
+              "scoreMaximum": 3.138742385999649e-06,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.022425739094614983,
+              "scoreMaximum": 0.022425739094614983,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0025649946182966232,
+              "scoreMaximum": 0.0025649946182966232,
+              "unstable": false
+            }
+          }
+        }
+      }
+    },
+    "2.4.6": {
+      "measured": true,
+      "passed": true,
+      "unstableSubtypes": [],
+      "subtypes": {
+        "2.4.6:regex": {
+          "groups": 80,
+          "repeatedGroups": 80,
+          "unstableGroups": 0,
+          "measured": true,
+          "passed": true,
+          "details": {
+            "acceptance-generic-lantern/good": {
+              "captures": 2,
+              "scoreMinimum": 0.031648024916648865,
+              "scoreMaximum": 0.031648024916648865,
+              "unstable": false
+            },
+            "acceptance-generic-lantern/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00265442649833858,
+              "scoreMaximum": 0.00265442649833858,
+              "unstable": false
+            },
+            "acceptance-generic-rain/good": {
+              "captures": 2,
+              "scoreMinimum": 0.005642844829708338,
+              "scoreMaximum": 0.005642844829708338,
+              "unstable": false
+            },
+            "acceptance-generic-rain/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0009359091054648161,
+              "scoreMaximum": 0.0009359091054648161,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/good": {
+              "captures": 2,
+              "scoreMinimum": 0.018490446731448174,
+              "scoreMaximum": 0.018490446731448174,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0010998453944921494,
+              "scoreMaximum": 0.0010998453944921494,
+              "unstable": false
+            },
+            "acceptance-missing-banners/good": {
+              "captures": 2,
+              "scoreMinimum": 0.007886288687586784,
+              "scoreMaximum": 0.007886288687586784,
+              "unstable": false
+            },
+            "acceptance-missing-banners/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00075936084613204,
+              "scoreMaximum": 0.00075936084613204,
+              "unstable": false
+            },
+            "acceptance-fake-hours/good": {
+              "captures": 2,
+              "scoreMinimum": 0.030327385291457176,
+              "scoreMaximum": 0.030327385291457176,
+              "unstable": false
+            },
+            "acceptance-fake-hours/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0031554505694657564,
+              "scoreMaximum": 0.0031554505694657564,
+              "unstable": false
+            },
+            "acceptance-fake-access/good": {
+              "captures": 2,
+              "scoreMinimum": 0.041267961263656616,
+              "scoreMaximum": 0.041267961263656616,
+              "unstable": false
+            },
+            "acceptance-fake-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.004362607840448618,
+              "scoreMaximum": 0.004362607840448618,
+              "unstable": false
+            },
+            "acceptance-table-bus/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0008562934235669672,
+              "scoreMaximum": 0.0008562934235669672,
+              "unstable": false
+            },
+            "acceptance-table-bus/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0007344206096604466,
+              "scoreMaximum": 0.0007344206096604466,
+              "unstable": false
+            },
+            "acceptance-link-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.030642308294773102,
+              "scoreMaximum": 0.030642308294773102,
+              "unstable": false
+            },
+            "acceptance-link-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0005942904390394688,
+              "scoreMaximum": 0.0005942904390394688,
+              "unstable": false
+            },
+            "acceptance-link-appointments/good": {
+              "captures": 2,
+              "scoreMinimum": 0.007269756868481636,
+              "scoreMaximum": 0.007269756868481636,
+              "unstable": false
+            },
+            "acceptance-link-appointments/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.783540058881044e-05,
+              "scoreMaximum": 7.783540058881044e-05,
+              "unstable": false
+            },
+            "acceptance-link-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.058195289224386215,
+              "scoreMaximum": 0.058195289224386215,
+              "unstable": false
+            },
+            "acceptance-link-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.000972449837718159,
+              "scoreMaximum": 0.000972449837718159,
+              "unstable": false
+            },
+            "acceptance-link-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00792298000305891,
+              "scoreMaximum": 0.00792298000305891,
+              "unstable": false
+            },
+            "acceptance-link-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00012397566752042621,
+              "scoreMaximum": 0.00012397566752042621,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.07366570830345154,
+              "scoreMaximum": 0.07366570830345154,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9982070922851562,
+              "scoreMaximum": 0.9982070922851562,
+              "unstable": false
+            },
+            "acceptance-heading-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0947953388094902,
+              "scoreMaximum": 0.0947953388094902,
+              "unstable": false
+            },
+            "acceptance-heading-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9983365535736084,
+              "scoreMaximum": 0.9983365535736084,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.08167476207017899,
+              "scoreMaximum": 0.08167476207017899,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9993165731430054,
+              "scoreMaximum": 0.9993165731430054,
+              "unstable": false
+            },
+            "acceptance-heading-visits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.028722623363137245,
+              "scoreMaximum": 0.028722623363137245,
+              "unstable": false
+            },
+            "acceptance-heading-visits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9959367513656616,
+              "scoreMaximum": 0.9959367513656616,
+              "unstable": false
+            },
+            "acceptance-error-name/good": {
+              "captures": 2,
+              "scoreMinimum": 1.0538906280999072e-05,
+              "scoreMaximum": 1.0538906280999072e-05,
+              "unstable": false
+            },
+            "acceptance-error-name/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.2188816072011832e-05,
+              "scoreMaximum": 1.2188816072011832e-05,
+              "unstable": false
+            },
+            "acceptance-error-date/good": {
+              "captures": 2,
+              "scoreMinimum": 2.5847405140666524e-06,
+              "scoreMaximum": 2.5847405140666524e-06,
+              "unstable": false
+            },
+            "acceptance-error-date/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.3257271095644683e-06,
+              "scoreMaximum": 2.3257271095644683e-06,
+              "unstable": false
+            },
+            "acceptance-error-code/good": {
+              "captures": 2,
+              "scoreMinimum": 9.384840268467087e-06,
+              "scoreMaximum": 9.384840268467087e-06,
+              "unstable": false
+            },
+            "acceptance-error-code/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.163981990743196e-06,
+              "scoreMaximum": 7.163981990743196e-06,
+              "unstable": false
+            },
+            "acceptance-error-phone/good": {
+              "captures": 2,
+              "scoreMinimum": 9.16287081054179e-06,
+              "scoreMaximum": 9.16287081054179e-06,
+              "unstable": false
+            },
+            "acceptance-error-phone/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.53331141822855e-06,
+              "scoreMaximum": 7.53331141822855e-06,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00010473075963091105,
+              "scoreMaximum": 0.00010473075963091105,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0098119480535388,
+              "scoreMaximum": 0.0098119480535388,
+              "unstable": false
+            },
+            "acceptance-field-company/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0002630754897836596,
+              "scoreMaximum": 0.0002630754897836596,
+              "unstable": false
+            },
+            "acceptance-field-company/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.2144423635618296e-05,
+              "scoreMaximum": 1.2144423635618296e-05,
+              "unstable": false
+            },
+            "acceptance-field-ticket/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001389888784615323,
+              "scoreMaximum": 0.0001389888784615323,
+              "unstable": false
+            },
+            "acceptance-field-ticket/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.392968200292671e-06,
+              "scoreMaximum": 7.392968200292671e-06,
+              "unstable": false
+            },
+            "acceptance-field-route/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00027436859090812504,
+              "scoreMaximum": 0.00027436859090812504,
+              "unstable": false
+            },
+            "acceptance-field-route/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.3210421457188204e-05,
+              "scoreMaximum": 1.3210421457188204e-05,
+              "unstable": false
+            },
+            "acceptance-icon-settings/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00010083008237415925,
+              "scoreMaximum": 0.00010083008237415925,
+              "unstable": false
+            },
+            "acceptance-icon-settings/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00035619575646705925,
+              "scoreMaximum": 0.00035619575646705925,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/good": {
+              "captures": 2,
+              "scoreMinimum": 2.6090900064446032e-05,
+              "scoreMaximum": 2.6090900064446032e-05,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00013483736256603152,
+              "scoreMaximum": 0.00013483736256603152,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/good": {
+              "captures": 2,
+              "scoreMinimum": 4.5944456360302866e-05,
+              "scoreMaximum": 4.5944456360302866e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.247662920737639e-05,
+              "scoreMaximum": 5.247662920737639e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/good": {
+              "captures": 2,
+              "scoreMinimum": 6.22629959252663e-05,
+              "scoreMaximum": 6.22629959252663e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.863591261208057e-05,
+              "scoreMaximum": 6.863591261208057e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/good": {
+              "captures": 2,
+              "scoreMinimum": 6.501973257400095e-05,
+              "scoreMaximum": 6.501973257400095e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.34090426703915e-05,
+              "scoreMaximum": 7.34090426703915e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/good": {
+              "captures": 2,
+              "scoreMinimum": 8.998867269838229e-05,
+              "scoreMaximum": 8.998867269838229e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00010209404717897996,
+              "scoreMaximum": 0.00010209404717897996,
+              "unstable": false
+            },
+            "acceptance-status-red/good": {
+              "captures": 2,
+              "scoreMinimum": 7.44639055483276e-06,
+              "scoreMaximum": 7.44639055483276e-06,
+              "unstable": false
+            },
+            "acceptance-status-red/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.9497789253364317e-05,
+              "scoreMaximum": 1.9497789253364317e-05,
+              "unstable": false
+            },
+            "acceptance-status-large/good": {
+              "captures": 2,
+              "scoreMinimum": 6.745285190845607e-06,
+              "scoreMaximum": 6.745285190845607e-06,
+              "unstable": false
+            },
+            "acceptance-status-large/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.7628697605687194e-05,
+              "scoreMaximum": 1.7628697605687194e-05,
+              "unstable": false
+            },
+            "acceptance-status-new/good": {
+              "captures": 2,
+              "scoreMinimum": 1.5454619642696343e-05,
+              "scoreMaximum": 1.5454619642696343e-05,
+              "unstable": false
+            },
+            "acceptance-status-new/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.8940914237173274e-05,
+              "scoreMaximum": 3.8940914237173274e-05,
+              "unstable": false
+            },
+            "acceptance-status-local/good": {
+              "captures": 2,
+              "scoreMinimum": 1.0799912161019165e-05,
+              "scoreMaximum": 1.0799912161019165e-05,
+              "unstable": false
+            },
+            "acceptance-status-local/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.6940202587866224e-05,
+              "scoreMaximum": 2.6940202587866224e-05,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00010473075963091105,
+              "scoreMaximum": 0.00010473075963091105,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.274767318041995e-06,
+              "scoreMaximum": 5.274767318041995e-06,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0002630754897836596,
+              "scoreMaximum": 0.0002630754897836596,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.0885146366490517e-05,
+              "scoreMaximum": 1.0885146366490517e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 4.5944456360302866e-05,
+              "scoreMaximum": 4.5944456360302866e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0475306361913681,
+              "scoreMaximum": 0.0475306361913681,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 0.030642308294773102,
+              "scoreMaximum": 0.030642308294773102,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.3508546054363251,
+              "scoreMaximum": 0.3508546054363251,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0008562934235669672,
+              "scoreMaximum": 0.0008562934235669672,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0009121065377257764,
+              "scoreMaximum": 0.0009121065377257764,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.030327385291457176,
+              "scoreMaximum": 0.030327385291457176,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.227500090157264e-06,
+              "scoreMaximum": 2.227500090157264e-06,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.031648024916648865,
+              "scoreMaximum": 0.031648024916648865,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0020009875297546387,
+              "scoreMaximum": 0.0020009875297546387,
+              "unstable": false
+            }
+          }
+        }
+      }
+    },
+    "3.3.1": {
+      "measured": true,
+      "passed": true,
+      "unstableSubtypes": [],
+      "subtypes": {
+        "3.3.1:validation-error-silent": {
+          "groups": 80,
+          "repeatedGroups": 80,
+          "unstableGroups": 0,
+          "measured": true,
+          "passed": true,
+          "details": {
+            "acceptance-generic-lantern/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00026493583573028445,
+              "scoreMaximum": 0.00026493583573028445,
+              "unstable": false
+            },
+            "acceptance-generic-lantern/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.656704110559076e-05,
+              "scoreMaximum": 7.656704110559076e-05,
+              "unstable": false
+            },
+            "acceptance-generic-rain/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0006007113261148334,
+              "scoreMaximum": 0.0006007113261148334,
+              "unstable": false
+            },
+            "acceptance-generic-rain/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0001585338613949716,
+              "scoreMaximum": 0.0001585338613949716,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0004623767454177141,
+              "scoreMaximum": 0.0004623767454177141,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00010564271360635757,
+              "scoreMaximum": 0.00010564271360635757,
+              "unstable": false
+            },
+            "acceptance-missing-banners/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00024226009554695338,
+              "scoreMaximum": 0.00024226009554695338,
+              "unstable": false
+            },
+            "acceptance-missing-banners/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.6689016269519925e-05,
+              "scoreMaximum": 3.6689016269519925e-05,
+              "unstable": false
+            },
+            "acceptance-fake-hours/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001090833538910374,
+              "scoreMaximum": 0.0001090833538910374,
+              "unstable": false
+            },
+            "acceptance-fake-hours/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.2345092222385574e-06,
+              "scoreMaximum": 3.2345092222385574e-06,
+              "unstable": false
+            },
+            "acceptance-fake-access/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00010167723667109385,
+              "scoreMaximum": 0.00010167723667109385,
+              "unstable": false
+            },
+            "acceptance-fake-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.757220267492812e-06,
+              "scoreMaximum": 4.757220267492812e-06,
+              "unstable": false
+            },
+            "acceptance-table-bus/good": {
+              "captures": 2,
+              "scoreMinimum": 2.1600282707368024e-05,
+              "scoreMaximum": 2.1600282707368024e-05,
+              "unstable": false
+            },
+            "acceptance-table-bus/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.634732325328514e-05,
+              "scoreMaximum": 1.634732325328514e-05,
+              "unstable": false
+            },
+            "acceptance-link-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00029062156681902707,
+              "scoreMaximum": 0.00029062156681902707,
+              "unstable": false
+            },
+            "acceptance-link-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.8673496015253477e-05,
+              "scoreMaximum": 1.8673496015253477e-05,
+              "unstable": false
+            },
+            "acceptance-link-appointments/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0012304303236305714,
+              "scoreMaximum": 0.0012304303236305714,
+              "unstable": false
+            },
+            "acceptance-link-appointments/bad": {
+              "captures": 2,
+              "scoreMinimum": 8.28631455078721e-05,
+              "scoreMaximum": 8.28631455078721e-05,
+              "unstable": false
+            },
+            "acceptance-link-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0008076571975834668,
+              "scoreMaximum": 0.0008076571975834668,
+              "unstable": false
+            },
+            "acceptance-link-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.9092610424850136e-05,
+              "scoreMaximum": 4.9092610424850136e-05,
+              "unstable": false
+            },
+            "acceptance-link-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0020762071944773197,
+              "scoreMaximum": 0.0020762071944773197,
+              "unstable": false
+            },
+            "acceptance-link-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00011575254029594362,
+              "scoreMaximum": 0.00011575254029594362,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00024557378492318094,
+              "scoreMaximum": 0.00024557378492318094,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.987960968108382e-05,
+              "scoreMaximum": 1.987960968108382e-05,
+              "unstable": false
+            },
+            "acceptance-heading-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0002664547646418214,
+              "scoreMaximum": 0.0002664547646418214,
+              "unstable": false
+            },
+            "acceptance-heading-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.713886194920633e-05,
+              "scoreMaximum": 1.713886194920633e-05,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00017458744696341455,
+              "scoreMaximum": 0.00017458744696341455,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 8.921070730139036e-06,
+              "scoreMaximum": 8.921070730139036e-06,
+              "unstable": false
+            },
+            "acceptance-heading-visits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00020486893481574953,
+              "scoreMaximum": 0.00020486893481574953,
+              "unstable": false
+            },
+            "acceptance-heading-visits/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.0984619621012826e-05,
+              "scoreMaximum": 1.0984619621012826e-05,
+              "unstable": false
+            },
+            "acceptance-error-name/good": {
+              "captures": 2,
+              "scoreMinimum": 0.008186721242964268,
+              "scoreMaximum": 0.008186721242964268,
+              "unstable": false
+            },
+            "acceptance-error-name/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.998578667640686,
+              "scoreMaximum": 0.998578667640686,
+              "unstable": false
+            },
+            "acceptance-error-date/good": {
+              "captures": 2,
+              "scoreMinimum": 0.010987594723701477,
+              "scoreMaximum": 0.010987594723701477,
+              "unstable": false
+            },
+            "acceptance-error-date/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9986704587936401,
+              "scoreMaximum": 0.9986704587936401,
+              "unstable": false
+            },
+            "acceptance-error-code/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0025774387177079916,
+              "scoreMaximum": 0.0025774387177079916,
+              "unstable": false
+            },
+            "acceptance-error-code/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9955856800079346,
+              "scoreMaximum": 0.9955856800079346,
+              "unstable": false
+            },
+            "acceptance-error-phone/good": {
+              "captures": 2,
+              "scoreMinimum": 0.003009884152561426,
+              "scoreMaximum": 0.003009884152561426,
+              "unstable": false
+            },
+            "acceptance-error-phone/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9960126876831055,
+              "scoreMaximum": 0.9960126876831055,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/good": {
+              "captures": 2,
+              "scoreMinimum": 0.016282478347420692,
+              "scoreMaximum": 0.016282478347420692,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.002993221627548337,
+              "scoreMaximum": 0.002993221627548337,
+              "unstable": false
+            },
+            "acceptance-field-company/good": {
+              "captures": 2,
+              "scoreMinimum": 0.016441071406006813,
+              "scoreMaximum": 0.016441071406006813,
+              "unstable": false
+            },
+            "acceptance-field-company/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.5055196601897478e-05,
+              "scoreMaximum": 2.5055196601897478e-05,
+              "unstable": false
+            },
+            "acceptance-field-ticket/good": {
+              "captures": 2,
+              "scoreMinimum": 0.01367391087114811,
+              "scoreMaximum": 0.01367391087114811,
+              "unstable": false
+            },
+            "acceptance-field-ticket/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.0560564735205844e-05,
+              "scoreMaximum": 2.0560564735205844e-05,
+              "unstable": false
+            },
+            "acceptance-field-route/good": {
+              "captures": 2,
+              "scoreMinimum": 0.01202804408967495,
+              "scoreMaximum": 0.01202804408967495,
+              "unstable": false
+            },
+            "acceptance-field-route/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.7276444850722328e-05,
+              "scoreMaximum": 1.7276444850722328e-05,
+              "unstable": false
+            },
+            "acceptance-icon-settings/good": {
+              "captures": 2,
+              "scoreMinimum": 0.05119306594133377,
+              "scoreMaximum": 0.05119306594133377,
+              "unstable": false
+            },
+            "acceptance-icon-settings/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.5349469271750422e-06,
+              "scoreMaximum": 3.5349469271750422e-06,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/good": {
+              "captures": 2,
+              "scoreMinimum": 0.15102027356624603,
+              "scoreMaximum": 0.15102027356624603,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.498770173697267e-06,
+              "scoreMaximum": 7.498770173697267e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/good": {
+              "captures": 2,
+              "scoreMinimum": 9.647101251175627e-06,
+              "scoreMaximum": 9.647101251175627e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.1121735951746814e-05,
+              "scoreMaximum": 1.1121735951746814e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/good": {
+              "captures": 2,
+              "scoreMinimum": 1.5960315067786723e-05,
+              "scoreMaximum": 1.5960315067786723e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.8320935851079412e-05,
+              "scoreMaximum": 1.8320935851079412e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/good": {
+              "captures": 2,
+              "scoreMinimum": 9.796291124075651e-06,
+              "scoreMaximum": 9.796291124075651e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.0993685464200098e-05,
+              "scoreMaximum": 1.0993685464200098e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/good": {
+              "captures": 2,
+              "scoreMinimum": 1.5049183275550604e-05,
+              "scoreMaximum": 1.5049183275550604e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.706982948235236e-05,
+              "scoreMaximum": 1.706982948235236e-05,
+              "unstable": false
+            },
+            "acceptance-status-red/good": {
+              "captures": 2,
+              "scoreMinimum": 1.4696681773784803e-06,
+              "scoreMaximum": 1.4696681773784803e-06,
+              "unstable": false
+            },
+            "acceptance-status-red/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.000661902129650116,
+              "scoreMaximum": 0.000661902129650116,
+              "unstable": false
+            },
+            "acceptance-status-large/good": {
+              "captures": 2,
+              "scoreMinimum": 1.3998057966091437e-06,
+              "scoreMaximum": 1.3998057966091437e-06,
+              "unstable": false
+            },
+            "acceptance-status-large/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0006619743653573096,
+              "scoreMaximum": 0.0006619743653573096,
+              "unstable": false
+            },
+            "acceptance-status-new/good": {
+              "captures": 2,
+              "scoreMinimum": 1.2617680340554216e-06,
+              "scoreMaximum": 1.2617680340554216e-06,
+              "unstable": false
+            },
+            "acceptance-status-new/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0005773037555627525,
+              "scoreMaximum": 0.0005773037555627525,
+              "unstable": false
+            },
+            "acceptance-status-local/good": {
+              "captures": 2,
+              "scoreMinimum": 1.410009872415685e-06,
+              "scoreMaximum": 1.410009872415685e-06,
+              "unstable": false
+            },
+            "acceptance-status-local/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0006562236230820417,
+              "scoreMaximum": 0.0006562236230820417,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.016282478347420692,
+              "scoreMaximum": 0.016282478347420692,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.6383672118536197e-05,
+              "scoreMaximum": 1.6383672118536197e-05,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.016441071406006813,
+              "scoreMaximum": 0.016441071406006813,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.1546646166825667e-05,
+              "scoreMaximum": 2.1546646166825667e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 9.647101251175627e-06,
+              "scoreMaximum": 9.647101251175627e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.763766133284662e-05,
+              "scoreMaximum": 2.763766133284662e-05,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00029062156681902707,
+              "scoreMaximum": 0.00029062156681902707,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.180424002697691e-05,
+              "scoreMaximum": 4.180424002697691e-05,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 2.1600282707368024e-05,
+              "scoreMaximum": 2.1600282707368024e-05,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.3593049516202882e-05,
+              "scoreMaximum": 1.3593049516202882e-05,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001090833538910374,
+              "scoreMaximum": 0.0001090833538910374,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.1486372741842388e-08,
+              "scoreMaximum": 1.1486372741842388e-08,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00026493583573028445,
+              "scoreMaximum": 0.00026493583573028445,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.444930088240653e-05,
+              "scoreMaximum": 7.444930088240653e-05,
+              "unstable": false
+            }
+          }
+        }
+      }
+    },
+    "3.3.2": {
+      "measured": true,
+      "passed": true,
+      "unstableSubtypes": [],
+      "subtypes": {
+        "3.3.2:placeholder-only": {
+          "groups": 80,
+          "repeatedGroups": 80,
+          "unstableGroups": 0,
+          "measured": true,
+          "passed": true,
+          "details": {
+            "acceptance-generic-lantern/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0012286087730899453,
+              "scoreMaximum": 0.0012286087730899453,
+              "unstable": false
+            },
+            "acceptance-generic-lantern/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.7890489946003072e-05,
+              "scoreMaximum": 2.7890489946003072e-05,
+              "unstable": false
+            },
+            "acceptance-generic-rain/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0009639495401643217,
+              "scoreMaximum": 0.0009639495401643217,
+              "unstable": false
+            },
+            "acceptance-generic-rain/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.773125197563786e-05,
+              "scoreMaximum": 2.773125197563786e-05,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0017222934402525425,
+              "scoreMaximum": 0.0017222934402525425,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.947390334564261e-05,
+              "scoreMaximum": 4.947390334564261e-05,
+              "unstable": false
+            },
+            "acceptance-missing-banners/good": {
+              "captures": 2,
+              "scoreMinimum": 0.028783215209841728,
+              "scoreMaximum": 0.028783215209841728,
+              "unstable": false
+            },
+            "acceptance-missing-banners/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0013421676121652126,
+              "scoreMaximum": 0.0013421676121652126,
+              "unstable": false
+            },
+            "acceptance-fake-hours/good": {
+              "captures": 2,
+              "scoreMinimum": 0.007027566432952881,
+              "scoreMaximum": 0.007027566432952881,
+              "unstable": false
+            },
+            "acceptance-fake-hours/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0002986669132951647,
+              "scoreMaximum": 0.0002986669132951647,
+              "unstable": false
+            },
+            "acceptance-fake-access/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00555072445422411,
+              "scoreMaximum": 0.00555072445422411,
+              "unstable": false
+            },
+            "acceptance-fake-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00016072625294327736,
+              "scoreMaximum": 0.00016072625294327736,
+              "unstable": false
+            },
+            "acceptance-table-bus/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0008073882199823856,
+              "scoreMaximum": 0.0008073882199823856,
+              "unstable": false
+            },
+            "acceptance-table-bus/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0007870462723076344,
+              "scoreMaximum": 0.0007870462723076344,
+              "unstable": false
+            },
+            "acceptance-link-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0042721983045339584,
+              "scoreMaximum": 0.0042721983045339584,
+              "unstable": false
+            },
+            "acceptance-link-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.320105265127495e-05,
+              "scoreMaximum": 5.320105265127495e-05,
+              "unstable": false
+            },
+            "acceptance-link-appointments/good": {
+              "captures": 2,
+              "scoreMinimum": 0.013494644314050674,
+              "scoreMaximum": 0.013494644314050674,
+              "unstable": false
+            },
+            "acceptance-link-appointments/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00013467829558067024,
+              "scoreMaximum": 0.00013467829558067024,
+              "unstable": false
+            },
+            "acceptance-link-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0003669035213533789,
+              "scoreMaximum": 0.0003669035213533789,
+              "unstable": false
+            },
+            "acceptance-link-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.1608391256886534e-06,
+              "scoreMaximum": 4.1608391256886534e-06,
+              "unstable": false
+            },
+            "acceptance-link-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.004998625721782446,
+              "scoreMaximum": 0.004998625721782446,
+              "unstable": false
+            },
+            "acceptance-link-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.635341636254452e-05,
+              "scoreMaximum": 3.635341636254452e-05,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.003865606850013137,
+              "scoreMaximum": 0.003865606850013137,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 8.152289956342429e-05,
+              "scoreMaximum": 8.152289956342429e-05,
+              "unstable": false
+            },
+            "acceptance-heading-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.007997623644769192,
+              "scoreMaximum": 0.007997623644769192,
+              "unstable": false
+            },
+            "acceptance-heading-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00013500421482603997,
+              "scoreMaximum": 0.00013500421482603997,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0016937757609412074,
+              "scoreMaximum": 0.0016937757609412074,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00010415283031761646,
+              "scoreMaximum": 0.00010415283031761646,
+              "unstable": false
+            },
+            "acceptance-heading-visits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.012396077625453472,
+              "scoreMaximum": 0.012396077625453472,
+              "unstable": false
+            },
+            "acceptance-heading-visits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00017157579713966697,
+              "scoreMaximum": 0.00017157579713966697,
+              "unstable": false
+            },
+            "acceptance-error-name/good": {
+              "captures": 2,
+              "scoreMinimum": 0.002212140941992402,
+              "scoreMaximum": 0.002212140941992402,
+              "unstable": false
+            },
+            "acceptance-error-name/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0011181196896359324,
+              "scoreMaximum": 0.0011181196896359324,
+              "unstable": false
+            },
+            "acceptance-error-date/good": {
+              "captures": 2,
+              "scoreMinimum": 0.010195388458669186,
+              "scoreMaximum": 0.010195388458669186,
+              "unstable": false
+            },
+            "acceptance-error-date/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0022831724490970373,
+              "scoreMaximum": 0.0022831724490970373,
+              "unstable": false
+            },
+            "acceptance-error-code/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0020582322031259537,
+              "scoreMaximum": 0.0020582322031259537,
+              "unstable": false
+            },
+            "acceptance-error-code/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0006487663486041129,
+              "scoreMaximum": 0.0006487663486041129,
+              "unstable": false
+            },
+            "acceptance-error-phone/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0032833246514201164,
+              "scoreMaximum": 0.0032833246514201164,
+              "unstable": false
+            },
+            "acceptance-error-phone/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0010037807514891028,
+              "scoreMaximum": 0.0010037807514891028,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/good": {
+              "captures": 2,
+              "scoreMinimum": 0.04055158421397209,
+              "scoreMaximum": 0.04055158421397209,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9975097179412842,
+              "scoreMaximum": 0.9975097179412842,
+              "unstable": false
+            },
+            "acceptance-field-company/good": {
+              "captures": 2,
+              "scoreMinimum": 0.15955331921577454,
+              "scoreMaximum": 0.15955331921577454,
+              "unstable": false
+            },
+            "acceptance-field-company/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.005987891927361488,
+              "scoreMaximum": 0.005987891927361488,
+              "unstable": false
+            },
+            "acceptance-field-ticket/good": {
+              "captures": 2,
+              "scoreMinimum": 0.13917897641658783,
+              "scoreMaximum": 0.13917897641658783,
+              "unstable": false
+            },
+            "acceptance-field-ticket/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.003696921980008483,
+              "scoreMaximum": 0.003696921980008483,
+              "unstable": false
+            },
+            "acceptance-field-route/good": {
+              "captures": 2,
+              "scoreMinimum": 0.19955210387706757,
+              "scoreMaximum": 0.19955210387706757,
+              "unstable": false
+            },
+            "acceptance-field-route/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.006440622266381979,
+              "scoreMaximum": 0.006440622266381979,
+              "unstable": false
+            },
+            "acceptance-icon-settings/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0002620211453177035,
+              "scoreMaximum": 0.0002620211453177035,
+              "unstable": false
+            },
+            "acceptance-icon-settings/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0004910469288006425,
+              "scoreMaximum": 0.0004910469288006425,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00022098887711763382,
+              "scoreMaximum": 0.00022098887711763382,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0007434788858518004,
+              "scoreMaximum": 0.0007434788858518004,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/good": {
+              "captures": 2,
+              "scoreMinimum": 5.155054896022193e-05,
+              "scoreMaximum": 5.155054896022193e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.8497524150880054e-05,
+              "scoreMaximum": 5.8497524150880054e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/good": {
+              "captures": 2,
+              "scoreMinimum": 2.690844121389091e-05,
+              "scoreMaximum": 2.690844121389091e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.8765760362148285e-05,
+              "scoreMaximum": 2.8765760362148285e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/good": {
+              "captures": 2,
+              "scoreMinimum": 4.414021532284096e-06,
+              "scoreMaximum": 4.414021532284096e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.251132733974373e-06,
+              "scoreMaximum": 5.251132733974373e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/good": {
+              "captures": 2,
+              "scoreMinimum": 3.954989369958639e-05,
+              "scoreMaximum": 3.954989369958639e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.228937905281782e-05,
+              "scoreMaximum": 4.228937905281782e-05,
+              "unstable": false
+            },
+            "acceptance-status-red/good": {
+              "captures": 2,
+              "scoreMinimum": 9.86988425211166e-07,
+              "scoreMaximum": 9.86988425211166e-07,
+              "unstable": false
+            },
+            "acceptance-status-red/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.4652398426260334e-06,
+              "scoreMaximum": 3.4652398426260334e-06,
+              "unstable": false
+            },
+            "acceptance-status-large/good": {
+              "captures": 2,
+              "scoreMinimum": 2.6003590392065234e-06,
+              "scoreMaximum": 2.6003590392065234e-06,
+              "unstable": false
+            },
+            "acceptance-status-large/bad": {
+              "captures": 2,
+              "scoreMinimum": 9.701489034341648e-06,
+              "scoreMaximum": 9.701489034341648e-06,
+              "unstable": false
+            },
+            "acceptance-status-new/good": {
+              "captures": 2,
+              "scoreMinimum": 6.358118298521731e-06,
+              "scoreMaximum": 6.358118298521731e-06,
+              "unstable": false
+            },
+            "acceptance-status-new/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.2127882402855903e-05,
+              "scoreMaximum": 2.2127882402855903e-05,
+              "unstable": false
+            },
+            "acceptance-status-local/good": {
+              "captures": 2,
+              "scoreMinimum": 3.831877620541491e-06,
+              "scoreMaximum": 3.831877620541491e-06,
+              "unstable": false
+            },
+            "acceptance-status-local/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.3964196114102378e-05,
+              "scoreMaximum": 1.3964196114102378e-05,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.04055158421397209,
+              "scoreMaximum": 0.04055158421397209,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.004928295034915209,
+              "scoreMaximum": 0.004928295034915209,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.15955331921577454,
+              "scoreMaximum": 0.15955331921577454,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.007599508855491877,
+              "scoreMaximum": 0.007599508855491877,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 5.155054896022193e-05,
+              "scoreMaximum": 5.155054896022193e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.046651833457872e-06,
+              "scoreMaximum": 6.046651833457872e-06,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0042721983045339584,
+              "scoreMaximum": 0.0042721983045339584,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.296557911700802e-05,
+              "scoreMaximum": 1.296557911700802e-05,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0008073882199823856,
+              "scoreMaximum": 0.0008073882199823856,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0014428102876991034,
+              "scoreMaximum": 0.0014428102876991034,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.007027566432952881,
+              "scoreMaximum": 0.007027566432952881,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.312508584623174e-08,
+              "scoreMaximum": 2.312508584623174e-08,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0012286087730899453,
+              "scoreMaximum": 0.0012286087730899453,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.317856706213206e-05,
+              "scoreMaximum": 2.317856706213206e-05,
+              "unstable": false
+            }
+          }
+        },
+        "3.3.2:unnamed-form-field": {
+          "groups": 80,
+          "repeatedGroups": 80,
+          "unstableGroups": 0,
+          "measured": true,
+          "passed": true,
+          "details": {
+            "acceptance-generic-lantern/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0006199798663146794,
+              "scoreMaximum": 0.0006199798663146794,
+              "unstable": false
+            },
+            "acceptance-generic-lantern/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00013658928219228983,
+              "scoreMaximum": 0.00013658928219228983,
+              "unstable": false
+            },
+            "acceptance-generic-rain/good": {
+              "captures": 2,
+              "scoreMinimum": 0.001033647102303803,
+              "scoreMaximum": 0.001033647102303803,
+              "unstable": false
+            },
+            "acceptance-generic-rain/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0002575482940301299,
+              "scoreMaximum": 0.0002575482940301299,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0007647411548532546,
+              "scoreMaximum": 0.0007647411548532546,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0001504305109847337,
+              "scoreMaximum": 0.0001504305109847337,
+              "unstable": false
+            },
+            "acceptance-missing-banners/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0003053602995350957,
+              "scoreMaximum": 0.0003053602995350957,
+              "unstable": false
+            },
+            "acceptance-missing-banners/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.239054684760049e-05,
+              "scoreMaximum": 7.239054684760049e-05,
+              "unstable": false
+            },
+            "acceptance-fake-hours/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001710400392767042,
+              "scoreMaximum": 0.0001710400392767042,
+              "unstable": false
+            },
+            "acceptance-fake-hours/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.698612560285255e-05,
+              "scoreMaximum": 6.698612560285255e-05,
+              "unstable": false
+            },
+            "acceptance-fake-access/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001453769946238026,
+              "scoreMaximum": 0.0001453769946238026,
+              "unstable": false
+            },
+            "acceptance-fake-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 9.209816926158965e-05,
+              "scoreMaximum": 9.209816926158965e-05,
+              "unstable": false
+            },
+            "acceptance-table-bus/good": {
+              "captures": 2,
+              "scoreMinimum": 2.490644510544371e-05,
+              "scoreMaximum": 2.490644510544371e-05,
+              "unstable": false
+            },
+            "acceptance-table-bus/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.0874083929811604e-05,
+              "scoreMaximum": 2.0874083929811604e-05,
+              "unstable": false
+            },
+            "acceptance-link-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.000850682845339179,
+              "scoreMaximum": 0.000850682845339179,
+              "unstable": false
+            },
+            "acceptance-link-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.943931369576603e-05,
+              "scoreMaximum": 3.943931369576603e-05,
+              "unstable": false
+            },
+            "acceptance-link-appointments/good": {
+              "captures": 2,
+              "scoreMinimum": 0.002764984732493758,
+              "scoreMaximum": 0.002764984732493758,
+              "unstable": false
+            },
+            "acceptance-link-appointments/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00018139836902264506,
+              "scoreMaximum": 0.00018139836902264506,
+              "unstable": false
+            },
+            "acceptance-link-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0009217085316777229,
+              "scoreMaximum": 0.0009217085316777229,
+              "unstable": false
+            },
+            "acceptance-link-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.533635001280345e-05,
+              "scoreMaximum": 4.533635001280345e-05,
+              "unstable": false
+            },
+            "acceptance-link-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.001576963230036199,
+              "scoreMaximum": 0.001576963230036199,
+              "unstable": false
+            },
+            "acceptance-link-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 9.727305587148294e-05,
+              "scoreMaximum": 9.727305587148294e-05,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0003767888993024826,
+              "scoreMaximum": 0.0003767888993024826,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.9593815270345658e-05,
+              "scoreMaximum": 2.9593815270345658e-05,
+              "unstable": false
+            },
+            "acceptance-heading-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00015873926167842,
+              "scoreMaximum": 0.00015873926167842,
+              "unstable": false
+            },
+            "acceptance-heading-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.1149812962685246e-05,
+              "scoreMaximum": 1.1149812962685246e-05,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0003090054960921407,
+              "scoreMaximum": 0.0003090054960921407,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.427043116564164e-05,
+              "scoreMaximum": 1.427043116564164e-05,
+              "unstable": false
+            },
+            "acceptance-heading-visits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00020854020840488374,
+              "scoreMaximum": 0.00020854020840488374,
+              "unstable": false
+            },
+            "acceptance-heading-visits/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.0851098522834945e-05,
+              "scoreMaximum": 1.0851098522834945e-05,
+              "unstable": false
+            },
+            "acceptance-error-name/good": {
+              "captures": 2,
+              "scoreMinimum": 1.30567786982283e-05,
+              "scoreMaximum": 1.30567786982283e-05,
+              "unstable": false
+            },
+            "acceptance-error-name/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.627588507195469e-06,
+              "scoreMaximum": 5.627588507195469e-06,
+              "unstable": false
+            },
+            "acceptance-error-date/good": {
+              "captures": 2,
+              "scoreMinimum": 2.0602783479262143e-05,
+              "scoreMaximum": 2.0602783479262143e-05,
+              "unstable": false
+            },
+            "acceptance-error-date/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.683875653834548e-06,
+              "scoreMaximum": 6.683875653834548e-06,
+              "unstable": false
+            },
+            "acceptance-error-code/good": {
+              "captures": 2,
+              "scoreMinimum": 9.330556167697068e-06,
+              "scoreMaximum": 9.330556167697068e-06,
+              "unstable": false
+            },
+            "acceptance-error-code/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.856944204017054e-06,
+              "scoreMaximum": 3.856944204017054e-06,
+              "unstable": false
+            },
+            "acceptance-error-phone/good": {
+              "captures": 2,
+              "scoreMinimum": 1.0334436410630587e-05,
+              "scoreMaximum": 1.0334436410630587e-05,
+              "unstable": false
+            },
+            "acceptance-error-phone/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.747566779566114e-06,
+              "scoreMaximum": 3.747566779566114e-06,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/good": {
+              "captures": 2,
+              "scoreMinimum": 0.001088557532057166,
+              "scoreMaximum": 0.001088557532057166,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.016892820596694946,
+              "scoreMaximum": 0.016892820596694946,
+              "unstable": false
+            },
+            "acceptance-field-company/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0011854085605591536,
+              "scoreMaximum": 0.0011854085605591536,
+              "unstable": false
+            },
+            "acceptance-field-company/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9978806972503662,
+              "scoreMaximum": 0.9978806972503662,
+              "unstable": false
+            },
+            "acceptance-field-ticket/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0006289197481237352,
+              "scoreMaximum": 0.0006289197481237352,
+              "unstable": false
+            },
+            "acceptance-field-ticket/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9958539009094238,
+              "scoreMaximum": 0.9958539009094238,
+              "unstable": false
+            },
+            "acceptance-field-route/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0009153463179245591,
+              "scoreMaximum": 0.0009153463179245591,
+              "unstable": false
+            },
+            "acceptance-field-route/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9973145127296448,
+              "scoreMaximum": 0.9973145127296448,
+              "unstable": false
+            },
+            "acceptance-icon-settings/good": {
+              "captures": 2,
+              "scoreMinimum": 1.34562571929564e-06,
+              "scoreMaximum": 1.34562571929564e-06,
+              "unstable": false
+            },
+            "acceptance-icon-settings/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.08602562546730042,
+              "scoreMaximum": 0.08602562546730042,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/good": {
+              "captures": 2,
+              "scoreMinimum": 2.3110305846785195e-06,
+              "scoreMaximum": 2.3110305846785195e-06,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.1329914629459381,
+              "scoreMaximum": 0.1329914629459381,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/good": {
+              "captures": 2,
+              "scoreMinimum": 2.106357533193659e-05,
+              "scoreMaximum": 2.106357533193659e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.1760453566676006e-05,
+              "scoreMaximum": 3.1760453566676006e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/good": {
+              "captures": 2,
+              "scoreMinimum": 2.730016058194451e-05,
+              "scoreMaximum": 2.730016058194451e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.0595041355118155e-05,
+              "scoreMaximum": 4.0595041355118155e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/good": {
+              "captures": 2,
+              "scoreMinimum": 1.0004634532378986e-05,
+              "scoreMaximum": 1.0004634532378986e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.5527066352660768e-05,
+              "scoreMaximum": 1.5527066352660768e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/good": {
+              "captures": 2,
+              "scoreMinimum": 1.882045398815535e-05,
+              "scoreMaximum": 1.882045398815535e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.928996764239855e-05,
+              "scoreMaximum": 2.928996764239855e-05,
+              "unstable": false
+            },
+            "acceptance-status-red/good": {
+              "captures": 2,
+              "scoreMinimum": 7.301687077188035e-08,
+              "scoreMaximum": 7.301687077188035e-08,
+              "unstable": false
+            },
+            "acceptance-status-red/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.9481936419651902e-07,
+              "scoreMaximum": 1.9481936419651902e-07,
+              "unstable": false
+            },
+            "acceptance-status-large/good": {
+              "captures": 2,
+              "scoreMinimum": 9.54549079779099e-08,
+              "scoreMaximum": 9.54549079779099e-08,
+              "unstable": false
+            },
+            "acceptance-status-large/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.634352540553664e-07,
+              "scoreMaximum": 2.634352540553664e-07,
+              "unstable": false
+            },
+            "acceptance-status-new/good": {
+              "captures": 2,
+              "scoreMinimum": 8.830072317778104e-08,
+              "scoreMaximum": 8.830072317778104e-08,
+              "unstable": false
+            },
+            "acceptance-status-new/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.3545530325463915e-07,
+              "scoreMaximum": 2.3545530325463915e-07,
+              "unstable": false
+            },
+            "acceptance-status-local/good": {
+              "captures": 2,
+              "scoreMinimum": 6.806608610077092e-08,
+              "scoreMaximum": 6.806608610077092e-08,
+              "unstable": false
+            },
+            "acceptance-status-local/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.8768822940273822e-07,
+              "scoreMaximum": 1.8768822940273822e-07,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.001088557532057166,
+              "scoreMaximum": 0.001088557532057166,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.997671902179718,
+              "scoreMaximum": 0.997671902179718,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0011854085605591536,
+              "scoreMaximum": 0.0011854085605591536,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9973366856575012,
+              "scoreMaximum": 0.9973366856575012,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 2.106357533193659e-05,
+              "scoreMaximum": 2.106357533193659e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.2532100299722515e-05,
+              "scoreMaximum": 1.2532100299722515e-05,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 0.000850682845339179,
+              "scoreMaximum": 0.000850682845339179,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.132080408046022e-05,
+              "scoreMaximum": 2.132080408046022e-05,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 2.490644510544371e-05,
+              "scoreMaximum": 2.490644510544371e-05,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.3861924344382714e-05,
+              "scoreMaximum": 1.3861924344382714e-05,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001710400392767042,
+              "scoreMaximum": 0.0001710400392767042,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.6735795736312866,
+              "scoreMaximum": 0.6735795736312866,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0006199798663146794,
+              "scoreMaximum": 0.0006199798663146794,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00012260394578333944,
+              "scoreMaximum": 0.00012260394578333944,
+              "unstable": false
+            }
+          }
+        }
+      }
+    },
+    "4.1.2": {
+      "measured": true,
+      "passed": true,
+      "unstableSubtypes": [],
+      "subtypes": {
+        "4.1.2:state-change-silent": {
+          "groups": 78,
+          "repeatedGroups": 78,
+          "unstableGroups": 0,
+          "measured": true,
+          "passed": true,
+          "details": {
+            "acceptance-generic-lantern/good": {
+              "captures": 2,
+              "scoreMinimum": 0.005465326830744743,
+              "scoreMaximum": 0.005465326830744743,
+              "unstable": false
+            },
+            "acceptance-generic-lantern/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0008156523108482361,
+              "scoreMaximum": 0.0008156523108482361,
+              "unstable": false
+            },
+            "acceptance-generic-rain/good": {
+              "captures": 2,
+              "scoreMinimum": 0.009061334654688835,
+              "scoreMaximum": 0.009061334654688835,
+              "unstable": false
+            },
+            "acceptance-generic-rain/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.001866369741037488,
+              "scoreMaximum": 0.001866369741037488,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0022349334321916103,
+              "scoreMaximum": 0.0022349334321916103,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00031002500327304006,
+              "scoreMaximum": 0.00031002500327304006,
+              "unstable": false
+            },
+            "acceptance-missing-banners/good": {
+              "captures": 2,
+              "scoreMinimum": 0.003253730945289135,
+              "scoreMaximum": 0.003253730945289135,
+              "unstable": false
+            },
+            "acceptance-missing-banners/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0006410409114323556,
+              "scoreMaximum": 0.0006410409114323556,
+              "unstable": false
+            },
+            "acceptance-fake-hours/good": {
+              "captures": 2,
+              "scoreMinimum": 0.002575266407802701,
+              "scoreMaximum": 0.002575266407802701,
+              "unstable": false
+            },
+            "acceptance-fake-hours/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0004717608680948615,
+              "scoreMaximum": 0.0004717608680948615,
+              "unstable": false
+            },
+            "acceptance-fake-access/good": {
+              "captures": 2,
+              "scoreMinimum": 0.002315839985385537,
+              "scoreMaximum": 0.002315839985385537,
+              "unstable": false
+            },
+            "acceptance-fake-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0004082635568920523,
+              "scoreMaximum": 0.0004082635568920523,
+              "unstable": false
+            },
+            "acceptance-table-bus/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001545953709864989,
+              "scoreMaximum": 0.0001545953709864989,
+              "unstable": false
+            },
+            "acceptance-table-bus/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00013435185246635228,
+              "scoreMaximum": 0.00013435185246635228,
+              "unstable": false
+            },
+            "acceptance-link-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0028840014711022377,
+              "scoreMaximum": 0.0028840014711022377,
+              "unstable": false
+            },
+            "acceptance-link-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00016959242930170149,
+              "scoreMaximum": 0.00016959242930170149,
+              "unstable": false
+            },
+            "acceptance-link-appointments/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0023668454959988594,
+              "scoreMaximum": 0.0023668454959988594,
+              "unstable": false
+            },
+            "acceptance-link-appointments/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0001391133846482262,
+              "scoreMaximum": 0.0001391133846482262,
+              "unstable": false
+            },
+            "acceptance-link-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.008801265619695187,
+              "scoreMaximum": 0.008801265619695187,
+              "unstable": false
+            },
+            "acceptance-link-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.000520461646374315,
+              "scoreMaximum": 0.000520461646374315,
+              "unstable": false
+            },
+            "acceptance-link-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.011702436953783035,
+              "scoreMaximum": 0.011702436953783035,
+              "unstable": false
+            },
+            "acceptance-link-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0006939329905435443,
+              "scoreMaximum": 0.0006939329905435443,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.004326364025473595,
+              "scoreMaximum": 0.004326364025473595,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00025420752353966236,
+              "scoreMaximum": 0.00025420752353966236,
+              "unstable": false
+            },
+            "acceptance-heading-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0029584933072328568,
+              "scoreMaximum": 0.0029584933072328568,
+              "unstable": false
+            },
+            "acceptance-heading-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0002191169187426567,
+              "scoreMaximum": 0.0002191169187426567,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.005695971194654703,
+              "scoreMaximum": 0.005695971194654703,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0003620472562033683,
+              "scoreMaximum": 0.0003620472562033683,
+              "unstable": false
+            },
+            "acceptance-heading-visits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.002111036330461502,
+              "scoreMaximum": 0.002111036330461502,
+              "unstable": false
+            },
+            "acceptance-heading-visits/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00015622841601725668,
+              "scoreMaximum": 0.00015622841601725668,
+              "unstable": false
+            },
+            "acceptance-error-name/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0002934970543719828,
+              "scoreMaximum": 0.0002934970543719828,
+              "unstable": false
+            },
+            "acceptance-error-name/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0002298527251696214,
+              "scoreMaximum": 0.0002298527251696214,
+              "unstable": false
+            },
+            "acceptance-error-date/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00029231832013465464,
+              "scoreMaximum": 0.00029231832013465464,
+              "unstable": false
+            },
+            "acceptance-error-date/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0001910177816171199,
+              "scoreMaximum": 0.0001910177816171199,
+              "unstable": false
+            },
+            "acceptance-error-code/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00023675779812037945,
+              "scoreMaximum": 0.00023675779812037945,
+              "unstable": false
+            },
+            "acceptance-error-code/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00017086138541344553,
+              "scoreMaximum": 0.00017086138541344553,
+              "unstable": false
+            },
+            "acceptance-error-phone/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0003602742508519441,
+              "scoreMaximum": 0.0003602742508519441,
+              "unstable": false
+            },
+            "acceptance-error-phone/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0003503357002045959,
+              "scoreMaximum": 0.0003503357002045959,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/good": {
+              "captures": 2,
+              "scoreMinimum": 0.029366441071033478,
+              "scoreMaximum": 0.029366441071033478,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0012134606949985027,
+              "scoreMaximum": 0.0012134606949985027,
+              "unstable": false
+            },
+            "acceptance-field-company/good": {
+              "captures": 2,
+              "scoreMinimum": 0.016649676486849785,
+              "scoreMaximum": 0.016649676486849785,
+              "unstable": false
+            },
+            "acceptance-field-company/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.011310011264868e-06,
+              "scoreMaximum": 4.011310011264868e-06,
+              "unstable": false
+            },
+            "acceptance-field-ticket/good": {
+              "captures": 2,
+              "scoreMinimum": 0.04098963737487793,
+              "scoreMaximum": 0.04098963737487793,
+              "unstable": false
+            },
+            "acceptance-field-ticket/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.723033377260435e-06,
+              "scoreMaximum": 7.723033377260435e-06,
+              "unstable": false
+            },
+            "acceptance-field-route/good": {
+              "captures": 2,
+              "scoreMinimum": 0.020110972225666046,
+              "scoreMaximum": 0.020110972225666046,
+              "unstable": false
+            },
+            "acceptance-field-route/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.011310011264868e-06,
+              "scoreMaximum": 4.011310011264868e-06,
+              "unstable": false
+            },
+            "acceptance-icon-settings/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0038725791964679956,
+              "scoreMaximum": 0.0038725791964679956,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/good": {
+              "captures": 2,
+              "scoreMinimum": 0.002559829503297806,
+              "scoreMaximum": 0.002559829503297806,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/good": {
+              "captures": 2,
+              "scoreMinimum": 0.028619371354579926,
+              "scoreMaximum": 0.028619371354579926,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9985345602035522,
+              "scoreMaximum": 0.9985345602035522,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/good": {
+              "captures": 2,
+              "scoreMinimum": 0.043659523129463196,
+              "scoreMaximum": 0.043659523129463196,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.999029278755188,
+              "scoreMaximum": 0.999029278755188,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/good": {
+              "captures": 2,
+              "scoreMinimum": 0.02705950289964676,
+              "scoreMaximum": 0.02705950289964676,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9984620809555054,
+              "scoreMaximum": 0.9984620809555054,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/good": {
+              "captures": 2,
+              "scoreMinimum": 0.032015930861234665,
+              "scoreMaximum": 0.032015930861234665,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9986764788627625,
+              "scoreMaximum": 0.9986764788627625,
+              "unstable": false
+            },
+            "acceptance-status-red/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00015754543710500002,
+              "scoreMaximum": 0.00015754543710500002,
+              "unstable": false
+            },
+            "acceptance-status-red/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0006528451922349632,
+              "scoreMaximum": 0.0006528451922349632,
+              "unstable": false
+            },
+            "acceptance-status-large/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00011922657722607255,
+              "scoreMaximum": 0.00011922657722607255,
+              "unstable": false
+            },
+            "acceptance-status-large/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0004458559269551188,
+              "scoreMaximum": 0.0004458559269551188,
+              "unstable": false
+            },
+            "acceptance-status-new/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00016824784688651562,
+              "scoreMaximum": 0.00016824784688651562,
+              "unstable": false
+            },
+            "acceptance-status-new/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0006981981568969786,
+              "scoreMaximum": 0.0006981981568969786,
+              "unstable": false
+            },
+            "acceptance-status-local/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001489311980549246,
+              "scoreMaximum": 0.0001489311980549246,
+              "unstable": false
+            },
+            "acceptance-status-local/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0006309276795946062,
+              "scoreMaximum": 0.0006309276795946062,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.029366441071033478,
+              "scoreMaximum": 0.029366441071033478,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.1362864067195915e-06,
+              "scoreMaximum": 4.1362864067195915e-06,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.016649676486849785,
+              "scoreMaximum": 0.016649676486849785,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.011310011264868e-06,
+              "scoreMaximum": 4.011310011264868e-06,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 0.028619371354579926,
+              "scoreMaximum": 0.028619371354579926,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.948591947555542,
+              "scoreMaximum": 0.948591947555542,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0028840014711022377,
+              "scoreMaximum": 0.0028840014711022377,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.7781155697302893e-06,
+              "scoreMaximum": 3.7781155697302893e-06,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001545953709864989,
+              "scoreMaximum": 0.0001545953709864989,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00013435185246635228,
+              "scoreMaximum": 0.00013435185246635228,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.002575266407802701,
+              "scoreMaximum": 0.002575266407802701,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.1237794953776756e-06,
+              "scoreMaximum": 2.1237794953776756e-06,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.005465326830744743,
+              "scoreMaximum": 0.005465326830744743,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0007748260395601392,
+              "scoreMaximum": 0.0007748260395601392,
+              "unstable": false
+            }
+          }
+        }
+      }
+    },
+    "4.1.3": {
+      "measured": true,
+      "passed": true,
+      "unstableSubtypes": [],
+      "subtypes": {
+        "4.1.3:form-activation-silent": {
+          "groups": 80,
+          "repeatedGroups": 80,
+          "unstableGroups": 0,
+          "measured": true,
+          "passed": true,
+          "details": {
+            "acceptance-generic-lantern/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0014790749410167336,
+              "scoreMaximum": 0.0014790749410167336,
+              "unstable": false
+            },
+            "acceptance-generic-lantern/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0005856200587004423,
+              "scoreMaximum": 0.0005856200587004423,
+              "unstable": false
+            },
+            "acceptance-generic-rain/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0006815477390773594,
+              "scoreMaximum": 0.0006815477390773594,
+              "unstable": false
+            },
+            "acceptance-generic-rain/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0003301851684227586,
+              "scoreMaximum": 0.0003301851684227586,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0008222449105232954,
+              "scoreMaximum": 0.0008222449105232954,
+              "unstable": false
+            },
+            "acceptance-filename-orchard/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0003406040195841342,
+              "scoreMaximum": 0.0003406040195841342,
+              "unstable": false
+            },
+            "acceptance-missing-banners/good": {
+              "captures": 2,
+              "scoreMinimum": 0.000728264800272882,
+              "scoreMaximum": 0.000728264800272882,
+              "unstable": false
+            },
+            "acceptance-missing-banners/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.000347710243659094,
+              "scoreMaximum": 0.000347710243659094,
+              "unstable": false
+            },
+            "acceptance-fake-hours/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00031830952502787113,
+              "scoreMaximum": 0.00031830952502787113,
+              "unstable": false
+            },
+            "acceptance-fake-hours/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.016930747777223587,
+              "scoreMaximum": 0.016930747777223587,
+              "unstable": false
+            },
+            "acceptance-fake-access/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00022365593758877367,
+              "scoreMaximum": 0.00022365593758877367,
+              "unstable": false
+            },
+            "acceptance-fake-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.015465649776160717,
+              "scoreMaximum": 0.015465649776160717,
+              "unstable": false
+            },
+            "acceptance-table-bus/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00019866494403686374,
+              "scoreMaximum": 0.00019866494403686374,
+              "unstable": false
+            },
+            "acceptance-table-bus/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00014830213331151754,
+              "scoreMaximum": 0.00014830213331151754,
+              "unstable": false
+            },
+            "acceptance-link-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0002460544928908348,
+              "scoreMaximum": 0.0002460544928908348,
+              "unstable": false
+            },
+            "acceptance-link-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.9358145184232853e-05,
+              "scoreMaximum": 2.9358145184232853e-05,
+              "unstable": false
+            },
+            "acceptance-link-appointments/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0008218290167860687,
+              "scoreMaximum": 0.0008218290167860687,
+              "unstable": false
+            },
+            "acceptance-link-appointments/bad": {
+              "captures": 2,
+              "scoreMinimum": 9.574951400281861e-05,
+              "scoreMaximum": 9.574951400281861e-05,
+              "unstable": false
+            },
+            "acceptance-link-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.001080410904251039,
+              "scoreMaximum": 0.001080410904251039,
+              "unstable": false
+            },
+            "acceptance-link-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0001315493427682668,
+              "scoreMaximum": 0.0001315493427682668,
+              "unstable": false
+            },
+            "acceptance-link-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00017202777962666005,
+              "scoreMaximum": 0.00017202777962666005,
+              "unstable": false
+            },
+            "acceptance-link-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.2975065803620964e-05,
+              "scoreMaximum": 2.2975065803620964e-05,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00020437203056644648,
+              "scoreMaximum": 0.00020437203056644648,
+              "unstable": false
+            },
+            "acceptance-heading-guidance/bad": {
+              "captures": 2,
+              "scoreMinimum": 5.32031299371738e-05,
+              "scoreMaximum": 5.32031299371738e-05,
+              "unstable": false
+            },
+            "acceptance-heading-permits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00011999256821582094,
+              "scoreMaximum": 0.00011999256821582094,
+              "unstable": false
+            },
+            "acceptance-heading-permits/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.969378354260698e-05,
+              "scoreMaximum": 1.969378354260698e-05,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0005096935201436281,
+              "scoreMaximum": 0.0005096935201436281,
+              "unstable": false
+            },
+            "acceptance-heading-repairs/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.0658076613908634e-05,
+              "scoreMaximum": 4.0658076613908634e-05,
+              "unstable": false
+            },
+            "acceptance-heading-visits/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001266112958546728,
+              "scoreMaximum": 0.0001266112958546728,
+              "unstable": false
+            },
+            "acceptance-heading-visits/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.832930684031453e-05,
+              "scoreMaximum": 1.832930684031453e-05,
+              "unstable": false
+            },
+            "acceptance-error-name/good": {
+              "captures": 2,
+              "scoreMinimum": 4.331839136284543e-06,
+              "scoreMaximum": 4.331839136284543e-06,
+              "unstable": false
+            },
+            "acceptance-error-name/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00010943917004624382,
+              "scoreMaximum": 0.00010943917004624382,
+              "unstable": false
+            },
+            "acceptance-error-date/good": {
+              "captures": 2,
+              "scoreMinimum": 6.838732133473968e-06,
+              "scoreMaximum": 6.838732133473968e-06,
+              "unstable": false
+            },
+            "acceptance-error-date/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0002701853518374264,
+              "scoreMaximum": 0.0002701853518374264,
+              "unstable": false
+            },
+            "acceptance-error-code/good": {
+              "captures": 2,
+              "scoreMinimum": 8.343293302459642e-06,
+              "scoreMaximum": 8.343293302459642e-06,
+              "unstable": false
+            },
+            "acceptance-error-code/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00026412197621539235,
+              "scoreMaximum": 0.00026412197621539235,
+              "unstable": false
+            },
+            "acceptance-error-phone/good": {
+              "captures": 2,
+              "scoreMinimum": 3.2348175409424584e-06,
+              "scoreMaximum": 3.2348175409424584e-06,
+              "unstable": false
+            },
+            "acceptance-error-phone/bad": {
+              "captures": 2,
+              "scoreMinimum": 7.856792217353359e-05,
+              "scoreMaximum": 7.856792217353359e-05,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00020133561338298023,
+              "scoreMaximum": 0.00020133561338298023,
+              "unstable": false
+            },
+            "acceptance-placeholder-email/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.373414124827832e-05,
+              "scoreMaximum": 1.373414124827832e-05,
+              "unstable": false
+            },
+            "acceptance-field-company/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0002535875828471035,
+              "scoreMaximum": 0.0002535875828471035,
+              "unstable": false
+            },
+            "acceptance-field-company/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.6740308928528975e-07,
+              "scoreMaximum": 3.6740308928528975e-07,
+              "unstable": false
+            },
+            "acceptance-field-ticket/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00012204290396766737,
+              "scoreMaximum": 0.00012204290396766737,
+              "unstable": false
+            },
+            "acceptance-field-ticket/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.6456802143238747e-07,
+              "scoreMaximum": 1.6456802143238747e-07,
+              "unstable": false
+            },
+            "acceptance-field-route/good": {
+              "captures": 2,
+              "scoreMinimum": 8.715614239918068e-05,
+              "scoreMaximum": 8.715614239918068e-05,
+              "unstable": false
+            },
+            "acceptance-field-route/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.3160408229850873e-07,
+              "scoreMaximum": 1.3160408229850873e-07,
+              "unstable": false
+            },
+            "acceptance-icon-settings/good": {
+              "captures": 2,
+              "scoreMinimum": 0.024419227614998817,
+              "scoreMaximum": 0.024419227614998817,
+              "unstable": false
+            },
+            "acceptance-icon-settings/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.869190095429076e-06,
+              "scoreMaximum": 3.869190095429076e-06,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/good": {
+              "captures": 2,
+              "scoreMinimum": 0.158246248960495,
+              "scoreMaximum": 0.158246248960495,
+              "unstable": false
+            },
+            "acceptance-icon-calendar/bad": {
+              "captures": 2,
+              "scoreMinimum": 1.719622923701536e-05,
+              "scoreMaximum": 1.719622923701536e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/good": {
+              "captures": 2,
+              "scoreMinimum": 4.687347245635465e-05,
+              "scoreMaximum": 4.687347245635465e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access/bad": {
+              "captures": 2,
+              "scoreMinimum": 4.9772650527302176e-05,
+              "scoreMaximum": 4.9772650527302176e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001154575584223494,
+              "scoreMaximum": 0.0001154575584223494,
+              "unstable": false
+            },
+            "acceptance-disclosure-refunds/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00012999166210647672,
+              "scoreMaximum": 0.00012999166210647672,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00021106147323735058,
+              "scoreMaximum": 0.00021106147323735058,
+              "unstable": false
+            },
+            "acceptance-disclosure-lockers/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00022174912737682462,
+              "scoreMaximum": 0.00022174912737682462,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0001016944952425547,
+              "scoreMaximum": 0.0001016944952425547,
+              "unstable": false
+            },
+            "acceptance-disclosure-cycling/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00011344221275066957,
+              "scoreMaximum": 0.00011344221275066957,
+              "unstable": false
+            },
+            "acceptance-status-red/good": {
+              "captures": 2,
+              "scoreMinimum": 0.010061626322567463,
+              "scoreMaximum": 0.010061626322567463,
+              "unstable": false
+            },
+            "acceptance-status-red/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9970807433128357,
+              "scoreMaximum": 0.9970807433128357,
+              "unstable": false
+            },
+            "acceptance-status-large/good": {
+              "captures": 2,
+              "scoreMinimum": 0.02692103385925293,
+              "scoreMaximum": 0.02692103385925293,
+              "unstable": false
+            },
+            "acceptance-status-large/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9988841414451599,
+              "scoreMaximum": 0.9988841414451599,
+              "unstable": false
+            },
+            "acceptance-status-new/good": {
+              "captures": 2,
+              "scoreMinimum": 0.014406479895114899,
+              "scoreMaximum": 0.014406479895114899,
+              "unstable": false
+            },
+            "acceptance-status-new/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9979240894317627,
+              "scoreMaximum": 0.9979240894317627,
+              "unstable": false
+            },
+            "acceptance-status-local/good": {
+              "captures": 2,
+              "scoreMinimum": 0.017907731235027313,
+              "scoreMaximum": 0.017907731235027313,
+              "unstable": false
+            },
+            "acceptance-status-local/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.9983439445495605,
+              "scoreMaximum": 0.9983439445495605,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00020133561338298023,
+              "scoreMaximum": 0.00020133561338298023,
+              "unstable": false
+            },
+            "acceptance-placeholder-email+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.5290685218569706e-07,
+              "scoreMaximum": 3.5290685218569706e-07,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0002535875828471035,
+              "scoreMaximum": 0.0002535875828471035,
+              "unstable": false
+            },
+            "acceptance-field-company+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 3.817579568021756e-07,
+              "scoreMaximum": 3.817579568021756e-07,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 4.687347245635465e-05,
+              "scoreMaximum": 4.687347245635465e-05,
+              "unstable": false
+            },
+            "acceptance-disclosure-access+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 6.734177304679179e-07,
+              "scoreMaximum": 6.734177304679179e-07,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0002460544928908348,
+              "scoreMaximum": 0.0002460544928908348,
+              "unstable": false
+            },
+            "acceptance-link-guidance+also-generic-heading/bad": {
+              "captures": 2,
+              "scoreMinimum": 2.865396311335644e-07,
+              "scoreMaximum": 2.865396311335644e-07,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00019866494403686374,
+              "scoreMaximum": 0.00019866494403686374,
+              "unstable": false
+            },
+            "acceptance-table-bus+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00013593467883765697,
+              "scoreMaximum": 0.00013593467883765697,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/good": {
+              "captures": 2,
+              "scoreMinimum": 0.00031830952502787113,
+              "scoreMaximum": 0.00031830952502787113,
+              "unstable": false
+            },
+            "acceptance-fake-hours+also-bare-edit/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.00029947669827379286,
+              "scoreMaximum": 0.00029947669827379286,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/good": {
+              "captures": 2,
+              "scoreMinimum": 0.0014790749410167336,
+              "scoreMaximum": 0.0014790749410167336,
+              "unstable": false
+            },
+            "acceptance-generic-lantern+also-vague-link/bad": {
+              "captures": 2,
+              "scoreMinimum": 0.0006508133374154568,
+              "scoreMaximum": 0.0006508133374154568,
+              "unstable": false
+            }
+          }
+        }
+      }
+    }
+  },
+  "passed": false,
+  "failureReasons": [
+    "1.3.1: acceptance false negatives",
+    "2.4.6: acceptance false positives"
+  ],
+  "diagnostic": false
+}
