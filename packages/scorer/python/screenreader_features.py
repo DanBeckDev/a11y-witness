@@ -585,10 +585,32 @@ def score_head(features: Any, weight: Any, bias: Any) -> Any:
 # from "a page with no controls at all" -- the bad variant is a styled div announced as plain text where
 # a button belongs. That is a different piece of work from choosing a pooling view, and this comment
 # exists so nobody re-runs the pooling experiment expecting a different answer.
+#
+# ## 3.3.2:unnamed-form-field, added 2026-08-23 — the OPPOSITE direction, deliberately
+#
+# The paragraphs above warn against re-running the pooling experiment expecting a different answer. That
+# experiment moved 4.1.2 from instance-max TO document-mean and measured the cost: precision 1.000 -> 0.782,
+# FP 2 -> FP 21. This is the reverse move on a different subtype, and it is that measurement being USED
+# rather than ignored: the recorded evidence is that instance-max buys precision and costs recall, and
+# 3.3.2 has a precision problem — 8 false accusations on conformant pages, against 0 misses.
+#
+# Why the average is the wrong question here. A CONFORMING field page announces its field twice: bare when
+# focus lands ("edit, Example value") and again with its label ("Company name, edit, Example value"). A mean
+# over both lands between them, so which side of the cut a clean page falls on is decided by 384 encoder
+# dimensions (|w| sum 248.0) rather than by the 29 document features (|w| sum 5.98) that say plainly
+# `form_field_named=1`. "Is there an unnamed field on this page?" is an existence question and a mean
+# answers a different one.
+#
+# Note what was tried first and did NOT work, so nobody repeats it: raising `form_field_named`'s multiplier
+# from 2.0 to 6.0. The head simply learned a weight a third the size (-0.2316 -> -0.0717) and the effective
+# contribution was unchanged (-0.4632 -> -0.4303). Scaling an input cannot strengthen a relation in a linear
+# head, because gradient descent compensates. That applies to every entry in
+# ENGINEERED_FEATURE_MULTIPLIERS, which is worth knowing before reaching for one again.
 INSTANCE_POOLED_SUBTYPES = frozenset({
     "4.1.2:missing-role",
     "4.1.2:unnamed-control",
     "4.1.2:state-change-silent",
+    "3.3.2:unnamed-form-field",
 })
 
 
