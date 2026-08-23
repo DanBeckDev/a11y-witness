@@ -89,21 +89,43 @@ is exactly the property that makes a corpus usable by someone who does not trust
 
 ## What must be true before it ships
 
-**It is not ready, and the gap is coverage, not permission.**
+> ### Corrected 2026-08-23, the same day this was written — the coverage table below was WRONG
+>
+> This ADR originally said 26 pages captured from 1 publisher, and planned a capture run to close the gap.
+> **The corpus was already complete: 77 pages from 41 publishers, captured 2026-08-20.** The figures came
+> from `runs/real-page-corpus` on a laptop; `runs/` is gitignored, so a local copy is only ever as fresh as
+> its last sync, and that one was three days stale. The lab — the box that actually produces captures — had
+> all 77 the whole time.
+>
+> | | defined | captured (measured on the LAB) |
+> |---|---|---|
+> | pages | 77 | **77** |
+> | publishers | 41 | **41** |
+> | claimed conformant / inaccessible | 74 / 3 | **74 / 3** |
+> | training / calibration | 55 / 22 | **55 / 22** |
+>
+> **The rule this earns: any figure quoted about the corpus comes from the lab, never from a working copy.**
+> The same mistake had already been made an hour earlier against the synthetic corpus — `check-signals`
+> reported 860 stale locally and 0 on the lab at the same commit — so this is a repeated error, not a slip,
+> and it produced a published document stating a number that was never true. `check-signals` now prints
+> both readings and names the command that settles it; this ADR is the record of what happens when it does
+> not.
+>
+> What survives the correction is the part that matters, and it is unchanged: **3 of 77 pages carry a
+> publisher-declared *inaccessible*.** That is the real gap, it is the one ADR 0010 already named as "the
+> single highest-value addition to this corpus", and no amount of capturing fixes it — it needs more pages
+> whose publisher says they fail.
 
-| | defined | captured |
-|---|---|---|
-| pages | 77 | **26** |
-| publishers | 41 | **1** (w3.org) |
-| claimed inaccessible | 3 | 3 |
+**The gap is not coverage, and it is not permission. It is the balance of labels.**
 
-A dataset that is 26 pages from a single publisher, 96% of them claimed conformant, is not the artifact
-described above — it is the W3C demo suite with our transcripts attached. Two things gate publication:
-
-- **Capture the remaining 51 pages.** The definitions and the runner exist; this is fleet time.
-- **More publisher-declared *inaccessible* pages.** ADR 0010 already names this "the single highest-value
-  addition to this corpus", and it is worse for a public dataset than for our own calibration: three
-  negatives, all from one publisher's teaching material, cannot support a claim about real failures.
+- **74 of 77 pages are claimed conformant.** A dataset that is 96% positives supports "here is what a
+  screen reader announces on pages their publishers call compliant" — which is genuinely publishable and
+  genuinely novel — but it cannot support a claim about detecting real failures.
+- **More publisher-declared *inaccessible* pages** is therefore the one thing standing between this and a
+  balanced corpus. Three negatives, all from one publisher's teaching material (W3C's BAD demo), cannot
+  carry that weight.
+- Say so in the dataset's title and README rather than letting a consumer infer a balance that is not
+  there.
 
 Two limits belong **in the dataset's own README**, not just here, because a consumer will otherwise infer
 them wrongly:
