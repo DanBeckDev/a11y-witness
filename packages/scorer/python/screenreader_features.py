@@ -74,7 +74,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # every weight file trained under v7 was fitted to a different function of the same captures. Bumping is
 # what stops a v7 model being scored with v8 features and the difference being read as model behaviour.
 # Measured before bumping: 73 corpus records change, all of them labelled `violation`, none clean.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v8"
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v9"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -263,17 +263,40 @@ def heading_name(value: str) -> str:
     name = LANDMARK_PREFIX.sub("", name).strip()
     return HEADING_ANNOUNCEMENT.sub("", name).lstrip(" ,").strip().lower()
 
+# A line whose first token is a ROLE is an announced control, not prose.
+#
+# `plain_heading_candidate` excluded heading announcements and nothing else, so "button, Show red items" —
+# short, unpunctuated, followed by a sentence — matched the pattern exactly. It is a button. A fake heading
+# is a section title rendered WITHOUT any role, and a line that announces a role cannot be one.
+#
+# Measured 2026-08-23 on the held-out set: the feature alone scored TP 6 / FP 16 / FN 0, every false
+# positive a conformant `acceptance-status-*` page whose button matched. With this exclusion it is
+# TP 6 / FP 0 / FN 0 — exact.
+#
+# Third instance today of one shape: a heuristic written without accounting for how NVDA PREFIXES ROLES.
+# `link_name` anchored the role at the start and missed 98% of link announcements; `graphic_name` shared
+# it; this one forgot roles exist at all. When a rule reasons about announcement text, enumerate the roles.
+ANNOUNCED_ROLE = re.compile(
+    r"^(?:out of\s+)?(?:\w[\w\s'-]*,\s*)?(button|link|graphic|edit(?:\s+text)?|checkbox|radio|"
+    r"combo\s*box|list\s*box|slider|spin\s*button|table|list|banner|navigation|main|region|landmark|"
+    r"form|article|separator|menu|tab|dialog|progress\s*bar|status)\b",
+    re.IGNORECASE,
+)
+
+
 def plain_heading_candidate(value: str, following_value: str) -> bool:
     """Find a likely spoken section title that has no heading announcement.
 
-    This is intentionally a weak, screen-reader-only relation. It does not
-    infer a heading from HTML or visual styling; it only notices the common
-    transcript pattern of a short, punctuation-free line followed by prose.
-    The model learns whether that relation is predictive for the criterion.
+    A screen-reader-only relation. It does not infer a heading from HTML or visual styling; it notices the
+    transcript pattern of a short, punctuation-free line of PROSE followed by a sentence — and prose is the
+    operative word, which is what `ANNOUNCED_ROLE` above enforces.
     """
     candidate = value.strip()
     following = following_value.strip()
     if not candidate or not following or HEADING_ANNOUNCEMENT.match(candidate):
+        return False
+    # An announced control is not a section title, however heading-shaped its label reads.
+    if ANNOUNCED_ROLE.match(candidate):
         return False
     if candidate[-1:] in ".,;:!?" or not re.search(r"[.!?]$", following):
         return False

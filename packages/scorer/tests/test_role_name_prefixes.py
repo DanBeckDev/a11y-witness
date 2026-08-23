@@ -62,8 +62,17 @@ def test_graphic_names_read_through_prefixes_too():
     assert F.graphic_name("out of form, graphic, logo.png") == "logo.png"
 
 
-def test_the_schema_version_moved_with_the_meaning():
-    # The same capture now yields different feature values, so a v7 weight file was fitted to a different
-    # function of the same evidence. Scoring v7 weights with v8 features reads the difference as model
-    # behaviour, which is the one thing this version exists to prevent.
-    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v8"
+def test_the_schema_version_is_declared_and_versioned():
+    """The version must EXIST and be numbered; the current number is pinned in one place, not here.
+
+    This pinned `v8` exactly, and the next meaning change — tightening `plain_heading_candidate` — bumped it
+    to v9 and broke this test, which had nothing to do with that change. Two tests asserting one constant is
+    the fact-stated-twice shape: whichever is not the reason for the bump becomes noise a future reader
+    edits without thinking, which is how a guard stops guarding.
+
+    So the newest meaning change owns the exact pin (see `test_prose_vs_announced_role.py`), and this
+    asserts only the property it actually cares about: that the schema is versioned at all, so a v7 weight
+    file cannot be scored with today's features and the difference read as model behaviour.
+    """
+    assert F.FEATURE_SCHEMA_VERSION.startswith("screenreader-structured-v")
+    assert F.FEATURE_SCHEMA_VERSION.rsplit("v", 1)[-1].isdigit()
