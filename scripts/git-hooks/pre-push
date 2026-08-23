@@ -61,8 +61,29 @@ run "unit tests" npm test
 # The corpus lives in gitignored `runs/`, so these two cannot run on a fresh clone or in CI. Say so out
 # loud rather than passing quietly: a check that reports success when it examined nothing is how "verified"
 # comes to mean "unexamined", which is the specific defect this project keeps finding in its own tooling.
+# check-signals answers what a working copy CAN answer — does every signal with evidence here discriminate
+# — and exits 2 INCONCLUSIVE when there is too little of it, rather than failing. It used to fail on a stale
+# `runs/`, which is not a defect and not something this machine can even distinguish from a corpus needing
+# capture. The consequence was the reason this changed: the only way past it was A11Y_SKIP_VERIFY=1, which
+# disables lint, typecheck, tests and rules:gate too — so the check that could not answer its own question
+# switched off four that could, nine times in one day.
+#
+# The strict form lives where the corpus is authoritative: `release:gate` and the lab job pass
+# --require-complete, and there a hole in the corpus IS the answer.
 if [ -d runs/screenreader-dataset/captures ]; then
-  run "check-signals" npm run --silent training:check-signals
+  npm run --silent training:check-signals >/tmp/a11y-signals.$$ 2>&1
+  signals_status=$?
+  case $signals_status in
+    0) echo "  ok      check-signals" ;;
+    # 2 is INCONCLUSIVE, never a pass: it is reported in the SKIPPED list, which the hook prints and which
+    # exists so "not examined" can never read as "examined and clean".
+    2) skipped+=("check-signals (INCONCLUSIVE — too little usable evidence in this copy of runs/; the "\
+                 "authoritative answer is npm run lab:job -- -e job=check-signals)") ;;
+    *) echo "  FAILED  check-signals"
+       tail -20 /tmp/a11y-signals.$$ | sed 's/^/            /'
+       failed+=("check-signals") ;;
+  esac
+  rm -f /tmp/a11y-signals.$$
 else
   skipped+=("check-signals (no runs/screenreader-dataset/captures — needs a local corpus)")
 fi
