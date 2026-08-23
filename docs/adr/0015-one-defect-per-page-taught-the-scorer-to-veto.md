@@ -393,3 +393,66 @@ because I did not follow it to the output. **Both are failures to ask what the c
 
 The corrected statement is in RELEASE.md's operating-limitation bullet, and the earlier wording is quoted
 there rather than deleted.
+
+## Answered 2026-08-23 — the vetoes were not load-bearing, and the corpus posed a harder question
+
+The section above left one thing open: whether removing the vetoes costs accuracy, and whether the splice
+probe's 3.3.2 regression was the veto doing real work or spliced input being incoherent. Real multi-defect
+pages answer it.
+
+**The retrain works on what it was built for.** Free vetoes fell from **225 across 13 heads to roughly 65
+on the 13 comparable ones** — about 70% — with positives up as designed (`4.1.2:unnamed-control` 147 → 170,
+`2.4.4:regex` 100 → 122). The mechanism is confirmed on real pages, not merged records.
+
+**And the candidate is not shippable.** Held-out acceptance: 58 TP, **4 FP**, 0 FN, failing on 3.3.2 alone —
+which replicates the splice probe exactly, same criterion and direction at about half the magnitude. On the
+development split, recall fell on nine heads, `1.3.1:fake-heading` from 1.000 to 0.808.
+
+### Two hypotheses, and the measured answer
+
+**Furniture destroying a signature: REFUTED.** The hypothesis was that a placeholder-only bad page
+announced no form field at all, and furniture put one on a quarter of the corpus. If that were the cause,
+false positives would cluster on one furniture type. They do not — rates run 0.5–5.6% across all four
+kinds, and `data-table`, the suspected culprit, has the **lowest** rate everywhere (0.0–0.3%).
+
+**The false positives ARE the multi-defect pages: SUPPORTED.**
+
+```
+2.4.1:skip-link-inert          9 of 10 attributed false positives are multi-defect families
+2.4.3:focus-order-scrambled   12 of 13
+2.4.4:regex                    9 of 14
+2.1.2:focus-trapped            7 of 12
+3.3.2:placeholder-only         3 of 10        <- the exception, see below
+```
+
+### What that means, and it is not what "load-bearing" would mean
+
+The old corpus asked each head one question: **does this page have my defect, or is it clean?** The vetoes
+answered it for free — *this page has a vague link, so it is a 2.4.4 page, so it is not mine.*
+
+Multi-defect pages remove that shortcut and pose a **harder question**: *does this page have my defect, or
+somebody else's?* That is a different discrimination, and the corpus barely teaches it — 60 pages, about
+eight per host family, each host-plus-accompanying pairing seen once or twice.
+
+**So the heads did not lose a crutch they needed. They were handed a new problem with almost no examples of
+it.** The fix is therefore MORE multi-defect coverage, not less: enough examples of each pairing to learn
+the distinction the corpus now demands. That is the opposite of the "exclude the criteria" move that was
+proposed and correctly rejected before this diagnosis existed.
+
+### `3.3.2:placeholder-only` is a different problem
+
+Only 3 of its 10 attributed false positives are multi-defect; the rest are `form-unlabelled-*`. Those two
+failures are genuinely similar — both are form fields lacking a proper label — and the veto
+(`form_field_unnamed`, −5.29) was what separated them. **No page in the corpus contains both**, so the head
+has never been shown the difference. It needs pages carrying a placeholder-only field AND a properly
+labelled one, which is a specific case rather than more variety.
+
+### What this cost, and the tooling it produced
+
+Reaching this answer required four things that did not exist: a way to read an artifact off the lab
+(`lab:fetch` — the journal truncates every line, so a training report arrived as fragments), a veto audit
+against a named candidate, a false-positive diagnostic that reports WHICH records fail and what they share,
+and a way to run acceptance on a candidate at all. That last one was a **circular deadlock**: the trainer
+marked a fresh candidate ineligible because acceptance had not run, and the evaluator refused any
+ineligible model. Nothing could ever pass. It went unnoticed because the shipped model was made by hand,
+outside the pipeline — which had, until this week, never produced a releasable model end to end.
