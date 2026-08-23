@@ -124,7 +124,25 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "2.4.4": { status: "assessed", channels: ["links", "transcript"], note: "Vague link text. Rules cover a six-phrase subset (19 of 100 corpus records, a declared overlap); the head owns the rest." },
   "2.4.6": { status: "assessed", channels: ["headings", "transcript"], note: "Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the page, so this head is document-pooled." },
   "3.3.1": { status: "assessed", channels: ["formChanges", "postSubmitFields"], note: "A validation error that is displayed but never announced. Needs the form probe, which is on by default in the Action and off in the CLI -- and therefore OFF for every real-page capture, because submitting a form on a site we do not own is not a review. Measured: 0 of 77 real captures carry `formChanges`, so on a real page this criterion cannot fire in either direction." },
-  "3.3.2": { status: "assessed", channels: ["formFields", "transcript"], note: "Unlabelled fields and placeholder-only labels." },
+  "3.3.2": {
+    status: "partial",
+    needs: ["dom"],
+    channels: ["formFields", "transcript"],
+    note: "ONE of two failure modes. A field with no label at all is covered and exact: the screen reader "
+      + "announces a bare role, the rules decide it 115/115, and that is a fact rather than a judgement. "
+      + "A field labelled ONLY by its placeholder is NOT covered, and cannot be from screen-reader "
+      + "evidence — when a field has no label the browser uses the placeholder as its accessible name, so "
+      + "NVDA speaks it exactly as it speaks a real label. `<input placeholder=\"Email address\">` and "
+      + "`<label>Email address</label><input>` both announce \"Email address, edit\". Identical words, "
+      + "identical order; the difference exists only in the DOM. THAT IS AXE'S JOB, and this tool sits "
+      + "alongside axe-core rather than instead of it — a DOM scanner sees the missing `<label>` in one "
+      + "pass. Attempting it here was a category error, not a gap to close. Measured 2026-08-23: the "
+      + "trained head produced EIGHT false accusations on conformant pages because it had no placeholder "
+      + "feature at all (encoder weight mass 598.9 against 9.26 across every document feature) and had "
+      + "learned the corpus's placeholder WORDING — it fired on 4 of the 6 clean pages containing "
+      + "\"Example value\" and 0 of the 34 without it. Declared `unavailable` in rule-ownership.json. "
+      + "See ADR 0018.",
+  },
   "4.1.3": { status: "assessed", channels: ["postSubmitFields", "formChanges"], note: "A status message after form activation that the screen reader never speaks. Same probe dependency as 3.3.1 and the same consequence, which was recorded there and not here: it reads `postSubmitFields`, and 0 of 77 real captures carry any, so it cannot fire on a real page." },
 
   "4.1.2": {
