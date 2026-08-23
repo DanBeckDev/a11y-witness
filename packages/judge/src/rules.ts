@@ -136,6 +136,19 @@ const isControl = (entry: string): boolean =>
   /\b(button|edit|radio|checkbox|combo box|list box|menu button|link)\b/i.test(entry);
 
 /**
+ * A control that takes a VALUE, as opposed to one that performs an action.
+ *
+ * The distinction carries a criterion. An unnamed button fails 4.1.2 and nothing else — there is no label
+ * to be missing, only a name. An unnamed INPUT additionally fails 3.3.2 Labels or Instructions, because
+ * the user is being asked to enter something and has not been told what.
+ *
+ * Measured 2026-08-23: conflating the two put four conformant ICON pages into 3.3.2, because a bare
+ * `button` announcement satisfied a check written for form fields.
+ */
+const isInput = (entry: string): boolean =>
+  /\b(edit(?: text)?|radio|checkbox|combo box|list box|spin button|slider)\b/i.test(entry);
+
+/**
  * Report a finding. The fourth argument is its ACT requirement mapping, and it DEFAULTS to `secondary`.
  *
  * Defaulting to the weaker claim is the point: asserting that a criterion is not satisfied has to be an
@@ -310,6 +323,25 @@ function addUnnamedControls(entries: string[], requireMarker: boolean, add: AddF
     if (unnamed) {
       add("4.1.2 Name, Role, Value", "Control announced with a role but no accessible name", entry,
         "conformance");
+      // AND 3.3.2, for an input specifically. An input the screen reader announces as a bare role has no
+      // label at all — W3C's own description of the failure is a screen reader announcing "edit text" with
+      // no indication of the field's purpose, which fails 1.3.1, 3.3.2 and 4.1.2 together.
+      //
+      // The limit, stated because it bounds the claim: a control CAN pass 4.1.2 with an `aria-label` and
+      // still fail 3.3.2 when no label is visible to sighted users. A screen-reader transcript cannot see
+      // that case — the name is announced either way — so this rule claims 3.3.2 only for "no name at all",
+      // which is the mode it can actually witness. `criterion-coverage.ts` records 3.3.2 as PARTIAL for it.
+      //
+      // Why this matters beyond correctness: `3.3.2:unnamed-form-field` was declared rule-decided while the
+      // rules reported ONLY 4.1.2, so nothing emitted a 3.3.2 finding and the trained head had to stay —
+      // load-bearing in production and, briefly, exempt from the release gate. The head then produced eight
+      // false accusations on conformant form pages, because a clean page and a broken one announce nearly
+      // the same text and the embedding could not separate them while the explicit features could. Emitting
+      // the criterion the rule already decides is what lets the head go.
+      if (isInput(entry)) {
+        add("3.3.2 Labels or Instructions", "Input announced with a role but no label", entry,
+          "conformance");
+      }
     }
   }
 }
