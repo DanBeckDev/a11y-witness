@@ -15,7 +15,7 @@
  * judge. Shadow output is log-only and never changes findings.
  */
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { judge } from "@a11y-witness/judge";
 import { scanWithAxe, axeAvailable, type AxeFinding } from "./scan/axe.js";
 import { fetchPageTitle } from "./scan/page-title.js";
@@ -90,7 +90,12 @@ function defaultArgs(): Args {
 // Applies one argument and returns the index it consumed up to, so value-taking flags can
 // swallow their value. Split out of parseArgs to keep each side simple: this one knows the
 // flags, parseArgs knows the loop and the validation.
-function applyArg(args: Args, argv: string[], i: number): number {
+/**
+ * Apply one argv token. EXPORTED for tests, and that is the whole reason this file had none: it exported
+ * nothing, so nothing could import it. Argument handling is pure and this project has already paid for
+ * getting it wrong — `--worker=http://:8765` was accepted and burned 29 minutes before anything noticed.
+ */
+export function applyArg(args: Args, argv: string[], i: number): number {
   const v = argv[i];
   switch (v) {
     case "--task": args.task = argv[++i] ?? args.task; return i;
@@ -108,8 +113,8 @@ function applyArg(args: Args, argv: string[], i: number): number {
   }
 }
 
-function parseArgs(): Args {
-  const argv = process.argv.slice(2);
+/** ARGV as a parameter, so a test needs no `process.argv`, and `main()` passes the real one. */
+export function parseArgs(argv: string[] = process.argv.slice(2)): Args {
   const args = defaultArgs();
   for (let i = 0; i < argv.length; i++) i = applyArg(args, argv, i);
   if (!args.url) {
@@ -125,7 +130,7 @@ function afterRunArg(v: string | undefined): AfterRun {
   process.exit(1);
 }
 
-interface CaptureResponse {
+export interface CaptureResponse {
   url: string;
   screenReader: string;
   transcript: string[];
@@ -352,7 +357,12 @@ async function runWitness(
  * scorer head reads it, so counting it would report a criterion as covered while a keyboard trap in that
  * array reached nobody.
  */
-function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): ConformanceRequirement[] {
+/**
+ * What this run can and cannot claim, from a capture. EXPORTED because it is pure over a capture object,
+ * and this repo has 2,122 real captures on disk — so it is testable against evidence a real screen reader
+ * produced, not against a hand-written shape somebody imagined.
+ */
+export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): ConformanceRequirement[] {
   const env = (cap as { environment?: Record<string, string> }).environment ?? {};
   const version = (name: string, ver: string): string | null =>
     env[name] ? `${env[name]}${env[ver] ? ` ${env[ver]}` : ""}` : null;
@@ -519,7 +529,18 @@ function printReport(report: Report): void {
   console.log(reportLines(report).join("\n"));
 }
 
-main().catch((err: unknown) => {
+/**
+ * Run ONLY when this file is the program, never when it is imported.
+ *
+ * Without this guard, importing `cli.ts` runs the CLI: a test that merely imported it printed USAGE and
+ * exited 1 before a single assertion. That is the structural reason this file had no tests — not that its
+ * logic is hard to test. `entry-points.test.ts` asserts this property for scripts reached through
+ * `package.json`; the CLI is reached through a bin and slipped past it.
+ */
+const isProgram = process.argv[1] !== undefined
+  && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isProgram) main().catch((err: unknown) => {
   // `console.error(err)` printed a Node stack trace as the entire user-facing output on the first real
   // website this was pointed at. A stack is for whoever is fixing the tool; a user needs the reason.
   const message = err instanceof Error ? err.message : String(err);
