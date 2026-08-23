@@ -629,11 +629,26 @@ def score_head(features: Any, weight: Any, bias: Any) -> Any:
 # contribution was unchanged (-0.4632 -> -0.4303). Scaling an input cannot strengthen a relation in a linear
 # head, because gradient descent compensates. That applies to every entry in
 # ENGINEERED_FEATURE_MULTIPLIERS, which is worth knowing before reaching for one again.
+#
+# ## 1.3.1:fake-heading, added 2026-08-23 — a rare signal averaged away by page size
+#
+# Measured: 88 development positives at recall 0.55 (threshold 0.95, FP 0), against 10 of 10 on the
+# held-out set. The gap is not difficulty in the failure, it is difficulty in the PAGE: 63 of the 88
+# positives are accompaniment-derived and sit on pages averaging 52.3 announcements, while the dedicated
+# fake-heading pages average 41.6. A document mean gives one fake heading among 52 lines a 1/52 share; the
+# same failure on a focused page dominates its own mean. The head is being diluted by page length.
+#
+# The reverse move on 4.1.2 recorded what to expect: instance-max -> document-mean cost precision
+# 1.000 -> 0.782, FP 2 -> FP 21. So instance-max BUYS precision, and this head has precision to spare
+# (FP 0) and recall to gain (0.55). Note this is the opposite situation to `3.3.2:unnamed-form-field`
+# earlier the same day, where switching pooling changed nothing: there both views fired on a bare edit that
+# was genuinely present, so there was nothing to dilute. Rare-signal dilution is the case max is for.
 INSTANCE_POOLED_SUBTYPES = frozenset({
     "4.1.2:missing-role",
     "4.1.2:unnamed-control",
     "4.1.2:state-change-silent",
     "3.3.2:unnamed-form-field",
+    "1.3.1:fake-heading",
 })
 
 
