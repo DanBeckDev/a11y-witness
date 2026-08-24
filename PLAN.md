@@ -91,6 +91,129 @@ The honest shape of the product today:
 
 That last row is the one that matters most, and no amount of green CI substitutes for it.
 
+### CORRECTION, 2026-08-24: the table above counts criteria that had never run on a real page
+
+The row *"criteria assessed **on a real page** — 10"* was not measured on real pages. It counts criteria
+the rules are WRITTEN for. Measured directly, over 3,210 corpus captures and 77 real ones, by running
+`ruleFindings` and tallying what came out:
+
+| rule → criterion | fired on corpus | fired on a REAL page |
+|---|---|---|
+| `addMissingHeadings` → 1.3.1 | **0** | **0** |
+| `addAutoplayingAudio` → 1.4.2 | **0** | **0** |
+| `addInertSkipLink` → 2.4.1 | 12 | **0** |
+| `addStaleRouteTitle` → 2.4.2 | 9 | **0** |
+| `addVagueLinks` → 2.4.4 | 62 | **0** |
+| 1.1.1 · 2.1.2 · 3.3.2 · 4.1.2 | 350 · 11 · 265 · 425 | 19 · 1 · 6 · 52 |
+| 2.1.1 · 2.4.3 | 9 · 13 | 45 · 31 — **first ran 2026-08-24, and both were wrong** |
+
+**Five of eleven rules have never fired on real evidence, and two have never fired at all.** A rule that
+has never executed is not a covered criterion; it is an untested assumption with a criterion number.
+
+The two that left that pool did so by accident. `MAX_TAB_STOPS` was 12 while real pages carry a median of
+79 focusable elements, so `addKeyboardUnreachableControl` — which refuses to claim anything unless the tab
+cycle closes — could never close one, and `addBrokenFocusOrder` found fewer than two shared names and
+returned early. Raising the cap ran both for the first time: 2.1.1 reported keyboard-unreachable controls
+on **23 of 35 conformant pages**, 2.4.3 on 19. Neither regressed. Both had been wrong all along and silent.
+
+Other rows in that table need the same reading. *"0 false positives on conformant pages"* was measured on
+the corpus, where no page has more than 22 focusable elements. *"20 of 22 calibration pages"* is now 38
+pages, and the sweep that produced it was passing `truncatedSweeps: []` where the product passes the real
+value — 18 referrals measured against 151 reported.
+
+**The generalisation, and it is the reason the section below is sequenced the way it is:** every gate this
+project owns runs on a corpus built from the same assumptions as the code it checks, so a shared wrong
+assumption is invisible to all of them at once. That is ADR 0019's thesis, and 2026-08-24 found it in a
+probe constant, a name normaliser, a calibration sweep, a promotion gate and a test's own fixtures.
+
+---
+
+## The goal, and the sequence to reach it
+
+**The end state:** someone who is not the author installs this, points it at a site they own, and gets
+screen-reader-witnessed findings they can act on — each carrying either an assertion the evidence settles
+or a referral worth a person's time, with a stated error bound that holds on pages nobody trained on.
+
+Four phases. They are ordered by dependency, not by preference, and each exits on a **measurement** rather
+than on work being finished. The blocker list below (B1, B5, B7, B8) distributes across them.
+
+### Phase 1 — The tool stops making claims it has never tested
+
+*Exit: every rule has either fired on real evidence, or is reported as unvalidated. No rule reports on a
+criterion it has never demonstrated.*
+
+The instrument has to be honest about its own coverage before anything else is worth measuring, because
+every later number is computed through it.
+
+1. **Ship the never-fired audit as a gate.** It is the general form of today's defect: it would have named
+   2.1.1 and 2.4.3 in the morning instead of after they misfired, and it names the next five now.
+2. **Fix 2.4.3's evidence.** It compares tab order against `structure.formFields`, which is assembled from
+   a sweep walking BACKWARDS and FORWARDS from the caret — on `check-for-flooding` that array is exactly
+   reverse document order. The rule's premise is false. The capture already records `prevStopPhrase` /
+   `nextStopPhrase` and discards the direction; recording the two walks separately makes document order
+   recoverable. **This is a capture change and costs a recapture of the real pages.**
+3. **Validate or retire the five.** 1.3.1 and 1.4.2 have never fired anywhere; 2.4.1, 2.4.2 and 2.4.4 have
+   never fired on a real page. Each needs either a real page that exercises it or an honest `PARTIAL`
+   entry in `criterion-coverage.ts` saying it is unproven.
+4. **Re-measure `asserted-wrongly` on the product path** once 1–3 land.
+
+### Phase 2 — A model can actually be promoted
+
+*Exit: a candidate passes `job=promote` on its own merits, and the report states the false-positive bound
+it holds rather than a precision that restates its own constraint.*
+
+1. **The promotion gate demands recall 1.000 on every head**, which no learned model can meet. It carries
+   the identical flaw `regressions()` already has a scar for — comparing a candidate measured on a harder
+   population against an incumbent measured on an easier one — twelve lines away in the same file. **This
+   is a decision about what the gate should require, not a bug to quietly fix.**
+2. **Establish a baseline.** The shipped model is `screenreader-structured-v7`; the runtime computes `v15`,
+   so the shipped weights cannot be scored at all and "is the candidate better?" is currently unanswerable.
+   Either promote a v15 as the first-of-schema baseline, or record explicitly that no comparison exists.
+3. **Close B8** — the 225 free vetoes. Removing `vague_link_present` as a model input took 2.4.4 from 27
+   false positives to **0** with recall rising, and cleared 2.4.6 to 1.000/1.000 in the same change. The
+   remedy is the corpus, never the weights (ADR 0015).
+4. **Keep the NP bound honest.** ADR 0022 gives population FP ≤ 0.5% at 95% confidence, recorded as
+   `exact: false` because out-of-fold scores come from K fold models where the proposition assumes one.
+   Closing that needs negatives held back from training entirely.
+
+### Phase 3 — The claims are defensible on pages nobody trained on
+
+*Exit: an error rate on real pages with enough pages behind it to be meaningful.*
+
+The calibration set is **38 pages, so the finest error rate it can express is ~2.6%** — the sweep says so
+itself. A tool that asserts conformance failures needs better resolution than that.
+
+1. **Grow the real-page corpus**, especially conformant pages. The three publisher-declared *inaccessible*
+   pages are capped by labelling discipline, not by effort: statements, WCAG-EM reports and GDS monitoring
+   all aggregate to the site, and an audit years apart from a capture describes a different page.
+2. **Decide what the product promises.** A hard zero-false-positive constraint selected on the same data
+   it is reported against is high-variance by construction. Conformal risk control gives a *bounded* rate
+   with a finite-sample guarantee instead of *zero on this corpus* — **a product decision about what the
+   tool claims, not to be made silently.**
+3. **Watch the cliff.** Three heads sit at 0.95, the top of the grid. One more negative crossing leaves
+   them no valid cut at all.
+
+### Phase 4 — Someone else can use it
+
+*Exit: a stranger installs it, runs it on their own app, and the findings survive contact with them.*
+
+This is B7 → B1 → B5, and it is last for a reason that changed today: **a tool that refers on 7 of 10
+conformant pages cannot be handed to anyone.** 2.4.3 currently fires on 71% of conformant real pages and
+2.1.1 on 31%. Phase 1 is what makes Phase 4 defensible rather than embarrassing.
+
+1. **B7 — publishing (ours, cheap).** ADR 0007 chose Changesets and independent per-package semver and it
+   was never built, so nobody can `npx a11y-witness`. Half the documented product is unreachable.
+2. **B1 — the first outside user (yours).** Partly blocked by B7.
+3. **B5 — the name, and the first publish (yours).**
+
+### What this sequence deliberately does not do
+
+- **It does not add criteria.** 11 rules exist and 5 are unproven; a twelfth would be a sixth unproven one.
+- **It does not tune weights to make a number look better.** The abstention floor caught a page the tool
+  should not have scored, and lowering it would have hidden that.
+- **It does not treat the corpus as the gate.** The corpus is a controlled instrument for contrast, and it
+  cannot express what real pages do — that is settled, five times over.
+
 ---
 
 ## Blockers — a general release should not happen until these are closed
