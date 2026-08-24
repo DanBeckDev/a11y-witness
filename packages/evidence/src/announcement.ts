@@ -111,6 +111,15 @@ export const CONTROL_ROLES = Object.freeze([
 const STATE_PATTERNS: readonly RegExp[] = Object.freeze([
   /^level \d+$/i, /^with \d+ items?$/i, /^\d+ of \d+$/i, /^row \d+$/i, /^column \d+$/i,
   /^(?:not )?(?:checked|pressed|selected|expanded|collapsed)$/i,
+  // `focused` was MISSING, and its absence was silent in the worst way: the parser stopped at it, so
+  // "aquarium rules, button, focused, collapsed" yielded NO states at all and the `collapsed` after it was
+  // lost. A rule comparing the state before and after activation would have compared two empty lists and
+  // found them equal — reporting every disclosure as broken, or none, depending which way it read.
+  //
+  // Derived from the captures rather than guessed: these are the tokens that actually appear in
+  // `interaction.stateChanges` and `formChanges` across the corpus — collapsed 219, focused 144,
+  // invalid entry 125, blank 125, expanded 69.
+  /^focused$/i,
   /^(?:current page|clickable|visited|read only|required|invalid entry|has auto complete|editable|multi line|blank|bullet|same page|has pop up|busy|unavailable)$/i,
 ]);
 

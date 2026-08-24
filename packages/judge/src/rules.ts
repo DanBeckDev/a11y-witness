@@ -253,6 +253,70 @@ const REPORTABLE_CONTROL_ROLES: ReadonlySet<string> = new Set([
  * The marker requirement survives, because it is a real and separate policy: in a read-through an empty
  * name can be a line-wrap artefact, while a sweep entry is one object NVDA was asked to describe.
  */
+/**
+ * States that a control's ACTIVATION is supposed to change.
+ *
+ * Only the expandable pair. `checked`/`pressed`/`selected` change on activation too, but Enter on a
+ * checkbox is not always its activation and "it did not change" then has a second cause. Narrow on purpose:
+ * this rule ASSERTS non-conformance, so every case it covers has to have exactly one explanation.
+ */
+const EXPANDABLE_STATES: ReadonlySet<string> = new Set(["collapsed", "expanded"]);
+
+/**
+ * A control that announces an expandable state, is activated, and announces the SAME state afterwards.
+ *
+ * ## Why this is a rule and not the model's, reversing a decision recorded above
+ *
+ * The comment above says a rule here "would duplicate a decision that already holds", because
+ * `4.1.2:state-change-silent` is model-owned and scores 59/0/0 on development. That reasoning weighed only
+ * ACCURACY, and the two layers differ in something else entirely: what they are PERMITTED TO CLAIM.
+ *
+ * A model finding carries no `mapping`, which `RequirementMapping` defines as `secondary` — so
+ * `criterionOutcomes` reports it `cantTell`, "needs human confirmation". A rule may be CONFORMANCE-mapped
+ * and assert. Measured on the product path, the tool asserted nothing at all from the model on 18
+ * conformant real pages: 0 asserted, 4 referred.
+ *
+ * And `compare-layers.mjs` names this exact criterion as the differentiator against a static scanner —
+ * "axe can see that `aria-expanded` EXISTS; it cannot see that it never CHANGES". So the one finding this
+ * project makes that nothing else can was being reported as a maybe, while a deterministic rule for it had
+ * already been written and measured at 69/69 EXACT with no false positives across 1,001 conformant records.
+ *
+ * The ownership rule — exactly one layer decides each subtype — is sound and stays. What it lacked was the
+ * observation that "which layer is more accurate" and "which layer may state a conclusion" are different
+ * questions, and that a subtype whose evidence is DECISIVE belongs with the layer that can act on it.
+ *
+ * ## Why the evidence is decisive
+ *
+ * `probeDisclosure` calls `nvda.act()` and only then reads the state, so `after` is post-activation. A
+ * control that said `collapsed`, was activated, and still says `collapsed` has contradicted itself. There
+ * is no second reading of that: either the state did not change, or it changed and was not announced, and
+ * both are 4.1.2 failures for the same user.
+ */
+function addSilentStateChanges(
+  changes: readonly { control?: string; after?: string | null }[], add: AddFinding,
+): void {
+  for (const change of changes) {
+    const before = statesOf(change.control);
+    const after = statesOf(change.after);
+    // Both sides must actually carry an expandable state. Absent on either side means the control is not
+    // a disclosure, or the probe never read it — neither is evidence that a state failed to change, and
+    // treating the absence as the finding is the mistake this repo has paid for most often.
+    if (!before.length || !after.length) continue;
+    if (before[0] !== after[0]) continue;
+    add("4.1.2 Name, Role, Value",
+      "Control announced the same state after activation, so its state change is not exposed",
+      `${change.control} -> ${change.after}`, "conformance");
+  }
+}
+
+/** The expandable states a control announced, via the shared grammar rather than a fourth state vocabulary. */
+function statesOf(announcement: string | null | undefined): string[] {
+  if (typeof announcement !== "string" || !announcement) return [];
+  return parseAnnouncement(announcement, "sweep").objects
+    .flatMap((object) => object.states)
+    .filter((state) => EXPANDABLE_STATES.has(state));
+}
+
 function addUnnamedControls(entries: string[], channel: Channel, add: AddFinding): void {
   for (const entry of entries) {
     for (const object of parseAnnouncement(entry, channel).objects) {
@@ -729,6 +793,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   // 4.1.2 — controls announced with a role but no accessible name. Transcript
   // path requires the ￼ marker; the structural-sweep path does not (see
   // addUnnamedControls).
+  addSilentStateChanges(input.interaction?.stateChanges ?? [], add);
   addUnnamedControls(input.transcript, "transcript", add);
   addUnnamedControls([...(input.structure?.formFields ?? []), ...(input.interaction?.controls ?? [])],
     "sweep", add);
