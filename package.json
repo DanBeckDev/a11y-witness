@@ -84,7 +84,8 @@
     "coverage": "c8 npx tsx --test \"packages/*/src/**/*.test.ts\"",
     "identity:rate": "tsx packages/lab/src/harnesses/page-identity-rate.mjs",
     "verdict:stability": "tsx packages/lab/src/harnesses/occurrence-verdict-stability.mjs",
-    "training:export-acceptance:all": "REPEAT=repeat-1 npm run --silent training:export-acceptance && REPEAT=repeat-2 npm run --silent training:export-acceptance"
+    "training:export-acceptance:all": "REPEAT=repeat-1 npm run --silent training:export-acceptance && REPEAT=repeat-2 npm run --silent training:export-acceptance",
+    "scorer:size-sensitivity": "node packages/lab/scripts/audit-size-sensitivity.mjs"
   },
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
