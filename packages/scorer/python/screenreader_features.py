@@ -74,7 +74,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # every weight file trained under v7 was fitted to a different function of the same captures. Bumping is
 # what stops a v7 model being scored with v8 features and the difference being read as model behaviour.
 # Measured before bumping: 73 corpus records change, all of them labelled `violation`, none clean.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v10"
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v11"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -106,6 +106,9 @@ FEATURE_NAMES = (
     "generic_graphic_present",
     "unnamed_graphic_present",
     "filename_graphic_present",
+    # PER-INSTANCE in the instance view, document-level in the document view — the only feature that
+    # differs between rows of the same capture. See `build_instance_view`.
+    "unit_is_plain_heading_candidate",
 )
 
 LEADING_ROLE = re.compile(
@@ -377,6 +380,9 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
             for index, value in enumerate(transcript[:-1])
         )
     )
+    # Document view: the same fact as `plain_heading_candidate_present`. The instance view overwrites this
+    # column per announcement, which is the whole point of the feature.
+    values["unit_is_plain_heading_candidate"] = values["plain_heading_candidate_present"]
     values["landmark_present"] = float(bool(landmarks))
     values["landmark_named"] = float(any(named_landmark(value) for value in landmarks))
     values["form_field_present"] = float(bool(form_fields))
@@ -692,6 +698,49 @@ def encode_documents(records: list[dict[str, Any]], encoder_root: Path, max_leng
     return features, list(range(len(records) + 1))
 
 
+def candidate_unit_flags(record: dict[str, Any]) -> list[float]:
+    """1.0 for each evidence unit that IS the plain-heading candidate, aligned with `unit_texts`.
+
+    ## Why a per-instance feature exists at all
+    #
+    Every other structured feature is document-level and `np.repeat`-ed onto all of a capture's rows, so
+    under instance-max pooling it is a constant the head cannot use to tell one announcement from another.
+    `plain_heading_candidate_present` therefore said "somewhere on this page a section title has no role"
+    and never "THIS line is one" — and the head had to identify the line from the embedding alone.
+
+    Measured 2026-08-24 on three structurally IDENTICAL pages — same announcements, same feature values,
+    same shape, differing only in wording:
+
+        "Opening hours"        0.9899   caught
+        "Lending conditions"   0.9902   caught
+        "Collection deposits"  0.6120   missed, threshold 0.90
+
+    The head ranked the correct announcement top on all three; only its CONFIDENCE moved, and it moved with
+    vocabulary. That is why doubling the positives raised development recall and left the held-out misses
+    untouched: more phrases, not more structure.
+
+    Alignment matters more than the flag. `unit_texts` emits one row per evidence unit as
+    "channel: text", and the candidate relation is computed over adjacent TRANSCRIPT lines, so the flag is
+    matched back by channel and text. A misalignment here would attach the flag to the wrong announcement,
+    which is worse than not having it.
+    """
+    units = record["input"].get("evidenceUnits", [])
+    transcript = record["input"].get("transcript") or []
+    candidates = {
+        value.strip()
+        for index, value in enumerate(transcript[:-1])
+        if plain_heading_candidate(value, transcript[index + 1])
+    }
+    flags = [
+        float(unit.get("channel") == "transcript" and str(unit.get("text", "")).strip() in candidates)
+        for unit in units
+        if isinstance(unit.get("text"), str)
+    ]
+    # `unit_texts` falls back to a single empty row for a unit-less capture; match it or every bag after
+    # this one is misaligned.
+    return flags or [0.0]
+
+
 def unit_texts(record: dict[str, Any]) -> list[str]:
     """The channel-tagged announcements of one capture — the INSTANCES of its bag.
 
@@ -800,6 +849,17 @@ def encode_records(records: list[dict[str, Any]], encoder_root: Path, max_length
     text_features = _onnx_encode(flat, encoder_root, max_length)
     counts = [len(bag) for bag in bags]
     structural = np.repeat(structured_features(records), counts, axis=0)
+    # The one column that is NOT the same for every row of a capture. Written after the repeat so the
+    # document values are unchanged and only this is per-instance — and scaled the same way, because a
+    # feature that skipped the scale would sit on a different footing from its neighbours.
+    candidate_column = FEATURE_NAMES.index("unit_is_plain_heading_candidate")
+    flags = np.array([flag for record in records for flag in candidate_unit_flags(record)], dtype=np.float32)
+    if flags.shape[0] != structural.shape[0]:
+        raise RuntimeError(
+            f"candidate flags ({flags.shape[0]}) do not align with instances ({structural.shape[0]}); "
+            "attaching the flag to the wrong announcement is worse than not having it"
+        )
+    structural[:, candidate_column] = flags * ENGINEERED_FEATURE_SCALE
     # 384 is MiniLM-L6-v2's hidden size, stated rather than read from a loaded torch model — reading it
     # from `encoder.config` was the last thing forcing the torch model to be constructed at inference.
     # `score.py` asserts the head is 413 wide, so a wrong value here fails loudly rather than silently.

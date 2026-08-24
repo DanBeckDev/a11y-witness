@@ -82,4 +82,4 @@ def test_the_role_vocabulary_covers_what_the_featurizer_itself_knows_about():
 def test_the_schema_version_moved_with_the_meaning():
     # The same capture now yields a different `plain_heading_candidate_present`, so weights fitted under v8
     # were fitted to a different function of the same evidence.
-    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v10"
+    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v11"
