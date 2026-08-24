@@ -49,5 +49,8 @@
     "screen-reader",
     "nvda",
     "scorer"
-  ]
+  ],
+  "dependencies": {
+    "@a11y-witness/evidence": "0.1.0"
+  }
 }

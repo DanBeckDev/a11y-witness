@@ -80,7 +80,8 @@ def test_the_role_vocabulary_covers_what_the_featurizer_itself_knows_about():
 
 
 def test_the_schema_version_moved_with_the_meaning():
-    # v12: `role_name` now ends a name at the next object's role instead of at end-of-line, so the same
-    # capture yields different `link_name`/`graphic_name` values wherever NVDA packed several objects into
-    # one announcement. Weights fitted under v11 were fitted to a different function of the same evidence.
-    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v12"
+    # v13: `form_field_named`/`form_field_unnamed` read the PARSE attached by `annotateCapture` instead of
+    # re-deriving the grammar with an anchored role-first regex over a name-first channel. On GOV.UK Design
+    # System captures that regex matched the word "Radio" at the start of the example's TITLE and reported
+    # an unnamed field on a page where every field is named.
+    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v13"
