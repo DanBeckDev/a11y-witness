@@ -33,6 +33,7 @@ you which arguments have already been tried.
 | [0019](./0019-a-synthetic-holdout-cannot-falsify-a-synthetic-assumption.md) | A synthetic hold-out cannot falsify a synthetic assumption; real pages are the only unshared measurement | accepted 2026-08-24 |
 | [0020](./0020-unexamined-is-not-failing.md) | Unexamined is not failing: evidence completeness gates absence claims | accepted 2026-08-24 |
 | [0021](./0021-the-layer-that-decides-must-be-the-layer-allowed-to-claim.md) | The layer that decides a subtype must be the layer allowed to claim it | accepted 2026-08-24 |
+| [0022](./0022-zero-false-positives-on-our-own-corpus-is-not-a-promise.md) | Zero false positives on our own corpus is not a promise | accepted 2026-08-24 |
 
 ## If you read only one
 
