@@ -142,3 +142,34 @@ test("a plain button the tab cycle never reaches IS still reported", () => {
   };
   assert.equal(fires(unreachable, "2.1.1"), true);
 });
+
+test("a disclosure button renamed by its own state is not keyboard-unreachable", () => {
+  // Verbatim from docs.sign-in.service.gov.uk: the sweep recorded BOTH labels of one button, because
+  // `probeDisclosure` activates a control and the capture spans that change, while the focus probe ran
+  // afterwards and only ever saw the second.
+  //
+  //   sweep  "clickable, Expand Quick start, button, collapsed"
+  //   sweep  "clickable, Collapse Quick start, button, expanded"
+  //   focus  "Collapse Quick start, button, focused, expanded"
+  //
+  // 2.1.1 reported "Expand Quick start" as unreachable. It is the same button, before it was pressed.
+  const disclosure = {
+    transcript: [],
+    structure: {
+      formFields: [
+        "clickable, Expand Quick start, button, collapsed",
+        "clickable, Collapse Quick start, button, expanded",
+        "Search, edit",
+      ],
+      links: Array.from({ length: 3 }, (_, i) => `Link ${i}, link`),
+    },
+    interaction: {
+      focusOrder: [
+        "Collapse Quick start, button, focused, expanded", "Search, edit, focused",
+        "Collapse Quick start, button, focused, expanded", "Search, edit, focused",
+      ],
+    },
+  };
+  assert.equal(fires(disclosure, "2.1.1"), false,
+    "the capture cannot tell a control RENAMED by an interaction from one nothing can reach");
+});
