@@ -18,18 +18,36 @@ inaccessible, five publishers, none written by this project — the same candida
 
 One additional true catch, bought with twelve findings a publisher's own conformance statement contradicts.
 
-The cause was a real bug, and its shape is the point. `role_name` had been fixed days earlier to find its
-role anywhere in a phrase rather than only at the start — correct, it had been reading a minority of link
-announcements. But it still captured `(.*)$`, so an accessible name ran to the **end of the line** instead of
-stopping where the next object begins. NVDA packs several objects into one announcement:
+**The cause, measured — and the first answer was wrong.**
 
-    "link, Accessibility statement, link, Sitemap, link, Cookies"    -> ONE name, three links
-    "link, graphic, GOV dot UK"                                      -> a stacked prefix, not a boundary
+The initial diagnosis was that `role_name` captured `(.*)$`, so an accessible name ran to the end of the
+line instead of stopping at the next object's role. NVDA packs several objects into one announcement, and
+`"link, Accessibility statement, link, Sitemap, link, Cookies"` was being read as ONE link name. That is a
+real defect, it is fixed (schema v12), and **it was not the cause of these findings.** Retraining under v12
+produced a byte-identical sweep: the same 12 pages, the same criteria, the same scores.
 
-**Corpus pages announce one object per line.** There, the tail *is* the name, so the defect is not merely
-hard to see — it is structurally inexpressible. It appears only where announcements are dense, which is every
-real page with a navigation bar and no corpus page at all. Eleven of the twelve false accusations were 2.4.4
-on GOV.UK Design System component pages, which share furniture: one mistake, replicated across a site.
+The actual cause, measured directly:
+
+    VAGUE_LINKS = {"click here", "details", "go", "here", "info", "learn more", "more",
+                   "read more", "that", "this"}
+
+    the announcement that matches, on every GOV.UK component page:   "link, Details"
+
+The GOV.UK Design System documents a component called **Details**, and every component page links to it.
+`vague_link_present` is an EXACT match against a hand-written wordlist, so it is 1 on all of them, and the
+head reports 2.4.4 on each. It was already 1 under the old extractor, which is why the fix moved nothing.
+
+**In the corpus, "details" appears only ever as a deliberately vague link.** The generator never produces it
+as a proper noun, so the feature is a perfect predictor there and is wrong only where the same word carries a
+different sense — which is a property of real writing and of no page we author. 2.4.4 is *Link Purpose (In
+Context)*, and an exact wordlist over link text has no context to consult; the criterion's own name says what
+the feature is missing.
+
+This is ADR 0015's shortcut lesson and this record's hold-out lesson meeting: a feature that cannot be wrong
+on the corpus, inside a hold-out drawn from that same corpus.
+
+**Eleven of the twelve false accusations are one mistake replicated across one publisher's component pages**,
+which share furniture. Counted as pages it is 12; counted as distinct errors it is three.
 
 ## Decision
 
@@ -77,6 +95,16 @@ can and cannot falsify which assumptions.
 ## What would falsify this
 
 If a candidate regressed on real pages while the synthetic hold-out *also* caught it, the claim that these
-measure different things would be weakened. Two more instances would settle it either way. The mechanism
-above is specific and testable: corpus pages announce one object per announcement, real pages do not — count
-objects per announcement in both and the gap is measurable rather than argued.
+measure different things would be weakened. Two more instances would settle it either way.
+
+The measurement that survived the wrong first diagnosis is worth keeping, because it is the sharpest number
+here even though it turned out not to explain these findings. Announcements containing a link, and how many
+of those contain **two or more** links — the packing that a name running to end-of-line misreads as one:
+
+| | announcements with a link | two or more in one |
+|---|---|---|
+| corpus (400 captures) | 1,254 | **0 (0.0%)** |
+| real pages (77 captures) | 4,659 | **379 (8.1%)** |
+
+Zero against 8.1% is what "structurally inexpressible in the corpus" means as a number, and it is the general
+form of the claim this record makes. The specific fault it was measured for was something else.
