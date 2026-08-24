@@ -1271,6 +1271,48 @@ one layer and not the others.
 
 **When a comment names a control-specific behaviour, grep every layer that decides on that control.**
 
+### 5. A ZERO CANNOT VETO, so "A and not B" must be computed, never handed over as two features
+
+The promotion gate refused the candidate on 2.4.4: **27 false positives, precision 0.841**, against a
+shipped model at **1.000 with zero**. Scored every clean development record and grouped what fired:
+
+```
+CLEAN records firing 2.4.4: 23
+    22  component-index          <- the conformant pages added that morning
+     1  components-text
+```
+
+Those pages carry "Details" inside a peer index, added deliberately so the WORD would stop predicting the
+failure. Their features:
+
+```
+vague_link_present         = 1.0     pushes the score UP
+vague_link_without_context = 0.0     correct — the link HAS context
+```
+
+**The contextual feature computes perfectly and cannot help.** `0 x weight = 0`, so it pushes up when it is
+1 and can never pull down when it is 0. A linear head only ADDS. So:
+
+> **If a criterion needs "A and not B", compute the conjunction and give the head one feature. Handing it A
+> and B separately works only if the model can multiply, and this one cannot.** The heads are
+> `torch.nn.Linear(n, 1)` — 13 logistic regressions with 416 parameters against 3 to 224 positives each.
+
+Two corollaries earned the same day:
+
+- **A feature that answers a DIFFERENT criterion is a shortcut waiting to be taken.** `vague_link_present`
+  asks 2.4.9's question (is the text alone vague — AAA, unreported here). The 2.4.4 head used it because it
+  was the cheapest separator available. It is no longer a model input; the helper stays exported for when
+  AAA ships.
+- **A corpus fix that appears to make things worse may have worked.** Adding conformant pages carrying the
+  word did not create the problem — it removed the shortcut's cover and exposed the head's dependence on
+  it. `corpus:starvation`'s monopoly report predicts exactly this, and the right response is to fix the
+  FEATURE, never to withdraw the pages.
+
+**And this is what the promotion gate is for.** Held-out acceptance said 90/90, 0 FP, 0 FN. Grouped
+development said precision 0.841 over 2,419 records. Both true: acceptance is 104 records and cannot resolve
+a 1.4% false-positive rate. `npm run lab:job -- -e job=promote` runs the candidate gate where the weights
+and the code both live, refuses on the candidate's own reports, and writes nothing when it refuses.
+
 ### What was checked and REFUTED, so nobody re-derives it
 
 **Bag size is not the driver.** The distribution shift is real and large — corpus median 18 / max 43 against
