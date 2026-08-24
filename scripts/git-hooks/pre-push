@@ -71,14 +71,17 @@ run "unit tests" npm test
 # The strict form lives where the corpus is authoritative: `release:gate` and the lab job pass
 # --require-complete, and there a hole in the corpus IS the answer.
 if [ -d runs/screenreader-dataset/captures ]; then
-  npm run --silent training:check-signals >/tmp/a11y-signals.$$ 2>&1
-  signals_status=$?
+  # `&& x=0 || x=$?`, never `cmd; x=$?`: `set -e` is on (line 31), so a non-zero exit terminates the hook
+  # BEFORE the status can be captured -- which meant the INCONCLUSIVE handling below had never once run. The
+  # symptom is a push that dies after the last "ok" line with no failure named, because the hook's own exit
+  # code becomes the check's.
+  signals_status=0
+  npm run --silent training:check-signals >/tmp/a11y-signals.$$ 2>&1 || signals_status=$?
   case $signals_status in
     0) echo "  ok      check-signals" ;;
     # 2 is INCONCLUSIVE, never a pass: it is reported in the SKIPPED list, which the hook prints and which
     # exists so "not examined" can never read as "examined and clean".
-    2) skipped+=("check-signals (INCONCLUSIVE — too little usable evidence in this copy of runs/; the "\
-                 "authoritative answer is npm run lab:job -- -e job=check-signals)") ;;
+    2) skipped+=("check-signals (INCONCLUSIVE — too little usable evidence in this copy of runs/; the authoritative answer is npm run lab:job -- -e job=check-signals)") ;;
     *) echo "  FAILED  check-signals"
        tail -20 /tmp/a11y-signals.$$ | sed 's/^/            /'
        failed+=("check-signals") ;;
@@ -88,8 +91,22 @@ else
   skipped+=("check-signals (no runs/screenreader-dataset/captures — needs a local corpus)")
 fi
 
+# Exit 2 means INCONCLUSIVE here too, for the same reason it does above: a problem this copy of `runs/`
+# cannot ATTRIBUTE -- a stale export looks exactly like a broken exclusion from here. Reported as SKIPPED,
+# never as a pass. This was the last check that could fail on a stale corpus, and therefore the last reason
+# to reach for A11Y_SKIP_VERIFY=1, which turns off lint, typecheck and 953 tests as collateral.
 if [ -f runs/screenreader-dataset/screenreader-evidence.jsonl ] && [ -x .venv/bin/python ]; then
-  run "rules:gate" npm run --silent rules:gate
+  rules_status=0
+  npm run --silent rules:gate >/tmp/a11y-rules.$$ 2>&1 || rules_status=$?
+  case $rules_status in
+    0) echo "  ok      rules:gate" ;;
+    2) skipped+=("rules:gate (INCONCLUSIVE — this copy of runs/ cannot attribute the problem; the authoritative answer is npm run lab:job -- -e job=rules-gate)")
+       tail -3 /tmp/a11y-rules.$$ | sed 's/^/            /' ;;
+    *) echo "  FAILED  rules:gate"
+       tail -20 /tmp/a11y-rules.$$ | sed 's/^/            /'
+       failed+=("rules:gate") ;;
+  esac
+  rm -f /tmp/a11y-rules.$$
 else
   skipped+=("rules:gate (needs the exported corpus and .venv)")
 fi
