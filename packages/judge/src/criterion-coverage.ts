@@ -81,6 +81,15 @@ export type EvidenceChannel =
   /** Interaction probes, in `interaction`. */
   | "controls" | "stateChanges" | "formChanges" | "postSubmitFields" | "focusOrder"
   /**
+   * The DOM media census — `<audio>`/`<video>` with their `autoplay`, `muted` and `controls` attributes.
+   *
+   * The one channel that is not screen-reader output, and it has to be: those attributes have no
+   * accessibility-tree equivalent, so 1.4.2 is decided from the DOM or not at all. It was declared as
+   * `transcript` until 2026-08-24 while `addAutoplayingAudio` read `capture.media` — one fact written in
+   * two places, and the declaration was the copy that was wrong.
+   */
+  | "media"
+  /**
    * What NVDA said the page was called and what its first heading was, before and after activating a
    * navigation control. The only channel that measures a TRANSITION rather than a state, which is why it
    * reaches a failure no static analyser can: the markup is valid at every instant.
@@ -124,7 +133,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   // ---- assessed today -------------------------------------------------------------------------
   "1.1.1": { status: "assessed", channels: ["graphics", "transcript"], note: "Rules own missing and filename alt text exactly; the head owns generic alt ('image', 'photo')." },
   "1.3.1": { status: "assessed", channels: ["headings", "tableCells", "transcript"], note: "Fake headings and tables whose headers are not associated. Heading HIERARCHY (h2 -> h4) is not checked — see 'reachable' note on 2.4.10-style structure below; `moveToNextHeadingLevel` would supply it." },
-  "1.4.2": { status: "assessed", needs: ["dom"], channels: ["transcript"], note: "Rule-only, and the exception that proves the boundary: `autoplay` and `muted` are attributes with no accessibility-tree equivalent, so a deterministic rule reads the DOM and no head is trained on it." },
+  "1.4.2": { status: "assessed", needs: ["dom"], channels: ["media"], note: "Rule-only, and the exception that proves the boundary: `autoplay` and `muted` are attributes with no accessibility-tree equivalent, so a deterministic rule reads the DOM and no head is trained on it." },
   // ASSESSED BUT NEVER VALIDATED, and `criteriaAssessableFrom` is what surfaced it on the day it was added.
   // `rules.ts` emits "2.1.2 No Keyboard Trap", but: no corpus case targets it, it is absent from
   // `rule-ownership.json` — so `rules:gate`'s "every declared boundary holds" never covered it — and it reads
@@ -287,6 +296,7 @@ export function channelsPresent(capture: ChannelBearingCapture): Set<EvidenceCha
   for (const channel of INTERACTION_CHANNELS) {
     if (nonEmpty((capture.interaction ?? {})[channel])) present.add(channel);
   }
+  if (nonEmpty((capture as { media?: unknown[] }).media)) present.add("media");
   const ready = (capture.diagnostics ?? []).find((mark) => mark.event === "documentReady");
   if (typeof ready?.title === "string" && ready.title.trim()) present.add("title");
   if ((capture.diagnostics ?? []).some((mark) => mark.event === "structureCensus")) {
