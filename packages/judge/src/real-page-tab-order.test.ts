@@ -173,3 +173,36 @@ test("a disclosure button renamed by its own state is not keyboard-unreachable",
   assert.equal(fires(disclosure, "2.1.1"), false,
     "the capture cannot tell a control RENAMED by an interaction from one nothing can reach");
 });
+
+test("NVDA saying there is no next link is not a control that was activated", () => {
+  // Measured on gov.scot/publications: `after activating "no next link" the page moved to
+  // "AUGUST 2025, heading, level 2" while the title stayed …`. Nothing was activated — quick-nav ran out
+  // of links, NVDA said so, and the probe took its own end-of-page announcement for a control name.
+  //
+  // The heading changed because the caret moved, which is what quick-nav does.
+  const exhausted = {
+    transcript: [],
+    interaction: {
+      routeChange: {
+        control: "no next link", navigated: true,
+        titleBefore: "Publications - gov.scot", titleAfter: "Publications - gov.scot",
+        headingBefore: "Publications, heading, level 1", headingAfter: "AUGUST 2025, heading, level 2",
+      },
+    },
+  };
+  assert.equal(fires(exhausted, "2.4.2"), false);
+});
+
+test("a real activation with a stale title IS still reported", () => {
+  const stale = {
+    transcript: [],
+    interaction: {
+      routeChange: {
+        control: "Bookings, link", navigated: true,
+        titleBefore: "Home - Example", titleAfter: "Home - Example",
+        headingBefore: "Home, heading, level 1", headingAfter: "Your bookings, heading, level 1",
+      },
+    },
+  };
+  assert.equal(fires(stale, "2.4.2"), true);
+});

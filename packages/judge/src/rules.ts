@@ -559,9 +559,29 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
  * site may be a skip link or a plain fragment jump — and then the heading does not change either, so this
  * correctly makes no claim.
  */
+/**
+ * NVDA announcing that there is nothing further of a type — not a control it activated.
+ *
+ * `probeRouteChange` names the control it pressed by diffing the speech log, so whatever NVDA said in
+ * response becomes the "control". When quick-nav runs out, what NVDA says is `"no next link"` — and that
+ * string was then carried into a finding as though a control by that name had been activated.
+ *
+ * Measured 2026-08-24 on `gov.scot/publications`: *after activating "no next link" the page moved to
+ * "AUGUST 2025, heading, level 2" while the title stayed…*. Nothing was activated. The heading changed
+ * because the caret moved, which is what quick-nav does.
+ *
+ * This is the lesson `sweepInDirection` already carries — *NVDA announces the end of a page, so
+ * `exhausted` is the sound terminus* — applied to the one probe that never learned it. Fixed here rather
+ * than in the capture so existing evidence is covered without another recapture; the capture should stop
+ * recording it as a control too, and `interaction.routeChange.navigated` is where that belongs.
+ */
+const NOTHING_FURTHER = /^\s*no (next|previous) \w+/i;
+
 function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
   const route = input.interaction?.routeChange;
   if (!route || route.error || !route.navigated) return; // not probed, or the probe could not answer
+  // The probe reached the end of the links instead of activating one. See `NOTHING_FURTHER`.
+  if (NOTHING_FURTHER.test(String(route.control ?? ""))) return;
   const { titleBefore, titleAfter, headingBefore, headingAfter } = route;
   if (!titleBefore || !titleAfter) return;
   if (headingBefore === headingAfter) return; // nothing navigated; there is no transition to judge
