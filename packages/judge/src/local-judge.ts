@@ -39,6 +39,7 @@
  */
 import { spawn } from "node:child_process";
 
+import { annotateCapture } from "@a11y-witness/evidence";
 import { scorerPaths as artefact } from "@a11y-witness/scorer";
 
 import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
@@ -422,7 +423,10 @@ Promise<ScorerOutput> {
         reject(new Error(`could not parse the local scorer's output: ${(e as Error).message}`));
       }
     });
-    child.stdin.end(JSON.stringify(capture));
+    // Annotated, because `score.py` builds its record from this JSON and the featurizer now reads the
+    // parse rather than re-deriving it. Unannotated input fails loudly there rather than silently
+    // falling back to a regex, which is what let the old defect survive every gate.
+    child.stdin.end(JSON.stringify(annotateCapture(capture as unknown as Record<string, unknown>)));
   });
 }
 

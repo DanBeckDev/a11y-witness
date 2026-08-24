@@ -1,7 +1,7 @@
 {
-  "pendingSchema": "screenreader-structured-v12",
+  "pendingSchema": "screenreader-structured-v13",
   "shippedSchema": "screenreader-structured-v7",
   "openedAt": "2026-08-24",
-  "why": "role_name ended an accessible name at end-of-line instead of at the next object's role, so several links announced in one phrase became one name. Fixing it changes what every capture means, so the shipped weights were fitted to a different function of the same evidence and must be retrained before they can be promoted.",
+  "why": "The announcement grammar was seven partial regexes across three languages. It is now one parser in packages/evidence, and the featurizer reads the parse instead of re-deriving it, so the same capture yields different form_field_named/form_field_unnamed wherever NVDA prefixed a container or a page's own prose began with a role word. Weights fitted before it were fitted to a different function of the same evidence.",
   "closes": "delete this file in the same commit that promotes weights stamped pendingSchema"
 }

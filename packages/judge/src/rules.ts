@@ -23,8 +23,8 @@
  * on spacing). Validate any new announcement-string rule against our own captures,
  * not against a book's strings.
  */
-import type { Channel } from "./announcement.js";
-import { parseAnnouncement } from "./announcement.js";
+import type { Channel } from "@a11y-witness/evidence";
+import { parseAnnouncement } from "@a11y-witness/evidence";
 import type { Finding, RequirementMapping } from "./judge.js";
 
 /** The capture fields the rules inspect (a subset of JudgeInput; a full

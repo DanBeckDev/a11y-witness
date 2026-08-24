@@ -278,3 +278,48 @@ export function announces(raw: string, role: string, channel: Channel): boolean 
   const wanted = role.trim().toLowerCase();
   return parseAnnouncement(raw, channel).objects.some((object) => object.role === wanted);
 }
+
+/**
+ * Attach the parse to a capture, so a consumer that cannot run this code reads FIELDS instead of guessing.
+ *
+ * The featurizer is Python and computed `form_field_named`/`form_field_unnamed` with its own anchored
+ * role-first regex over `structure.formFields` — a NAME-first channel. Measured on GOV.UK Design System
+ * captures, `LEADING_ROLE` matched the word "Radio" at the start of
+ *
+ *     "Radio items with hint – Radios example, frame, How do you want to sign in?, grouping, …"
+ *
+ * which is the example's TITLE, not a role. So a role-token regex matched English prose and reported an
+ * unnamed form field on a page where every field is named. No corpus page begins a heading with "Radio
+ * items", which is why it could only ever be found on somebody else's site.
+ *
+ * Node always precedes Python in this pipeline — export before training, `local-judge` and the abstention
+ * sweep before `score.py` — so Python never has to parse at all. That DELETES a copy rather than pinning two
+ * equal, which is this repo's first-preference remedy and the reason the parser is not ported.
+ *
+ * Additive: it adds a field and changes none, so nothing about the existing evidence means anything
+ * different. It does change what the featurizer computes FROM, so `FEATURE_SCHEMA_VERSION` moves with it.
+ */
+export function annotateCapture<T extends Record<string, unknown>>(capture: T): T {
+  const structure = (capture.structure ?? {}) as Record<string, unknown>;
+  const interaction = (capture.interaction ?? {}) as Record<string, unknown>;
+  const strings = (value: unknown): string[] =>
+    (Array.isArray(value) ? value : []).filter((v): v is string => typeof v === "string");
+
+  const parse = (values: unknown, channel: Channel): ParsedAnnouncement[] =>
+    strings(values).map((text) => parseAnnouncement(text, channel));
+
+  return {
+    ...capture,
+    parsed: {
+      // The channel per field is not a guess: quick-navigation sweeps announce name-first and the arrow
+      // read-through announces role-first, measured at 884/0 and 0/880 with no overlap.
+      transcript: parse(capture.transcript, "transcript"),
+      formFields: parse(structure.formFields, "sweep"),
+      links: parse(structure.links, "sweep"),
+      graphics: parse(structure.graphics, "sweep"),
+      headings: parse(structure.headings, "sweep"),
+      tableCells: parse(structure.tableCells, "sweep"),
+      controls: parse(interaction.controls, "sweep"),
+    },
+  };
+}

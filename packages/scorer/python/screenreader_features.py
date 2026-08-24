@@ -74,7 +74,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # every weight file trained under v7 was fitted to a different function of the same captures. Bumping is
 # what stops a v7 model being scored with v8 features and the difference being read as model behaviour.
 # Measured before bumping: 73 corpus records change, all of them labelled `violation`, none clean.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v12"
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v13"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -376,6 +376,31 @@ def link_name(value: str) -> str:
 def graphic_name(value: str) -> str:
     return role_name("graphic", value)
 
+#: Roles for which a MISSING name is a form-field failure. Narrower than every role the parser knows, because
+#: an unnamed heading is 1.3.1 and an unnamed graphic is 1.1.1 — neither is what these two features mean.
+REPORTABLE_FIELD_ROLES = frozenset({
+    "edit", "edit text", "button", "checkbox", "radio", "radio button",
+    "combo box", "list box", "slider", "spin button",
+})
+
+
+def parsed_units(record: dict[str, Any], field: str) -> list[dict[str, Any]]:
+    """The pre-parsed announcements for one capture field.
+
+    REQUIRED, never optional. A silent fallback to regex parsing would restore the defect this replaced and
+    hide it: the featurizer would keep producing numbers, and the numbers would be wrong only on the pages
+    nobody wrote — which is precisely how this survived 2,122 captures and every green gate.
+    """
+    parsed = record["input"].get("parsed")
+    if parsed is None:
+        raise RuntimeError(
+            "this capture carries no `parsed` block, so the featurizer cannot read announcement fields. "
+            "It is attached by `annotateCapture` in packages/evidence; a caller that sends a capture to the "
+            "scorer must call it first. Re-export the dataset if this is training data."
+        )
+    return parsed.get(field) or []
+
+
 def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     """Extract only relations and presence facts observable in screen-reader output."""
     values = {name: 0.0 for name in FEATURE_NAMES}
@@ -406,8 +431,23 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     values["landmark_present"] = float(bool(landmarks))
     values["landmark_named"] = float(any(named_landmark(value) for value in landmarks))
     values["form_field_present"] = float(bool(form_fields))
-    values["form_field_named"] = float(any(not LEADING_ROLE.match(value.strip()) for value in form_fields))
-    values["form_field_unnamed"] = float(any(LEADING_ROLE.match(value.strip()) for value in form_fields))
+    # Read from the PARSE, never re-derived here. `LEADING_ROLE` is anchored and role-first, and
+    # `structure.formFields` is a NAME-first channel — so on GOV.UK Design System captures it matched the
+    # word "Radio" at the start of "Radio items with hint – Radios example, frame, …", which is the
+    # example's title and not a role. A role-token regex matching English prose reported an unnamed form
+    # field on a page where every field is named, and no corpus page can express that because none begins a
+    # heading with a role word.
+    #
+    # Node always runs before Python here, so the grammar has exactly one implementation
+    # (`packages/evidence/src/announcement.ts`) and this file does not parse announcements at all.
+    parsed_fields = parsed_units(record, "formFields")
+    named = [unit for unit in parsed_fields if any(o.get("name") for o in unit.get("objects") or [])]
+    unnamed = [
+        unit for unit in parsed_fields
+        if any(o.get("role") in REPORTABLE_FIELD_ROLES and not o.get("name") for o in unit.get("objects") or [])
+    ]
+    values["form_field_named"] = float(bool(named))
+    values["form_field_unnamed"] = float(bool(unnamed))
     values["bare_edit_present"] = float(any(value.strip().lower() in {"edit", "edit text"} for value in all_evidence(record)))
     values["control_present"] = float(bool(controls))
 
