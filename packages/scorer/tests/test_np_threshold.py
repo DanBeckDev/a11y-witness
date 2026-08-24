@@ -73,19 +73,51 @@ def test_the_rank_is_the_smallest_one_that_holds_the_bound():
     assert trainer.np_violation_rate(n, rank - 1, alpha) > delta, "and it must be the SMALLEST that does"
 
 
-def test_the_cut_excludes_the_negative_it_sits_on():
+def test_the_cut_excludes_the_negative_it_sits_on_IN_FLOAT32():
     """Inference compares `score >= threshold`; the proposition is stated for `score > s_(r)`.
 
-    Without the nextafter nudge every negative tied at the cut counts as a positive — an off-by-one in
-    the single direction this project cannot be wrong in. Asserted through the real predicate.
+    The first version of this test used round Python floats and passed against a cut nudged with
+    `math.nextafter` — which is float64, and is rounded straight back onto the value it was meant to
+    clear the moment it meets the float32 tensor the head scores actually live in. Every one of the
+    seventeen heads shipped exactly one false positive more than its rank permitted, and the test saw
+    nothing, because it never exercised the dtype the code runs on. A test written against a shape
+    nobody verified is this repo's oldest defect.
+
+    So: scores that are genuinely float32, and the comparison made in float32 as `metrics` makes it.
     """
     trainer = load()
-    negatives = [0.10] * 700 + [0.90] * 100
+    import numpy
+
+    # Values with no exact float32 representation, so a float64 nudge cannot survive the cast.
+    negatives = [float(numpy.float32(0.1 + i * 0.0007123)) for i in range(900)]
     cut, guarantee = trainer.np_threshold(negatives, "3.3.1:demo", [])
     at_rank = sorted(negatives)[guarantee["rank"] - 1]
-    assert not (at_rank >= cut), "the negative AT the chosen rank must fall below the cut"
-    permitted = guarantee["permittedFalsePositives"]
-    assert sum(1 for s in negatives if s >= cut) <= permitted
+
+    as_float32 = numpy.array(negatives, dtype=numpy.float32)
+    admitted = int((as_float32 >= numpy.float32(cut)).sum())
+    assert numpy.float32(cut) > numpy.float32(at_rank), "the cut must clear its order statistic in FLOAT32"
+    assert admitted == guarantee["permittedFalsePositives"], (
+        f"cut admits {admitted} negatives, rank permits {guarantee['permittedFalsePositives']}"
+    )
+    # And in float64, which is how `score.py` compares — one threshold must be right in both.
+    assert sum(1 for s in negatives if s >= cut) == guarantee["permittedFalsePositives"]
+
+
+def test_a_cut_that_admits_more_than_its_rank_permits_REFUSES_to_return():
+    # The counting check, which does not share a failure mode with the arithmetic that produced the cut.
+    # Verified by driving the helper to return something wrong rather than by trusting it.
+    trainer = load()
+    original = trainer.float32_above
+    try:
+        trainer.float32_above = lambda value: value  # a nudge that does not clear the value
+        try:
+            trainer.np_threshold([i / 1000 for i in range(900)], "3.3.1:demo", [])
+        except RuntimeError as error:
+            assert "do not ship these weights" in str(error)
+        else:
+            raise AssertionError("a cut admitting more negatives than its rank permits must refuse")
+    finally:
+        trainer.float32_above = original
 
 
 def test_recall_is_an_outcome_and_the_positives_never_move_the_cut():
