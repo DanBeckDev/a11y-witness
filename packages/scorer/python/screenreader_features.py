@@ -39,6 +39,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
     # guess. Give it enough representation strength to survive surrounding
     # prose that can otherwise make a generic link look semantically specific.
     "vague_link_present": 2.0,
+    "vague_link_without_context": 3.0,
     "form_field_unnamed": 3.0,
     # Acceptance evidence includes headings whose generic name is announced
     # correctly by NVDA. This relation is useful for 2.4.6, but the frozen
@@ -74,7 +75,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # every weight file trained under v7 was fitted to a different function of the same captures. Bumping is
 # what stops a v7 model being scored with v8 features and the difference being read as model behaviour.
 # Measured before bumping: 73 corpus records change, all of them labelled `violation`, none clean.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v13"
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v14"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -103,6 +104,7 @@ FEATURE_NAMES = (
     "validation_error_missing",
     "generic_heading_present",
     "vague_link_present",
+    "vague_link_without_context",
     "generic_graphic_present",
     "unnamed_graphic_present",
     "filename_graphic_present",
@@ -445,6 +447,44 @@ def parsed_units(record: dict[str, Any], field: str) -> list[dict[str, Any]]:
     return parsed.get(field) or []
 
 
+#: Containers that supply the CONTEXT 2.4.4 accepts.
+#:
+#: WCAG 2.4.4 is Link Purpose IN CONTEXT: the purpose may come from the link text "or from the link text
+#: together with its programmatically determined link context", which W3C defines as text in the same
+#: paragraph, list item, table cell or table header. A link sitting in a list of peer links has that; a lone
+#: call to action after a paragraph of prose does not.
+#:
+#: This is what separates the two senses of the same word, measured on real captures:
+#:
+#:     "link, Details"                                                   -> no container   FAILING
+#:     "list, with 4 items, link, Details"                               -> list           conformant
+#:     "Menu, navigation landmark, list, with 6 items, link, Details"    -> nav, list      conformant
+#:
+#: `vague_link_present` asks whether the TEXT ALONE is vague, which is 2.4.9 -- a AAA criterion this project
+#: does not report. Keeping both means the AAA distinction is computed now and reportable later, without a
+#: second pipeline.
+CONTEXT_CONTAINERS = frozenset({
+    "list", "navigation landmark", "navigation", "menu", "menu bar", "table", "grouping",
+})
+
+
+def vague_link_lacks_context(record: dict[str, Any]) -> bool:
+    """A vague link name with nothing around it to disambiguate.
+
+    Reads the TRANSCRIPT parse, never the sweep: a sweep entry is one object in isolation and carries no
+    container, so asking it about context would report every link as contextless. That the two channels
+    answer different questions is exactly why the parser is told which one it is reading.
+    """
+    for unit in parsed_units(record, "transcript"):
+        containers = {c.get("role") for c in unit.get("containers") or []}
+        if containers & CONTEXT_CONTAINERS:
+            continue
+        for obj in unit.get("objects") or []:
+            if obj.get("role") == "link" and (obj.get("name") or "").strip().lower() in VAGUE_LINKS:
+                return True
+    return False
+
+
 def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     """Extract only relations and presence facts observable in screen-reader output."""
     values = {name: 0.0 for name in FEATURE_NAMES}
@@ -549,6 +589,7 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     values["generic_heading_present"] = float(
         any(heading_name(value) in GENERIC_HEADINGS for value in headings)
     )
+    values["vague_link_without_context"] = float(vague_link_lacks_context(record))
     values["vague_link_present"] = float(
         any(link_name(value) in VAGUE_LINKS for value in all_evidence(record))
     )
