@@ -76,18 +76,22 @@ test("an UNKNOWABLE expectation is not incompleteness", () => {
   assert.deepEqual(withheldForIncompleteEvidence(["1.3.1"], completeness).supported, ["1.3.1"]);
 });
 
-test("a criterion resting on a truncated LINK sweep is withheld too", () => {
-  // The generalisation, and the reason this is a gate rather than a table fix. `evidence-units.ts` already
-  // records that links, lists and graphics are the channels that truncate FIRST on a large page, so 2.4.4
-  // and 1.1.1 carry this identical latent defect — we have simply not hit them yet.
+test("a PRESENCE finding survives an incomplete sweep", () => {
+  // The correction that measurement forced. The first version gated 1.1.1 on the graphics channel, and
+  // withheld it on all three W3C "before" pages — the canonical missing-alt demos — because the sweep saw
+  // 8 of 31 graphics. But "here is an unnamed graphic" is proved by ONE instance; completeness bounds a
+  // claim about ALL of them, and 1.1.1 makes no such claim.
   const truncated = {
     transcript: [],
-    structure: { links: ["Home, link"], tableCells: [], headings: [], graphics: [], landmarks: [] },
-    diagnostics: [{ event: "structureCensus", link: 46, heading: 5, graphic: 4, landmark: 2 }],
+    structure: { links: ["Home, link"], tableCells: [], headings: [], graphics: ["graphic"], landmarks: [] },
+    diagnostics: [{ event: "structureCensus", link: 46, heading: 5, graphic: 31, landmark: 2 }],
   };
-  const { supported, inconclusive } = withheldForIncompleteEvidence(["2.4.4"], evidenceCompleteness(truncated));
-  assert.deepEqual(supported, []);
-  assert.equal(inconclusive[0].channel, "links");
+  const completeness = evidenceCompleteness(truncated);
+  assert.equal(completeness.graphics.complete, false, "the sweep really was incomplete");
+  const { supported, inconclusive } = withheldForIncompleteEvidence(["1.1.1", "2.4.4"], completeness);
+  assert.deepEqual(supported, ["1.1.1", "2.4.4"],
+    "a presence finding must survive: withholding it discards a true finding on a page already known bad");
+  assert.deepEqual(inconclusive, []);
 });
 
 test("a criterion with no declared evidence channel is never withheld", () => {

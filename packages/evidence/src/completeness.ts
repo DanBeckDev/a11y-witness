@@ -131,21 +131,27 @@ export function evidenceCompleteness(capture: Record<string, unknown>): Complete
 }
 
 /**
- * Which channel a criterion's finding rests on.
+ * Criteria whose finding is an ABSENCE claim, and the channel that claim ranges over.
  *
- * Declared per CRITERION rather than inferred, for the reason `rule-ownership.json` is declared: a mapping
- * nothing can contradict is a comment, and one derived from the feature list would silently follow the
- * features wherever they drifted.
+ * This is the axis, and getting it wrong made the gate over-broad on its first run: it withheld 1.1.1 on
+ * all three W3C "before" pages — the canonical missing-alt demos — because the graphic sweep saw 8 of 31.
  *
- * Only criteria whose evidence comes from a sweep that can TRUNCATE appear here. 3.3.1 and 4.1.3 rest on
- * interaction evidence, which is not a sweep and cannot be half-done — it either happened or the capture
- * says it did not.
+ *   PRESENCE claim   "here is an unnamed graphic"    one instance proves it. Seeing 8 of 31 is ENOUGH,
+ *                                                     and withholding discards a true finding on exactly
+ *                                                     the pages a publisher already admits are broken.
+ *   ABSENCE claim    "no cell announces a header"    ranges over ALL cells. 0 of 21 cannot support it;
+ *                                                     the capture did not look.
+ *
+ * The distinction is already this repo's: `IMPOSSIBLE_BY_DEFINITION` names subtypes "where the feature's
+ * ABSENCE is what the subtype means", and CLAUDE.md's most expensive rule is that a check must never reject
+ * evidence whose absence is the finding. This is that rule pointed at the finding rather than the evidence.
+ *
+ * So the map is deliberately SHORT. A criterion belongs here only when its failure is "nothing in this
+ * channel did X" — never when it is "something in this channel did X".
  */
 export const CRITERION_EVIDENCE: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  "1.3.1": ["tableCells", "headings"],
-  "1.1.1": ["graphics"],
-  "2.4.4": ["links"],
-  "2.4.6": ["headings"],
+  // "no cell announced a header name" — a claim about every cell in the table.
+  "1.3.1": ["tableCells"],
 });
 
 /**
