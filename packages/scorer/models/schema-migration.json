@@ -1,7 +1,7 @@
 {
-  "pendingSchema": "screenreader-structured-v14",
+  "pendingSchema": "screenreader-structured-v15",
   "shippedSchema": "screenreader-structured-v7",
   "openedAt": "2026-08-24",
-  "why": "The announcement grammar is now one parser in packages/evidence, the featurizer reads the parse rather than re-deriving it, and 2.4.4 gained vague_link_without_context -- which asks whether a vague link is unsupported by its container, the question the criterion actually poses. Weights fitted before these were fitted to a different function of the same evidence, and to fewer inputs.",
+  "why": "One announcement grammar in packages/evidence; the featurizer reads the parse rather than re-deriving it; 2.4.4 now reads whether a vague link LACKS CONTEXT, and no longer reads whether the text alone is vague -- that is 2.4.9, a AAA criterion this project does not report, and the head was using it as a shortcut. Weights fitted before these were fitted to a different function of the same evidence and to a different input space.",
   "closes": "delete this file in the same commit that promotes weights stamped pendingSchema"
 }

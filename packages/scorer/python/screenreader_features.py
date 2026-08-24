@@ -38,7 +38,6 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
     # This is an explicit relation in the NVDA evidence, not an embedding
     # guess. Give it enough representation strength to survive surrounding
     # prose that can otherwise make a generic link look semantically specific.
-    "vague_link_present": 2.0,
     "vague_link_without_context": 3.0,
     "form_field_unnamed": 3.0,
     # Acceptance evidence includes headings whose generic name is announced
@@ -75,7 +74,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # every weight file trained under v7 was fitted to a different function of the same captures. Bumping is
 # what stops a v7 model being scored with v8 features and the difference being read as model behaviour.
 # Measured before bumping: 73 corpus records change, all of them labelled `violation`, none clean.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v14"
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v15"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -103,7 +102,6 @@ FEATURE_NAMES = (
     "validation_error_announced",
     "validation_error_missing",
     "generic_heading_present",
-    "vague_link_present",
     "vague_link_without_context",
     "generic_graphic_present",
     "unnamed_graphic_present",
@@ -471,6 +469,25 @@ CONTEXT_CONTAINERS = frozenset({
 def vague_link_lacks_context(record: dict[str, Any]) -> bool:
     """A vague link name with nothing around it to disambiguate.
 
+    ## Why `vague_link_present` is not also a feature
+
+    It was, and it answered the WRONG CRITERION. "Is the link text alone vague" is 2.4.9 -- Link Purpose
+    (Link Only), AAA, which this project does not report -- and the 2.4.4 head used it anyway, because it
+    was the cheapest separator available.
+
+    Measured 2026-08-24, and it is why a contextual feature alone could not fix it. On the 44 conformant
+    `component-index` pages, which carry "Details" inside a peer index:
+
+        vague_link_present         = 1.0     pushes the score UP
+        vague_link_without_context = 0.0     correct -- the link HAS context
+
+    and the head fired on 22 of them. A ZERO-VALUED FEATURE CONTRIBUTES NOTHING TO A LINEAR MODEL: 0 x
+    weight is 0, so this feature can push up when it is 1 and can never pull down when it is 0. "Vague AND
+    unsupported by context" is a conjunction, and a linear head cannot represent one -- it can only add.
+    Removing the wrong-criterion half is what leaves the conjunction already computed here.
+
+    `VAGUE_LINKS` and this function stay exported: when AAA ships, 2.4.9 is exactly the question they ask.
+
     Reads the transcript as a STREAM, not as independent lines, because that is what it is. NVDA announces a
     container ONCE on entering it and says nothing about it again until "out of list":
 
@@ -610,9 +627,6 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
         any(heading_name(value) in GENERIC_HEADINGS for value in headings)
     )
     values["vague_link_without_context"] = float(vague_link_lacks_context(record))
-    values["vague_link_present"] = float(
-        any(link_name(value) in VAGUE_LINKS for value in all_evidence(record))
-    )
     values["generic_graphic_present"] = float(
         any(graphic_name(value) in GENERIC_GRAPHICS for value in all_evidence(record))
     )
