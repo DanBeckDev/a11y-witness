@@ -163,6 +163,23 @@ probe constant, a name normaliser, a calibration sweep, a promotion gate and a t
 > scores perfect precision* is this project's most expensive lesson, and a broken rule is silent on
 > conformant pages too.
 >
+> **PHASE 1.4 — the product path, re-measured on the recaptured set.** At the model's own floor, 36
+> pages scored, 33 of them conformant:
+>
+> | | before the fixes (true value) | after |
+> |---|---|---|
+> | **asserted wrongly** | **1** | **1** |
+> | referred (`cantTell`) | **151** | **79** |
+> | publisher-declared inaccessible caught | 3 of 3 | **3 of 3** |
+>
+> Read the first row first. The safety number did not move through a probe change, two rule fixes, a new
+> threshold scheme and a full recapture — which is the property this tool exists to protect, and the only
+> one whose failure would be an accusation against somebody's site.
+>
+> The second row is the day's work showing up: 151 was the TRUE figure all along while the sweep reported
+> 27, because it passed `truncatedSweeps: []` where the product passes the real value. The halving came
+> from the focus probe, whose truncation collapsed 133 → 27 once it stopped stopping at twelve tab stops.
+>
 > **MEASURED on the recaptured pages, split by whether they carry the new mark:**
 >
 > | on conformant calibration pages | before | after |
