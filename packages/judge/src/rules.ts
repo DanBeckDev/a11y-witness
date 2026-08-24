@@ -752,6 +752,26 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
   // absence from the tab order is the specified behaviour, and this probe presses only Tab, so the
   // capture cannot tell that from a control nothing can reach.
   const announced = controlsWithRoles(input.structure?.formFields);
+  // DID A DISCLOSURE OPEN OR CLOSE DURING THIS CAPTURE? If so the set of focusable controls changed
+  // while we were measuring it, and a set comparison across that is unsound.
+  //
+  // Measured 2026-08-24 on sportengland.org. The sweep recorded `"Close search, button, expanded"` and
+  // the fields inside the open panel; the focus probe, running at another moment, recorded
+  // `"Toggle search, button, focused, collapsed"`. Controls inside a closed panel are not focusable —
+  // correctly — so 2.1.1 reported "Search" and "Submit search query" as unreachable when they simply
+  // did not exist at the time Tab was pressed.
+  //
+  // A capture is not an instant: `probeDisclosure` activates a control unconditionally, and the sweeps
+  // and the focus probe run before and after it. One name announced BOTH expanded and collapsed is that
+  // fact made visible, and it is the whole page's evidence that is affected, not one control's.
+  const toggled = new Set<string>();
+  for (const control of announced) {
+    if (!control.states.includes("expanded")) continue;
+    if (announced.some((other) => other.name === control.name && other.states.includes("collapsed"))) {
+      toggled.add(control.name);
+    }
+  }
+  if (toggled.size) return;
   const untrackable = new Set(announced
     .filter((c) => SHARES_ONE_TAB_STOP.has(c.role)
       || c.states.some((state) => NAME_CHANGES_WITH_STATE.has(state)))
