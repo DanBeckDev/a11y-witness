@@ -599,6 +599,34 @@ function cycleClosed(tabOrder: string[]): boolean {
 }
 
 /**
+ * How much of the page the tab cycle actually accounts for, against a count taken independently.
+ *
+ * `cycleClosed` asks the tab order about itself, and a repeated navigation block answers yes. Measured
+ * 2026-08-24, after the focus probe was allowed to run past twelve stops: `gov.scot/publications` recorded
+ * a closed cycle in 10 stops on a page whose sweeps found 78 focusable elements, and `networkrail` in 7 of
+ * 29. Both then reported keyboard-unreachable controls, on a tab order that was incomplete while claiming
+ * to be complete — the exact fault `addKeyboardUnreachableControl`'s guard exists to prevent, arriving
+ * through the guard instead of around it.
+ *
+ * The sweeps are a SEPARATE instrument: quick-nav walks the document, Tab walks the focus ring, and
+ * neither can produce the other's error. That is what makes this check worth more than a longer
+ * confirmation inside the probe, which would still be the tab order vouching for itself.
+ *
+ * Deliberately generous. The two counts measure different things — the focus ring holds controls no
+ * quick-nav type sweeps, and a page can have far more links than tab stops — so this rejects only the
+ * order-of-magnitude disagreement that a false wrap produces, and never adjudicates a near miss.
+ */
+const CYCLE_COVERAGE_FLOOR = 0.5;
+
+function cycleCoversThePage(tabOrder: string[], input: RuleInput): boolean {
+  const structure = input.structure ?? {};
+  const sweptFocusable = ["links", "formFields", "buttons"]
+    .reduce((total, key) => total + ((structure as Record<string, unknown>)[key] as unknown[] ?? []).length, 0);
+  if (sweptFocusable === 0) return true;
+  return tabOrder.length >= sweptFocusable * CYCLE_COVERAGE_FLOOR;
+}
+
+/**
  * 2.1.1 — a control the page announces as operable that the keyboard never reaches.
  *
  * The failure a screen-reader user meets as "I can hear it and I cannot press it": a `div role="button"`
@@ -628,6 +656,9 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
   // early in READING order and late in TAB order, so the probe simply stopped before them. A well-built
   // page, accused on the first run.
   if (!cycleClosed(tabbedNames)) return;
+  // ...and the cycle has to account for the page. See `cycleCoversThePage`: a wrap the tab order detects
+  // in itself can be a repeated nav block, and then every control past it reads as unreachable.
+  if (!cycleCoversThePage(tabbedNames, input)) return;
   // A control whose announced name is shared with another cannot be said to have been missed: its name
   // appearing in the tab order may be the OTHER control, and its absence may mean the other one was
   // reached. Same reasoning as 2.4.3 — see `unambiguous`.
@@ -738,9 +769,23 @@ const FOCUS_ONLY_STATES = /\b(focused|blank|visited|same page|linked|has auto ?c
  * is context, not the control's own role … reported three conformant W3C pages as 4.1.2 failures"*. The fix
  * there was to strip CONTAINERS rather than landmarks specifically, and every real nav bar is a list inside
  * a landmark. Same correction, applied where two channels are compared rather than where a role is read.
+ *
+ * THE FIFTH APPEARANCE IS WHY THE REGEX THAT USED TO LIVE HERE IS GONE. It handled a container announced as
+ * one comma group (`"banner landmark,"`) and not one announced as two (`"Main navigation, navigation
+ * landmark,"`), and it knew nothing of `frame` or `grouping`. Measured on real pages 2026-08-24: the first
+ * entry of a sweep carries the whole container preamble, because NVDA announces context once on entry — so
+ * `"banner landmark, Main navigation, navigation landmark, list, with 6 items, About us, button"` reduced to
+ * `"main navigation navigation with 6 items about us"` and matched nothing in the tab order. 2.1.1 then
+ * reported a keyboard-unreachable control on 23 of 35 CONFORMANT pages, and 2.4.3 on 19.
+ *
+ * It had been latent for the life of the corpus: `addKeyboardUnreachableControl` refuses to claim anything
+ * unless the tab cycle closes, and with a 12-stop probe it never did. Raising the stop cap ran this
+ * normaliser against real pages for the first time.
+ *
+ * `parseAnnouncement` already answers all of it, is channel-aware, and is validated on 6,555 cross-channel
+ * comparisons at 0.08% disagreement. Patching the regex a fifth time would have been the wrong repair: the
+ * rule this file kept relearning is that a second encoding of one grammar drifts from the first.
  */
-const LEADING_CONTAINER =
-  /^(?:(?:[^,]+\s+)?(?:landmark|form|list|table|group|region|dialog)(?:\s*,\s*with\s+\d+\s+items?)?\s*,\s*)+/i;
 
 /**
  * Exported ONLY so `name-normalisation.test.ts` can pin this equal to the dataset signals' own copy in
@@ -751,9 +796,8 @@ export const comparableNamesForTest = (entries: string[] | undefined): string[] 
 
 function comparableNames(entries: string[] | undefined): string[] {
   return (entries ?? [])
-    .map((entry) => accessibleName(
-      String(entry).replace(LEADING_CONTAINER, "").replace(FOCUS_ONLY_STATES, " "),
-    ))
+    .map((entry) => parseAnnouncement(String(entry), "sweep").objects[0]?.name ?? "")
+    .map((name) => name.replace(FOCUS_ONLY_STATES, " ").replace(/[\s,]+/g, " ").trim())
     .filter(Boolean);
 }
 
