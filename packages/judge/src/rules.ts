@@ -24,7 +24,7 @@
  * not against a book's strings.
  */
 import type { Channel } from "@a11y-witness/evidence";
-import { parseAnnouncement } from "@a11y-witness/evidence";
+import { parseAnnouncement, CONTROL_ROLES } from "@a11y-witness/evidence";
 // The ONE list of criteria the rules may emit. Imported rather than restated: writing a second
 // copy here is the defect this file has recorded five times, and I made it once before deleting it.
 import { RULE_CRITERIA } from "./coverage.js";
@@ -712,55 +712,40 @@ function addInertSkipLink(input: RuleInput, add: AddFinding): void {
 }
 
 /**
- * A structural sweep in DOCUMENT order, or null when this capture cannot say.
+ * The controls a screen-reader user meets, in the order they meet them.
  *
- * `collectByType` walks backwards from the caret and then forwards, pushing both into one array. So the
- * result is `reverse(before the caret)` followed by `(after it, in order)` — and read raw it is not
- * reading order at all. Measured on check-for-flooding 2026-08-24, `structure.formFields` was exactly
- * REVERSE document order, and `addBrokenFocusOrder` compared tab order against it and reported a failure
- * on 25 of 35 conformant real pages.
+ * From the TRANSCRIPT, which is an arrow-key read-through line by line and therefore document order by
+ * construction — not from `structure.formFields`, which cannot be reading order at all.
  *
- * The split index is `prevCount` on the sweep diagnostic. **Null when it is absent**, which is every
- * capture taken before 2026-08-24 — and null must make no claim. Guessing that an unmarked array happens
- * to be in order is how this rule came to accuse three quarters of its conformant pages.
+ * That distinction was established the hard way. `collectByType` sweeps BACKWARDS from the caret and then
+ * forwards, deduplicating, so its output is a COUNT of a type and never an ordering. Recording where the
+ * two walks met (`prevCount`) made a reconstruction possible and it is STILL wrong, because the caret can
+ * fall anywhere: measured on `design-system.service.gov.uk/components/date-input`, the caret landed
+ * between Month and Year of one date group, so the reconstruction placed Day and Month early and Year
+ * seventeen entries later. The transcript has them adjacent at lines 61, 63 and 65, which is what the
+ * page actually reads like.
+ *
+ * The cost is honest and worth stating: in browse mode some fields announce as a bare label with no role
+ * on that line ("Day"), so this reaches fewer controls than the sweep does. The rule compares only names
+ * present in BOTH sequences, so a control missing here is simply not compared — and comparing fewer
+ * controls in a real order beats comparing more in an invented one.
  */
-function sweepInDocumentOrder(input: RuleInput, type: string): string[] | null {
-  for (const mark of input.diagnostics ?? []) {
-    const m = mark as { event?: string; type?: string; prevCount?: number; phrases?: unknown };
-    if (m?.event !== "sweep" || m.type !== type) continue;
-    if (typeof m.prevCount !== "number" || !Array.isArray(m.phrases)) return null;
-    const phrases = m.phrases.map(String);
-    // The backward half, un-reversed, then the forward half as recorded.
-    return [...phrases.slice(0, m.prevCount).reverse(), ...phrases.slice(m.prevCount)];
+function controlsInReadingOrder(input: RuleInput): string[] {
+  const names: string[] = [];
+  for (const line of input.transcript ?? []) {
+    for (const object of parseAnnouncement(String(line), "transcript").objects) {
+      if (!CONTROL_ROLES.includes(object.role)) continue;
+      const name = object.name.replace(FOCUS_ONLY_STATES, " ").replace(/[\s,]+/g, " ").trim();
+      if (name) names.push(name);
+    }
   }
-  return null;
+  return names;
 }
 
-/**
- * 2.4.3 — Tab visits the controls in a different order from the one the page reads in.
- *
- * PARTIAL coverage, and the boundary is the honest one: whether an order "preserves meaning" in general is
- * human judgement, the same wall 2.4.6 stops at. What is not a judgement call is a tab sequence that
- * contradicts the reading sequence for the very same controls — the shape a positive `tabindex` produces,
- * and the way this criterion is failed in practice.
- *
- * **Only a screen reader can make this comparison.** A static checker can flag `tabindex="1"` as a smell,
- * but the DOM has no "reading order" to compare it against — the order a screen reader walks the page is
- * the thing being contradicted, and that only exists once something has walked it.
- *
- * Compared on accessible NAME, because the two channels announce the same control differently: the sweep
- * says "Postcode, edit" and focus says "Postcode, edit, focused, blank". And restricted to controls present
- * in BOTH sequences — `focusOrder` also holds links and anything else focusable, while the form-field sweep
- * holds controls Tab may never reach. Neither absence is a 2.4.3 failure, and counting it as one would fire
- * on every page with a nav bar.
- */
 function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
-  // DOCUMENT order, or no claim. `structure.formFields` is the sweep's raw output, whose first half is
-  // reversed — see `readingOrder`. This rule is entirely about ORDER, so an array whose order is unknown
-  // is not weak evidence, it is no evidence.
-  const documentOrder = sweepInDocumentOrder(input, "formField");
-  if (!documentOrder) return;
-  const reading = comparableNames(documentOrder);
+  // READING order from the transcript, ordered by construction. `structure.formFields` is a count sweep
+  // and cannot answer this — see `controlsInReadingOrder`.
+  const reading = firstVisitEach(controlsInReadingOrder(input));
   const tabbed = firstVisitEach(comparableNames(input.interaction?.focusOrder));
   if (reading.length < 2 || tabbed.length < 2) return; // absent or too short proves nothing
   // Only names that identify one control in BOTH sequences. A repeated name cannot be tracked between

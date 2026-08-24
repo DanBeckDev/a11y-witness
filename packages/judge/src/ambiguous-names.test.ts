@@ -48,16 +48,16 @@ test("a repeated control name does not become a keyboard-unreachable finding", (
 test("an UNAMBIGUOUS reordering is still reported", () => {
   // The guard must not buy silence by refusing to decide. Same shape, no repeated names.
   const scrambled = {
-    transcript: [],
+    // READING ORDER COMES FROM THE TRANSCRIPT, and this fixture carrying one is the point rather than an
+    // inconvenience. `structure.formFields` is a COUNT sweep — `collectByType` walks backwards from the
+    // caret then forwards, deduplicating — so it can never be an ordering, and 2.4.3 is entirely about
+    // order. The transcript is an arrow read-through, so it is document order by construction.
+    //
+    // Role-first, because that is how NVDA announces in browse mode: `getPropertiesSpeech` appends
+    // name→role→states and arrow navigation reverses it for the focused object. The sweep and the focus
+    // probe are name-first. Two channels, two grammars, one parser told which it is reading.
+    transcript: ["edit, Full name", "edit, Email", "edit, Postcode"],
     structure: { formFields: ["Full name, edit", "Email, edit", "Postcode, edit"] },
-    // The sweep mark is REQUIRED now, and this fixture gaining one is the point rather than an
-    // inconvenience: `structure.formFields` is the sweep's raw output, whose backward half is reversed,
-    // so it is not reading order and 2.4.3 is entirely about order. `prevCount: 0` says the caret was at
-    // the top and the whole sweep ran forwards, which is what makes this array document order.
-    diagnostics: [{
-      event: "sweep", type: "formField", prevCount: 0,
-      phrases: ["Full name, edit", "Email, edit", "Postcode, edit"],
-    }],
     interaction: {
       focusOrder: ["Postcode, edit, focused", "Full name, edit, focused", "Email, edit, focused"],
     },
