@@ -80,7 +80,8 @@ def test_the_role_vocabulary_covers_what_the_featurizer_itself_knows_about():
 
 
 def test_the_schema_version_moved_with_the_meaning():
-    # v14: `vague_link_without_context` asks 2.4.4's actual question -- is the link vague AND unsupported
-    # by its container -- where `vague_link_present` asks 2.4.9's (is the text alone vague). The same
-    # capture now yields a new feature, so weights fitted before it were fitted to fewer inputs.
-    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v14"
+    # v15: `vague_link_present` is no longer a model input at all. It answers 2.4.9 (text alone, AAA, not
+    # reported here) and the 2.4.4 head used it because it was the cheapest separator -- firing on 22 of the
+    # 44 conformant pages that carry "Details" inside a peer index. The head width changed, so weights
+    # fitted before it were fitted to a different input space.
+    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v15"
