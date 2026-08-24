@@ -81,7 +81,7 @@ takes a VM UUID rather than a host, and it fails immediately off macOS. Physical
 rather than file-pushed, so they deploy by pulling:
 
 ```bash
-cd packages/worker-fleet/ansible && ansible-playbook deploy.yml     # pull + install + restart + PROVE it
+npm run fleet:deploy                  # pull + install + restart + PROVE it (bare metal)
 eval "$(npm run --silent fleet:env)"                                # A11Y_WORKERS from inventory.yml
 npm run fleet:status                                                # what every box is doing, right now
 ```
