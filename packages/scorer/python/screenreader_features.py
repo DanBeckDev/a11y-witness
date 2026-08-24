@@ -74,7 +74,7 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # every weight file trained under v7 was fitted to a different function of the same captures. Bumping is
 # what stops a v7 model being scored with v8 features and the difference being read as model behaviour.
 # Measured before bumping: 73 corpus records change, all of them labelled `violation`, none clean.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v11"
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v12"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -289,15 +289,22 @@ def heading_name(value: str) -> str:
 # false negatives unchanged at 82 and 13 — precision 0.719 -> 0.854 at no recall cost.
 #
 # `{0,4}` and `[^,]{1,48}` bound the repetition so it cannot backtrack pathologically on a long line.
-ANNOUNCED_ROLE = re.compile(
-    r"^(?:out of\s+)?(?:[^,]{1,48},\s*){0,4}"
-    r"(?:button|link|graphic|edit(?:\s+text)?|checkbox|radio|combo\s*box|list\s*box|slider|spin\s*button|"
+# The roles NVDA speaks. ONE copy, because two consumers need the same vocabulary and a drifting pair of
+# them is this repo's most expensive recurring shape: `ANNOUNCED_ROLE` asks "does this phrase begin with a
+# role?", `ROLE_NAME` asks "where does this object's name END?" — and the answer to the second is "at the
+# next one of these".
+ROLE_WORDS = (
+    r"button|link|graphic|edit(?:\s+text)?|checkbox|radio|combo\s*box|list\s*box|slider|spin\s*button|"
     r"table|list|banner|navigation|main|region|landmark|form|article|separator|menu|tab|dialog|"
     r"progress\s*bar|status|bullet|blank|row|column|cell|heading|clickable|"
     # NVDA names a landmark by its TYPE then the word: "complementary landmark, Note". Enumerated rather
     # than allowing any word before a role, because `(\w+\s+)*role` would also swallow ordinary prose that
     # happens to end in one — "the archive is a table" — and over-exclusion is how a feature goes blind.
-    r"(?:complementary|banner|content\s*info|navigation|main|search|form|region)\s+landmark)\b",
+    r"(?:complementary|banner|content\s*info|navigation|main|search|form|region)\s+landmark"
+)
+
+ANNOUNCED_ROLE = re.compile(
+    r"^(?:out of\s+)?(?:[^,]{1,48},\s*){0,4}(?:" + ROLE_WORDS + r")\b",
     re.IGNORECASE,
 )
 
@@ -341,7 +348,20 @@ def plain_heading_candidate(value: str, following_value: str) -> bool:
 #
 # `\b` plus an explicit comma is what keeps this from matching a NAME containing the word: "out of links,
 # same page, link, Details" needs `link` followed by a comma, so "links," cannot match.
-ROLE_NAME = r"\b{role}\s*,\s*(.*)$"
+# A name ENDS at the next object's role, not at the end of the line. NVDA packs several objects into one
+# announcement — "link, Accessibility statement, link, Sitemap, link, Cookies" is THREE links — so a
+# greedy `(.*)$` returns a run-on that belongs to no control. Corpus pages are one object per line, which
+# is why that tail was invisible there and cost 11 false 2.4.4 accusations on real GOV.UK pages.
+#
+# Roles also STACK as prefixes of a single object: "link, graphic, GOV dot UK" is one link whose content
+# is a graphic. So leading role tokens are skipped rather than treated as a boundary — stopping at the
+# first one would report that link as having no name at all, which is a 4.1.2 failure we would be
+# inventing.
+ROLE_NAME = (
+    r"\b{role}\s*,\s*"
+    r"(?:(?:" + ROLE_WORDS + r")\s*,\s*)*"
+    r"((?:(?!\s*,\s*(?:" + ROLE_WORDS + r")\b).)*)"
+)
 
 
 def role_name(role: str, value: str) -> str:
