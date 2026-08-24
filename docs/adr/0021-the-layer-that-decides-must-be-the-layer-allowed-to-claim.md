@@ -64,11 +64,45 @@ failures for the same user. There is no second reading.
   vocabulary. Writing it exposed that `focused` was missing from that grammar, which was silent in the
   worst way: the parser stopped at it, so `"…, button, focused, collapsed"` produced NO states and a
   before/after comparison would have compared two empty lists and found them equal.
-- `3.3.1:validation-error-silent` and `4.1.3:form-activation-silent` are the obvious next candidates — also
-  model-owned, also on the `compare-layers` list — and are deliberately NOT moved here. Their evidence
-  carries an inference this one does not: "nothing was announced after submitting" only means failure if
-  the submission was actually rejected. That has to be established before they can assert, not assumed
-  because the pattern looks similar.
+- `3.3.1:validation-error-silent` and `4.1.3:form-activation-silent` were the obvious next candidates —
+  also model-owned, also on the `compare-layers` list. **Investigated 2026-08-24 and they stay referred.**
+  See "Why the other two cannot follow" below; it is a property of the evidence, not a gap in the work.
+
+## Why the other two cannot follow
+
+`3.3.1:validation-error-silent` and `4.1.3:form-activation-silent` look identical to the state-change case
+and are not. Their evidence:
+
+    3.3.1  bad   {"control": "Submit request, button", "kind": "submit",     "after": ""}
+           good  {"control": "Submit request, button", "kind": "submit",     "after": "Reference number, edit, invalid entry, …"}
+    4.1.3  bad   {"control": "Show bags, button",      "kind": "taskButton", "after": ""}
+           good  {"control": "Show bags, button",      "kind": "taskButton", "after": "Showing 2 bags."}
+
+Silence versus announcement — which is ambiguous, because **silence has two causes**. "Nothing was announced
+after submitting" is a failure only if the submission was *rejected*; if it succeeded, silence is correct.
+"Nothing was announced after filtering" is a failure only if the results *changed*.
+
+The state-change case has no such gap. A control that announced `collapsed`, was activated, and still
+announces `collapsed` has **contradicted itself**. The contradiction is self-contained: no fact outside the
+announcement is needed to see it.
+
+**The capture cannot currently supply the missing fact.** Measured over the corpus: 254 captures carry a
+submit, 248 leave the form on the page, and the other 6 are `custom-control-*` pages that never had a form
+field. **There is not one successful submission in the corpus** — so it cannot even express the conformant
+case a rule would fire on wrongly. And `structureCensus` runs ONCE, after the interaction, so there is
+nothing to compare it against.
+
+There is a sharper way to put it. A silently-rejected form and a silently-successful one produce *identical*
+screen-reader evidence — and that identity **is the criterion**. The user cannot tell what happened; that is
+the barrier 3.3.1 describes. Our tool sees exactly what the user hears, so it is in exactly the user's
+position, and it cannot tell either. `cantTell` is not a shortfall here. It is the correct answer, and ACT
+has a word for it.
+
+**The route to assertion, if it is ever wanted**, is a capture change and not a model or rule change: record
+a structural census or content fingerprint BEFORE the interaction as well as after. "The content changed and
+nothing was announced" is then self-contained in the same way the state-change contradiction is. That costs
+a `CAPTURE_PROTOCOL_VERSION` bump and a full recapture, which is a real price — and it is the only thing
+that would move these two, so no amount of corpus or model work should be spent trying.
 
 ## Alternatives rejected
 
