@@ -116,9 +116,37 @@ const byLengthDesc = (a: string, b: string): number => b.length - a.length;
 const CONTAINERS_ORDERED = [...CONTAINER_ROLES].sort(byLengthDesc);
 const CONTROLS_ORDERED = [...CONTROL_ROLES].sort(byLengthDesc);
 
+/**
+ * NVDA's OBJECT REPLACEMENT CHARACTER, which it speaks for an element with no text at all.
+ *
+ * It is the ABSENCE of a name written down, so a name made only of it is empty. Reading it as a name made
+ * `"edit, ￼"` — the canonical unnamed control — parse as an edit NAMED "￼", and 4.1.2 stopped firing on the
+ * exact evidence it exists for. See docs/ufffc-investigation.md for the other reason this character matters.
+ */
+const EMPTY_NAME_MARKER = /\uFFFC/g;
+
+const cleanName = (parts: string[]): string =>
+  parts.join(", ").replace(EMPTY_NAME_MARKER, "").replace(/\s*,\s*,\s*/g, ", ")
+    .replace(/^[\s,]+|[\s,]+$/g, "").trim();
+
 const isState = (token: string): boolean => STATE_PATTERNS.some((pattern) => pattern.test(token.trim()));
 const matches = (token: string, vocabulary: readonly string[]): string =>
   vocabulary.find((role) => token.trim().toLowerCase() === role) ?? "";
+
+/**
+ * A container token, which may carry its size adornment INSIDE it: NVDA writes both `"list, with 6 items,"`
+ * and `"table with 3 rows,"` — comma in one, no comma in the other.
+ *
+ * Missing the second form made `"table with 3 rows, link"` parse as a link NAMED "table with 3 rows", so a
+ * genuinely unnamed link inside a table stopped being reported. The regex this replaced already handled
+ * both, and losing that on the way through is how a rewrite regresses.
+ */
+function containerAt(token: string): string {
+  const exact = matches(token, CONTAINERS_ORDERED);
+  if (exact) return exact;
+  const inline = /^(.+?)\s+with\s+\d+\s+\w+$/i.exec(token.trim());
+  return inline ? matches(inline[1], CONTAINERS_ORDERED) : "";
+}
 
 /**
  * Split on commas, keeping empty fields.
@@ -159,13 +187,13 @@ function takeLeaving(tokens: string[]): string[] {
 function takeContainers(tokens: string[]): { name: string; role: string }[] {
   const containers: { name: string; role: string }[] = [];
   for (;;) {
-    if (matches(tokens[0] ?? "", CONTAINERS_ORDERED)) {
-      containers.push({ name: "", role: matches(tokens.shift() ?? "", CONTAINERS_ORDERED) });
+    if (containerAt(tokens[0] ?? "")) {
+      containers.push({ name: "", role: containerAt(tokens.shift() ?? "") });
       continue;
     }
     // A NAMED container: "Radios example, frame". Only two tokens ahead, never a longer scan, so a control
     // name that happens to precede an unrelated container is not swallowed.
-    const role = matches(tokens[1] ?? "", CONTAINERS_ORDERED);
+    const role = containerAt(tokens[1] ?? "");
     if (role && tokens[0] && !isState(tokens[0]) && !matches(tokens[0], CONTROLS_ORDERED)) {
       containers.push({ name: tokens[0].trim(), role });
       tokens.splice(0, 2);
@@ -187,7 +215,7 @@ function takeRoleFirst(tokens: string[]): ParsedObject | null {
     if (isState(tokens[0])) states.push(tokens.shift()!.trim().toLowerCase());
     else nameParts.push(tokens.shift()!);
   }
-  return { name: nameParts.join(", ").trim(), role, states };
+  return { name: cleanName(nameParts), role, states };
 }
 
 /** `name, role, [states]` — the quick-navigation reading order. */
@@ -198,7 +226,7 @@ function takeNameFirst(tokens: string[]): ParsedObject | null {
   const role = matches(tokens.shift() ?? "", CONTROLS_ORDERED);
   const states: string[] = [];
   while (tokens.length && isState(tokens[0])) states.push(tokens.shift()!.trim().toLowerCase());
-  return { name: nameParts.join(", ").trim(), role, states };
+  return { name: cleanName(nameParts), role, states };
 }
 
 /**

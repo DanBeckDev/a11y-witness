@@ -107,3 +107,20 @@ test("a vague name and a component name are INDISTINGUISHABLE to the parser, del
   assert.equal(nameOf("link, Details", "link", "transcript"), "Details");
   assert.equal(nameOf("Details, link", "link", "sweep"), "Details");
 });
+
+test("the empty-name marker is an ABSENT name, not a name", () => {
+  // "edit, ￼" is the canonical unnamed control. Reading U+FFFC as a name made it parse as an edit NAMED
+  // "￼", and 4.1.2 stopped firing on the exact evidence it exists for — caught by rules.test.ts, which is
+  // why a rewrite must run the tests of everything it replaces rather than only its own.
+  assert.equal(parseAnnouncement("edit, ￼", "transcript").objects[0].name, "");
+  assert.equal(parseAnnouncement("￼, radio button, not checked", "sweep").objects[0].name, "");
+});
+
+test("a container adornment written INSIDE the token is still a container", () => {
+  // NVDA writes both "list, with 6 items," and "table with 3 rows," — comma in one, none in the other.
+  // Handling only the comma form made "table with 3 rows, link" a link NAMED "table with 3 rows", so an
+  // unnamed link inside a table went unreported. The regex this replaced already handled both.
+  const parsed = parseAnnouncement("table with 3 rows, link", "sweep");
+  assert.deepEqual(parsed.containers, [{ name: "", role: "table" }]);
+  assert.equal(parsed.objects[0].name, "", "the link is unnamed; the table is context");
+});
