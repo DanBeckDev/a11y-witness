@@ -23,7 +23,7 @@ def record_with(*announcements: str) -> dict:
     """A record carrying the parse Node attaches, in the shape `annotateCapture` produces."""
     def parse(text: str) -> dict:
         parts = [p.strip() for p in text.split(",")]
-        containers, objects = [], []
+        containers, objects, containers_left = [], [], []
         index = 0
         while index < len(parts):
             token = parts[index].lower()
@@ -33,11 +33,13 @@ def record_with(*announcements: str) -> dict:
             elif nxt in features.CONTEXT_CONTAINERS:
                 containers.append({"name": parts[index], "role": nxt})
                 index += 1
+            elif token.startswith("out of"):
+                containers_left.append(token[len("out of"):].strip())
             elif token == "link" and index + 1 < len(parts):
                 objects.append({"name": parts[index + 1], "role": "link", "states": []})
                 index += 1
             index += 1
-        return {"containers": containers, "objects": objects, "leaving": [], "raw": text}
+        return {"containers": containers, "objects": objects, "leaving": containers_left, "raw": text}
     return {"input": {"parsed": {"transcript": [parse(a) for a in announcements]}}}
 
 
@@ -68,5 +70,44 @@ def test_a_descriptive_link_with_no_container_is_not_vague() -> None:
 def test_one_contextless_vague_link_is_enough() -> None:
     # A presence claim: the page need not be uniformly bad. Requiring all of them would make a single
     # well-placed index excuse every lone "click here" on the page.
+    #
+    # The exit marker is REQUIRED in this fixture and its absence is why an earlier version of this test
+    # failed. Without "out of list" the stream is still inside the list, and treating it as closed would be
+    # inventing a boundary NVDA did not announce.
+    page = record_with("list, with 4 items, link, Details", "out of list", "link, Click here")
+    assert features.vague_link_lacks_context(page) is True
+
+
+def test_an_unclosed_container_suppresses_later_findings_and_that_is_the_known_cost() -> None:
+    # Stated rather than hidden. If a read-through truncates before its "out of list", every vague link
+    # after that point reads as having context and is not reported. That is over-suppression, and it is the
+    # direction chosen deliberately: a false accusation against a conformant publisher is the worst error
+    # this tool can make, and a missed finding on a truncated capture is already covered by the completeness
+    # gate reporting INCONCLUSIVE rather than clean.
     page = record_with("list, with 4 items, link, Details", "link, Click here")
+    assert features.vague_link_lacks_context(page) is False
+
+
+def test_context_PERSISTS_across_lines_until_the_exit_marker() -> None:
+    """NVDA announces a container once, on entry. Every item after the first carries no prefix.
+
+    Asking each line for its own containers reported every subsequent item as contextless, and accused
+    GOV.UK's table and tabs pages of 2.4.4 on a `"link, Details"` sitting mid-list. Corpus lists are short
+    enough that the prefix lands on the same line as the only link, so this was invisible there — the third
+    time a real page has exposed something the corpus structurally cannot.
+    """
+    page = record_with(
+        "list, with 35 items, link, Accordion",
+        "link, Cookie banner",
+        "link, Details",            # mid-list: no prefix of its own, but still inside the list
+    )
+    assert features.vague_link_lacks_context(page) is False
+
+
+def test_context_ENDS_at_the_exit_marker() -> None:
+    page = record_with(
+        "list, with 3 items, link, Accordion",
+        "out of list",
+        "link, Details",            # after the list closed: genuinely a lone link
+    )
     assert features.vague_link_lacks_context(page) is True
