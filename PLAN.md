@@ -198,6 +198,17 @@ probe constant, a name normaliser, a calibration sweep, a promotion gate and a t
 > `addBrokenFocusOrder`'s own comment says it stops short of — worth deciding deliberately, and it can
 > only be asked now that the comparison is sound. They are `cantTell` referrals, not assertions.
 >
+> **THE COST SIDE, measured when the recapture finished: 71 of 77 pages carry route evidence, not 77.**
+> Six hit the capture deadline at ~425 s before `probeRouteChange` ran — `british-history.ac.uk/catalogue`,
+> `gov.wales/statistics-and-research`, `metoffice.gov.uk/weather/forecast/…` and three like them. The
+> deeper focus probe spends the budget first on exactly the pages it was raised for.
+>
+> It is recorded rather than silent: those captures carry `{"event":"routeChange","skipped":"deadline"}`,
+> so "this page has no navigation" and "we ran out of time to ask" are different evidence — which is the
+> whole rule this session kept rediscovering. The honest reading is that the biggest pages now get focus
+> evidence OR route evidence, not both, and closing that means a bigger budget rather than a cleverer
+> probe.
+>
 > **What the recapture is for, and why it is the long pole.** Turning on `probeNavigation` and recording
 > `prevCount` are both capture changes, so 2.4.1, 2.4.2 and 2.4.3 cannot be validated against evidence
 > collected before them. Real-page captures are never cached, so this is unavoidable rather than a cache
