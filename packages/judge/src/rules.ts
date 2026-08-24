@@ -263,6 +263,32 @@ const REPORTABLE_CONTROL_ROLES: ReadonlySet<string> = new Set([
 const EXPANDABLE_STATES: ReadonlySet<string> = new Set(["collapsed", "expanded"]);
 
 /**
+ * Roles for which pressing Enter IS the activation.
+ *
+ * `probeDisclosure` calls `nvda.act()` — Enter — on whatever control it is aimed at. For a search combo box
+ * or a native `<select>`, Enter is simply not the key that opens the list, so one that stays `collapsed`
+ * afterwards is behaving CORRECTLY and the observation is not a state-change test at all.
+ *
+ * The evidence is identical to a broken disclosure's, character for character apart from the role:
+ *
+ *     bad  disclosure  "Travel advice, button, collapsed"      -> "…, button, focused, collapsed"
+ *     ok   combo box   "Passenger type, combo box, collapsed"  -> "…, combo box, focused, collapsed"
+ *
+ * `screenreader_features.py` learned this as `TOGGLE_ROLE` at a measured cost of 3 false positives on
+ * conformant pages, and its comment says so. This rule then reproduced the identical bug one layer over,
+ * at a cost of 12 wrong ASSERTIONS on GOV.UK pages — every one of them the site's search box. The corpus
+ * could not catch it: it holds 69 conformant and 69 failing disclosures against six combo-box records, and
+ * no corpus page has a search autocomplete at all.
+ *
+ * A POSITIVE list, deliberately and for the same reason the Python one is: enumerating the EXCLUDED roles
+ * would make an unseen role fire, and the safe direction of failure for a rule that ASSERTS is to miss
+ * rather than to accuse.
+ */
+const ENTER_ACTIVATES: ReadonlySet<string> = new Set([
+  "button", "checkbox", "radio button", "menu item", "tab",
+]);
+
+/**
  * A control that announces an expandable state, is activated, and announces the SAME state afterwards.
  *
  * ## Why this is a rule and not the model's, reversing a decision recorded above
@@ -296,6 +322,9 @@ function addSilentStateChanges(
   changes: readonly { control?: string; after?: string | null }[], add: AddFinding,
 ): void {
   for (const change of changes) {
+    // The ROLE gate comes first: a combo box that stays collapsed after Enter is correct behaviour, and
+    // asserting from it is this tool's worst error.
+    if (!enterActivates(change.control)) continue;
     const before = statesOf(change.control);
     const after = statesOf(change.after);
     // Both sides must actually carry an expandable state. Absent on either side means the control is not
@@ -307,6 +336,13 @@ function addSilentStateChanges(
       "Control announced the same state after activation, so its state change is not exposed",
       `${change.control} -> ${change.after}`, "conformance");
   }
+}
+
+/** Is this a control whose activation is Enter? Read through the shared grammar, never a role regex. */
+function enterActivates(announcement: string | null | undefined): boolean {
+  if (typeof announcement !== "string" || !announcement) return false;
+  return parseAnnouncement(announcement, "sweep").objects
+    .some((object) => ENTER_ACTIVATES.has(object.role));
 }
 
 /** The expandable states a control announced, via the shared grammar rather than a fourth state vocabulary. */

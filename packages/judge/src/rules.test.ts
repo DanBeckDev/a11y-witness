@@ -422,3 +422,52 @@ test("the unnamed cases the rule already caught still fire", () => {
     assert.equal(findings.length, 1, `should still flag: ${line}`);
   }
 });
+
+test("a combo box that stays collapsed after Enter is CORRECT, not a state-change failure", () => {
+  // Verbatim from GOV.UK Design System captures. Enter is not the key that opens a search autocomplete, so
+  // one that is still `collapsed` afterwards is behaving properly — the evidence is identical to a broken
+  // disclosure's, character for character apart from the role.
+  //
+  // `screenreader_features.py` learned this as `TOGGLE_ROLE` at a cost of 3 false positives, and this rule
+  // reproduced the identical bug at a cost of 12 wrong ASSERTIONS on conformant pages. The corpus cannot
+  // express it: 69 conformant and 69 failing disclosures against six combo-box records, and no corpus page
+  // has a search autocomplete.
+  const comboBox = {
+    transcript: [],
+    interaction: {
+      stateChanges: [{
+        control: "banner landmark, Search Design system, combo box, collapsed, has auto complete, editable",
+        after: "Search Design system, combo box, focused, collapsed, has auto complete, editable",
+      }],
+    },
+  };
+  assert.equal(ruleFindings(comboBox).length, 0,
+    "a combo box unchanged after Enter is correct behaviour; asserting from it is this tool's worst error");
+});
+
+test("a disclosure BUTTON that stays collapsed after activation still fails", () => {
+  // The other direction, so the role gate cannot be widened into silence. This is the flagship finding.
+  const disclosure = {
+    transcript: [],
+    interaction: {
+      stateChanges: [{
+        control: "aquarium rules, button, collapsed",
+        after: "aquarium rules, button, focused, collapsed",
+      }],
+    },
+  };
+  const found = ruleFindings(disclosure);
+  assert.equal(found.length, 1, "the flagship 4.1.2 finding stopped firing");
+  assert.match(found[0].wcag, /^4\.1\.2/);
+  assert.equal(found[0].mapping, "conformance", "it must ASSERT — reporting it as a maybe is what this move fixed");
+});
+
+test("a disclosure button that DOES change state is silent", () => {
+  const working = {
+    transcript: [],
+    interaction: {
+      stateChanges: [{ control: "aquarium rules, button, collapsed", after: "aquarium rules, button, focused, expanded" }],
+    },
+  };
+  assert.equal(ruleFindings(working).length, 0);
+});
