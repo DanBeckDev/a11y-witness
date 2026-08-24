@@ -34,6 +34,8 @@
  */
 
 /** One channel-tagged piece of evidence. The featurizer's unit of input. */
+import { annotateCapture } from "@a11y-witness/evidence";
+
 export interface EvidenceUnit {
   channel: string;
   text: string;
@@ -145,3 +147,27 @@ export const CHANNEL_BY_PRODUCER: Readonly<Record<string, string>> = Object.free
 /** True when this producer's truncation would leave a gap in what the model reads. */
 export const producerFeedsModel = (producer: string): boolean =>
   Object.hasOwn(CHANNEL_BY_PRODUCER, producer);
+
+/**
+ * THE MODEL'S INPUT, built in ONE place.
+ *
+ * It was built twice — once in `export-screenreader-dataset.mjs` for corpus records and once in
+ * `build-realism-tier.mjs` for real-page records — with no relationship between the copies. So when the
+ * featurizer started reading a `parsed` block, wiring it into three callers still missed the fourth, and
+ * training died on a real-page record. The duplication is what made the miss possible; the fix is not to
+ * remember the fourth site but to have one.
+ *
+ * `annotateCapture` is called HERE rather than by each caller, for the same reason.
+ */
+export function modelInput(capture: ScorableCapture): Record<string, unknown> {
+  const annotated = annotateCapture(capture as unknown as Record<string, unknown>);
+  return {
+    screenReader: (capture as { screenReader?: string }).screenReader ?? "unknown",
+    transcript: capture.transcript ?? [],
+    structure: capture.structure ?? null,
+    interaction: capture.interaction ?? null,
+    evidenceUnits: evidenceUnits(capture),
+    evidenceText: captureEvidenceText(capture),
+    parsed: (annotated as { parsed: unknown }).parsed,
+  };
+}
