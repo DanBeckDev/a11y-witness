@@ -23,6 +23,8 @@
  * on spacing). Validate any new announcement-string rule against our own captures,
  * not against a book's strings.
  */
+import type { Channel } from "./announcement.js";
+import { parseAnnouncement } from "./announcement.js";
 import type { Finding, RequirementMapping } from "./judge.js";
 
 /** The capture fields the rules inspect (a subset of JudgeInput; a full
@@ -132,8 +134,6 @@ function hasEmptyName(announcement: string): boolean {
 }
 
 const isImage = (line: string): boolean => /\b(graphic|image)\b/i.test(line);
-const isControl = (entry: string): boolean =>
-  /\b(button|edit|radio|checkbox|combo box|list box|menu button|link)\b/i.test(entry);
 
 /**
  * A control that takes a VALUE, as opposed to one that performs an action.
@@ -158,106 +158,23 @@ const isInput = (entry: string): boolean =>
 type AddFinding =
   (wcag: string, issue: string, evidence: string, mapping?: RequirementMapping) => void;
 
-/**
- * Flag controls announced with a role but no accessible name. In the transcript
- * (`requireMarker = true`) require the ￼ marker, because a labelled field's role
- * and name can wrap onto separate read-through lines, so a bare role token alone
- * is ambiguous. In the structural sweep (`requireMarker = false`) each entry is
- * ONE control's full announcement, never line-wrapped, so an empty name alone is
- * unambiguous — NVDA announces an unnamed button as just "button" (verified
- * against a real capture, 2026-06-29).
- */
-/**
- * True when a sweep announcement BEGINS with its own role, which means it has no accessible name.
- *
- * NVDA puts the name first: a labelled select is "Passenger type, combo box, collapsed, Adult" and an
- * unlabelled one is "combo box, collapsed, Adult". Stripping roles and states from the second leaves
- * "Adult" — the selected VALUE — which `accessibleName` cannot tell from a name, so the rule read every
- * unlabelled select and textarea as named and missed them. Measured: 109 of 115 rule-owned records,
- * which `rules:gate` correctly calls a defect.
- *
- * Only sound for the structural sweep, where each entry is ONE control's complete announcement. In the
- * read-through a role and its name can wrap onto separate lines, so a leading role proves nothing —
- * which is why the marker is still required there.
- */
-const CONTROL_ROLE_TOKENS = ROLE_TOKENS.filter((role) => !role.endsWith("landmark"));
+// FOUR grammar fragments lived here -- CONTROL_ROLE_TOKENS, MAX_CONTEXT_PREFIXES, LEADING_LANDMARKS and
+// LEADING_CONTAINERS -- each a partial model of what NVDA says, maintained by hand beside three more in
+// other files and other languages. They are gone, not moved: `announcement.ts` holds one grammar,
+// validated against 6,555 cross-channel comparisons of captures on disk. Deleting a copy is this
+// repo's first-preference remedy for a fact stated twice, and this was the same fact stated seven times.
 
-/** Bounded so a pathological announcement cannot spin: deeper nesting than this is not real page structure. */
-const MAX_CONTEXT_PREFIXES = 8;
-/**
- * A landmark prefix, WITH its optional accessible name.
- *
- * The name is the part this missed, and it is the common case: naming a landmark is best practice as soon as
- * a page has more than one of a type, so real announcements are `<name>, <role> landmark,` and not
- * `<role> landmark,`. Matching only the bare role left the NAME behind — and when that name happens to begin
- * with a role word, the leftover reads as a control announced by role alone. Measured on the real-page
- * corpus, three distinct announcements (six occurrences) were reported as unnamed when every one was named:
- *
- *   "edit consent, complementary landmark, form, accept all, button"        -> button named "accept all"
- *   "banner landmark, Navigation menu, navigation landmark, Show search menu, button, collapsed"
- *   "banner landmark, Navigation menu, navigation landmark, Show navigation menu, button, collapsed"
- *
- * The first is flagged because the LANDMARK is called "edit consent" and `edit` is a role token; the other
- * two because it is called "Navigation menu" and `navigation` is one. A false 4.1.2 against a named control
- * is, in this function's own words, the worst error this tool can make, and all three are on real pages —
- * the only pages where a landmark gets a name.
- *
- * Verified over 3,082 real announcements: this flags SIX FEWER and not one more. The generated corpus is
- * unaffected because its announcements carry no landmark nesting at all, which is exactly why the whole
- * family of prefix defects is only ever reachable on real pages.
- *
- * `[^,]+` is deliberately greedy-to-the-comma rather than clever: NVDA announces a landmark as name-then-role
- * and a control the same way, so everything before `<role> landmark` belongs to the landmark. A bare role
- * after it therefore IS an unnamed control, and stripping the name is what makes that case reachable too.
- */
-const LEADING_LANDMARKS =
-  /^(?:(?:[^,]+,\s*)?(?:navigation|main|banner|complementary|contentinfo|region|search)\s+landmark\s*,\s*)+/i;
 
-/**
- * CONTAINER context NVDA prepends that is not a landmark and not the control's own role.
- *
- * Found on a real website, and it is the THIRD instance of the prefix trap the comment below already describes
- * twice. This announcement is a button NAMED "Community":
- *
- *   "banner landmark, navigation landmark, list, with 6 items, Community, button"
- *
- * Stripping the landmarks leaves `list, with 6 items, Community, button`, which begins with the role token
- * "list" — so the control was reported as having no accessible name, and reported as ASSERTED, the strongest
- * claim this tool makes. A false 4.1.2 against a named control is the worst output this project can produce.
- *
- * Every navigation bar on every real site is a list inside a landmark, so this fires constantly out there and
- * never once on the generated corpus, whose announcements have no container nesting. That asymmetry is the
- * whole argument for blocker B1: the defect is only reachable on pages nobody wrote for the test suite.
- */
-const LEADING_CONTAINERS =
-  /^(?:(?:list|table|grouping|group|region|frame|dialog|tree view|menu bar|tab control)\b(?:\s+with\s+\d+\s+\w+)?(?:\s*,\s*with\s+\d+\s+\w+)?\s*,\s*)+/i;
 // The item count sits on EITHER side of the comma depending on the container: NVDA says
 // "list, with 6 items, ..." but "table with 3 rows, ...". The first version of this handled only the second
 // form, so "list," was consumed and "with 6 items," was left behind — which happened to silence the false
 // positive while ALSO silencing a genuinely unnamed button in a list, because the leftover no longer began
 // with a role. A guard that stops firing for the wrong reason looks fixed and is not.
 
-function beginsWithRole(entry: string): boolean {
-  // A leading LANDMARK is context, not the control's own role. NVDA prefixes the enclosing landmark, so
-  // "main landmark, Web Accessibility Perspectives, region, Video, frame, clickable, Copy link, button"
-  // is a NAMED button inside a landmark — and matching "main landmark" here reported three conformant
-  // W3C pages as 4.1.2 failures, which is the worst error this tool can make.
-  //
-  // This is the same landmark-prefix trap as `heading_name` in screenreader_features.py, found twice in
-  // one session in two layers. When NVDA prepends context to an announcement, every parser of that
-  // announcement has to strip it.
-  // Strip context REPEATEDLY and in either order: NVDA nests them arbitrarily deep, so
-  // "banner landmark, navigation landmark, list, with 6 items, ..." needs landmarks then a container, while
-  // "list, with 3 items, main landmark, ..." needs the reverse. One pass in a fixed order leaves a prefix
-  // behind, and a leftover prefix is exactly the false positive this function exists to prevent.
-  let start = entry.trim().toLowerCase();
-  for (let pass = 0; pass < MAX_CONTEXT_PREFIXES; pass += 1) {
-    const shorter = start.replace(LEADING_LANDMARKS, "").replace(LEADING_CONTAINERS, "");
-    if (shorter === start) break;
-    start = shorter;
-  }
-  return CONTROL_ROLE_TOKENS.some((role) => start.startsWith(role));
-}
+// `beginsWithRole` lived here. Its job -- decide whether a leading token is the control's own role or
+// the context NVDA prefixed -- is now `parseAnnouncement`'s, which knows that a container may be NAMED
+// ("Radios example, frame") and that the order depends on the channel. Both facts it lacked, and both
+// cost false 4.1.2 accusations on conformant pages.
 
 /**
  * NO state-change rule here — but NOT for the reason this comment gave until 2026-08-21, which was wrong
@@ -311,38 +228,76 @@ function beginsWithRole(entry: string): boolean {
  * what happened. It is that "nothing changed" has two causes and the page cannot tell you which.
  */
 
-function addUnnamedControls(entries: string[], requireMarker: boolean, add: AddFinding): void {
+/**
+ * Roles a MISSING NAME is a 4.1.2 finding for.
+ *
+ * Narrower than the parser's role vocabulary, deliberately: a heading or a graphic with no name is 1.3.1 or
+ * 1.1.1, and reporting it here would claim a criterion this rule does not decide. Derived from the
+ * `isControl` predicate that preceded it so the set cannot quietly widen.
+ */
+const REPORTABLE_CONTROL_ROLES: ReadonlySet<string> = new Set([
+  "button", "edit", "edit text", "radio", "radio button", "checkbox", "combo box", "list box",
+  "menu item", "link", "slider", "spin button",
+]);
+
+/**
+ * `channel`, not `requireMarker`, and the difference is the whole fix.
+ *
+ * The old signature took a boolean that stood in for two unrelated things at once: which announcement ORDER
+ * to expect, and whether an empty name needs the U+FFFC marker to be believed. The first is a property of
+ * the channel and was never modelled — so `beginsWithRole` stripped a role-first container and missed a
+ * NAME-first one, and every GOV.UK Design System example (each inside a named iframe) reported a properly
+ * named radio as unnamed. Two false 4.1.2 accusations against a design system its publisher declares
+ * conformant, which is the worst error this tool can make.
+ *
+ * The marker requirement survives, because it is a real and separate policy: in a read-through an empty
+ * name can be a line-wrap artefact, while a sweep entry is one object NVDA was asked to describe.
+ */
+function addUnnamedControls(entries: string[], channel: Channel, add: AddFinding): void {
   for (const entry of entries) {
-    if (!isControl(entry)) continue;
-    const unnamed = requireMarker
-      ? hasEmptyName(entry)
-      : accessibleName(entry) === "" || beginsWithRole(entry);
-    // CONFORMANCE-mapped: 4.1.2 requires a programmatically determinable NAME for every user-interface
-    // component, and a control the screen reader announces as a bare role has none. The announcement is not
-    // a proxy for the failure, it IS the failure — a user meets a control they cannot identify.
-    if (unnamed) {
-      add("4.1.2 Name, Role, Value", "Control announced with a role but no accessible name", entry,
-        "conformance");
-      // AND 3.3.2, for an input specifically. An input the screen reader announces as a bare role has no
-      // label at all — W3C's own description of the failure is a screen reader announcing "edit text" with
-      // no indication of the field's purpose, which fails 1.3.1, 3.3.2 and 4.1.2 together.
-      //
-      // The limit, stated because it bounds the claim: a control CAN pass 4.1.2 with an `aria-label` and
-      // still fail 3.3.2 when no label is visible to sighted users. A screen-reader transcript cannot see
-      // that case — the name is announced either way — so this rule claims 3.3.2 only for "no name at all",
-      // which is the mode it can actually witness. `criterion-coverage.ts` records 3.3.2 as PARTIAL for it.
-      //
-      // Why this matters beyond correctness: `3.3.2:unnamed-form-field` was declared rule-decided while the
-      // rules reported ONLY 4.1.2, so nothing emitted a 3.3.2 finding and the trained head had to stay —
-      // load-bearing in production and, briefly, exempt from the release gate. The head then produced eight
-      // false accusations on conformant form pages, because a clean page and a broken one announce nearly
-      // the same text and the embedding could not separate them while the explicit features could. Emitting
-      // the criterion the rule already decides is what lets the head go.
-      if (isInput(entry)) {
-        add("3.3.2 Labels or Instructions", "Input announced with a role but no label", entry,
-          "conformance");
-      }
+    for (const object of parseAnnouncement(entry, channel).objects) {
+      reportIfUnnamed(object, entry, channel, add);
     }
+  }
+}
+
+/**
+ * One control, one decision. Extracted because the loop over objects added a nesting level and `max-depth`
+ * refused it — which is that rule doing its job: the decision below is a separate thing from walking the
+ * announcements, and reads better named.
+ */
+function reportIfUnnamed(
+  object: { name: string; role: string }, entry: string, channel: Channel, add: AddFinding,
+): void {
+  if (!REPORTABLE_CONTROL_ROLES.has(object.role)) return;
+  // The marker requirement is a POLICY about the channel, not about the grammar: in a read-through an empty
+  // name can be a line-wrap artefact, while a sweep entry is one object NVDA was asked to describe.
+  const unnamed = channel === "transcript"
+    ? object.name === "" && entry.includes(EMPTY_NAME)
+    : object.name === "";
+  if (!unnamed) return;
+
+  // CONFORMANCE-mapped: 4.1.2 requires a programmatically determinable NAME for every user-interface
+  // component, and a control the screen reader announces as a bare role has none. The announcement is not a
+  // proxy for the failure, it IS the failure — a user meets a control they cannot identify.
+  add("4.1.2 Name, Role, Value", "Control announced with a role but no accessible name", entry, "conformance");
+
+  // AND 3.3.2, for an input specifically. An input the screen reader announces as a bare role has no label
+  // at all — W3C's own description of the failure is a screen reader announcing "edit text" with no
+  // indication of the field's purpose, which fails 1.3.1, 3.3.2 and 4.1.2 together.
+  //
+  // The limit, stated because it bounds the claim: a control CAN pass 4.1.2 with an `aria-label` and still
+  // fail 3.3.2 when no label is visible to sighted users. A screen-reader transcript cannot see that case —
+  // the name is announced either way — so this rule claims 3.3.2 only for "no name at all", which is the
+  // mode it can actually witness. `criterion-coverage.ts` records 3.3.2 as PARTIAL for it.
+  //
+  // Why this matters beyond correctness: `3.3.2:unnamed-form-field` was declared rule-decided while the
+  // rules reported ONLY 4.1.2, so nothing emitted a 3.3.2 finding and the trained head had to stay —
+  // load-bearing in production and, briefly, exempt from the release gate. The head then produced eight
+  // false accusations on conformant form pages. Emitting the criterion the rule already decides is what
+  // lets the head go.
+  if (isInput(entry)) {
+    add("3.3.2 Labels or Instructions", "Input announced with a role but no label", entry, "conformance");
   }
 }
 
@@ -774,8 +729,9 @@ export function ruleFindings(input: RuleInput): Finding[] {
   // 4.1.2 — controls announced with a role but no accessible name. Transcript
   // path requires the ￼ marker; the structural-sweep path does not (see
   // addUnnamedControls).
-  addUnnamedControls(input.transcript, true, add);
-  addUnnamedControls([...(input.structure?.formFields ?? []), ...(input.interaction?.controls ?? [])], false, add);
+  addUnnamedControls(input.transcript, "transcript", add);
+  addUnnamedControls([...(input.structure?.formFields ?? []), ...(input.interaction?.controls ?? [])],
+    "sweep", add);
 
   // 2.4.4 and 1.3.1 — both about what a screen reader user CANNOT do: tell two links apart, or skim.
   // Neither is reported by axe, which is the point of having them here.
