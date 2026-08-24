@@ -186,10 +186,20 @@ itself. A tool that asserts conformance failures needs better resolution than th
 1. **Grow the real-page corpus**, especially conformant pages. The three publisher-declared *inaccessible*
    pages are capped by labelling discipline, not by effort: statements, WCAG-EM reports and GDS monitoring
    all aggregate to the site, and an audit years apart from a capture describes a different page.
-2. **Decide what the product promises.** A hard zero-false-positive constraint selected on the same data
-   it is reported against is high-variance by construction. Conformal risk control gives a *bounded* rate
-   with a finite-sample guarantee instead of *zero on this corpus* — **a product decision about what the
-   tool claims, not to be made silently.**
+2. **DECIDED 2026-08-24 — the promise is split by layer, because the layers differ in kind.** The question
+   was whether the tool claims *zero on this corpus* or *a bounded rate with a finite-sample guarantee*.
+   Both, and which one depends on who is speaking — ADR 0021's division doing product work:
+   - **The rules keep "zero".** They are deterministic, carry no threshold, and nothing was tuned to make
+     the number come out. "0 false positives across 1,183 conformant records" is a measurement and stands
+     — now paired with `rules:coverage`, because a rule that never fires scores zero too.
+   - **The scorer states a BOUND**, not a zero: population false-positive rate ≤ 0.5% at 95% confidence,
+     distribution-free (ADR 0022), recorded as approximate. Its old "0 false positives on development"
+     was the constraint restated — the threshold was chosen to make it true — and a figure that cannot be
+     wrong cannot be informative.
+
+   What this deliberately does NOT do is adopt conformal risk control. It is the more general tool, and the
+   generality is not needed: type-I error IS the risk being bounded here, and Neyman-Pearson states it
+   directly with a tighter order-statistic result. Revisit if a criterion ever needs a non-binary loss.
 3. **Watch the cliff.** Three heads sit at 0.95, the top of the grid. One more negative crossing leaves
    them no valid cut at all.
 
