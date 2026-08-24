@@ -105,6 +105,18 @@ export interface CriterionCoverage {
    * out-of-scope, where no channel could carry the evidence. Pinned both ways by the tests.
    */
   channels?: EvidenceChannel[];
+  /**
+   * Why this criterion cannot fire on a REAL-PAGE capture, when that is structurally true.
+   *
+   * Machine-readable on purpose. `audit-rule-coverage.ts` blocks a criterion this project CLAIMS to assess
+   * that has never once fired on a real page, and two criteria are legitimately in that state forever: the
+   * form probe is deliberately off for real pages, because submitting a form on a site we do not own is not
+   * a review. Left as prose in `note`, that fact could not be told from an oversight — and the audit would
+   * either block on something correct or, worse, be softened until it blocked on nothing.
+   *
+   * Absent means the criterion IS expected to fire on real pages. Only declare it with a reason.
+   */
+  realPageEvidence?: { available: false; because: string };
   note: string;
 }
 
@@ -123,7 +135,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "2.1.2": { status: "assessed", channels: ["focusOrder"], note: "Keyboard trap, from `focusOrder`: focus repeating and never reaching the rest of the page. UNVALIDATED: no corpus case targets it, it is not declared in `rule-ownership.json` so `rules:gate` does not cover it, and `focusOrder` is absent from all 4,899 corpus captures. Needs a case family captured WITH the focus probe — the same fix 2.4.1, 2.4.3 and 2.1.1 need, which makes it the cheapest of the four since the rule already exists." },
   "2.4.4": { status: "assessed", channels: ["links", "transcript"], note: "Vague link text. Rules cover a six-phrase subset (19 of 100 corpus records, a declared overlap); the head owns the rest." },
   "2.4.6": { status: "assessed", channels: ["headings", "transcript"], note: "Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the page, so this head is document-pooled." },
-  "3.3.1": { status: "assessed", channels: ["formChanges", "postSubmitFields"], note: "A validation error that is displayed but never announced. Needs the form probe, which is on by default in the Action and off in the CLI -- and therefore OFF for every real-page capture, because submitting a form on a site we do not own is not a review. Measured: 0 of 77 real captures carry `formChanges`, so on a real page this criterion cannot fire in either direction." },
+  "3.3.1": { status: "assessed", realPageEvidence: { available: false, because: "the form probe is OFF for real-page captures — pressing submit on a site we do not own is not a review — so `formChanges` is absent from all 77 real captures" }, channels: ["formChanges", "postSubmitFields"], note: "A validation error that is displayed but never announced. Needs the form probe, which is on by default in the Action and off in the CLI -- and therefore OFF for every real-page capture, because submitting a form on a site we do not own is not a review. Measured: 0 of 77 real captures carry `formChanges`, so on a real page this criterion cannot fire in either direction." },
   "3.3.2": {
     status: "partial",
     needs: ["dom"],
@@ -143,7 +155,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
       + "\"Example value\" and 0 of the 34 without it. Declared `unavailable` in rule-ownership.json. "
       + "See ADR 0018.",
   },
-  "4.1.3": { status: "assessed", channels: ["postSubmitFields", "formChanges"], note: "A status message after form activation that the screen reader never speaks. Same probe dependency as 3.3.1 and the same consequence, which was recorded there and not here: it reads `postSubmitFields`, and 0 of 77 real captures carry any, so it cannot fire on a real page." },
+  "4.1.3": { status: "assessed", realPageEvidence: { available: false, because: "same probe dependency as 3.3.1: `postSubmitFields` is absent from all 77 real captures, because the form probe is deliberately off for pages we do not own" }, channels: ["postSubmitFields", "formChanges"], note: "A status message after form activation that the screen reader never speaks. Same probe dependency as 3.3.1 and the same consequence, which was recorded there and not here: it reads `postSubmitFields`, and 0 of 77 real captures carry any, so it cannot fire on a real page." },
 
   "4.1.2": {
     status: "partial",

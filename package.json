@@ -69,6 +69,7 @@
     "training:repeat": "tsx packages/lab/src/training/repeat-capture.mjs",
     "rules:score": "tsx packages/lab/scripts/score-rules.ts",
     "rules:gate": "tsx packages/lab/scripts/score-rules.ts --gate",
+    "rules:coverage": "tsx packages/lab/scripts/audit-rule-coverage.ts",
     "scorer:migration": "node scripts/check-schema-migration.mjs",
     "scorer:shortcuts": ".venv/bin/python packages/lab/scripts/audit-scorer-shortcuts.py",
     "promote:model": "node packages/lab/scripts/promote-model.mjs",
@@ -77,7 +78,7 @@
     "changeset": "changeset",
     "changeset:status": "changeset status --since=origin/main",
     "release:version": "changeset version && npm install --package-lock-only",
-    "release:gate": "npm run scorer:migration && npm run scorer:shortcuts && npm run gate:isolation && npm run training:check-signals:complete && npm run rules:gate && npm run training:evaluate-acceptance && npm run eval:gate",
+    "release:gate": "npm run scorer:migration && npm run scorer:shortcuts && npm run gate:isolation && npm run training:check-signals:complete && npm run rules:gate && npm run rules:coverage && npm run training:evaluate-acceptance && npm run eval:gate",
     "capture:check": "tsx packages/lab/src/harnesses/capture-check.mjs",
     "layers:compare": "A11Y_PYTHON=.venv/bin/python node packages/lab/scripts/compare-layers.mjs",
     "pretest": "npm run build",
@@ -88,7 +89,7 @@
     "verdict:stability": "tsx packages/lab/src/harnesses/occurrence-verdict-stability.mjs",
     "training:export-acceptance:all": "REPEAT=repeat-1 npm run --silent training:export-acceptance && REPEAT=repeat-2 npm run --silent training:export-acceptance",
     "scorer:size-sensitivity": "node packages/lab/scripts/audit-size-sensitivity.mjs",
-    "candidate:gate": "npm run scorer:migration -- --evaluating && npm run scorer:shortcuts && npm run gate:isolation && npm run training:check-signals:complete && npm run rules:gate",
+    "candidate:gate": "npm run scorer:migration -- --evaluating && npm run scorer:shortcuts && npm run gate:isolation && npm run training:check-signals:complete && npm run rules:gate && npm run rules:coverage",
     "promote:gated": "npm run --silent candidate:gate && npm run --silent promote:model --"
   },
   "dependencies": {

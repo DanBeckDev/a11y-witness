@@ -135,7 +135,7 @@ findings.
   on pages unlike its training data — which today is still many real pages. The ones that always work are the
   deterministic rules:
   - **In full: 1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.4.**
-  - **Partially: 2.1.1, 2.4.1, 2.4.2, 2.4.3, 4.1.2** — each covers one failure mode of several, and
+  - **Partially: 2.1.1, 2.4.1, 2.4.2, 2.4.3, 3.3.2, 4.1.2** — each covers one failure mode of several, and
     `criterion-coverage.ts` records which mode and why the others are out. Three of them (2.4.1, 2.4.2,
     2.4.3, added 2026-08-22) are failures a static analyser structurally cannot reach: a skip link that is
     present and inert, a route that changes without the title changing, and a tab order that contradicts the

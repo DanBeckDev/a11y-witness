@@ -32,8 +32,16 @@ export const SCORED_CRITERIA = [
  * no head for it. That is why `assessedCriteria()` is a UNION rather than the scorer's list — a criterion
  * covered by a rule alone is still covered, and reporting it as untested would be the mirror of the
  * over-claim this file exists to prevent.
+ *
+ * **3.3.2 was missing from this list until 2026-08-24**, while `addUnnamedFormFields` was firing on 265
+ * corpus captures and 6 real ones. Nothing caught it because the only consumer was `assessedCriteria()`,
+ * which UNIONS this with `SCORED_CRITERIA` — and 3.3.2 is in that — so the union stayed correct and the
+ * error had no visible consequence. It acquired one the moment `audit-rule-coverage.ts` began asking
+ * "which of these has never fired?", because a criterion absent from the list is one the audit never asks
+ * about. `add()` in `rules.ts` now throws on an unlisted criterion, so this cannot go stale silently again.
  */
-export const RULE_CRITERIA = ["1.1.1", "1.3.1", "1.4.2", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "2.4.4", "4.1.2"] as const;
+export const RULE_CRITERIA = ["1.1.1", "1.3.1", "1.4.2", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3",
+  "2.4.4", "3.3.2", "4.1.2"] as const;
 
 /** Everything the shipped judge can return a finding for, deduplicated and sorted. */
 export function assessedCriteria(): string[] {
