@@ -15,7 +15,23 @@ Three shorter documents came first for a reason, and they are not duplicated her
 
 ## What this is
 
-a11y-witness drives a **real screen reader (NVDA)** through real navigation and uses **our own trained scorer** (`judge-backend: local`, the default everywhere — no rented LLM, no metered API) to assess the lived assistive-technology experience: the judgment-based WCAG failures that rule scanners miss. It sits **alongside** axe-core (the rule/visual layer), not instead of it. See `README.md`, `PLAN.md`, and `docs/adr/`.
+a11y-witness drives a **real screen reader (NVDA)** through real navigation to assess the lived
+assistive-technology experience: the WCAG failures that rule scanners structurally cannot reach. It sits
+**alongside** axe-core (the rule/visual layer), not instead of it. See `README.md`, `PLAN.md`, `docs/adr/`.
+
+**A finding is either ASSERTED or REFERRED, and knowing which is decided by which layer owns the subtype.**
+This paragraph used to say the trained scorer "assesses the judgment-based WCAG failures" — it does not
+assess them in the sense of concluding anything. Measured on the product path, 18 conformant real pages:
+**0 criteria asserted wrongly, 4 referred.**
+
+| | |
+|---|---|
+| **rules** (`rule-ownership.json` → `decidedBy: "rules"`) | conformance-mapped, so `criterionOutcomes` reports `failed`. **This is the only layer that ASSERTS.** Exact on every criterion it owns, 0 false positives across 1,183 conformant records. |
+| **the trained scorer** (`judge-backend: local`, no rented LLM) | `findingsFromScores` sets NO `mapping`, and `RequirementMapping` defines absent as `secondary` — so every model finding becomes `cantTell`. It TRIAGES: finds the moment worth a human's attention and quotes the announcement. |
+
+ADR 0021 records why that is the right division rather than a shortfall, and moved
+`4.1.2:state-change-silent` — the flagship finding — from the model to the rules so it could be stated
+rather than suggested.
 
 ## Code conventions
 
@@ -1189,6 +1205,81 @@ npm run scorer:shortcuts       # the TRAINED WEIGHTS: which did a head penalise 
 **Generalise it.** Before trusting any accuracy figure here, ask what would have to be true of the data for
 that figure to be uninformative — and then check whether it is.
 
+## The four things 2026-08-24 cost, and none of them were the model
+
+A day spent chasing "12 false accusations on GOV.UK" that the tool never made. Recorded in the order they
+have to be understood, because each one hid the next.
+
+### 1. THE NUMBER WE STEERED BY MEASURED SOMETHING THE PRODUCT DOES NOT DO
+
+`calibrate-abstention.mjs` read `record.predictions` straight out of `score.py` and called every true one a
+FALSE POSITIVE. The CLI routes findings through `criterionOutcomes`, where an unmapped model finding becomes
+`cantTell`. So the whole real-page calibration — and ADR 0019's headline — described accusations that were
+referrals. **Verified before changing anything: the identical finding scores `cantTell` unmapped and
+`failed` when conformance-mapped.**
+
+This is the third instance of one defect in this repo, and the pattern is now unmistakable:
+
+- `JUDGE_BACKEND` defaulted to `codex` while the Action shipped `local` — *"a gate that does not exercise
+  what ships is not a gate"*
+- the abstention sweep scored raw predictions instead of the product path
+- `npm run eval` resolved the SHIPPED artefact always, so a candidate's judge quality was unknowable until
+  after promotion — a gate that cannot examine the thing being decided
+
+**Before optimising any number, run the path a user runs and check the number is the one they would see.**
+
+### 2. THE ANNOUNCEMENT ORDER DEPENDS ON HOW THE CARET GOT THERE
+
+Measured over 300 captures, with no overlap whatsoever:
+
+```
+structure.*  (quick-nav sweeps)      name-first  884   role-first    0
+transcript   (arrow read-through)    name-first    0   role-first  880
+```
+
+NVDA's `getPropertiesSpeech` appends name→role→states, and browse-mode arrow navigation reverses it for the
+focused object (nvaccess/nvda#11102). Seven partial regexes across three languages each guessed at one
+order. They are gone: `packages/evidence/src/announcement.ts` is the single grammar, told its channel rather
+than inferring it, validated on **6,555 cross-channel comparisons at 0.08% disagreement**.
+
+Container context also PERSISTS: NVDA announces a container once on entry and says nothing again until
+`out of list`. Reading each line's own containers reports every item after the first as contextless.
+
+### 3. THE CORPUS CANNOT EXPRESS WHAT REAL PAGES DO — four times in one day
+
+ADR 0019's thesis, earning its keep. Each of these was invisible to every corpus gate and appeared only on
+somebody else's site:
+
+| what broke | why the corpus cannot hold it |
+|---|---|
+| "Details" as a component name | corpus uses vague words ONLY in the failing sense — 13 of 13 wordlist terms, 0 conformant occurrences |
+| a named iframe (`"Radios example, frame"`) | no corpus page has an iframe |
+| a link mid-list with no prefix of its own | corpus lists are short enough that the prefix lands on the same line |
+| a search combo box unchanged after Enter | 69 conformant + 69 failing disclosures against SIX combo-box records |
+
+`npm run corpus:starvation` now reports **word-sense monopoly** — a feature no CONFORMANT record carries, so
+its presence is a free predictor. Split into "fix these" (a wordlist, so the word has another sense in
+English) and "correct as they are" (the feature IS the failure).
+
+### 4. A LESSON LEARNED AT ONE LAYER, REPEATED AT THE NEXT, AT FOUR TIMES THE COST
+
+`screenreader_features.py` carries `TOGGLE_ROLE` and the comment explaining it: Enter is not a combo box's
+activation, the evidence is *"identical to a broken disclosure's, character for character apart from the
+role"*, and leaving it implicit cost **3 false positives**. The new state-change RULE reproduced the
+identical bug and cost **12 wrong assertions** — while ADR 0021 was being written about remedies that reach
+one layer and not the others.
+
+**When a comment names a control-specific behaviour, grep every layer that decides on that control.**
+
+### What was checked and REFUTED, so nobody re-derives it
+
+**Bag size is not the driver.** The distribution shift is real and large — corpus median 18 / max 43 against
+real median 253 / max 805, so the corpus maximum sits below the real 25th percentile — and padding 40
+conformant pages with conformant content produced **0 accusations at every size across 200 trials**.
+`npm run scorer:size-sensitivity` is kept because it is the only check that could see a size effect if a
+future pooling change introduces one. An earlier 3/12 was an instrument fault: the donor pool moved with the
+sample size, so two runs were two experiments.
+
 ## The rule that cost the most to learn
 
 **A check must never reject evidence whose absence is the finding.**
@@ -1314,9 +1405,21 @@ manual step left is acting on what it tells you.
 
 ```bash
 git push                      # pre-push hook: lint, typecheck, tests, check-signals, rules:gate (~5s)
-npm run release:gate          # shortcuts -> signals -> rules -> held-out acceptance -> judge quality, cheapest first
+npm run release:gate          # migration -> shortcuts -> signals -> rules -> held-out acceptance -> judge quality
 npm run capture:check -- --worker=http://192.168.64.4:8765    # the capture layer, ~2 min
 ```
+
+**Two audits added 2026-08-24 that no gate chain runs for you, and both answer questions the corpus cannot:**
+
+```bash
+npm run corpus:starvation        # word-sense MONOPOLY: a feature no conformant record carries
+npm run scorer:size-sensitivity  # does a conformant page FAIL when padded with conformant content?
+```
+
+And the measurement that matters most is not in any of them. `calibrate-abstention.mjs` on the lab is the
+only check that scores REAL pages through the product path, and its ASSERTED-WRONGLY column is the number to
+watch: a criterion the tool STATES is unsatisfied on a page its publisher declares conformant. `referred` is
+a different and much cheaper kind of wrong. Collapsing the two is what made the number meaningless for a day.
 
 **Run the clean-code review on your own diff before you push.** Not on the whole repo — on what you
 changed, plus anything the Boy Scout Rule says you should have tidied in passing. It is a judgement
