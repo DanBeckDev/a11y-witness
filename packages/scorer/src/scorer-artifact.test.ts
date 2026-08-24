@@ -24,7 +24,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { openSync, readSync, closeSync, readFileSync } from "node:fs";
+import { openSync, readSync, closeSync, readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { scorerPaths } from "@a11y-witness/scorer";
@@ -39,6 +39,21 @@ import { join } from "node:path";
  * weights are what must agree, and both live here.
  */
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
+
+const MIGRATION_FILE = "packages/scorer/models/schema-migration.json";
+
+/**
+ * A deliberate, declared divergence between the shipped weights and the pipeline in this tree.
+ *
+ * Before this existed the only way past the assertion below was `A11Y_SKIP_VERIFY=1`, and that does not skip
+ * this check — it skips the whole pre-push hook, lint and 949 tests included. A guard that is routinely
+ * bypassed by disabling every other guard is a net loss, so the divergence is declared instead and refused at
+ * release by `scripts/check-schema-migration.mjs`.
+ */
+function openMigration(): { pendingSchema: string; shippedSchema: string; why?: string } | null {
+  const path = join(packageRoot, "models/schema-migration.json");
+  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
+}
 
 /** `__metadata__` from a safetensors file, without loading a single tensor. */
 function safetensorsMetadata(path: string): Record<string, string> {
@@ -69,10 +84,31 @@ test("the committed weights carry the schema the committed feature pipeline comp
   const declared = /^FEATURE_SCHEMA_VERSION\s*=\s*["']([^"']+)["']/m.exec(readFileSync(trainer, "utf8"))?.[1];
   assert.ok(declared, `could not find FEATURE_SCHEMA_VERSION in ${trainer}; the check is broken, not passing`);
 
-  assert.equal(stamped, declared,
-    `the weights were trained under "${stamped}" but the trainer in this tree computes "${declared}". `
+  const migration = openMigration();
+
+  if (stamped === declared) {
+    // A declaration left behind after the retrain landed would silently disable this guard forever, which is
+    // strictly worse than not having it: the check would keep reporting success while examining nothing.
+    assert.equal(migration, null,
+      `weights and pipeline agree on "${stamped}", but ${MIGRATION_FILE} still declares a migration. `
+      + `Delete it — a stale declaration turns this check off without anyone deciding to.`);
+    return;
+  }
+
+  // They disagree. That is legitimate on a branch changing the schema ahead of a retrain, and a release
+  // blocker anywhere else — so it must be DECLARED, and the declaration must match reality rather than merely
+  // exist. `npm run scorer:migration` fails release while it is open.
+  assert.ok(migration,
+    `the weights were trained under "${stamped}" but the pipeline in this tree computes "${declared}". `
     + `The scorer refuses that combination at runtime, so the default judge backend cannot run — which is `
-    + `exactly what a consumer gets if only one of the two is committed.`);
+    + `exactly what a consumer gets if only one of the two is committed. If this divergence is deliberate, `
+    + `declare it in ${MIGRATION_FILE}; the release gate will refuse to promote while it is open.`);
+  assert.equal(migration.pendingSchema, declared,
+    `${MIGRATION_FILE} declares pendingSchema "${migration.pendingSchema}" but the pipeline computes "${declared}"`);
+  assert.equal(migration.shippedSchema, stamped,
+    `${MIGRATION_FILE} declares shippedSchema "${migration.shippedSchema}" but the weights carry "${stamped}"`);
+  assert.ok((migration.why ?? "").trim().length > 0,
+    `${MIGRATION_FILE} must say WHY the schema is changing; a declaration nobody can evaluate is a skip with extra steps`);
 });
 
 test("the training report agrees with the weights", () => {
