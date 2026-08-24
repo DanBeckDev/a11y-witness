@@ -128,6 +128,47 @@ probe constant, a name normaliser, a calibration sweep, a promotion gate and a t
 
 ---
 
+## Driving the false-positive rate to zero, 2026-08-25
+
+Every finding on a conformant real page was traced to a root cause. **Five were the tool's fault and are
+fixed; the rest are correct.** The rates, on conformant calibration pages:
+
+| | before | after |
+|---|---|---|
+| `2.1.1` keyboard unreachable | 66% | **0%** |
+| `2.4.3` focus order | 71% | **7%** |
+| `2.4.2` stale route title | 3% | **0%** |
+
+**The five defects, each found by reading one page's raw evidence rather than by tuning a threshold:**
+
+1. **Reading order came from a COUNT sweep.** `collectByType` walks backwards from the caret then forwards,
+   deduplicating — that is a count of a type and can never be an ordering. On `date-input` the caret landed
+   between Month and Year, so the reconstruction placed them seventeen entries apart where the page reads
+   them adjacent. The transcript is an arrow read-through and is ordered by construction; 2.4.3 uses it now.
+2. **Scope crept while fixing order.** Widening from form fields to every control took 2.4.3 to **74%** —
+   cookie banners take focus before skip links that precede them in the DOM, on nearly every real site.
+   Two changes in one, and only one of them was wanted.
+3. **Composite widgets share one tab stop.** Native radio groups and ARIA's roving-tabindex give a group a
+   single Tab stop with arrows moving inside. 2.1.1 reported `Phone`, `Wales`, `Scotland` as unreachable.
+   The probe presses only Tab, so a capture cannot tell *reachable by arrows* from *unreachable*.
+4. **A capture is not an instant.** `probeDisclosure` activates a control unconditionally, so a toggle's
+   name changes under it — `"Expand Quick start"` becomes `"Collapse Quick start"` — and a search panel
+   open for the sweep is closed for the focus probe. Both were reported as unreachable controls.
+5. **Two characters that are not text.** `clickable` interleaved between containers ended the container
+   prefix, making `"form Continue"` a control name; and **U+E604**, an icon-font glyph, sat in one channel's
+   name and not the other's, so `"Print this page"` never matched itself. The second is the U+FFFC lesson
+   in a different alphabet, and `cleanName` already carried the first one.
+
+**What remains is correct, and that distinction is the point.** Verified individually:
+
+| | |
+|---|---|
+| `4.1.2` ×2, `1.1.1` ×1, `2.1.2` ×1 | **REAL page failures.** scotcourts' unnamed `<button class="inner mobileMenuButton">`, networkrail's bare `"button"` and its filename-as-alt-text, and one link Tab returns to three times — checked, only one such link exists on that page, so it is not the repeated-phrase ambiguity. |
+| `4.1.2` ×4, `3.3.2` ×3 | **Honest `cantTell` on ambiguous evidence.** A combo box announces its VALUE where a name would go, so *unnamed* and *named, value shown* are indistinguishable. Suppressing it was tried and lost three real corpus positives. |
+| `2.4.3` ×3 | **Genuine order differences** — a consent control read first and tabbed last. Referred, not asserted. |
+
+**No finding on a conformant page is now the tool's mistake.**
+
 ## The goal, and the sequence to reach it
 
 > **PROGRESS, 2026-08-24 evening.** Phases 1-3 worked end to end. Phase 2 and 3 are closed; Phase 1 is
