@@ -30,6 +30,7 @@ you which arguments have already been tried.
 | [0016](./0016-publishing-the-screen-reader-evidence.md) | Publish the screen-reader evidence, not the pages, and not the synthetic corpus | accepted 2026-08-23 |
 | [0017](./0017-the-rule-reports-the-criterion-it-already-decides.md) | A rule that decides evidence must report every criterion that evidence fails | accepted 2026-08-23 |
 | [0018](./0018-a-placeholder-label-is-not-witnessable-by-a-screen-reader.md) | A placeholder-only label is not witnessable by a screen reader, and belongs to axe | accepted 2026-08-23 |
+| [0019](./0019-a-synthetic-holdout-cannot-falsify-a-synthetic-assumption.md) | A synthetic hold-out cannot falsify a synthetic assumption; real pages are the only unshared measurement | accepted 2026-08-24 |
 
 ## If you read only one
 
