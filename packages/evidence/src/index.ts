@@ -82,3 +82,7 @@ export {
   parseAnnouncement, nameOf, announces, annotateCapture, CONTAINER_ROLES, CONTROL_ROLES,
 } from "./announcement.js";
 export type { Channel, ParsedAnnouncement, ParsedObject } from "./announcement.js";
+
+/** Whether the capture examined enough of a channel to support a finding on it. */
+export { evidenceCompleteness, withheldForIncompleteEvidence, CRITERION_EVIDENCE } from "./completeness.js";
+export type { Completeness, ChannelCompleteness } from "./completeness.js";
