@@ -48,6 +48,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--shadow", action="store_true", help="mark output log-only; never mutate findings")
     parser.add_argument("--allow-ineligible", action="store_true", help="diagnostic override for a report not marked releaseEligible")
+    # DECLARES A PURPOSE, where --allow-ineligible OVERRIDES A GUARD. The difference matters: a subprocess
+    # caller that is measuring a candidate is in the same position as the acceptance evaluator, which says
+    # so at its Python call site. `calibrate-abstention.mjs` cannot — it shells out — so without this its
+    # only route was the inference escape hatch, which the error message itself calls inference-only.
+    #
+    # Kept separate so the two never blur. A run that passes --evaluating is not scoring anybody's page; it
+    # is producing the evidence that decides whether the weights may ever score one.
+    parser.add_argument("--evaluating", action="store_true",
+                        help="this run MEASURES a candidate rather than scoring a real page")
     return parser.parse_args()
 
 
@@ -166,6 +175,12 @@ def verify_artifact(
         and no candidate could ever pass. Measured 2026-08-23 on the first candidate anyone evaluated
         through the lab interface; the shipped model predates it and was made by hand.
       - THE HARDENING CHECK is the same case: examining a candidate is not shipping it.
+      - THE ABSTENTION SWEEP is the same case again, and it is a SUBPROCESS caller, which is why
+        `--evaluating` exists. `calibrate-abstention.mjs` measures a named candidate against the held-out
+        real pages; it shells out to this file, so it cannot declare its purpose at a Python call site. Its
+        only route was `--allow-ineligible`, which the refusal message itself calls inference-only —
+        so the honest options were to misuse an escape hatch or leave the sweep unable to measure a
+        candidate at all. Measured 2026-08-24, the first time anyone pointed the sweep at one.
 
     Declared by the CALLER at the call site rather than passed as a flag at the command line. A job that
     must always pass `--allow-ineligible` is a guard nobody has — the same reasoning that kept `train` from
@@ -190,7 +205,8 @@ def verify_artifact(
     if not isinstance(criteria, dict) or not criteria:
         raise RuntimeError("scorer report has no criteria")
     ineligible = report.get("releaseEligible") is not True
-    if require_release_eligible and ineligible and not getattr(args, "allow_ineligible", False):
+    evaluating = getattr(args, "evaluating", False) or getattr(args, "allow_ineligible", False)
+    if require_release_eligible and ineligible and not evaluating:
         raise RuntimeError("scorer report is not releaseEligible, so it must not score a real page. "
                            "If you are EVALUATING this candidate rather than using it, the caller should "
                            "pass require_release_eligible=False; --allow-ineligible is the escape hatch "
