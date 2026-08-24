@@ -471,13 +471,33 @@ CONTEXT_CONTAINERS = frozenset({
 def vague_link_lacks_context(record: dict[str, Any]) -> bool:
     """A vague link name with nothing around it to disambiguate.
 
-    Reads the TRANSCRIPT parse, never the sweep: a sweep entry is one object in isolation and carries no
-    container, so asking it about context would report every link as contextless. That the two channels
-    answer different questions is exactly why the parser is told which one it is reading.
+    Reads the transcript as a STREAM, not as independent lines, because that is what it is. NVDA announces a
+    container ONCE on entering it and says nothing about it again until "out of list":
+
+        "list, with 35 items, same page, link, Accordion"   <- the prefix appears here
+        "link, Cookie banner"                               <- and not here
+        "link, Details"                                     <- ...nor here
+        "out of list, heading, level 2, How it works"       <- the exit marker
+
+    Asking each announcement for its own containers therefore reports every item after the first as
+    contextless. Measured: that accused GOV.UK's table and tabs pages of 2.4.4 on `"link, Details"` sitting
+    mid-list, which is exactly the false accusation the feature was added to remove. Corpus lists are short
+    enough that the prefix lands on the same line as the only link, so the error is invisible there.
+
+    Reads the TRANSCRIPT and never the sweep: a sweep entry is one object in isolation and carries no
+    container at all, so it can say nothing about context.
     """
+    open_containers: list[str] = []
     for unit in parsed_units(record, "transcript"):
-        containers = {c.get("role") for c in unit.get("containers") or []}
-        if containers & CONTEXT_CONTAINERS:
+        # Exits FIRST: "out of list, heading, …" leaves the list before announcing what follows.
+        for left in unit.get("leaving") or []:
+            role = str(left).strip().lower()
+            if role in open_containers:
+                del open_containers[open_containers.index(role):]
+        open_containers.extend(
+            str(c.get("role")) for c in unit.get("containers") or [] if c.get("role"))
+        has_context = bool(set(open_containers) & CONTEXT_CONTAINERS)
+        if has_context:
             continue
         for obj in unit.get("objects") or []:
             if obj.get("role") == "link" and (obj.get("name") or "").strip().lower() in VAGUE_LINKS:
