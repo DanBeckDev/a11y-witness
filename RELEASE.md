@@ -13,7 +13,7 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 | typecheck | clean — and now actually covering the package tests: `tsc --listFiles` showed **0** of them in the program before M5, 24 after |
 | lint | 0 errors (337 warnings, all `no-magic-numbers`, non-blocking by design) |
 | `gate:isolation` | **6/6 packages usable when installed**, 1 private package skipped and announced |
-| `rules:gate` | **PASS** — every rule-owned subtype exact on real captured evidence, **0 false positives across 934 conformant records** |
+| `rules:gate` | **PASS** — every rule-owned subtype exact on real captured evidence, **0 false positives across 1,183 conformant records** |
 | held-out acceptance | **PASS** — `"passed": true`, no failure reasons |
 | `npm run eval:gate` (judge quality) | **PASS — recall 78%, 0 false positives on conformant pages**, abstained on 5 of 16 failure cases, 48 failure-case runs (16 cases x 3). Recall was 59% before the realism tier, and 90% before abstention existed, when it carried 3 false positives, 2 of them accusing conformant W3C pages. It failed at one false positive until 2026-08-21; the cause was a mis-authored fixture, not the scorer. See below. |
 | `verify.corpus.test.ts` | 6/6 |
@@ -215,7 +215,7 @@ findings.
     version of this bullet said the *tool* reports an unnamed control only where nothing else is named.
     That is true of the HEAD and not of the product: `4.1.2:unnamed-control` is `decidedBy: "rules"` in
     `rule-ownership.json`, so the scorer is suppressed for it and the exact rule answers — 0 false
-    positives across 934 conformant records. Verified on the three W3C pages where the head scores worst:
+    positives across 1,183 conformant records. Verified on the three W3C pages where the head scores worst:
     the rule layer reports `4.1.2: combo box, collapsed, QUICKMENU ---- greater` on **all three**,
     including the one the scorer misses entirely.
 

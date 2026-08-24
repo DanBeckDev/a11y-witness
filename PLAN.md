@@ -2,8 +2,24 @@
 
 ## North star
 
-Automate the half of accessibility testing that rule scanners structurally cannot reach: whether what a
-screen reader announces, as someone reads and operates a page, adds up to something a person can use.
+Reach the half of accessibility testing that rule scanners structurally cannot: whether what a screen reader
+announces, as someone reads and operates a page, adds up to something a person can use.
+
+**In two halves, because they are different jobs.** Where the screen reader's own output settles the
+question — a control that announced `collapsed`, was activated, and still announces `collapsed` — the tool
+WITNESSES and ASSERTS. Where the question needs a person, it does the TRIAGE rather than the judging: finds
+the moment worth looking at, quotes the announcement, and reports `cantTell` rather than guessing.
+
+Recorded here because it was decided on evidence rather than taste, and the evidence is specific. Measured
+2026-08-24 on the product path across 18 real pages their publishers declare conformant: **0 criteria
+asserted wrongly, 4 referred**. The rule layer is exact on every criterion it owns with 0 false positives
+across 1,183 conformant records; the trained scorer never asserts at all, and
+[ADR 0021](./docs/adr/0021-the-layer-that-decides-must-be-the-layer-allowed-to-claim.md) records why that is
+the right division rather than a shortfall — a subtype whose evidence is decisive belongs with the layer
+allowed to state a conclusion from it.
+
+The ambition this replaces — "automate that judgement" — was not wrong to hold, but it is not what the
+measurements support, and a north star nobody can verify is a slogan.
 
 ## What this file is
 
