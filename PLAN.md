@@ -169,9 +169,23 @@ it holds rather than a precision that restates its own constraint.*
 2. **Establish a baseline.** The shipped model is `screenreader-structured-v7`; the runtime computes `v15`,
    so the shipped weights cannot be scored at all and "is the candidate better?" is currently unanswerable.
    Either promote a v15 as the first-of-schema baseline, or record explicitly that no comparison exists.
-3. **Close B8** — the 225 free vetoes. Removing `vague_link_present` as a model input took 2.4.4 from 27
-   false positives to **0** with recall rising, and cleared 2.4.6 to 1.000/1.000 in the same change. The
-   remedy is the corpus, never the weights (ADR 0015).
+3. **B8 — MEASURED DOWN FROM 225 TO 67 on 2026-08-24, and the headline understates it.** Removing
+   `vague_link_present` as a model input took 2.4.4 from 27 false positives to **0** with recall rising,
+   and cleared 2.4.6 to 1.000/1.000 in the same change. Six heads now carry **zero** free vetoes:
+   all three 1.1.1 subtypes, both 1.3.1 subtypes, 2.4.4 and 2.4.6.
+
+   The remaining 67 are not spread evenly, and where they sit changes what they cost:
+
+   | | free vetoes |
+   |---|---|
+   | in **rule-decided** heads, whose model output `findingsFromScores` suppresses | **59** |
+   | in heads that actually decide something in production | **8** (3.3.1 and 4.1.3, four each) |
+
+   So the number that reaches a user went 225 → **8**. The 59 sit on `2.1.1`, `2.1.2`, `2.4.1`, `2.4.2`
+   and `2.4.3` — every one a head with **3 to 7 positive records**, which is ADR 0015's mechanism stated
+   exactly: a head that has never seen a positive carrying a feature can veto it at no cost. The remedy
+   is corpus, not weights, and it is Phase 3.1 — these five are the same criteria the rule layer decides,
+   so nothing ships on them today either way.
 4. **Keep the NP bound honest.** ADR 0022 gives population FP ≤ 0.5% at 95% confidence, recorded as
    `exact: false` because out-of-fold scores come from K fold models where the proposition assumes one.
    Closing that needs negatives held back from training entirely.
