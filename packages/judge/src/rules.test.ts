@@ -471,3 +471,37 @@ test("a disclosure button that DOES change state is silent", () => {
   };
   assert.equal(ruleFindings(working).length, 0);
 });
+
+test("a combo box whose NAME was not repeated is not an unnamed control", () => {
+  // Verbatim from caselaw.nationalarchives.gov.uk, and the markup was checked rather than inferred:
+  //   <label for="order_by" class="result-controls__label">Order results by</label>
+  //   <select class="result-controls__select" id="order_by" name="order">
+  //     <option>Sort by: Most relevant</option>
+  // So the control IS named, NVDA did not repeat the name in this sweep entry, and "Sort by: Newest" is the
+  // selected VALUE. An empty name beside content the grammar could not place is not evidence of anything.
+  //
+  // Six false 4.1.2/3.3.2 ASSERTIONS across six government search pages came from treating it as such. The
+  // corpus cannot express it: all 106 of its genuinely unnamed fields announce as a bare "edit".
+  const searchPage = {
+    transcript: [],
+    structure: { formFields: ["combo box, collapsed, Sort by: Newest"] },
+  };
+  // REPORTED, never ASSERTED. Silence was the first fix and it was wrong: it lost three real corpus
+  // positives (`field-followup-select*`), which `rules:gate` caught by noticing the rule no longer covered
+  // every record it owns. The evidence is ambiguous, so the claim must be too.
+  const found = ruleFindings(searchPage);
+  assert.ok(found.length > 0, "the finding must still be reported — a human should look at this select");
+  for (const f of found) {
+    assert.equal(f.mapping, "secondary",
+      `${f.wcag} was ASSERTED on a select whose markup carries <label for="order_by">. A conformance `
+      + "mapping here accuses a publisher of a failure their own markup disproves");
+  }
+});
+
+test("a genuinely unnamed field still fails — bare role, nothing trailing", () => {
+  // The other direction, and the 106 corpus positives all look like this.
+  const unlabelled = { transcript: [], structure: { formFields: ["edit"] } };
+  const found = ruleFindings(unlabelled);
+  assert.ok(found.length >= 1, "the corpus's own unnamed-field shape stopped being reported");
+  assert.ok(found.some((f) => f.wcag.startsWith("4.1.2")));
+});

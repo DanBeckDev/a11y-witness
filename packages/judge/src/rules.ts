@@ -355,8 +355,27 @@ function statesOf(announcement: string | null | undefined): string[] {
 
 function addUnnamedControls(entries: string[], channel: Channel, add: AddFinding): void {
   for (const entry of entries) {
-    for (const object of parseAnnouncement(entry, channel).objects) {
-      reportIfUnnamed(object, entry, channel, add);
+    const parsed = parseAnnouncement(entry, channel);
+    // TRAILING CONTENT MEANS THE EVIDENCE IS AMBIGUOUS, so the finding is REPORTED and not ASSERTED.
+    //
+    // A select's value trails its role, and its name leads it. The corpus shows both shapes:
+    //
+    //     unnamed  "combo box, collapsed, English"
+    //     named    "Tour language, combo box, collapsed, English"
+    //
+    // and caselaw.nationalarchives.gov.uk announced `"combo box, collapsed, Sort by: Newest"` — the UNNAMED
+    // shape — for a select whose markup is sound. Checked, not inferred: `<label for="order_by">Order
+    // results by</label>`, one `id="order_by"` on the page, no duplicate ids, label not hidden. NVDA simply
+    // did not repeat the name in that sweep entry.
+    //
+    // So the two are INDISTINGUISHABLE here, and the honest answer is neither silence nor an accusation.
+    // Suppressing it outright lost three real corpus positives (`field-followup-select*`), which `rules:gate`
+    // caught; asserting it accused six government publishers of a failure their markup disproves.
+    // `secondary` mapping makes `criterionOutcomes` report `cantTell` — the finding is kept, quoted, and
+    // handed to a human. ADR 0021 in the other direction: claim strength must match evidence strength.
+    const ambiguous = parsed.trailing.length > 0;
+    for (const object of parsed.objects) {
+      reportIfUnnamed({ object, entry, channel, ambiguous }, add);
     }
   }
 }
@@ -366,9 +385,22 @@ function addUnnamedControls(entries: string[], channel: Channel, add: AddFinding
  * refused it — which is that rule doing its job: the decision below is a separate thing from walking the
  * announcements, and reads better named.
  */
-function reportIfUnnamed(
-  object: { name: string; role: string }, entry: string, channel: Channel, add: AddFinding,
-): void {
+/**
+ * One control, one decision.
+ *
+ * Takes an OBJECT rather than five positionals, and specifically rather than a trailing boolean: this
+ * repo's conventions forbid a flag argument, `max-params` caps at four, and `report(o, e, c, add, true)`
+ * at a call site tells a reader nothing about what the `true` means.
+ */
+interface UnnamedCheck {
+  object: { name: string; role: string };
+  entry: string;
+  channel: Channel;
+  /** The announcement carried text the grammar could not place, so an absent name is not decisive. */
+  ambiguous: boolean;
+}
+
+function reportIfUnnamed({ object, entry, channel, ambiguous }: UnnamedCheck, add: AddFinding): void {
   if (!REPORTABLE_CONTROL_ROLES.has(object.role)) return;
   // The marker requirement is a POLICY about the channel, not about the grammar: in a read-through an empty
   // name can be a line-wrap artefact, while a sweep entry is one object NVDA was asked to describe.
@@ -380,7 +412,12 @@ function reportIfUnnamed(
   // CONFORMANCE-mapped: 4.1.2 requires a programmatically determinable NAME for every user-interface
   // component, and a control the screen reader announces as a bare role has none. The announcement is not a
   // proxy for the failure, it IS the failure — a user meets a control they cannot identify.
-  add("4.1.2 Name, Role, Value", "Control announced with a role but no accessible name", entry, "conformance");
+  add("4.1.2 Name, Role, Value",
+    ambiguous
+      ? "Control announced with no accessible name, but its announcement also carries unplaced text — the "
+        + "name may exist and not have been repeated. Needs a human to confirm."
+      : "Control announced with a role but no accessible name",
+    entry, ambiguous ? "secondary" : "conformance");
 
   // AND 3.3.2, for an input specifically. An input the screen reader announces as a bare role has no label
   // at all — W3C's own description of the failure is a screen reader announcing "edit text" with no
@@ -397,7 +434,10 @@ function reportIfUnnamed(
   // false accusations on conformant form pages. Emitting the criterion the rule already decides is what
   // lets the head go.
   if (isInput(entry)) {
-    add("3.3.2 Labels or Instructions", "Input announced with a role but no label", entry, "conformance");
+    add("3.3.2 Labels or Instructions",
+      ambiguous ? "Input announced with no label, but unplaced text in the announcement leaves it open"
+        : "Input announced with a role but no label",
+      entry, ambiguous ? "secondary" : "conformance");
   }
 }
 

@@ -67,6 +67,16 @@ export type ParsedAnnouncement = {
   leaving: string[];
   /** Every object in the phrase. NVDA packs several into one line; 8.1% of real-page link lines carry two. */
   objects: ParsedObject[];
+  /**
+   * Tokens the grammar could not assign, kept rather than dropped.
+   *
+   * Silently discarding them cost six false 4.1.2 assertions on real search pages.
+   * `"combo box, collapsed, Sort by: Newest"` parsed to a combo box with an EMPTY name — and the select is
+   * properly labelled `<label for="order_by">Order results by</label>`, so the empty name was NVDA not
+   * repeating it, and "Sort by: Newest" was the selected VALUE, thrown away. An empty name plus discarded
+   * content reads exactly like an unnamed control and is not one.
+   */
+  trailing: string[];
   raw: string;
 };
 
@@ -272,7 +282,7 @@ export function parseAnnouncement(raw: string, channel: Channel): ParsedAnnounce
     if (object) objects.push({ ...object, states: [...leadingStates, ...object.states] });
     if (tokens.length === before) break;
   }
-  return { containers, leaving, objects, raw };
+  return { containers, leaving, objects, trailing: tokens.filter((t) => t.length > 0), raw };
 }
 
 /**
