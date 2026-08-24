@@ -403,7 +403,20 @@ Promise<ScorerOutput> {
   const python = options.python ?? resolved.python;
   const script = options.script ?? resolved.script;
   return new Promise((resolve, reject) => {
-    const child = spawn(python, [script, "--stdin"], { stdio: ["pipe", "pipe", "pipe"] });
+    // `A11Y_SCORER_MODEL` names a CANDIDATE to evaluate instead of the shipped weights.
+    //
+    // Only `calibrate-abstention.mjs` honoured it, so `npm run eval` -- the judge-quality gate -- could
+    // measure ONLY what was already released. A gate that cannot examine the thing being decided cannot
+    // gate the decision: a candidate's judge quality was unknowable until after promotion, which is the
+    // wrong way round and is why this went unnoticed.
+    //
+    // `--evaluating` travels with it for the same reason the sweep passes it: a fresh candidate is marked
+    // ineligible BECAUSE its gates have not run, so the guard that refuses ineligible weights would refuse
+    // the very run that would qualify them. Naming a model is the declaration of purpose; with no model
+    // named, nothing is passed and the strict default stands over the shipped artefact.
+    const candidate = process.env.A11Y_SCORER_MODEL;
+    const args = [script, "--stdin", ...(candidate ? ["--model", candidate, "--evaluating"] : [])];
+    const child = spawn(python, args, { stdio: ["pipe", "pipe", "pipe"] });
     let out = "", err = "";
     const timer = setTimeout(() => {
       child.kill();
