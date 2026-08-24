@@ -130,6 +130,37 @@ probe constant, a name normaliser, a calibration sweep, a promotion gate and a t
 
 ## The goal, and the sequence to reach it
 
+> **PROGRESS, 2026-08-24 evening.** Phases 1-3 worked end to end. Phase 2 and 3 are closed; Phase 1 is
+> closed as WORK and its last two validations are waiting on capture time rather than on a decision.
+>
+> | | |
+> |---|---|
+> | **1.1** never-fired audit | **DONE** — `npm run rules:coverage`, in `release:gate`, `candidate:gate` and the lab catalogue. Authoritative run named exactly the five predicted. |
+> | **1.2** 2.4.3's evidence | **DONE in code** — the sweep records `prevCount`, so document order is recoverable; the rule abstains without it. Validating needs the recapture below. |
+> | **1.3** validate or retire the five | **RESOLVED, three different ways.** `1.3.1` and `2.4.4` are scorer-covered, so an unvalidated rule does not leave the criterion uncovered — reported, not blocking. `2.4.1` and `2.4.2` could never fire because `probeNavigation` was never requested for real pages; now on. `1.4.2` reports the true reason at last: its evidence channel is absent from every real capture. |
+> | **1.4** re-measure on the product path | **WAITING on the recapture.** |
+> | **2.1** the recall-1.000 demand | **DONE** — silent blocks, missing is reported, losing ground is caught on acceptance where two models are comparable. |
+> | **2.2** the missing baseline | **DONE** — a schema gap is now a loud NOTE saying every regression check below it is inert, rather than an empty list that reads as "no regressions". |
+> | **2.3** free vetoes (B8) | **DONE** — 225 → 67, and 225 → **8** by the measure that matters: 59 sit on rule-decided heads whose model output is suppressed. |
+> | **2.4** keep the bound honest | **DONE** — `exact: false` recorded, with what closing it would take. |
+> | **3.1** grow the corpus | **DONE** — calibration 38 → **50**, every URL verified 200 first, which caught one 404. Capture queued. |
+> | **3.2** what the product promises | **DECIDED** — split by layer. Rules keep "zero" because it is a measurement; the scorer states a bound because its zero was the constraint restated. |
+> | **3.3** the threshold cliff | **DONE** — a head at the extreme is named as NO MARGIN, as a note rather than a blocker, because nothing is wrong with it except that it has none. |
+>
+> **What the recapture is for, and why it is the long pole.** Turning on `probeNavigation` and recording
+> `prevCount` are both capture changes, so 2.4.1, 2.4.2 and 2.4.3 cannot be validated against evidence
+> collected before them. Real-page captures are never cached, so this is unavoidable rather than a cache
+> miss. It roughly doubles per-page capture time, which is the cost of asking the page two more questions.
+>
+> **One thing found mid-run that is worth keeping.** The fleet went INCONSISTENT *during* a corpus run:
+> a worker that had been down came back with Edge auto-updated to `.107` against the fleet's pinned
+> `.101`. `fleet:status` reports consistency before a run and nothing rechecks it during one. Re-pinning
+> reported success while the binary stayed on `.107` — the vendor-bookkeeping-versus-file trap this repo
+> already records, recurring. Left visible rather than papered over: `provenance.browserVersion` is
+> stamped per capture, so which build produced which page is auditable, and whether `.101` and `.107`
+> announce differently is a question this project has never answered and now can.
+
+
 **The end state:** someone who is not the author installs this, points it at a site they own, and gets
 screen-reader-witnessed findings they can act on — each carrying either an assertion the evidence settles
 or a referral worth a person's time, with a stated error bound that holds on pages nobody trained on.
