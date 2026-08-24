@@ -1,0 +1,252 @@
+/**
+ * One grammar for what NVDA says, in one place.
+ *
+ * ## Why this exists
+ *
+ * Six defects in one week shared a single cause: there was no shared model of NVDA's utterance grammar, so
+ * every consumer re-derived a fragment of it with its own regex, in three languages, and each encoded a
+ * different incomplete guess.
+ *
+ *   - `role_name` anchored the role at the START, and read a minority of announcements.
+ *   - `role_name` then ran to END OF LINE, so three links announced together became one name.
+ *   - `ANNOUNCED_ROLE` had to learn that roles STACK as prefixes.
+ *   - `LEADING_CONTAINERS` strips a container announced role-first and misses one announced NAME-first, so
+ *     every GOV.UK Design System example — each inside a named iframe — reported a named control as unnamed.
+ *   - `beginsWithRole` confused a landmark with a container, and reported three conformant W3C pages as
+ *     4.1.2 failures.
+ *   - Signal regexes broke whenever a container prefix appeared in front of the text they matched.
+ *
+ * ## The fact that explains all of them
+ *
+ * **The announcement order depends on how the caret got there.** NVDA's `getPropertiesSpeech` appends name,
+ * then role, then states, as separate elements — but browse-mode arrow navigation reverses it for the
+ * focused object, which nvaccess/nvda#11102 records as a known behaviour. Our two evidence channels navigate
+ * differently, so they carry opposite orders. Measured over 300 corpus captures, with no overlap at all:
+ *
+ *     structure.*  (quick-nav sweeps)        name-first   884   role-first     0
+ *     transcript   (arrow read-through)      name-first     0   role-first   880
+ *
+ * So a parser cannot infer the order from the text — and must not try. It is TOLD, because the caller knows
+ * which sweep produced the string. That is what makes this deterministic rather than another heuristic.
+ *
+ * ## The grammar
+ *
+ *     announcement := outOf* container* object+
+ *     container    := [name ","] containerRole ","     "Radios example, frame,"  |  "main landmark,"
+ *     object       := name "," role [...]              sweep:      "Departure date, edit"
+ *                   | role ["," level] "," name        transcript: "heading, level 1, Marina 022 schedule"
+ *
+ * Containers are always name-then-role, in both channels: the reversal applies to the focused object only.
+ * A name is simply absent when there is none, which is why `"edit, ,"` means an UNNAMED edit and not a
+ * parse failure — and that distinction is the whole of 4.1.2.
+ *
+ * ## What this deliberately is not
+ *
+ * Not built on NVDA's internal `SpeechSequence`, though an add-on could expose it. W3C's AT Driver — the
+ * emerging standard for exactly this — defines `interaction.capturedOutput` as plain text, "without
+ * speech-specific markup or annotations". Parsing the rendered string is where the ecosystem is going, and
+ * a structured side-channel would cost a full recapture for evidence recoverable from what we already hold.
+ */
+
+/** Which navigation produced the string, and therefore which order its object is in. */
+export type Channel = "sweep" | "transcript";
+
+export type ParsedObject = {
+  /** The accessible name. Empty string means NVDA announced none — which IS the 4.1.2 finding. */
+  name: string;
+  /** The control's own role, lower-cased. Empty when the phrase is prose rather than a control. */
+  role: string;
+  /** `checked`, `collapsed`, `current page`, `clickable`, `level 1` … in the order announced. */
+  states: string[];
+};
+
+export type ParsedAnnouncement = {
+  /** Enclosing context NVDA prefixed, outermost first. A landmark or a named iframe is context, not a role. */
+  containers: { name: string; role: string }[];
+  /** `out of table`, `out of list` … NVDA announcing that the caret LEFT something. */
+  leaving: string[];
+  /** Every object in the phrase. NVDA packs several into one line; 8.1% of real-page link lines carry two. */
+  objects: ParsedObject[];
+  raw: string;
+};
+
+/**
+ * Roles that CONTAIN other things. A leading one is context, never the control's own role.
+ *
+ * Separate from CONTROL_ROLES because the distinction decides whether a leading token may be stripped, and
+ * getting it wrong is what produced the two false 4.1.2 accusations this module was written for.
+ */
+export const CONTAINER_ROLES = Object.freeze([
+  "banner landmark", "complementary landmark", "content info landmark", "navigation landmark",
+  "main landmark", "search landmark", "form landmark", "region landmark",
+  "landmark", "region", "frame", "grouping", "group", "dialog", "tree view", "menu bar", "tab control",
+  "list", "table", "form", "article", "banner", "navigation", "main", "blockquote",
+]);
+
+/** Roles a control is announced WITH. A phrase ending or beginning with one names a control. */
+export const CONTROL_ROLES = Object.freeze([
+  "button", "link", "graphic", "heading", "edit text", "edit", "checkbox", "radio button", "radio",
+  "combo box", "list box", "slider", "spin button", "menu item", "menu", "tab", "separator",
+  "progress bar", "status", "cell", "list item",
+  // NOT "clickable": NVDA announces it as a STATE adornment, and listing it here made it win the role match
+  // in "…, grouping, clickable, England, radio button" — so the radio's name was consumed as a prefix and a
+  // properly named control reported as unnamed. The exact defect this module was written to remove.
+  //
+  // NOT "text", "row" or "column" either: they occur in ordinary prose and as table position adornments
+  // ("row 2", "column 2, Stall"), and a role vocabulary that matches prose reports controls that do not
+  // exist. Over-inclusion here is silent; a missing role at least shows up as an unparsed phrase.
+]);
+
+/**
+ * States and adornments NVDA appends. Not part of the name, and not a role.
+ *
+ * `level N` is here rather than in the role because "heading, level 1, Marina" is ONE heading whose level is
+ * an adornment — treating it as a role boundary split the name off every heading in the corpus.
+ */
+const STATE_PATTERNS: readonly RegExp[] = Object.freeze([
+  /^level \d+$/i, /^with \d+ items?$/i, /^\d+ of \d+$/i, /^row \d+$/i, /^column \d+$/i,
+  /^(?:not )?(?:checked|pressed|selected|expanded|collapsed)$/i,
+  /^(?:current page|clickable|visited|read only|required|invalid entry|has auto complete|editable|multi line|blank|bullet|same page|has pop up|busy|unavailable)$/i,
+]);
+
+const LEAVING = /^out of\s+(.+)$/i;
+
+/** Longest first, so "edit text" is not read as "edit" and "main landmark" is not read as "main". */
+const byLengthDesc = (a: string, b: string): number => b.length - a.length;
+const CONTAINERS_ORDERED = [...CONTAINER_ROLES].sort(byLengthDesc);
+const CONTROLS_ORDERED = [...CONTROL_ROLES].sort(byLengthDesc);
+
+const isState = (token: string): boolean => STATE_PATTERNS.some((pattern) => pattern.test(token.trim()));
+const matches = (token: string, vocabulary: readonly string[]): string =>
+  vocabulary.find((role) => token.trim().toLowerCase() === role) ?? "";
+
+/**
+ * Split on commas, keeping empty fields.
+ *
+ * The empty ones are load-bearing: `"edit, , button, Submit"` is an UNNAMED edit followed by a named button,
+ * and dropping the empty token turns the unnamed control — the finding — into a parse artefact.
+ */
+function fields(raw: string): string[] {
+  return raw.split(",").map((part) => part.trim());
+}
+
+/** Consume state adornments from the front, so the object parser meets a role where it expects one. */
+function takeStates(tokens: string[]): string[] {
+  const states: string[] = [];
+  while (tokens.length && isState(tokens[0])) states.push(tokens.shift()!.trim().toLowerCase());
+  return states;
+}
+
+/** Consume `out of X` markers from the front. */
+function takeLeaving(tokens: string[]): string[] {
+  const leaving: string[] = [];
+  while (tokens.length) {
+    const match = LEAVING.exec(tokens[0]);
+    if (!match) break;
+    leaving.push(match[1].trim().toLowerCase());
+    tokens.shift();
+  }
+  return leaving;
+}
+
+/**
+ * Consume container prefixes, which are name-then-role in BOTH channels.
+ *
+ * A container is recognised by its role token; the optional name is the field before it. Only consumed when
+ * the role that follows is a CONTAINER — otherwise `"England, radio button"` would lose its name, which is
+ * the opposite defect and a worse one, since it invents an unnamed control.
+ */
+function takeContainers(tokens: string[]): { name: string; role: string }[] {
+  const containers: { name: string; role: string }[] = [];
+  for (;;) {
+    if (matches(tokens[0] ?? "", CONTAINERS_ORDERED)) {
+      containers.push({ name: "", role: matches(tokens.shift() ?? "", CONTAINERS_ORDERED) });
+      continue;
+    }
+    // A NAMED container: "Radios example, frame". Only two tokens ahead, never a longer scan, so a control
+    // name that happens to precede an unrelated container is not swallowed.
+    const role = matches(tokens[1] ?? "", CONTAINERS_ORDERED);
+    if (role && tokens[0] && !isState(tokens[0]) && !matches(tokens[0], CONTROLS_ORDERED)) {
+      containers.push({ name: tokens[0].trim(), role });
+      tokens.splice(0, 2);
+      continue;
+    }
+    return containers;
+  }
+}
+
+/** `role, [level,] name` — the browse-mode reading order. */
+function takeRoleFirst(tokens: string[]): ParsedObject | null {
+  const role = matches(tokens[0] ?? "", CONTROLS_ORDERED);
+  if (!role) return null;
+  tokens.shift();
+  const states: string[] = [];
+  while (tokens.length && isState(tokens[0])) states.push(tokens.shift()!.trim().toLowerCase());
+  const nameParts: string[] = [];
+  while (tokens.length && !matches(tokens[0], CONTROLS_ORDERED) && !LEAVING.test(tokens[0])) {
+    if (isState(tokens[0])) states.push(tokens.shift()!.trim().toLowerCase());
+    else nameParts.push(tokens.shift()!);
+  }
+  return { name: nameParts.join(", ").trim(), role, states };
+}
+
+/** `name, role, [states]` — the quick-navigation reading order. */
+function takeNameFirst(tokens: string[]): ParsedObject | null {
+  const roleAt = tokens.findIndex((token) => matches(token, CONTROLS_ORDERED));
+  if (roleAt === -1) return null;
+  const nameParts = tokens.splice(0, roleAt).filter((token) => !isState(token));
+  const role = matches(tokens.shift() ?? "", CONTROLS_ORDERED);
+  const states: string[] = [];
+  while (tokens.length && isState(tokens[0])) states.push(tokens.shift()!.trim().toLowerCase());
+  return { name: nameParts.join(", ").trim(), role, states };
+}
+
+/**
+ * Parse one announcement.
+ *
+ * `channel` is required and never inferred. The order is a property of how the caret moved, which the caller
+ * knows and the text does not reliably reveal — guessing it is how six separate regexes each got it wrong.
+ */
+export function parseAnnouncement(raw: string, channel: Channel): ParsedAnnouncement {
+  const tokens = fields(raw);
+  const containers: { name: string; role: string }[] = [];
+  const leaving: string[] = [];
+  const objects: ParsedObject[] = [];
+  const take = channel === "transcript" ? takeRoleFirst : takeNameFirst;
+
+  // A loop, because NVDA packs several objects into one line — measured at 8.1% of real-page announcements
+  // that mention a link, against 0% in the corpus, which is why a single-object parser looked correct here
+  // and merged three links into one name out there.
+  for (let guard = 0; guard < 12 && tokens.length; guard += 1) {
+    const before = tokens.length;
+    leaving.push(...takeLeaving(tokens));
+    containers.push(...takeContainers(tokens));
+    // Leading states, and they are common: "bullet, same page, link, Annual review 2019" begins with two.
+    // Without this the object parser met "bullet" where it expected a role and returned nothing — and a
+    // parser that returns nothing is indistinguishable from a page with no links, which is the failure this
+    // module exists to end.
+    const leadingStates = takeStates(tokens);
+    const object = take(tokens);
+    if (object) objects.push({ ...object, states: [...leadingStates, ...object.states] });
+    if (tokens.length === before) break;
+  }
+  return { containers, leaving, objects, raw };
+}
+
+/**
+ * The accessible name of the first object announced with `role`, or "" when it has none.
+ *
+ * The replacement for `link_name`/`graphic_name`. Empty means NVDA announced no name, which is evidence and
+ * not an error — the distinction the whole of 4.1.2 rests on.
+ */
+export function nameOf(raw: string, role: string, channel: Channel): string {
+  const wanted = role.trim().toLowerCase();
+  const found = parseAnnouncement(raw, channel).objects.find((object) => object.role === wanted);
+  return found ? found.name : "";
+}
+
+/** Does this phrase announce a control of `role` at all, named or not? */
+export function announces(raw: string, role: string, channel: Channel): boolean {
+  const wanted = role.trim().toLowerCase();
+  return parseAnnouncement(raw, channel).objects.some((object) => object.role === wanted);
+}
