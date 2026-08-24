@@ -74,6 +74,32 @@ can and cannot falsify which assumptions.
 - A baseline is required to compare against, so the shipped model's sweep is now an artefact with a purpose
   rather than a file left over from calibration.
 
+## Outcome, measured 2026-08-24
+
+The corpus remedy was applied and swept: a conformant `component-index` — a list of peer links, one named
+"Details" — added to 44 cases, injected into both variants, excluded from the criteria whose own evidence it
+would disturb.
+
+| | shipped | before the corpus fix | after |
+|---|---|---|---|
+| false accusations on conformant real pages | 0 | **12 of 18** | **3 of 18** |
+| publisher-declared inaccessible caught | 2 of 3 | 3 of 3 | **3 of 3** |
+
+**All eleven 2.4.4 accusations are gone** — the exact class the change targeted — while the extra true catch
+was kept. `vague_link_present` now appears on 35 conformant records against 0 before, so the head can no
+longer read the word's presence as proof of failure.
+
+Cost: 44 new cases and 88 captures. **Zero of 1,357 existing cases changed a byte**, verified by hashing
+every case's pages before and after rather than assumed. Furniture is keyed on an FNV-1a hash of the case ID,
+so appending invalidates nothing; a sixth `SCALE_BUCKETS` entry would have moved `hash % 5` to `hash % 6` and
+cost a full recapture.
+
+The three that remain are a different mechanism, diagnosed and not yet fixed: a **named** container is
+announced name-first (`"Radios second example, frame, …"`), and `LEADING_CONTAINERS` in `rules.ts` strips
+only role-first, unnamed ones. Every GOV.UK Design System example sits in a named iframe, so the leftover
+begins with a role token and a named control reads as unnamed. It is the same name-before-role asymmetry as
+`role_name`, one layer along, and no corpus page has an iframe.
+
 ## Alternatives rejected
 
 - **Widen the synthetic hold-out further.** Already done, and it produced the false clean this record exists
