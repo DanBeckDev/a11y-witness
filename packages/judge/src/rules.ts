@@ -667,13 +667,39 @@ const SHARES_ONE_TAB_STOP = new Set([
   "radio button", "radio", "tab", "menu item", "tree item", "option", "grid cell", "cell",
 ]);
 
-/** Announced controls as name+role, so a rule can ask WHICH KIND of control it is about. */
-function controlsWithRoles(entries: string[] | undefined): { name: string; role: string }[] {
-  const out: { name: string; role: string }[] = [];
+/**
+ * States that mean a control's NAME may change under it, so it cannot be tracked by name across time.
+ *
+ * A disclosure button is labelled "Expand Quick start" while collapsed and "Collapse Quick start" while
+ * expanded. A capture spans an interaction — `probeDisclosure` activates a control unconditionally — so
+ * the structural sweep can record BOTH labels for one button while the focus probe, running afterwards,
+ * only ever sees the second.
+ *
+ * Measured 2026-08-24 on `docs.sign-in.service.gov.uk`, verbatim from one capture:
+ *
+ *     sweep   "clickable, Expand Quick start, button, collapsed"
+ *     sweep   "clickable, Collapse Quick start, button, expanded"
+ *     focus   "Collapse Quick start, button, focused, expanded"
+ *
+ * 2.1.1 reported "Expand Quick start" as a control the keyboard cannot reach. It is the same button,
+ * before it was pressed.
+ *
+ * As with `SHARES_ONE_TAB_STOP`, this is the absence of a claim rather than a narrower one: the capture
+ * cannot tell a control that was RENAMED by an interaction from one nothing can reach.
+ */
+const NAME_CHANGES_WITH_STATE = new Set([
+  "collapsed", "expanded", "pressed", "not pressed",
+]);
+
+/** Announced controls as name, role and states, so a rule can ask what KIND of control it is. */
+function controlsWithRoles(
+  entries: string[] | undefined,
+): { name: string; role: string; states: string[] }[] {
+  const out: { name: string; role: string; states: string[] }[] = [];
   for (const entry of entries ?? []) {
     for (const object of parseAnnouncement(String(entry), "sweep").objects) {
       const name = object.name.replace(FOCUS_ONLY_STATES, " ").replace(/[\s,]+/g, " ").trim();
-      if (name) out.push({ name, role: object.role });
+      if (name) out.push({ name, role: object.role, states: object.states });
     }
   }
   return out;
@@ -705,10 +731,13 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
   // A member of a composite widget is reached by ARROW keys, not Tab — see `SHARES_ONE_TAB_STOP`. Its
   // absence from the tab order is the specified behaviour, and this probe presses only Tab, so the
   // capture cannot tell that from a control nothing can reach.
-  const compositeMembers = new Set(controlsWithRoles(input.structure?.formFields)
-    .filter((c) => SHARES_ONE_TAB_STOP.has(c.role)).map((c) => c.name));
+  const announced = controlsWithRoles(input.structure?.formFields);
+  const untrackable = new Set(announced
+    .filter((c) => SHARES_ONE_TAB_STOP.has(c.role)
+      || c.states.some((state) => NAME_CHANGES_WITH_STATE.has(state)))
+    .map((c) => c.name));
   const missed = reading.filter((name) =>
-    trackable.has(name) && !tabbed.has(name) && !compositeMembers.has(name));
+    trackable.has(name) && !tabbed.has(name) && !untrackable.has(name));
   if (!missed.length) return;
   add("2.1.1 Keyboard",
     "The page announces a control the keyboard cannot reach: Tab passed the point where it sits and never "
