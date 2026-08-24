@@ -215,6 +215,23 @@ function takeContainers(tokens: string[]): { name: string; role: string }[] {
       containers.push({ name: "", role: containerAt(tokens.shift() ?? "") });
       continue;
     }
+    // NVDA INTERLEAVES A STATE BETWEEN CONTAINERS, and this loop used to stop at the first one.
+    // Measured 2026-08-24 on gov.scot and mygov.scot, verbatim:
+    //
+    //     "main landmark, clickable, form, clickable, Continue, button"
+    //
+    // The loop consumed `main landmark`, met `clickable`, and returned — so `form` was never taken as a
+    // container and the object parser read the whole tail as a name, giving "form Continue". That is the
+    // container-prefix defect this module exists to prevent, arriving through a state token instead of a
+    // role one, and it made 2.1.1 report `"form Continue"` as a keyboard-unreachable control on four
+    // conformant government pages.
+    //
+    // Only stepped over when a bare container FOLLOWS immediately: a state before a control belongs to
+    // that control, and consuming it here would strip states from the object that owns them.
+    if (isState(tokens[0] ?? "") && containerAt(tokens[1] ?? "")) {
+      tokens.shift();
+      continue;
+    }
     // A NAMED container: "Radios example, frame". Only two tokens ahead, never a longer scan, so a control
     // name that happens to precede an unrelated container is not swallowed.
     const role = containerAt(tokens[1] ?? "");

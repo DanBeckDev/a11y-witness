@@ -124,3 +124,34 @@ test("a container adornment written INSIDE the token is still a container", () =
   assert.deepEqual(parsed.containers, [{ name: "", role: "table" }]);
   assert.equal(parsed.objects[0].name, "", "the link is unnamed; the table is context");
 });
+
+test("a STATE interleaved between containers does not end the container prefix", () => {
+  // Verbatim from gov.scot and mygov.scot. NVDA puts `clickable` between the landmark and the form:
+  //
+  //     "main landmark, clickable, form, clickable, Continue, button"
+  //
+  // The container loop stopped at the first `clickable`, so `form` was never taken as a container and
+  // the object parser read the tail as a name — "form Continue". 2.1.1 then reported that as a
+  // keyboard-unreachable control on four conformant government pages.
+  const parsed = parseAnnouncement("main landmark, clickable, form, clickable, Continue, button", "sweep");
+  assert.deepEqual(parsed.containers.map((c) => c.role), ["main landmark", "form"]);
+  assert.equal(parsed.objects.length, 1);
+  assert.equal(parsed.objects[0].name, "Continue");
+  assert.equal(parsed.objects[0].role, "button");
+});
+
+test("a state before a CONTROL still belongs to that control", () => {
+  // The narrow condition matters: only a state followed IMMEDIATELY by a bare container is stepped over.
+  // A state before a control is that control's, and consuming it here would strip it from the object.
+  const parsed = parseAnnouncement("clickable, Expand Quick start, button, collapsed", "sweep");
+  assert.deepEqual(parsed.containers, []);
+  assert.equal(parsed.objects[0].name, "Expand Quick start");
+  assert.ok(parsed.objects[0].states.includes("clickable"));
+  assert.ok(parsed.objects[0].states.includes("collapsed"));
+});
+
+test("a NAMED control before a container role keeps its name", () => {
+  // The opposite defect, and the module's comment calls it the worse one: inventing an unnamed control.
+  const parsed = parseAnnouncement("England, radio button, not checked", "sweep");
+  assert.equal(parsed.objects[0].name, "England");
+});
