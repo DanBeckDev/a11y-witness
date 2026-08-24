@@ -147,6 +147,24 @@ probe constant, a name normaliser, a calibration sweep, a promotion gate and a t
 > | **3.2** what the product promises | **DECIDED** — split by layer. Rules keep "zero" because it is a measurement; the scorer states a bound because its zero was the constraint restated. |
 > | **3.3** the threshold cliff | **DONE** — a head at the extreme is named as NO MARGIN, as a note rather than a blocker, because nothing is wrong with it except that it has none. |
 >
+> **MEASURED on the first 27 recaptured pages, split by whether they carry the new mark:**
+>
+> | on conformant calibration pages | before | after |
+> |---|---|---|
+> | `2.4.3` focus order | 71% | **33%** |
+> | `2.1.1` keyboard unreachable | 66% | **41%** |
+> | `2.4.2` stale route title | never fired on a real page, ever | **fires on one** |
+>
+> The evidence is now the right evidence, which is the claim worth making: a 2.4.3 finding reads
+> `["Accept cookies","Reject cookies","Search",…]` — cookies first, then search, then content, which is
+> document order — where before it read the same list reversed. What remains are genuine order
+> differences, some of them small: one page differs only by `"Copy code"` and `"Nunjucks"` transposing.
+>
+> **Both rules are still noisier than they should be, and that is now a question about the RULE rather
+> than about the evidence.** Whether a two-element transposition warrants a referral is the judgement
+> `addBrokenFocusOrder`'s own comment says it stops short of — worth deciding deliberately, and it can
+> only be asked now that the comparison is sound. They are `cantTell` referrals, not assertions.
+>
 > **What the recapture is for, and why it is the long pole.** Turning on `probeNavigation` and recording
 > `prevCount` are both capture changes, so 2.4.1, 2.4.2 and 2.4.3 cannot be validated against evidence
 > collected before them. Real-page captures are never cached, so this is unavoidable rather than a cache
