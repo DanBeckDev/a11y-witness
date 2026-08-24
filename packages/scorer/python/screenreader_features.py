@@ -195,10 +195,54 @@ def sha256(path: Path) -> str:
             digest.update(block)
     return digest.hexdigest()
 
+#: Must equal `MODEL_INPUT_VERSION` in packages/scorer/src/evidence-units.ts. Two languages, one fact, so
+#: `test_input_contract_version.py` pins them equal — the third remedy, for a duplication that is forced
+#: because the writer is Node and the reader is Python.
+MODEL_INPUT_VERSION = 2
+
+#: How to rebuild each dataset, by the path it lives at. Named rather than inferred: a reader who has just
+#: been refused needs the command, and "re-export something" is the kind of instruction that gets ignored.
+REBUILD_COMMAND = {
+    "with-realism": "npm run lab:job -- -e job=build-realism",
+    "screenreader-evidence": "npm run lab:job -- -e job=export",
+    "repeat-": "npm run lab:job -- -e job=export-acceptance   (exports EVERY repeat)",
+}
+
+
+def assert_input_contract(records: list[dict[str, Any]], path: Any) -> None:
+    """Refuse a dataset built under an older input contract, at LOAD rather than mid-featurize.
+
+    Both dataset failures on 2026-08-24 were this: a realism tier and an acceptance dataset built before
+    `parsed` existed. Each surfaced as a RuntimeError deep inside `structured_feature_values`, after the
+    encoder had loaded, one job at a time. The condition was knowable from the first record.
+
+    Absent version means an OLD export, not a valid one: the field is written by every current writer, so
+    its absence is exactly the staleness being detected.
+    """
+    if not records:
+        return
+    found = records[0].get("input", {}).get("inputVersion")
+    if found == MODEL_INPUT_VERSION:
+        return
+    name = str(path)
+    rebuild = next((cmd for key, cmd in REBUILD_COMMAND.items() if key in name), "re-export it")
+    raise SystemExit(
+        f"REFUSING to read {name}: it was built under model-input contract "
+        f"{found if found is not None else 'pre-versioning'}, and this code reads {MODEL_INPUT_VERSION}.\n"
+        f"  Records from an older contract are missing fields the featurizer requires, so every number "
+        f"computed from them would describe a different pipeline.\n"
+        f"  Rebuild it:  {rebuild}"
+    )
+
+
 def read_records(path: Path) -> list[dict[str, Any]]:
     records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     if not records:
         raise RuntimeError(f"no training records in {path}")
+    # Checked HERE because this is the one load point every reader shares -- the trainer and the acceptance
+    # evaluator both arrive through it. Guarding at the call sites instead would be the same "fix applied at
+    # one call site" that has cost this repo four separate defects, twice today.
+    assert_input_contract(records, path)
     for index, record in enumerate(records, start=1):
         input_data = record.get("input", {})
         leaked = sorted(FORBIDDEN_INPUT_KEYS.intersection(input_data))

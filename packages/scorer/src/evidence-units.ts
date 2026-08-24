@@ -159,6 +159,18 @@ export const producerFeedsModel = (producer: string): boolean =>
  *
  * `annotateCapture` is called HERE rather than by each caller, for the same reason.
  */
+/**
+ * The shape of `modelInput`'s output. Bumped when a consumer would MISREAD an older record.
+ *
+ * Both dataset failures on 2026-08-24 were contract staleness, not content staleness: a `with-realism.jsonl`
+ * and an acceptance dataset built before `parsed` existed. Each died deep in the featurizer with a stack
+ * trace, one job at a time, and each cost a full train or evaluate cycle to discover.
+ *
+ * Recorded per record so any consumer can refuse at LOAD, naming the dataset and the command that rebuilds
+ * it. A hash of the source would not have caught either: the sources had not changed, the CONTRACT had.
+ */
+export const MODEL_INPUT_VERSION = 2;
+
 export function modelInput(capture: ScorableCapture): Record<string, unknown> {
   const annotated = annotateCapture(capture as unknown as Record<string, unknown>);
   return {
@@ -169,5 +181,6 @@ export function modelInput(capture: ScorableCapture): Record<string, unknown> {
     evidenceUnits: evidenceUnits(capture),
     evidenceText: captureEvidenceText(capture),
     parsed: (annotated as { parsed: unknown }).parsed,
+    inputVersion: MODEL_INPUT_VERSION,
   };
 }

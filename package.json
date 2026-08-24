@@ -13,7 +13,7 @@
     "rules-check": "tsx packages/lab/src/eval/rules-check.ts",
     "test": "npm run test:ts && npm run test:python",
     "test:ts": "tsx --test \"packages/*/src/**/*.test.ts\"",
-    "test:python": "if [ -x .venv/bin/pytest ]; then .venv/bin/pytest packages/*/tests -q; else echo \"SKIPPED: no .venv/bin/pytest — python tests need it. This is an honest skip, not a pass.\"; fi",
+    "test:python": "if [ -x .venv/bin/pytest ]; then .venv/bin/pytest packages/*/tests -q; else echo \"SKIPPED: no .venv/bin/pytest \u2014 python tests need it. This is an honest skip, not a pass.\"; fi",
     "eval:capture": "A11Y_PYTHON=.venv/bin/python node packages/lab/src/harnesses/capture-fixtures.mjs",
     "eval:gate": "A11Y_PYTHON=.venv/bin/python EVAL_GATE=1 EVAL_RUNS=3 tsx packages/lab/src/eval/run.ts",
     "typecheck": "tsc --noEmit",
@@ -83,7 +83,8 @@
     "worker:ctl": "packages/worker-fleet/src/local-worker/worker-ctl.sh",
     "coverage": "c8 npx tsx --test \"packages/*/src/**/*.test.ts\"",
     "identity:rate": "tsx packages/lab/src/harnesses/page-identity-rate.mjs",
-    "verdict:stability": "tsx packages/lab/src/harnesses/occurrence-verdict-stability.mjs"
+    "verdict:stability": "tsx packages/lab/src/harnesses/occurrence-verdict-stability.mjs",
+    "training:export-acceptance:all": "REPEAT=repeat-1 npm run --silent training:export-acceptance && REPEAT=repeat-2 npm run --silent training:export-acceptance"
   },
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
