@@ -42,7 +42,28 @@ function readDeclaration(repoRoot) {
 
 function main() {
   const repoRoot = fileURLToPath(new URL("../", import.meta.url));
-  const verdict = migrationVerdict(readDeclaration(repoRoot));
+  const evaluating = process.argv.includes("--evaluating");
+  const declaration = readDeclaration(repoRoot);
+
+  // `--evaluating` when the run is QUALIFYING a candidate rather than releasing one.
+  //
+  // Without it this gate is circular, and I built the circle: an open migration blocks `release:gate`, and
+  // the migration closes only AT promotion — so the gate that would qualify a promotion refuses to run
+  // because the promotion has not happened. Nothing could ever be promoted through the front door.
+  //
+  // Exactly the shape `score.py` already carries: a fresh candidate is ineligible BECAUSE its gates have
+  // not run, and the guard then refuses the very run that would qualify it. Same fix, same word.
+  //
+  // Releasing is still blocked. `--evaluating` is a declaration of purpose made at the call site, not a way
+  // round the guard, and the message says which mode it ran in so a green line cannot be misread.
+  if (declaration && evaluating) {
+    console.log(`EVALUATING  a migration is open (${declaration.shippedSchema} -> `
+      + `${declaration.pendingSchema}) and this run is qualifying a candidate, not releasing one.\n`
+      + `  Release remains blocked until weights stamped ${declaration.pendingSchema} are promoted.`);
+    process.exit(0);
+  }
+
+  const verdict = migrationVerdict(declaration);
   console.log(verdict.ok ? `OK  ${verdict.message}` : `BLOCKED  ${verdict.message}`);
   process.exit(verdict.ok ? 0 : 1);
 }
