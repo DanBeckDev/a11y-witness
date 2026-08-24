@@ -110,6 +110,15 @@ def raw_capture_record(capture: dict[str, Any], source_id: str) -> dict[str, Any
         "interaction": capture.get("interaction") or {},
         "evidenceUnits": units,
         "evidenceText": "\n".join(unit["text"] for unit in units),
+        # CARRIED THROUGH, never re-derived. The caller annotated the capture with `annotateCapture`
+        # (packages/evidence) because the announcement grammar has exactly one implementation and it is not
+        # this file. Selecting keys here DROPPED it, so a live capture reached the featurizer with no parse
+        # and the abstention sweep died -- the model-input contract existing in a fifth place, which is the
+        # same defect the TypeScript consolidation had just removed from the other four.
+        #
+        # Absent rather than defaulted: `parsed_units` must be able to tell "the caller did not annotate"
+        # from "this page has no form fields", and a `{}` here would make those identical.
+        "parsed": capture.get("parsed"),
     }
     return {
         "input": input_data,
