@@ -80,8 +80,7 @@ def test_the_role_vocabulary_covers_what_the_featurizer_itself_knows_about():
 
 
 def test_the_schema_version_moved_with_the_meaning():
-    # v13: `form_field_named`/`form_field_unnamed` read the PARSE attached by `annotateCapture` instead of
-    # re-deriving the grammar with an anchored role-first regex over a name-first channel. On GOV.UK Design
-    # System captures that regex matched the word "Radio" at the start of the example's TITLE and reported
-    # an unnamed field on a page where every field is named.
-    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v13"
+    # v14: `vague_link_without_context` asks 2.4.4's actual question -- is the link vague AND unsupported
+    # by its container -- where `vague_link_present` asks 2.4.9's (is the text alone vague). The same
+    # capture now yields a new feature, so weights fitted before it were fitted to fewer inputs.
+    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v14"

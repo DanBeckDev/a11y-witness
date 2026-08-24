@@ -80,13 +80,18 @@ export const CONTAINER_ROLES = Object.freeze([
   "banner landmark", "complementary landmark", "content info landmark", "navigation landmark",
   "main landmark", "search landmark", "form landmark", "region landmark",
   "landmark", "region", "frame", "grouping", "group", "dialog", "tree view", "menu bar", "tab control",
+  // "menu" CONTAINS its items, and it is also an ordinary page word: GOV.UK labels its navigation "Menu",
+  // so `"Menu, navigation landmark, list, with 6 items, link, Details"` refused to parse while it was a
+  // control role — the named-container branch rejects a name that looks like a control, and this name did.
+  // Same collision as "clickable" and "text": a role vocabulary that matches real page wording.
+  "menu",
   "list", "table", "form", "article", "banner", "navigation", "main", "blockquote",
 ]);
 
 /** Roles a control is announced WITH. A phrase ending or beginning with one names a control. */
 export const CONTROL_ROLES = Object.freeze([
   "button", "link", "graphic", "heading", "edit text", "edit", "checkbox", "radio button", "radio",
-  "combo box", "list box", "slider", "spin button", "menu item", "menu", "tab", "separator",
+  "combo box", "list box", "slider", "spin button", "menu item", "tab", "separator",
   "progress bar", "status", "cell", "list item",
   // NOT "clickable": NVDA announces it as a STATE adornment, and listing it here made it win the role match
   // in "…, grouping, clickable, England, radio button" — so the radio's name was consumed as a prefix and a

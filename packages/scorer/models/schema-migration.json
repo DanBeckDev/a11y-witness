@@ -1,7 +1,7 @@
 {
-  "pendingSchema": "screenreader-structured-v13",
+  "pendingSchema": "screenreader-structured-v14",
   "shippedSchema": "screenreader-structured-v7",
   "openedAt": "2026-08-24",
-  "why": "The announcement grammar was seven partial regexes across three languages. It is now one parser in packages/evidence, and the featurizer reads the parse instead of re-deriving it, so the same capture yields different form_field_named/form_field_unnamed wherever NVDA prefixed a container or a page's own prose began with a role word. Weights fitted before it were fitted to a different function of the same evidence.",
+  "why": "The announcement grammar is now one parser in packages/evidence, the featurizer reads the parse rather than re-deriving it, and 2.4.4 gained vague_link_without_context -- which asks whether a vague link is unsupported by its container, the question the criterion actually poses. Weights fitted before these were fitted to a different function of the same evidence, and to fewer inputs.",
   "closes": "delete this file in the same commit that promotes weights stamped pendingSchema"
 }
