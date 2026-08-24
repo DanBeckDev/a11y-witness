@@ -10,11 +10,33 @@ The findings it is *for* are the ones a rule scanner structurally cannot produce
 
 > axe tells you an ARIA attribute is wrong. This tells you your form rejects input and **never announces why**, or your filter updates results and **says nothing**.
 
-Those come from the deterministic rule layer, which is exact on every criterion it owns with **zero false positives across 934 conformant records** — re-verified by `npm run rules:gate` on every push. There is also a trained scorer of our own, and it is honest about its limits: it **abstains** on pages unlike its training data and reports those criteria as *unchecked, not clean*, rather than guessing. It also has **measured blind spots**, on the criteria it rather than the rules decides — see [Known limitations](./RELEASE.md#known-limitations-stated-plainly).
+**A finding comes in one of two kinds, and the difference is the point.**
+
+*Asserted* — the evidence decides it, so the tool states the criterion is not satisfied. A control that
+announced `collapsed`, was activated, and still announces `collapsed` has contradicted itself; there is no
+second reading. These come from the deterministic rule layer, which is exact on every criterion it owns with
+**zero false positives across 1,183 conformant records**, re-verified by `npm run rules:gate` on every push.
+
+*Referred* — the evidence is suggestive and the judgement is a human's. Whether a link named "Details" is
+adequate depends on context WCAG itself says may be off-screen; the tool reports `cantTell` in ACT and EARL's
+own vocabulary, quotes the announcement, and points you at it. Measured on 18 real pages whose publishers
+declare them conformant: **0 criteria asserted wrongly, 4 referred.**
+
+That split is deliberate. The trained scorer of our own is what does the referring — it **abstains** on pages
+unlike its training data and reports those criteria as *unchecked, not clean*, and it has **measured blind
+spots** on the criteria it rather than the rules decides. See
+[Known limitations](./RELEASE.md#known-limitations-stated-plainly) and
+[ADR 0021](./docs/adr/0021-the-layer-that-decides-must-be-the-layer-allowed-to-claim.md).
 
 It is three things: a testing pipeline, the reproducible screen-reader infrastructure that makes it runnable by anyone, and an accessibility model of our own being trained on the evidence the first two produce. The first two are what ships and works; the third is real, measured, and not yet carrying real pages.
 
-It is not a rule scanner, and it is not a wrapper around one. Rule engines automate the mechanical layer well — Deque reports [axe-core](https://github.com/dequelabs/axe-core) finds about 57% of WCAG issues automatically and flags the rest for human review. That remainder is largely the **lived experience**: whether what a screen reader announces, as someone reads and operates the page, adds up to something a person can use. Automating that judgment is what this project is for — and where it cannot yet do so honestly, it says so instead of inventing an answer.
+It is not a rule scanner, and it is not a wrapper around one. Rule engines automate the mechanical layer well — Deque reports [axe-core](https://github.com/dequelabs/axe-core) finds about 57% of WCAG issues automatically and flags the rest for human review. That remainder is largely the **lived experience**: whether what a screen reader announces, as someone reads and operates the page, adds up to something a person can use.
+
+This project takes that remainder in two halves. Where a screen reader's own output settles the question, it
+**witnesses and asserts** — tirelessly, reproducibly, on failures no static analysis can reach. Where the
+question genuinely needs a person, it **does the triage instead of the judging**: it finds the moment worth
+looking at and hands over the announcement it rests on. It is not trying to replace the judgement; it is
+trying to make sure nobody has to hunt for where to apply it.
 
 ## Contents
 
