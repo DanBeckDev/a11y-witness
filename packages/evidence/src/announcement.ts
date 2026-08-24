@@ -149,8 +149,29 @@ const CONTROLS_ORDERED = [...CONTROL_ROLES].sort(byLengthDesc);
  */
 const EMPTY_NAME_MARKER = /\uFFFC/g;
 
+/**
+ * Private Use Area codepoints — icon-font glyphs that leak into an accessible name.
+ *
+ * They are not text. An icon font maps a picture onto a codepoint with no assigned meaning, so a screen
+ * reader has nothing to say for it and a comparison between two channels has nothing to match on.
+ *
+ * Measured 2026-08-24 on ico.org.uk, where the same button announced:
+ *
+ *     sweep   "content info landmark, Print this page, button"
+ *     focus   "\uE604 Print this page, button, focused"
+ *
+ * `\s` does not match U+E604 and `trim()` does not remove it, so the two names differed and 2.1.1
+ * reported "Print this page" as a control the keyboard cannot reach — on two ico pages.
+ *
+ * This is the U+FFFC lesson exactly, which `EMPTY_NAME_MARKER` above already carries: a non-text
+ * character riding along in an announcement, invisible in a diff, and decisive in a comparison. The
+ * ranges are the BMP Private Use Area and the two supplementary planes reserved for the same purpose.
+ */
+const ICON_FONT_GLYPH = /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
+
 const cleanName = (parts: string[]): string =>
-  parts.join(", ").replace(EMPTY_NAME_MARKER, "").replace(/\s*,\s*,\s*/g, ", ")
+  parts.join(", ").replace(EMPTY_NAME_MARKER, "").replace(ICON_FONT_GLYPH, "")
+    .replace(/\s*,\s*,\s*/g, ", ")
     .replace(/^[\s,]+|[\s,]+$/g, "").trim();
 
 const isState = (token: string): boolean => STATE_PATTERNS.some((pattern) => pattern.test(token.trim()));

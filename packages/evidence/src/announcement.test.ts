@@ -155,3 +155,26 @@ test("a NAMED control before a container role keeps its name", () => {
   const parsed = parseAnnouncement("England, radio button, not checked", "sweep");
   assert.equal(parsed.objects[0].name, "England");
 });
+
+test("an icon-font glyph in the name is stripped, so two channels can still match", () => {
+  // Measured on ico.org.uk, where one button announced differently in each channel:
+  //
+  //   sweep  "content info landmark, Print this page, button"
+  //   focus  " Print this page, button, focused"
+  //
+  // U+E604 is a Private Use Area codepoint — an icon font's glyph, with no assigned meaning and nothing
+  // for a screen reader to say. `\s` does not match it and trim() does not remove it, so the names
+  // differed and 2.1.1 reported "Print this page" as keyboard-unreachable on two ico pages.
+  //
+  // The U+FFFC lesson, which EMPTY_NAME_MARKER already carries, in a second alphabet.
+  const swept = parseAnnouncement("content info landmark, Print this page, button", "sweep");
+  const focused = parseAnnouncement(" Print this page, button, focused", "sweep");
+  assert.equal(focused.objects[0].name, "Print this page");
+  assert.equal(swept.objects[0].name, focused.objects[0].name,
+    "the same control must reduce to the same name in both channels");
+});
+
+test("ordinary text is untouched by the glyph strip", () => {
+  const parsed = parseAnnouncement("Continue to payment, button", "sweep");
+  assert.equal(parsed.objects[0].name, "Continue to payment");
+});
