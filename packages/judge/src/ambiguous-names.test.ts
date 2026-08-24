@@ -50,6 +50,14 @@ test("an UNAMBIGUOUS reordering is still reported", () => {
   const scrambled = {
     transcript: [],
     structure: { formFields: ["Full name, edit", "Email, edit", "Postcode, edit"] },
+    // The sweep mark is REQUIRED now, and this fixture gaining one is the point rather than an
+    // inconvenience: `structure.formFields` is the sweep's raw output, whose backward half is reversed,
+    // so it is not reading order and 2.4.3 is entirely about order. `prevCount: 0` says the caret was at
+    // the top and the whole sweep ran forwards, which is what makes this array document order.
+    diagnostics: [{
+      event: "sweep", type: "formField", prevCount: 0,
+      phrases: ["Full name, edit", "Email, edit", "Postcode, edit"],
+    }],
     interaction: {
       focusOrder: ["Postcode, edit, focused", "Full name, edit, focused", "Email, edit, focused"],
     },

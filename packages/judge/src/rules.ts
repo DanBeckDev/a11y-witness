@@ -34,6 +34,8 @@ import type { Finding, RequirementMapping } from "./judge.js";
  * JudgeInput is assignable to this). */
 export interface RuleInput {
   transcript: string[];
+  /** Capture diagnostics. `readingOrder` needs the sweep mark to know which half of a sweep is reversed. */
+  diagnostics?: unknown[];
   structure?: { formFields?: string[]; headings?: string[]; links?: string[]; graphics?: string[] };
   interaction?: {
     controls?: string[];
@@ -710,6 +712,31 @@ function addInertSkipLink(input: RuleInput, add: AddFinding): void {
 }
 
 /**
+ * A structural sweep in DOCUMENT order, or null when this capture cannot say.
+ *
+ * `collectByType` walks backwards from the caret and then forwards, pushing both into one array. So the
+ * result is `reverse(before the caret)` followed by `(after it, in order)` — and read raw it is not
+ * reading order at all. Measured on check-for-flooding 2026-08-24, `structure.formFields` was exactly
+ * REVERSE document order, and `addBrokenFocusOrder` compared tab order against it and reported a failure
+ * on 25 of 35 conformant real pages.
+ *
+ * The split index is `prevCount` on the sweep diagnostic. **Null when it is absent**, which is every
+ * capture taken before 2026-08-24 — and null must make no claim. Guessing that an unmarked array happens
+ * to be in order is how this rule came to accuse three quarters of its conformant pages.
+ */
+function sweepInDocumentOrder(input: RuleInput, type: string): string[] | null {
+  for (const mark of input.diagnostics ?? []) {
+    const m = mark as { event?: string; type?: string; prevCount?: number; phrases?: unknown };
+    if (m?.event !== "sweep" || m.type !== type) continue;
+    if (typeof m.prevCount !== "number" || !Array.isArray(m.phrases)) return null;
+    const phrases = m.phrases.map(String);
+    // The backward half, un-reversed, then the forward half as recorded.
+    return [...phrases.slice(0, m.prevCount).reverse(), ...phrases.slice(m.prevCount)];
+  }
+  return null;
+}
+
+/**
  * 2.4.3 — Tab visits the controls in a different order from the one the page reads in.
  *
  * PARTIAL coverage, and the boundary is the honest one: whether an order "preserves meaning" in general is
@@ -728,7 +755,12 @@ function addInertSkipLink(input: RuleInput, add: AddFinding): void {
  * on every page with a nav bar.
  */
 function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
-  const reading = comparableNames(input.structure?.formFields);
+  // DOCUMENT order, or no claim. `structure.formFields` is the sweep's raw output, whose first half is
+  // reversed — see `readingOrder`. This rule is entirely about ORDER, so an array whose order is unknown
+  // is not weak evidence, it is no evidence.
+  const documentOrder = sweepInDocumentOrder(input, "formField");
+  if (!documentOrder) return;
+  const reading = comparableNames(documentOrder);
   const tabbed = firstVisitEach(comparableNames(input.interaction?.focusOrder));
   if (reading.length < 2 || tabbed.length < 2) return; // absent or too short proves nothing
   // Only names that identify one control in BOTH sequences. A repeated name cannot be tracked between
