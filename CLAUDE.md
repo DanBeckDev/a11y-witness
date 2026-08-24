@@ -1205,7 +1205,7 @@ npm run scorer:shortcuts       # the TRAINED WEIGHTS: which did a head penalise 
 **Generalise it.** Before trusting any accuracy figure here, ask what would have to be true of the data for
 that figure to be uninformative — and then check whether it is.
 
-## The four things 2026-08-24 cost, and none of them were the model
+## The things 2026-08-24 cost, and none of them were the model
 
 A day spent chasing "12 false accusations on GOV.UK" that the tool never made. Recorded in the order they
 have to be understood, because each one hid the next.
@@ -1312,6 +1312,61 @@ Two corollaries earned the same day:
 development said precision 0.841 over 2,419 records. Both true: acceptance is 104 records and cannot resolve
 a 1.4% false-positive rate. `npm run lab:job -- -e job=promote` runs the candidate gate where the weights
 and the code both live, refuses on the candidate's own reports, and writes nothing when it refuses.
+
+**CONFIRMED by the retrain, and it cost nothing.** Removing `vague_link_present` as a model input took
+`2.4.4:regex` from **27 false positives to 0** (precision 0.841 → 1.000) and recall *rose*, 0.979 → 0.986.
+`2.4.6:regex` cleared entirely in the same change, 0.836 → **1.000/1.000** — the same shortcut had been
+suppressing it. A feature answering a different criterion's question is worth removing even when it looks
+like free signal.
+
+### 6. THE THRESHOLD IS SET BY THE SINGLE WORST NEGATIVE, so one record reads as a model regression
+
+The retrain above also moved `3.3.1:validation-error-silent` from **15 missed findings to 24**, in a change
+that dropped a LINK-TEXT feature. Every head reads the same shared feature vector so it was genuinely
+re-fitted — but it reads validation messages, and losing nine findings to link text wanted explaining. The
+obvious reading is that the head got worse. It is not what happened, and the two need opposite responses:
+go and look at one record, versus retrain.
+
+`choose_threshold` takes the **lowest cut reaching zero false positives** over ~1,200 negatives. So the
+threshold is an *extreme order statistic* — pinned by the single highest-scoring conformant record — and
+the grid is 0.05 steps. Recorded by `threshold_sweep`, which now writes the whole curve into the report:
+
+```
+   thr    TP   FP   FN   recall
+   0.85   108    5   13   0.893
+   0.90   105    1   16   0.868     <- ONE negative sits here
+   0.95    97    0   24   0.802     <- so the cut jumps, and 8 findings go with it
+```
+
+The head separates 105 of 121 positives above 0.90 with a single negative up there. Nothing about it
+weakened. **A blocker now names the next cut down and what rules it out** — one false positive there is a
+record to go and read; forty means the head is genuinely weak and the threshold is doing its job.
+
+Two things fall out, both measured on the same report:
+
+- **`development.precision` is the constraint restated, not a measurement.** It is computed with the cut
+  that was *chosen from those same out-of-fold scores* to have zero false positives, so 1.000 is guaranteed
+  whenever calibration succeeds. Thirteen heads reading 1.000 is not thirteen pieces of evidence. The
+  contrapositive is the useful half: **precision below 1.000 can only mean the fallback fired**, so that
+  head has no clean cut anywhere and is not calibrated at all. `1.3.1:unassociated-table` reporting
+  "2 false positives at threshold 0.5" reads like mild over-eagerness and means the opposite.
+- **The fallback was the cut that accuses MOST.** It returned a fixed 0.5, which its own docstring called
+  "a value nobody chose" — and reporting a bad default loudly is not fixing it. Measured on the three heads
+  where calibration failed: `2.1.2:focus-trapped` 36 false positives at 0.5 against **4** at 0.95;
+  `2.4.2:route-title-stale` 6 against **2** at 0.75 *at the same recall*, so 0.5 was strictly dominated;
+  `1.3.1:unassociated-table` 2 against **1** at 0.55. It is now the fewest-false-positive cut, ties broken
+  by recall, and it can never choose worse than 0.5 did because 0.5 is itself a candidate.
+
+**A cliff worth watching.** Three heads now sit at **0.95, the top of the grid** — `3.3.1`,
+`4.1.2:state-change-silent`, `4.1.3`. One more negative crossing 0.95 leaves them no valid cut at all, and
+3.3.1's own sweep puts the fallback at 31 false positives. The gate would refuse it, but the head goes from
+clean to unusable on one record.
+
+**The root cause is unfixed and is a product decision, not a bug.** A hard zero-false-positive constraint
+selected on the same data it is reported against is high-variance by construction. The principled
+alternatives — a quantile criterion, or conformal risk control giving a *bounded* false-positive rate with a
+finite-sample guarantee — all trade "zero on this corpus" for "bounded in expectation", which for a tool
+that ASSERTS conformance failures is a decision about what the product promises. Not to be made silently.
 
 ### What was checked and REFUTED, so nobody re-derives it
 
