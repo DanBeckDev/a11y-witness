@@ -85,7 +85,9 @@
     "identity:rate": "tsx packages/lab/src/harnesses/page-identity-rate.mjs",
     "verdict:stability": "tsx packages/lab/src/harnesses/occurrence-verdict-stability.mjs",
     "training:export-acceptance:all": "REPEAT=repeat-1 npm run --silent training:export-acceptance && REPEAT=repeat-2 npm run --silent training:export-acceptance",
-    "scorer:size-sensitivity": "node packages/lab/scripts/audit-size-sensitivity.mjs"
+    "scorer:size-sensitivity": "node packages/lab/scripts/audit-size-sensitivity.mjs",
+    "candidate:gate": "npm run scorer:migration -- --evaluating && npm run scorer:shortcuts && npm run gate:isolation && npm run training:check-signals:complete && npm run rules:gate",
+    "promote:gated": "npm run --silent candidate:gate && npm run --silent promote:model --"
   },
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
