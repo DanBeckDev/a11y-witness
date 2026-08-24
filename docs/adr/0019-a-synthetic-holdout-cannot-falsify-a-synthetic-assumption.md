@@ -80,10 +80,21 @@ The corpus remedy was applied and swept: a conformant `component-index` — a li
 "Details" — added to 44 cases, injected into both variants, excluded from the criteria whose own evidence it
 would disturb.
 
-| | shipped | before the corpus fix | after |
-|---|---|---|---|
-| false accusations on conformant real pages | 0 | **12 of 18** | **3 of 18** |
-| publisher-declared inaccessible caught | 2 of 3 | 3 of 3 | **3 of 3** |
+| | shipped | before | after corpus fix | after grammar fix | after completeness gate |
+|---|---|---|---|---|---|
+| false accusations on conformant real pages | 0 | **12 of 18** | 3 of 18 | 1 of 18 | **0 of 18** |
+| publisher-declared inaccessible caught | 2 of 3 | 3 of 3 | 3 of 3 | 3 of 3 | **3 of 3** |
+
+Three distinct causes, each invisible to the corpus for the same structural reason, and each needing a
+different remedy:
+
+1. **A word the corpus only ever used wrongly.** `vague_link_present` was 100 failing / 0 conformant, so the
+   head learned the WORD was the failure. Fixed in the corpus (ADR 0015's rule: never in the weights).
+2. **Seven partial copies of NVDA's grammar.** The announcement order depends on how the caret got there —
+   name-first under quick-navigation, role-first under arrow keys, 884/0 and 0/880 with no overlap — and
+   every consumer had guessed at one of them. Replaced by one parser, validated on 6,555 cross-channel
+   comparisons.
+3. **Unexamined read as failing.** See ADR 0020.
 
 **All eleven 2.4.4 accusations are gone** — the exact class the change targeted — while the extra true catch
 was kept. `vague_link_present` now appears on 35 conformant records against 0 before, so the head can no
