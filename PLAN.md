@@ -147,12 +147,28 @@ probe constant, a name normaliser, a calibration sweep, a promotion gate and a t
 > | **3.2** what the product promises | **DECIDED** — split by layer. Rules keep "zero" because it is a measurement; the scorer states a bound because its zero was the constraint restated. |
 > | **3.3** the threshold cliff | **DONE** — a head at the extreme is named as NO MARGIN, as a note rather than a blocker, because nothing is wrong with it except that it has none. |
 >
-> **MEASURED on the first 27 recaptured pages, split by whether they carry the new mark:**
+> **PHASE 1 EXIT MET, 2026-08-24.** Every rule is now either validated on real evidence or reported as
+> unvalidated with the correct next step named. `rules:coverage` on the authoritative corpus:
+>
+> | | before today | after |
+> |---|---|---|
+> | rules validated on a real page | 5 of 11 | **9 of 11** |
+> | blockers | 5 | **2** |
+>
+> `2.4.2` and `2.4.3` moved from *never fired on a real page* to validated. The two that remain are
+> named precisely rather than lumped together: `1.4.2` has never executed anywhere, and `2.4.1` **ran and
+> stayed silent** — its channel exists on every real capture now, so `addInertSkipLink` read them and
+> found nothing, which on a conformant page is the right answer. The work there is finding a page with an
+> inert skip link, not collecting evidence. Deliberately still a blocker: *a head that has gone silent
+> scores perfect precision* is this project's most expensive lesson, and a broken rule is silent on
+> conformant pages too.
+>
+> **MEASURED on the recaptured pages, split by whether they carry the new mark:**
 >
 > | on conformant calibration pages | before | after |
 > |---|---|---|
-> | `2.4.3` focus order | 71% | **33%** |
-> | `2.1.1` keyboard unreachable | 66% | **41%** |
+> | `2.4.3` focus order | 71% | **29%** |
+> | `2.1.1` keyboard unreachable | 66% | **31%** |
 > | `2.4.2` stale route title | never fired on a real page, ever | **fires on one** |
 >
 > The evidence is now the right evidence, which is the claim worth making: a 2.4.3 finding reads
