@@ -645,6 +645,40 @@ function cycleCoversThePage(tabOrder: string[], input: RuleInput): boolean {
  * when something LATER in reading order was reached — the probe demonstrably got past it and never landed
  * on it. That makes the claim sound at the tail, where the evidence runs out.
  */
+/**
+ * Roles whose GROUP shares one tab stop, so Tab reaching only one member is correct behaviour.
+ *
+ * Native HTML gives a radio group a single tab stop: Tab moves to the checked radio (or the first if
+ * none is), and the ARROW keys move between members. ARIA's Authoring Practices codify the same shape
+ * for custom widgets as the "roving tabindex" pattern, which is why a tablist, a menu and a tree behave
+ * the same way. None of it is a keyboard trap; all of it is the documented interaction.
+ *
+ * Measured 2026-08-24 on `design-system.service.gov.uk/components/radios`, where the focus probe recorded
+ * `"England, radio button, focused, not checked, 1 of 5"` — Tab reached exactly one radio of each group,
+ * exactly as specified — and 2.1.1 reported `"Phone"`, `"Wales"` and `"Scotland"` as controls the
+ * keyboard cannot reach. Same on the tabs component, with `"Past month"` and `"Past week"`.
+ *
+ * **A capture cannot tell "reachable by arrow keys" from "unreachable", because the probe presses only
+ * Tab.** So this is not a narrower claim, it is the absence of one — the same discipline as everywhere
+ * else here: where the evidence cannot decide, make no finding. Driving the arrows is what would settle
+ * it, and `docs/screenreader-coverage.md` is where that belongs when somebody adds it.
+ */
+const SHARES_ONE_TAB_STOP = new Set([
+  "radio button", "radio", "tab", "menu item", "tree item", "option", "grid cell", "cell",
+]);
+
+/** Announced controls as name+role, so a rule can ask WHICH KIND of control it is about. */
+function controlsWithRoles(entries: string[] | undefined): { name: string; role: string }[] {
+  const out: { name: string; role: string }[] = [];
+  for (const entry of entries ?? []) {
+    for (const object of parseAnnouncement(String(entry), "sweep").objects) {
+      const name = object.name.replace(FOCUS_ONLY_STATES, " ").replace(/[\s,]+/g, " ").trim();
+      if (name) out.push({ name, role: object.role });
+    }
+  }
+  return out;
+}
+
 function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void {
   const reading = comparableNames(input.structure?.formFields);
   const tabbedNames = comparableNames(input.interaction?.focusOrder);
@@ -668,7 +702,13 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
   // appearing in the tab order may be the OTHER control, and its absence may mean the other one was
   // reached. Same reasoning as 2.4.3 — see `unambiguous`.
   const trackable = unambiguous(reading);
-  const missed = reading.filter((name) => trackable.has(name) && !tabbed.has(name));
+  // A member of a composite widget is reached by ARROW keys, not Tab — see `SHARES_ONE_TAB_STOP`. Its
+  // absence from the tab order is the specified behaviour, and this probe presses only Tab, so the
+  // capture cannot tell that from a control nothing can reach.
+  const compositeMembers = new Set(controlsWithRoles(input.structure?.formFields)
+    .filter((c) => SHARES_ONE_TAB_STOP.has(c.role)).map((c) => c.name));
+  const missed = reading.filter((name) =>
+    trackable.has(name) && !tabbed.has(name) && !compositeMembers.has(name));
   if (!missed.length) return;
   add("2.1.1 Keyboard",
     "The page announces a control the keyboard cannot reach: Tab passed the point where it sits and never "

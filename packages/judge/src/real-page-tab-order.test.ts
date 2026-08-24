@@ -95,3 +95,50 @@ test("a cycle that DOES account for the page still reports a genuinely missed co
   assert.equal(fires(real, "2.1.1"), true,
     "a control the sweep announces and a COMPLETE tab cycle never reaches is the finding this rule is for");
 });
+
+test("a radio group member absent from the tab order is NOT keyboard-unreachable", () => {
+  // Native HTML gives a radio group ONE tab stop: Tab moves to the checked radio (or the first), and the
+  // ARROW keys move between members. ARIA's Authoring Practices codify the same as "roving tabindex" for
+  // tablists, menus and trees. None of it is a trap.
+  //
+  // Measured on design-system.service.gov.uk/components/radios, where the probe recorded
+  // "England, radio button, focused, not checked, 1 of 5" — exactly one radio per group, as specified —
+  // and 2.1.1 named Phone, Wales and Scotland as unreachable.
+  //
+  // The probe presses only Tab, so a capture cannot tell "reachable by arrows" from "unreachable". This
+  // is the absence of a claim, not a narrower one.
+  const radioGroup = {
+    transcript: [],
+    structure: {
+      formFields: [
+        "England, radio button, not checked", "Wales, radio button, not checked",
+        "Scotland, radio button, not checked", "Continue, button",
+      ],
+      links: Array.from({ length: 4 }, (_, i) => `Link ${i}, link`),
+    },
+    interaction: {
+      focusOrder: [
+        "England, radio button, focused, not checked", "Continue, button, focused",
+        "England, radio button, focused, not checked", "Continue, button, focused",
+      ],
+    },
+  };
+  assert.equal(fires(radioGroup, "2.1.1"), false,
+    "Wales and Scotland are reached with arrow keys; Tab visiting one member of the group is correct");
+});
+
+test("a plain button the tab cycle never reaches IS still reported", () => {
+  // The exclusion must not silence the rule. Same shape, but the missed control is a button — which has
+  // its own tab stop, so its absence is the failure this rule exists for.
+  const unreachable = {
+    transcript: [],
+    structure: {
+      formFields: ["Search, edit", "Filter, combo box", "Hidden toggle, button"],
+      links: Array.from({ length: 3 }, (_, i) => `Link ${i}, link`),
+    },
+    interaction: {
+      focusOrder: ["Search, edit, focused", "Filter, combo box, focused", "Search, edit, focused"],
+    },
+  };
+  assert.equal(fires(unreachable, "2.1.1"), true);
+});
