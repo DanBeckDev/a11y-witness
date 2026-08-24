@@ -24,7 +24,7 @@
  * not against a book's strings.
  */
 import type { Channel } from "@a11y-witness/evidence";
-import { parseAnnouncement, CONTROL_ROLES } from "@a11y-witness/evidence";
+import { parseAnnouncement } from "@a11y-witness/evidence";
 // The ONE list of criteria the rules may emit. Imported rather than restated: writing a second
 // copy here is the defect this file has recorded five times, and I made it once before deleting it.
 import { RULE_CRITERIA } from "./coverage.js";
@@ -730,11 +730,29 @@ function addInertSkipLink(input: RuleInput, add: AddFinding): void {
  * present in BOTH sequences, so a control missing here is simply not compared — and comparing fewer
  * controls in a real order beats comparing more in an invented one.
  */
+/**
+ * Roles the FORM-FIELD sweep would have reached — the scope this rule was always written for.
+ *
+ * Not every control. Widening it to links took 2.4.3 from 29% of conformant real pages to **74%**, and
+ * the extra findings were not failures: a cookie banner takes focus before a skip link that precedes it
+ * in the DOM, and page-level navigation is reordered for good reasons on nearly every real site. The
+ * criterion is about an order that CONTRADICTS meaning, and a form whose fields are reached out of
+ * sequence is that; a consent dialog jumping the queue is not.
+ *
+ * The rule's own comment already said so — *"`focusOrder` also holds links and anything else focusable,
+ * while the form-field sweep holds controls Tab may never reach"* — and I widened the scope while fixing
+ * the ordering, which is two changes in one and only one of them was wanted.
+ */
+const FORM_FIELD_ROLES = new Set([
+  "edit", "edit text", "combo box", "check box", "checkbox", "radio button", "radio",
+  "list box", "spin button", "slider", "button", "menu button",
+]);
+
 function controlsInReadingOrder(input: RuleInput): string[] {
   const names: string[] = [];
   for (const line of input.transcript ?? []) {
     for (const object of parseAnnouncement(String(line), "transcript").objects) {
-      if (!CONTROL_ROLES.includes(object.role)) continue;
+      if (!FORM_FIELD_ROLES.has(object.role)) continue;
       const name = object.name.replace(FOCUS_ONLY_STATES, " ").replace(/[\s,]+/g, " ").trim();
       if (name) names.push(name);
     }
