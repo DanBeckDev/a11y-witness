@@ -25,6 +25,9 @@
  */
 import type { Channel } from "@a11y-witness/evidence";
 import { parseAnnouncement } from "@a11y-witness/evidence";
+// The ONE list of criteria the rules may emit. Imported rather than restated: writing a second
+// copy here is the defect this file has recorded five times, and I made it once before deleting it.
+import { RULE_CRITERIA } from "./coverage.js";
 import type { Finding, RequirementMapping } from "./judge.js";
 
 /** The capture fields the rules inspect (a subset of JudgeInput; a full
@@ -884,10 +887,18 @@ function addUnnamedGraphics(input: RuleInput, add: AddFinding): void {
       + `the screen reader reached ${announced}`);
 }
 
+const RULE_CRITERIA_SET = new Set<string>(RULE_CRITERIA);
+
 export function ruleFindings(input: RuleInput): Finding[] {
   const findings: Finding[] = [];
   const seen = new Set<string>();
   const add: AddFinding = (wcag, issue, evidence, mapping = "secondary"): void => {
+    const criterion = wcag.split(" ")[0];
+    if (!RULE_CRITERIA_SET.has(criterion)) {
+      throw new Error(`rule reported ${criterion}, which is not in RULE_CRITERIA. Add it there — the `
+        + "coverage audit asks which criteria have never fired, and it cannot ask about one it "
+        + "does not know exists.");
+    }
     const key = `${wcag}|${evidence}`;
     if (seen.has(key)) return;
     seen.add(key);

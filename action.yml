@@ -35,11 +35,12 @@ inputs:
       local | anthropic | openai. Defaults to `local`: this project's own trained scorer, which ships in
       the repo (27 KB of heads over an 87 MB encoder fetched at setup). No key, no account, no data
       leaving the runner. Fourteen criteria can produce a finding, and the number that matters more on a
-      REAL page is TEN: the deterministic rules cover 1.1.1, 1.3.1, 1.4.2, 2.1.1, 2.1.2, 2.4.1, 2.4.2,
-      2.4.3, 2.4.4 and 4.1.2 and always run. Five of those ten (2.1.1, 2.4.1, 2.4.2, 2.4.3, 4.1.2) cover
-      one failure mode of several — `criterion-coverage.ts` records which mode and why the rest are out.
-      The other four (2.4.6, 3.3.1, 3.3.2, 4.1.3) come only from the trained scorer, which ABSTAINS on
-      pages unlike its training data, and those come back `cantTell` — unchecked, not clean.
+      REAL page is ELEVEN: the deterministic rules cover 1.1.1, 1.3.1, 1.4.2, 2.1.1, 2.1.2, 2.4.1, 2.4.2,
+      2.4.3, 2.4.4, 3.3.2 and 4.1.2 and always run. Six of those eleven (2.1.1, 2.4.1, 2.4.2, 2.4.3,
+      3.3.2, 4.1.2) cover one failure mode of several — `criterion-coverage.ts` records which mode and
+      why the rest are out. The other three (2.4.6, 3.3.1, 4.1.3) come only from the trained scorer,
+      which ABSTAINS on pages unlike its training data, and those come back `cantTell` — unchecked,
+      not clean.
       Use `anthropic` or `openai` for an LLM judge, which attempts any criterion — broader, noisier,
       and needs a key or an endpoint.
     required: false
