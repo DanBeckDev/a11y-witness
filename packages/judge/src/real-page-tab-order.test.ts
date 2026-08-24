@@ -206,3 +206,31 @@ test("a real activation with a stale title IS still reported", () => {
   };
   assert.equal(fires(stale, "2.4.2"), true);
 });
+
+test("a disclosure that opened DURING the capture stops 2.1.1 claiming anything", () => {
+  // Measured on sportengland.org. The sweep recorded "Close search, button, expanded" and the fields
+  // inside the open panel; the focus probe recorded "Toggle search, button, focused, collapsed". The
+  // panel was open for one measurement and closed for the other, so the focusable set genuinely differed
+  // — and 2.1.1 reported "Search" and "Submit search query" as unreachable when they did not exist at
+  // the moment Tab was pressed.
+  //
+  // A capture is not an instant: probeDisclosure activates a control unconditionally.
+  const mutated = {
+    transcript: [],
+    structure: {
+      formFields: [
+        "Toggle search, button, collapsed", "Toggle search, button, expanded",
+        "form, Search, edit, required", "Submit search query, button",
+      ],
+      links: Array.from({ length: 4 }, (_, i) => `Link ${i}, link`),
+    },
+    interaction: {
+      focusOrder: [
+        "Toggle search, button, focused, collapsed", "Link 0, link, focused",
+        "Toggle search, button, focused, collapsed", "Link 0, link, focused",
+      ],
+    },
+  };
+  assert.equal(fires(mutated, "2.1.1"), false,
+    "the page mutated between the two measurements, so a set comparison across them proves nothing");
+});
