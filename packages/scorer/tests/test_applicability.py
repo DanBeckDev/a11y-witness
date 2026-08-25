@@ -26,6 +26,7 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "packages" / "scorer" / "python"))
 
 import applicability  # noqa: E402
+import audit_applicability  # noqa: E402
 
 
 def corpora():
@@ -63,37 +64,29 @@ def test_every_shipped_subtype_is_a_decision_rather_than_an_omission():
 
 
 def test_no_precondition_silences_a_true_positive():
+    """The same sweep `audit_applicability.main()` runs on the lab — one implementation, two entry points.
+
+    This reads `runs/`, which is gitignored, so here it sees a copy and in CI it sees nothing. The lab has
+    the authoritative corpus and no pytest, which is why the sweep is a plain function that a lab job can
+    call: the check that most needs the full data was the one that could not reach it.
+    """
     sets = corpora()
     if not sets:
         pytest.skip("no labelled records on this machine — the lab holds the corpus. Honest skip, not a pass.")
 
-    silenced = []
-    ruled_out = 0
-    examined = 0
-    for name, rows in sets:
-        for record in rows:
-            labelled = set((record.get("target") or {}).get("subtypes") or [])
-            for subtype in applicability.SUBTYPE_REQUIRES:
-                examined += 1
-                if applicability.applicable(subtype, record):
-                    continue
-                if subtype in labelled:
-                    silenced.append(f"{name}: {record.get('provenance', {}).get('caseId')} "
-                                    f"/{record.get('provenance', {}).get('variant')} is labelled "
-                                    f"{subtype} and its precondition rules it inapplicable")
-                else:
-                    ruled_out += 1
+    records = [record for _name, rows in sets for record in rows]
+    report = audit_applicability.sweep(records)
 
-    assert examined > 500, f"only {examined} (subtype, record) pairs examined; this guard is nearly blind"
-    assert silenced == [], (
-        "A precondition deleted evidence the corpus says is real:\n  " + "\n  ".join(silenced[:20])
+    silenced = {name: counts["silenced"] for name, counts in report.items() if counts["silenced"]}
+    assert silenced == {}, (
+        "A precondition deleted evidence the corpus says is real:\n  " + json.dumps(silenced, indent=2)
         + "\n\nThe precondition must be the SUBJECT of the claim, never the defect — most of these "
           "subtypes are findings of ABSENCE, and requiring the defect's own feature removes exactly what "
           "they exist to catch."
     )
     # The other half: a precondition that rules nothing out is decoration, and would pass the assertion
     # above by doing nothing at all.
-    assert ruled_out > 0, "no record was ruled inapplicable; these preconditions are inert"
+    assert sum(counts["ruledOut"] for counts in report.values()) > 0, "these preconditions are inert"
 
 
 def test_the_measured_failure_is_ruled_out_and_the_real_defect_is_not():
