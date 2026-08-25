@@ -1598,6 +1598,81 @@ Anything a human has to remember is something that does not happen. What runs it
 answering, a run left mid-flight. It is read-only by design — it never kills anything — so the one
 manual step left is acting on what it tells you.
 
+## Producing evidence is a PIPELINE, and it is one command
+
+`npm run lab:pipeline -- --pipeline=<name>` runs the ordered stages that used to be typed out by hand.
+`--list` names them; `gates` needs no worker and so leaves the fleet alone.
+
+```bash
+npm run lab:pipeline -- --list
+npm run lab:pipeline -- --pipeline=real-pages          # deploy -> capture -> rules:real-pages -> rules:coverage
+npm run lab:pipeline -- --pipeline=corpus --ref=<branch>
+npm run lab:pipeline -- --pipeline=gates               # no fleet: reads the corpus already on disk
+```
+
+Every stage already existed and was supervised. What did not exist was the ORDER, which lived in
+somebody's head — the same defect `lab:retrain` closed one layer down. Retyped by hand on 2026-08-25 that
+sequence produced: a fleet deployed at `main` while the lab ran a branch, four boxes rebooted for a ref
+nobody had pushed, an `ANSIBLE_EXIT=2` masked by `| tail`, and three jobs run four commits behind.
+
+- **ONE ref, resolved once and given to both halves.** `fleet:deploy` takes `a11y_git_ref`, `lab:job` takes
+  `ref`, and they default independently — which is exactly how the fleet came to be on a different commit
+  from the lab, failing with a hash mismatch that reads like a corrupted guest checkout. It is also
+  **refused before anything expensive runs** if it is not on origin, because both halves fetch from there.
+- **It stops at the first failing stage** and names what did not run, for the reason `lab:retrain` gives: a
+  pipeline that continues past a failed gate produces a number that looks exactly like a good one.
+- **It is a node script and not one Ansible playbook, and that was MEASURED.** The two halves are in
+  different credential domains: the workers are reachable only from the control plane, and the lab needs the
+  `a11y-pve` key, which the control plane does not have — verified 2026-08-25, `192.168.1.79:22` is open
+  from there and answers `Permission denied (publickey)`. Exactly one machine can drive both. Giving the
+  control plane the lab key would make a single playbook possible and would put both halves of ADR 0012's
+  split behind one credential.
+- **Stages go through the npm scripts**, never a second spelling of `ansible-playbook` — `lab:job` also sets
+  `ANSIBLE_CONFIG`, without which the collections path and host-key settings differ.
+
+`lab-pipeline.test.ts` pins the pipelines against the real catalogue: every job named must exist in
+`lab-job.yml`, and a pipeline containing a job that reads `A11Y_WORKER(S)` must deploy the fleet first. A
+renamed job would otherwise fail at its STAGE, which for `corpus` is after a multi-hour capture.
+
+### A capture now REFUSES a fleet that is not running this checkout
+
+`run-job.yml` refuses to run at a commit other than the one asked for — *"a job that quietly runs four
+commits behind reports success for code you did not ask for."* That guard covers the LAB and says nothing
+about the twelve machines that take the captures, which are a second checkout deployed by a separate
+command nobody was forced to run.
+
+Measured: after `MAX_TAB_STOPS` went 12 → 150 and `collectByType` began recording `prevCount`, the
+real-page corpus held **both populations at once**, and reading it meant bucketing captures by whether they
+carried the new diagnostic mark at all. Every gate was green. `npm run worker:code` has answered this
+correctly the whole time and is a separate command a human must remember — this file's own definition of a
+check that does not happen. It was remembered by hand four times in one day.
+
+`assertFleetRunsThisCheckout` (`worker-code-check.mjs`) now runs at the boundary of **both** capture entry
+points, and `--allow-stale-workers` says so in the output rather than passing quietly.
+
+- **Both, not one.** The remedy reaching one of several paths is this repo's most expensive recurring shape
+  (`anchorToTop`, `ensureSpeechChannel`, `waitForAnnouncement`). `worker-code-check.test.ts` DISCOVERS every
+  lab module that POSTs to `/capture` and requires each to be classified as a corpus writer (must check) or
+  a diagnostic (must not — a diagnostic may never take the pool offline). A seventh capture client fails
+  that test until somebody decides which it is.
+- **The synthetic corpus is the worse half.** Real-page captures never cache, so a stale worker's evidence
+  there is at least overwritten next run. Dataset captures ARE cached, and `workerCode` is deliberately
+  outside the cache key — so one stale guest's capture is reused for ever with nothing recording which code
+  produced it.
+- **A hash mismatch does not say which side moved**, and the two need opposite responses. If the local
+  worker source is dirty against HEAD the CHECKOUT is the odd one out and deploying would ship uncommitted
+  work — an uncommitted `CAPTURE_PROTOCOL_VERSION` bump among it invalidates every cached capture. The
+  refusal detects that and inverts its own advice.
+- **It is a precondition and never a key.** Nothing here invalidates a cached capture, and `workerCode`
+  stays out of both the cache key and `fleet-consistency.mjs`'s `MUST_MATCH` — those answer *is this
+  evidence still valid* and *are these guests interchangeable*. This answers a third question, and a
+  comment-only false alarm costs one `fleet:deploy` while a real drift costs a corpus.
+
+Proved by making it fire against the real fleet, not by a green unit test: a whitespace change to one
+worker file took it from `Fleet runs this checkout (worker code bccf65cf76d4baef, 4 worker(s) checked)` to
+a refusal naming both hashes and exit 3. **A guard must be shown to fail before it is trusted** — both
+capture-client guards were mutation-checked the same way.
+
 ## Verifying changes
 
 **Two of these now run themselves. That is deliberate, and it is the point.**

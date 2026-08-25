@@ -58,6 +58,7 @@
     "fleet:discover": "node packages/worker-fleet/src/fleet-discover.mjs",
     "fleet:wake": "node packages/worker-fleet/src/fleet-wake.mjs",
     "lab:job": "ANSIBLE_CONFIG=packages/worker-fleet/ansible/ansible.cfg ansible-playbook -i packages/worker-fleet/ansible/inventory.yml packages/worker-fleet/ansible/lab-job.yml",
+    "lab:pipeline": "node packages/worker-fleet/src/lab-pipeline.mjs",
     "lab:status": "ANSIBLE_CONFIG=packages/worker-fleet/ansible/ansible.cfg ansible-playbook -i packages/worker-fleet/ansible/inventory.yml packages/worker-fleet/ansible/lab-status.yml",
     "fleet:tailscale": "ANSIBLE_CONFIG=packages/worker-fleet/ansible/ansible.cfg ansible-playbook -i packages/worker-fleet/ansible/inventory.yml packages/worker-fleet/ansible/tailscale.yml",
     "fleet:deploy": "node packages/worker-fleet/src/fleet-playbook.mjs --playbook=deploy.yml",
