@@ -203,3 +203,19 @@ test("two separately named controls on one line are still two controls", () => {
   const parsed = parseAnnouncement("Search, edit, Submit, button", "sweep");
   assert.deepEqual(parsed.objects.map((o) => `${o.name}|${o.role}`), ["Search|edit", "Submit|button"]);
 });
+
+test("a container role used as a NAME is not stripped as context", () => {
+  // "Menu, button, collapsed" on financial-ombudsman.org.uk is a button whose accessible name is "Menu".
+  // `menu` is also a container role — GOV.UK labels its nav that way, which is why the vocabulary was
+  // widened — so the name was stripped as context and the button reported as having none. A 4.1.2
+  // ASSERTION against a correctly labelled control.
+  //
+  // The disambiguation is what FOLLOWS: a container precedes more context, a name precedes its own role.
+  const asName = parseAnnouncement("Menu, button, collapsed", "sweep");
+  assert.deepEqual(asName.containers, []);
+  assert.equal(asName.objects[0].name, "Menu");
+
+  // And the case the vocabulary was widened FOR still parses as context.
+  const asContainer = parseAnnouncement("Menu, navigation landmark, list, with 6 items, link", "sweep");
+  assert.deepEqual(asContainer.containers.map((c) => c.role), ["menu", "navigation landmark", "list"]);
+});
