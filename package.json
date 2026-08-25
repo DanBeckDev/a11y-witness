@@ -79,6 +79,8 @@
     "promote:model": "node packages/lab/scripts/promote-model.mjs",
     "docs:coverage": "tsx packages/lab/scripts/generate-coverage-doc.ts",
     "corpus:starvation": "node packages/lab/scripts/audit-corpus-starvation.mjs",
+    "corpus:grants-map": "node packages/lab/scripts/emit-grants-map.mjs",
+    "corpus:grants-audit": "npm run --silent corpus:grants-map && .venv/bin/python packages/scorer/python/audit_grants.py",
     "changeset": "changeset",
     "changeset:status": "changeset status --since=origin/main",
     "release:version": "changeset version && npm install --package-lock-only",
