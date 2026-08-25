@@ -353,6 +353,23 @@ ANNOUNCED_ROLE = re.compile(
 )
 
 
+#: NVDA's container EXIT marker, stripped before asking whether a line announces a role.
+#:
+#: `"out of table, Borrowing books"` is a container exit followed by PROSE, and `ANNOUNCED_ROLE` matched it
+#: because `table` is itself a role word — so the line read as an announced control and
+#: `plain_heading_candidate` rejected it. Measured 2026-08-25 by `corpus:grants-audit`: 13 of 108 records
+#: labelled `1.3.1:fake-heading` carried no `plain_heading_candidate_present`, every one of them a
+#: multi-defect page where the accompanying markup is appended AFTER a table, list or form, so the fake
+#: heading always follows a container exit.
+#:
+#: An exit says where the cursor WAS. It is context, not a role on what follows — the same distinction
+#: `beginsWithRole` already carries a scar for ("a leading LANDMARK is context, not the control's own
+#: role"), and the same one `vague_link_lacks_context` twelve functions below already handles by tracking
+#: `leaving` from the parse. Fifth instance of one shape: a heuristic written without accounting for how
+#: NVDA PREFIXES a line.
+LEAVING_PREFIX = re.compile(r"^out of\s+[^,]{1,48},\s*", re.IGNORECASE)
+
+
 def plain_heading_candidate(value: str, following_value: str) -> bool:
     """Find a likely spoken section title that has no heading announcement.
 
@@ -360,7 +377,9 @@ def plain_heading_candidate(value: str, following_value: str) -> bool:
     transcript pattern of a short, punctuation-free line of PROSE followed by a sentence — and prose is the
     operative word, which is what `ANNOUNCED_ROLE` above enforces.
     """
-    candidate = value.strip()
+    # The exit marker comes off FIRST, before any question is asked of the line. Asking about roles with
+    # it still attached is what made a container exit read as an announced control.
+    candidate = LEAVING_PREFIX.sub("", value.strip()).strip()
     following = following_value.strip()
     if not candidate or not following or HEADING_ANNOUNCEMENT.match(candidate):
         return False
