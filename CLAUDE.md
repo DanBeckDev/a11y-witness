@@ -178,6 +178,47 @@ interactive desktop and reports its absence as `nvda.start failed: NVDA is not s
 which reads like a broken install and is not one. Run captures through a scheduled task with
 `LogonType Interactive` — see the runbook.
 
+## The diagnostics lied to me six times in one day, and never once by being wrong
+
+Every one of these was a CORRECT value read from the wrong place, or a stale value read as current. None
+of them looked like an error, which is why each cost a run or more.
+
+| what I read | what it actually was |
+|---|---|
+| `journalctl -u <unit> --since <ExecMainStartTimestamp>` | the PREVIOUS run's window once the unit has exited — a stale `RULES: FAIL` for a gate that passes. **Three times.** |
+| `ansible-playbook ... \| tail` | the pipeline's status is `tail`'s. A real `ANSIBLE_EXIT=2` read as success. **Twice.** |
+| "the fixture capture keeps failing" | it had succeeded 20 minutes earlier; I was reading a later, unrelated refused job |
+| "the rule does not fire on its fixture" | the fixture page demonstrated a DIFFERENT criterion, declared as such thirty lines away |
+| "4 blockers, expect 1" | quoted from a run that predated three fixes |
+| coverage counts mid-recapture | the corpus was being rewritten underneath the count |
+
+**The rule that covers all six: ask the authoritative source, and let it tell you what it is bounded to.**
+
+```bash
+npm run lab:status -- -e job=<name>     # ONE run: systemd's view, the journal bounded by
+                                        # InvocationID, and the run's own progress file
+```
+
+`lab-status.yml` has a task called *"Whether that journal is ONE run or the unit's whole history"*. It
+existed the whole time. Every one of the three journal misreads came from hand-rolling `journalctl` instead
+of running it — and improvising around a tool the repo already has is itself a defect source.
+
+Two more that follow:
+
+- **Never pipe a command whose exit status you intend to read.** `cmd > /tmp/log 2>&1; echo "EXIT=$?"` then
+  read the file. `set -o pipefail` also works; a bare `| tail` does not.
+- **Check the premise before re-running the expensive thing.** Three capture runs went into "the 2.1.1
+  fixture will not capture" before anyone asked whether that page demonstrates 2.1.1. It did not, and
+  `real-page-corpus.test.ts` now answers that offline in milliseconds by pinning a fixture's declared
+  criterion to the case it is built from. **The same discipline as "reproduce the fault with your test
+  before trusting the test's verdict"**, applied to evidence rather than to a test.
+
+**And the generalisation, which is this file's oldest lesson pointed at the operator instead of the code:**
+a number is only as good as what it was computed from, so make every reported number carry that. The three
+guards added on 2026-08-25 all do it — `rules:coverage` refuses a corpus written in the last ten minutes,
+`run-job.yml` refuses a commit other than the one asked for, and the capture refuses a page whose URL is not
+the one requested. Each replaces a plausible wrong answer with a refusal that names the cause.
+
 ## If you are an agent, start with these
 
 ```bash
