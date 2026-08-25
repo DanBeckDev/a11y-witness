@@ -133,7 +133,24 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   // ---- assessed today -------------------------------------------------------------------------
   "1.1.1": { status: "assessed", channels: ["graphics", "transcript"], note: "Rules own missing and filename alt text exactly; the head owns generic alt ('image', 'photo')." },
   "1.3.1": { status: "assessed", channels: ["headings", "tableCells", "transcript"], note: "Fake headings and tables whose headers are not associated. Heading HIERARCHY (h2 -> h4) is not checked — see 'reachable' note on 2.4.10-style structure below; `moveToNextHeadingLevel` would supply it." },
-  "1.4.2": { status: "assessed", needs: ["dom"], channels: ["media"], note: "Rule-only, and the exception that proves the boundary: `autoplay` and `muted` are attributes with no accessibility-tree equivalent, so a deterministic rule reads the DOM and no head is trained on it." },
+  "1.4.2": {
+    status: "assessed", needs: ["dom"], channels: ["media"],
+    // MEASURED, not assumed: 89 real captures, 8 carry `<audio>`/`<video>` at all, and **0 autoplay**.
+    // The probe runs and the channel is populated — this rule is exercised and correctly silent, which
+    // on a page that does not autoplay is the right answer.
+    //
+    // It is not going to fire on this corpus, and the reason is the corpus rather than the rule: these
+    // are UK public-body information pages, and autoplaying sound is the thing the regulations they
+    // publish under exist to stop. A blocker that can only be closed by finding a public body breaking
+    // that rule is a blocker nobody can close, so it is declared here instead — with the measurement,
+    // so a future reader can check whether it is still true rather than take it on trust.
+    realPageEvidence: {
+      available: false,
+      because: "89 real captures carry 8 media elements between them and NONE autoplay — measured "
+        + "2026-08-25. The rule is exercised and silent because the failure does not occur on public-body "
+        + "information pages, not because it cannot run",
+    },
+    note: "Rule-only, and the exception that proves the boundary: `autoplay` and `muted` are attributes with no accessibility-tree equivalent, so a deterministic rule reads the DOM and no head is trained on it." },
   // ASSESSED BUT NEVER VALIDATED, and `criteriaAssessableFrom` is what surfaced it on the day it was added.
   // `rules.ts` emits "2.1.2 No Keyboard Trap", but: no corpus case targets it, it is absent from
   // `rule-ownership.json` — so `rules:gate`'s "every declared boundary holds" never covered it — and it reads
