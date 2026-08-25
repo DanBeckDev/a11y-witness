@@ -155,6 +155,16 @@ def main() -> int:
         if len(missing) > 6:
             print(f"         ... and {len(missing) - 6} more")
 
+    # WRITTEN TO DISK, not only printed. `lab-fetch.yml` exists because "a job interface that can start a
+    # 4-hour training run and cannot return its report leaves you diagnosing from log fragments" — and the
+    # first real run of this audit proved the point twice over: it exited 1 and its journal read
+    # `-- No entries --`, so the finding was unreadable. A report that only exists as stdout is a report
+    # that a job runner can lose.
+    out = REPO / "runs" / "grants-audit.json"
+    out.write_text(json.dumps({"records": len(records), "defects": report}, indent=2) + "\n",
+                   encoding="utf-8")
+    print(f"\n  report written to {out.relative_to(REPO)}")
+
     if broken:
         print(f"\n  {len(broken)} defect(s) declare evidence the corpus does not contain: "
               f"{', '.join(broken)}")
