@@ -131,3 +131,23 @@ def applicable(subtype: str, record: Record) -> bool:
 def inapplicable_subtypes(record: Record, subtypes: list[str]) -> list[str]:
     """Which of these subtypes this page cannot be judged on. PURE."""
     return [subtype for subtype in subtypes if not applicable(subtype, record)]
+
+
+def decide(subtype: str, score: float, threshold: float, record: Record) -> bool:
+    """Does this subtype FIRE on this record? The one definition, called by everything that decides.
+
+    It existed twice: `score.py` compared `value >= threshold` in its scoring loop, and
+    `evaluate-screenreader-acceptance.py` did the same thing again over numpy arrays. Adding the
+    applicability gate to the first left the second untouched, so the held-out gate went on judging pages
+    the product would rule inapplicable -- a remedy correct, committed, and unreachable from the path that
+    mattered.
+
+    That is this repo's most-named defect (`refreshBrowseBuffer` "marked when it skips, so 'did not need
+    to refresh' and 'never ran' can never again be the same silence"), and it was committed here while
+    fixing something else. The result LOOKED like the fix not working, which is worse than a failure: it
+    argues for abandoning a correct change.
+
+    `decision-has-one-definition.py` forbids either file from comparing a subtype score to a threshold
+    directly, so a third copy cannot be added quietly.
+    """
+    return bool(score >= threshold) and applicable(subtype, record)
