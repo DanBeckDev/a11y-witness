@@ -33,6 +33,7 @@ SUPPORTED_SCREEN_READER = "NVDA"
 # encoded tensor), and aliasing the module to that name shadows it — `UnboundLocalError` on every capture,
 # which is how this was found.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import applicability  # noqa: E402  (path shim must precede the import)
 import screenreader_features as feature_pipeline  # noqa: E402  (path shim must precede the import)
 
 
@@ -420,7 +421,18 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
             highest = 0.0
             for subtype, subtype_report in criterion_report["subtypes"].items():
                 value = float(head_scores[subtype_report["head"]][index])
-                predicted = value >= float(subtype_report["threshold"])
+                # IS THIS SUBTYPE'S CLAIM EVEN ABOUT THIS PAGE? A head scores every record it is given,
+                # and `1.3.1:unassociated-table` is a claim about a table. On a page with no table the
+                # honest answer is INAPPLICABLE, not a low score -- and a threshold cannot express that,
+                # because a linear head only ADDS and `table_present = 0` can never veto.
+                #
+                # Measured on `acceptance-link-permits/bad`, three announcements long with no table and
+                # `plain_heading_candidate_present = 0`: 1.3.1 fired anyway, from the 384-dim embedding.
+                # See `applicability.py` for why the precondition is the SUBJECT of the claim and never
+                # the defect -- most of these subtypes are findings of ABSENCE, and requiring the defect
+                # would delete the evidence they exist to catch.
+                predicted = (value >= float(subtype_report["threshold"])
+                             and applicability.applicable(subtype, record))
                 subtype_scores_out[subtype] = value
                 subtype_predictions[subtype] = predicted
                 decided = decided or predicted
