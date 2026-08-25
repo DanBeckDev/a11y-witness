@@ -95,6 +95,12 @@ export const CONTAINER_ROLES = Object.freeze([
   // control role — the named-container branch rejects a name that looks like a control, and this name did.
   // Same collision as "clickable" and "text": a role vocabulary that matches real page wording.
   "menu",
+  // NVDA's role for a tab panel — a property sheet's page. Measured 2026-08-25 on nls.uk, which
+  // announces `"Search the site, property page, form, Search site by keyword or category, edit, …"`.
+  // Absent from this list, the named-container branch could not match it, so the whole preamble became
+  // the control's NAME and 2.1.1 reported "Search the site property page form Search site…" as a
+  // keyboard-unreachable control.
+  "property page",
   "list", "table", "form", "article", "banner", "navigation", "main", "blockquote",
 ]);
 

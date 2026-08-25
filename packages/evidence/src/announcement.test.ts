@@ -223,3 +223,16 @@ test("a container role used as a NAME is not stripped as context", () => {
   assert.equal(asContainer.containers[0].name, "Menu");
   assert.equal(asContainer.objects[0].name, "", "the link inside it is still unnamed");
 });
+
+test("`property page` is a container, not part of the control's name", () => {
+  // NVDA's role for a tab panel. Measured on nls.uk, which announces
+  // "Search the site, property page, form, Search site by keyword or category, edit".
+  // Absent from the vocabulary, the named-container branch could not match it and the whole preamble
+  // became the control's NAME — so 2.1.1 reported "Search the site property page form Search site…" as
+  // a keyboard-unreachable control.
+  const parsed = parseAnnouncement(
+    "Search the site, property page, form, Search site by keyword or category, edit", "sweep");
+  assert.deepEqual(parsed.containers.map((c) => c.role), ["property page", "form"]);
+  assert.equal(parsed.containers[0].name, "Search the site");
+  assert.equal(parsed.objects[0].name, "Search site by keyword or category");
+});
