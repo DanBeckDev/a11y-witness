@@ -2,5 +2,27 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "outDir": "dist", "rootDir": "src" },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["src/**/*.test.ts"],
+  // NOT decoration, and `judge/tsconfig.json` already carried this exact comment for this exact failure:
+  // "`prepare` runs during `npm ci` in whatever order npm chooses, and this package's build failed there
+  // with `Cannot find module '@a11y-witness/evidence/wcag'` — the sibling's `dist` did not exist yet."
+  //
+  // It was fixed for judge and not for scorer, which is this repo's most expensive recurring shape: a
+  // remedy applied at one call site when the behaviour reaches several. Measured 2026-08-25 on a fresh
+  // worker, where `npm install` had never run before:
+  //
+  //   npm error path C:\Users\witness\a11y-witness\packages\scorer
+  //   npm error command tsc --build
+  //   src/evidence-units.ts(37,10): error TS2305: Module '"@a11y-witness/evidence"' has no exported
+  //   member 'annotateCapture'.
+  //
+  // The timestamps settle what it was: evidence's `dist/index.d.ts` was written at 12:45:56 and this
+  // build read it and failed at 12:45:57. Not a stale checkout — a RACE, because without `references`
+  // `tsc --build` has no dependency information and takes whatever is on disk.
+  //
+  // Invisible on every warm machine, since a `dist` that already exists is always complete enough. Only a
+  // first install can see it, which is why it waited for the fifth box.
+  "references": [
+    { "path": "../evidence" }
+  ]
 }

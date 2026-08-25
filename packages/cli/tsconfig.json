@@ -5,9 +5,13 @@
   "exclude": ["src/**/*.test.ts"],
   // `tsc --build` builds these first, so a fresh `npm ci` cannot compile the CLI against a sibling's missing
   // `dist` — the failure M4 hit. `nvda-worker` is deliberately absent: the CLI speaks HTTP to a worker.
+  // `../scorer` was missing while `cli.ts` imported `scorerPaths` from it — found by the discovery guard
+  // in `project-references.test.ts`, not by anything that had run before. Same latent race as scorer's own
+  // missing reference to evidence: invisible on a warm machine, a coin-flip on a first `npm install`.
   "references": [
     { "path": "../evidence" },
     { "path": "../judge" },
+    { "path": "../scorer" },
     { "path": "../worker-fleet" }
   ]
 }
