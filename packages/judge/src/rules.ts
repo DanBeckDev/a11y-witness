@@ -593,6 +593,17 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
       + `while the title stayed ${JSON.stringify(titleAfter)}`);
 }
 
+/** How many separate FORMS the page announces. See `addBrokenFocusOrder` for why this decides anything. */
+function formsAnnounced(transcript: readonly string[]): number {
+  let forms = 0;
+  for (const line of transcript) {
+    for (const container of parseAnnouncement(String(line), "transcript").containers) {
+      if (container.role === "form") forms += 1;
+    }
+  }
+  return forms;
+}
+
 /**
  * Names the PAGE uses more than once, counted in the raw transcript rather than in what was extracted.
  *
@@ -929,6 +940,16 @@ function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
   // Only names that identify one control in BOTH sequences. A repeated name cannot be tracked between
   // them, and comparing it invents a reordering — see `unambiguous`.
   const readingOnce = unambiguous(reading), tabbedOnce = unambiguous(tabbed);
+  // MORE THAN ONE FORM MEANS THE NAMES REPEAT BY CONSTRUCTION, so nothing here can be tracked between
+  // the two channels. A tutorial page carries several worked examples and therefore several buttons
+  // called Submit; `w3.org/WAI/tutorials/forms/validation/` has three forms and 2.4.3 reported a
+  // reordering built from two different ones.
+  //
+  // `repeatedOnThePage` below cannot always see it: that page announces one Submit as
+  // "form, Name (required):, edit, required, , button, Submit", where the name lands in `trailing`
+  // rather than as a parsed object, so it is uncountable. Counting FORMS is the fact that is actually
+  // available, and it is the right one — the ambiguity is a property of the page's structure.
+  if (formsAnnounced(input.transcript ?? []) > 1) return;
   const onPage = repeatedOnThePage(input.transcript ?? []);
   const shared = new Set([...readingOnce]
     .filter((name) => tabbedOnce.has(name) && !onPage.has(name)));
