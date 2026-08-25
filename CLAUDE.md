@@ -1758,6 +1758,50 @@ failure as `capture-check` being mandatory and never running once.
 | `corpus:grants-map` | emits the JS-side `grants` declarations for the Python audit to read. Run by `corpus:grants-audit`; separate because the audit REFUSES without it rather than examining an empty set |
 | `changeset:status` / `release:version` | changesets, as usual |
 
+## Make the failure bubble up, or you will dig for it every time
+
+Three commands answer "what happened", and the third was missing for months:
+
+```bash
+npm run lab:status -- -e job=<name>   # systemd's view, the journal, and the run's own progress file
+npm run lab:log -- -e job=<name>      # the job's OWN OUTPUT, unwrapped — bytes, not YAML
+npm run lab:fetch -- -e artifact=<name>   # a report, as a file
+```
+
+**`lab:log` exists because reading one audit's output took eleven hand-written `awk | sed | grep`
+pipelines in a single session, one of which silently matched nothing.** `lab:status` shows the journal
+through Ansible's `debug`, which wraps at ~90 characters, re-indents and quotes as YAML — so a table, a
+transcript or a threshold sweep arrives as fragments. The journal is now written to a file on the lab and
+fetched. That is the same remedy `lab-fetch.yml` already applied to reports, and improvising around it
+rather than reading it is itself the defect this file names.
+
+Three rules that follow, each of which cost a round trip on 2026-08-25:
+
+- **A report that exists only as stdout is one a job runner can lose.** `audit_grants.py` exited 1 with a
+  real finding and its journal read `-- No entries --`. Write the report to `runs/` and make it fetchable.
+- **Two different faults must not print the same word.** That audit reported `FAIL vague-link 0/52` for a
+  declaration naming a feature the pipeline no longer computes — nothing wrong with those 52 pages —
+  beside `FAIL fake-heading 35/48`, which is real missing evidence. They need opposite fixes and one of
+  them is not in the corpus at all. It now prints `STALE` and says why.
+- **A count is where an investigation stops.** "13 records lack it" sent me theorising twice. The report
+  now carries the TRANSCRIPT of up to three failing records, and the answer was visible in one line of it:
+  `"out of table, Borrowing books"` — NVDA's container-exit prefix, which the relation rejects as a role.
+
+### The order that would have saved the evening: AUDIT FIRST, THEN FIX
+
+Every wrong turn on 2026-08-25 came from reasoning about a MECHANISM instead of measuring the EVIDENCE,
+and every recovery came from an audit that asked "is this actually true?" over the whole corpus.
+
+| what I reasoned | what the audit said |
+|---|---|
+| `plain_heading_candidate` separates perfectly — 5 of 5 held-out positives carry it | it misses **13 of 108** on the full corpus; five positives cannot see a 12% miss rate |
+| `probeTables: false` on 62 cases means the table evidence was never captured | `table_position_only` reads the TRANSCRIPT — **49 of 49 carry it**, the corpus was fine and my check was wrong |
+| 52 `vague-link` records are missing evidence | the feature was deleted this morning; the DECLARATION is stale |
+
+Two of those three would have led to a full recapture of 62 cases for nothing. **Write the check that
+would detect the problem, run it to confirm the problem is what you think, then fix, then re-run.** Doing
+it the other way round cost two reverts and most of an evening.
+
 ## Verifying changes
 
 **Two of these now run themselves. That is deliberate, and it is the point.**
