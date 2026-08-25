@@ -594,6 +594,41 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
 }
 
 /**
+ * Names the PAGE uses more than once, counted in the raw transcript rather than in what was extracted.
+ *
+ * `unambiguous` drops a name that appears twice in a sequence, which is the right idea and can be
+ * defeated: a name missed by extraction in one channel and present in the other looks unique in both.
+ *
+ * Measured 2026-08-25 on `w3.org/WAI/tutorials/forms/validation/`, a tutorial page carrying several
+ * example forms and therefore several buttons called Submit. One is announced as
+ * `"form, Name (required):, edit, required, , button, Submit"` — name-first inside a transcript line, a
+ * shape the reading-order extractor does not take — and another as `"out of grouping, button, Submit"`,
+ * which it does. So `Submit` appeared once in the extracted reading order and once in the tab order, and
+ * 2.4.3 compared two different buttons and reported a reordering on one of W3C's own tutorials.
+ *
+ * Counting raw lines instead makes the check independent of what extraction happened to catch, which is
+ * the property it needed: the ambiguity is a fact about the PAGE, not about the parse.
+ */
+function repeatedOnThePage(transcript: readonly string[]): Set<string> {
+  const seen = new Map<string, number>();
+  for (const line of transcript) {
+    for (const object of parseAnnouncement(String(line), "transcript").objects) {
+      const name = object.name.trim();
+      if (name) seen.set(name, (seen.get(name) ?? 0) + 1);
+    }
+    // Also the name-first shapes the reading-order extractor skips, which is exactly where the missed
+    // duplicate lived. Counted from the same line by the other grammar.
+    for (const object of parseAnnouncement(String(line), "sweep").objects) {
+      const name = object.name.trim();
+      if (name) seen.set(name, (seen.get(name) ?? 0) + 1);
+    }
+  }
+  // > 2, not > 1: every line is counted by BOTH grammars above, so one occurrence scores two. A name is
+  // repeated on the page only when it clears that doubling.
+  return new Set([...seen].filter(([, count]) => count > 2).map(([name]) => name));
+}
+
+/**
  * Names that identify exactly ONE control in a sequence.
  *
  * Two controls can announce identically — MDN has a sidebar toggle and a theme toggle, both "Toggle" — and
@@ -894,7 +929,9 @@ function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
   // Only names that identify one control in BOTH sequences. A repeated name cannot be tracked between
   // them, and comparing it invents a reordering — see `unambiguous`.
   const readingOnce = unambiguous(reading), tabbedOnce = unambiguous(tabbed);
-  const shared = new Set([...readingOnce].filter((name) => tabbedOnce.has(name)));
+  const onPage = repeatedOnThePage(input.transcript ?? []);
+  const shared = new Set([...readingOnce]
+    .filter((name) => tabbedOnce.has(name) && !onPage.has(name)));
   if (shared.size < 2) return;
   const readingOrder = reading.filter((name) => shared.has(name));
   const tabOrder = tabbed.filter((name) => shared.has(name));
