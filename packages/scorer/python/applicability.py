@@ -93,6 +93,19 @@ def _interacted(field: str) -> Callable[[Record], bool]:
 #: an omission — see `test_applicability.py`, which requires every shipped subtype to be either declared
 #: here or listed as unconditional with a reason.
 SUBTYPE_REQUIRES: dict[str, Callable[[Record], bool]] = {
+    # A claim that PROSE ACTS AS A HEADING without announcing one — gated on the relation itself.
+    #
+    # THIS WAS TRIED, REFUSED BY THE CORPUS, AND REVERTED, and the difference now is a fix rather than an
+    # argument. It silenced 13 of 108 labelled positives, every one a multi-defect page whose fake heading
+    # follows a container exit: NVDA announces `"out of table, Borrowing books"`, and
+    # `plain_heading_candidate` rejected it because `table` is a role word. With the exit prefix stripped,
+    # `lab:job -e job=applicability-audit` measures the same gate over 2,503 records as **SAFE — 108
+    # positives, 0 silenced**.
+    #
+    # Still the SUBJECT of the claim and not the defect: it requires prose that reads as a section title,
+    # which is what the subtype is about. The missing heading ROLE is not required, so the absence case
+    # this subtype exists to catch is untouched.
+    "1.3.1:fake-heading": _reads_as_an_unmarked_heading,
     # A claim about an IMAGE. All three are absence findings — a missing, generic or filename alt — so the
     # precondition is that a graphic exists at all, never that its alternative is bad.
     "1.1.1:filename-alt": _has("graphics"),
@@ -138,9 +151,6 @@ UNCONDITIONAL: dict[str, str] = {
     #
     # So they stay unconditional until the evidence can distinguish the two, and the false positive on
     # `acceptance-link-permits/bad` stays open rather than being closed by deleting 62 true positives.
-    "1.3.1:fake-heading": "the relation it would require, `plain_heading_candidate`, misses 13 of 108 "
-                          "real positives on multi-defect pages — it looked exact only on a held-out set "
-                          "of single-defect pages",
     "1.3.1:unassociated-table": "an empty `tableCells` means EITHER no table OR that probeTables never "
                                 "ran, and the record does not say which — it silenced 49 of 140",
     "2.1.1:control-unreachable-by-keyboard": "the finding is that a control is missing from the focus "
