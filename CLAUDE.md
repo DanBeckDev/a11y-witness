@@ -1754,6 +1754,8 @@ failure as `capture-check` being mandatory and never running once.
 | `training:check-signals:complete` | `check-signals` that REFUSES a partial corpus, rather than scoring what happens to be on disk |
 | `training:capture-acceptance`, `training:export-acceptance`, `training:export-acceptance:all` | the held-out set. Never cached, because those runs exist to test whether NVDA's output is still stable. The `:all` one exports EVERY repeat, because the evaluator reads every repeat — two jobs feeding one consumer is a drift generator, and produced a held-out score computed half on each |
 | `training:train-baseline` | train without the realism tier, for comparison |
+| `corpus:grants-audit` | **does a multi-defect page carry the evidence its labels claim?** Every accompanying defect declares a `grants` feature and nothing read it — so a label for a defect whose evidence was never captured passed every gate. Needs the AUTHORITATIVE corpus: `lab:job -e job=grants-audit` |
+| `corpus:grants-map` | emits the JS-side `grants` declarations for the Python audit to read. Run by `corpus:grants-audit`; separate because the audit REFUSES without it rather than examining an empty set |
 | `changeset:status` / `release:version` | changesets, as usual |
 
 ## Verifying changes
