@@ -96,13 +96,17 @@ def test_no_precondition_silences_a_true_positive():
     assert ruled_out > 0, "no record was ruled inapplicable; these preconditions are inert"
 
 
-def test_the_measured_failure_is_ruled_out_and_its_sibling_is_not():
+def test_the_measured_failure_is_ruled_out_and_the_real_defect_is_not():
     """The page that survived recalibration, and the discrimination that matters.
 
     `acceptance-link-permits/bad` is three announcements — a heading, a sentence, and `link, Go`. It has no
-    table, so `1.3.1:unassociated-table` is not a claim about it. `1.3.1:fake-heading` IS still applicable,
-    because the absence of a heading role is that subtype's whole finding and there is nothing to require.
-    A precondition that switched both off would be hiding a head rather than scoping it.
+    table, and no prose that reads as an unmarked title, so NEITHER 1.3.1 subtype is a claim about it. Its
+    real defect, 2.4.4, must stay judgeable: a precondition that silenced that would be hiding the model's
+    correct finding along with its wrong one.
+
+    An earlier version of this test asserted `1.3.1:fake-heading` stays APPLICABLE here, on the reasoning
+    that "the absence of the heading role IS the finding". That was wrong, and the measurement below is
+    what settled it.
     """
     records = [rows for name, rows in corpora() if "acceptance" in name]
     if not records:
@@ -115,7 +119,39 @@ def test_the_measured_failure_is_ruled_out_and_its_sibling_is_not():
 
     record = hit[0]
     assert applicability.applicable("1.3.1:unassociated-table", record) is False
-    assert applicability.applicable("1.3.1:fake-heading", record) is True
+    assert applicability.applicable("1.3.1:fake-heading", record) is False
     assert applicability.applicable("2.4.4:regex", record) is True, (
         "the page's REAL defect must stay judgeable — it has a link, and 2.4.4 is its declared failure"
     )
+
+
+def test_the_fake_heading_precondition_is_an_actual_separator():
+    """The evidence for making it conditional, kept next to the decision.
+
+    Measured on the held-out set: every record labelled `1.3.1:fake-heading` carries the relation, and no
+    clean record does. A precondition drawn from a feature that did NOT separate would silence true
+    positives the moment the corpus grew, so the separation is asserted rather than assumed — and if it
+    ever stops holding, this fails before the preconditions start deleting evidence.
+    """
+    sets = corpora()
+    if not sets:
+        pytest.skip("no labelled records on this machine — the lab holds the corpus. Honest skip.")
+
+    positives = missed = clean_with = clean_total = 0
+    for _name, rows in sets:
+        for record in rows:
+            labelled = "1.3.1:fake-heading" in set((record.get("target") or {}).get("subtypes") or [])
+            holds = applicability.applicable("1.3.1:fake-heading", record)
+            if labelled:
+                positives += 1
+                missed += not holds
+            else:
+                clean_total += 1
+                clean_with += holds
+
+    assert positives >= 5, f"only {positives} labelled positives; too few to claim separation"
+    assert missed == 0, f"{missed} of {positives} labelled positives lack the relation — it would silence them"
+    # Not required to be zero: a clean page MAY contain prose that reads as a title without that being a
+    # failure, and the head is what decides. What matters is that the relation is not everywhere, or the
+    # precondition would rule nothing out.
+    assert clean_with < clean_total, "every clean record carries the relation; the precondition is inert"

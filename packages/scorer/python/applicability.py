@@ -64,6 +64,22 @@ def _has(field: str) -> Callable[[Record], bool]:
     return present
 
 
+def _reads_as_an_unmarked_heading(record: Record) -> bool:
+    """The transcript contains prose that ACTS as a section title without announcing a heading role.
+
+    This is `plain_heading_candidate` — the same relation the featurizer computes into
+    `plain_heading_candidate_present` — asked as a precondition rather than as a weight. Imported lazily
+    so this module stays importable without the featurizer's dependencies; `score.py` loads both anyway.
+    """
+    import screenreader_features  # local, to keep this module dependency-free at import time
+
+    transcript = record.get("input", {}).get("transcript") or []
+    return any(
+        screenreader_features.plain_heading_candidate(value, transcript[index + 1])
+        for index, value in enumerate(transcript[:-1])
+    )
+
+
 def _interacted(field: str) -> Callable[[Record], bool]:
     """The capture actually performed the interaction this subtype reasons about."""
     def present(record: Record) -> bool:
@@ -82,6 +98,18 @@ SUBTYPE_REQUIRES: dict[str, Callable[[Record], bool]] = {
     "1.1.1:filename-alt": _has("graphics"),
     "1.1.1:generic-alt": _has("graphics"),
     "1.1.1:missing-alt": _has("graphics"),
+    # A claim that PROSE ACTS AS A HEADING without announcing one.
+    #
+    # This was listed as unconditional, with the reason "there is no structural thing to require, since the
+    # absence of the heading role IS the finding". THAT WAS WRONG, and the measurement says so: on the
+    # held-out set, 5 of 5 records labelled `1.3.1:fake-heading` carry `plain_heading_candidate_present`
+    # and 0 of 99 clean records do. An exact separator, and the head fired anyway on a page where it reads
+    # zero — because 30 structured features cannot outvote 384 embedding dimensions, and a linear head
+    # only ADDS.
+    #
+    # The precondition is still the SUBJECT and not the defect: it requires that prose reads as a title,
+    # which is what the subtype is a claim ABOUT. The missing heading ROLE — the defect — is not required.
+    "1.3.1:fake-heading": _reads_as_an_unmarked_heading,
     # A claim about a TABLE. This is the subtype that produced the failure above.
     "1.3.1:unassociated-table": _has("tableCells"),
     # A claim about a LINK.
@@ -104,8 +132,6 @@ SUBTYPE_REQUIRES: dict[str, Callable[[Record], bool]] = {
 #: Every one of these is a claim about the page as a whole or about a probe whose absence is itself the
 #: finding, so there is nothing that could be required without deleting evidence.
 UNCONDITIONAL: dict[str, str] = {
-    "1.3.1:fake-heading": "a claim that prose ACTS as a heading without being one — there is no structural "
-                          "thing to require, since the absence of the heading role IS the finding",
     "2.1.1:control-unreachable-by-keyboard": "the finding is that a control is missing from the focus "
                                              "order; requiring focusOrder would be circular",
     "2.1.2:focus-trapped": "a property of the focus order as a whole, not of any element",
