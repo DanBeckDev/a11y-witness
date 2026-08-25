@@ -1368,6 +1368,67 @@ alternatives — a quantile criterion, or conformal risk control giving a *bound
 finite-sample guarantee — all trade "zero on this corpus" for "bounded in expectation", which for a tool
 that ASSERTS conformance failures is a decision about what the product promises. Not to be made silently.
 
+## 2026-08-25: eleven false positives on real pages, and they were all ONE defect
+
+Driven to zero on 86 conformant real pages. `2.1.1` went from **66% of pages to 0**, `2.4.3` from 71% to
+6%, `4.1.2` on training pages from **56% to 3%**. Four of the eleven had been producing ASSERTIONS, and
+three of those landed on **W3C's own accessibility tutorials** — the pages that teach the guidance.
+
+**Every one was two things compared that describe different moments, or different alphabets.** That is the
+same sentence as the 2026-08-24 section below, and it is worth writing twice because it kept being true.
+
+| what was compared | and why they could not match |
+|---|---|
+| a COUNT sweep, read as an ordering | `collectByType` walks backwards from the caret then forwards, deduplicating. On `date-input` the caret fell between Month and Year, so a reconstruction placed them 17 entries apart where the page reads them adjacent. **The transcript is a read-through and is ordered by construction** — that is the only reading-order signal this tool has. |
+| a toggle's name, before and after it was pressed | `"Expand Quick start"` becomes `"Collapse Quick start"`. `probeDisclosure` activates a control unconditionally, so the sweep can record BOTH labels while the focus probe only ever sees the second. |
+| a page open for one probe, closed for another | sportengland's search panel was expanded for the sweep and collapsed for the focus probe. Controls inside a closed panel are not focusable, correctly. **A capture is not an instant.** |
+| Tab against a widget that shares one tab stop | Native radio groups and ARIA's roving tabindex give a GROUP one stop, with arrows inside. The probe presses only Tab, so a capture cannot tell *reachable by arrows* from *unreachable*. |
+| a name with an icon-font glyph against one without | **U+E604**, Private Use Area, in the focus channel and not the sweep — so `"Print this page"` never matched itself. `\s` does not match it and `trim()` does not remove it. The U+FFFC lesson in a second alphabet. |
+| a name with `clickable` wedged into its container prefix | NVDA interleaves a STATE between containers: `"main landmark, clickable, form, clickable, Continue, button"`. The container loop stopped at the first one, so `"form Continue"` became a control name. |
+| one element announced with TWO roles | `<button><img alt="Submit Search"></button>` is `"Submit Search, graphic, button"`. Parsed as a named graphic PLUS an unnamed button — and an empty name IS the 4.1.2 finding. |
+| a container role used as a NAME | `"Menu, button"` is a button named Menu; `menu` is also a container role, so the name was stripped and the button reported unnamed. **The disambiguation is CASE** — NVDA lower-cases roles and passes names through as authored. |
+| markup read aloud, against prose | `<input type="image" src="searchbutton.png">` is announced `"less input type equals image src equals searchbutton dot png"`. `isImage` matched the word *image* inside the markup. |
+
+### The one that matters most: a rule can be clean because it has gone DEAF
+
+The transcript rewrite took `2.4.3` from 71% of conformant pages to 6% — and caught **0 of the 4 corpus
+records it owns**. NVDA WRAPS a field's label and role onto separate transcript lines:
+
+```
+"form, Full name"     <- the label, no role
+"edit"                <- the role, no name
+```
+
+Requiring both on one line found nothing in the corpus. The real-page number looked excellent for the
+worst possible reason, and it would have shipped.
+
+**`rules:gate` refused it, and that is the whole point of the corpus.** It is free ground truth: 1,183
+conformant records with 0 false positives, and every rule-owned subtype scored against real captured
+evidence. **Run it after ANY change that makes a rule quieter.** Quieter is only good if it has not gone
+deaf, and nothing on the real-page side can tell you which you got.
+
+### Two process slips, recorded because they are cheap to avoid
+
+- **A verdict was quoted from a journal window spanning two runs**, and the older one was read — a stale
+  `RULES: FAIL` for a gate that passes. `journalctl --since "$(systemctl show -p ExecMainStartTimestamp
+  --value <unit>)"` bounds it to the run you dispatched.
+- **A commit went in with three tests failing**, because `npm test` was run and its result not read. The
+  tests were right and caught a real over-broad fix.
+
+### What is CORRECT and must not be "fixed"
+
+18 findings remain on 86 conformant pages and every one was checked individually:
+
+- **4 assertions, all real** — scotcourts' `<button class="inner mobileMenuButton">` with no text and no
+  aria-label, networkrail's bare `"button"` and its silent state change.
+- **8 referrals on combo boxes**, where NVDA announces the VALUE where a name would go, so *unnamed* and
+  *named, value shown* are indistinguishable. Suppressing this was tried and lost three real corpus
+  positives; `secondary` → `cantTell` is the tested answer.
+- **5 real order differences** and **1 real filename-as-alt**.
+
+A referral on a conformant page is not automatically a defect. **Check whether the evidence genuinely
+shows the thing before making the tool quieter about it.**
+
 ### What was checked and REFUTED, so nobody re-derives it
 
 **Bag size is not the driver.** The distribution shift is real and large — corpus median 18 / max 43 against
