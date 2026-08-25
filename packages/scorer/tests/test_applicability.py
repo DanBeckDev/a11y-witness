@@ -89,17 +89,16 @@ def test_no_precondition_silences_a_true_positive():
     assert sum(counts["ruledOut"] for counts in report.values()) > 0, "these preconditions are inert"
 
 
-def test_the_measured_failure_is_ruled_out_and_the_real_defect_is_not():
-    """The page that survived recalibration, and the discrimination that matters.
+def test_the_1_3_1_subtypes_stay_JUDGEABLE_because_absence_is_ambiguous():
+    """The false positive is NOT closed here, and pretending otherwise would cost 62 true positives.
 
-    `acceptance-link-permits/bad` is three announcements — a heading, a sentence, and `link, Go`. It has no
-    table, and no prose that reads as an unmarked title, so NEITHER 1.3.1 subtype is a claim about it. Its
-    real defect, 2.4.4, must stay judgeable: a precondition that silenced that would be hiding the model's
-    correct finding along with its wrong one.
+    Both 1.3.1 subtypes were conditional for one commit. Against the full corpus the preconditions
+    silenced 13 of 108 `fake-heading` positives and 49 of 140 `unassociated-table` positives, every one a
+    multi-defect page. An empty `tableCells` means EITHER no table OR that `probeTables` never ran, and the
+    record does not say which.
 
-    An earlier version of this test asserted `1.3.1:fake-heading` stays APPLICABLE here, on the reasoning
-    that "the absence of the heading role IS the finding". That was wrong, and the measurement below is
-    what settled it.
+    So they are unconditional, and `acceptance-link-permits/bad` is still judged on 1.3.1. That is the
+    honest state: a precondition may only rule a subtype out when its subject is KNOWN absent.
     """
     records = [rows for name, rows in corpora() if "acceptance" in name]
     if not records:
@@ -111,40 +110,47 @@ def test_the_measured_failure_is_ruled_out_and_the_real_defect_is_not():
         pytest.skip("acceptance-link-permits/bad not in the records on this machine")
 
     record = hit[0]
-    assert applicability.applicable("1.3.1:unassociated-table", record) is False
-    assert applicability.applicable("1.3.1:fake-heading", record) is False
+    assert applicability.applicable("1.3.1:unassociated-table", record) is True
+    assert applicability.applicable("1.3.1:fake-heading", record) is True
     assert applicability.applicable("2.4.4:regex", record) is True, (
         "the page's REAL defect must stay judgeable — it has a link, and 2.4.4 is its declared failure"
     )
+    assert "1.3.1:fake-heading" in applicability.UNCONDITIONAL, (
+        "if this becomes conditional again, `lab:job -e job=applicability-audit` must pass on the FULL "
+        "corpus first — the held-out set is single-defect pages and made it look exact"
+    )
 
 
-def test_the_fake_heading_precondition_is_an_actual_separator():
-    """The evidence for making it conditional, kept next to the decision.
+def test_the_held_out_set_is_NOT_enough_to_qualify_a_precondition():
+    """The measurement that misled me — and it took three tries to state correctly.
 
-    Measured on the held-out set: every record labelled `1.3.1:fake-heading` carries the relation, and no
-    clean record does. A precondition drawn from a feature that did NOT separate would silence true
-    positives the moment the corpus grew, so the separation is asserted rather than assumed — and if it
-    ever stops holding, this fails before the preconditions start deleting evidence.
+    On the held-out set `plain_heading_candidate` separates `1.3.1:fake-heading` perfectly: 5 of 5 labelled
+    positives carry it, 0 of 99 clean records do. Against all 2,611 records the same relation misses 13 of
+    108 real positives — a 12% miss rate.
+
+    My first explanation was "the held-out set is one defect per page". Wrong: it holds 6 multi-defect
+    records. My second was "none of them carries this subtype". Also wrong: one does, and it passes.
+
+    The true reason is arithmetic and duller than either. FIVE positives cannot see a 12% miss rate — the
+    expected number of misses in a sample that size is 0.6, so observing zero is the likeliest outcome
+    even when the relation is unsafe. The sample was not unrepresentative in SHAPE; it was too small to
+    carry the claim, and 5/5 looked exactly like proof.
+
+    So the bar is on the count, where it belongs: a precondition needs enough positives here to detect a
+    miss rate worth caring about, or it must be qualified against the full corpus with
+    `lab:job -e job=applicability-audit`.
     """
-    sets = corpora()
+    sets = [(n, r) for n, r in corpora() if "acceptance" in n]
     if not sets:
-        pytest.skip("no labelled records on this machine — the lab holds the corpus. Honest skip.")
+        pytest.skip("no acceptance records on this machine")
+    records = [record for _n, rows in sets for record in rows]
 
-    positives = missed = clean_with = clean_total = 0
-    for _name, rows in sets:
-        for record in rows:
-            labelled = "1.3.1:fake-heading" in set((record.get("target") or {}).get("subtypes") or [])
-            holds = applicability.applicable("1.3.1:fake-heading", record)
-            if labelled:
-                positives += 1
-                missed += not holds
-            else:
-                clean_total += 1
-                clean_with += holds
-
-    assert positives >= 5, f"only {positives} labelled positives; too few to claim separation"
-    assert missed == 0, f"{missed} of {positives} labelled positives lack the relation — it would silence them"
-    # Not required to be zero: a clean page MAY contain prose that reads as a title without that being a
-    # failure, and the head is what decides. What matters is that the relation is not everywhere, or the
-    # precondition would rule nothing out.
-    assert clean_with < clean_total, "every clean record carries the relation; the precondition is inert"
+    positives = [r for r in records
+                 if "1.3.1:fake-heading" in ((r.get("target") or {}).get("subtypes") or [])]
+    # The number that matters. At 12% a sample needs roughly 25 positives before a single miss is more
+    # likely than not; five is nowhere near, which is why this subtype must be qualified on the lab.
+    assert len(positives) < 25, (
+        f"the held-out set now carries {len(positives)} `1.3.1:fake-heading` positives, which is enough to "
+        f"start detecting a miss rate around 12%. Re-run `lab:job -e job=applicability-audit` and "
+        f"re-decide whether the precondition is safe, rather than inheriting this test's conclusion."
+    )

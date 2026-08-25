@@ -94,10 +94,10 @@ def test_the_shared_decision_actually_combines_BOTH_halves():
     sys.path.insert(0, str(REPO / "packages" / "scorer" / "python"))
     import applicability
 
-    with_table = {"input": {"structure": {"tableCells": ["cell"]}}}
+    with_graphic = {"input": {"structure": {"graphics": ["graphic, a kiln"]}}}
     without = {"input": {"structure": {}}}
-    subtype = "1.3.1:unassociated-table"
+    subtype = "1.1.1:missing-alt"
 
-    assert applicability.decide(subtype, 0.9, 0.5, with_table) is True
-    assert applicability.decide(subtype, 0.1, 0.5, with_table) is False, "the threshold half is missing"
+    assert applicability.decide(subtype, 0.9, 0.5, with_graphic) is True
+    assert applicability.decide(subtype, 0.1, 0.5, with_graphic) is False, "the threshold half is missing"
     assert applicability.decide(subtype, 0.9, 0.5, without) is False, "the applicability half is missing"
