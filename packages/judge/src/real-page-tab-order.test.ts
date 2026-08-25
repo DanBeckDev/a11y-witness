@@ -258,3 +258,29 @@ test("a REAL filename alternative is still reported", () => {
   const real = { transcript: ["graphic, cropped-Awesome-railways-graphic-2-1035 times 532 dot png"] };
   assert.equal(fires(real, "1.1.1"), true);
 });
+
+test("a label and role WRAPPED onto separate transcript lines is still one control", () => {
+  // NVDA wraps a field's label and its role onto separate lines, and the corpus is full of it:
+  //
+  //     "form, Full name"     <- the label, with no role
+  //     "edit"                <- the role, with no name
+  //
+  // Requiring both on one line found nothing there, so 2.4.3 caught 0 of the 4 corpus records it owns —
+  // clean on real pages by being DEAF, which rules:gate refused. `hasEmptyName` already names this exact
+  // shape. Both the wrapped and inline forms must reach the same finding.
+  const wrapped = {
+    transcript: ["form, Full name", "edit", "Email", "edit", "Postcode", "edit"],
+    interaction: {
+      focusOrder: ["Postcode, edit, focused", "Full name, edit, focused", "Email, edit, focused"],
+    },
+  };
+  assert.equal(fires(wrapped, "2.4.3"), true, "the corpus shape must still be caught");
+
+  const inline = {
+    transcript: ["edit, Full name", "edit, Email", "edit, Postcode"],
+    interaction: {
+      focusOrder: ["Postcode, edit, focused", "Full name, edit, focused", "Email, edit, focused"],
+    },
+  };
+  assert.equal(fires(inline, "2.4.3"), true, "and so must the real-page shape");
+});

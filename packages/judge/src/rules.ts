@@ -859,11 +859,27 @@ const FORM_FIELD_ROLES = new Set([
 
 function controlsInReadingOrder(input: RuleInput): string[] {
   const names: string[] = [];
+  // NVDA WRAPS a field's label and its role onto separate transcript lines, and the corpus is full of it:
+  //
+  //     "form, Full name"     <- the label, with no role
+  //     "edit"                <- the role, with no name
+  //
+  // Requiring both on one line found nothing there, so 2.4.3 caught 0 of the 4 corpus records it owns —
+  // clean on real pages by being deaf, which `rules:gate` refused. `hasEmptyName` already names this
+  // exact shape: "line-wrapping, where a labelled field's role and name land on separate transcript
+  // lines". A bare label line is therefore held and used by the next role that arrives without one.
+  let pendingLabel = "";
   for (const line of input.transcript ?? []) {
-    for (const object of parseAnnouncement(String(line), "transcript").objects) {
-      if (!FORM_FIELD_ROLES.has(object.role)) continue;
-      const name = object.name.replace(FOCUS_ONLY_STATES, " ").replace(/[\s,]+/g, " ").trim();
+    const parsed = parseAnnouncement(String(line), "transcript");
+    if (!parsed.objects.length) {
+      pendingLabel = parsed.trailing.join(" ").replace(/[\s,]+/g, " ").trim();
+      continue;
+    }
+    for (const object of parsed.objects) {
+      const own = object.name.replace(FOCUS_ONLY_STATES, " ").replace(/[\s,]+/g, " ").trim();
+      const name = FORM_FIELD_ROLES.has(object.role) ? own || pendingLabel : "";
       if (name) names.push(name);
+      pendingLabel = "";
     }
   }
   return names;
