@@ -232,7 +232,16 @@ function takeLeaving(tokens: string[]): string[] {
 function takeContainers(tokens: string[]): { name: string; role: string }[] {
   const containers: { name: string; role: string }[] = [];
   for (;;) {
-    if (containerAt(tokens[0] ?? "")) {
+    // A CONTAINER ROLE THAT IS ALSO A NAME. `"Menu, button, collapsed"` on financial-ombudsman.org.uk is a
+    // button whose accessible name is "Menu" — but `menu` is a container role, so it was stripped as
+    // context and the button reported as having no name at all. That is a 4.1.2 ASSERTION against a
+    // correctly labelled control.
+    //
+    // The disambiguation is what FOLLOWS. A container is announced before more context — `"Menu,
+    // navigation landmark, list, with 6 items, link, Details"`, the case this vocabulary was widened for
+    // — whereas a name is announced immediately before its own role. So a container token followed
+    // directly by a CONTROL role is not a container; it is the control's name.
+    if (containerAt(tokens[0] ?? "") && !matches(tokens[1] ?? "", CONTROLS_ORDERED)) {
       containers.push({ name: "", role: containerAt(tokens.shift() ?? "") });
       continue;
     }
