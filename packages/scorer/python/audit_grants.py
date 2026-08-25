@@ -77,6 +77,10 @@ def defects_in(case_id: str, known: list[str]) -> list[str]:
 def audit(records: list[dict[str, Any]], grants: dict[str, str]) -> dict[str, Any]:
     """Per accompanying defect: which records fail to carry the feature it declares. PURE."""
     known = list(grants)
+    # The canonical list the pipeline actually computes, read from the module rather than hardcoded: a
+    # second copy of the feature names is exactly how a declaration comes to name one that no longer
+    # exists, which is the fault this distinction exists to report.
+    vector = set(getattr(features, "FEATURE_NAMES", ()) or ()) or None
     report: dict[str, Any] = {}
     for record in records:
         provenance = record.get("provenance", {})
@@ -95,10 +99,28 @@ def audit(records: list[dict[str, Any]], grants: dict[str, str]) -> dict[str, An
             continue
         for defect in defects_in(case_id, known):
             feature = grants[defect]
-            entry = report.setdefault(defect, {"feature": feature, "records": 0, "missing": []})
+            entry = report.setdefault(defect, {
+                "feature": feature,
+                # A declaration naming a feature the pipeline no longer computes is a fact about the
+                # DECLARATION, recorded once here so every record does not report it as absent evidence.
+                "declarationStale": vector is not None and feature not in vector,
+                "records": 0, "missing": [], "examples": [],
+            })
             entry["records"] += 1
-            if not float(values.get(feature, 0.0)):
-                entry["missing"].append(case_id)
+            if float(values.get(feature, 0.0)):
+                continue
+            entry["missing"].append(case_id)
+            if len(entry["examples"]) < 3 and not entry["declarationStale"]:
+                # The evidence, not just the count. What the page ANNOUNCED is the only thing that can say
+                # why a relation did not hold, and fetching it by hand afterwards is the step this exists
+                # to remove. Skipped for a stale declaration, where the transcript says nothing at all.
+                entry["examples"].append({
+                    "case": case_id,
+                    "transcript": [str(line) for line in (record["input"].get("transcript") or [])][:14],
+                    "otherFeaturesPresent": sorted(
+                        name for name, value in values.items() if float(value or 0.0)
+                    )[:12],
+                })
     return report
 
 
