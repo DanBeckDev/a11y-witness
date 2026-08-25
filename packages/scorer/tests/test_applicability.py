@@ -89,16 +89,19 @@ def test_no_precondition_silences_a_true_positive():
     assert sum(counts["ruledOut"] for counts in report.values()) > 0, "these preconditions are inert"
 
 
-def test_the_1_3_1_subtypes_stay_JUDGEABLE_because_absence_is_ambiguous():
-    """The false positive is NOT closed here, and pretending otherwise would cost 62 true positives.
+def test_fake_heading_is_gated_and_unassociated_table_is_NOT():
+    """Two subtypes of one criterion, and only one has a safe precondition. The difference is measured.
 
-    Both 1.3.1 subtypes were conditional for one commit. Against the full corpus the preconditions
-    silenced 13 of 108 `fake-heading` positives and 49 of 140 `unassociated-table` positives, every one a
-    multi-defect page. An empty `tableCells` means EITHER no table OR that `probeTables` never ran, and the
-    record does not say which.
+    `1.3.1:fake-heading` requires prose that reads as an unmarked title. That gate was tried, refused by
+    the corpus at 13 of 108 positives silenced, and reverted — every silenced case a multi-defect page
+    whose fake heading follows a container exit (`"out of table, Borrowing books"`, which
+    `plain_heading_candidate` rejected because `table` is a role word). With the exit prefix stripped,
+    `lab:job -e job=applicability-audit` measures the same gate over 2,503 records as SAFE: 108 positives,
+    0 silenced.
 
-    So they are unconditional, and `acceptance-link-permits/bad` is still judged on 1.3.1. That is the
-    honest state: a precondition may only rule a subtype out when its subject is KNOWN absent.
+    `1.3.1:unassociated-table` stays UNGATED. Requiring `tableCells` silenced 49 of 140, and the reason is
+    unchanged by any of this: `probeTables` is opt-in, so an empty field means either "no table" or
+    "nobody asked", and the record does not say which.
     """
     records = [rows for name, rows in corpora() if "acceptance" in name]
     if not records:
@@ -110,15 +113,16 @@ def test_the_1_3_1_subtypes_stay_JUDGEABLE_because_absence_is_ambiguous():
         pytest.skip("acceptance-link-permits/bad not in the records on this machine")
 
     record = hit[0]
-    assert applicability.applicable("1.3.1:unassociated-table", record) is True
-    assert applicability.applicable("1.3.1:fake-heading", record) is True
+    assert applicability.applicable("1.3.1:fake-heading", record) is False, (
+        "the page is a heading, a sentence and a vague link — no prose reads as an unmarked title"
+    )
+    assert applicability.applicable("1.3.1:unassociated-table", record) is True, (
+        "absence of tableCells is ambiguous; gating on it silenced 49 of 140 labelled positives"
+    )
     assert applicability.applicable("2.4.4:regex", record) is True, (
         "the page's REAL defect must stay judgeable — it has a link, and 2.4.4 is its declared failure"
     )
-    assert "1.3.1:fake-heading" in applicability.UNCONDITIONAL, (
-        "if this becomes conditional again, `lab:job -e job=applicability-audit` must pass on the FULL "
-        "corpus first — the held-out set is single-defect pages and made it look exact"
-    )
+    assert "1.3.1:unassociated-table" in applicability.UNCONDITIONAL
 
 
 def test_the_held_out_set_is_NOT_enough_to_qualify_a_precondition():
