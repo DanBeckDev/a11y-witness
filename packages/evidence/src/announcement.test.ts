@@ -178,3 +178,28 @@ test("ordinary text is untouched by the glyph strip", () => {
   const parsed = parseAnnouncement("Continue to payment, button", "sweep");
   assert.equal(parsed.objects[0].name, "Continue to payment");
 });
+
+test("an element announced with TWO roles is one control, not an unnamed second one", () => {
+  // NVDA announces `<button><img alt="Submit Search"></button>` as "Submit Search, graphic, button" —
+  // the image's alt, the image's role, then the role of the element containing it. The object loop read
+  // that as a named graphic followed by an UNNAMED button, and an empty name IS the 4.1.2 finding.
+  //
+  // Measured 2026-08-25 on four of W3C's own accessibility TUTORIAL pages, plus lbhf.gov.uk,
+  // metoffice.gov.uk and financial-ombudsman.org.uk — and CONFORMANCE-mapped, so an assertion.
+  const parsed = parseAnnouncement("Submit Search, graphic, button", "sweep");
+  assert.equal(parsed.objects.length, 1);
+  assert.equal(parsed.objects[0].name, "Submit Search");
+});
+
+test("a genuinely unnamed image button is still ONE unnamed control", () => {
+  // The distinction the merge must not destroy, and the one this module exists to hold. With no name at
+  // all there is nothing to attach the outer role to, so both objects stay and 4.1.2 still fires.
+  const parsed = parseAnnouncement("graphic, button", "sweep");
+  assert.ok(parsed.objects.every((o) => o.name === ""),
+    "no name anywhere means this really is an unnamed control");
+});
+
+test("two separately named controls on one line are still two controls", () => {
+  const parsed = parseAnnouncement("Search, edit, Submit, button", "sweep");
+  assert.deepEqual(parsed.objects.map((o) => `${o.name}|${o.role}`), ["Search|edit", "Submit|button"]);
+});

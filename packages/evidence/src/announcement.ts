@@ -320,7 +320,41 @@ export function parseAnnouncement(raw: string, channel: Channel): ParsedAnnounce
     if (object) objects.push({ ...object, states: [...leadingStates, ...object.states] });
     if (tokens.length === before) break;
   }
-  return { containers, leaving, objects, trailing: tokens.filter((t) => t.length > 0), raw };
+  return {
+    containers, leaving, objects: mergeNestedRoles(objects),
+    trailing: tokens.filter((t) => t.length > 0), raw,
+  };
+}
+
+/**
+ * One element announced with TWO roles is one control, not two — and the second is not unnamed.
+ *
+ * NVDA announces `<button><img alt="Submit Search"></button>` as `"Submit Search, graphic, button"`: the
+ * image's alt text, the image's role, then the role of the element containing it. The object loop read
+ * that as `Submit Search|graphic` followed by a SECOND object with an empty name and the role `button` —
+ * and an empty name IS the 4.1.2 finding, so a correctly labelled image button was reported as a control
+ * with no accessible name.
+ *
+ * Measured 2026-08-25, and where it was measured is the point: four of W3C's own accessibility TUTORIAL
+ * pages, plus lbhf.gov.uk, metoffice.gov.uk and financial-ombudsman.org.uk. Those tutorials are as close
+ * to ground truth as this project can get, and the finding was CONFORMANCE-mapped — an assertion, not a
+ * referral.
+ *
+ * Merged only when the previous object HAS a name. `"graphic, button"` with no name at all is a genuinely
+ * unnamed image button and stays exactly one unnamed object, so the real 4.1.2 still fires — which is the
+ * distinction this whole module exists to hold, and losing it would be the worse defect.
+ */
+function mergeNestedRoles(objects: ParsedObject[]): ParsedObject[] {
+  const merged: ParsedObject[] = [];
+  for (const object of objects) {
+    const previous = merged[merged.length - 1];
+    if (object.name === "" && previous && previous.name !== "") {
+      previous.states.push(...object.states);
+      continue;
+    }
+    merged.push(object);
+  }
+  return merged;
 }
 
 /**
