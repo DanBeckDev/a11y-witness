@@ -82,9 +82,26 @@ rather than file-pushed, so they deploy by pulling:
 
 ```bash
 npm run fleet:deploy                  # pull + install + restart + PROVE it (bare metal)
+npm run fleet:provision               # the ROLE: NVDA, the Edge pin, policies, and the provision stamp
+npm run fleet:provision -- --serial=0 # all boxes at once, rather than one at a time
 eval "$(npm run --silent fleet:env)"                                # A11Y_WORKERS from inventory.yml
 npm run fleet:status                                                # what every box is doing, right now
 ```
+
+**`fleet:provision` runs the ROLE, and it must run across the WHOLE fleet.** `provisionRevision` is a hash
+of four environment files and it is a CAPTURE CACHE KEY that `fleet-consistency` also treats as
+MUST_MATCH — so a box provisioned alone gets a stamp its peers do not have, the fleet reads INCONSISTENT,
+and every capture run refuses to start. `stamp-provision-revision.ps1` records that happening: four boxes,
+four revisions, *"purely because each first-booted at a different commit during one afternoon"*. Use
+`--limit` only to REPAIR a box back to the stamp its peers already carry, never to add one.
+
+> It **refuses a worker mid-capture**, and that refusal replaced `serial: 1` doing the job badly.
+> Serialising made provisioning-during-a-run survivable rather than impossible — it restarts a worker
+> mid-capture, destroying 12–520 s of unresumable work, and splits `provisionRevision` across the corpus.
+> `sleep.yml` already had the refusal twenty lines away. With it in place, `--serial=0` is the normal way
+> to converge a fleet: measured 2026-08-25, **10 m 07 s across five boxes against 26 minutes serial** —
+> and serial ALSO fired the `run_once` Node-version lookup once per box, defeating the guarantee its own
+> comment describes, because `run_once` means once per BATCH.
 
 `fleet:status` is the "which box is the problem" answer: per worker, its state, its `/health.code`, and —
 for a busy one — the case it is on, how long it has been there and the phase it is IN, read from
@@ -1564,6 +1581,35 @@ curl -s http://<guest-ip>:8765/diagnostics | jq .
 `/health` stays cheap because it is polled; `/diagnostics` walks directories and shells out, so it is
 on-demand only.
 
+### What state is the CORPUS in — `lab:inventory`
+
+```bash
+npm run lab:job -- -e job=inventory     # the authoritative answer, on the box that holds the corpus
+npm run lab:inventory                   # against a local copy; it SAYS it is a copy
+npm run lab:inventory -- --json
+```
+
+Every other moving part had a status command — `fleet:status` for the boxes, `lab:status` for a job,
+`doctor` for the local environment, `worker:code` for what the guests run. The corpus and the artefacts
+trained from it had none, and they are what everything else exists to produce. So those questions were
+answered by opening an SSH shell and running ad-hoc Python — **about eight times on 2026-08-25**, one of
+which read the wrong field and reported `captured: 0` while `lab:status` correctly said 85. A one-off
+script has no tests, no review and no second reader.
+
+It answers four questions, each of which has cost a run:
+
+| | |
+|---|---|
+| **is the corpus homogeneous?** | the distribution of every cache-key field, with COUNTS — "split" and "split 3,168 to 42" distinguish a finished migration from a run that died halfway. An ABSENT field is counted as a value, because the key reads it as `unknown` and those captures can never match a live guest |
+| **are the exports current?** | measured against the CAPTURES each was built from, not against the clock. The featurizer reads a `parsed` block baked in at export time, so an announcement-grammar change moves the model input without touching a line of Python |
+| **what schema is each model stamped with?** | read from safetensors metadata, not `training-report.json`, which does not carry it |
+| **is a schema migration open?** | what `release:gate` refuses on, and which candidate could close it |
+
+**It reports WHERE it read from, because it lied on its first run.** From a laptop it said *"NO candidate
+carries it yet"* — true locally, false on the lab, which held a v15 candidate. `runs/` is gitignored, so a
+local copy is only as fresh as its last sync and carries no `runs/model-*` at all. "None here" and "none
+anywhere" are different answers, and it now refuses to turn the first into the second.
+
 **NVDA records almost nothing by default** — a whole session log is seven lines, identical on a healthy
 guest and a failing one. `A11Y_NVDA_LOG_LEVEL=DEBUG` raises it (applied to `nvda.ini` at boot, no
 elevation needed). Opt-in, because NVDA writes a great deal at DEBUG and this pipeline measures
@@ -1678,6 +1724,37 @@ Proved by making it fire against the real fleet, not by a green unit test: a whi
 worker file took it from `Fleet runs this checkout (worker code bccf65cf76d4baef, 4 worker(s) checked)` to
 a refusal naming both hashes and exit 3. **A guard must be shown to fail before it is trusted** — both
 capture-client guards were mutation-checked the same way.
+
+## Every other command, and when you would reach for it
+
+The sections above document a command where the problem it solves is described, which is more useful than
+an index. These are the rest — real commands with no natural home above, listed so that none is
+discoverable only by reading its own source.
+
+`commands-documented.test.ts` enforces the coverage: every npm script must appear somewhere a human
+looks, or be declared INTERNAL with a reason. It was added because three commands and two flags landed in
+one day and only one reached this file. **A command nobody can find is a command nobody runs** — the same
+failure as `capture-check` being mandatory and never running once.
+
+| command | when |
+|---|---|
+| `fleet:normalise` | bring every LOCAL UTM guest to one baseline, elevated, and prove it took. The bare-metal equivalent is `fleet:provision` |
+| `guest:run` | run a script on a UTM guest elevated and actually get its output — `utmctl exec` returns exit 0 and no output whether or not it ran |
+| `fleet:tailscale` | put the fleet on Tailscale |
+| `layers:compare` | **the project's central claim, demonstrated**: which findings can ONLY the screen-reader layer produce? Asserted for a long time before anyone ran the two side by side |
+| `verdict:stability` | is an OCCURRENCE verdict stable on a flaky substrate? |
+| `eval:capture` | recapture the eval fixtures, over a live worker or in-process on the guest |
+| `rules:score` | `rules:gate` without the gate — the per-criterion detail rather than a pass/fail |
+| `scorer:migration` | is a schema migration open? `release:gate` runs it first and refuses while one is. `lab:inventory` also reports it, with which candidate could close it |
+| `candidate:gate` | the gate chain against a CANDIDATE rather than the shipped weights — the question `release:gate` structurally cannot ask |
+| `promote:model` | copy trained weights into `packages/scorer/models/` and write the changeset. Stops at an uncommitted tree |
+| `promote:gated` | `candidate:gate` and then `promote:model`, which is what `lab:job -e job=promote` runs. Never promotes on a failed gate |
+| `training:capture:fresh` | generate the pages and then capture them. Capturing without regenerating is testing the previous commit |
+| `training:build-realism` | add the real-page tier to the exported dataset |
+| `training:check-signals:complete` | `check-signals` that REFUSES a partial corpus, rather than scoring what happens to be on disk |
+| `training:capture-acceptance`, `training:export-acceptance`, `training:export-acceptance:all` | the held-out set. Never cached, because those runs exist to test whether NVDA's output is still stable. The `:all` one exports EVERY repeat, because the evaluator reads every repeat — two jobs feeding one consumer is a drift generator, and produced a held-out score computed half on each |
+| `training:train-baseline` | train without the realism tier, for comparison |
+| `changeset:status` / `release:version` | changesets, as usual |
 
 ## Verifying changes
 
