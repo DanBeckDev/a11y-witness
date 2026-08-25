@@ -130,6 +130,25 @@ probe constant, a name normaliser, a calibration sweep, a promotion gate and a t
 
 ## Driving the false-positive rate to zero, 2026-08-25
 
+**FINAL, on the settled 50-page calibration set and 86 conformant real pages in total.**
+
+| | |
+|---|---|
+| `rules:gate` | **PASS** — 1,183 conformant records, 0 false positives |
+| asserted wrongly, product path | **1** of 44 conformant pages scored |
+| publisher-declared inaccessible caught | **3 of 3** |
+| tool-caused false positives | **0** — all 18 remaining findings checked individually |
+| `2.1.1` on conformant pages | 66% → **0%** |
+| `2.4.3` | 71% → **6%** |
+| `4.1.2` on training pages | 56% → **3%** |
+| resolution of the calibration set | 2.6% → **2.0%** |
+
+The one remaining assertion is networkrail's bare `"button"`, traced to markup rather than assumed. The
+sweep's own legend governs how to read it: *ASSERTED-WRONGLY counts disagreement with a PUBLISHED CLAIM,
+not proven tool error.*
+
+
+
 Every finding on a conformant real page was traced to a root cause. **Five were the tool's fault and are
 fixed; the rest are correct.** The rates, on conformant calibration pages:
 
