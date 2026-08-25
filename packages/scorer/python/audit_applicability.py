@@ -24,6 +24,15 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import applicability  # noqa: E402
+import screenreader_features as features  # noqa: E402
+
+#: Gates somebody has proposed but not applied, reported so the cost is a measurement rather than a guess.
+#:
+#: `1.3.1:fake-heading` is here because gating it was tried, refused by the corpus (13 of 108 positives
+#: silenced), and reverted -- and the container-exit fix has since changed the inputs. Whether it changed
+#: them ENOUGH is exactly what this reports, over the full corpus, rather than from a sample small enough
+#: to miss a 12% miss rate.
+CANDIDATE_GATES = {"1.3.1:fake-heading": "plain_heading_candidate_present"}
 
 
 def sweep(records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -59,6 +68,34 @@ def sweep(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 def read(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def would_gating(subtype: str, feature: str, records: list[dict[str, Any]]) -> dict[str, Any]:
+    """If `subtype` were gated on `feature`, what would it cost? Measured, never assumed.
+
+    Added because the same question was answered wrongly twice on 2026-08-25 — once from a 5-positive
+    held-out sample that could not see a 12% miss rate, and once from a theory about which probe ran. The
+    only trustworthy answer is a count over the whole corpus, so it is a function rather than an argument.
+    """
+    silenced: list[str] = []
+    positives = clean = clean_with = 0
+    for record in records:
+        labelled = subtype in set((record.get("target") or {}).get("subtypes") or [])
+        try:
+            values = features.structured_feature_values(record)
+        except RuntimeError:
+            continue
+        present = float(values.get(feature, 0.0)) > 0
+        if labelled:
+            positives += 1
+            if not present:
+                provenance = record.get("provenance", {})
+                silenced.append(f"{provenance.get('caseId')}/{provenance.get('variant')}")
+        else:
+            clean += 1
+            clean_with += present
+    return {"subtype": subtype, "feature": feature, "positives": positives,
+            "wouldSilence": silenced, "cleanRecords": clean, "cleanCarryingFeature": clean_with}
 
 
 def main() -> int:
@@ -104,6 +141,19 @@ def main() -> int:
         # Not fatal: a subtype may legitimately apply to every record in this corpus. Said aloud because a
         # precondition that never fires is one nobody would notice was wrong.
         print(f"\n  NOTE: ruled nothing out, so unverified here: {', '.join(inert)}")
+    # WHAT A PROPOSED GATE WOULD COST, for the subtypes not currently gated. This is the question that was
+    # answered wrongly twice from small samples; answering it here, over the full corpus, is the whole
+    # point of the audit having a home on the lab.
+    print("\n  IF THESE WERE GATED ON THEIR OWN FEATURE (not currently, reported so the cost is known):")
+    for subtype, feature in CANDIDATE_GATES.items():
+        cost = would_gating(subtype, feature, records)
+        verdict = "SAFE" if not cost["wouldSilence"] else f"COSTS {len(cost['wouldSilence'])}"
+        print(f"    {verdict:12s} {subtype:32s} on {feature}")
+        print(f"                 {cost['positives']} positive(s); "
+              f"{cost['cleanCarryingFeature']} of {cost['cleanRecords']} clean records also carry it")
+        for case in cost["wouldSilence"][:5]:
+            print(f"                 would silence: {case}")
+
     print("\n  PASS — no precondition silences a labelled positive.")
     return 0
 
