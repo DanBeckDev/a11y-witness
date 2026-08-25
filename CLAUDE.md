@@ -207,6 +207,12 @@ Two more that follow:
 
 - **Never pipe a command whose exit status you intend to read.** `cmd > /tmp/log 2>&1; echo "EXIT=$?"` then
   read the file. `set -o pipefail` also works; a bare `| tail` does not.
+  > **And then actually READ the echoed value — the remedy has the same trap inside it.** Appending
+  > `; echo "EXIT=$?"` makes the COMPOUND command's status the echo's, which is always 0. Measured
+  > 2026-08-25: the `gates` pipeline failed at stage 5 and the surrounding harness reported the run as
+  > exit 0, because the shell's last statement had succeeded. The file said `PIPELINE_EXIT=2`. So the
+  > echo is not a substitute for reading it, it is the only place the real status survives — and a
+  > wrapper that reports the shell's status is the `| tail` defect wearing the recommended fix.
 - **Check the premise before re-running the expensive thing.** Three capture runs went into "the 2.1.1
   fixture will not capture" before anyone asked whether that page demonstrates 2.1.1. It did not, and
   `real-page-corpus.test.ts` now answers that offline in milliseconds by pinning a fixture's declared
