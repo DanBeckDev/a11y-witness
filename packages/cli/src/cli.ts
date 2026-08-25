@@ -23,8 +23,7 @@ import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "@a11y-witness/judge/layers";
 import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fleet";
-import { requestJson } from "@a11y-witness/worker-fleet/worker-http";
-import { CAPTURE_HARD_TIMEOUT_DEFAULT_MS } from "@a11y-witness/nvda-worker";
+import { requestJson, CAPTURE_CLIENT_TIMEOUT_MS } from "@a11y-witness/worker-fleet/worker-http";
 import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
 import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics, type ConformanceRequirement }
@@ -496,8 +495,14 @@ interface CaptureRequest {
  * than five minutes, and the number below never applied. `AbortSignal.timeout()` does not govern that cap;
  * only a different client does. Measured, and the reason `requestJson` exists — see worker-http.mjs.
  */
-const CLIENT_TIMEOUT_MARGIN_MS = 40_000;
-const CAPTURE_CLIENT_TIMEOUT_MS = CAPTURE_HARD_TIMEOUT_DEFAULT_MS + CLIENT_TIMEOUT_MARGIN_MS;
+// The SHARED ceiling, imported rather than recomputed. This was
+// `CAPTURE_HARD_TIMEOUT_DEFAULT_MS + 40_000`, which is 560_000 -- byte for byte the value
+// `worker-http.mjs` already exports, arrived at a second way and paid for with an import of
+// `@a11y-witness/nvda-worker`. That package is NOT a dependency of this one (isolation-smoke.mjs asserts
+// it must not be, "the CLI speaks HTTP to a worker"), so the published bundle imported something npm
+// never installed -- and it reached guidepup, which throws at import wherever there is no screen reader.
+// Found by `no-win32-imports.test.ts`; `budget-ladder.test.ts` already treats an unresolvable ceiling as
+// "it comes from the shared constant", which is now true here.
 
 async function captureViaWorker(
   url: string, { task, worker, probeForms, probeFocus }: CaptureRequest,
