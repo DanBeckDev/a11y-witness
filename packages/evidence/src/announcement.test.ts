@@ -215,7 +215,11 @@ test("a container role used as a NAME is not stripped as context", () => {
   assert.deepEqual(asName.containers, []);
   assert.equal(asName.objects[0].name, "Menu");
 
-  // And the case the vocabulary was widened FOR still parses as context.
+  // And the case the vocabulary was widened FOR still parses as context — more precisely than before.
+  // GOV.UK labels its navigation "Menu", and that is now read as the landmark's NAME rather than as a
+  // second bare container, which is what it actually is.
   const asContainer = parseAnnouncement("Menu, navigation landmark, list, with 6 items, link", "sweep");
-  assert.deepEqual(asContainer.containers.map((c) => c.role), ["menu", "navigation landmark", "list"]);
+  assert.deepEqual(asContainer.containers.map((c) => c.role), ["navigation landmark", "list"]);
+  assert.equal(asContainer.containers[0].name, "Menu");
+  assert.equal(asContainer.objects[0].name, "", "the link inside it is still unnamed");
 });

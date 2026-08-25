@@ -174,6 +174,23 @@ const cleanName = (parts: string[]): string =>
     .replace(/\s*,\s*,\s*/g, ", ")
     .replace(/^[\s,]+|[\s,]+$/g, "").trim();
 
+/**
+ * Is this token written the way NVDA writes a ROLE, rather than the way an author writes a NAME?
+ *
+ * NVDA lower-cases roles and adornments — `banner landmark`, `table with 3 rows`, `list` — and passes a
+ * name through as authored. So case separates `"Menu, button"` (a button named Menu) from
+ * `"menu, list, link"` (a menu containing a list containing a link), which no amount of looking at
+ * neighbouring tokens can do reliably.
+ */
+const isLowerCaseRole = (token: string): boolean => {
+  const trimmed = token.trim();
+  return trimmed.length > 0 && trimmed === trimmed.toLowerCase();
+};
+
+/** A container announced with no name of its own: the role word alone, as NVDA writes it. */
+const isBareContainer = (token: string): boolean =>
+  isLowerCaseRole(token) && containerAt(token) !== "";
+
 const isState = (token: string): boolean => STATE_PATTERNS.some((pattern) => pattern.test(token.trim()));
 const matches = (token: string, vocabulary: readonly string[]): string =>
   vocabulary.find((role) => token.trim().toLowerCase() === role) ?? "";
@@ -237,11 +254,14 @@ function takeContainers(tokens: string[]): { name: string; role: string }[] {
     // context and the button reported as having no name at all. That is a 4.1.2 ASSERTION against a
     // correctly labelled control.
     //
-    // The disambiguation is what FOLLOWS. A container is announced before more context — `"Menu,
-    // navigation landmark, list, with 6 items, link, Details"`, the case this vocabulary was widened for
-    // — whereas a name is announced immediately before its own role. So a container token followed
-    // directly by a CONTROL role is not a container; it is the control's name.
-    if (containerAt(tokens[0] ?? "") && !matches(tokens[1] ?? "", CONTROLS_ORDERED)) {
+    // The disambiguation is CASE. NVDA writes a role in lower case and a name as its author wrote it, so
+    // a capitalised token that happens to collide with the role vocabulary is a name.
+    //
+    // Deciding it on what FOLLOWS instead was tried first and was wrong: it made a container token before
+    // a control role always a name, which broke `"banner landmark, link, graphic, GOV dot UK"` and
+    // `"table with 3 rows, link"` — both legitimately a container in front of an unnamed control, and
+    // both already pinned by tests. Those tests caught it, which is what they are for.
+    if (isBareContainer(tokens[0] ?? "")) {
       containers.push({ name: "", role: containerAt(tokens.shift() ?? "") });
       continue;
     }
