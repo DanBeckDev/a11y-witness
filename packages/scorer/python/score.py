@@ -431,8 +431,8 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
                 # See `applicability.py` for why the precondition is the SUBJECT of the claim and never
                 # the defect -- most of these subtypes are findings of ABSENCE, and requiring the defect
                 # would delete the evidence they exist to catch.
-                predicted = (value >= float(subtype_report["threshold"])
-                             and applicability.applicable(subtype, record))
+                predicted = applicability.decide(
+                    subtype, value, float(subtype_report["threshold"]), record)
                 subtype_scores_out[subtype] = value
                 subtype_predictions[subtype] = predicted
                 decided = decided or predicted
