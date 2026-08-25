@@ -128,3 +128,85 @@ def test_recall_is_an_outcome_and_the_positives_never_move_the_cut():
     first, _ = trainer.np_threshold(negatives, "x", [])
     second, _ = trainer.np_threshold(list(reversed(negatives)), "x", [])
     assert first == second, "the cut must not depend on the order the negatives arrive in"
+
+
+def _shape_where_recall_is_flat():
+    """The 2.4.4 shape, measured: positives well separated, a few negative stragglers below them.
+
+    Between the order statistic and the lowest positive, lowering the cut admits negatives and no
+    positives. That is the region where the NP floor spends its whole budget for nothing.
+    """
+    import random
+    random.seed(1)
+    negatives = [random.uniform(0, 0.05) for _ in range(1890)] + [
+        0.08, 0.09, 0.12, 0.15, 0.30, 0.31, 0.33, 0.35, 0.40, 0.42
+    ]
+    positives = [random.uniform(0.80, 0.99) for _ in range(140)]
+    return negatives, positives
+
+
+def test_the_cut_is_RAISED_off_the_floor_when_recall_is_flat():
+    """The order statistic is a FLOOR, not the answer.
+
+    `s_(r*)` is by construction the lowest cut satisfying the bound, which is right in the continuous
+    idealisation where a lower cut always buys power. In a finite sample it often buys none.
+
+    Measured 2026-08-25 on 2.4.4:regex: the chosen cut 0.0694 gave TP 144 / FP 4, while the sweep showed
+    0.25 and 0.75 both gave TP 144 / FP 0 -- identical recall, no false positives, a cut an order of
+    magnitude higher. A strictly dominated choice. That head then fired 2.4.4 on
+    `acceptance-b2-generic-kiln/good`, A PAGE WITH NO LINK ON IT, and failed the held-out gate.
+    """
+    trainer = load()
+    negatives, positives = _shape_where_recall_is_flat()
+    cut, guarantee = trainer.np_threshold(negatives, "flat", [], positives)
+
+    floor = guarantee["floor"]
+    assert cut > floor, "the cut was left on the floor where raising it was free"
+
+    kept = sum(1 for p in positives if p >= cut)
+    kept_at_floor = sum(1 for p in positives if p >= floor)
+    assert kept == kept_at_floor, "raising the cut lost recall; it must admit exactly the same positives"
+
+    admitted = sum(1 for x in negatives if x >= cut)
+    admitted_at_floor = sum(1 for x in negatives if x >= floor)
+    assert admitted < admitted_at_floor, "raising bought no reduction in false positives"
+    assert admitted == guarantee["admittedFalsePositives"]
+
+
+def test_raising_never_breaks_the_guarantee():
+    """A higher cut admits weakly fewer negatives, so the bound holds a fortiori.
+
+    `permittedFalsePositives` keeps reporting what the BOUND allows rather than what the cut spends --
+    they are different facts, and `type_one_error_blocker` compares against the first.
+    """
+    trainer = load()
+    negatives, positives = _shape_where_recall_is_flat()
+    _, guarantee = trainer.np_threshold(negatives, "flat", [], positives)
+    assert guarantee["admittedFalsePositives"] <= guarantee["permittedFalsePositives"]
+    assert guarantee["method"] == "neyman-pearson-order-statistic"
+    assert guarantee["atTarget"] is True
+
+
+def test_with_no_positives_above_the_floor_the_cut_stays_put():
+    """Nothing to preserve and nothing to gain, so it is not raised to an arbitrary place."""
+    trainer = load()
+    negatives, _ = _shape_where_recall_is_flat()
+    cut, guarantee = trainer.np_threshold(negatives, "none", [], [0.001, 0.002])
+    assert cut == guarantee["floor"]
+
+    cut_no_positives, guarantee2 = trainer.np_threshold(negatives, "none", [], [])
+    assert cut_no_positives == guarantee2["floor"], "an empty positive list must not move the cut"
+
+
+def test_raise_to_same_power_is_the_lowest_positive_at_or_above_the_floor():
+    """Pure, and asserted directly: the boundary is what `score >= threshold` makes it.
+
+    Every cut up to and including the smallest admitted positive keeps the same positives, and one step
+    beyond drops it. Raising to exactly that value is the largest cut that loses nothing.
+    """
+    trainer = load()
+    assert trainer.raise_to_same_power(0.1, [0.05, 0.4, 0.9]) == 0.4
+    assert trainer.raise_to_same_power(0.4, [0.05, 0.4, 0.9]) == 0.4, "a positive ON the floor is kept"
+    assert trainer.raise_to_same_power(0.5, [0.05, 0.4]) == 0.5, "nothing above the floor: stay put"
+    assert trainer.raise_to_same_power(0.5, None) == 0.5
+    assert trainer.raise_to_same_power(0.5, []) == 0.5
