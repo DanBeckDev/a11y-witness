@@ -143,17 +143,38 @@ def main() -> int:
 
     print(f"\n  {len(records)} record(s), {len(report)} accompanying defect(s) present\n")
     broken = []
+    stale_declarations = []
     for defect, entry in sorted(report.items()):
         missing = entry["missing"]
-        mark = "FAIL" if missing else "OK  "
-        if missing:
+        if entry.get("declarationStale"):
+            mark = "STALE"
+            stale_declarations.append(defect)
+        elif missing:
+            mark = "FAIL"
             broken.append(defect)
-        print(f"  {mark} {defect:24s} grants {entry['feature']:32s} "
+        else:
+            mark = "OK"
+        print(f"  {mark:5s} {defect:22s} grants {entry['feature']:32s} "
               f"{entry['records'] - len(missing):4d}/{entry['records']:4d} carry it")
+        if entry.get("declarationStale"):
+            print("           ^ that feature is NOT in the pipeline's feature vector. The DECLARATION is")
+            print("             stale, not the corpus — these records were never examined for anything.")
+            continue
         for case in missing[:6]:
-            print(f"         missing: {case}")
+            print(f"           missing: {case}")
         if len(missing) > 6:
-            print(f"         ... and {len(missing) - 6} more")
+            print(f"           ... and {len(missing) - 6} more")
+        for example in entry.get("examples", []):
+            print(f"\n           WHAT {example['case']} ANNOUNCED:")
+            for line in example["transcript"]:
+                print(f"             {line!r}")
+            print(f"           features it DOES carry: {', '.join(example['otherFeaturesPresent'])}\n")
+
+    if stale_declarations:
+        print(f"\n  {len(stale_declarations)} STALE declaration(s): {', '.join(stale_declarations)}")
+        print("  These name a feature the pipeline no longer computes. Fix the declaration; the corpus is")
+        print("  not implicated, and reporting it as missing evidence sends the next reader to the wrong")
+        print("  layer entirely.")
 
     # WRITTEN TO DISK, not only printed. `lab-fetch.yml` exists because "a job interface that can start a
     # 4-hour training run and cannot return its report leaves you diagnosing from log fragments" — and the
