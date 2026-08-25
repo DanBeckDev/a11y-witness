@@ -1033,6 +1033,49 @@ function addUnnamedGraphics(input: RuleInput, add: AddFinding): void {
 
 const RULE_CRITERIA_SET = new Set<string>(RULE_CRITERIA);
 
+/**
+ * Is this line MARKUP being read aloud, rather than a control being announced?
+ *
+ * NVDA speaks punctuation, so a code sample on the page becomes text: `<input type="image"
+ * src="searchbutton.png" alt="Search">` is announced as *"less input type equals image src equals
+ * searchbutton dot png alt equals Search greater"*.
+ *
+ * Measured 2026-08-25 on three of W3C's own accessibility TUTORIAL pages. `isImage` matched the word
+ * "image" inside `type equals image`, and the filename rule then matched `searchbutton dot png` — so the
+ * pages that TEACH how to write image alternatives were reported as having a filename for an alternative.
+ * The example is the subject of the lesson, printed as an example.
+ *
+ * Keyed on the two characters NVDA renders as words when reading a tag — `<` as "less" and `=` as
+ * "equals", or `>` as "greater". Prose does not put those together in that order; markup always does.
+ */
+const READ_ALOUD_MARKUP = /\bless\s+\w+\b[^]*\b(equals|greater)\b/i;
+
+const isReadAloudMarkup = (line: string): boolean => READ_ALOUD_MARKUP.test(String(line));
+
+/**
+ * 1.1.1 — images with no text alternative: announced "unlabelled", an empty name, or a file name.
+ *
+ * Extracted from `ruleFindings`, which the complexity gate stopped at 16 when the markup guard was added.
+ * It reads better as its own step anyway: one criterion, three ways of failing it, one level of
+ * abstraction.
+ */
+function addImageAlternatives(transcript: string[], add: AddFinding): void {
+  for (const line of transcript) {
+    if (isReadAloudMarkup(line)) continue; // a code SAMPLE, not an image — see `READ_ALOUD_MARKUP`
+    if (!isImage(line)) continue;
+    if (UNLABELLED_RE.test(line) || NO_DESCRIPTION_HINT_RE.test(line)) {
+      // CONFORMANCE-mapped: NVDA said "Unlabeled graphic" in so many words. The screen reader is
+      // reporting non-text content with no text alternative, which is the criterion stated directly.
+      add("1.1.1 Non-text Content", "Image announced as unlabelled (no text alternative)", line,
+        "conformance");
+    } else if (hasEmptyName(line)) {
+      add("1.1.1 Non-text Content", "Image announced with no text alternative", line);
+    } else if (FILENAME_RE.test(accessibleName(line))) {
+      add("1.1.1 Non-text Content", "Image alternative text is a file name, not a description", line);
+    }
+  }
+}
+
 export function ruleFindings(input: RuleInput): Finding[] {
   const findings: Finding[] = [];
   const seen = new Set<string>();
@@ -1049,21 +1092,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
     findings.push({ issue, wcag, severity: "serious", evidence, confidence: 1, mapping });
   };
 
-  // 1.1.1 — images with no text alternative: announced "unlabelled", an empty
-  // name, or a file name used as the alt text.
-  for (const line of input.transcript) {
-    if (!isImage(line)) continue;
-    if (UNLABELLED_RE.test(line) || NO_DESCRIPTION_HINT_RE.test(line)) {
-      // CONFORMANCE-mapped: NVDA said "Unlabeled graphic" in so many words. The screen reader is reporting
-      // non-text content with no text alternative, which is the criterion stated directly.
-      add("1.1.1 Non-text Content", "Image announced as unlabelled (no text alternative)", line,
-        "conformance");
-    } else if (hasEmptyName(line)) {
-      add("1.1.1 Non-text Content", "Image announced with no text alternative", line);
-    } else if (FILENAME_RE.test(accessibleName(line))) {
-      add("1.1.1 Non-text Content", "Image alternative text is a file name, not a description", line);
-    }
-  }
+  addImageAlternatives(input.transcript, add);
 
   // 4.1.2 — controls announced with a role but no accessible name. Transcript
   // path requires the ￼ marker; the structural-sweep path does not (see

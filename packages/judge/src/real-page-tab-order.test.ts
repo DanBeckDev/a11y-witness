@@ -234,3 +234,27 @@ test("a disclosure that opened DURING the capture stops 2.1.1 claiming anything"
   assert.equal(fires(mutated, "2.1.1"), false,
     "the page mutated between the two measurements, so a set comparison across them proves nothing");
 });
+
+test("a code SAMPLE read aloud is not an image with a filename alternative", () => {
+  // NVDA speaks punctuation, so markup printed on a page becomes text:
+  // `<input type="image" src="searchbutton.png" alt="Search">` is announced as
+  // "less input type equals image src equals searchbutton dot png alt equals Search greater".
+  //
+  // Measured on three of W3C's own accessibility TUTORIAL pages. `isImage` matched the word "image"
+  // inside `type equals image`, and the filename rule then matched `searchbutton dot png` — so the pages
+  // that TEACH how to write image alternatives were reported as getting it wrong. The example is the
+  // subject of the lesson, printed as an example.
+  const sample = {
+    transcript: [
+      "example:, less input type equals image src equals searchbutton dot png alt equals Search greater",
+    ],
+  };
+  assert.equal(fires(sample, "1.1.1"), false);
+});
+
+test("a REAL filename alternative is still reported", () => {
+  // The guard must not buy silence. This is the finding 1.1.1 exists for, and networkrail.co.uk has a
+  // genuine one: an alt of "cropped-Awesome-railways-graphic-2-1035x532.png".
+  const real = { transcript: ["graphic, cropped-Awesome-railways-graphic-2-1035 times 532 dot png"] };
+  assert.equal(fires(real, "1.1.1"), true);
+});
