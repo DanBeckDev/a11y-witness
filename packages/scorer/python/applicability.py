@@ -98,20 +98,6 @@ SUBTYPE_REQUIRES: dict[str, Callable[[Record], bool]] = {
     "1.1.1:filename-alt": _has("graphics"),
     "1.1.1:generic-alt": _has("graphics"),
     "1.1.1:missing-alt": _has("graphics"),
-    # A claim that PROSE ACTS AS A HEADING without announcing one.
-    #
-    # This was listed as unconditional, with the reason "there is no structural thing to require, since the
-    # absence of the heading role IS the finding". THAT WAS WRONG, and the measurement says so: on the
-    # held-out set, 5 of 5 records labelled `1.3.1:fake-heading` carry `plain_heading_candidate_present`
-    # and 0 of 99 clean records do. An exact separator, and the head fired anyway on a page where it reads
-    # zero — because 30 structured features cannot outvote 384 embedding dimensions, and a linear head
-    # only ADDS.
-    #
-    # The precondition is still the SUBJECT and not the defect: it requires that prose reads as a title,
-    # which is what the subtype is a claim ABOUT. The missing heading ROLE — the defect — is not required.
-    "1.3.1:fake-heading": _reads_as_an_unmarked_heading,
-    # A claim about a TABLE. This is the subtype that produced the failure above.
-    "1.3.1:unassociated-table": _has("tableCells"),
     # A claim about a LINK.
     "2.4.4:regex": _has("links"),
     # A claim about a HEADING.
@@ -132,6 +118,31 @@ SUBTYPE_REQUIRES: dict[str, Callable[[Record], bool]] = {
 #: Every one of these is a claim about the page as a whole or about a probe whose absence is itself the
 #: finding, so there is nothing that could be required without deleting evidence.
 UNCONDITIONAL: dict[str, str] = {
+    # BOTH 1.3.1 SUBTYPES WERE CONDITIONAL FOR ONE COMMIT, AND THE CORPUS REFUSED THEM.
+    #
+    # `1.3.1:fake-heading` required `plain_heading_candidate`, measured on the held-out set as an exact
+    # separator: 5 of 5 labelled positives carried it, 0 of 99 clean records did. Against all 2,611
+    # records it SILENCED 13 of 108 real positives. `1.3.1:unassociated-table` required `tableCells` and
+    # silenced 49 of 140.
+    #
+    # Every silenced case is a MULTI-DEFECT page (`X+also-Y`), and that is the whole explanation: the
+    # held-out set is one defect per page, so a feature measured there looks exact and is not. ADR 0015 is
+    # about precisely this — "one defect per page taught the scorer to veto" — and the sample that
+    # produced the 5/5 was 104 records of the easy shape.
+    #
+    # The deeper fault is that an empty field has TWO meanings. `probeTables` is opt-in, so no `tableCells`
+    # means either "this page has no table" or "nobody asked about tables" — and this module's own
+    # docstring names that rule before breaking it: a check must never reject evidence whose absence is
+    # the finding. A precondition may only rule a subtype out when the subject is KNOWN absent, and the
+    # record does not currently carry which probes ran.
+    #
+    # So they stay unconditional until the evidence can distinguish the two, and the false positive on
+    # `acceptance-link-permits/bad` stays open rather than being closed by deleting 62 true positives.
+    "1.3.1:fake-heading": "the relation it would require, `plain_heading_candidate`, misses 13 of 108 "
+                          "real positives on multi-defect pages — it looked exact only on a held-out set "
+                          "of single-defect pages",
+    "1.3.1:unassociated-table": "an empty `tableCells` means EITHER no table OR that probeTables never "
+                                "ran, and the record does not say which — it silenced 49 of 140",
     "2.1.1:control-unreachable-by-keyboard": "the finding is that a control is missing from the focus "
                                              "order; requiring focusOrder would be circular",
     "2.1.2:focus-trapped": "a property of the focus order as a whole, not of any element",
