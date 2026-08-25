@@ -1,0 +1,121 @@
+"""A precondition must never silence a true positive.
+
+A subtype ruled inapplicable is never scored, so a precondition that is too strict deletes evidence
+outright — strictly worse than the false positive it was added to remove, and invisible in every score,
+because a finding that was never made cannot be counted as missed.
+
+That is this repo's most expensive rule, and it has a scar attached:
+
+    A check must never reject evidence whose absence is the finding.
+
+`custom-control` bad pages are div-based fake buttons with no `<button>`, so NVDA finds no form controls —
+and that absence IS the 4.1.2 failure. A guard that rejected captures whose probe produced nothing threw
+away exactly the evidence the case existed to demonstrate, failed 44 cases in a live run, and had been
+validated on six hand-picked cases first.
+
+So this runs the real preconditions over every record on disk and fails if ANY record labelled positive
+for a subtype is made inapplicable by it.
+"""
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO / "packages" / "scorer" / "python"))
+
+import applicability  # noqa: E402
+
+
+def corpora():
+    """Every set of labelled records this machine has, largest first.
+
+    The lab holds the authoritative corpus and a laptop holds a copy of whatever was last fetched, so this
+    reads what is here and SKIPS HONESTLY when there is nothing — never passing quietly on an empty set,
+    which is how a guard comes to report success having examined nothing.
+    """
+    found = []
+    for path in [
+        REPO / "runs" / "screenreader-dataset" / "with-realism.jsonl",
+        REPO / "runs" / "screenreader-acceptance" / "repeat-1.jsonl",
+        REPO / "runs" / "fetched" / "candidate.acceptance-records.json",
+    ]:
+        if path.exists():
+            rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+            if rows:
+                found.append((path.name, rows))
+    return found
+
+
+def test_every_shipped_subtype_is_a_decision_rather_than_an_omission():
+    """A subtype absent from both tables would be silently unconditional.
+
+    Unknown subtypes are APPLICABLE by design — a new head must not be switched off by a table that has
+    not heard of it — which is exactly why the decision has to be forced here instead.
+    """
+    declared = set(applicability.SUBTYPE_REQUIRES) | set(applicability.UNCONDITIONAL)
+    assert len(declared) >= 15, f"only {len(declared)} subtypes classified; the head list moved"
+    overlap = set(applicability.SUBTYPE_REQUIRES) & set(applicability.UNCONDITIONAL)
+    assert not overlap, f"{overlap} is both conditional and unconditional"
+    for subtype, why in applicability.UNCONDITIONAL.items():
+        assert len(why) > 30, f"{subtype} is unconditional without a reason"
+
+
+def test_no_precondition_silences_a_true_positive():
+    sets = corpora()
+    if not sets:
+        pytest.skip("no labelled records on this machine — the lab holds the corpus. Honest skip, not a pass.")
+
+    silenced = []
+    ruled_out = 0
+    examined = 0
+    for name, rows in sets:
+        for record in rows:
+            labelled = set((record.get("target") or {}).get("subtypes") or [])
+            for subtype in applicability.SUBTYPE_REQUIRES:
+                examined += 1
+                if applicability.applicable(subtype, record):
+                    continue
+                if subtype in labelled:
+                    silenced.append(f"{name}: {record.get('provenance', {}).get('caseId')} "
+                                    f"/{record.get('provenance', {}).get('variant')} is labelled "
+                                    f"{subtype} and its precondition rules it inapplicable")
+                else:
+                    ruled_out += 1
+
+    assert examined > 500, f"only {examined} (subtype, record) pairs examined; this guard is nearly blind"
+    assert silenced == [], (
+        "A precondition deleted evidence the corpus says is real:\n  " + "\n  ".join(silenced[:20])
+        + "\n\nThe precondition must be the SUBJECT of the claim, never the defect — most of these "
+          "subtypes are findings of ABSENCE, and requiring the defect's own feature removes exactly what "
+          "they exist to catch."
+    )
+    # The other half: a precondition that rules nothing out is decoration, and would pass the assertion
+    # above by doing nothing at all.
+    assert ruled_out > 0, "no record was ruled inapplicable; these preconditions are inert"
+
+
+def test_the_measured_failure_is_ruled_out_and_its_sibling_is_not():
+    """The page that survived recalibration, and the discrimination that matters.
+
+    `acceptance-link-permits/bad` is three announcements — a heading, a sentence, and `link, Go`. It has no
+    table, so `1.3.1:unassociated-table` is not a claim about it. `1.3.1:fake-heading` IS still applicable,
+    because the absence of a heading role is that subtype's whole finding and there is nothing to require.
+    A precondition that switched both off would be hiding a head rather than scoping it.
+    """
+    records = [rows for name, rows in corpora() if "acceptance" in name]
+    if not records:
+        pytest.skip("no acceptance records on this machine")
+    hit = [r for rows in records for r in rows
+           if r.get("provenance", {}).get("caseId") == "acceptance-link-permits"
+           and r.get("provenance", {}).get("variant") == "bad"]
+    if not hit:
+        pytest.skip("acceptance-link-permits/bad not in the records on this machine")
+
+    record = hit[0]
+    assert applicability.applicable("1.3.1:unassociated-table", record) is False
+    assert applicability.applicable("1.3.1:fake-heading", record) is True
+    assert applicability.applicable("2.4.4:regex", record) is True, (
+        "the page's REAL defect must stay judgeable — it has a link, and 2.4.4 is its declared failure"
+    )
