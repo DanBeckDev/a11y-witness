@@ -102,7 +102,10 @@
     "training:export-acceptance:all": "REPEAT=repeat-1 npm run --silent training:export-acceptance && REPEAT=repeat-2 npm run --silent training:export-acceptance",
     "scorer:size-sensitivity": "node packages/lab/scripts/audit-size-sensitivity.mjs",
     "candidate:gate": "npm run scorer:migration -- --evaluating && npm run scorer:shortcuts && npm run gate:isolation && npm run training:check-signals:complete && npm run rules:gate && npm run rules:coverage && npm run rules:real-pages",
-    "promote:gated": "npm run --silent candidate:gate && npm run --silent promote:model --"
+    "promote:gated": "npm run --silent candidate:gate && npm run --silent promote:model --",
+    "scorer:shortcuts:candidate": ".venv/bin/python packages/lab/scripts/audit-scorer-shortcuts.py --model runs/model-candidate --data runs/screenreader-dataset/with-realism.jsonl --no-baseline",
+    "training:evaluate-acceptance:candidate": ".venv/bin/python packages/lab/scripts/evaluate-screenreader-acceptance.py --data runs/screenreader-acceptance/repeat-1.jsonl --data runs/screenreader-acceptance/repeat-2.jsonl --training-data runs/screenreader-dataset/with-realism.jsonl --model runs/model-candidate --training-report runs/model-candidate/training-report.json --out runs/model-candidate/acceptance-report.json",
+    "corpus:applicability-audit": ".venv/bin/python packages/scorer/python/audit_applicability.py"
   },
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
