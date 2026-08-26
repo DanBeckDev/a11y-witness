@@ -1660,6 +1660,7 @@ npm run lab:pipeline -- --list
 npm run lab:pipeline -- --pipeline=real-pages          # deploy -> capture -> rules:real-pages -> rules:coverage
 npm run lab:pipeline -- --pipeline=corpus --ref=<branch>
 npm run lab:pipeline -- --pipeline=gates               # no fleet: reads the corpus already on disk
+npm run lab:pipeline -- --pipeline=verify --only=route-title-stale   # PROVE a corpus change first
 ```
 
 Every stage already existed and was supervised. What did not exist was the ORDER, which lived in
@@ -1667,6 +1668,13 @@ somebody's head — the same defect `lab:retrain` closed one layer down. Retyped
 sequence produced: a fleet deployed at `main` while the lab ran a branch, four boxes rebooted for a ref
 nobody had pushed, an `ANSIBLE_EXIT=2` masked by `| tail`, and three jobs run four commits behind.
 
+- **Prove a corpus change on ONE subtype before paying for the whole corpus.** A full recapture is ~4 h,
+  and a corpus change usually targets one subtype's evidence — so running four hours to discover the fix
+  did not move the number is the wrong order. `verify` captures just the cases named by `--only=` and then
+  runs the audits that would SEE the change; if they still report the same finding, the fix is wrong and
+  it cost minutes. The capability existed the whole time (`capture-screenreader-dataset.mjs` has taken
+  `--only=` with exact ids and lists for months) and **no job exposed it**, so the only unit available was
+  all-or-nothing. Paste what `check-signals` or an audit printed.
 - **ONE ref, resolved once and given to both halves.** `fleet:deploy` takes `a11y_git_ref`, `lab:job` takes
   `ref`, and they default independently — which is exactly how the fleet came to be on a different commit
   from the lab, failing with a hash mismatch that reads like a corrupted guest checkout. It is also
