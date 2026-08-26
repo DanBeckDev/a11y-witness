@@ -178,6 +178,27 @@ A capture **refuses a fleet that is not running this checkout**, at both capture
 
 ---
 
+## A flag a command does not read is refused, not ignored
+
+Every CLI here parses argv by looking for the flags it knows, so anything else is dropped without a word
+and the command runs its default. This repo has paid for that twice — a blocker's own message told the
+reader to run `--write-baseline` when the flag is `--update-baseline`, and `--only=route-title-stale`
+covered 1 of that family's 7 cases. Neither produced an error; both produced a plausible wrong answer.
+
+```
+$ npm run lab:pipeline -- --pipeline=gates --refs=main
+  npm run lab:pipeline: unknown flag --refs — did you mean --ref?
+  It takes: --list --only --pipeline --ref
+  Refusing rather than ignoring it: an ignored flag runs the default and reports success.
+```
+
+Guarded so far — the five where an ignored flag has a measured cost:
+`training:capture`, `lab:pipeline`, `promote:model`, `training:check-signals`, `training:repeat`.
+`promote:model` is the sharpest of them: a mistyped `--dry-run` **promotes**.
+
+The rest are listed in `cli-flags.test.ts` as `UNGUARDED`, **a list that may only shrink** — a new CLI
+that is neither guarded nor on it fails that test, so the gap stays countable rather than invisible.
+
 ## Exit codes and what refuses what
 
 `lab:job`, `lab:status`, `lab:log`, `lab:fetch`, `lab:stop` and `lab:reset` are Ansible playbooks: **0** the
