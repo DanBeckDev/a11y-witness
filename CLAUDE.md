@@ -1661,6 +1661,7 @@ npm run lab:pipeline -- --pipeline=real-pages          # deploy -> capture -> ru
 npm run lab:pipeline -- --pipeline=corpus --ref=<branch>
 npm run lab:pipeline -- --pipeline=gates               # no fleet: reads the corpus already on disk
 npm run lab:pipeline -- --pipeline=verify --only=route-title-stale+  # PROVE a corpus change first
+npm run lab:pipeline -- --pipeline=full                # corpus + model + gates, proven TOGETHER
 ```
 
 Every stage already existed and was supervised. What did not exist was the ORDER, which lived in
