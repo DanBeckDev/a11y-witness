@@ -1715,6 +1715,17 @@ nobody had pushed, an `ANSIBLE_EXIT=2` masked by `| tail`, and three jobs run fo
 - **Stages go through the npm scripts**, never a second spelling of `ansible-playbook` — `lab:job` also sets
   `ANSIBLE_CONFIG`, without which the collections path and host-key settings differ.
 
+**`lab:everything` and `--pipeline=full` were TWO SPELLINGS OF THE WHOLE CHAIN, and they disagreed.**
+`full` names thirteen jobs; the npm chain named six, and nothing compared them. So `shortcuts`,
+`acceptance` and `applicability-audit` were simply absent — and `acceptance` is what writes the report
+`promote:model` requires, so a complete run ended at *"model-candidate is not releasable: held-out
+acceptance has not been run against these weights"* with `rules:gate` (1,183 conformant records, 0 false
+positives), `rules:coverage` and `rules:real-pages` all green behind it. Those three stages existed ONLY
+as Ansible job argv and had no npm script at all, so the chain could not have run them.
+`everything-chain.test.ts` now requires every job in `full` to be a stage here or to be **covered by**
+one — and VERIFIES each claimed containment, because an unverified containment list is "trust me" written
+in test form. Mutation-checked by deleting the `acceptance` stage, which reproduces the failure exactly.
+
 **`lab:everything` names the stage it is on, and the one it stopped at.** It was six npm scripts joined
 with `&&`, which ran correctly as one unit and said nothing about where it had got to — so when it died at
 exit 3 on `REFUSING to overwrite ... a RELEASE-ELIGIBLE model`, locating the stage cost two dispatches and
@@ -1810,6 +1821,7 @@ failure as `capture-check` being mandatory and never running once.
 | `corpus:grants-audit` | **does a multi-defect page carry the evidence its labels claim?** Every accompanying defect declares a `grants` feature and nothing read it — so a label for a defect whose evidence was never captured passed every gate. Needs the AUTHORITATIVE corpus: `lab:job -e job=grants-audit` |
 | `corpus:container-exits` | **does NVDA ever announce leaving a landmark?** The fact `vague_link_lacks_context` rests on: a container that never closes stays open for the rest of the transcript, so a rule reading it as CONTEXT is describing the top of the page rather than the announcement in front of it. Reports, never blocks — it describes NVDA, not a defect |
 | `corpus:grants-map` | emits the JS-side `grants` declarations for the Python audit to read. Run by `corpus:grants-audit`; separate because the audit REFUSES without it rather than examining an empty set |
+| `scorer:shortcuts:candidate`, `training:evaluate-acceptance:candidate`, `corpus:applicability-audit` | the three stages that existed ONLY as Ansible job argv, so the npm chain could not run them and silently did not. `evaluate-acceptance:candidate` is the one that matters: it writes the report `promote:model` requires, and without it a whole run ends at *"model-candidate is not releasable: held-out acceptance has not been run against these weights"* with every earlier gate green |
 | `changeset:status` / `release:version` | changesets, as usual |
 
 ## Make the failure bubble up, or you will dig for it every time
