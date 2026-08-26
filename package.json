@@ -68,6 +68,7 @@
     "fleet:provision": "node packages/worker-fleet/src/fleet-playbook.mjs --playbook=provision-role.yml",
     "lab:fetch": "ANSIBLE_CONFIG=packages/worker-fleet/ansible/ansible.cfg ansible-playbook -i packages/worker-fleet/ansible/inventory.yml packages/worker-fleet/ansible/lab-fetch.yml",
     "lab:stop": "ANSIBLE_CONFIG=packages/worker-fleet/ansible/ansible.cfg ansible-playbook -i packages/worker-fleet/ansible/inventory.yml packages/worker-fleet/ansible/lab-stop.yml",
+    "lab:reset": "ANSIBLE_CONFIG=packages/worker-fleet/ansible/ansible.cfg ansible-playbook -i packages/worker-fleet/ansible/inventory.yml packages/worker-fleet/ansible/lab-reset.yml",
     "corpus:snapshot": "node packages/lab/scripts/corpus-snapshot.mjs",
     "corpus:backup": "node packages/lab/scripts/corpus-backup.mjs",
     "training:repeat": "tsx packages/lab/src/training/repeat-capture.mjs",

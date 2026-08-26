@@ -1766,7 +1766,20 @@ Three commands answer "what happened", and the third was missing for months:
 npm run lab:status -- -e job=<name>   # systemd's view, the journal, and the run's own progress file
 npm run lab:log -- -e job=<name>      # the job's OWN OUTPUT, unwrapped — bytes, not YAML
 npm run lab:fetch -- -e artifact=<name>   # a report, as a file
+npm run lab:reset                         # what is dirty in the lab checkout, and is it safe to discard
+npm run lab:reset -- -e apply=true        # discard it — ONLY files origin already has
 ```
+
+**`lab:reset` exists because promoting leaves the lab dirty and every later job then refuses to pull.**
+`promote:gated` runs there (it is the only box with both the candidate weights and the code) and
+deliberately does not commit, since promoting is a MAJOR release. `run-job.yml` then declines to pull into
+a dirty checkout — correctly, it cannot tell a stray artefact from work in progress — so the next job runs
+at the pre-promotion commit and the `gates` pipeline fails at stage 1 saying so.
+
+It **refuses anything origin does not already have**, comparing each dirty path against `origin/<ref>`
+before touching it, and reports without applying unless `-e apply=true`. That containment is not decorum:
+the manual alternative is `git checkout --`, the command that once destroyed release-eligible weights in
+this repo. Untracked files are never discarded, and it says so rather than reporting a clean checkout.
 
 **`lab:log` exists because reading one audit's output took eleven hand-written `awk | sed | grep`
 pipelines in a single session, one of which silently matched nothing.** `lab:status` shows the journal
