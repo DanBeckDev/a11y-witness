@@ -1758,6 +1758,7 @@ failure as `capture-check` being mandatory and never running once.
 | `promote:model` | copy trained weights into `packages/scorer/models/` and write the changeset. Stops at an uncommitted tree |
 | `promote:gated` | `candidate:gate` and then `promote:model`, which is what `lab:job -e job=promote` runs. Never promotes on a failed gate |
 | `training:capture:fresh` | generate the pages and then capture them. Capturing without regenerating is testing the previous commit |
+| `training:export:test` | export accepting captures whose PAGE HAS MOVED, so a change can be tested without a full recapture. Every record is stamped `grade: "test"`, the trainer refuses to mark such a model release-eligible, and `promote:model` refuses an ineligible one — three gates, so a test dataset can never ship. Use it with `--pipeline=verify`; never for a release |
 | `training:build-realism` | add the real-page tier to the exported dataset |
 | `training:check-signals:complete` | `check-signals` that REFUSES a partial corpus, rather than scoring what happens to be on disk |
 | `training:capture-acceptance`, `training:export-acceptance`, `training:export-acceptance:all` | the held-out set. Never cached, because those runs exist to test whether NVDA's output is still stable. The `:all` one exports EVERY repeat, because the evaluator reads every repeat — two jobs feeding one consumer is a drift generator, and produced a held-out score computed half on each |
