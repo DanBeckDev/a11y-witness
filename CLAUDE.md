@@ -1756,6 +1756,7 @@ failure as `capture-check` being mandatory and never running once.
 | `training:evaluate-acceptance:shipped` | score the SHIPPED model from a COPY under `runs/`. `release:gate` calls this one: the plain `training:evaluate-acceptance` defaults `--model` and `--training-report` into `packages/`, and the evaluator refuses to stamp a verdict into tracked source — *"that record describes what was true when those weights shipped"* — so the gate could never pass as written |
 | `training:train-baseline` | train without the realism tier, for comparison |
 | `corpus:grants-audit` | **does a multi-defect page carry the evidence its labels claim?** Every accompanying defect declares a `grants` feature and nothing read it — so a label for a defect whose evidence was never captured passed every gate. Needs the AUTHORITATIVE corpus: `lab:job -e job=grants-audit` |
+| `corpus:container-exits` | **does NVDA ever announce leaving a landmark?** The fact `vague_link_lacks_context` rests on: a container that never closes stays open for the rest of the transcript, so a rule reading it as CONTEXT is describing the top of the page rather than the announcement in front of it. Reports, never blocks — it describes NVDA, not a defect |
 | `corpus:grants-map` | emits the JS-side `grants` declarations for the Python audit to read. Run by `corpus:grants-audit`; separate because the audit REFUSES without it rather than examining an empty set |
 | `changeset:status` / `release:version` | changesets, as usual |
 

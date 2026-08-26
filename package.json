@@ -84,6 +84,7 @@
     "corpus:starvation": "node packages/lab/scripts/audit-corpus-starvation.mjs",
     "corpus:grants-map": "node packages/lab/scripts/emit-grants-map.mjs",
     "corpus:grants-audit": "npm run --silent corpus:grants-map && .venv/bin/python packages/scorer/python/audit_grants.py",
+    "corpus:container-exits": ".venv/bin/python packages/scorer/python/audit_container_exits.py",
     "changeset": "changeset",
     "changeset:status": "changeset status --since=origin/main",
     "release:version": "changeset version && npm install --package-lock-only",
