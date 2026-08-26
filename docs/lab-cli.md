@@ -102,6 +102,11 @@ threshold sweep arrives as fragments.
 `grants-audit`, `promoted-acceptance-report`, `promoted-training-report`, `promoted-weights`,
 `shipped-acceptance`, `shortcuts-baseline`, `training-report`.
 
+**A job name that is not in the catalogue is refused by all three**, and says so. Until 2026-08-26
+`lab:status -e job=<typo>` answered `SubState=dead` and **exit 0** — which is what a finished job answers,
+so a script polling a mistyped name read it as fine. `lab:log` blamed a rotated journal and `lab:stop` said
+there was nothing to stop. Three commands, one collapsed answer; each now names the actual cause.
+
 **`lab:stop` refuses a unit that is not running** and names the state it found instead — "it was already
 finished" and "I stopped your job" are different outcomes. It exists because the unit name is the lock, so
 `lab:job` refuses a second job of that name, and until it was written the only way out was `systemctl stop`
