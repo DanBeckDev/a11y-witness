@@ -19,9 +19,19 @@
 /**
  * Criteria the trained scorer has a head for. Must equal the keys of `criteria` in the shipped
  * `training-report.json`.
+ *
+ * A HEAD EXISTING IS NOT THE SAME AS THE MODEL DECIDING. The five added on 2026-08-25 —
+ * 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3 — are all `decisionOwner: deterministic-rules` in the shipped report:
+ * the rules layer owns the verdict and the head is trained alongside it, scored but not authoritative.
+ * They belong here because this list answers "is there a head", which `generate-coverage-doc.ts` uses to
+ * distinguish "a rule decides all of it" from "there is no head at all" — opposite answers.
+ *
+ * No coverage claim widens as a result: `RULE_CRITERIA` below already lists four of the five, and
+ * `assessedCriteria()` is the UNION, so what the tool reports it can assess is unchanged.
  */
 export const SCORED_CRITERIA = [
-  "1.1.1", "1.3.1", "2.4.4", "2.4.6", "3.3.1", "3.3.2", "4.1.2", "4.1.3",
+  "1.1.1", "1.3.1", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3",
+  "2.4.4", "2.4.6", "3.3.1", "3.3.2", "4.1.2", "4.1.3",
 ] as const;
 
 /**
