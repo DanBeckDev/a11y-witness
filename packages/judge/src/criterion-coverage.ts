@@ -132,7 +132,7 @@ export interface CriterionCoverage {
 export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   // ---- assessed today -------------------------------------------------------------------------
   "1.1.1": { status: "assessed", channels: ["graphics", "transcript"], note: "Rules own missing and filename alt text exactly; the head owns generic alt ('image', 'photo')." },
-  "1.3.1": { status: "assessed", channels: ["headings", "tableCells", "transcript"], note: "Fake headings and tables whose headers are not associated. Heading HIERARCHY (h2 -> h4) is not checked — see 'reachable' note on 2.4.10-style structure below; `moveToNextHeadingLevel` would supply it." },
+  "1.3.1": { status: "assessed", channels: ["headings", "tableCells", "transcript"], note: "Pages with NO headings at all (confirmed by the accessibility tree, not merely unseen by the sweep), fake headings, and tables whose headers are not associated. Heading HIERARCHY (h2 -> h4) is not checked — see 'reachable' note on 2.4.10-style structure below; `moveToNextHeadingLevel` would supply it." },
   "1.4.2": {
     status: "assessed", needs: ["dom"], channels: ["media"],
     // MEASURED, not assumed: 89 real captures, 8 carry `<audio>`/`<video>` at all, and **0 autoplay**.
