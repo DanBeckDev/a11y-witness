@@ -1855,9 +1855,10 @@ Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth
 
 - **Ansible silently drops an unused extra var.** `-e out=varied` on a job that never reads `out` looked
   like it worked. 36 jobs had 6 hand-written `when: job == '<name>'` asserts, so a new job's parameter
-  needed somebody to remember one. `lab-job.yml` now DERIVES what a job takes from the command it runs —
-  `{{ only }}` reads it, `{{ out | default('candidate') }}` reads it and can do without — and refuses
-  both an unknown parameter and a missing required one. `-e describe=1` prints what a job takes.
+  needed somebody to remember one. Each job now DECLARES `params: {only: required}` beside its command,
+  and `lab-job.test.ts` DERIVES the same answer from that job's raw argv and refuses any disagreement —
+  `{{ only }}` is required, `{{ out | default('candidate') }}` is optional, and `model is defined` is the
+  other spelling of optional. `-e describe=1` prints what a job takes.
 - **Every `.mjs` CLI here ignores an unrecognised flag**, because they all parse argv by looking for what
   they know. Guarded on the five with a measured cost (`refuseUnknownFlags`, `cli-flags.mjs`); the rest
   are an `UNGUARDED` list that may only shrink, so a new one cannot join them unnoticed.
@@ -1866,7 +1867,16 @@ Three things that cost real time inside those two fixes:
 
 - **`lab_jobs[job].argv` cannot be inspected, because reading it RENDERS it.** A job whose command says
   `{{ only }}` dies with *"'only' is undefined"* while being asked WHETHER it needs `only` — the question
-  destroys its own subject. A `lookup()` result is never re-templated, so the playbook re-reads itself.
+  destroys its own subject. A `lookup()` result is never re-templated, so a playbook CAN re-read itself,
+  and `lab-status`/`lab-log`/`lab-stop` do exactly that to check a job name against the catalogue.
+- **But do not build an analyser out of Jinja, which is what the first version of this did.** It
+  re-read the playbook and `regex_findall`-ed the parameters out of each argv at runtime. The SRE
+  Workbook (ch14-15) names the shape: a YAML+Jinja config that accrues *"ad hoc language features"*
+  becomes *"an esoteric and complex programming language ... difficult for both humans and tools to
+  maintain and analyze"*, and its remedy is to **separate config from data and put the cleverness in
+  TOOLING**. The `\b`-is-a-backspace bug below is what that costs. The interface is now DATA an operator
+  can read, and the derivation is a test in a language with a real regex engine that can be
+  mutation-checked.
 - **`\b` inside a JINJA string literal is a BACKSPACE**, since Jinja parses escapes with Python's rules.
   Written that way first, both checks passed vacuously *and* refused `-e only=` on the one job requiring
   it. Found by mutation, never by reading — a guard must be shown to fail before it is trusted.
