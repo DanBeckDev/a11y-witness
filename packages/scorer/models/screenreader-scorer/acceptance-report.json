@@ -13,7 +13,7 @@
   "artifact": {
     "screenReader": "NVDA",
     "encoderSha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db",
-    "modelSha256": "d737db00586bfc3d25e6822ed2dd3227be696e6dd4b24e0956980cf45a8fe0d0",
+    "modelSha256": "16e7f445bf8e6ed9b38eb41fb8acfa9f7f4ba3eb62d43e2c7518d06a3beb1daa",
     "reportSha256": "568291c33e50c35f7489175202b2ff7732b56aca148de7360ed822dc85ae953b",
     "trainingDatasetSha256": "9f31f02669e0bc8acd8c0e322addac00bc937684382679e2aa222015421f6973",
     "modelPath": "runs/model-candidate/model.safetensors",
