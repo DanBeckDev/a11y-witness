@@ -21,6 +21,12 @@
   // type-check 14 worker `.mjs` files as JS, which is a separate change with its own fallout.
   // `src` is gone as of M8 — every source file now lives in a package.
   "include": [
-    "packages/*/src/**/*.ts"
+    "packages/*/src/**/*.ts",
+    // THE GATE SCRIPTS, which were outside the typecheck entirely — so `tsc --noEmit` passed on
+    // `audit-rule-coverage.ts` while it called a function whose import did not exist, and only
+    // running it found out. `score-rules.ts`, `audit-rule-coverage.ts` and
+    // `check-real-page-findings.ts` ARE the rules gates, so "the gate is not checked" is this
+    // repo's most-named defect applied to the thing doing the checking.
+    "packages/*/scripts/**/*.ts"
   ]
 }
