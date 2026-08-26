@@ -192,9 +192,10 @@ $ npm run lab:pipeline -- --pipeline=gates --refs=main
   Refusing rather than ignoring it: an ignored flag runs the default and reports success.
 ```
 
-Guarded so far — the five where an ignored flag has a measured cost:
-`training:capture`, `lab:pipeline`, `promote:model`, `training:check-signals`, `training:repeat`.
-`promote:model` is the sharpest of them: a mistyped `--dry-run` **promotes**.
+Guarded so far — eleven: `training:capture`, `capture-real-pages`, `lab:pipeline`, `promote:model`,
+`training:check-signals`, `training:repeat`, `training:wait`, and the `--json` reporters `doctor`,
+`fleet:status`, `training:status`, `lab:inventory`. `promote:model` is the sharpest of them: a mistyped
+`--dry-run` **promotes**.
 
 The rest are listed in `cli-flags.test.ts` as `UNGUARDED`, **a list that may only shrink** — a new CLI
 that is neither guarded nor on it fails that test, so the gap stays countable rather than invisible.
