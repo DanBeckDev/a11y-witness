@@ -1561,12 +1561,24 @@ say whether the census had arrived and found nothing or had not arrived at all.
   census.heading === 0 on 0 record(s); census.graphicUnnamed > 0 on 155
 ```
 
-That converts a guess into a fact, and it settles 1.3.1: **the corpus contains no page with zero headings,
-proved rather than assumed.** So the residual gap is a CORPUS gap and the remedy is a corpus page — content
-with no `h1` at all and ≥15 announcements — not a change to the rule. Every generated page has an `h1` by
-construction and all 93 real captures are real sites. Until such a page exists, 1.3.1's rule is a claim
-this project cannot test, and `rules:coverage` reports it as non-blocking only because the trained scorer
-also covers 1.3.1 (16 TP, 0 FP held-out).
+That converted a guess into a fact: **the corpus contained no page with zero headings**, proved rather
+than assumed, so the residual gap was a CORPUS gap and the remedy was a corpus page — not a change to the
+rule. `page()` emitted an `<h1>` unconditionally, which is why: every generated page carried one by
+construction and all 93 real captures are real sites.
+
+**CLOSED 2026-08-26.** Five `1.3.1:no-headings` cases, and the rule now reads
+`29/29 rules: EXACT` with `census.heading === 0 on 29 record(s)`, validated on a real page as well as the
+corpus. Three things had to be true at once and each was found by measuring rather than reasoning:
+
+| what was wrong | how it presented |
+|---|---|
+| the census was stripped at export, and TWO of three gates passed a RAW capture to `ruleFindings` | `rules:gate` said `29/29 EXACT` while `rules:coverage` said `fired 0x` — **two gates disagreeing about one corpus is the signal** |
+| furniture and the `generic-heading` accompanying defect both put headings back | 5 of 29 variants silently carried one; the whole suite passed with them voided |
+| three pages fell under `MIN_CONTENT_LINES`, so the rule read them as fragments | `rule-decided on 29 record(s) and caught only 26` — and two passing cases sat one block above the floor |
+
+The census-based **1.1.1** rule was fixed by the same change and was the worse of the two, because sibling
+1.1.1 rules fire: its criterion read `validated on real evidence` throughout. Its corpus evidence went
+**350 → 734** once the census arrived, which is the size of what was invisible.
 
 ## The rule that cost the most to learn
 
