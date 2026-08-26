@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // `a11y-scorer-fetch-encoder` — download the 87 MB encoder into this package.
 //
 // A thin wrapper rather than a `bin` pointing straight at the `.py`: npm's bin shims assume an executable

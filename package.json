@@ -16,7 +16,7 @@
     "test:python": "if [ -x .venv/bin/pytest ]; then .venv/bin/pytest packages/*/tests -q; else echo \"SKIPPED: no .venv/bin/pytest — python tests need it. This is an honest skip, not a pass.\"; fi",
     "eval:capture": "A11Y_PYTHON=.venv/bin/python node packages/lab/src/harnesses/capture-fixtures.mjs",
     "eval:gate": "A11Y_PYTHON=.venv/bin/python EVAL_GATE=1 EVAL_RUNS=3 tsx packages/lab/src/eval/run.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.mjs.json",
     "build": "node scripts/build-packages.mjs",
     "lint": "eslint .",
     "scan": "tsx packages/cli/src/scan/run-axe.ts",
