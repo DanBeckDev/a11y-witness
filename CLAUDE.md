@@ -1848,6 +1848,34 @@ Two of those three would have led to a full recapture of 62 cases for nothing. *
 would detect the problem, run it to confirm the problem is what you think, then fix, then re-run.** Doing
 it the other way round cost two reverts and most of an evening.
 
+## A flag nobody reads, and an extra var nobody reads
+
+Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth recognising by shape:
+**an argument the receiving thing does not know is DISCARDED, so the default runs and reports success.**
+
+- **Ansible silently drops an unused extra var.** `-e out=varied` on a job that never reads `out` looked
+  like it worked. 36 jobs had 6 hand-written `when: job == '<name>'` asserts, so a new job's parameter
+  needed somebody to remember one. `lab-job.yml` now DERIVES what a job takes from the command it runs —
+  `{{ only }}` reads it, `{{ out | default('candidate') }}` reads it and can do without — and refuses
+  both an unknown parameter and a missing required one. `-e describe=1` prints what a job takes.
+- **Every `.mjs` CLI here ignores an unrecognised flag**, because they all parse argv by looking for what
+  they know. Guarded on the five with a measured cost (`refuseUnknownFlags`, `cli-flags.mjs`); the rest
+  are an `UNGUARDED` list that may only shrink, so a new one cannot join them unnoticed.
+
+Three things that cost real time inside those two fixes:
+
+- **`lab_jobs[job].argv` cannot be inspected, because reading it RENDERS it.** A job whose command says
+  `{{ only }}` dies with *"'only' is undefined"* while being asked WHETHER it needs `only` — the question
+  destroys its own subject. A `lookup()` result is never re-templated, so the playbook re-reads itself.
+- **`\b` inside a JINJA string literal is a BACKSPACE**, since Jinja parses escapes with Python's rules.
+  Written that way first, both checks passed vacuously *and* refused `-e only=` on the one job requiring
+  it. Found by mutation, never by reading — a guard must be shown to fail before it is trusted.
+- **Static derivation of a CLI's flags CANNOT be trusted here, and that is why the list is pinned rather
+  than derived.** `stability-gate` builds flags from a variable and `repeat-capture` reads seven of them
+  through an `arg(name)` helper, so a regex reports ZERO flags for both — a test that would have passed
+  having examined nothing. Naming `--worker` literally in `repeat-capture` immediately made a pre-existing
+  discovery test fire: it had been reading `--worker` and never validating it.
+
 ## Verifying changes
 
 **Two of these now run themselves. That is deliberate, and it is the point.**
