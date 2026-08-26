@@ -95,6 +95,18 @@ and every capture run refuses to start. `stamp-provision-revision.ps1` records t
 four revisions, *"purely because each first-booted at a different commit during one afternoon"*. Use
 `--limit` only to REPAIR a box back to the stamp its peers already carry, never to add one.
 
+> **A GLOBAL ALL-AT-ONCE PUSH IS NORMALLY WRONG, AND HERE IT IS THE ONLY SAFE OPTION.** The SRE
+> Workbook is explicit that a config change must be deployable gradually — *"avoid a global all-at-once
+> push … doing so allows you to detect issues and abort a problematic push before causing a 100%
+> outage"* — and `--serial=0` is exactly the push it warns against. It is still right here, for a reason
+> specific to this fleet: `provisionRevision` is a capture cache key AND a `MUST_MATCH` field, so a
+> canary box is not a safety measure, it IS the failure mode. One box provisioned ahead of its peers
+> splits the fleet, `fleet-consistency` reads INCONSISTENT, and every capture run refuses to start.
+> The rollback the book asks for is `git checkout <ref> && fleet:provision` across the whole fleet, and
+> the "abort before 100%" it asks for is the pre-flight refusal of a worker mid-capture. Do not
+> introduce staged provisioning here without first removing `provisionRevision` from the cache key,
+> which would cost a full recapture.
+
 > It **refuses a worker mid-capture**, and that refusal replaced `serial: 1` doing the job badly.
 > Serialising made provisioning-during-a-run survivable rather than impossible — it restarts a worker
 > mid-capture, destroying 12–520 s of unresumable work, and splits `provisionRevision` across the corpus.
