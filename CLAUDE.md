@@ -1660,7 +1660,7 @@ npm run lab:pipeline -- --list
 npm run lab:pipeline -- --pipeline=real-pages          # deploy -> capture -> rules:real-pages -> rules:coverage
 npm run lab:pipeline -- --pipeline=corpus --ref=<branch>
 npm run lab:pipeline -- --pipeline=gates               # no fleet: reads the corpus already on disk
-npm run lab:pipeline -- --pipeline=verify --only=route-title-stale   # PROVE a corpus change first
+npm run lab:pipeline -- --pipeline=verify --only=route-title-stale+  # PROVE a corpus change first
 ```
 
 Every stage already existed and was supervised. What did not exist was the ORDER, which lived in
@@ -1674,7 +1674,7 @@ nobody had pushed, an `ANSIBLE_EXIT=2` masked by `| tail`, and three jobs run fo
   runs the audits that would SEE the change; if they still report the same finding, the fix is wrong and
   it cost minutes. The capability existed the whole time (`capture-screenreader-dataset.mjs` has taken
   `--only=` with exact ids and lists for months) and **no job exposed it**, so the only unit available was
-  all-or-nothing. Paste what `check-signals` or an audit printed.
+  all-or-nothing. Paste what `check-signals` or an audit printed. **A trailing `+` means the FAMILY** — the base case and its `+also-`/`+with-` variants — because an exact id deliberately means exactly that case: `form-error-silent` is a real id AND a prefix of ~90 others. Asking for `route-title-stale` and getting 1 of 7 is a confident partial answer, which is worse than none.
 - **ONE ref, resolved once and given to both halves.** `fleet:deploy` takes `a11y_git_ref`, `lab:job` takes
   `ref`, and they default independently — which is exactly how the fleet came to be on a different commit
   from the lab, failing with a hash mismatch that reads like a corrupted guest checkout. It is also
