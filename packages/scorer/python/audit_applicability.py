@@ -26,6 +26,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import applicability  # noqa: E402
 import screenreader_features as features  # noqa: E402
 
+#: Subtypes whose free vetoes are STRUCTURAL, with the measurement that says so.
+#:
+#: ADR 0015's remedy for a free veto is the corpus: give the subtype's positives pages that carry the
+#: feature, so a head cannot penalise it for nothing. That remedy is UNAVAILABLE for these, and the reason
+#: is recorded in `case-matrix.mjs` where the exclusion lives:
+#:
+#:   - Their pages carry their own control, so `probeForms` furniture would give the probe two things to
+#:     press and change which one the case's own signal reads.
+#:   - `component-index` is `notFor` exactly these criteria because it adds four focusable links, and
+#:     `focusOrder` truncates at 12 stops — measured on `focus-order-tabindex`, which reported
+#:     CONTAMINATED for precisely that reason. Their evidence IS the focus order.
+#:
+#: So 25 of the 44 vetoes are on features that ARE defects (`form_field_unnamed`, `state_unchanged`,
+#: `validation_error_missing`), which no conformant page can carry by definition; and the rest are on
+#: features whose furniture would contaminate the case. Recorded so the next reader does not spend an
+#: evening re-deriving that furniture is not the answer here.
+STRUCTURAL_VETOES = {
+    "2.1.1:control-unreachable-by-keyboard": "its evidence IS the focus order; furniture that adds "
+                                             "focusable links contaminates it",
+    "2.1.2:focus-trapped": "same — the page's own controls are the evidence",
+    "2.4.3:focus-order-scrambled": "measured CONTAMINATED when component-index was applied",
+}
+
 #: Gates somebody has proposed but not applied, reported so the cost is a measurement rather than a guess.
 #:
 #: `1.3.1:fake-heading` is here because gating it was tried, refused by the corpus (13 of 108 positives
