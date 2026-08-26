@@ -75,3 +75,29 @@ test("the gate's merge gives the rules the model's input PLUS the rule-only evid
   assert.ok(!ruleFindings(exported.input as never).some((finding) => finding.wcag.startsWith("1.3.1")),
     "unmerged — which is what the gate did for the whole life of these rules — it cannot");
 });
+
+test("a RAW capture needs pageCensus; the census is a diagnostic, not a field", () => {
+  // THE SAME DEFECT IN A SECOND GATE, and it is why two gates disagreed about one corpus:
+  // `rules:gate` reported `1.3.1:no-headings 29/29 EXACT` while `rules:coverage` reported the same
+  // criterion as having fired `0x`.
+  //
+  // `score-rules.ts` scores exported RECORDS and was fixed hours earlier. `audit-rule-coverage.ts` and
+  // `check-real-page-findings.ts` score raw CAPTURES, where the census is a `structureCensus` DIAGNOSTIC
+  // and only `pageCensus` lifts it into the `census` field the rules read. The CLI has always done that
+  // (`census: pageCensus(cap)`); those two passed the capture straight through.
+  //
+  // A fix reaching one of several paths — this repo's most expensive recurring shape — committed while
+  // fixing that exact shape somewhere else.
+  const raw = {
+    transcript: CONTENT,
+    structure: { headings: [], links: [], graphics: [], formFields: [], lists: [] },
+    interaction: {},
+    diagnostics: [{ event: "structureCensus", heading: 0, link: 2, graphic: 0, graphicUnnamed: 0 }],
+  };
+  assert.ok(!("census" in raw), "a raw capture has no census FIELD — that is the whole trap");
+  assert.ok(!ruleFindings(raw as never).some((f) => f.wcag.startsWith("1.3.1")),
+    "passed raw, the census-reading rule cannot fire — which is what both audits were doing");
+  const lifted = { ...raw, census: { heading: 0, link: 2, graphic: 0, graphicUnnamed: 0 } };
+  assert.ok(ruleFindings(lifted as never).some((f) => f.wcag.startsWith("1.3.1")),
+    "with the census lifted out of diagnostics, it fires");
+});
