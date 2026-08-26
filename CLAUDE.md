@@ -803,13 +803,23 @@ Two rules that fall out and are cheap to apply:
 
 - **A test must not derive its expectations from source TEXT.** Both the signal-type scrape and an earlier
   `sweepLog` guard passed while examining nothing. Read an exported value, or assert against a fixture.
-- ~~**APPEND new cases to `CASES`, never insert.**~~ **No longer true, and the fix is the better lesson.**
-  Furniture is keyed on an FNV-1a hash of the case ID, so a case's pages depend on nothing but its own
-  name — insert, reorder or delete freely. Verified by doing it: adding 60 cases left `check-signals`
-  reporting the same 860 stale pairs as before, so zero existing pages moved. Renaming a case still
-  re-buckets that one case, which is correct: a renamed case is a different case.
-  **A rule that asks a human to remember something is a rule that gets broken** — this file's own
-  housekeeping principle, applied to itself.
+- **Inserting a case re-buckets that SUBTYPE's later cases** — and this entry has now said the opposite
+  twice, which is the more useful lesson.
+  It first said "APPEND, never insert", because furniture was keyed on array position. Then furniture
+  moved to an FNV-1a hash of the case ID and it said "insert, reorder or delete freely", verified by
+  adding 60 cases and watching zero existing pages move.
+  **Both were true when written, and the second is now wrong.** Measured 2026-08-26: hashing the ID gives
+  each case an INDEPENDENT 1-in-5 chance of the `namedField` bucket, so a seven-case subtype misses it
+  entirely with probability 0.8⁷ = 0.21 — one subtype in five — and exactly one did. That is a free veto
+  under ADR 0015, on a feature no positive of that subtype carries. Furniture is now DEALT within the
+  subtype: case *k* gets bucket *(offset + k) % 5*, so every subtype with five or more cases sees all five
+  by construction rather than by luck.
+  The cost is real and is the trade: a case inserted mid-subtype re-buckets the ones after it, so its
+  pages change and they recapture. `furniture-spread.test.ts` asserts the guarantee per FEATURE — an
+  earlier version asserted "at least two shapes" and did NOT catch a revert to independent hashing,
+  because random assignment produces two shapes most of the time; it just does not produce all of them.
+  **A rule that asks a human to remember something is a rule that gets broken** — which is why the
+  property is a test rather than this paragraph.
 
 ### Three criteria a static analyser structurally cannot reach
 
