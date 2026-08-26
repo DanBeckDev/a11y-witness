@@ -35,7 +35,7 @@
     "training:check-signals:complete": "node packages/lab/src/training/check-signals.mjs --require-complete",
     "training:build-realism": "node packages/lab/scripts/build-realism-tier.mjs --out=runs/screenreader-dataset/with-realism.jsonl",
     "lab:retrain": "node packages/lab/scripts/retrain-pipeline.mjs",
-    "lab:everything": "npm run --silent lab:retrain && npm run --silent training:export-acceptance:all && npm run --silent training:train && npm run --silent promote:gated -- --from=candidate && npm run --silent corpus:grants-audit && npm run --silent release:gate",
+    "lab:everything": "node packages/lab/scripts/everything-pipeline.mjs",
     "training:export": "node packages/lab/src/training/export-screenreader-dataset.mjs",
     "training:export:test": "A11Y_DATASET_GRADE=test node packages/lab/src/training/export-screenreader-dataset.mjs",
     "training:analyze-errors": ".venv/bin/python packages/lab/scripts/report-screenreader-errors.py",
