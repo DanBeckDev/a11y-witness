@@ -13,6 +13,12 @@ human or agent, *working on* the repo rather than using it.
 | [control-plane-proxmox.md](./control-plane-proxmox.md) | you are running the bare-metal fleet rather than local VMs |
 | [github-action.md](./github-action.md) | you want it in CI against your own app |
 
+## Running the long jobs
+
+| | when you want it |
+|---|---|
+| [**lab-cli.md**](./lab-cli.md) | **the complete lab and fleet command line** — every job, every parameter, every refusal and what it means. Capture, export, training, calibration and the gates all run on machines that are not yours, and there is deliberately no shell: a job is a name from a fixed catalogue |
+
 ## When something is broken
 
 | doc | read it when |
