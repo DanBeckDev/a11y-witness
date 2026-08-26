@@ -27,7 +27,7 @@
     "training:capture-acceptance": "DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_PAGES_PORT=5051 DATASET_BASE_URL=http://localhost:5051 DATASET_CAPTURE_ROOT=captures/${REPEAT:-repeat-1} tsx packages/lab/src/training/capture-screenreader-dataset.mjs",
     "training:export-acceptance": "DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_CAPTURE_ROOT=captures/${REPEAT:-repeat-1} node packages/lab/src/training/export-screenreader-dataset.mjs --out=runs/screenreader-acceptance/${REPEAT:-repeat-1}.jsonl",
     "training:capture": "tsx packages/lab/src/training/capture-screenreader-dataset.mjs",
-    "training:capture:fresh": "npm run training:generate && npm run training:capture",
+    "training:capture:fresh": "npm run training:generate && npm run training:capture --",
     "training:status": "node packages/lab/src/training/capture-status.mjs",
     "training:wait": "node packages/lab/src/training/wait-for-capture.mjs",
     "scorer:explain": "node packages/lab/scripts/explain-scorer.mjs",
