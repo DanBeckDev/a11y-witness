@@ -1580,6 +1580,38 @@ The census-based **1.1.1** rule was fixed by the same change and was the worse o
 1.1.1 rules fire: its criterion read `validated on real evidence` throughout. Its corpus evidence went
 **350 → 734** once the census arrived, which is the size of what was invisible.
 
+### A diagnostic that cannot report itself, six times in one evening
+
+The 2026-08-22 table above is about a fact stated twice. This is its successor and it cost most of
+2026-08-26: **the system was largely working, and every layer that could have said so was broken in a
+way that made it look otherwise.** Each one was found only by disbelieving a message.
+
+| what it said | what was true |
+|---|---|
+| `fleet:deploy`: "the files on the box are not the ones you think" | the FETCH had failed and reported success — PowerShell does not abort on a failed NATIVE command, and `changed_when: true` claimed a change regardless. One dirty file blocked every fast-forward, for every deploy |
+| `UNREACHABLE` on one to four workers, four runs running | they were rebooting from the deploy BEFORE — `deploy.yml` reboots what it deploys to, and nothing waited. All five answered `/health` throughout |
+| `lab:status -e job=capture-real-pages`: `captured: 29, total: 1431` | the DATASET run's file, for a FIFTY-page job. `training:status` reads `DATASET_ROOT`; the fix for the same bug on `acceptance` covered only `acceptance` |
+| a Jinja traceback where a refusal should be | the guard had FIRED correctly — a capture was holding the checkout — and crashed writing its own sentence |
+| `50 of 86 captures read the site's furniture` | MY metric, merging "has a cookie banner" (every UK gov site) with "never got past one" (one page) |
+| `wrong-page` × 7, no detail | seven stale corpus URLs, and `captureFault(code, message)` called as `(message, code)` so the diagnostic went into `.code` and the bare code became the message |
+
+**The rule that covers all six: when a diagnostic surprises you, suspect the diagnostic before the
+system.** Every one of these was investigated as a fleet, corpus or capture fault first, and every one
+was the reporting.
+
+Three habits fall out, all cheap:
+
+- **A guard must be able to say what it caught.** `regex_search(p, '\1')` throws INSIDE the filter on a
+  non-match — Ansible calls `.group()` on the None — so no `| default` afterwards can save the message.
+  `regex_findall` returns `[]`. A guard that stops the job and explains nothing gets distrusted, then
+  bypassed: `A11Y_SKIP_VERIFY=1` was used **six times** in one evening for a `rules:gate` refusal that
+  turned out to be a stale local export.
+- **Escaping in YAML+Jinja is settled by RUNNING it, never by reading.** In a folded scalar `\.` matches
+  nothing and `\.` written as `\.` in the file matches; `\b` inside a Jinja literal is a BACKSPACE.
+  Both cost real time here. A three-line playbook answers it in ten seconds.
+- **`changed_when: true` on a shell task is a lie waiting to happen.** It reports change without knowing,
+  and on Windows the shell will not fail for you.
+
 ## The rule that cost the most to learn
 
 **A check must never reject evidence whose absence is the finding.**
