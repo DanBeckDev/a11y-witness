@@ -1524,6 +1524,50 @@ conformant pages with conformant content produced **0 accusations at every size 
 future pooling change introduces one. An earlier 3/12 was an instrument fault: the donor pool moved with the
 sample size, so two runs were two experiments.
 
+### "The rule never fired" and "the rule never had its evidence" are different answers
+
+`rules:coverage` reported `1.3.1 assessed 0 corpus 0 real — NEVER FIRED ANYWHERE — the claim rests on
+nothing` for as long as that rule has existed, and that sentence sends you to the CORPUS. The fault was in
+the exporter, and finding it took an audit that started by asking whether the rule was even reachable.
+
+`addMissingHeadings` needs `census.heading === 0` — the AX tree CONFIRMING no headings, because a sweep
+alone cannot tell "this page has none" from "we could not ask". Every capture records that census as a
+`structureCensus` diagnostic, and `diagnostics` is correctly on the exporter's `FORBIDDEN_INPUT_KEYS` — so
+the census never reached the exported record. Measured: `input.census` was `undefined` on all 3,790 of
+them. `score-rules.ts` then scored `record.input`, the MODEL's allowlist, so **the gate could not exercise
+ANY rule reading evidence the model is deliberately denied.**
+
+**The product path was fine throughout** — the CLI builds `census: pageCensus(cap)` itself. So these rules
+work where it matters and were unexercised where they are checked: *a gate that does not exercise what
+ships is not a gate*, for the fourth time in this repo.
+
+**A second rule was affected and was completely invisible.** The census-based 1.1.1 rule — images the tree
+exposes with no accessible name, which NVDA's sweep walks straight past — is equally unreachable, but
+sibling 1.1.1 rules DO fire, so the criterion read `validated on real evidence`. 1.3.1 at least announced
+its own silence.
+
+The split this needed was **already designed**, thirty lines above the leak guard: *"`modelInput()` is an
+allowlist and FORBIDDEN_INPUT_KEYS names `dom` explicitly, so a rule may use evidence the model never
+sees"*. It had never been implemented. `ruleEvidence` is now a SIBLING of `input` — the boundary assertion
+and the featurizer both read `input`, so neither can reach it — and the gate merges the two.
+
+**And the gate now STATES whether that evidence arrived**, because the ambiguity cost the investigation
+twice: once to find, and once again when the re-export left every number unchanged and the report could not
+say whether the census had arrived and found nothing or had not arrived at all.
+
+```
+# evidence the rules may see and the model may not
+  2366 of 2366 record(s) carry ruleEvidence; 2366 carry a census
+  census.heading === 0 on 0 record(s); census.graphicUnnamed > 0 on 155
+```
+
+That converts a guess into a fact, and it settles 1.3.1: **the corpus contains no page with zero headings,
+proved rather than assumed.** So the residual gap is a CORPUS gap and the remedy is a corpus page — content
+with no `h1` at all and ≥15 announcements — not a change to the rule. Every generated page has an `h1` by
+construction and all 93 real captures are real sites. Until such a page exists, 1.3.1's rule is a claim
+this project cannot test, and `rules:coverage` reports it as non-blocking only because the trained scorer
+also covers 1.3.1 (16 TP, 0 FP held-out).
+
 ## The rule that cost the most to learn
 
 **A check must never reject evidence whose absence is the finding.**
