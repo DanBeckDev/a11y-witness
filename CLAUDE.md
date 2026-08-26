@@ -1672,6 +1672,8 @@ npm run lab:pipeline -- --pipeline=corpus --ref=<branch>
 npm run lab:pipeline -- --pipeline=gates               # no fleet: reads the corpus already on disk
 npm run lab:pipeline -- --pipeline=verify --only=route-title-stale+  # PROVE a corpus change first
 npm run lab:pipeline -- --pipeline=full                # corpus + model + gates, proven TOGETHER
+npm run lab:job -- -e job=everything                  # the same chain as ONE supervised unit
+                                                      # (it runs `lab:everything` on the lab)
 ```
 
 Every stage already existed and was supervised. What did not exist was the ORDER, which lived in
@@ -1700,6 +1702,15 @@ nobody had pushed, an `ANSIBLE_EXIT=2` masked by `| tail`, and three jobs run fo
   split behind one credential.
 - **Stages go through the npm scripts**, never a second spelling of `ansible-playbook` — `lab:job` also sets
   `ANSIBLE_CONFIG`, without which the collections path and host-key settings differ.
+
+**For a long unattended run, prefer `lab:job -e job=everything` over `--pipeline=full`.** They sequence
+the same stages; the difference is where the SEQUENCING lives. `lab:pipeline` runs on a laptop, so each
+stage is a supervised systemd unit and the thing deciding what comes next is a local node process —
+measured 2026-08-26, five local watchers were killed during one capture, and each time the unit survived
+exactly as designed while the orchestration did not, so nothing after it ever started. As a job the whole
+chain is one unit: it outlives the ssh connection, the playbook and the laptop, and `lab:status -e
+job=everything` still finds it. `lab:pipeline` stays right for a SHORT chain you want to watch, because it
+prints per-stage boundaries live and a single unit cannot.
 
 `lab-pipeline.test.ts` pins the pipelines against the real catalogue: every job named must exist in
 `lab-job.yml`, and a pipeline containing a job that reads `A11Y_WORKER(S)` must deploy the fleet first. A
