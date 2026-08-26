@@ -1937,8 +1937,18 @@ Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth
   `{{ only }}` is required, `{{ out | default('candidate') }}` is optional, and `model is defined` is the
   other spelling of optional. `-e describe=1` prints what a job takes.
 - **Every `.mjs` CLI here ignores an unrecognised flag**, because they all parse argv by looking for what
-  they know. Guarded on the five with a measured cost (`refuseUnknownFlags`, `cli-flags.mjs`); the rest
-  are an `UNGUARDED` list that may only shrink, so a new one cannot join them unnoticed.
+  they know. `refuseUnknownFlags` (`cli-flags.mjs`) refuses one, names the near miss, and prints what the
+  command does take. Guarded on **26**: every CLI with a measured cost, every script a LAB JOB
+  drives directly, the FLEET operations where a flag decides how many of twelve machines are touched, the
+  capture harnesses, and the `--json` reporters whose flag decides who the output is FOR. The other
+  **18** are an `UNGUARDED` list that **may only shrink** — a discovered CLI that is neither
+  guarded nor on it fails the test, so the gap stays countable rather than invisible.
+  > **The flag lists are READ out of each file, never derived, and every batch has proved why.**
+  > `stability-gate` builds flags from a variable and `repeat-capture` reads seven through an `arg(name)`
+  > helper, so a regex reports ZERO for both. `fleet-playbook` mentions `--abbrev-ref`/`--all`/`--ff-only`
+  > and `capture-fixtures` mentions `--ff-only` because they pass them to GIT. `compare-workers` accepts
+  > `--runs=` as a deliberate ALIAS of `--rounds=`. A derived guard would have refused correct usage in
+  > every one of those cases.
 
 Three things that cost real time inside those two fixes:
 
