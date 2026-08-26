@@ -1703,6 +1703,15 @@ nobody had pushed, an `ANSIBLE_EXIT=2` masked by `| tail`, and three jobs run fo
 - **Stages go through the npm scripts**, never a second spelling of `ansible-playbook` — `lab:job` also sets
   `ANSIBLE_CONFIG`, without which the collections path and host-key settings differ.
 
+**`lab:everything` names the stage it is on, and the one it stopped at.** It was six npm scripts joined
+with `&&`, which ran correctly as one unit and said nothing about where it had got to — so when it died at
+exit 3 on `REFUSING to overwrite ... a RELEASE-ELIGIBLE model`, locating the stage cost two dispatches and
+a `lab:fetch` of the whole journal. It is now the step runner `retrain-pipeline.mjs` already had, over a
+longer chain: a banner and a `why` per stage, stderr captured on failure, `STOPPED at <stage>`, and the
+stage list printed on SUCCESS too — "it passed" and "it passed these six things" are different claims and
+only the second survives being read a week later. `everything-chain.test.ts` pins the order and that every
+stage names a script that exists, because `npm` would otherwise fail with *Missing script* hours in.
+
 **For a long unattended run, prefer `lab:job -e job=everything` over `--pipeline=full`.** They sequence
 the same stages; the difference is where the SEQUENCING lives. `lab:pipeline` runs on a laptop, so each
 stage is a supervised systemd unit and the thing deciding what comes next is a local node process —
