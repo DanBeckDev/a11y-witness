@@ -481,7 +481,33 @@ def parsed_units(record: dict[str, Any], field: str) -> list[dict[str, Any]]:
 #: does not report. Keeping both means the AAA distinction is computed now and reportable later, without a
 #: second pipeline.
 CONTEXT_CONTAINERS = frozenset({
-    "list", "navigation landmark", "navigation", "menu", "menu bar", "table", "grouping",
+    "list", "menu", "menu bar", "table", "grouping",
+})
+
+#: Containers NVDA opens and NEVER CLOSES, so they cannot be read as context for a later announcement.
+#:
+#: Measured 2026-08-26 by `corpus:container-exits` over 2,507 records:
+#:
+#:     list                    entered 2632   left 2584
+#:     table                   entered  710   left  189
+#:     navigation landmark     entered  189   left    0
+#:     complementary landmark  entered  106   left    0
+#:     ...six landmark roles, 432 entries, ZERO exits
+#:
+#: NVDA announces entering a landmark and never announces leaving one. So a landmark opened at the top of
+#: a page stays open for every announcement after it, and "this link is inside a navigation landmark"
+#: describes where the document STARTED rather than where the link is.
+#:
+#: That produced two false readings the grants audit refused to pass: a page whose nav is announced on
+#: line 1 and whose vague link sits after it, in no container at all, read as having context. WCAG 2.4.4
+#: accepts context from "the same paragraph, list item, table cell or table header" — every one of which
+#: NVDA does close — so dropping landmarks is what the criterion says as well as what the evidence allows.
+#:
+#: Kept as a named set rather than deleted from the vocabulary above, because the reason is a fact about
+#: NVDA that a future reader will otherwise re-derive from the same two records.
+UNCLOSED_CONTAINERS = frozenset({
+    "navigation landmark", "navigation", "complementary landmark", "content info landmark",
+    "banner landmark", "main landmark", "search landmark", "region", "form landmark",
 })
 
 
