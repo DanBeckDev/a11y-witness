@@ -1909,6 +1909,7 @@ failure as `capture-check` being mandatory and never running once.
 | `eval:capture` | recapture the eval fixtures, over a live worker or in-process on the guest |
 | `rules:score` | `rules:gate` without the gate — the per-criterion detail rather than a pass/fail |
 | `scorer:verify` | **is the SHIPPED model directory free of unsafe artefact types?** `.pt`, `.pkl`, `.ckpt` and friends are executable-on-load weight formats; safetensors is not. The script existed and NOTHING invoked it — not an npm script, not a playbook, not another module — so a security check on the one artefact this project publishes had never run. First stage of `release:gate` now |
+| `release:provenance` | **do the weights about to ship have a changelog entry saying where they came from?** ADR 0007 makes the weights the API and `promote:model` writes their provenance into a changeset, which is the only record of it — and nothing checked that the entry described the weights actually present. Found the shipped model at 2,485 records while both pending changesets said 2,403 and were BYTE-IDENTICAL to each other, so a first release would have published weights nothing accounts for beside one note printed twice. Both are invisible elsewhere: a changeset is prose, and `changeset-provenance.test.ts` asserts how a row RENDERS, never that it describes what ships. Second stage of `release:gate` |
 | `scorer:migration` | is a schema migration open? `release:gate` runs it first and refuses while one is. `lab:inventory` also reports it, with which candidate could close it |
 | `candidate:gate` | the gate chain against a CANDIDATE rather than the shipped weights — the question `release:gate` structurally cannot ask |
 | `promote:model` | copy trained weights into `packages/scorer/models/` and write the changeset. Stops at an uncommitted tree |
@@ -1998,7 +1999,7 @@ Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth
 - **Every `.mjs` CLI here ignored an unrecognised flag**, because they all parse argv by looking for what
   they know — so a mistyped one ran the default and reported success. `refuseUnknownFlags`
   (`cli-flags.mjs`) refuses it, names the near miss, and prints what the command does take.
-  **ALL 46 are guarded as of 2026-08-27**, and `cli-flags.test.ts` DISCOVERS every argv-reading
+  **ALL 47 are guarded as of 2026-08-27**, and `cli-flags.test.ts` DISCOVERS every argv-reading
   module and requires each to be guarded or exempted with a reason. The exemption list is empty.
   > **The flag lists are READ out of each file, never derived, and every batch proved why.**
   > `stability-gate` builds flags from a variable and `repeat-capture` reads seven through an `arg(name)`
