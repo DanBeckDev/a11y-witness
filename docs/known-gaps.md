@@ -323,39 +323,62 @@ recapture on the next corpus run.
 `furniture-spread.test.ts` passes per feature, which is what made the gap visible rather than a matter of
 somebody remembering.
 
-## 9. The model is one corpus revision behind — DISPATCHED, and it now has more to catch up on
+## 9. The model is one corpus revision behind — DONE
 
 | | |
 |---|---|
-| **state** | shipped model trained on **2,403** records; the corpus exported **2,426** before this session, and §8 has since added 11 cases and re-bucketed 9 pages |
-| **why** | the 29 `1.3.1:no-headings` cases were added after the promotion, and the three focus cases after that |
-| **does it invalidate anything?** | No. `1.3.1:no-headings` is `decidedBy: "rules"`, so the model is not expected to cover it, and every gate that judges the model passed against the weights that shipped |
-| **fix** | `npm run lab:job -- -e job=everything` — capture, export, retrain, re-gate, re-promote. **Running.** |
-| **done when** | `training-report.json`'s `dataset.records` matches the export's record count |
+| **was** | shipped model trained on 2,403 records; the corpus exported 2,426 |
+| **now** | **2,448 exported, 2,485 trained** (base + realism tier), `grade: "release"`, promoted |
+| **done when** | `training-report.json`'s `dataset.records` matches the export — it does |
 
-**The corpus change was proven on one subtype first, and that is why this is worth recording rather than
-just doing.** `--pipeline=verify --only=` captured the three new cases alone and `check-signals` reported
-`1 blind` — `keyboard-unreachable-native-button` never fired. Cost: minutes. A full recapture is ~4 hours
-and would have shipped a case that can never fire, which this repo's rules forbid outright.
+The corpus change was proven on one subtype first (`--pipeline=verify --only=`), which caught a case that
+could never have fired and cost minutes instead of a four-hour recapture. See §8.
 
-The diagnosis needed a fix to the REPORT before it could reach the case, and that is the more useful half:
+### What the chain surfaced on the way, all of it ordering and reporting
 
-- `evidenceFor` had no branch for the three focus signals, so they fell through to the transcript default
-  and printed two fields their predicates never consult. For these pairs the transcript is IDENTICAL by
-  design — the whole point is two pages that announce the same and operate differently — so the report
-  read as "these pages are the same" when the evidence had not been looked at. `focusIsTrapped` reads
-  `stalled` off the probe's diagnostic mark, and **nothing could print it**: the single value deciding a
-  2.1.2 case was unprintable. Now a table, because ESLint stopped the chain at complexity 16 — the same
-  limit doing the same job it did for `signalMatches`.
-- With the evidence visible the cause was one line: `bad probe {stops: 92, cycled: false}` against
-  `good {stops: 6, cycled: true}`. The unreachable button was **stop 0 on both variants**, and Tab can
-  never return to a `tabindex="-1"` element, so the bad variant's cycle never closed and
-  `controlUnreachableByKeyboard`'s "whole tab cycle, or no claim" guard correctly refused. The guard is
-  right; the case sat in the one position that poisons its own test. Moved to second.
+Every one of these was a guard that could not report itself, and none was a product defect:
 
-Re-verified: **1425 discriminating, 0 blind, 0 contaminated.** The remaining exit 2 is `17 case(s) have no
-usable evidence HERE` — the 9 re-bucketed pages and the 8 generated variants `--only=` did not capture,
-which is what a full run resolves.
+| | |
+|---|---|
+| the `real-pages` pipeline captured **39 of 89** pages | `capture-real-pages` DEFAULTS to `--role=training`, so the pipeline scored and rewrote the baseline against whatever was on disk. A stage can now declare its vars, and both roles are named |
+| `--update` rewrote the baseline from partial coverage | it now refuses, naming every page it would erase — and distinguishes a RENAMED url (drop it, the record moved) from an uncaptured one (refuse) |
+| `corpus:urls` counted a page it never saw | a 403 returns the URL asked for, so `addressesSamePage` said "same page". A non-OK status is a third answer: `89 checked (88 actually seen), 1 blocked` |
+| `lab:reset` discarded a file and said "Nothing was deleted" | and `-e remove=` could never work on more than one file, because the porcelain was split inside a FOLDED scalar. `promote` writes three |
+| **the corpus audits ran AFTER `promote`** | `grants-audit` refused over one record with the weights already in the shipped directory. A gate that arrives after the act is a report |
+
+### The one real limitation, and it is structural rather than a defect
+
+`scorer:shortcuts` reports free vetoes on the three focus subtypes, all on the same feature:
+
+```
+2.1.1:control-unreachable-by-keyboard   8 positives  10 vetoes  form_field_unnamed (-4.60)
+2.1.2:focus-trapped                     8            10         form_field_unnamed (-6.59)
+2.4.3:focus-order-scrambled             7            10         form_field_unnamed (-6.59)
+1.3.1:no-headings                      29             5         heading_present   (-2.93)
+```
+
+**`1.3.1:no-headings` cannot be fixed and never needs to be**: every positive of that subtype has zero
+headings by definition, and the subtype is `decidedBy: "rules"`, so the veto cannot reach a user.
+
+**The focus ones have a real cost and no remedy available today.** `bare-edit` is the only accompanying
+defect granting an unnamed field, and `PERTURBS_FOCUS_ORDER` excludes it from all four focus-order
+criteria — an `<input>` injected into the BAD variant only enters the tab order and perturbs the very
+channel those cases are measured on. That exclusion is correct and was learned by producing the corpus's
+only BLIND case in 1,306. So the feature cannot appear on a focus positive without either corrupting the
+evidence or making the conformant variant non-conformant.
+
+The cost is the ADR 0015 shape pointed the other way: the 2.1.1 head is pushed down 4.6 logits on any
+page that has an unnamed form field, and real pages frequently do.
+
+**A candidate remedy, untested:** an `<input tabindex="-1">` with no label is an unnamed form field in the
+accessibility tree and never enters the tab order, so a focus-safe variant of `bare-edit` might supply the
+feature without perturbing the channel. Whether NVDA's form-field quick-nav still reaches it is the
+question, and `--pipeline=verify --only=` answers it in minutes. Not attempted here.
+
+Recorded in the shortcuts baseline rather than left refusing, because that baseline exists to detect
+REGRESSIONS after a deliberate corpus change and these were diagnosed rather than assumed — but the
+limitation above is the honest characteristic, and it belongs in this document rather than only in a
+JSON file.
 
 ## 10. Two changesets are pending publish
 
