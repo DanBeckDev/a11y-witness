@@ -29,7 +29,7 @@ metrics". Both halves are used below.
 
 ### 1. Disbelieve "it needs a fleet / a corpus / a venv"
 
-This premise is usually **false**, and it has been false **five times in a row** here:
+This premise is usually **false**, and it has been false **seven times in a row** here:
 
 | the claim | what was true |
 |---|---|
@@ -38,6 +38,8 @@ This premise is usually **false**, and it has been false **five times in a row**
 | `scorer:verify` "needs a real model directory" | its decision is a pure function, and the end-to-end case is a temp dir and two empty files |
 | `scorer:migration` "needs a synthetic migration" | `migrationVerdict()` was already exported and pure; the command runs against a copied script in a temp tree |
 | `corpus:applicability-audit` "needs the exported corpus" | `sweep()` says PURE in its own docstring; three hand-built records reach every branch |
+| `gate:isolation` "needs a train/test split" | it does not check splits at all — it packs and installs each package outside the repo. The register's own description was wrong, and writing the proof is what found it |
+| `check-signals` "needs runs/" | `signalMatches` is a boolean over plain fields; four one-line predicates cover the 811 highest-risk cases |
 
 What a gate needs is almost never its whole production input. It needs the **subject of its claim**.
 
@@ -93,6 +95,17 @@ silent exit 0 from a copied script will look like the gate working rather than t
 A refusal that does not name the offending thing sends the reader to search for it, which is the
 difference between a gate and an obstacle. `weights.pkl` in the output is part of the contract.
 
+### 4a. Assert WHERE the refusal comes from, not just that one happened
+
+A mutation can be caught by accident. Deleting `gate:isolation`'s smoke-test precondition does not make it
+pass — it fails later trying to copy the missing file, with a raw `ENOENT ... isolation-smoke.mjs`. A test
+matching `/smoke/i` against the failure detail was satisfied by that ENOENT, so it caught the mutation for
+the wrong reason and would have stopped working the day the error text changed.
+
+Assert the STAGE. A gate that diagnoses its own precondition tells you to add a smoke test; one that trips
+over a missing file tells you a path does not exist and leaves you to work out why. That distinction is
+this repo's entire diagnostics model.
+
 ### 5. Include the control
 
 Every proof needs a case that must NOT refuse. Without it, all the assertions above are satisfied by a
@@ -119,6 +132,6 @@ this very exercise.
 
 ## The honest state
 
-Gates whose refusal has been watched: **6 of 16.** Each of the other 13 carries a reason, and reasons
+Gates whose refusal has been watched: **8 of 16.** Each of the other 13 carries a reason, and reasons
 decay — "needs a fleet" was true of `rules:coverage` until the eval fixtures turned out to be real
 captures already on disk. Re-read them before believing them.
