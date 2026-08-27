@@ -247,15 +247,27 @@ the question, and `--pipeline=verify --only=` answers it in minutes.
 **Done when** the three subtypes carry the feature on some positives, or the veto is declared permanent
 with the measurement behind it.
 
-### C2. Eleven signal types have no fixture
+### C2. ~~Eleven signal types have no fixture~~ — DONE, 10 of 15 covered
 
-`signal-predicates-discriminate.test.ts` exercises 4 of 15 and exempts 11 with reasons — each reads an
-interaction delta, a probe mark, or the announcement grammar, where a hand-built fixture would assert my
-model of the probe rather than the probe. The honest way in is a RECORDED capture as the fixture, not a
-synthesised one.
+Was 4 of 15 synthetic with 11 exempt. Now **4 synthetic + 6 from real evidence**, with 5 exempt and each
+carrying a reason that names what is missing rather than what is hard.
 
-**Done when** each exempted type either has a fixture built from a real capture, or its reason has been
-re-tested.
+The six came from captures NVDA actually produced, trimmed to the fields their predicate reads and
+**committed** — which is the whole point. A test that reads `runs/` skips where the corpus is absent, and
+a test that skips vouches for nothing. This is the SRE Workbook's stated fallback for when synthetic
+testing is impossible: *"a running system that exports well-known metrics"*, frozen into 19 KB.
+
+The extraction asserted that trimming did not change either verdict, so what is stored discriminates for
+the same reason the full capture did — a fixture cut down until it stopped proving anything would
+otherwise be indistinguishable from one that still does.
+
+**The five that remain are all focus-probe types, and that is one fact rather than five.** Each reads
+`interaction.focusOrder` or the probe's diagnostic mark, and this corpus copy carries neither for them —
+the cases are recent and `probeFocus` evidence is absent from the captures on disk. Six siblings WERE
+fixtured in the same sweep, which is what makes it a gap in the EVIDENCE rather than in the method. The
+way in is the same extraction, run once a corpus with focus evidence exists.
+
+Two mutations, both caught: a stored fixture that stops discriminating, and a real predicate going dead.
 
 ## Phase D — the model and the release
 
