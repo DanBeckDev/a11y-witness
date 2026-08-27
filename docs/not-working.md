@@ -10,22 +10,27 @@ distinction has been wrong twice in one afternoon and is the first thing to chec
 
 ---
 
-## 1. A rule reads as validated here and unvalidated on the lab
+## 1. The shipped weights are not the weights anything says shipped
 
-The sharpest one, because it means a fix I verified may not be real.
+`packages/scorer/models/screenreader-scorer` holds a model trained on **2,485 records**. Nothing states
+its provenance. The two pending promotion changesets both describe **2,403**, and are byte-identical to
+each other — one release note, written twice, for a model that never shipped.
 
-```
-local  (31 real captures)     2.4.4  assessed  38   1   validated on real evidence
-lab    (100 real captures)    2.4.4  assessed  68   0   never on a REAL page
-```
+ADR 0007 makes the weights the scorer's API and the changeset the only record of which model produced a
+given finding, which is the question somebody asks when they dispute a WCAG assertion. So the first
+release would publish weights nobody can trace a finding back to.
 
-Same code — pushed. Same fixture — `nvda-w3c-bad-before.json`, committed, and `ruleFindings` fires 2.4.4
-on it locally with evidence `"Click here, link"`. The lab counts 100 real captures, which is 94 real pages
-plus the 5 eval fixtures, so the fixture IS in its population.
+`npm run release:provenance` now refuses this, names the provenance it wanted stated, and is the second
+stage of `release:gate`. **The gate is the fix; the DATA is still wrong.** Closing it is a decision only
+the maintainer can take, because it is a major release:
 
-**Cause unknown.** Until it is found, the §7 claim ("2.4.4 is validated on real evidence") is unproven on
-the authoritative corpus, and one of the two runs is lying. Start by establishing which commit the lab's
-job actually ran, then whether `withCensus` changes the record the audit passes to `ruleFindings`.
+- the lab has a gated candidate at **2,487 records** — `releaseEligible`, held-out acceptance passed,
+  and `promote:model --dry-run` confirms it clears the regression check against the shipped 2,485
+- its exact bytes are in `runs/fetched/candidate.promoted-*`, and the candidate itself is intact on the
+  lab at `runs/model-candidate`
+- promoting it writes the changeset that closes this entry
+
+Until then the gate is correctly red, which is the honest state rather than a defect in the gate.
 
 ## 2. Sixty free vetoes across eighteen heads
 
@@ -113,9 +118,27 @@ repo's own rules say not to do. Worth a dry run before the real one, which the w
 
 ---
 
+## Closed since this list was written
+
+**`2.4.4` reading validated here and never-fired on the lab** — it was never a contradiction. The lab's
+run was 26 Aug 23:19 and the fix that taught the audit to count eval fixtures landed 27 Aug 10:04,
+eleven hours later. Re-run at HEAD, the lab reports `2.4.4 assessed 68 1 validated on real evidence`
+and agrees with local.
+
+Establishing that meant comparing a journal timestamp against `git log` by hand, because the journal
+carried no code identity at all — so the fix is not the number, it is that the question is now answerable.
+`run-job.yml` stamps `<job> at <sha12>[ DIRTY]` into the unit description, systemd opens every journal
+with it, and `lab:status` prints `What code produced this run` outright. A journal predating the stamp
+says `NOT STATED` rather than going quiet.
+
+Two more found by pulling that thread, both fixed: `promote:model` named its changeset from a COUNT of
+`.changeset/`, so one promotion overwrote another's release note — that is what the duplicate above is —
+and `lab:fetch` looked for a literal `promote-candidate-4.md` while the lab held `-6`, so the one
+artefact that entry exists to rescue was unfetchable.
+
 ## How to read the numbers on this page
 
-- **Lab, not local.** Items 1 and 2 quote the lab. My local `runs/` is a partial copy and its audits
+- **Lab, not local.** Item 2 quotes the lab. My local `runs/` is a partial copy and its audits
   describe the copy: it reported six criteria as "NEVER FIRED ANYWHERE" while the lab reported every one
   of them validated. That is not a bug in either — it is what a stale corpus does — and building this list
   on the local numbers was avoided by an hour, not by design.
