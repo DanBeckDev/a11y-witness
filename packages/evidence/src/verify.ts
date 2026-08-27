@@ -176,6 +176,33 @@ export function captureMentionsTitle(capture: CapturedAnnouncements, title: stri
  * Exported because the deterministic rules need it too: two of them assert something is ABSENT, and a
  * sweep alone cannot tell "the page has none" from "we could not ask".
  */
+/**
+ * What the DOM contains, as counted in the DOM rather than in the accessibility tree.
+ *
+ * Its whole value is the COMPARISON with `pageCensus`. Both alone are ambiguous; together they separate
+ * two verdicts that had been indistinguishable and need opposite responses:
+ *
+ *     dom.heading 0   census.heading 0    the page never rendered — our defect
+ *     dom.heading 40  census.heading 0    forty headings the tree cannot see — a severe finding
+ *
+ * A capture taken before this existed returns null, which reads as "cannot say" and never as "none".
+ */
+export function domCensus(capture: CapturedAnnouncements):
+  { heading?: number; link?: number; graphic?: number; landmark?: number; formField?: number } | null {
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  for (const mark of marks) {
+    if (typeof mark !== "object" || mark === null) continue;
+    const record = mark as Record<string, unknown>;
+    if (record.event !== "domCensus" || record.error) continue;
+    const num = (value: unknown) => (typeof value === "number" ? value : undefined);
+    return {
+      heading: num(record.heading), link: num(record.link), graphic: num(record.graphic),
+      landmark: num(record.landmark), formField: num(record.formField),
+    };
+  }
+  return null;
+}
+
 export function pageCensus(capture: CapturedAnnouncements):
   { heading?: number; link?: number; graphic?: number; graphicUnnamed?: number } | null {
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];

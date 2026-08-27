@@ -24,6 +24,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ruleFindings } from "./rules.js";
+import { pageCensus, domCensus as evidenceDomCensus } from "@a11y-witness/evidence/verify";
 
 /** Enough announcements to clear MIN_CONTENT_LINES, so "no headings" is a finding and not a fragment. */
 const CONTENT = Array.from({ length: 20 }, (_unused, index) => `Paragraph ${index + 1} of body copy.`);
@@ -100,4 +101,36 @@ test("a RAW capture needs pageCensus; the census is a diagnostic, not a field", 
   const lifted = { ...raw, census: { heading: 0, link: 2, graphic: 0, graphicUnnamed: 0 } };
   assert.ok(ruleFindings(lifted as never).some((f) => f.wcag.startsWith("1.3.1")),
     "with the census lifted out of diagnostics, it fires");
+});
+
+test("the DOM count and the tree count answer different questions", () => {
+  // THE MEASUREMENT THIS PROJECT DID NOT HAVE, and its absence cost a corpus page.
+  //
+  // Both existing structure sources are accessibility-layer: the sweep is what NVDA REACHED, the census
+  // is what Chromium EXPOSES. `crossCheckStructure` compares those two, so it can catch a sweep that
+  // stopped early and can say nothing at all about markup the tree never exposed.
+  //
+  // The Met Office warnings page captured as 27 announcements with `census.heading = 0` while its
+  // published HTML carries forty headings, and it was IMPOSSIBLE to say whether this tool failed to
+  // render it or the page fails to expose it. Those are opposite verdicts — one our defect, one a severe
+  // genuine finding — so the page had to leave the corpus unattributed.
+  const withDom = (tree: number, dom: number) => ({
+    diagnostics: [
+      { event: "structureCensus", heading: tree, link: 6, graphic: 4, graphicUnnamed: 1 },
+      { event: "domCensus", heading: dom, link: 62, graphic: 9, landmark: 5, formField: 2 },
+    ],
+  });
+  assert.equal(pageCensus(withDom(0, 40) as never)?.heading, 0);
+  assert.equal(evidenceDomCensus(withDom(0, 40) as never)?.heading, 40,
+    "40 in the DOM and 0 in the tree is a finding ABOUT THE PAGE");
+  assert.equal(evidenceDomCensus(withDom(0, 0) as never)?.heading, 0,
+    "0 in both is a page that never rendered — our defect");
+});
+
+test("a capture without the DOM count says so, rather than reporting none", () => {
+  // `undefined` and `0` must never collapse. A capture taken before the counter existed cannot say what
+  // the DOM held, and reading that as "no headings" would turn every old capture into a finding.
+  const older = { diagnostics: [{ event: "structureCensus", heading: 3, link: 1, graphic: 0 }] };
+  assert.equal(evidenceDomCensus(older as never), null,
+    "no domCensus mark means CANNOT SAY, never zero");
 });
