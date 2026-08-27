@@ -13,6 +13,12 @@ human or agent, *working on* the repo rather than using it.
 | [control-plane-proxmox.md](./control-plane-proxmox.md) | you are running the bare-metal fleet rather than local VMs |
 | [github-action.md](./github-action.md) | you want it in CI against your own app |
 
+## What is not done yet
+
+| | when you want it |
+|---|---|
+| [**known-gaps.md**](./known-gaps.md) | **the honest list** — what this project does not do, or does not yet know, each with what it would cost and what would tell you it is fixed. Written the day all seven gates first passed together, because "all gates pass" and "everything is validated" are different claims |
+
 ## Running the long jobs
 
 | | when you want it |
