@@ -168,13 +168,31 @@ to press Escape and observe whether focus leaves, which is a capture-path change
 **Done when** a case that cycles within a container is caught, or the limitation is declared in
 `screenreader-coverage.md` as a behaviour we do not drive.
 
-### B2. `graphicUnnamed` is a COUNT, and a count is where an investigation stops
+### B2. ~~`graphicUnnamed` is a COUNT~~ — DONE
 
-`rules:real-pages` reports `graphicUnnamed=2` and cannot say WHICH images. Settling cqc.org.uk meant
-fetching the page by hand and counting `<svg>` elements without `<title>`. The repo's own rule —
-"a count is where an investigation stops" — applies to its own report.
+`rules:real-pages` reported `graphicUnnamed=2` and could not say WHICH images. Settling cqc.org.uk meant
+fetching the page by hand and tallying `<svg>` elements without a `<title>` — this repo's own rule ("a
+count is where an investigation stops") applied to its own report.
 
-**Done when** the census records an identifier per unnamed graphic and the report prints up to three.
+The census now names them, DOM-side, because an unnamed node has by definition no name to identify it by:
+
+```
+census heading=41 ... graphicUnnamed=2 | DOM heading=54 ...
+       unnamed graphics: img logo.png .brand, svg .icon
+```
+
+Capped at five with the full count beside it — a truncated list that reads as complete is the defect one
+layer along.
+
+**A diagnostic mark, not evidence**, so `CAPTURE_PROTOCOL_VERSION` stays at 6 and the cached captures
+survive. The `evidence/verify` reader was widened in the same change, so producer and consumer agree
+about what a census contains rather than one of them guessing.
+
+**The page-side JS is now the only thing here with its own test harness, and it needed one.** The census
+expression is a STRING sent to `Runtime.evaluate`: tsc never parses it, ESLint never sees it, nothing
+imports it — so a typo fails at runtime, on a worker, mid-capture, as a null census that reads exactly
+like a page exposing nothing. `dom-census-expression.test.ts` extracts it and runs it against a synthetic
+DOM, which is the page-side equivalent of this repo's `node -e "import(...)"` rule for `.mjs`.
 
 ### B3. Real-page captures never checkpoint
 
