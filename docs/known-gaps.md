@@ -282,16 +282,30 @@ programmatically determined context and is 2.4.9's question (AAA, unreported her
 Adding it to `VAGUE_LINK_NAMES` would repeat 2026-08-24's most expensive mistake, where a feature
 answering a different criterion's question cost 27 false positives.
 
-## 8. Three subtypes have fewer cases than furniture buckets
+## 8. Three subtypes have fewer cases than furniture buckets — DONE
 
+`focus-trapped`, `focus-order-scrambled` and `control-unreachable-by-keyboard` had **4 cases each** against
+**5** layout buckets, so each missed one furniture shape by construction — a feature constant at zero
+across every positive of the subtype, which ADR 0015 calls a free veto.
 
-`focus-trapped`, `focus-order-scrambled` and `control-unreachable-by-keyboard` have **4 cases each**
-against **5** layout buckets — so each misses one furniture shape by construction. `furniture-spread.test.ts`
-asserts the property per FEATURE, so this is visible rather than silent.
+A fifth case each, and **each is a different MECHANISM rather than a restatement**. Each subtype had one
+mechanism and three multi-defect variants of it, so the head had seen one way of failing four times.
+Each new case was also chosen so a STATIC checker handles it differently from its sibling, which is the
+standing question this project exists to answer:
 
-A fifth case each. This is corpus authoring, and it changes what those heads are trained on.
+| subtype | the existing mechanism | the added one |
+|---|---|---|
+| 2.1.2 | a keydown handler cancels Tab — traps the keys it names and nothing else | a `focusin` guard on the container, which holds against Tab, Shift+Tab, arrows, a click and a programmatic focus alike. No `tabindex`, no key handler: the markup is conformant on its face |
+| 2.4.3 | positive `tabindex`, which every checker flags as a smell | a scripted tab-advance with **no `tabindex` anywhere** — the pattern real forms grow when somebody makes tabbing "smarter" |
+| 2.1.1 | `div role="button"` with no `tabindex` — the shape every static rule looks for | a NATIVE `<button tabindex="-1">`, which a checker scanning for "interactive element without a tabindex" passes without comment. Same announcement, same failure, invisible to markup analysis |
 
-# Phase D — model: consumes everything above
+Measured cost rather than predicted: **+11 cases** (3 base, 8 auto-generated multi-defect and conformant
+variants) and **9 existing pages re-bucketed** — contained to those three subtypes, which is the documented
+trade for dealing furniture within a subtype instead of hashing it independently. Those 18 captures
+recapture on the next corpus run.
+
+`furniture-spread.test.ts` passes per feature, which is what made the gap visible rather than a matter of
+somebody remembering.
 
 ## 9. The model is one corpus revision behind
 
