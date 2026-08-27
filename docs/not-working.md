@@ -72,25 +72,32 @@ Each reads `interaction.focusOrder` or the probe's diagnostic mark, and no captu
 disk carries one for a case using them. A dead predicate here would blind every case using it, silently.
 The way in is the same extraction that produced the other six, once a corpus with focus evidence exists.
 
-## 5. Thirty-four `.mjs` files are still unchecked
+## 5. CLOSED — all 107 `.mjs` files typecheck
 
-**73 of 107 now, from a real 32.** The figure this entry used to carry — 53 — counted files bearing a
+**107 of 107, from a real 32.** The figure this entry used to carry — 53 — counted files bearing a
 `// @ts-check` marker, and **21 of those were outside the `tsc` program entirely**, so the marker was a
 comment. Proved by planting `const X: number = "s"` in a marked file and watching nothing happen. Two
-assertions now make an inert marker impossible, so the number above is coverage rather than intent.
+assertions now make an inert marker impossible, and `AT_LEAST` is 107, which may only rise.
 
-`capture-core.mjs` — 3,112 lines, the largest single block and the capture path itself — is done, and it
-was hiding the defect that justifies the whole exercise: `waitForPageToSettle` treated a FAILED census as
-a reading, so two consecutive CDP failures compared equal and the page was declared settled. That wait is
-the only defence against capturing a client-rendered shell.
+**Every batch found real defects rather than missing annotations.** The ones that could bite:
 
-**Every batch has found real defects rather than missing annotations.** A state shape spelled twice and
-drifted; a map type that could not express the invariant its store exists to protect; three options types
-inferred from their own defaults, so the options without defaults vanished; two required parameters with
-`= {}` defaults that made their own guards silently never fire; a `kill(undefined)` on a `process.exit`
-handler. That is the argument for continuing, not the count.
+- `waitForPageToSettle` treated a FAILED census as a reading, so two consecutive CDP failures compared
+  equal and the page was declared settled — the only defence against capturing a client-rendered shell
+- `stopPid(child.pid)` on a `process.exit` handler, where a spawn that never started has no pid and
+  `kill(undefined)` throws, losing the rest of the cleanup
+- `stalenessMs(null)` threw, against its own docstring: *"null means cannot tell, deliberately distinct
+  from healthy — claiming health from a missing timestamp is how a monitor ends up reporting green on a
+  dead process"*
+- two required parameters with `= {}` defaults that made their own guards silently never fire
+- a state shape spelled twice and already drifted; a map type that could not express the invariant its
+  store exists to protect; four options types inferred from their own defaults, so the options WITHOUT
+  defaults vanished
 
-What is left is 34 files. `case-matrix.mjs` (3,311 lines) and `server.mjs` (1,126) are the large ones.
+And three lessons about the tool itself, each established by compiling a probe rather than by reading: a
+JSDoc union does not narrow when the discriminant is `string`, because `""` is falsy; two adjacent JSDoc
+blocks silently discard all but the last, which was true in five places; and a shape typed by glancing at
+how a value is USED describes the uses, not the value — I did that four times before learning to read the
+body first.
 
 ## 6. Nobody knows how the scorer behaves on a user's pages
 
