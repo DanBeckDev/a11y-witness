@@ -101,39 +101,49 @@ Three things it does deliberately, each of which was a decision:
 to the current intake, so an unversioned URL fails EVERY capture while a versioned one fails once a year
 and this audit names it. Recorded in the entry.
 
-## 3. Most `.mjs` is still unchecked — 26 of 101 files, and the cost of the rest is now measured
+## 3. Most `.mjs` is still unchecked — 38 of 102, and the REAL blocker is now known
 
 | | |
 |---|---|
-| **why it matters** | that 73% is the CAPTURE PATH. `captureFault(code, message)` was called as `(message, code)` at two sites for as long as those faults existed — TypeScript rejects that call, and could not help |
-| **today** | **26** files carry `// @ts-check` and are checked by a second `tsc` pass wired into `npm run typecheck`. `typecheck-coverage.test.ts` holds a floor that may only rise |
-| **to check ALL 101 strictly** | **1,923** errors, mostly implicit `any` |
-| **to check ALL 101 with `noImplicitAny` off** | **273** — and every category in it is real |
+| **why it matters** | that remainder is the CAPTURE PATH. `captureFault(code, message)` was called as `(message, code)` at two sites for as long as those faults existed — TypeScript rejects that call, and could not help |
+| **today** | **38** files carry `// @ts-check`, up from 27. `typecheck-coverage.test.ts` holds a floor that may only rise |
 
-**The 273 is the number to plan against**, because its categories are the ones that catch defects rather
-than style:
+**The blocker is NOT the second `tsc` pass, and that is the finding.** This entry used to plan against
+"273 errors with `noImplicitAny` off", on the assumption that relaxing `tsconfig.mjs.json` would unlock
+the remainder. It does not, because **every package build already compiles its own `.mjs` STRICTLY** —
+`allowJs` is on in each package's tsconfig, so `// @ts-check` is honoured there under the root config's
+`strict`. Relaxing the standalone pass changes nothing about the gate a file must clear, and leaving the
+relaxation in place would have been worse than useless: a setting that reads like it lowers the bar and
+does not.
 
-| errors | code | what it is |
-|---|---|---|
-| 78 | TS2339 | a property read off a value that may not have it |
-| 78 | TS18046 | a caught value used without narrowing |
-| 55 | TS2345 | **an argument of the wrong type** — the class that caught the `captureFault` swap |
-| 20 | TS2322 | a value assigned to something it does not fit |
+Verified by doing it. `noImplicitAny: false` took the standalone pass from 1,923 errors to 270 and 22
+files to clean — then `npm run build` failed on 11 of them anyway, because the package builds never saw
+the relaxed config. Reverted.
 
-The TS18046 group is correctness, not ceremony. *Clean Code with TypeScript* puts it plainly: JavaScript
-can throw **any** value, so a caught value is `unknown` and reading `.message` off it is a guess — and
-when the guess is wrong the result is `undefined`, which in a diagnostic is worse than nothing because it
-looks like an answer. This repo has paid for exactly that shape repeatedly.
+**So the bar is `@ts-check` + strict, per file, and it is cleared one file at a time.** Eleven were this
+round, by annotating rather than by loosening — and the annotations found real things:
 
-**`errorText`/`errorCode` now exist** (`@a11y-witness/nvda-worker/error-text`) so narrowing is one import
-rather than a hand-rolled ternary per site. It was a private one-liner in `capture-core.mjs` with 35 call
-sites that nothing else could reach, which is why every other module narrowed by hand or not at all.
+- `fleet-consistency` and `describeMismatches` described the same value two ways (`object` against
+  `Record<string, unknown>`), which only showed up in the test that calls them in sequence. Now one
+  `Mismatch` typedef, which is the "delete a copy" remedy in its cheapest form.
+- `workerNamesFromInventory` could return `undefined` as a worker's NAME, which reaches a fleet report and
+  prints as the string `"undefined"` — a value that looks like an answer. Falls back to the address.
+- `labelWorkers` had the same hole one level down.
+- The two dataset generators widened `["good", "bad"]` to `string`, so `testCase[variant]` permitted a
+  third variant that the corpus's central constraint forbids. `as const` states the pair.
+- `report()` in `wait-for-capture` is called with a PARTIAL summary on the no-run path, which its type now
+  says rather than the code merely doing.
 
-Two approaches were tried and do NOT work, recorded so nobody repeats them: a file allowlist cannot
-isolate, because TypeScript follows imports and `checkJs` is program-wide; and `allowJs` in the ROOT
-config drags every `.mjs` into the main program, where `@ts-check` then fails under strict (0 → 290).
+**A measurement trap worth keeping**, because it inflated this number by ten before being caught: a
+`grep -rl` over `packages` counts `dist/` copies of the same files. The floor test walks the tree and
+excludes `dist`, which is why it disagreed — and it was right. Quote the test's number, not a grep's.
 
-**Done when** the floor reaches 101, or the remainder is declared with reasons.
+**Two approaches that do NOT work**, unchanged and still worth recording: a file allowlist cannot isolate,
+because TypeScript follows imports and `checkJs` is program-wide; and `allowJs` in the ROOT config drags
+every `.mjs` into the main program, where `@ts-check` then fails under strict (0 -> 290).
+
+**Done when** the floor reaches 102, or the remainder is declared with reasons. The largest holdouts are
+`case-matrix` (284), `capture-core` (219) and `capture-screenreader-dataset` (120), measured under strict.
 
 ## 4. ~~18 CLIs still ignore an unrecognised flag~~ — DONE
 
