@@ -367,7 +367,20 @@ ANNOUNCED_ROLE = re.compile(
 #: role"), and the same one `vague_link_lacks_context` twelve functions below already handles by tracking
 #: `leaving` from the parse. Fifth instance of one shape: a heuristic written without accounting for how
 #: NVDA PREFIXES a line.
-LEAVING_PREFIX = re.compile(r"^out of\s+[^,]{1,48},\s*", re.IGNORECASE)
+#:
+#: **REPEATED, because NVDA announces one exit per container LEFT and they nest.** The pattern is anchored
+#: at `^`, so `sub` strips exactly one however many follow — and a page whose fake heading sits after a
+#: `<fieldset>` inside a `<form>` announces
+#:
+#:     "out of grouping, out of form, Where to find us"
+#:
+#: which stripped once is still `"out of form, Where to find us"`, still matches `ANNOUNCED_ROLE` on
+#: `form`, and is still rejected. Measured 2026-08-27 by `corpus:grants-audit`: 57 of 58 records carried
+#: the feature, and the one that did not was the corpus's first doubly-nested container.
+#:
+#: The single-exit form was correct for every case that existed when it was written, which is exactly how
+#: this shape recurs — the remedy fits the instance rather than the rule. One `+` covers any depth.
+LEAVING_PREFIX = re.compile(r"^(?:out of\s+[^,]{1,48},\s*)+", re.IGNORECASE)
 
 
 def plain_heading_candidate(value: str, following_value: str) -> bool:

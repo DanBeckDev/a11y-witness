@@ -72,3 +72,32 @@ def test_the_exit_pattern_is_bounded_and_does_not_eat_a_whole_line():
     long_name = "out of " + ("x" * 60) + ", Borrowing books"
     # No comma within 48 characters, so nothing is stripped and the line is judged as it stands.
     assert features.LEAVING_PREFIX.sub("", long_name) == long_name
+
+
+def test_nested_containers_announce_one_exit_each_and_all_are_stripped():
+    """NVDA emits one exit per container LEFT, and containers nest.
+
+    The single-exit form of this pattern was correct for every case that existed when it was written, and
+    that is exactly how this shape recurs: the remedy fits the instance rather than the rule. `^` anchors
+    it, so `sub` strips exactly one however many follow — leaving `"out of form, Where to find us"`, which
+    still matches `ANNOUNCED_ROLE` on `form` and is still rejected.
+
+    Found 2026-08-27 by `corpus:grants-audit` on the corpus's first doubly-nested container, a `<fieldset>`
+    inside a `<form>`: 57 of 58 `fake-heading` records carried `plain_heading_candidate_present` and that
+    one did not.
+    """
+    assert features.plain_heading_candidate(
+        "out of grouping, out of form, Where to find us", SENTENCE) is True
+    # Any depth, not just two — the point of `+` over a second hand-written alternative.
+    assert features.plain_heading_candidate(
+        "out of list, out of grouping, out of form, Where to find us", SENTENCE) is True
+
+
+def test_a_nested_exit_still_does_not_rescue_a_line_that_announces_a_role():
+    """Stripping exits must not turn a real control into a fake heading.
+
+    The strip only removes CONTEXT about where the cursor was; whatever is left is judged exactly as
+    before. A nested exit followed by an announced control is still an announced control.
+    """
+    assert features.plain_heading_candidate(
+        "out of grouping, out of form, Search, edit", SENTENCE) is False
