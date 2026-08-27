@@ -380,15 +380,32 @@ REGRESSIONS after a deliberate corpus change and these were diagnosed rather tha
 limitation above is the honest characteristic, and it belongs in this document rather than only in a
 JSON file.
 
-## 10. Two changesets are pending publish
+## 10. Changesets are pending publish — READY, and publishing is a human decision
 
+**Three** now, not two: `promote-candidate-4`, `promote-v15-scorer` and `promote-candidate-6` (this
+session's retrain), plus two deliberate empty ones. `npm run changeset:status` is clean:
 
-`.changeset/promote-candidate-4.md` and `.changeset/promote-v15-scorer.md`. Both are MAJOR on
-`@a11y-witness/scorer`, because the weights ARE the API — a consumer's build can go from passing to
-failing with no code change on their side.
+```
+major   @a11y-witness/scorer
+patch   @a11y-witness/judge, a11y-witness
+```
 
-Committed, not published. `npm run release:version` then `changeset publish`, deliberately, when you want
-it out.
+All MAJOR on the scorer, because **the weights ARE the API** — a consumer's build can go from passing to
+failing with no code change on their side, which is breaking however small the diff looks.
+
+**Committed, not published, and that is the whole point of this entry.** `npm run release:version` then
+`changeset publish` puts them out. Publishing to a registry is irreversible and outward-facing: a version
+cannot be unpublished cleanly and consumers may pull it within minutes. So it stays a human decision,
+taken deliberately, exactly as `promote:gated` refuses to commit for the same reason one layer down.
+
+Everything that CAN be verified before that point has been:
+
+```
+1442 discriminating, 0 blind, 0 contaminated, 0 uncaptured, 0 stale
+1224 scored, 0 false positive(s)          RULES: PASS
+recall 92%, 0 false positives             FITNESS: PASS
+MODEL CHECK PASSED — safetensors only, no executable-on-load artefact
+```
 
 ## What is NOT on this list, deliberately
 
