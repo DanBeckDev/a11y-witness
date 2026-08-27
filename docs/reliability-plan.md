@@ -117,13 +117,34 @@ un-proving one, which reports *"1 of its 10 stage(s) are not themselves proven: 
 decision and not the weight-copying, `eval:gate` proves the verdict and not the fixture run. A register
 that overclaims is worse than one with a gap: the gap is something a person can pick up.
 
-### A2. Idempotency is claimed and unasserted
+### A2. ~~Idempotency is claimed and unasserted~~ — DONE
 
-Assert what the pipeline runner promises: running a stage twice against unchanged inputs produces an
-unchanged result. Cheapest form is a test over the CACHE decision (`capture-cache.mjs` is pure) plus a
-`--dry-run` comparison for the stages that cannot be re-run cheaply.
+`lab:pipeline` tells the operator *"every stage is idempotent, and a stage that already succeeded either
+hits its cache or re-runs cheaply."* That is advice people act on — it is why you re-run the whole chain
+rather than resuming by hand — and nothing asserted it.
 
-**Done when** a test fails if a stage stops being re-runnable.
+Arrived at by asking what could break the claim INVISIBLY: a stage that APPENDS rather than replaces. A
+re-run would silently double the corpus, and every downstream gate would pass on it, because the data
+stays numeric and the right shape throughout. *Building ML Powered Applications* names that as ML's
+distinguishing failure mode.
+
+**Checked before writing anything, and the pipeline is clean today.** Nothing appends except the
+`everything` transcript, which is truncated at the start of each run so it cannot accumulate. Now
+asserted rather than true by luck:
+
+- no lab stage may append, DISCOVERED across `src` and `scripts` rather than from a list somebody must
+  remember to extend;
+- the one exception carries the truncation that makes it safe, and the two travel together;
+- the runner does not mutate its own stage list, so the second run sees what the first did.
+
+The cache half was already covered: `capture-cache.test.ts` proves the key is stable under object-key
+order and across repeated calls, which is what makes a re-captured case a hit rather than fresh work.
+
+**A test of mine was wrong before the code was.** The truncation assertion compared SOURCE positions of
+`rmSync` and `appendFileSync` — and matched the *import* on line 24, so it was measuring where a symbol
+is imported rather than where anything happens. The append itself sits inside a function defined above
+`main` and called from within it. Execution order and source order are different questions; the honest
+textual proxy is the `pipeline(` call.
 
 ### A3. No distribution tests on the exported dataset
 
