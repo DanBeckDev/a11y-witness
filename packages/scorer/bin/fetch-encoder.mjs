@@ -13,7 +13,10 @@ const python = process.env.A11Y_PYTHON ?? "python3";
 const { fetchEncoderScript, requirements } = scorerPaths();
 const result = spawnSync(python, [fetchEncoderScript, ...process.argv.slice(2)], { stdio: "inherit" });
 
-if (result.error?.code === "ENOENT") {
+// `spawnSync` reports a missing interpreter as an Error carrying `code`, which Node's types do not
+// describe -- so the cast is the type catching up with the runtime, not a claim being waved through.
+const spawnFailure = /** @type {NodeJS.ErrnoException | undefined} */ (result.error);
+if (spawnFailure?.code === "ENOENT") {
   process.stderr.write(`cannot run ${python}. Set A11Y_PYTHON, and install ${requirements} first.\n`);
   process.exit(127);
 }

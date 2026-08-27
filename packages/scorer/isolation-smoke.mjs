@@ -25,7 +25,9 @@ for (const [name, path] of Object.entries(paths)) {
 
 // Everything the tarball is supposed to carry. `files` allow-lists drop assets silently — a `.py` or a
 // `.safetensors` is exactly the kind of payload that goes missing and is only noticed at runtime.
-for (const key of ["weights", "trainingReport", "scoreScript", "fetchEncoderScript", "requirements"]) {
+const REQUIRED = /** @type {Array<keyof typeof paths>} */ (
+  ["weights", "trainingReport", "scoreScript", "fetchEncoderScript", "requirements"]);
+for (const key of REQUIRED) {
   assert.ok(existsSync(paths[key]), `${key} is missing from the installed package: ${paths[key]}`);
 }
 
@@ -47,7 +49,9 @@ assert.equal(encoderPresent(), false, "a fresh install has no encoder yet");
 
 const provenance = scorerProvenance();
 assert.ok(provenance, "the training report should be readable");
-assert.equal(typeof provenance.featureSchema, "string",
+// `assert.ok` rather than `assert.equal(typeof ...)`, because only the first NARROWS -- and the line below
+// takes a string. The message is unchanged; what moved is that the compiler now agrees it holds.
+assert.ok(typeof provenance.featureSchema === "string",
   `featureSchema must be the schema STRING, got ${JSON.stringify(provenance.featureSchema)}`);
 assert.match(provenance.featureSchema, /^screenreader-/, "the schema name should identify this feature pipeline");
 assert.equal(typeof provenance.releaseEligible, "boolean");
