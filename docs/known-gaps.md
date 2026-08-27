@@ -101,12 +101,12 @@ Three things it does deliberately, each of which was a decision:
 to the current intake, so an unversioned URL fails EVERY capture while a versioned one fails once a year
 and this audit names it. Recorded in the entry.
 
-## 3. Most `.mjs` is still unchecked — 38 of 102, and the REAL blocker is now known
+## 3. Most `.mjs` is still unchecked — 46 of 102, and the REAL blocker is now known
 
 | | |
 |---|---|
 | **why it matters** | that remainder is the CAPTURE PATH. `captureFault(code, message)` was called as `(message, code)` at two sites for as long as those faults existed — TypeScript rejects that call, and could not help |
-| **today** | **38** files carry `// @ts-check`, up from 27. `typecheck-coverage.test.ts` holds a floor that may only rise |
+| **today** | **46** files carry `// @ts-check`, up from 27. `typecheck-coverage.test.ts` holds a floor that may only rise |
 
 **The blocker is NOT the second `tsc` pass, and that is the finding.** This entry used to plan against
 "273 errors with `noImplicitAny` off", on the assumption that relaxing `tsconfig.mjs.json` would unlock
@@ -143,7 +143,25 @@ because TypeScript follows imports and `checkJs` is program-wide; and `allowJs` 
 every `.mjs` into the main program, where `@ts-check` then fails under strict (0 -> 290).
 
 **Done when** the floor reaches 102, or the remainder is declared with reasons. The largest holdouts are
-`case-matrix` (284), `capture-core` (219) and `capture-screenreader-dataset` (120), measured under strict.
+`case-matrix` (284), `capture-core` (219) and `capture-screenreader-dataset` (120), measured under strict —
+so the remaining 56 files are roughly 1,000 annotations, dominated by four files.
+
+**This is the one entry left OPEN, deliberately, and the reason is that it converts rather than closes.**
+Every batch is mechanical JSDoc and every batch has found something real, so stopping is a budget
+decision rather than a judgement that the rest does not matter. The floor may only rise, which is what
+makes an open entry safe: `typecheck-coverage.test.ts` fails if anyone removes a marker.
+
+What the second batch found, which is the argument for continuing:
+
+- `workerNamesFromInventory` could return `undefined` as a worker's NAME, printing as the string
+  `"undefined"` in a fleet report — a value that looks like an answer.
+- Both dataset generators widened `["good", "bad"]` to `string`, so `testCase[variant]` permitted a third
+  variant the corpus forbids by construction.
+- A wrapper in `everything-pipeline.mjs` was typed by MIRRORING what it wraps, and the mirror immediately
+  disagreed with the real `run` — the same "two spellings of one shape" defect as `Mismatch` one package
+  over, and as `chromiumArgs` re-declaring `BrowserPreset` an hour later. Three instances in one session.
+- Typing `real-page-corpus.mjs` broke two consumers that had been passing `string | undefined` into a
+  lookup, which is exactly what typing a module is for.
 
 ## 4. ~~18 CLIs still ignore an unrecognised flag~~ — DONE
 
