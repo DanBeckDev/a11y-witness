@@ -230,31 +230,31 @@ in step.
 
 ## Phase C — the corpus and the dataset
 
-### C1. ~~Three focus subtypes carry a free veto~~ — FIX SHIPPED, half verified
-
-`form_field_unnamed` was 0 on every positive of `2.1.1:control-unreachable-by-keyboard`,
-`2.1.2:focus-trapped` and `2.4.3:focus-order-scrambled` — a free veto worth **−4.60 to −6.59 logits**,
-which pushes those heads DOWN on any page carrying an unnamed field, and real pages frequently do.
+### C1. ~~Three focus subtypes carry a free veto~~ — DONE, verified end to end
 
 `bare-edit-inert` is `bare-edit` with `tabindex="-1"`: an unnamed field in the accessibility tree that
 adds no tab stop, so a focus-order host can carry it without its channel moving.
 
-**Substituted inside the filter, not added to `ROTATIONS`** — that list's choice is
-`(rotation + round) % length`, so enlarging it re-rolls every multi-defect pairing in the corpus, which
-its own comment says to treat like a protocol bump. Measured: **5 added, 4 renamed, 1 existing page
-moved.** Ten captures against a full recapture.
+**Both halves are now settled by a full chain run.**
 
-**Verified: it does not perturb the channel.** `--pipeline=verify` captured two of the new cases and
-`check-signals` reports `1439 discriminating, 0 blind, 0 contaminated` — the host signals still fire, so
-the tab order they are judged on is unchanged. That was the entire risk of the substitution and it is
-settled.
+| | |
+|---|---|
+| does it perturb the channel? | **No.** `check-signals`: 0 blind, 0 contaminated — the host signals still fire |
+| does NVDA's `f` quick-nav reach a non-focusable input? | **Yes.** `corpus:grants-audit`: `bare-edit-inert: 5/5 carry bare_edit_present` |
+| did the veto close? | **Yes.** Those three heads went from 10 vetoes to 9, and `form_field_unnamed` is gone from all of them |
 
-**Not yet verified: that NVDA's `f` quick-nav REACHES a non-focusable input**, and therefore that the
-feature is actually granted. That is a question about NVDA rather than about the markup, and
-`corpus:grants-audit` is the gate built to answer it — it fires on a defect that declares evidence the
-corpus does not contain, and it is now itself proven (A1). The next export settles it either way, and the
-defect says so in its own comment: if the feature is not granted, `bare-edit-inert` must be DELETED rather
-than left looking useful.
+The unknown was a question about NVDA rather than about the markup, and the gate built for exactly that
+claim answered it. Worth noting the shape: the defect carried its own instruction to DELETE it if the
+feature was not granted, so a null result had a defined outcome rather than an argument.
+
+**Substituted inside the filter, not added to `ROTATIONS`** — that choice is
+`(rotation + round) % length`, so enlarging the list re-rolls every multi-defect pairing in the corpus.
+Measured: 5 added, 4 renamed, 1 existing page moved. Ten captures against a full recapture.
+
+**What is left, and it is a different feature.** `vague_link_without_context` is now the worst veto on
+those heads (−16 to −20). `vague-link` is excluded from focus-order criteria for a reason that has no
+`tabindex="-1"` escape: a link IS a tab stop by nature, and making one unreachable is a different defect
+that would collide with 2.1.1's own signal. That is a genuine remaining limitation, not an oversight.
 
 ### C2. ~~Eleven signal types have no fixture~~ — DONE, 10 of 15 covered
 
