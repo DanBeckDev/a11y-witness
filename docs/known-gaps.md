@@ -178,26 +178,40 @@ this one. Guarded, and split into named functions on the way past.
 
 # Phase B — capture path: changes what a capture CONTAINS. Bundle these
 
-## 5. One page is out of the corpus and nobody can say why it failed
+## 5. One page is out of the corpus and nobody can say why it failed — DONE, and the answer is NOT US
 
+Answered on the first clean capture after the flag-guard fix:
 
-`weather.metoffice.gov.uk/warnings-and-advice/uk-warnings` yields 27 announcements of navigation and a
-census of `heading=0`, twice, byte for byte — while its published HTML carries **forty** headings.
+```
+weather.metoffice.gov.uk/warnings-and-advice/uk-warnings
+census heading=0  link=5   graphic=4    |  27 announcement(s)
+DOM    heading=55 link=281 graphic=31
+   <- 55 headings in the DOM, 0 in the tree: the page EXPOSES nothing,
+      which is a finding about it, not about this tool
+```
 
-Either this tool never renders it, or it renders and exposes almost nothing to the accessibility tree —
-**which would be a severe genuine finding**. Waiting for the DOM to settle changed the output not at all,
-so it is not a race.
+**The page rendered in full and exposed none of it.** That is a real 1.1.1 and 1.3.1 finding on a page
+whose publisher declares it conformant, and it stands. The instrument discriminates rather than always
+saying the same thing — `cqc.org.uk/search` on the same run reads `census heading=41 | DOM heading=54`,
+which is the healthy ratio.
 
-**The measurement that would settle it does not exist.** `crossCheckStructure` compares the SWEEP to the
-AX-TREE CENSUS and both are accessibility-layer, so neither can see a DOM the tree is failing to expose.
+**And the report was contradicting itself about it.** `furnitureCaptures` classifies on the TREE alone, so
+a zero-heading capture was filed as an "unrendered SHELL" under a headline reading *"anything they say is
+about this tool"* — printed directly above `noteEvidence`'s line saying the opposite. The DOM count had
+been computed and displayed and never reached the code that CLASSIFIES: a remedy reaching one consumer and
+not the deciding one, this repo's most expensive recurring shape, committed inside the report written to
+expose it. Now: **0 furniture claims across 81 real pages**, down from 1, and the page appears only as the
+findings it earns.
 
-| | |
-|---|---|
-| **fix** | a DOM-side element count over CDP, carried as `ruleEvidence` — evidence the rules may see and the model may not |
-| **also buys** | a real answer to "is this page inaccessible or did we fail to read it", which is the question this whole tool exists to answer |
-| **done when** | the page can be re-added and its verdict attributed either way |
+An uncounted DOM stays furniture, deliberately. An older capture with no DOM census cannot demonstrate the
+page rendered, and claiming a finding on evidence we do not have is the one error this report must not make.
 
-## 6. Two capture-path behaviours — one MEASURED AS NOT HAPPENING, one fixed and awaiting proof
+**A diagnostic trap that nearly discarded a correct result.** The lab journals in UTC and the playbook
+prints its own timestamps in BST, so a verdict produced at 10:30 is stamped `09:30:08` — which reads
+exactly like the stale-journal defect this file records three times. It was the same moment in two zones.
+Settle it with the InvocationID the playbook already reports, not by comparing clocks.
+
+## 6. Two capture-path behaviours — DONE: one MEASURED AS NOT HAPPENING, one proven neutral
 
 ### Cookie/consent overlays — detected, and never once blocking
 
@@ -219,7 +233,7 @@ defect it is.
 consent decision this tool has no business making on their behalf, and the read-through does not need it.
 If a page ever IS blocked, the detector says so by name and the decision can be made about that page.
 
-### Render readiness — fixed, awaiting proof
+### Render readiness — fixed and PROVEN
 
 `waitForPageToSettle` waits for the accessibility tree to stop changing rather than for a duration.
 Deliberately not "wait for content": that would hang the full budget on a page which genuinely has none,
@@ -232,11 +246,13 @@ would reject evidence rather than describe it.
 **It did not fix the Met Office page**, which is what proved settling is necessary and not sufficient, and
 what §5's DOM count is for.
 
-**Outstanding:** a fleet deploy and `npm run evidence:check`, bundled with §5. Exit 0 means both changes
-are evidence-neutral and the 2,122 cached captures survive; exit 1 means a recapture. Neither change
-alters an existing field — §5 ADDS a diagnostic, and settling changes only pages that were being read too
-early, which were wrong — so 48/48 SAME is the expectation. That is a prediction, and the point of running
-it is that predictions about evidence are not evidence.
+**DONE.** `npm run worker:code` reports all five workers at `56a39c9a18aeb5c6`, matching this checkout,
+so the fleet runs both changes; `evidence:check` reported **48 compared, 48 same, 0 drift, 0 changed**.
+Both are evidence-neutral and the 2,122 cached captures survive.
+
+The prediction in the paragraph above was right, and running it was still the point: predictions about
+evidence are not evidence. §5's verdict is what the settle wait plus the DOM count were for, and it came
+back on the first clean run.
 
 # Phase C — corpus: authored against a settled capture path
 
