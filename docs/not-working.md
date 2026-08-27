@@ -62,15 +62,22 @@ being NVDA's own way out of focus mode, so the evidence would not say which move
 size against `domCensus.formField` needs no new keystroke but misses a trap in a modal holding most of the
 page's controls.
 
-## 4. Five signal types have never been shown to discriminate
+## 4. CLOSED — all 15 signal types are shown to discriminate
 
-10 of 15 are covered — 4 synthetic, 6 cut from real captures. The five that are not are ALL focus-probe
-types: `focus-trapped`, `focus-order-scrambled`, `control-unreachable-by-keyboard`, `route-title-stale`,
-`skip-link-inert`.
+**11 from real captures, 4 synthetic.** The five that were exempt were ALL focus-probe types, and the
+exemption was the right call for the right reason: no capture on disk carried `interaction.focusOrder` or
+the probe's mark for a case using them, and a hand-built fixture would have asserted my model of the
+probe rather than the probe. The gap was in the evidence, not the method.
 
-Each reads `interaction.focusOrder` or the probe's diagnostic mark, and no capture in the corpus copy on
-disk carries one for a case using them. A dead predicate here would blind every case using it, silently.
-The way in is the same extraction that produced the other six, once a corpus with focus evidence exists.
+So the evidence was captured — five cases, both variants, across the real fleet. All five discriminate,
+and the extraction refuses any trim that changes either verdict. Each is mutation-checked by stripping the
+diagnostics and interaction block it is decided from.
+
+**A caution about how nearly this went wrong.** My first harness reported all five BLIND, and I almost
+recorded that as a finding. `check-signals` said `OK` on the same capture — two checks disagreeing about
+one corpus, which this repo already names as the signal. It was my harness: `signalMatches(capture,
+signal)` called as `(signal, capture)`. The same argument-order defect as `captureFault(code, message)`,
+made while reading the file that documents it.
 
 ## 5. CLOSED — all 107 `.mjs` files typecheck
 
