@@ -188,7 +188,20 @@ export function captureMentionsTitle(capture: CapturedAnnouncements, title: stri
  * A capture taken before this existed returns null, which reads as "cannot say" and never as "none".
  */
 export function domCensus(capture: CapturedAnnouncements):
-  { heading?: number; link?: number; graphic?: number; landmark?: number; formField?: number } | null {
+  {
+    heading?: number; link?: number; graphic?: number; landmark?: number; formField?: number;
+    /**
+     * WHICH graphics carry no accessible name, capped, with the full count beside them.
+     *
+     * The count alone sent a reader to fetch cqc.org.uk by hand and tally `<svg>` elements without a
+     * `<title>`. Both travel together because a truncated list that reads as complete is the defect one
+     * layer along — the sample says which, the count says how many.
+     *
+     * Absent on every capture taken before the census learned to name them, which reads as "cannot say"
+     * and never as "none".
+     */
+    unnamedGraphics?: string[]; unnamedGraphicCount?: number;
+  } | null {
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
   for (const mark of marks) {
     if (typeof mark !== "object" || mark === null) continue;
@@ -198,6 +211,10 @@ export function domCensus(capture: CapturedAnnouncements):
     return {
       heading: num(record.heading), link: num(record.link), graphic: num(record.graphic),
       landmark: num(record.landmark), formField: num(record.formField),
+      unnamedGraphics: Array.isArray(record.unnamedGraphics)
+        ? record.unnamedGraphics.filter((n): n is string => typeof n === "string")
+        : undefined,
+      unnamedGraphicCount: num(record.unnamedGraphicCount),
     };
   }
   return null;
