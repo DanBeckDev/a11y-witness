@@ -29,13 +29,15 @@ metrics". Both halves are used below.
 
 ### 1. Disbelieve "it needs a fleet / a corpus / a venv"
 
-This premise is usually **false**, and it has been false three times in a row here:
+This premise is usually **false**, and it has been false **five times in a row** here:
 
 | the claim | what was true |
 |---|---|
 | §3 "checking all `.mjs` needs `noImplicitAny` off" | every package build already compiles `.mjs` strictly, so the setting changes nothing |
 | §7 "2.4.4 needs a real page that exhibits it" | one was already in the corpus; the *count* was bounded to one directory |
 | `scorer:verify` "needs a real model directory" | its decision is a pure function, and the end-to-end case is a temp dir and two empty files |
+| `scorer:migration` "needs a synthetic migration" | `migrationVerdict()` was already exported and pure; the command runs against a copied script in a temp tree |
+| `corpus:applicability-audit` "needs the exported corpus" | `sweep()` says PURE in its own docstring; three hand-built records reach every branch |
 
 What a gate needs is almost never its whole production input. It needs the **subject of its claim**.
 
@@ -76,6 +78,16 @@ And tier 2 is the tier this repo keeps needing, because its signature defect is 
 never reaches: `refreshBrowseBuffer` guarded on a flag nothing set, `ensureSpeechChannel` fixed at one call
 site of two, the census computed and never delivered to the classifier.
 
+### 3a. One trap tier 2 will spring on you
+
+A script that resolves its own root from `import.meta.url` and guards on `process.argv[1]` **will not run
+at all** from a macOS temp directory: `tmpdir()` lives under `/var`, which is a symlink to `/private/var`,
+so the two disagree and `main()` is skipped. The command then exits **0 having printed nothing**, which
+reads exactly like a passing gate.
+
+`realpathSync(mkdtempSync(...))` fixes it. Recorded because it cost twenty minutes and, next time, a
+silent exit 0 from a copied script will look like the gate working rather than the gate never starting.
+
 ### 4. Assert the MESSAGE, not only the exit code
 
 A refusal that does not name the offending thing sends the reader to search for it, which is the
@@ -107,6 +119,6 @@ this very exercise.
 
 ## The honest state
 
-Gates whose refusal has been watched: **5 of 16.** Each of the other 13 carries a reason, and reasons
+Gates whose refusal has been watched: **6 of 16.** Each of the other 13 carries a reason, and reasons
 decay — "needs a fleet" was true of `rules:coverage` until the eval fixtures turned out to be real
 captures already on disk. Re-read them before believing them.
