@@ -230,16 +230,47 @@ it is that predictions about evidence are not evidence.
 
 # Phase C — corpus: authored against a settled capture path
 
-## 7. `2.4.4`'s rule has never fired on a real page
+## 7. `2.4.4`'s rule has never fired on a real page — DONE, and the gap was the COUNT
 
+**This entry was wrong in both halves, and an audit rather than an argument is what showed it.** It said
+the rule had never been validated on real evidence and prescribed "a real page that exhibits it, not a
+change to the rule". Neither was needed:
 
-Reported by `rules:coverage` every run: *"68x on the corpus, 0x on a real page — assumptions untested"*.
-Non-blocking only because the trained scorer also covers 2.4.4.
+- The corpus already held such a page. `nvda-w3c-bad-before.json` is a real capture of
+  `w3.org/WAI/demos/bad/before/home.html`, carrying two links both announced `"Click here, link"` in one
+  paragraph — WCAG F63, and the exact shape the rule's message describes.
+- The rule already fired on it. Verified offline in milliseconds, before anything was changed.
 
-The corpus's vague-link vocabulary is deliberately narrow (six phrases context cannot rescue). Real sites
-use different ones. **Fix is a real page that exhibits it**, not a change to the rule.
+What was missing was the population. `rules:coverage` defined "real" as one directory,
+`runs/real-page-corpus`, so the eval fixtures — captures of live websites, held out for judge quality —
+could not be seen. **It reported an untested assumption that had been tested all along**, which is worse
+than reporting nothing: it sent the next reader to find a page that was already there.
 
-`1.4.2` reads `0 corpus 0 real` and is fine: it declares that no real-page evidence is possible.
+Fixed by counting every population that holds real evidence, keyed on the CAPTURE'S OWN URL rather than
+on the directory — `fixtures/tutorials` and `fixtures/books` sit beside the real ones and are authored
+pages and `file:///` captures, so a directory rule would have counted them and a scheme rule would have
+admitted the two served from the lab's page server. Mutation-checked: removing the source reproduces the
+old report exactly.
+
+```
+  2.4.4  assessed  38  0  never on a REAL page — assumptions untested      <- before
+  2.4.4  assessed  38  1  validated on real evidence                       <- after
+```
+
+`1.1.1` 19 -> 29, `3.3.2` and `4.1.2` 3 -> 6 on the same change, and the unvalidated list 7 -> 6. No
+criterion regressed. Pinned by `rule-coverage-populations.test.ts`, which asserts both the claim and the
+discriminator, because those rot independently.
+
+**The general lesson, which is this repo's most-repeated defect one layer further out.** "The rule never
+fired" and "the rule never had its evidence" were already recorded as different answers. This is a third:
+**the rule fired where nobody counted.** Before trusting any coverage number, ask what population it was
+computed over — and make the number say so.
+
+One thing checked and deliberately NOT done: `"Read more..."` on `before/template.html` looked like a
+second real-page candidate and is not one. It sits in a table cell with its own intro text, so it has
+programmatically determined context and is 2.4.9's question (AAA, unreported here) rather than 2.4.4's.
+Adding it to `VAGUE_LINK_NAMES` would repeat 2026-08-24's most expensive mistake, where a feature
+answering a different criterion's question cost 27 false positives.
 
 ## 8. Three subtypes have fewer cases than furniture buckets
 
