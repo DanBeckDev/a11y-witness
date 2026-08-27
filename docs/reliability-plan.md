@@ -202,12 +202,31 @@ imports it — so a typo fails at runtime, on a worker, mid-capture, as a null c
 like a page exposing nothing. `dom-census-expression.test.ts` extracts it and runs it against a synthetic
 DOM, which is the page-side equivalent of this repo's `node -e "import(...)"` rule for `.mjs`.
 
-### B3. Real-page captures never checkpoint
+### B3. ~~Real-page captures never checkpoint~~ — DONE
 
-50 calibration pages at ~191 s each is ~32 minutes across five workers, and a kill loses all of it. The
-dataset capture resumes; this one does not.
+50 calibration pages at ~191 s each is ~32 minutes across five workers, and a kill lost all of it. The SRE
+Workbook names checkpointing as the pattern for exactly that.
 
-**Done when** `capture-real-pages` resumes, and the resume is proven by killing it mid-run.
+**A window, not a flag, and the distinction is the whole design.** A cache reuses a capture because the
+URL matches, which these pages must never do — *"a cache hit here would silently pair today's claim
+against yesterday's page."* `--resume` reuses one only while it is recent enough to belong to the SAME
+measurement, so a corpus scored as one thing cannot quietly be two. Six hours: long enough to survive a
+kill, a fleet repair and a re-dispatch, short enough that a publisher's overnight deploy falls outside it.
+
+Four refusals, all mutation-checked: outside the window, no timestamp, an unparseable timestamp, and a
+timestamp in the FUTURE — clock skew between lab and worker would otherwise pass the window test
+trivially and reuse evidence of unknown provenance.
+
+The run reports against the WHOLE role rather than what this invocation took, because a resumed run
+saying `3/3 captured` is true of the run and a lie about the corpus.
+
+**Two things the wiring caught that an import check could not.** `readdirSync` and `readFileSync` were
+unimported and the module still loaded cleanly, because they are used inside a function — the limit of
+this repo's `node -e "import(...)"` rule, worth knowing. And the corpus directory holds
+`abstention-sweep*.json` beside the captures; the reader ignored them by returning an empty URL that
+matched nothing, which is accidentally safe rather than deliberately. It now identifies a capture by
+SHAPE, as `capturesIn` does, for the reason that one gives: a name convention is a second thing to keep
+in step.
 
 ## Phase C — the corpus and the dataset
 
