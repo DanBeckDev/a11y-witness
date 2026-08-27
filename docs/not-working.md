@@ -120,30 +120,29 @@ over 1,183 conformant records.
 This is the item that pins the Monitoring section of the ML Test Score, and under the minimum rule that is
 the score.
 
-## 7. `eval:gate` cannot fail on a judge that goes silent
+## 7. CLOSED — both gates proven, and the one that could not see a silent judge now can
 
-Measured 2026-08-27 by driving the real command with an injected scorer that reports nothing at all:
+`promote:gated`'s wiring runs against a planted git repo; `eval:gate`'s against an injected scorer.
+Neither needed the thing it was assumed to need — a lab, or the Python venv. That was the original
+complaint, and proving it surfaced something worse.
+
+**A scorer reporting nothing at all scored 59% recall, against a floor of 0.55.** The deterministic rules
+supply that on their own, so the gate that exists to measure judge quality could not notice the judge
+disappearing. Not a wrong threshold so much as a missing measurement: one number for two layers, when
+this project's central claim is that they do different jobs.
+
+Recall is now reported and floored per layer, keyed on whether a finding carries a `mapping` — rules
+always set one, `findingsFromScores` never does:
 
 ```
-shipped scorer      recall 92%
-silent scorer       recall 59%     <- the deterministic rules, alone
-gate floor          0.55
+                       combined   trained scorer   rules
+shipped                    92%              33%      59%
+scorer reporting nothing   59%               0%      59%     <- now FITNESS: FAIL
 ```
 
-So a judge that stopped producing findings entirely would pass the gate that exists to measure judge
-quality. The floor is documented as *"a RATCHET... 0.55 sits just below the 59% measured after the scorer
-began abstaining"* — and that 59% was measured WITH the model. The rules alone reach the same number, so
-the ratchet's floor sits exactly at the no-model level.
-
-**Not a wrong threshold so much as a missing measurement.** The gate reports one recall figure for both
-layers, and this project's central claim is that they are different layers doing different jobs — rules
-ASSERT, the model TRIAGES. A number that cannot separate them cannot notice one of them disappearing.
-Closing it means reporting recall per layer and flooring the model's own contribution; the fixture set
-already carries which criteria each layer owns, so the data is there.
-
-**Both gates in this entry are now proven at both tiers**, which was the original complaint:
-`promote:gated`'s wiring runs against a planted git repo, and `eval:gate`'s against an injected scorer.
-Neither needed the thing it was assumed to need — a lab, or the Python venv.
+The floor is 0.20, chosen from those two measurements rather than from preference, and it is a ratchet
+like the one above it: raise it when real-page calibration lifts the model's own contribution, never
+lower it to make a run pass.
 
 ## 8. Nothing has ever been published
 
