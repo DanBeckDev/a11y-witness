@@ -1908,6 +1908,7 @@ failure as `capture-check` being mandatory and never running once.
 | `training:capture-acceptance`, `training:export-acceptance`, `training:export-acceptance:all` | the held-out set. Never cached, because those runs exist to test whether NVDA's output is still stable. The `:all` one exports EVERY repeat, because the evaluator reads every repeat — two jobs feeding one consumer is a drift generator, and produced a held-out score computed half on each |
 | `training:evaluate-acceptance:shipped` | score the SHIPPED model from a COPY under `runs/`. `release:gate` calls this one: the plain `training:evaluate-acceptance` defaults `--model` and `--training-report` into `packages/`, and the evaluator refuses to stamp a verdict into tracked source — *"that record describes what was true when those weights shipped"* — so the gate could never pass as written |
 | `training:train-baseline` | train without the realism tier, for comparison |
+| `corpus:distribution` | **is any field empty on EVERY record?** No page can cause that, so the probe or exporter filling it has stopped — and `postSubmitFields` was `[]` on all 2,122 captures with every check green, because *an empty field is not a malformed one* and no count ever moved. Empty on SOME records is often the finding and is deliberately not reported. Also catches a collapsed label balance and a missing required key. First data-shape gate this repo has had; runs inside `release:gate` |
 | `corpus:grants-audit` | **does a multi-defect page carry the evidence its labels claim?** Every accompanying defect declares a `grants` feature and nothing read it — so a label for a defect whose evidence was never captured passed every gate. Needs the AUTHORITATIVE corpus: `lab:job -e job=grants-audit` |
 | `corpus:container-exits` | **does NVDA ever announce leaving a landmark?** The fact `vague_link_lacks_context` rests on: a container that never closes stays open for the rest of the transcript, so a rule reading it as CONTEXT is describing the top of the page rather than the announcement in front of it. Reports, never blocks — it describes NVDA, not a defect |
 | `corpus:grants-map` | emits the JS-side `grants` declarations for the Python audit to read. Run by `corpus:grants-audit`; separate because the audit REFUSES without it rather than examining an empty set |
@@ -1985,7 +1986,7 @@ Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth
 - **Every `.mjs` CLI here ignored an unrecognised flag**, because they all parse argv by looking for what
   they know — so a mistyped one ran the default and reported success. `refuseUnknownFlags`
   (`cli-flags.mjs`) refuses it, names the near miss, and prints what the command does take.
-  **ALL 45 are guarded as of 2026-08-27**, and `cli-flags.test.ts` DISCOVERS every argv-reading
+  **ALL 46 are guarded as of 2026-08-27**, and `cli-flags.test.ts` DISCOVERS every argv-reading
   module and requires each to be guarded or exempted with a reason. The exemption list is empty.
   > **The flag lists are READ out of each file, never derived, and every batch proved why.**
   > `stability-gate` builds flags from a variable and `repeat-capture` reads seven through an `arg(name)`
