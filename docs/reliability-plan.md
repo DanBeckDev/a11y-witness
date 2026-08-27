@@ -230,22 +230,31 @@ in step.
 
 ## Phase C — the corpus and the dataset
 
-### C1. Three focus subtypes carry a free veto with no remedy available
+### C1. ~~Three focus subtypes carry a free veto~~ — FIX SHIPPED, half verified
 
-`form_field_unnamed` is 0 on every positive of `2.1.1:control-unreachable-by-keyboard`,
-`2.1.2:focus-trapped` and `2.4.3:focus-order-scrambled`, so each head can penalise it at no cost —
-measured at **−4.60 to −6.59 logits**. Real pages frequently have an unnamed field, so the cost is real.
+`form_field_unnamed` was 0 on every positive of `2.1.1:control-unreachable-by-keyboard`,
+`2.1.2:focus-trapped` and `2.4.3:focus-order-scrambled` — a free veto worth **−4.60 to −6.59 logits**,
+which pushes those heads DOWN on any page carrying an unnamed field, and real pages frequently do.
 
-`bare-edit` is the only accompanying defect granting the feature and `PERTURBS_FOCUS_ORDER` correctly
-excludes it from the four focus-order criteria: an `<input>` injected into the bad variant only enters the
-tab order and corrupts the channel those cases are measured on.
+`bare-edit-inert` is `bare-edit` with `tabindex="-1"`: an unnamed field in the accessibility tree that
+adds no tab stop, so a focus-order host can carry it without its channel moving.
 
-**The untested candidate:** an `<input tabindex="-1">` with no label is an unnamed form field in the
-accessibility tree and never enters the tab order. Whether NVDA's form-field quick-nav still reaches it is
-the question, and `--pipeline=verify --only=` answers it in minutes.
+**Substituted inside the filter, not added to `ROTATIONS`** — that list's choice is
+`(rotation + round) % length`, so enlarging it re-rolls every multi-defect pairing in the corpus, which
+its own comment says to treat like a protocol bump. Measured: **5 added, 4 renamed, 1 existing page
+moved.** Ten captures against a full recapture.
 
-**Done when** the three subtypes carry the feature on some positives, or the veto is declared permanent
-with the measurement behind it.
+**Verified: it does not perturb the channel.** `--pipeline=verify` captured two of the new cases and
+`check-signals` reports `1439 discriminating, 0 blind, 0 contaminated` — the host signals still fire, so
+the tab order they are judged on is unchanged. That was the entire risk of the substitution and it is
+settled.
+
+**Not yet verified: that NVDA's `f` quick-nav REACHES a non-focusable input**, and therefore that the
+feature is actually granted. That is a question about NVDA rather than about the markup, and
+`corpus:grants-audit` is the gate built to answer it — it fires on a defect that declares evidence the
+corpus does not contain, and it is now itself proven (A1). The next export settles it either way, and the
+defect says so in its own comment: if the feature is not granted, `bare-edit-inert` must be DELETED rather
+than left looking useful.
 
 ### C2. ~~Eleven signal types have no fixture~~ — DONE, 10 of 15 covered
 
