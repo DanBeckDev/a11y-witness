@@ -297,13 +297,39 @@ pages is the closest thing and it runs on our corpus, not theirs.
 **Done when** there is a documented, opt-in way for a consumer to report what the tool said on their
 pages, or a decision recorded that this project will not collect that.
 
-### D3. 56 `.mjs` files unchecked
+### D3. `.mjs` typechecking — 51 of 105, and the remainder is now DECLARED
 
-Was §3. **46 of 102** typechecked, floor may only rise. The remaining ~1,000 annotations are dominated by
-four files (`case-matrix` 284, `capture-core` 219, `capture-screenreader-dataset` 120). Every batch so far
-found real defects.
+Was 27 this morning. The floor may only rise and `typecheck-coverage.test.ts` enforces it.
 
-**Done when** the floor reaches 102, or the remainder is declared with reasons.
+Every batch has found real defects — a worker name that could print as the string `"undefined"`, a widened
+`["good","bad"]` that permitted a third variant, two consumers passing `string | undefined` into a lookup,
+an async function whose declared return was its resolved value.
+
+**The remainder is 54 files and 1,796 errors, and it is declared rather than left open**, which is this
+entry's stated alternative done-condition. The shape of it is the reason:
+
+| errors | code | what it is |
+|---|---|---|
+| 944 | TS7006 | a parameter with no annotation |
+| 428 | TS7031 | a destructured binding with no annotation |
+| 123 | TS2339 | a property read off a value that may not have it |
+| 68 | TS18046 | a caught value used without narrowing |
+
+**The first two are 76% of the total and they are not independent.** These are duck-typed `.mjs` modules
+whose callers pass partial objects, so annotating a function propagates into every caller and its tests —
+measured on `capture-decisions.mjs`, where five annotations turned 8 errors into 21 across two files, all
+of them real disagreements about what a value is. That is worth doing and it is a DESIGN pass on each
+module's interface, not a mechanical sweep. Treating it as mechanical is what makes it look cheap and stall.
+
+**The order to take them in**, since consequence is not evenly spread: `capture-core.mjs` (219) and
+`capture-decisions.mjs` are the capture path, where `captureFault(code, message)` was called as
+`(message, code)` at two sites for as long as those faults existed and TypeScript would have rejected it.
+`case-matrix.mjs` (284) is the largest and the least urgent — it is generated data, and
+`furniture-spread.test.ts` and `check-signals` already assert the properties that matter about it.
+
+**Two approaches that do NOT work**, unchanged: a file allowlist cannot isolate, because TypeScript
+follows imports and `checkJs` is program-wide; and `allowJs` in the ROOT config drags every `.mjs` into
+the main program, where `@ts-check` then fails under strict (0 → 290).
 
 ### D4. Five changesets pending publish
 
