@@ -92,24 +92,30 @@ the corpus, then the model. Each item states what it is, why it matters, and **w
 
 ## Phase A — the checking layer (highest value per hour, all offline)
 
-### A1. Eight gates have never been watched fail
+### A1. ~~Eight gates have never been watched fail~~ — DONE, 16 of 16
 
-`gates-are-proven.test.ts` holds the register: **8 of 16 proven.** The remaining eight each carry a
-reason, and *the reasons are the thing to attack*: "needs a fleet / corpus / venv" has been false **seven
-times running**, including once where the register's description of what the gate even did was wrong.
+**Every gate that can stop this pipeline has now been watched refusing.** It was 0 this morning.
 
-Recipe in [`proving-a-gate.md`](./proving-a-gate.md). In rough order of cost:
+The recipe in [`proving-a-gate.md`](./proving-a-gate.md) held all the way: its first step is to disbelieve
+"it needs a fleet / corpus / venv", and that premise was **false eleven times out of eleven**. In every
+case the gate needed the SUBJECT of its claim, not its production input:
 
-| gate | the likely way in |
-|---|---|
-| `rules:gate` | `ruleFindings()` is pure over a record — hand-build one carrying a rule-owned failure |
-| `promote:gated` | `releasability()` is exported and pure; `releasability.test.ts` already pins the decision. Check whether it mutation-proves a REFUSAL, and register it if so |
-| `scorer:shortcuts` | the veto arithmetic is pure over a weight matrix and a feature list; a 2×2 fixture may reach it |
-| `training:evaluate-acceptance:*` | needs the 104-record acceptance set. Probably genuinely blocked |
-| `eval:gate` | needs the venv; blocked in CI by the same limitation `npm run eval` has |
-| `release:gate` | composite — proven when its stages are |
+| gate | premise | what was true |
+|---|---|---|
+| `rules:gate` | needs `runs/` | `tally`, `verdictOf`, `falsePositiveFailures` are pure over records |
+| `scorer:shortcuts` ×2 | needs weights AND corpus | true of producing rows, false of judging them |
+| `training:evaluate-acceptance` ×2 | needs 104 captured records | `metrics()` is pure over four small arrays |
+| `eval:gate` | needs the venv | true of the 34 fixtures, false of `evaluateFitness` |
+| `promote:gated` | needs a candidate | `releasability()` was already pure and already tested |
+| `gate:isolation` | needs a train/test split | **it does not check splits at all** — the register's own description was wrong |
 
-**Done when** the count is 16, or each remaining reason has been re-tested and still holds.
+`release:gate` is proven by COMPOSITION, and that is a containment claim, so it is verified rather than
+asserted: a test walks its ten stages and fails if any is not itself proven. Mutation-checked by
+un-proving one, which reports *"1 of its 10 stage(s) are not themselves proven: eval:gate"*.
+
+**Two entries are honestly partial and say so in the register itself** — `promote:gated` proves the
+decision and not the weight-copying, `eval:gate` proves the verdict and not the fixture run. A register
+that overclaims is worse than one with a gap: the gap is something a person can pick up.
 
 ### A2. Idempotency is claimed and unasserted
 
