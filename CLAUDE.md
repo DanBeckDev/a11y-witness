@@ -1983,7 +1983,7 @@ Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth
   other spelling of optional. `-e describe=1` prints what a job takes.
 - **Every `.mjs` CLI here ignores an unrecognised flag**, because they all parse argv by looking for what
   they know. `refuseUnknownFlags` (`cli-flags.mjs`) refuses one, names the near miss, and prints what the
-  command does take. Guarded on **26**: every CLI with a measured cost, every script a LAB JOB
+  command does take. Guarded on **27**: every CLI with a measured cost, every script a LAB JOB
   drives directly, the FLEET operations where a flag decides how many of twelve machines are touched, the
   capture harnesses, and the `--json` reporters whose flag decides who the output is FOR. The other
   **18** are an `UNGUARDED` list that **may only shrink** — a discovered CLI that is neither

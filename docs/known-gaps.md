@@ -71,17 +71,35 @@ their command, and everything else says *"this job does not report progress"* an
 so `lab:status` can say it is running but not how far. `lab:log` shows its output. Worth a progress file
 only if a longer training run ever makes the difference between watching and waiting.
 
-## 2. The real-page corpus rots, and nothing watches it
+## 2. ~~The real-page corpus rots, and nothing watches it~~ — DONE
 
+`npm run corpus:urls` follows every corpus URL and reports what moved. Written 2026-08-27; it found five
+more the same day, on top of the seven found by a capture refusing them:
 
-7 of 50 calibration URLs were stale redirects — the sites had moved their pages. Found only because a
-capture refused them.
+| was | now |
+|---|---|
+| `financial-ombudsman.org.uk/decisions-case-studies/…` | `/businesses/resolving-complaint/…` |
+| `www.sepa.org.uk/environment/water/bathing-waters/` | `bathingwaters.sepa.org.uk/` — new HOST |
+| `www.bl.uk/whats-on/` | `events.bl.uk/` — new HOST |
+| `www.metoffice.gov.uk/weather/forecast/…` | `weather.metoffice.gov.uk/forecast/…` — new HOST |
+| `sheffield.ac.uk/postgraduate/taught/courses` | `/courses/2026` — **rots every year** |
 
-Now a `wrong-page` failure says the site probably moved the page and points at the corpus entry, so it is
-visible when it happens. **There is no periodic check**, so it is found at capture time rather than before.
+It **reports and never edits**. A redirect means one of three things and only a human can tell them
+apart: the same page at a new address, the page gone with the site offering its parent, or a consent
+interstitial. Auto-rewriting would make the third a silent corpus change.
 
-A `corpus:urls` audit that follows each URL and reports redirects would catch it in seconds, off the
-fleet.
+Three things it does deliberately, each of which was a decision:
+
+- **A script, not a test.** 92 third-party requests would be slow and flaky in CI, and a test that fails
+  for the wrong reason gets deleted.
+- **It reuses `addressesSamePage`**, so it cannot report a move the capture would tolerate, or miss one
+  the capture would refuse.
+- **UNREACHABLE does not fail it.** A third-party outage says nothing about the corpus, and a check that
+  goes red for somebody else's downtime is one people learn to ignore.
+
+**Sheffield is the interesting one and is left as a known annual break.** The unversioned path redirects
+to the current intake, so an unversioned URL fails EVERY capture while a versioned one fails once a year
+and this audit names it. Recorded in the entry.
 
 ## 3. 73% of source lines are not typechecked
 
