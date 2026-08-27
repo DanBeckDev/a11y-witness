@@ -17,7 +17,7 @@ human or agent, *working on* the repo rather than using it.
 
 | | when you want it |
 |---|---|
-| [**known-gaps.md**](./known-gaps.md) | **the honest list** — what this project does not do, or does not yet know, each with what it would cost and what would tell you it is fixed. Written the day all seven gates first passed together, because "all gates pass" and "everything is validated" are different claims |
+| [**known-gaps.md**](./known-gaps.md) | **the honest list, in the order to do it** — what this project does not do or does not yet know, phased by what CONSUMES what: tooling, then the capture path, then the corpus, then the model. Training is LAST because it consumes everything above it |
 
 ## Running the long jobs
 
