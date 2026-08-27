@@ -18,6 +18,7 @@ human or agent, *working on* the repo rather than using it.
 | | when you want it |
 |---|---|
 | [**known-gaps.md**](./known-gaps.md) | **the honest list, in the order to do it** — what this project does not do or does not yet know, phased by what CONSUMES what: tooling, then the capture path, then the corpus, then the model. Training is LAST because it consumes everything above it |
+| [**proving-a-gate.md**](./proving-a-gate.md) | **how to take a check from BELIEVED to WATCHED FAILING** — the recipe, and the measurements behind it. Nine defects in one session were all checks that could not report themselves, and none had ever been observed to fire. `gates-are-proven.test.ts` holds the count: 5 of 16 |
 
 ## Running the long jobs
 
