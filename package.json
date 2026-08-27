@@ -90,7 +90,7 @@
     "changeset": "changeset",
     "changeset:status": "changeset status --since=origin/main",
     "release:version": "changeset version && npm install --package-lock-only",
-    "release:gate": "npm run scorer:verify && npm run scorer:migration && npm run scorer:shortcuts && npm run gate:isolation && npm run corpus:distribution && npm run training:check-signals:complete && npm run rules:gate && npm run rules:coverage && npm run rules:real-pages && npm run training:evaluate-acceptance:shipped && npm run eval:gate",
+    "release:gate": "npm run scorer:verify && npm run release:provenance && npm run scorer:migration && npm run scorer:shortcuts && npm run gate:isolation && npm run corpus:distribution && npm run training:check-signals:complete && npm run rules:gate && npm run rules:coverage && npm run rules:real-pages && npm run training:evaluate-acceptance:shipped && npm run eval:gate",
     "capture:check": "tsx packages/lab/src/harnesses/capture-check.mjs",
     "layers:compare": "A11Y_PYTHON=.venv/bin/python node packages/lab/scripts/compare-layers.mjs",
     "pretest": "npm run build",
@@ -108,6 +108,7 @@
     "corpus:applicability-audit": ".venv/bin/python packages/scorer/python/audit_applicability.py",
     "corpus:urls": "node packages/lab/scripts/audit-corpus-urls.mjs",
     "scorer:verify": "node packages/lab/scripts/verify-safetensors.mjs packages/scorer/models/screenreader-scorer",
+    "release:provenance": "node packages/lab/scripts/check-shipped-provenance.mjs",
     "corpus:distribution": "node packages/lab/scripts/check-dataset-distribution.mjs"
   },
   "dependencies": {
