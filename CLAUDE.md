@@ -1833,6 +1833,18 @@ chain is one unit: it outlives the ssh connection, the playbook and the laptop, 
 job=everything` still finds it. `lab:pipeline` stays right for a SHORT chain you want to watch, because it
 prints per-stage boundaries live and a single unit cannot.
 
+> **BUT DEPLOY THE FLEET FIRST — the job cannot do it for you.** Every capture-bearing `lab:pipeline`
+> entry carries `fleet: true` and ships the ref to the workers before dispatching. `lab:job -e
+> job=everything` cannot: only the control plane holds both credentials (ADR 0012), so the lab has no
+> route to deploy the boxes it is about to capture on. Choosing the job route therefore means running
+> `npm run fleet:deploy -- --ref=<ref>` yourself.
+>
+> Measured 2026-08-27: a worker file changed, `everything` was dispatched without deploying, and it died
+> 30 seconds in with `5 stale worker(s)`. That is `assertFleetRunsThisCheckout` working exactly as built —
+> the message even names `fleet:deploy` — and the cost was one dispatch rather than a corpus captured on
+> the wrong code. The gap is not in the guard, it is that the RECOMMENDATION above omitted a prerequisite
+> the alternative route performs silently.
+
 `lab-pipeline.test.ts` pins the pipelines against the real catalogue: every job named must exist in
 `lab-job.yml`, and a pipeline containing a job that reads `A11Y_WORKER(S)` must deploy the fleet first. A
 renamed job would otherwise fail at its STAGE, which for `corpus` is after a multi-hour capture.
