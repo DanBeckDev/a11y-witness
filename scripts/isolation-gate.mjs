@@ -32,7 +32,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SMOKE = "isolation-smoke.mjs";
+export const SMOKE = "isolation-smoke.mjs";
 
 /** Somewhere that is definitively not inside the repo, so nothing can resolve by accident. */
 const consumerDir = () => mkdtempSync(join(tmpdir(), "a11y-isolation-"));
