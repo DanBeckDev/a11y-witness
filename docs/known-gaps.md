@@ -11,8 +11,9 @@ entry names what is missing, what it would cost, and what would tell you it is f
 
 > **THIS FILE IS NOW THE RECORD, NOT THE TRACKER.** Every item below was worked and closed on
 > 2026-08-27, and it is kept because *what a defect cost* is the part that stops it recurring — this
-> repo's oldest habit. The list to work through is **[`reliability-plan.md`](./reliability-plan.md)**,
-> which carries what is still open, scored against two published rubrics rather than against my opinion.
+> repo's oldest habit. The list that replaced it is done too. What survives both is
+> **[`not-working.md`](./not-working.md)** — not a backlog, but what this tool gets wrong, cannot do, or
+> cannot show, each entry carrying what was measured and on what.
 
 ## The order these should be done in
 
@@ -106,13 +107,13 @@ Three things it does deliberately, each of which was a decision:
 to the current intake, so an unversioned URL fails EVERY capture while a versioned one fails once a year
 and this audit names it. Recorded in the entry.
 
-## 3. `.mjs` typechecking — MOVED to [`reliability-plan.md` D3](./reliability-plan.md)
+## 3. `.mjs` typechecking — MOVED to [`not-working.md` §5](./not-working.md)
 
 This entry said **46 of 102** while the tracker said **51 of 105**, and both were written by me on the same
 day. One fact in two places, drifted — which is this repo's most-named defect, committed inside the
 document that records it.
 
-The remedy is the one it always is: delete the copy. D3 carries the count, the measured breakdown of the
+The remedy is the one it always is: delete the copy. §5 carries the count, the measured breakdown of the
 remainder (1,796 errors, 76% of them unannotated parameters and bindings that are not independent), and
 the order to take the files in. `typecheck-coverage.test.ts` holds the floor, which is the only number
 that cannot drift because it is executable.
@@ -352,9 +353,9 @@ REGRESSIONS after a deliberate corpus change and these were diagnosed rather tha
 limitation above is the honest characteristic, and it belongs in this document rather than only in a
 JSON file.
 
-## 10. Publishing — MOVED to [`reliability-plan.md` D4](./reliability-plan.md)
+## 10. Publishing — MOVED to [`not-working.md` §8](./not-working.md)
 
-Same reason as §3: a changeset count restated here goes stale the moment one is added, and one was. D4
+Same reason as §3: a changeset count restated here goes stale the moment one is added, and one was. §8
 carries the live state and the reason the last step is a human's.
 
 ## What is NOT on this list, deliberately
