@@ -527,14 +527,38 @@ function trailingRepeats(stops: string[]): number {
 function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
   const stops = input.interaction?.focusOrder;
   if (!stops || stops.length < 3) return; // absent means the probe did not run; too short proves nothing
-  if (trailingRepeats(stops) < 2) return;
   const reached = new Set(stops).size;
   const onPage = (input.structure?.formFields ?? []).length;
   if (onPage === 0 || reached >= onPage) return; // no corroboration, or focus did reach everything
-  add("2.1.2 No Keyboard Trap",
-    "Tab stopped moving: focus repeated the same control and never reached the rest of the page, so a "
-      + "keyboard user cannot get past it",
-    `focus stopped at "${stops[stops.length - 1]}" after reaching ${reached} of ${onPage} controls`);
+  if (trailingRepeats(stops) >= 2) {
+    add("2.1.2 No Keyboard Trap",
+      "Tab stopped moving: focus repeated the same control and never reached the rest of the page, so a "
+        + "keyboard user cannot get past it",
+      `focus stopped at "${stops[stops.length - 1]}" after reaching ${reached} of ${onPage} controls`);
+    return;
+  }
+  // THE CYCLING TRAP, and it is the shape the corpus could not express until 2026-08-28.
+  //
+  // A stop recurring without recurring CONSECUTIVELY means the tab order came back to something it had
+  // already visited — the cycle closed. On a conformant page that is the normal wrap, and it does not
+  // reach here: the corroboration above requires focus to have visited FEWER distinct things than the
+  // page has form fields, and a real wrap visits every field plus every link.
+  //
+  // `keyboard-trap-blur-revalidate`'s comment declared this unreachable, correctly about the CYCLE and
+  // not about its CONTENTS: "a guard that cycles focus among several fields moves focus every press, so
+  // it reads as `cycled`, which is exactly what a conformant page's tab order does when it wraps".
+  // Measured on `keyboard-trap-modal-cycle`, whose dialog holds three controls on a page of seven: the
+  // trapped variant closes over 3 distinct stops against 5 swept fields, the conformant one over 14.
+  //
+  // A truncated probe cannot fire this: truncation cuts the walk short, and a walk cut short before it
+  // wrapped has no repeat at all.
+  if (reached < stops.length) {
+    add("2.1.2 No Keyboard Trap",
+      "Focus cycles among a few controls and never reaches the rest of the page, so a keyboard user who "
+        + "enters that group cannot leave it",
+      `focus visited ${reached} distinct control(s) in ${stops.length} tab stops and never reached the `
+        + `other ${onPage - reached} of ${onPage} the page has`);
+  }
 }
 
 /**

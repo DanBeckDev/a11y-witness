@@ -87,7 +87,36 @@ It was caught by `--pipeline=verify --only=` before any capture was paid for, an
 single-field trap the probe can express. A canary that cannot express the fault is worthless, and choosing
 one that could not is the mistake this note exists to stop repeating.
 
-Two routes in, neither taken yet:
+#### BUILT 2026-08-28 — the second route below, and the corpus case that proves it
+
+The limitation above is true of the CYCLE and not of its CONTENTS. A conformant wrap visits everything
+the page has; a modal cycle visits what the dialog has, and the structural sweep already records what the
+whole page has. So a closed cycle covering **fewer distinct stops than the sweep found form fields** is a
+trap, and that evidence is in every capture already taken — no probe change, no recapture.
+
+`keyboard-trap-modal-cycle` is the canary, and it is the shape this note says would have entered the
+corpus blind: a `focusin` guard pulling focus back to a dialog's first control, three controls in the
+dialog and four fields behind it. Measured:
+
+| | stops | `cycled` | `stalled` | distinct | swept fields |
+|---|---|---|---|---|---|
+| trapped | 6 | true | **false** | **3** | 5 |
+| conformant | 17 | true | false | 14 | 5 |
+
+`stalled` is false on the trap, which is the blind spot exactly; the distinct count separates them. Swept
+across every capture on disk: **0 fires on a conformant page, 2,134 examined**, and `rules:gate` reports
+`2.1.2:focus-trapped 1/1 EXACT` with 0 false positives over 934 conformant records.
+
+Decided from the STOPS, not from the probe's `cycled`/`truncated` mark, because the rule in `rules.ts`
+has no diagnostics — a formulation needing the mark could not be the same decision in both places, and
+this repo pays more for one fact stated two ways than for a slightly indirect test.
+`keyboard-trap.corpus.test.ts` pins the two equal over the whole corpus.
+
+**The residual gap is narrower and stays**: a dialog holding MOST of a page's controls cycles over nearly
+everything, so the subset shrinks toward nothing. That is the "cheaper and weaker" cost named below, and
+it is the honest price of not pressing Escape.
+
+Two routes in, and the second is now built:
 
 - **Press Escape and see whether focus leaves.** The direct answer, and it is what "Dialogs and modals"
   in *Not driven yet* already prescribes. The complication is that Escape is *also* NVDA's own route out
@@ -96,10 +125,13 @@ Two routes in, neither taken yet:
 - **Compare the cycle's SIZE against the page's.** Needs no new keystroke and uses evidence already
   captured: when `cycled` is true the probe has seen the whole cycle, so a cycle covering materially
   fewer controls than `domCensus.formField` reports means focus is confined to a subset of the page.
-  Cheaper and weaker — it would miss a trap in a modal containing most of the page's controls.
+  Cheaper and weaker — it would miss a trap in a modal containing most of the page's controls. **Built,
+  and it is the section above.** It compares against the SWEEP's form fields rather than
+  `domCensus.formField`, because the sweep's count travels in every capture while the DOM census is a
+  diagnostic the rules layer cannot see.
 
-Until one is built, a cycling trap is a **behaviour this tool does not drive**, and 2.1.2 is claimed only
-for the pinned-focus mode.
+2.1.2 is now claimed for both the pinned-focus mode and the cycling mode, with the residual gap named
+above. The first route — pressing Escape — remains untaken, and would close it.
 
 The original report follows, because the shape of the defect is worth keeping: a probe that ran, evidence
 nobody read, and a coverage table claiming the criterion anyway.

@@ -51,16 +51,34 @@ solved with `tabindex="-1"`, an unnamed field the tab order never sees. A link I
 there is no inert form of it — making one unreachable is a different defect that collides with 2.1.1's own
 signal. Closing it needs a corpus page that fails twice in a way no current pairing produces.
 
-## 3. The focus probe cannot see a cycling modal trap
+## 3. CLOSED — a cycling modal trap is now detected, and the residual gap is named
 
-`stalled` requires the SAME control to repeat, so a trap that lets focus cycle among a modal's own controls
-reads as `cycled` — **identical to a conformant page whose Tab order wraps**. A genuine 2.1.2 failure and a
-correct page produce the same evidence.
+`stalled` requires the SAME control to repeat, so a trap letting focus cycle among a dialog's controls
+read as `cycled` — identical to a conformant page whose Tab order wraps. Both routes out were costed and
+neither taken: Escape collides with NVDA's own way out of focus mode, and comparing the cycle's size
+"would miss a trap in a modal containing most of the page's controls".
 
-Two routes, both costed and neither taken. Pressing Escape is the direct answer and collides with Escape
-being NVDA's own way out of focus mode, so the evidence would not say which moved. Comparing the cycle's
-size against `domCensus.formField` needs no new keystroke but misses a trap in a modal holding most of the
-page's controls.
+**The second route was right about the CYCLE and wrong about its CONTENTS.** A conformant wrap visits
+everything the page has; a modal cycle visits what the dialog has, and the structural sweep already
+records the whole page. `keyboard-trap-modal-cycle` is the canary — a `focusin` guard, three controls in
+the dialog, four fields behind it:
+
+| | stops | `cycled` | `stalled` | distinct | swept fields |
+|---|---|---|---|---|---|
+| trapped | 6 | true | **false** | **3** | 5 |
+| conformant | 17 | true | false | 14 | 5 |
+
+0 fires on a conformant page across 2,134 captures; `rules:gate` reports `2.1.2:focus-trapped 1/1 EXACT`
+with 0 false positives over 934 conformant records. No probe change and no recapture — the evidence was
+in every capture already taken.
+
+**The residual gap is narrower and stays:** a dialog holding most of a page's controls cycles over nearly
+everything, so the subset shrinks toward nothing. Closing that needs Escape, and Escape changes two things
+at once.
+
+**Cost to the corpus, paid:** adding a third `focus-trapped` case re-rolls that subtype's multi-defect
+pairings, so 6 existing pages moved and need recapturing on the lab. Measured before committing rather
+than discovered afterwards.
 
 ## 4. CLOSED — all 15 signal types are shown to discriminate
 
