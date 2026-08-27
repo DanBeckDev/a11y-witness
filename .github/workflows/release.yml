@@ -5,7 +5,7 @@
 # `npm publish` across six interdependent packages at the moment they are least able to check the result.
 # npm versions cannot be unpublished after 72 hours, only deprecated, so a wrong first release is permanent.
 #
-# FOUR INDEPENDENT THINGS must all be true before a single byte is published. They are independent on
+# FIVE INDEPENDENT THINGS must all be true before a single byte is published. They are independent on
 # purpose: any one of them alone would be a single point of failure, and this repo's own rule is that a
 # verification must not share a failure mode with the action it guards.
 #
@@ -15,8 +15,14 @@
 #   4. `.changeset/config.json` must say `"access": "public"`. It currently says `restricted`, so even a
 #      correctly-confirmed real run fails at the publish step rather than publishing privately under a
 #      name we may not keep.
+#   5. `action-smoke` must have SUCCEEDED for this exact commit. That workflow drives the published Action
+#      the way a consumer does — `uses: ./`, inputs only, no repo knowledge — so it is the only check here
+#      that exercises the weights through the path a user takes. It already runs on every push touching
+#      `packages/scorer/**`, which is where the weights live; what was missing is that nothing REQUIRED
+#      it. Two workflows both passing is not the same as one gating the other, and a publish could be
+#      dispatched while the consumer path was red or had never run for that commit.
 #
-# Removing any of the four is a deliberate act. Do not remove them in the same change that first uses this.
+# Removing any of the five is a deliberate act. Do not remove them in the same change that first uses this.
 name: release
 
 on:
@@ -71,7 +77,35 @@ jobs:
       - name: Pack every package, which is what a consumer receives
         run: npm run gate:isolation
 
-      - name: Refuse to publish unless all four guards agree
+      - name: The consumer path must have passed for THIS commit
+        # THE CANARY, and it is a query rather than a new run on purpose.
+        #
+        # `action-smoke` already drives the Action as a consumer does and already triggers on any push
+        # under `packages/scorer/**`. Re-running it here would be a second execution of the same thing, on
+        # the same machine that wants to publish — a verification sharing a failure mode with the action
+        # it guards, which is the rule this file's header already states four times over. Asking whether
+        # it passed is independent; running it again is not.
+        #
+        # Fails closed, and in DRY RUN too. A dry run exists to tell you whether the real one would work,
+        # so passing here while the consumer path is red would be the one lie this workflow must not tell.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="${{ github.sha }}"
+          conclusion=$(gh run list --workflow=action-smoke.yml --commit="$sha" \
+            --json conclusion --jq 'first(.[] | .conclusion) // "none"')
+          echo "action-smoke for $sha: $conclusion"
+          if [ "$conclusion" != "success" ]; then
+            echo "REFUSING: the consumer path has not passed for this commit (got: $conclusion)."
+            echo "action-smoke drives the published Action the way a user does, so it is the only check"
+            echo "here that exercises these weights through the path a consumer takes."
+            echo "Run it against this commit, then dispatch this workflow again:"
+            echo "  gh workflow run action-smoke.yml --ref $sha"
+            exit 1
+          fi
+
+      - name: Refuse to publish unless all five guards agree
         if: inputs.dry-run == false
         run: |
           if [ "${{ inputs.confirm }}" != "publish-for-real" ]; then

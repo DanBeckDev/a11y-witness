@@ -280,14 +280,31 @@ Two mutations, both caught: a stored fixture that stops discriminating, and a re
 
 ## Phase D — the model and the release
 
-### D1. No canary before publish
+### D1. ~~No canary before publish~~ — DONE, and the premise was half wrong
 
-The biggest structural gap, and both rubrics ask for it. Today: gate, commit, `changeset publish`, and
-every consumer gets the new weights at once.
+The plan said *"there is no intermediate state where a real consumer exercises the new weights before
+everyone gets them."* **False, and that makes eleven premises challenged and eleven found wrong.**
 
-**Done when** there is a state in which the new weights are exercised against real pages by a real
-consumer path before the version is public — at minimum, running the shipped GitHub Action against a
-known repository with the candidate weights.
+`action-smoke.yml` already drives the Action exactly as a consumer does — `uses: ./`, inputs only, no repo
+knowledge — and already triggers on every push under `packages/scorer/**`, which is where the weights
+live. Promoting weights has always run the consumer path.
+
+**What was missing is that nothing REQUIRED it.** `release.yml` ran `release:gate` and `gate:isolation`
+and never asked whether the consumer path had passed. Two workflows both being green is not one gating the
+other, and a publish could be dispatched while `action-smoke` was red or had never run for that commit.
+
+So the fifth guard is a QUERY, not another run: re-running the smoke test inside the release job would be
+a second execution of the same thing on the machine that wants to publish — a verification sharing a
+failure mode with the action it guards, which this workflow's own header already states four times over.
+
+Fails closed, including on `none`, and **including in dry run**: a dry run exists to say whether the real
+one would work, so passing while the consumer path is red is the one lie this workflow must not tell.
+
+Pinned by `release-safety.test.ts` as guard 5 and mutation-checked four ways — remove the step, unpin the
+commit, gate it on dry-run, or make the refusal soft. **Two of my first three assertions did not catch
+their mutation**: an alternation matched a surviving `sha=` assignment after the query lost `--commit`,
+and the dry-run check read the text BEFORE the step, so adding `if:` inside it changed nothing. Both now
+read the STEP. Caught by mutation, never by reading.
 
 ### D2. Nothing knows how the scorer behaves on a consumer's pages
 
