@@ -72,16 +72,24 @@ Each reads `interaction.focusOrder` or the probe's diagnostic mark, and no captu
 disk carries one for a case using them. A dead predicate here would blind every case using it, silently.
 The way in is the same extraction that produced the other six, once a corpus with focus evidence exists.
 
-## 5. Half the `.mjs` is unchecked, including the capture path
+## 5. Forty-three `.mjs` files are still unchecked, and the capture path is most of what is left
 
-**54 of 105 files, 1,796 errors.** 76% are unannotated parameters and destructured bindings, and they are
-not independent: these are duck-typed modules whose callers pass partial objects, so annotating one
-function propagates into every caller and its tests. On `capture-decisions.mjs`, five annotations took 8
-errors to 21 across two files — every one a real disagreement about what a value is.
+**64 of 107 now, from a real 32.** The number this entry used to carry — 53 — counted files bearing a
+`// @ts-check` marker, and **21 of those were outside the `tsc` program entirely**, so the marker was a
+comment. Proved by planting `const X: number = "s"` in a marked file and watching nothing happen. Two
+assertions now make an inert marker impossible, so the figure above is coverage rather than intent.
 
-It matters most where it is worst: `capture-core.mjs` (219 errors) is the capture path, where
-`captureFault(code, message)` was called as `(message, code)` at two sites for as long as those faults
-existed. TypeScript rejects that call and could not help.
+1,701 errors remain across the 43. They are not independent: these are duck-typed modules whose callers
+pass partial objects, so annotating one function propagates into every caller and its tests.
+
+It matters most where it is worst. `capture-core.mjs` is 3,112 lines and the largest single block left;
+it is the capture path, where `captureFault(code, message)` was called as `(message, code)` at two sites
+for as long as those faults existed. TypeScript rejects that call and could not help.
+
+**Every batch so far has found real defects, not missing annotations** — a state shape spelled twice and
+drifted, a map type that could not express the invariant its store exists to protect, an options type
+inferred from its own defaults so the one option without a default vanished, a required parameter with a
+default that made a guard silently never fire. That is the argument for continuing rather than a count.
 
 ## 6. Nobody knows how the scorer behaves on a user's pages
 
