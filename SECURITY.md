@@ -63,6 +63,35 @@ machine. No page content, transcript or finding leaves the machine unless you op
 capture transcript — which contains the page's text as a screen reader announced it — to that vendor. If the
 page is behind your authentication, that transcript may contain data from it.
 
+### And it will not start collecting, deliberately
+
+Recorded 2026-08-27 as a decision rather than an omission, because "we have not built telemetry yet" and
+"we are not going to" look identical from outside and only one of them is a promise.
+
+There is a real cost to that. Nobody knows how the shipped scorer behaves on a consumer's pages: it is
+calibrated against 94 real pages from five publishers, and a page shape absent from that set could be
+mis-scored systematically without anyone learning. Every published rubric for a production model asks for
+exactly this feedback loop.
+
+It is still the wrong trade here. This tool is aimed at pages behind an organisation's authentication, and
+the transcript IS the page's text. A usage report that carried enough to be useful would carry that;
+one stripped until it was safe would say nothing about the finding it came from. There is no version of
+this that is both informative and honest about the promise above.
+
+What bounds the risk instead, none of which requires a consumer to send anything:
+
+- **The mapping.** A finding from the model carries no `mapping`, and `RequirementMapping` treats absent as
+  `secondary` — so it becomes `cantTell`, a referral for a human, never an assertion. The layer that
+  ASSERTS is the deterministic one, measured at 0 false positives across 1,183 conformant records. A model
+  wrong about somebody's page produces a question, not an accusation.
+- **The proxy population.** `calibrate-abstention` scores the real-page corpus through the product path and
+  reports ASSERTED-WRONGLY separately from REFERRED, which is the number to watch.
+- **The abstention floor.** A page outside the model's support is abstained on rather than guessed at.
+
+If you want us to know how it behaved on your pages, an issue with the capture JSON is the route — a
+deliberate act by someone who has read what they are sending, which is the only form of this that respects
+the paragraph above.
+
 ## Scope
 
 In scope: anything that lets a page under test escape the capture sandbox, escalate on a worker, or reach

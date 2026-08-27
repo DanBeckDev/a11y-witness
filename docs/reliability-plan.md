@@ -306,13 +306,29 @@ their mutation**: an alternation matched a surviving `sha=` assignment after the
 and the dry-run check read the text BEFORE the step, so adding `if:` inside it changed nothing. Both now
 read the STEP. Caught by mutation, never by reading.
 
-### D2. Nothing knows how the scorer behaves on a consumer's pages
+### D2. ~~Nothing knows how the scorer behaves on a consumer's pages~~ — DECIDED, and recorded as a decision
 
-The analogue of the rubric's monitoring section for a shipped artefact. `calibrate-abstention` on real
-pages is the closest thing and it runs on our corpus, not theirs.
+Closed by the second half of its own done-condition: *"or a decision recorded that this project will not
+collect that."* Written into `SECURITY.md`, beside the promise it constrains, because "we have not built
+telemetry yet" and "we are not going to" look identical from outside and only one is a promise.
 
-**Done when** there is a documented, opt-in way for a consumer to report what the tool said on their
-pages, or a decision recorded that this project will not collect that.
+**The cost is real and is stated rather than argued away.** The scorer is calibrated against 94 real pages
+from five publishers, and a page shape absent from that set could be mis-scored systematically without
+anyone learning. Every published rubric for a production model asks for this feedback loop — it is the
+missing item that pins the Monitoring section of our ML Test Score at ~3, which is the score.
+
+It is still the wrong trade. This tool is aimed at pages behind an organisation's authentication and the
+transcript IS the page's text: a report carrying enough to be useful carries that, and one stripped until
+it is safe says nothing about the finding it came from.
+
+What bounds the risk instead — the reason this is a decision and not a gap left open:
+
+- **`cantTell`.** A model finding carries no `mapping`, and absent means `secondary`, so it is a referral
+  and never an assertion. The layer that ASSERTS is deterministic and measured at 0 false positives over
+  1,183 conformant records. A model wrong about somebody's page produces a question.
+- **The proxy population**, scored through the product path, with ASSERTED-WRONGLY reported separately
+  from REFERRED — which is the number that matters and the one that was collapsed for a day.
+- **The abstention floor**, so a page outside support is abstained on rather than guessed at.
 
 ### D3. `.mjs` typechecking — 51 of 105, and the remainder is now DECLARED
 
