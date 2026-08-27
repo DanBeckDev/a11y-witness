@@ -101,22 +101,39 @@ Three things it does deliberately, each of which was a decision:
 to the current intake, so an unversioned URL fails EVERY capture while a versioned one fails once a year
 and this audit names it. Recorded in the entry.
 
-## 3. 73% of source lines are not typechecked
-
+## 3. Most `.mjs` is still unchecked — 26 of 101 files, and the cost of the rest is now measured
 
 | | |
 |---|---|
-| **measured** | 26,102 lines of `.mjs` against 9,776 of `.ts` |
 | **why it matters** | that 73% is the CAPTURE PATH. `captureFault(code, message)` was called as `(message, code)` at two sites for as long as those faults existed — TypeScript rejects that call, and could not help |
-| **cost** | `checkJs` across the tree is **1,974** errors; **131** with `noImplicitAny` off. Mostly type inaccuracies (`log = () => {}` infers zero-arg), not bugs |
-| **today** | 16 files carry `// @ts-check` and are checked by a second `tsc` pass wired into `npm run typecheck`. `typecheck-coverage.test.ts` holds a floor that may only rise |
-| **fix** | raise the floor one verified file at a time; `noImplicitAny` off for the `.mjs` pass would take a large bite at once |
-| **done when** | the floor reaches the file count, or the remainder is declared with reasons |
+| **today** | **26** files carry `// @ts-check` and are checked by a second `tsc` pass wired into `npm run typecheck`. `typecheck-coverage.test.ts` holds a floor that may only rise |
+| **to check ALL 101 strictly** | **1,923** errors, mostly implicit `any` |
+| **to check ALL 101 with `noImplicitAny` off** | **273** — and every category in it is real |
+
+**The 273 is the number to plan against**, because its categories are the ones that catch defects rather
+than style:
+
+| errors | code | what it is |
+|---|---|---|
+| 78 | TS2339 | a property read off a value that may not have it |
+| 78 | TS18046 | a caught value used without narrowing |
+| 55 | TS2345 | **an argument of the wrong type** — the class that caught the `captureFault` swap |
+| 20 | TS2322 | a value assigned to something it does not fit |
+
+The TS18046 group is correctness, not ceremony. *Clean Code with TypeScript* puts it plainly: JavaScript
+can throw **any** value, so a caught value is `unknown` and reading `.message` off it is a guess — and
+when the guess is wrong the result is `undefined`, which in a diagnostic is worse than nothing because it
+looks like an answer. This repo has paid for exactly that shape repeatedly.
+
+**`errorText`/`errorCode` now exist** (`@a11y-witness/nvda-worker/error-text`) so narrowing is one import
+rather than a hand-rolled ternary per site. It was a private one-liner in `capture-core.mjs` with 35 call
+sites that nothing else could reach, which is why every other module narrowed by hand or not at all.
 
 Two approaches were tried and do NOT work, recorded so nobody repeats them: a file allowlist cannot
 isolate, because TypeScript follows imports and `checkJs` is program-wide; and `allowJs` in the ROOT
-config drags every `.mjs` into the main program, where `@ts-check` then fails under strict (0 → 290
-errors).
+config drags every `.mjs` into the main program, where `@ts-check` then fails under strict (0 → 290).
+
+**Done when** the floor reaches 101, or the remainder is declared with reasons.
 
 ## 4. 18 CLIs still ignore an unrecognised flag
 
