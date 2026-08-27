@@ -27,6 +27,11 @@
     // running it found out. `score-rules.ts`, `audit-rule-coverage.ts` and
     // `check-real-page-findings.ts` ARE the rules gates, so "the gate is not checked" is this
     // repo's most-named defect applied to the thing doing the checking.
-    "packages/*/scripts/**/*.ts"
+    "packages/*/scripts/**/*.ts",
+    // AND THE .mjs, or `// @ts-check` is a comment.
+    "packages/*/src/**/*.mjs",
+    "packages/*/scripts/**/*.mjs",
+    "packages/*/bin/**/*.mjs",
+    "packages/*/*.mjs"
   ]
 }
