@@ -72,24 +72,25 @@ Each reads `interaction.focusOrder` or the probe's diagnostic mark, and no captu
 disk carries one for a case using them. A dead predicate here would blind every case using it, silently.
 The way in is the same extraction that produced the other six, once a corpus with focus evidence exists.
 
-## 5. Forty-three `.mjs` files are still unchecked, and the capture path is most of what is left
+## 5. Thirty-four `.mjs` files are still unchecked
 
-**64 of 107 now, from a real 32.** The number this entry used to carry — 53 — counted files bearing a
+**73 of 107 now, from a real 32.** The figure this entry used to carry — 53 — counted files bearing a
 `// @ts-check` marker, and **21 of those were outside the `tsc` program entirely**, so the marker was a
 comment. Proved by planting `const X: number = "s"` in a marked file and watching nothing happen. Two
-assertions now make an inert marker impossible, so the figure above is coverage rather than intent.
+assertions now make an inert marker impossible, so the number above is coverage rather than intent.
 
-1,701 errors remain across the 43. They are not independent: these are duck-typed modules whose callers
-pass partial objects, so annotating one function propagates into every caller and its tests.
+`capture-core.mjs` — 3,112 lines, the largest single block and the capture path itself — is done, and it
+was hiding the defect that justifies the whole exercise: `waitForPageToSettle` treated a FAILED census as
+a reading, so two consecutive CDP failures compared equal and the page was declared settled. That wait is
+the only defence against capturing a client-rendered shell.
 
-It matters most where it is worst. `capture-core.mjs` is 3,112 lines and the largest single block left;
-it is the capture path, where `captureFault(code, message)` was called as `(message, code)` at two sites
-for as long as those faults existed. TypeScript rejects that call and could not help.
+**Every batch has found real defects rather than missing annotations.** A state shape spelled twice and
+drifted; a map type that could not express the invariant its store exists to protect; three options types
+inferred from their own defaults, so the options without defaults vanished; two required parameters with
+`= {}` defaults that made their own guards silently never fire; a `kill(undefined)` on a `process.exit`
+handler. That is the argument for continuing, not the count.
 
-**Every batch so far has found real defects, not missing annotations** — a state shape spelled twice and
-drifted, a map type that could not express the invariant its store exists to protect, an options type
-inferred from its own defaults so the one option without a default vanished, a required parameter with a
-default that made a guard silently never fire. That is the argument for continuing rather than a count.
+What is left is 34 files. `case-matrix.mjs` (3,311 lines) and `server.mjs` (1,126) are the large ones.
 
 ## 6. Nobody knows how the scorer behaves on a user's pages
 
