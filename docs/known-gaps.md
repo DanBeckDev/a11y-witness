@@ -9,6 +9,11 @@ entry names what is missing, what it would cost, and what would tell you it is f
 
 ---
 
+> **THIS FILE IS NOW THE RECORD, NOT THE TRACKER.** Every item below was worked and closed on
+> 2026-08-27, and it is kept because *what a defect cost* is the part that stops it recurring — this
+> repo's oldest habit. The list to work through is **[`reliability-plan.md`](./reliability-plan.md)**,
+> which carries what is still open, scored against two published rubrics rather than against my opinion.
+
 ## The order these should be done in
 
 Not by size, and **not** by what is closest to finished. By what CONSUMES what.
