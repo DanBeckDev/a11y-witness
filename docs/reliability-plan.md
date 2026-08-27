@@ -364,11 +364,48 @@ module's interface, not a mechanical sweep. Treating it as mechanical is what ma
 follows imports and `checkJs` is program-wide; and `allowJs` in the ROOT config drags every `.mjs` into
 the main program, where `@ts-check` then fails under strict (0 → 290).
 
-### D4. Five changesets pending publish
+### D4. Publishing — DONE to its boundary; the last step is a human's BY DESIGN
 
-Ready. `changeset status` clean, all gates green, MAJOR on `@a11y-witness/scorer` because the weights ARE
-the API. Publishing is irreversible and outward-facing, so it stays a human decision — and D1 should land
-first.
+Everything that can be verified without publishing has been, today:
+
+```
+changeset:status   clean — major @a11y-witness/scorer, patch judge + a11y-witness
+gate:isolation     every package installs and runs from its tarball, outside the repo
+scorer:verify      safetensors only; no executable-on-load artefact
+release:gate       PASS on the lab, all ten stages
+action-smoke       the consumer path, now REQUIRED by release.yml as guard 5 (D1)
+```
+
+**The two remaining acts are deliberate human ones, and the workflow is built so they cannot be
+automated away.** `.changeset/config.json` says `"access": "restricted"`, so even a correctly-confirmed
+run fails at the publish step; and `release.yml` needs `dry-run: false` plus a typed confirmation string.
+Its own header says it: *"Removing any of the five is a deliberate act. Do not remove them in the same
+change that first uses this."*
+
+Doing either on someone's behalf would be removing a guard — and npm versions cannot be unpublished after
+72 hours, only deprecated, so a wrong first release is permanent. This item is complete in the only sense
+available to it: nothing automatable is left, and the decision is surfaced rather than buried.
+
+---
+
+## The score, rescored
+
+The plan's own last instruction. Same rubric, same rule — the score is the MINIMUM of the four sections.
+
+| section | was | now | what moved |
+|---|---|---|---|
+| Features and Data | ~4.5 | **~5** | `corpus:distribution` — the first check here with an opinion about the DATA, and it runs inside `release:gate` |
+| Model Development | ~4.5 | ~4.5 | unchanged |
+| ML Infrastructure | ~5 | **~5.5** | the canary is now REQUIRED, not merely present; 16 of 16 gates watched failing |
+| **Monitoring** | **~3** | **~3.5** | data invariants now tested both sides; the served-prediction item is DECIDED against rather than pending |
+
+**ML Test Score ≈ 3.5, up from ≈ 3** — into the band the paper calls *"strong levels of automated testing
+and monitoring, appropriate for mission-critical systems."*
+
+**And the ceiling is real.** Three of Monitoring's seven tests are about a model SERVED with live traffic,
+which this one is not — it ships inside a CLI. Under the minimum rule that caps the whole score at roughly
+5 for this product shape, and no amount of data or model work moves it. D2 records why collecting the
+missing signal would cost more than it is worth, and what bounds the risk instead.
 
 ---
 

@@ -106,67 +106,16 @@ Three things it does deliberately, each of which was a decision:
 to the current intake, so an unversioned URL fails EVERY capture while a versioned one fails once a year
 and this audit names it. Recorded in the entry.
 
-## 3. Most `.mjs` is still unchecked — 46 of 102, and the REAL blocker is now known
+## 3. `.mjs` typechecking — MOVED to [`reliability-plan.md` D3](./reliability-plan.md)
 
-| | |
-|---|---|
-| **why it matters** | that remainder is the CAPTURE PATH. `captureFault(code, message)` was called as `(message, code)` at two sites for as long as those faults existed — TypeScript rejects that call, and could not help |
-| **today** | **46** files carry `// @ts-check`, up from 27. `typecheck-coverage.test.ts` holds a floor that may only rise |
+This entry said **46 of 102** while the tracker said **51 of 105**, and both were written by me on the same
+day. One fact in two places, drifted — which is this repo's most-named defect, committed inside the
+document that records it.
 
-**The blocker is NOT the second `tsc` pass, and that is the finding.** This entry used to plan against
-"273 errors with `noImplicitAny` off", on the assumption that relaxing `tsconfig.mjs.json` would unlock
-the remainder. It does not, because **every package build already compiles its own `.mjs` STRICTLY** —
-`allowJs` is on in each package's tsconfig, so `// @ts-check` is honoured there under the root config's
-`strict`. Relaxing the standalone pass changes nothing about the gate a file must clear, and leaving the
-relaxation in place would have been worse than useless: a setting that reads like it lowers the bar and
-does not.
-
-Verified by doing it. `noImplicitAny: false` took the standalone pass from 1,923 errors to 270 and 22
-files to clean — then `npm run build` failed on 11 of them anyway, because the package builds never saw
-the relaxed config. Reverted.
-
-**So the bar is `@ts-check` + strict, per file, and it is cleared one file at a time.** Eleven were this
-round, by annotating rather than by loosening — and the annotations found real things:
-
-- `fleet-consistency` and `describeMismatches` described the same value two ways (`object` against
-  `Record<string, unknown>`), which only showed up in the test that calls them in sequence. Now one
-  `Mismatch` typedef, which is the "delete a copy" remedy in its cheapest form.
-- `workerNamesFromInventory` could return `undefined` as a worker's NAME, which reaches a fleet report and
-  prints as the string `"undefined"` — a value that looks like an answer. Falls back to the address.
-- `labelWorkers` had the same hole one level down.
-- The two dataset generators widened `["good", "bad"]` to `string`, so `testCase[variant]` permitted a
-  third variant that the corpus's central constraint forbids. `as const` states the pair.
-- `report()` in `wait-for-capture` is called with a PARTIAL summary on the no-run path, which its type now
-  says rather than the code merely doing.
-
-**A measurement trap worth keeping**, because it inflated this number by ten before being caught: a
-`grep -rl` over `packages` counts `dist/` copies of the same files. The floor test walks the tree and
-excludes `dist`, which is why it disagreed — and it was right. Quote the test's number, not a grep's.
-
-**Two approaches that do NOT work**, unchanged and still worth recording: a file allowlist cannot isolate,
-because TypeScript follows imports and `checkJs` is program-wide; and `allowJs` in the ROOT config drags
-every `.mjs` into the main program, where `@ts-check` then fails under strict (0 -> 290).
-
-**Done when** the floor reaches 102, or the remainder is declared with reasons. The largest holdouts are
-`case-matrix` (284), `capture-core` (219) and `capture-screenreader-dataset` (120), measured under strict —
-so the remaining 56 files are roughly 1,000 annotations, dominated by four files.
-
-**This is the one entry left OPEN, deliberately, and the reason is that it converts rather than closes.**
-Every batch is mechanical JSDoc and every batch has found something real, so stopping is a budget
-decision rather than a judgement that the rest does not matter. The floor may only rise, which is what
-makes an open entry safe: `typecheck-coverage.test.ts` fails if anyone removes a marker.
-
-What the second batch found, which is the argument for continuing:
-
-- `workerNamesFromInventory` could return `undefined` as a worker's NAME, printing as the string
-  `"undefined"` in a fleet report — a value that looks like an answer.
-- Both dataset generators widened `["good", "bad"]` to `string`, so `testCase[variant]` permitted a third
-  variant the corpus forbids by construction.
-- A wrapper in `everything-pipeline.mjs` was typed by MIRRORING what it wraps, and the mirror immediately
-  disagreed with the real `run` — the same "two spellings of one shape" defect as `Mismatch` one package
-  over, and as `chromiumArgs` re-declaring `BrowserPreset` an hour later. Three instances in one session.
-- Typing `real-page-corpus.mjs` broke two consumers that had been passing `string | undefined` into a
-  lookup, which is exactly what typing a module is for.
+The remedy is the one it always is: delete the copy. D3 carries the count, the measured breakdown of the
+remainder (1,796 errors, 76% of them unannotated parameters and bindings that are not independent), and
+the order to take the files in. `typecheck-coverage.test.ts` holds the floor, which is the only number
+that cannot drift because it is executable.
 
 ## 4. ~~18 CLIs still ignore an unrecognised flag~~ — DONE
 
@@ -403,32 +352,10 @@ REGRESSIONS after a deliberate corpus change and these were diagnosed rather tha
 limitation above is the honest characteristic, and it belongs in this document rather than only in a
 JSON file.
 
-## 10. Changesets are pending publish — READY, and publishing is a human decision
+## 10. Publishing — MOVED to [`reliability-plan.md` D4](./reliability-plan.md)
 
-**Three** now, not two: `promote-candidate-4`, `promote-v15-scorer` and `promote-candidate-6` (this
-session's retrain), plus two deliberate empty ones. `npm run changeset:status` is clean:
-
-```
-major   @a11y-witness/scorer
-patch   @a11y-witness/judge, a11y-witness
-```
-
-All MAJOR on the scorer, because **the weights ARE the API** — a consumer's build can go from passing to
-failing with no code change on their side, which is breaking however small the diff looks.
-
-**Committed, not published, and that is the whole point of this entry.** `npm run release:version` then
-`changeset publish` puts them out. Publishing to a registry is irreversible and outward-facing: a version
-cannot be unpublished cleanly and consumers may pull it within minutes. So it stays a human decision,
-taken deliberately, exactly as `promote:gated` refuses to commit for the same reason one layer down.
-
-Everything that CAN be verified before that point has been:
-
-```
-1442 discriminating, 0 blind, 0 contaminated, 0 uncaptured, 0 stale
-1224 scored, 0 false positive(s)          RULES: PASS
-recall 92%, 0 false positives             FITNESS: PASS
-MODEL CHECK PASSED — safetensors only, no executable-on-load artefact
-```
+Same reason as §3: a changeset count restated here goes stale the moment one is added, and one was. D4
+carries the live state and the reason the last step is a human's.
 
 ## What is NOT on this list, deliberately
 
