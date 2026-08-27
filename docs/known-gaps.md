@@ -187,19 +187,46 @@ AX-TREE CENSUS and both are accessibility-layer, so neither can see a DOM the tr
 | **also buys** | a real answer to "is this page inaccessible or did we fail to read it", which is the question this whole tool exists to answer |
 | **done when** | the page can be re-added and its verdict attributed either way |
 
-## 6. Two capture-path behaviours are unhandled
+## 6. Two capture-path behaviours — one MEASURED AS NOT HAPPENING, one fixed and awaiting proof
 
+### Cookie/consent overlays — detected, and never once blocking
 
-- **Cookie/consent overlays.** Handled incidentally — the read-through walks past them — but nothing
-  dismisses one, so a page whose content sits behind a modal would be captured as the modal.
-- **Render readiness.** `waitForPageToSettle` now waits for the accessibility tree to stop changing, which
-  costs nothing on a server-rendered page. It did NOT fix the Met Office page (§5), so settling is
-  necessary and not sufficient.
+The entry said a page whose content sits behind a modal would be captured as the modal. **Measured across
+85 conformant real pages: it has never happened.** Every UK public-sector site opens with a cookie banner
+and the read-through walks straight past it — networkrail opens on Cookiebot and still reaches 69
+announcements and 11 headings.
 
-Both need `evidence:check` before any change ships: exit 0 means the change is evidence-neutral and the
-cache survives; exit 1 means a full recapture.
+The first version of that measurement said **50 of 86**, because it merged "has a banner" with "never got
+past one". The accessibility tree is the discriminator: a capture that reached the page has HEADINGS in
+its census. Corrected, the count is **0**.
 
----
+So the honest state is: **detected, reported, and not occurring.** `rules:real-pages` names any capture
+that opened on an overlay and never reached a heading — and now does so on a PASS as well as a failure,
+because a bad capture that matches an equally bad baseline entry reads as stability rather than as the
+defect it is.
+
+**Nothing dismisses a banner, and that stays deliberate.** Clicking "accept all" on somebody's site is a
+consent decision this tool has no business making on their behalf, and the read-through does not need it.
+If a page ever IS blocked, the detector says so by name and the decision can be made about that page.
+
+### Render readiness — fixed, awaiting proof
+
+`waitForPageToSettle` waits for the accessibility tree to stop changing rather than for a duration.
+Deliberately not "wait for content": that would hang the full budget on a page which genuinely has none,
+which is exactly what `1.3.1:no-headings` exists to catch.
+
+It costs nothing where nothing was wrong — a server-rendered page is already settled and it returns after
+one 400 ms poll — and a page that never settles is captured as it stands and marked, because refusing it
+would reject evidence rather than describe it.
+
+**It did not fix the Met Office page**, which is what proved settling is necessary and not sufficient, and
+what §5's DOM count is for.
+
+**Outstanding:** a fleet deploy and `npm run evidence:check`, bundled with §5. Exit 0 means both changes
+are evidence-neutral and the 2,122 cached captures survive; exit 1 means a recapture. Neither change
+alters an existing field — §5 ADDS a diagnostic, and settling changes only pages that were being read too
+early, which were wrong — so 48/48 SAME is the expectation. That is a prediction, and the point of running
+it is that predictions about evidence are not evidence.
 
 # Phase C — corpus: authored against a settled capture path
 
