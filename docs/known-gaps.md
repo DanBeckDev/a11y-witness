@@ -135,19 +135,36 @@ config drags every `.mjs` into the main program, where `@ts-check` then fails un
 
 **Done when** the floor reaches 101, or the remainder is declared with reasons.
 
-## 4. 18 CLIs still ignore an unrecognised flag
+## 4. ~~18 CLIs still ignore an unrecognised flag~~ — DONE
 
+**All 45 argv-reading `.mjs` modules now refuse a flag they do not know**, name the near miss, and print
+what the command does take. The exemption list is empty, and `cli-flags.test.ts` DISCOVERS every
+argv-reading module and requires each to be guarded or exempted with a reason — so a new one cannot join
+silently.
 
-Down from 38. An ignored flag runs the default and reports success — this repo has paid for it twice
-(`--write-baseline` for `--update-baseline`; `--only=route-title-stale` covering 1 of 7).
+An ignored flag runs the default and reports success, which this repo paid for twice: a blocker naming
+`--write-baseline` when the flag is `--update-baseline`, and `--only=route-title-stale` covering 1 of that
+family's 7 cases.
 
-`cli-flags.test.ts` holds them in `UNGUARDED`, which **may only shrink**: a discovered CLI that is
-neither guarded nor listed fails the test.
+**The lists were READ out of each file, never derived, and every batch proved why:** `stability-gate`
+builds flags from a variable and `repeat-capture` reads seven through an `arg(name)` helper, so a regex
+reports ZERO for both; `fleet-playbook`, `capture-fixtures` and `audit-size-sensitivity` mention flags
+they pass ONWARD to git or to Python; `compare-layers` takes its input positionally; `compare-workers`
+accepts `--runs=` as a deliberate alias of `--rounds=`. A derived guard would have refused correct usage
+in every one of those cases.
 
-**The flag lists must be READ out of each file, never derived**, and every batch so far has proved why:
-`stability-gate` builds flags from a variable and `repeat-capture` reads seven through an `arg(name)`
-helper (a regex reports ZERO for both); `fleet-playbook` and `capture-fixtures` mention `--ff-only` etc.
-because they pass them to GIT; `compare-workers` accepts `--runs=` as a deliberate alias of `--rounds=`.
+### Two things this uncovered
+
+**`verify-safetensors.mjs` was invoked by nothing.** Not an npm script, not a playbook, not another
+module. It checks the shipped model directory for weight formats that execute on load — `.pt`, `.pkl`,
+`.ckpt` — and for symbolic links that leave the directory. A security check on the one artefact this
+project publishes, which had never run. It is `npm run scorer:verify` now and the FIRST stage of
+`release:gate`, so an unsafe artefact stops a release before anything expensive measures it.
+
+**It also ran on import**, so `node -e "import(...)"` — the only way to catch a bad `.mjs` import, since
+neither lint nor tsc can see one — executed the whole check. `entry-points.test.ts` explains exactly why
+that matters and did not cover this file, because its discovery reads npm scripts and nothing invoked
+this one. Guarded, and split into named functions on the way past.
 
 # Phase B — capture path: changes what a capture CONTAINS. Bundle these
 
