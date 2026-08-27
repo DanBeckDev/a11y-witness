@@ -69,6 +69,38 @@ also happens at the end of a short document, and would fire on a single stale an
 Mapped SECONDARY: 2.1.2 permits an escape by other standard means, and permits a non-standard one if the
 user is advised of it. We press Tab only and cannot see an on-page advisory.
 
+#### What the probe CANNOT see: a trap you can move around inside
+
+Recorded 2026-08-27, while authoring a second 2.1.2 case, and it is the sharp half of "we press Tab only".
+
+`probeFocusOrder` marks `stalled` when the **same** control repeats `TRAP_REPEATS` times. That catches a
+trap which pins focus to one element — a `keydown` handler cancelling Tab, or blur-revalidation
+refocusing the field it rejected. It cannot catch the canonical modal focus trap, where focus **cycles
+among the modal's own controls for ever**: focus moves on every press, so the recording reads `cycled`,
+which is exactly what a conformant page does when Tab wraps past its last control.
+
+A genuine 2.1.2 failure and a correct page produce the same shape. That is not a bug in the rule — the
+rule is right to refuse — it is evidence the probe does not gather.
+
+**The first version of that corpus case used the cycling shape and would have entered the corpus BLIND.**
+It was caught by `--pipeline=verify --only=` before any capture was paid for, and rewritten to a
+single-field trap the probe can express. A canary that cannot express the fault is worthless, and choosing
+one that could not is the mistake this note exists to stop repeating.
+
+Two routes in, neither taken yet:
+
+- **Press Escape and see whether focus leaves.** The direct answer, and it is what "Dialogs and modals"
+  in *Not driven yet* already prescribes. The complication is that Escape is *also* NVDA's own route out
+  of focus mode (`script_disablePassThrough`, which `anchorToTop` relies on), so a probe pressing it is
+  changing two things at once and the evidence would not say which moved.
+- **Compare the cycle's SIZE against the page's.** Needs no new keystroke and uses evidence already
+  captured: when `cycled` is true the probe has seen the whole cycle, so a cycle covering materially
+  fewer controls than `domCensus.formField` reports means focus is confined to a subset of the page.
+  Cheaper and weaker — it would miss a trap in a modal containing most of the page's controls.
+
+Until one is built, a cycling trap is a **behaviour this tool does not drive**, and 2.1.2 is claimed only
+for the pinned-focus mode.
+
 The original report follows, because the shape of the defect is worth keeping: a probe that ran, evidence
 nobody read, and a coverage table claiming the criterion anyway.
 

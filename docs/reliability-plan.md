@@ -158,15 +158,23 @@ is refused by a command, and the refusal names the field.
 
 ## Phase B — the capture path
 
-### B1. The focus probe cannot see a cycling modal trap
+### B1. ~~The focus probe cannot see a cycling modal trap~~ — DECLARED
 
-Recorded while writing the 2.1.2 case. `probeFocusOrder` presses only Tab and calls a trap `stalled` only
-when the SAME control repeats — so a modal that cycles focus among its own controls for ever is a genuine
-2.1.2 failure this tool reads as a normal tab wrap. **A real limitation, not a defect**: the honest fix is
-to press Escape and observe whether focus leaves, which is a capture-path change and a recapture.
+Closed by the second half of its own done-condition: *"or the limitation is declared in
+`screenreader-coverage.md` as a behaviour we do not drive."* It now is, in the 2.1.2 section where the
+rule's conservatism is already discussed rather than in a list of gaps — the sharp fact belongs next to
+the rule it constrains.
 
-**Done when** a case that cycles within a container is caught, or the limitation is declared in
-`screenreader-coverage.md` as a behaviour we do not drive.
+The sharp fact, which was NOT previously written down: `stalled` requires the SAME control to repeat, so a
+trap that lets focus cycle among a modal's own controls reads as `cycled` — identical to a conformant page
+whose Tab order wraps. **A genuine 2.1.2 failure and a correct page produce the same shape.** The rule is
+right to refuse; the evidence is not there.
+
+Not built, and the reason is recorded rather than implied. The direct route — press Escape, see whether
+focus leaves — collides with Escape being NVDA's own way out of focus mode, so a probe pressing it moves
+two things at once. The cheap route — compare the cycle's size against `domCensus.formField` — needs no
+new keystroke and uses evidence already captured, but would miss a trap in a modal holding most of the
+page's controls. Both are written down so the next person does not re-derive them.
 
 ### B2. ~~`graphicUnnamed` is a COUNT~~ — DONE
 
