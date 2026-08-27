@@ -323,19 +323,39 @@ recapture on the next corpus run.
 `furniture-spread.test.ts` passes per feature, which is what made the gap visible rather than a matter of
 somebody remembering.
 
-## 9. The model is one corpus revision behind
-
+## 9. The model is one corpus revision behind — DISPATCHED, and it now has more to catch up on
 
 | | |
 |---|---|
-| **state** | shipped model trained on **2,403** records; the corpus now exports **2,426** |
-| **why** | the 29 `1.3.1:no-headings` cases were added after the promotion |
+| **state** | shipped model trained on **2,403** records; the corpus exported **2,426** before this session, and §8 has since added 11 cases and re-bucketed 9 pages |
+| **why** | the 29 `1.3.1:no-headings` cases were added after the promotion, and the three focus cases after that |
 | **does it invalidate anything?** | No. `1.3.1:no-headings` is `decidedBy: "rules"`, so the model is not expected to cover it, and every gate that judges the model passed against the weights that shipped |
-| **fix** | `npm run lab:job -- -e job=everything` — retrain, re-gate, re-promote |
+| **fix** | `npm run lab:job -- -e job=everything` — capture, export, retrain, re-gate, re-promote. **Running.** |
 | **done when** | `training-report.json`'s `dataset.records` matches the export's record count |
 
-Worth doing before the next corpus expansion, so the model and corpus move together rather than drifting
-by one more revision each time.
+**The corpus change was proven on one subtype first, and that is why this is worth recording rather than
+just doing.** `--pipeline=verify --only=` captured the three new cases alone and `check-signals` reported
+`1 blind` — `keyboard-unreachable-native-button` never fired. Cost: minutes. A full recapture is ~4 hours
+and would have shipped a case that can never fire, which this repo's rules forbid outright.
+
+The diagnosis needed a fix to the REPORT before it could reach the case, and that is the more useful half:
+
+- `evidenceFor` had no branch for the three focus signals, so they fell through to the transcript default
+  and printed two fields their predicates never consult. For these pairs the transcript is IDENTICAL by
+  design — the whole point is two pages that announce the same and operate differently — so the report
+  read as "these pages are the same" when the evidence had not been looked at. `focusIsTrapped` reads
+  `stalled` off the probe's diagnostic mark, and **nothing could print it**: the single value deciding a
+  2.1.2 case was unprintable. Now a table, because ESLint stopped the chain at complexity 16 — the same
+  limit doing the same job it did for `signalMatches`.
+- With the evidence visible the cause was one line: `bad probe {stops: 92, cycled: false}` against
+  `good {stops: 6, cycled: true}`. The unreachable button was **stop 0 on both variants**, and Tab can
+  never return to a `tabindex="-1"` element, so the bad variant's cycle never closed and
+  `controlUnreachableByKeyboard`'s "whole tab cycle, or no claim" guard correctly refused. The guard is
+  right; the case sat in the one position that poisons its own test. Moved to second.
+
+Re-verified: **1425 discriminating, 0 blind, 0 contaminated.** The remaining exit 2 is `17 case(s) have no
+usable evidence HERE` — the 9 re-bucketed pages and the 8 generated variants `--only=` did not capture,
+which is what a full run resolves.
 
 ## 10. Two changesets are pending publish
 
