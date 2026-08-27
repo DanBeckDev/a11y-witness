@@ -46,18 +46,30 @@ the right thing to do while a capture is in flight.
 
 # Phase A — tooling: touches no evidence, blocks nothing, do it anytime
 
-## 1. Three long jobs still report no progress
+## 1. ~~Three long jobs still report no progress~~ — MOSTLY NOT A GAP, and the real one is fixed
 
+**Corrected 2026-08-27 by measuring it.** The entry said `export`, `build-realism` and
+`calibrate-abstention` should get `beginRun()` because `lab:status` had nothing to read for them. Timed
+against real runs:
 
-`export-screenreader-dataset`, `build-realism-tier` and `calibrate-abstention` have no `beginRun()`, so
-`lab:status`, `training:wait` and the corpus-settled check have nothing to read for them.
+| job | actual duration |
+|---|---|
+| `build-realism` | **2 s** |
+| `export` | **13 s** |
+| `acceptance` | **25 s** |
 
-`capture-screenreader-dataset` and `capture-real-pages` have it. The Ansible plan named this work for all
-of them and only the first ever got it.
+A progress file for a two-second job is pure cost. The premise — "long jobs" — was wrong, and it came
+from a plan written before any of them had been timed.
 
-**Until then, `lab:status` on those jobs falls back to the training corpus's file** — which is how
-`captured: 29, total: 1431` was reported for a fifty-page job. The fallback is now keyed per corpus, so it
-answers correctly for the two that DO report; the other three still have nothing to report.
+**The real defect was `lab:status` itself, and it was bigger than these three.** It read `DATASET_ROOT`,
+which defaults to the training corpus, so a job that does not capture at all printed the DATASET run's
+`captured: 29, total: 1431` under its own name — for **31 of 36 jobs**. Two earlier fixes each covered
+the case somebody had just hit. Fixed at the root: the five jobs that capture declare `progress:` beside
+their command, and everything else says *"this job does not report progress"* and points at `lab:log`.
+
+**What is genuinely left**, and it is small: `train` runs about seven minutes and prints to stdout only,
+so `lab:status` can say it is running but not how far. `lab:log` shows its output. Worth a progress file
+only if a longer training run ever makes the difference between watching and waiting.
 
 ## 2. The real-page corpus rots, and nothing watches it
 
