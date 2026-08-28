@@ -736,6 +736,35 @@ Consequences, all of which are now enforced:
 
 Upgrading guidepup is an evidence change: run `npm run evidence:check` and expect a recapture.
 
+### Quick navigation can never reach the element the CARET IS ON
+
+Found 2026-08-28 by `gate:probe-order`, and it is more general than the one place this repo had written it
+down. `sweepEveryStructuralType` records it for landmarks — *"Quick navigation cannot reach a landmark
+containing the caret -- NVDA searches by start position"* — and treats it as a landmark quirk. It is not.
+**Every caret position silently costs one element of whatever type sits under it, in BOTH directions**, so
+`collectByType` sweeping backwards and forwards does not save you.
+
+The consequence is the uncomfortable half: **the default probe order does not work by design, it works by
+accident.** `readWithRetry` leaves the caret at the bottom, past the last heading, so the backward sweep
+reaches the `h1` from below and nothing is lost. Nothing chose that; it falls out of the read-through
+running first, and the sweep's own comment states the convention without noticing it is load-bearing.
+
+Measured, on three corpus pages, permuting the probes:
+
+| caret after the previous probe | result |
+|---|---|
+| bottom (what the read-through leaves) | every heading collected |
+| on the `h1` — where `Control+Home` puts it, since document start IS the `h1` | **`h1` lost on all three pages**, including one that had been agreeing |
+| inside a dialog — where `moveToContainingBrowseModeDocument` puts it | `h1` lost on both overlay pages |
+
+So a "known-good starting point" here is a MODE and a POSITION, and the position must be **the one the
+pipeline already establishes** rather than one that sounds principled. `Control+Home` was tried first and
+made the gate worse — the anchor is `Control+End`.
+
+**A sweep that structurally cannot see one element is the same shape as a truncated one**, and this project
+already refuses to let truncation read as absence. That is unfinished: `collectByType` does not yet report
+the element it could not reach.
+
 ### Focus mode makes quick-nav keys TYPE THEMSELVES INTO THE PAGE
 
 The worst evidence defect this project has had, and it ran for 2,122 captures with every check green.
