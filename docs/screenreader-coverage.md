@@ -23,6 +23,7 @@ is real.
 | Meet a list | `L` / `Shift+L` | `structure.lists` | 1.3.1 |
 | Read a table cell by cell | `T`, then `Ctrl+Alt+Arrow` (**opt-in, see caveat**) | `structure.tableCells` | 1.3.1 |
 | Tab through the page | `Tab` + report focus (on by default) | `interaction.focusOrder` | 2.1.2, **2.1.1**, **2.4.1**, **2.4.3** |
+| Escape a ring focus is CONFINED to | `Escape` then up to 4 × `Tab`, only when the ring is smaller than the swept controls | `interaction.focusAfterEscape` | 2.1.2 |
 | Follow a link and re-read the title | activate a navigation control, ask NVDA for the title before and after (**opt-in**) | `interaction.routeChange` | **2.4.2**, 2.4.1 |
 
 The first nine are on by default and cost ~15–17 s per capture. The last three are opt-in per
