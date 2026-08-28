@@ -191,6 +191,13 @@ export function domCensus(capture: CapturedAnnouncements):
   {
     heading?: number; link?: number; graphic?: number; landmark?: number; formField?: number;
     /**
+     * How many TAB STOPS the page has — the only truthful denominator for "did focus reach everything".
+     *
+     * Absent on every capture taken before the census learned to count them, which reads as "cannot say"
+     * and never as "none". 2.1.2 makes no claim without it.
+     */
+    tabbable?: number;
+    /**
      * WHICH graphics carry no accessible name, capped, with the full count beside them.
      *
      * The count alone sent a reader to fetch cqc.org.uk by hand and tally `<svg>` elements without a
@@ -210,7 +217,7 @@ export function domCensus(capture: CapturedAnnouncements):
     const num = (value: unknown) => (typeof value === "number" ? value : undefined);
     return {
       heading: num(record.heading), link: num(record.link), graphic: num(record.graphic),
-      landmark: num(record.landmark), formField: num(record.formField),
+      landmark: num(record.landmark), formField: num(record.formField), tabbable: num(record.tabbable),
       unnamedGraphics: Array.isArray(record.unnamedGraphics)
         ? record.unnamedGraphics.filter((n): n is string => typeof n === "string")
         : undefined,
