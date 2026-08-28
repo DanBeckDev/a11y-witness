@@ -267,6 +267,48 @@ function of coverage, not merely accompanied by it.**
 
 ---
 
+## D7 — The PAGE's state, not the screen reader's
+
+**Status: open. Found by D2's gate on 2026-08-28, once it was pointed at real pages.**
+
+D3 restores what the SCREEN READER carries between probes — browse mode and caret position — and
+`gate:probe-order` passes on all three corpus pages because of it. Pointed at live sites, it found the half
+D3 does not touch:
+
+```
+nls.uk/join/    interaction.focusOrder: 10 -> 150
+  default      "close search, button, expanded", "search the site, tab, selected"    10 stops
+  focus-first  "skip to main content, link", "open menu, button, collapsed"          150 — the cap
+```
+
+Under `default` the sweep runs first, its disclosure probe ACTIVATES a control, and the search panel opens —
+so the focus walk is confined to 10 stops inside it. Under `focus-first` nothing has touched the page and
+the walk covers the whole site. **The sweep changed the page for the next probe**, and no amount of
+restoring NVDA's state undoes a click.
+
+CLAUDE.md already records this, as an anecdote explaining one false positive: *"sportengland's search panel
+was expanded for the sweep and collapsed for the focus probe… A capture is not an instant."* It has now been
+MEASURED as an ordering effect, on a different site, by a gate — which is the difference between a story and
+a check.
+
+**The fix is not to stop clicking.** The disclosure probe is how 4.1.3 and half of 3.3.1 are reachable at
+all. It is to make the change VISIBLE, which is D3's own second half, written into that item and not built:
+*"Every probe stamps the state it observed, so 'did these two channels see the same page?' is checkable
+rather than inferred."* Today `domCensus` is sampled ONCE, before every probe, so nothing can see the page
+move underneath.
+
+**Done when:**
+
+- A cheap page-state fingerprint is recorded PER PROBE, not once per capture.
+- `gate:probe-order` distinguishes "the evidence differs because the probes ran in a different order" from
+  "the evidence differs because the page changed" — and reports which, rather than failing for both.
+- The rules can decline to compare two channels that observed different fingerprints. That is the same fact
+  `channelRelation.disjoint` infers from overlap, available directly instead of guessed at.
+- Read for on a live page: `tfl.gov.uk` differed by `"now at 17:30" -> "now at 17:34"` and a link's
+  `visited` state. A ticking clock is the PAGE changing and must never read as an ordering fault.
+
+---
+
 ## Not in this plan, and why
 
 - **Replacing guidepup with our own NVDA layer.** Considered and rejected on evidence. Every capture in the
