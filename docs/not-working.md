@@ -116,8 +116,9 @@ leave by a documented means, and nothing in a capture says whether they can.
 
 So the "0 fires on a conformant page across 2,134 captures" above was true and did not mean what it
 appeared to: the corpus contains no consent banner, no date picker, no modal that confines focus
-legitimately. 2.1.2 keeps only the STALLED detection. A3 in `docs/reliability-plan.md` carries the numbers
-and what closing it needs.
+legitimately. 2.1.2 keeps only the STALLED detection.
+
+**A THIRD attempt — pressing Escape on the confinement — was built and was inert.** `anchorToTop` presses Escape as its first action before the focus walk, so a dialog that responds to it is already closed and a confined ring ALREADY means *confined after an Escape*: the withdrawn rule's exact condition. Deciding this case needs the tool to ACTIVATE a dismiss control on a page it does not own, which `probeForms` withholds on purpose. **A3 is blocked on that policy decision, not on work**, and says so.
 
 **Cost to the corpus, paid:** adding a third `focus-trapped` case re-rolls that subtype's multi-defect
 pairings, so 6 existing pages moved and need recapturing on the lab. Measured before committing rather
