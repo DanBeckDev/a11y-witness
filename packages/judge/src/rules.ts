@@ -533,17 +533,66 @@ function trailingRepeats(stops: string[]): number {
  * fire on any page whose last control is genuinely last — and, worse, on a stale announcement, which this
  * pipeline produces often enough to have a whole section about.
  */
+/**
+ * How much of the page the tab ring covers, measured against the best denominator available — or null when
+ * nothing corroborates a trap.
+ *
+ * THE DENOMINATOR IS THE WHOLE RULE, and it used to be the wrong quantity. Swept FORM FIELDS answer "did
+ * focus reach every field", where 2.1.2 asks "did focus reach the page". While some fields sit outside the
+ * dialog the two agree; when the dialog holds them all, `reached >= onPage` and the rule goes silent on the
+ * most total trap there is. `keyboard-trap-modal-cycle` recorded that as its residual gap and
+ * `keyboard-trap-modal-total` is the case that fails it.
+ *
+ * `dom.tabbable` is the right quantity: the page's RENDERED tab stops, counted by the browser rather than
+ * inferred from what a sweep happened to hear. Measured on `keyboard-trap-modal-cycle` the moment it
+ * existed — conformant 14 distinct stops of 14 tabbable, trapped 3 of 14. The conformant variant matching
+ * EXACTLY is what makes it a denominator rather than one more estimate. The same capture also shows why
+ * the old one was weak: the sweep found 5 form fields where the DOM has 8.
+ *
+ * TWO GUARDS, and neither is optional, because this is the only branch here that can make a rule LOUDER:
+ *
+ *   - Absent `tabbable` makes NO claim. Every capture taken before the census counted tab stops omits it,
+ *     and "cannot say" must never collapse into "none".
+ *   - It applies ONLY to a CLOSED cycle. The focus probe stops at `MAX_TAB_STOPS`, and a real page can
+ *     hold hundreds — so a truncated walk would read as covering a fraction of the page and accuse every
+ *     large site. A repeated stop proves the walk WRAPPED, and a walk cut short before wrapping has no
+ *     repeat at all. That turns "we stopped early" into something the rule cannot mistake for a trap,
+ *     using only the stops, which is the same reason `cycleClosed` reads them rather than the diagnostic.
+ *
+ * Deliberately generous, like `CYCLE_COVERAGE_FLOOR` and for a sharper reason: `reached` counts DISTINCT
+ * ANNOUNCEMENTS, so a page with two "Read more, link" collapses them into one stop and undercounts its own
+ * ring. The floor absorbs that. It rejects the order-of-magnitude gap a trap produces (0.21 measured) and
+ * never adjudicates a near miss.
+ */
+export const TAB_RING_FLOOR = 0.5;
+
+function tabRingCoverage(stops: string[], input: RuleInput):
+  { reached: number; total: number; unit: string } | null {
+  const reached = new Set(stops).size;
+  const onPage = (input.structure?.formFields ?? []).length;
+  if (onPage > 0 && reached < onPage) return { reached, total: onPage, unit: "control" };
+
+  const tabbable = input.dom?.tabbable;
+  if (tabbable === undefined || !cycleClosed(stops)) return null;
+  if (reached >= tabbable * TAB_RING_FLOOR) return null;
+  return { reached, total: tabbable, unit: "tab stop" };
+}
+
 function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
   const stops = input.interaction?.focusOrder;
   if (!stops || stops.length < 3) return; // absent means the probe did not run; too short proves nothing
-  const reached = new Set(stops).size;
-  const onPage = (input.structure?.formFields ?? []).length;
-  if (onPage === 0 || reached >= onPage) return; // no corroboration, or focus did reach everything
+  const coverage = tabRingCoverage(stops, input);
+  if (!coverage) return; // no corroboration, or focus did reach the page
+  const { reached, total } = coverage;
+  // Pluralised rather than written "control(s)". This evidence string is quoted to a human in a report,
+  // and it is also asserted on by tests — where `control(s)` inside a regex is a CAPTURE GROUP matching
+  // "controls", so the literal spelling silently stops matching the string it was copied from.
+  const unit = total === 1 ? coverage.unit : `${coverage.unit}s`;
   if (trailingRepeats(stops) >= 2) {
     add("2.1.2 No Keyboard Trap",
       "Tab stopped moving: focus repeated the same control and never reached the rest of the page, so a "
         + "keyboard user cannot get past it",
-      `focus stopped at "${stops[stops.length - 1]}" after reaching ${reached} of ${onPage} controls`);
+      `focus stopped at "${stops[stops.length - 1]}" after reaching ${reached} of ${total} ${unit}`);
     return;
   }
   // THE CYCLING TRAP, and it is the shape the corpus could not express until 2026-08-28.
@@ -566,7 +615,7 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
       "Focus cycles among a few controls and never reaches the rest of the page, so a keyboard user who "
         + "enters that group cannot leave it",
       `focus visited ${reached} distinct control(s) in ${stops.length} tab stops and never reached the `
-        + `other ${onPage - reached} of ${onPage} the page has`);
+        + `other ${total - reached} of ${total} ${unit} the page has`);
   }
 }
 
