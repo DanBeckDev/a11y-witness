@@ -79,7 +79,7 @@ lever, and it is the next one to design.
 subtypes with few positives; `2.4.1` and `2.4.2` have 7 each against a recall cliff CLAUDE.md puts near
 140. Corpus DEPTH is the underlying constraint, not the veto mechanism.
 
-## 3. PARTLY CLOSED — a cycling modal trap is detected; the total-dialog gap is measured and open
+## 3. WITHDRAWN — cycling-trap detection was exact on the corpus and wrong on the web
 
 `stalled` requires the SAME control to repeat, so a trap letting focus cycle among a dialog's controls
 read as `cycled` — identical to a conformant page whose Tab order wraps. Both routes out were costed and
@@ -100,12 +100,24 @@ the dialog, four fields behind it:
 with 0 false positives over 934 conformant records. No probe change and no recapture — the evidence was
 in every capture already taken.
 
-**The residual gap is STILL OPEN, and an attempt to close it on 2026-08-28 was measured and withdrawn.**
-A tab-stop denominator (`domCensus.tabbable` instead of swept form fields) separated the corpus perfectly
-and then produced **9 new 2.1.2 findings on 86 conformant real pages** — consent banners and date-picker
-overlays confine Tab by design, the walks genuinely closed, and no floor tells that from a trap. The
-difference is whether focus can LEAVE, and nothing presses Escape. A3 in `docs/reliability-plan.md` carries
-the numbers and what closing it now requires.
+**BOTH cycling rules were withdrawn on 2026-08-28, and the whole entry above is the corpus being
+convincing about the wrong thing.** `rules-real-pages` scored them on 86 conformant real pages:
+
+| rule | new findings on conformant pages |
+|---|---|
+| ring vs `domCensus.tabbable` (the wider denominator) | **9** |
+| ring vs swept FORM FIELDS (the original cycling branch) | **7** |
+
+A consent banner confines Tab to its own controls while the quick-nav sweep walks the whole document, so
+the ring is smaller than the swept fields — which is *exactly* what the corpus case demonstrated. Measured:
+tfl.gov.uk ring 5 of 28 swept (three of them "Accept all cookies"), networkrail ring 4 of 7, and the corpus
+case ring 3 of 5. **The same evidence.** Under 2.1.2 a modal confining Tab conforms whenever the user can
+leave by a documented means, and nothing in a capture says whether they can.
+
+So the "0 fires on a conformant page across 2,134 captures" above was true and did not mean what it
+appeared to: the corpus contains no consent banner, no date picker, no modal that confines focus
+legitimately. 2.1.2 keeps only the STALLED detection. A3 in `docs/reliability-plan.md` carries the numbers
+and what closing it needs.
 
 **Cost to the corpus, paid:** adding a third `focus-trapped` case re-rolls that subtype's multi-defect
 pairings, so 6 existing pages moved and need recapturing on the lab. Measured before committing rather

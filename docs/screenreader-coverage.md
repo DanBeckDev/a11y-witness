@@ -112,7 +112,13 @@ has no diagnostics — a formulation needing the mark could not be the same deci
 this repo pays more for one fact stated two ways than for a slightly indirect test.
 `keyboard-trap.corpus.test.ts` pins the two equal over the whole corpus.
 
-**STILL OPEN, and 2026-08-28 established what it will actually take.** A dialog holding MOST of a page's
+**WIDER THAN IT WAS: the cycling detection this section described has itself been withdrawn.** Two rules
+were measured against 86 conformant real pages on 2026-08-28 and both failed — the wider tab-stop
+denominator with 9 new findings, and the original form-field cycling branch with 7. tfl.gov.uk reads ring 5
+against 28 swept controls (three of them "Accept all cookies"); networkrail ring 4 of 7; the corpus case
+they were built for, ring 3 of 5. **The same evidence.** 2.1.2 now detects only a STALL.
+
+The rest of this section is kept because the reasoning is what makes the remaining gap tractable. A dialog holding MOST of a page's
 controls cycles over nearly everything, so the subset shrinks toward nothing — worst exactly where the
 failure is most total.
 
