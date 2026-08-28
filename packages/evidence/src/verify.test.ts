@@ -320,3 +320,16 @@ test("a capture with no pageState marks yields null, never a fabricated agreemen
   assert.equal(probeStates({ diagnostics: [{ event: "structureCensus", heading: 4 }] } as never), null);
   assert.equal(probeStates({} as never), null);
 });
+
+test("a fingerprint key the old hand-rolled copy ignored is still a page that moved", () => {
+  // `gate:probe-order` hand-rolled this comparison over FOUR counts — tabbable, formField, link, heading —
+  // hours before `probeStates` existed, and the two lived side by side for a day. `FINGERPRINT_KEYS` has
+  // six. So a page whose GRAPHIC or LANDMARK count moved under its own probes was invisible to the copy
+  // and is caught here, which is why the dedup is an improvement rather than a tidy-up.
+  const states = probeStates({ diagnostics: [
+    { event: "pageState", beforeProbe: "sweep", tabbable: 9, formField: 2, link: 5, heading: 3, graphic: 4 },
+    { event: "pageState", beforeProbe: "focus", tabbable: 9, formField: 2, link: 5, heading: 3, graphic: 1 },
+  ] } as never);
+  assert.equal(states?.sameState, false);
+  assert.deepEqual(states?.changed, ["graphic"]);
+});
