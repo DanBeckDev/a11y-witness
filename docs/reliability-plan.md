@@ -70,20 +70,51 @@ Three things it turned up that were worth more than the depth:
 **Still deliberately not done:** enlarging `ROTATIONS`. It remains a bundled change at 237 cases and 474
 captures, and nothing here needed it.
 
-## A3 — the residual modal-trap gap needs Escape, and Escape is ambiguous
+## A3 — CLOSED. The gap did not need Escape; it needed a denominator
 
-**Status: open. Named, costed, not started.**
+**Status: closed 2026-08-28.**
 
-A cycling modal trap is detected now, by the cycle covering a strict subset of the page's controls. A
-dialog holding MOST of a page's controls shrinks that subset toward nothing, so the detection degrades
-exactly where the dialog is largest.
+The item as written said the probe must press Escape and watch whether focus leaves, and that Escape is
+ambiguous because it is *also* NVDA's route out of focus mode. **The premise was wrong before the
+ambiguity mattered.** On a conformant page with no dialog, Escape reveals no control the walk had not
+already reached — so the evidence is identical on both variants of the pair. Neither does Shift+Tab. A
+signal that cannot differ between good and bad is not weak; it is not a signal. The three-whys question
+that broke it open was "what would the conformant capture look like?", not "how do we disambiguate
+Escape?".
 
-Closing it needs the probe to press Escape and see whether focus leaves. Escape is *also* NVDA's own route
-out of focus mode (`script_disablePassThrough`, which `anchorToTop` relies on), so a probe pressing it
-changes two things at once and the evidence cannot say which moved.
+The real defect was the DENOMINATOR. `addKeyboardTrap` compared the tab ring against the swept FORM
+FIELDS — "did focus reach every field" — where 2.1.2 asks "did focus reach the page". While some fields
+sit outside the dialog the two agree; when the dialog holds them all, `reached >= onPage` and the rule
+returns silently. **It was blindest where the trap is most total**, which is an inverted rule rather than
+a conservative one.
 
-**Done when** `docs/screenreader-coverage.md` records a probe that presses Escape and can attribute the
-result, and a corpus case whose dialog holds most of the page's controls discriminates.
+`domCensus.tabbable` counts the page's RENDERED tab stops (`checkVisibility()`, and `inert` separately —
+an inert subtree renders and takes no focus, which is the modal pattern exactly). Measured on captures
+taken for this item:
+
+| case | variant | distinct stops | swept fields | tab stops | verdict |
+|---|---|---|---|---|---|
+| `keyboard-trap-modal-cycle` | good | 14 | 5 | 14 | silent (1.00) |
+| `keyboard-trap-modal-cycle` | bad | 3 | 5 | 14 | reported either way |
+| `keyboard-trap-modal-total` | good | 16 | 1 | 16 | silent (1.00) |
+| `keyboard-trap-modal-total` | bad | 3 | **3** | **16** | **silent before, reported now** |
+
+The conformant variants matching the tab-stop count EXACTLY is what makes it a denominator rather than
+one more estimate.
+
+**Done when — met:**
+
+- `docs/screenreader-coverage.md` records the closure and why the Escape route was refused. ✅
+- A corpus case whose dialog holds *every* form field discriminates: `keyboard-trap-modal-total`,
+  `check-signals` **226 discriminating, 0 blind, 0 contaminated**. ✅
+- Proved with the CONTROL, not a green result: the same capture with the census withheld — which is every
+  capture taken before today — yields 0 findings, and with it, 1. ✅
+
+**What it cost that the item did not predict:** the decision is stated twice (`focusIsTrappedIn` in the
+plain-node corpus generator, `tabRingCoverage` in the TypeScript rules) and drifted within the hour —
+`check-signals` said BLIND while the rule fired on the same capture. `focus-trap-parity.corpus.test.ts`
+pins them over every capture on disk AND pins the floor by exported value, because mutation-checking
+showed the verdict comparison alone could not see a floor moved 0.5 → 0.95 on a thin local corpus.
 
 ---
 
