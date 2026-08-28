@@ -79,7 +79,7 @@ lever, and it is the next one to design.
 subtypes with few positives; `2.4.1` and `2.4.2` have 7 each against a recall cliff CLAUDE.md puts near
 140. Corpus DEPTH is the underlying constraint, not the veto mechanism.
 
-## 3. WITHDRAWN — cycling-trap detection was exact on the corpus and wrong on the web
+## 3. CLOSED on the fourth attempt — the ring's ROLES, not its size
 
 `stalled` requires the SAME control to repeat, so a trap letting focus cycle among a dialog's controls
 read as `cycled` — identical to a conformant page whose Tab order wraps. Both routes out were costed and
@@ -118,7 +118,9 @@ So the "0 fires on a conformant page across 2,134 captures" above was true and d
 appeared to: the corpus contains no consent banner, no date picker, no modal that confines focus
 legitimately. 2.1.2 keeps only the STALLED detection.
 
-**A THIRD attempt — pressing Escape on the confinement — was built and was inert.** `anchorToTop` presses Escape as its first action before the focus walk, so a dialog that responds to it is already closed and a confined ring ALREADY means *confined after an Escape*: the withdrawn rule's exact condition. Deciding this case needs the tool to ACTIVATE a dismiss control on a page it does not own, which `probeForms` withholds on purpose. **A3 is blocked on that policy decision, not on work**, and says so.
+**A THIRD attempt — pressing Escape on the confinement — was built and was inert.** `anchorToTop` presses Escape as its first action before the focus walk, so a dialog that responds to it is already closed and a confined ring ALREADY means *confined after an Escape*.
+
+**A FOURTH attempt passes, and it changes the question.** The first three asked how MUCH of the page the ring covers; size is exactly what a consent banner also differs by. This asks what the ring OFFERS: tfl reads `link, link, button, button, button` ("Accept all cookies"), networkrail `link, button, button, button`, the corpus trap `edit, edit, edit`. Every banner offers a way out; the trap offers none. A ROLE test via `parseAnnouncement`, never the words. `rules-real-pages`: **PASS, 0 new findings on 86 conformant pages**. A3 in `docs/reliability-plan.md` carries all four attempts.
 
 **Cost to the corpus, paid:** adding a third `focus-trapped` case re-rolls that subtype's multi-defect
 pairings, so 6 existing pages moved and need recapturing on the lab. Measured before committing rather

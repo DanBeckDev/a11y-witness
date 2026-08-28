@@ -70,7 +70,7 @@ Three things it turned up that were worth more than the depth:
 **Still deliberately not done:** enlarging `ROTATIONS`. It remains a bundled change at 237 cases and 474
 captures, and nothing here needed it.
 
-## A3 — NOT CLOSABLE AS WRITTEN. The Escape probe was built, and `anchorToTop` had been pressing Escape all along
+## A3 — CLOSED on the fourth attempt. Ask what the ring OFFERS, not how big it is
 
 **Status: open. Attempted 2026-08-28, measured, withdrawn. Far better specified than it was.**
 
@@ -205,10 +205,11 @@ focus into an editable mid-capture puts NVDA in focus mode, and the sweep's quic
 themselves into the page. That is the 353-capture defect this repo already records, reproduced by a page
 built to press Escape.
 
-### Where this leaves the item
+### Where three attempts left it — and why that conclusion was wrong
 
-**2.1.2 assesses the STALLED case and nothing else, and that is now a measured boundary rather than a gap
-waiting for effort.** Three attempts, each refuted by evidence the previous one could not see:
+After the third withdrawal this section read: *2.1.2 assesses the STALLED case and nothing else, and closing
+it needs a policy decision about activating a dismiss control.* Three attempts, each refuted by evidence the
+previous one could not see:
 
 | attempt | refuted by |
 |---|---|
@@ -216,27 +217,62 @@ waiting for effort.** Three attempts, each refuted by evidence the previous one 
 | ring vs rendered tab stops | 9 false positives on the same pages |
 | press Escape and re-walk | `anchorToTop` already presses Escape; the probe cannot observe a release |
 
-Closing it needs one of two things, and both are decisions rather than tasks:
+**The escalation was premature, and it is worth keeping as the mistake it was.** Two of the premises behind
+it did not survive checking:
 
-- **Activate the dismiss control** on a detected confinement, which means `probeForms` semantics on pages
-  we do not own. That is a policy change and belongs to whoever owns the tool's conduct, not to this item.
-- **Report the confinement without claiming a failure** — a `cantTell` naming the ring and what it excludes.
-  Cheap, honest, and it would have fired on 7 of 86 conformant pages, which is noise rather than triage. The
-  combo-box referrals are kept because they mark a genuinely ambiguous ANNOUNCEMENT; "this page has a cookie
-  banner" is not a finding.
+- *"We never touch pages we do not own."* False. `capture-real-pages.mjs` runs `probeNavigation: true`,
+  which activates a link. The policy `probeForms` encodes is "do not submit forms", not "do not interact".
+- *"Separating them needs a wordlist, which 2.4.4 forbids."* A conflation. The banner's WORDS are a
+  wordlist; the control's ROLE is not, and `parseAnnouncement` already extracts it.
 
-### Done when
+Both were checkable in minutes and neither was checked before declaring the item blocked and handing it
+back. Escalating a decision is a real answer, and it has the same evidence bar as any other.
 
-This item is **BLOCKED ON A DECISION, not on work**, and should not be picked up as though it were a task.
-It closes when either:
+### FOURTH ATTEMPT — and it passes
 
-- somebody decides the tool may activate a dismiss control on a page it does not own (a change to the
-  conduct `probeForms` encodes), and a probe does that on a detected confinement only; **or**
-- somebody decides a bare confinement is worth a `cantTell` at a rate of ~7 per 86 conformant pages.
+The three above all asked HOW MUCH of the page the ring covers. That was never three coincidences: SIZE is
+exactly what a consent banner also differs by, so a rule fitted to it learns *is there a modal*, not *is
+there a trap*.
 
-Whichever is chosen, the gate that settles it is `rules-real-pages` showing **0 new findings on the 86
-conformant pages** — not the corpus, which contains no consent banner, no date picker, and no modal that
-confines focus legitimately, and which said 4/4 exact for all three refuted attempts.
+The question is what the ring **offers**. Measured on the pages that did the accusing:
+
+| ring | roles | verdict |
+|---|---|---|
+| tfl.gov.uk | `link, link, button, button, button` — "Accept all cookies" | silent |
+| networkrail | `link, button, button, button` — "Allow all cookies" | silent |
+| corpus trap | `edit, edit, edit, edit` | **fires** |
+
+Every consent banner offers a control that dismisses it. The trap offers nothing: you can type, and Tab
+cycles. That is 2.1.2 read literally — focus must be movable away *using only a keyboard*, and activating a
+button in the ring is exactly that. It composes with the third attempt's finding: a ring measured here has
+ALREADY outlived `anchorToTop`'s Escape, so one that offers no control has no documented means left.
+
+A **role** test via `parseAnnouncement`, never the words, so it cannot become the 2.4.4 wordlist shortcut
+and behaves identically on a banner in any language.
+
+**And the pair can no longer teach the old shortcut.** The previous cases paired a guarded dialog against an
+UNGUARDED one, so they differed by ring size — the very feature that fooled all three rules. The rebuilt
+pair carries the identical guard on both sides:
+
+    good  stops 7  distinct 4  swept 5  confined=true   3 edits + "Close, button"
+    bad   stops 7  distinct 4  swept 5  confined=true   4 edits
+
+Every count identical; one role different. A size-keyed rule is refuted **by construction** rather than by
+hoping — the ADR 0015 free-veto discipline applied to a pair instead of a head.
+
+Deliberately conservative: any actionable role anywhere in the ring silences it, including a Submit button
+in a genuinely trapped form. That miss is the right one to accept — 2.1.2 is non-interference under WCAG
+5.2.5, so a wrong accusation says the whole page is unusable.
+
+### Done when — MET
+
+- `rules-real-pages`: **PASS — no conformant page gained a finding**, 86 conformant pages. This is the gate
+  that killed the other three, and the only one that could: the corpus has no consent banner, no date
+  picker and no modal that confines focus legitimately, and it said 4/4 exact for every failed attempt. ✅
+- `check-signals` 226 discriminating, 0 blind, 0 contaminated; rule and corpus signal pinned equal by
+  `focus-trap-parity.corpus.test.ts`. ✅
+- The corpus pair holds ring size, `cycled`, swept fields and tab order constant, so the refuted feature is
+  unavailable to any rule fitted to it. ✅
 
 ### The lesson worth more than the branch
 
