@@ -340,18 +340,31 @@ function of coverage, not merely accompanied by it.**
 
 ## D7 — The PAGE's state, not the screen reader's
 
-**Status: PARTIALLY MET 2026-08-28. Run-to-run determinism is met; probe-order independence on a page that
-moves is not, and the residual is stated below rather than closed.**
+**Status: MET 2026-08-28. All four done-conditions.**
 
 `markPageState` records a DOM fingerprint per probe rather than once per capture, and `gate:probe-order`
 reports `PAGE-MOVED` separately from `CHANGED` — so a ticking clock on `tfl.gov.uk` no longer reads as an
 ordering fault. `PAGE-MOVED` reduces coverage rather than counting as examined, so such a run is
 INCONCLUSIVE and cannot pass.
 
-**Residual, open:** `nls.uk/join/` still reports `PAGE-MOVED` under permutation, because the sweep's
-disclosure probe opens a search panel and no restoration of NVDA's state undoes a click. What is NOT yet
-built is the third bullet: rules DECLINING to compare two channels that observed different fingerprints.
-Today `channelRelation.disjoint` still infers that from overlap instead of reading it directly.
+`probeStates` joins `oracleCounts` — the single extraction step every rule caller already takes — so the
+fingerprint reaches the rules as `ruleEvidence`, a sibling of `input`. It had been sitting in `diagnostics`,
+which is on the exporter's `FORBIDDEN_INPUT_KEYS`: exactly where the AX census sat while
+`1.3.1:no-headings` read `NEVER FIRED ANYWHERE`.
+
+**Why the inference was not enough, which is the point of the item.** `channelRelation.disjoint` reasons
+that two channels sharing no control names probably saw different pages. It cannot tell *the page moved*
+from *the sweep found nothing*, and it is silent whenever the two overlap a LITTLE — which is `nls.uk/join/`
+exactly: the ring falls from 150 stops to 10 and the handful of names that still match leave `disjoint`
+false, so an absence claim was available on a comparison of two different pages.
+
+Authoritative `rules:gate`: **PASS, all 14 of 14, 1242 conformant records, 0 false positives.** Three
+answers stay apart — `false` the shape changed, `true` it held, `undefined` nobody asked — and the rule
+tests `=== false`, so every capture predating this keeps its behaviour. `disjoint` is KEPT for that reason
+and is not redundant: the entire existing corpus reaches the rule with no fingerprint at all.
+
+`gate:probe-order` still reports `nls.uk` as `PAGE-MOVED`, and that is now the CORRECT answer rather than a
+residual: the page really does move, the gate says which, and the rules decline to compare across it.
 
 D3 restores what the SCREEN READER carries between probes — browse mode and caret position — and
 `gate:probe-order` passes on all three corpus pages because of it. Pointed at live sites, it found the half
