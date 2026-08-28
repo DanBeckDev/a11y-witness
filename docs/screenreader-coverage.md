@@ -112,11 +112,31 @@ has no diagnostics — a formulation needing the mark could not be the same deci
 this repo pays more for one fact stated two ways than for a slightly indirect test.
 `keyboard-trap.corpus.test.ts` pins the two equal over the whole corpus.
 
-**The residual gap is narrower and stays**: a dialog holding MOST of a page's controls cycles over nearly
-everything, so the subset shrinks toward nothing. That is the "cheaper and weaker" cost named below, and
-it is the honest price of not pressing Escape.
+**CLOSED 2026-08-28, and not by pressing Escape.** This said the residual gap "stays": a dialog holding
+MOST of a page's controls cycles over nearly everything, so the subset shrinks toward nothing — worst
+exactly where the failure is most total, which is an inverted rule rather than a conservative one.
 
-Two routes in, and the second is now built:
+The remedy it predicted was Escape or Shift+Tab, and **both are wrong for the same reason**: on a
+CONFORMANT page with no dialog, neither reveals a control the walk had not already reached, so the
+evidence is identical on both variants. A signal that cannot differ between them is not weak, it is not a
+signal. The complication recorded below — that Escape is also NVDA's own route out of focus mode — was
+real but secondary; the discrimination failure comes first.
+
+What the rule lacked was a **denominator**. It asked "did focus reach every FORM FIELD", where 2.1.2 asks
+"did focus reach the PAGE". `domCensus.tabbable` counts the page's rendered tab stops, so links outside a
+dialog are in the denominator and the dialog does not contain them. Measured on
+`keyboard-trap-modal-cycle` the moment the count existed: conformant **14 distinct stops of 14 tabbable**,
+trapped **3 of 14**; and on `keyboard-trap-modal-total`, where the dialog holds every field, **3 of 3
+swept fields (silent) against 3 of 16 tab stops (reported)**. The conformant variants matching EXACTLY is
+what makes it a denominator rather than one more estimate — and the same capture shows why the old one
+was weak: the sweep found 5 form fields where the DOM has 8.
+
+Two guards, neither optional, because this is the only branch here that can make the rule LOUDER: an
+absent `tabbable` makes no claim (every capture predating the count omits it), and it applies only to a
+CLOSED cycle — the focus probe stops at `MAX_TAB_STOPS` and a real page can hold hundreds, so a truncated
+walk would read as covering a fraction of the page and accuse every large site.
+
+Two routes in, and a THIRD that turned out to be the right one — see above. The original pair:
 
 - **Press Escape and see whether focus leaves.** The direct answer, and it is what "Dialogs and modals"
   in *Not driven yet* already prescribes. The complication is that Escape is *also* NVDA's own route out
