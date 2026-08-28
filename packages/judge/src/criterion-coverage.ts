@@ -90,6 +90,20 @@ export type EvidenceChannel =
    */
   | "media"
   /**
+   * The DOM tab-stop census — how many RENDERED, non-`inert` elements Tab can reach.
+   *
+   * The second channel that is not screen-reader output, and it is here for the same reason `media` is: a
+   * sweep reports what it REACHED, and 2.1.2 asks what it SHOULD have reached. No screen-reader channel can
+   * supply that denominator. Measured on `keyboard-trap-modal-cycle` the moment it existed — the conformant
+   * variant walks 14 distinct stops against 14 counted, and the trapped one 3 — where the swept form fields
+   * it replaced read 5 against a DOM holding 8.
+   *
+   * Declared as its own channel rather than folded into `focusOrder`, because a criterion's channel list is
+   * what `criteriaAssessableFrom` uses to answer "could this rule have fired at all" — and a capture taken
+   * before this census exists carries `focusOrder` and not this, which are different amounts of evidence.
+   */
+  | "tabStops"
+  /**
    * What NVDA said the page was called and what its first heading was, before and after activating a
    * navigation control. The only channel that measures a TRANSITION rather than a state, which is why it
    * reaches a failure no static analyser can: the markup is valid at every instant.
@@ -151,14 +165,21 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
         + "information pages, not because it cannot run",
     },
     note: "Rule-only, and the exception that proves the boundary: `autoplay` and `muted` are attributes with no accessibility-tree equivalent, so a deterministic rule reads the DOM and no head is trained on it." },
-  // ASSESSED BUT NEVER VALIDATED, and `criteriaAssessableFrom` is what surfaced it on the day it was added.
-  // `rules.ts` emits "2.1.2 No Keyboard Trap", but: no corpus case targets it, it is absent from
-  // `rule-ownership.json` — so `rules:gate`'s "every declared boundary holds" never covered it — and it reads
-  // `focusOrder`, which is present on 0 of 4,899 corpus captures because `probeFocus` is opt-in and the
-  // dataset runner never sets it. So it can only fire on real-page captures, which carry no per-criterion
-  // ground truth. A shipped Level A rule that has never once fired against known evidence, looking verified
-  // because the gate beside it is green.
-  "2.1.2": { status: "assessed", channels: ["focusOrder"], note: "Keyboard trap, from `focusOrder`: focus repeating and never reaching the rest of the page. UNVALIDATED: no corpus case targets it, it is not declared in `rule-ownership.json` so `rules:gate` does not cover it, and `focusOrder` is absent from all 4,899 corpus captures. Needs a case family captured WITH the focus probe — the same fix 2.4.1, 2.4.3 and 2.1.1 need, which makes it the cheapest of the four since the rule already exists." },
+  // VALIDATED 2026-08-28, and every clause of what stood here was true when written and is now false.
+  // It read: "no corpus case targets it, it is absent from `rule-ownership.json` ... and it reads
+  // `focusOrder`, which is present on 0 of 4,899 corpus captures". There are now four cases, the subtype is
+  // declared `decidedBy: "rules"`, and the cases carry `probeFocus: true`.
+  //
+  // Left in full rather than deleted, because a coverage file whose entries go stale IN THE OPTIMISTIC
+  // DIRECTION is the failure mode this file exists to prevent — the census-based 1.1.1 rule was unreachable
+  // for months while its criterion read `validated on real evidence`, precisely because sibling rules fired.
+  // This one went stale pessimistically, which is harmless to a user and still misleading to the next reader.
+  //
+  // WHAT IS STILL PARTIAL, and it is not what this comment used to claim: the tab-ring branch reads
+  // `dom.tabbable`, which no capture taken before 2026-08-28 carries, and it makes NO claim without it. So
+  // it is exercised only on captures taken since — `rules:gate` reports `dom.tabbable on N record(s)` so
+  // that a green 2.1.2 cannot silently mean "not one record could have tripped it".
+  "2.1.2": { status: "partial", needs: ["screen-reader"], channels: ["focusOrder", "tabStops"], note: "Keyboard trap, from `focusOrder`. TWO failure modes are assessed: focus STALLING on one control, and focus CYCLING within a group that is a strict subset of the page. Four corpus cases, `decidedBy: \"rules\"`, and `rules:gate` reports `2.1.2:focus-trapped` with 0 false positives over the conformant records. PARTIAL because the cycling branch measures the tab ring against `dom.tabbable` — the page's rendered tab stops — which captures taken before 2026-08-28 do not carry, and it makes NO claim without it; on an older corpus that branch is silent rather than clean, and `rules:gate` states which it is. NOT assessed: a trap a user escapes by a documented means (an ARIA dialog closing on Escape) is conformant, and nothing here presses Escape — such a page is REFERRED, never asserted." },
   "2.4.4": { status: "assessed", channels: ["links", "transcript"], note: "Vague link text. Rules cover a six-phrase subset (19 of 100 corpus records, a declared overlap); the head owns the rest." },
   "2.4.6": { status: "assessed", channels: ["headings", "transcript"], note: "Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the page, so this head is document-pooled." },
   "3.3.1": { status: "assessed", realPageEvidence: { available: false, because: "the form probe is OFF for real-page captures — pressing submit on a site we do not own is not a review — so `formChanges` is absent from all 77 real captures" }, channels: ["formChanges", "postSubmitFields"], note: "A validation error that is displayed but never announced. Needs the form probe, which is on by default in the Action and off in the CLI -- and therefore OFF for every real-page capture, because submitting a form on a site we do not own is not a review. Measured: 0 of 77 real captures carry `formChanges`, so on a real page this criterion cannot fire in either direction." },
