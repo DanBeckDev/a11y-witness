@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   captureDoubt, captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle,
-  captureRanRequestedProbes, captureReachedThePage,
+  captureRanRequestedProbes, probeStates, captureReachedThePage,
 } from "./verify.js";
 
 const TITLE = "Aquarium 001 schedule";
@@ -250,4 +250,73 @@ test("wrong-content beats contained, because it is the more fundamental doubt", 
   // Edge's magnifier overlay: we did not read a fraction of the page, we read a different document.
   const overlay = { transcript: ["Image Magnify, document", "Zoom In, button"], diagnostics: censusHeadings(463) };
   assert.equal(captureDoubt(overlay, "Welcome to GOV.UK"), "wrong-content");
+});
+
+/**
+ * DID THE TWO PROBES SEE THE SAME PAGE? — determinism-plan D7.
+ *
+ * The capture has stamped a fingerprint before each probe since D7's first half, and nothing read it. The
+ * rules INFERRED the same fact from zero overlap between the channels, which cannot distinguish "the page
+ * moved" from "the sweep found nothing" and is silent whenever the two overlap a little.
+ */
+test("two fingerprints that agree report sameState, and name nothing as changed", () => {
+  const states = probeStates({ diagnostics: [
+    { event: "pageState", beforeProbe: "sweep", tabbable: 150, heading: 12 },
+    { event: "pageState", beforeProbe: "focus", tabbable: 150, heading: 12 },
+  ] } as never);
+  assert.equal(states?.sameState, true);
+  assert.equal(states?.changed, undefined);
+});
+
+test("a page whose shape moved reports WHICH counts moved, not merely that something did", () => {
+  // nls.uk/join/: the sweep's disclosure probe opens the search panel, and the tab ring collapses.
+  const states = probeStates({ diagnostics: [
+    { event: "pageState", beforeProbe: "sweep", tabbable: 150, heading: 12 },
+    { event: "pageState", beforeProbe: "focus", tabbable: 10, heading: 12 },
+  ] } as never);
+  assert.equal(states?.sameState, false);
+  assert.deepEqual(states?.changed, ["tabbable"]);
+});
+
+test("A TICKING CLOCK IS NOT A STATE CHANGE — content moves, structure does not", () => {
+  // tfl.gov.uk differs between probe orders by `"now at 17:30" -> "now at 17:34"` and a link's `visited`
+  // state. A fingerprint comparing CONTENT would refuse every real site; this one compares shape.
+  const states = probeStates({ diagnostics: [
+    { event: "pageState", beforeProbe: "sweep", tabbable: 67, link: 51, heading: 9 },
+    { event: "pageState", beforeProbe: "focus", tabbable: 67, link: 51, heading: 9 },
+  ] } as never);
+  assert.equal(states?.sameState, true);
+});
+
+test("ONE fingerprint cannot answer the question, and says so rather than saying yes", () => {
+  const states = probeStates({ diagnostics: [
+    { event: "pageState", beforeProbe: "sweep", tabbable: 150 },
+  ] } as never);
+  assert.equal(states?.sameState, undefined,
+    "a single reading is not agreement — `undefined` is a third answer and rules must read it as such");
+  assert.deepEqual(states?.states.sweep, { tabbable: 150 });
+});
+
+test("A FAILED CENSUS IS NOT A READING OF ZERO", () => {
+  // `markPageState` marks even when the count failed, precisely so "not counted" stays distinguishable
+  // from "none". Reading that mark as zeroes would invent a state change on every capture that had one.
+  const states = probeStates({ diagnostics: [
+    { event: "pageState", beforeProbe: "sweep", tabbable: 150 },
+    { event: "pageState", beforeProbe: "focus", error: "not counted" },
+  ] } as never);
+  assert.equal(states?.sameState, undefined);
+  assert.equal(states?.states.focus, undefined);
+});
+
+test("a key only ONE probe counted is not a change — that is a census upgrade mid-capture", () => {
+  const states = probeStates({ diagnostics: [
+    { event: "pageState", beforeProbe: "sweep", tabbable: 40, heading: 3 },
+    { event: "pageState", beforeProbe: "focus", heading: 3 },
+  ] } as never);
+  assert.equal(states?.sameState, true, "only keys every fingerprint carries can be compared");
+});
+
+test("a capture with no pageState marks yields null, never a fabricated agreement", () => {
+  assert.equal(probeStates({ diagnostics: [{ event: "structureCensus", heading: 4 }] } as never), null);
+  assert.equal(probeStates({} as never), null);
 });

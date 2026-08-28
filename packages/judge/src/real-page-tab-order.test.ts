@@ -284,3 +284,56 @@ test("a label and role WRAPPED onto separate transcript lines is still one contr
   };
   assert.equal(fires(inline, "2.4.3"), true, "and so must the real-page shape");
 });
+
+/**
+ * THE PAGE MOVED BETWEEN THE TWO CHANNELS — determinism-plan D7.
+ *
+ * `disjoint` has guarded this since 2026-08-28, but it INFERS the state change from zero overlap, so it is
+ * blind exactly where the two channels overlap a little. `nls.uk/join/` is that page: the sweep's
+ * disclosure probe opens a search panel, the tab ring falls from 150 stops to 10, and the handful of names
+ * that still match make `disjoint` false. An absence claim was available on a comparison of two different
+ * pages.
+ *
+ * The fixture below is that shape: the sweep announces four controls, the walk reaches two of them plus a
+ * panel control, so the sets DO overlap — and every count-based and overlap-based guard passes.
+ */
+const searchPanelOpened = (probes: unknown) => ({
+  transcript: [],
+  structure: { formFields: ["Search, edit", "Filter, combo box", "Sort, combo box", "Print, button"] },
+  interaction: {
+    focusOrder: ["Search, edit, focused", "Filter, combo box, focused",
+      "Close search, button, focused", "Search, edit, focused"],
+  },
+  probes,
+});
+
+test("a control missed on a page that MOVED between the probes is not keyboard-unreachable", () => {
+  const moved = searchPanelOpened({
+    states: { sweep: { tabbable: 150, formField: 4 }, focus: { tabbable: 10, formField: 3 } },
+    sameState: false,
+    changed: ["tabbable", "formField"],
+  });
+  // Prove the fixture can express the finding before trusting the verdict — the corpus rule applied to a
+  // unit test. Without the fingerprint this same evidence IS a 2.1.1 report.
+  assert.equal(fires(searchPanelOpened(undefined), "2.1.1"), true,
+    "the fixture must reproduce the fault, or a clean result proves nothing");
+  assert.equal(fires(moved, "2.1.1"), false,
+    "two channels that measured different pages cannot support a claim that something is unreachable");
+});
+
+test("a page that HELD STILL is still reported, so the guard has not subsumed the rule", () => {
+  const held = searchPanelOpened({
+    states: { sweep: { tabbable: 150, formField: 4 }, focus: { tabbable: 150, formField: 4 } },
+    sameState: true,
+  });
+  assert.equal(fires(held, "2.1.1"), true,
+    "an explicit `sameState: true` must not silence the rule — that would be `tabRingCoverage` again");
+});
+
+test("UNDEFINED IS NOT FALSE — a capture that never took the fingerprint keeps its old behaviour", () => {
+  // Every capture before 2026-08-28 is in this state. Reading `undefined` as "the page moved" would
+  // silence 2.1.1 across the whole existing corpus while every gate stayed green.
+  const cannotSay = searchPanelOpened({ states: { sweep: { tabbable: 150 } } });
+  assert.equal(fires(cannotSay, "2.1.1"), true);
+  assert.equal(fires(searchPanelOpened(undefined), "2.1.1"), true);
+});
