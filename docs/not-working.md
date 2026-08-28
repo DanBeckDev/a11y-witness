@@ -1,8 +1,14 @@
 # What is not working
 
 Everything on this list is a thing the tool does wrong, cannot do, or cannot show. Nothing here is a task
-that is merely unfinished — `reliability-plan.md` held those and is deleted; its items are all at their
-done-conditions and the history is in git.
+that is merely unfinished — [`reliability-plan.md`](reliability-plan.md) holds those, as an ORDERED list
+where every item carries a done-condition that is a command and its expected output. **This file is the
+RECORD, that one is the PLAN**, and an entry usually appears here first and moves there when somebody
+decides to act on it.
+
+(This paragraph said the plan "is deleted" for part of 2026-08-28, which was true when written and stopped
+being true an hour later. Two documents naming each other is exactly the fact-stated-twice shape, so if
+you find them disagreeing again, the plan's per-item status is the one derived from a command.)
 
 **Read this before quoting any number about this project.** Each entry states what was measured, on what,
 and when. Where a claim rests on my local `runs/` rather than the lab's corpus, it says so — that
@@ -73,7 +79,7 @@ lever, and it is the next one to design.
 subtypes with few positives; `2.4.1` and `2.4.2` have 7 each against a recall cliff CLAUDE.md puts near
 140. Corpus DEPTH is the underlying constraint, not the veto mechanism.
 
-## 3. CLOSED — a cycling modal trap is now detected, and the residual gap is named
+## 3. CLOSED — a cycling modal trap is detected, and the residual gap is closed too
 
 `stalled` requires the SAME control to repeat, so a trap letting focus cycle among a dialog's controls
 read as `cycled` — identical to a conformant page whose Tab order wraps. Both routes out were costed and
@@ -94,9 +100,14 @@ the dialog, four fields behind it:
 with 0 false positives over 934 conformant records. No probe change and no recapture — the evidence was
 in every capture already taken.
 
-**The residual gap is narrower and stays:** a dialog holding most of a page's controls cycles over nearly
-everything, so the subset shrinks toward nothing. Closing that needs Escape, and Escape changes two things
-at once.
+**The residual gap is CLOSED too, 2026-08-28, and this paragraph's remedy was wrong.** It said closing it
+"needs Escape, and Escape changes two things at once". The Escape ambiguity is real and it never got to
+matter: on a conformant page with no dialog, Escape reveals no control the walk had not already reached,
+so the evidence is the same on both variants of the pair. Neither does Shift+Tab. What the rule lacked was
+a DENOMINATOR — it asked "did focus reach every form field", where 2.1.2 asks "did focus reach the page".
+`domCensus.tabbable` counts the page's rendered tab stops, so `keyboard-trap-modal-total` (a dialog holding
+EVERY field, six links behind it) reads 3 of 3 swept fields — silent — and 3 of 16 tab stops — reported.
+See A3 in `docs/reliability-plan.md`.
 
 **Cost to the corpus, paid:** adding a third `focus-trapped` case re-rolls that subtype's multi-defect
 pairings, so 6 existing pages moved and need recapturing on the lab. Measured before committing rather
@@ -194,6 +205,46 @@ The first release will exercise all five for the first time simultaneously, whic
 repo's own rules say not to do. Worth a dry run before the real one, which the workflow supports.
 
 ---
+
+## 9. FOUND AND CLOSED 2026-08-28 — three defects that were on no list
+
+None of these was on this page or in the plan. Each was found by disbelieving something, and each is the
+same shape: **a check that reported cleanly having examined the wrong thing, or nothing.**
+
+**The DOM census was exported and nowhere else.** Six modules run the deterministic rules against a
+capture and six spelled the evidence extraction themselves. `dom` was built only by the dataset exporter —
+so the first rule to read it would have scored perfectly on 1,183 conformant records and never once fired
+for a user, with nothing to say so. A gate that does not exercise what ships is this repo's most-recorded
+defect; **a gate that exercises what does NOT ship is the same defect with the alarm disconnected**,
+because the green result actively vouches for the silence. It was already loaded and pointed at 2.1.2,
+which is where A3 was headed.
+
+The same audit found the opposite direction live in two more callers: `calibrate-abstention.mjs` — the
+sweep that scores REAL pages through the product path, whose ASSERTED-WRONGLY column CLAUDE.md calls the
+number this project steers by — and `rules-check.ts` inside `eval:gate`, both passing a RAW capture, so
+every census-reading rule returned on its first line. The identical bug was fixed in two audits on
+2026-08-26 and reached neither. `oracleCounts` is now one named step and `rule-oracles.test.ts` DISCOVERS
+every rule caller and requires each to extract or be exempt with a reason; a list is what let this reach
+four of six.
+
+**`worker:code` reported "nothing to compare" while five workers served, all of them stale.** One env var
+apart: the bare command said nothing to compare, `eval $(fleet:env)` first said `5 stale worker(s)`. The
+inventory was already imported and already read twelve lines below to print the REMEDY — so the command
+could name the five workers it should have checked while insisting it had none. That is `lab:inventory`'s
+rule at another layer ("'none here' and 'none anywhere' are different answers"), and it lands harder here:
+this command exists to stop a corpus being captured on the wrong code, so a false clean from it IS the
+failure it prevents. Every reading now names its source.
+
+**`tabbable` counted markup rather than tab stops.** Caught before any corpus run, while two captures
+existed: a closed mega-menu or an `inert` background would have inflated the denominator, and a conformant
+page would then read as having left most of itself unvisited — a limit of the measurement reported as a
+finding about the page, this project's oldest defect. `checkVisibility()` and `inert` are separate checks
+because an inert subtree renders and takes no focus, which is the modal-dialog pattern exactly.
+
+**What connects them, and what to do about it.** Two of the three were found by running a command *twice*
+with something changed and noticing the answers disagreed. The third was found by asking what the
+CONFORMANT capture would look like. Neither is a technique a gate can run — but both become cheap once a
+check names what it examined, which is what all three fixes now do.
 
 ## Closed since this list was written
 
