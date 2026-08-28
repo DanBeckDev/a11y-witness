@@ -870,9 +870,22 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
  *   works   activating it →  "Search the archive, edit"   (past the block, in the content)
  *   inert   activating it →  "News and updates, link"     (the first nav link — where Tab went anyway)
  *
- * "Did nothing" is stated against the SECOND item of the ordinary tab order, so the claim is that the next
- * Tab landed exactly where it would have landed without ever touching the link. That is stronger than
- * "focus is still near the top" and needs no knowledge of where the block ends.
+ * "Did nothing" is stated against the ordinary tab order, so the claim is that the next Tab landed where
+ * it would have landed without ever touching the link — or EARLIER. That is stronger than "focus is still
+ * near the top" and needs no knowledge of where the block ends.
+ *
+ * TWO POSITIONS, not one, and the second was a real blind spot. Index 1 is "the link changed nothing".
+ * Index 0 is "the link put you back before you started", which is strictly worse and was uncovered.
+ * Measured 2026-08-28 on `skip-link-target-hidden`, whose target keeps its `tabindex="-1"` — somebody
+ * knew the pattern — and is `hidden`, so it is in neither the rendering nor the accessibility tree:
+ *
+ *   works    activating it →  "Search the archive, edit"        (past the block, in the content)
+ *   inert    activating it →  "News and updates, link"          (the first nav link — index 1)
+ *   hidden   activating it →  "Skip to main content, link"      (the skip link ITSELF — index 0)
+ *
+ * A third mechanism was tried and REFUTED: a target that exists with no `tabindex` behaves exactly like
+ * the conformant page, because Chromium moves the sequential-focus starting point anyway. Recorded on the
+ * corpus case so nobody re-derives it.
  */
 function addInertSkipLink(input: RuleInput, add: AddFinding): void {
   const route = input.interaction?.routeChange;
@@ -882,11 +895,11 @@ function addInertSkipLink(input: RuleInput, add: AddFinding): void {
   if (!/\b(skip|jump)\b/i.test(String(route.control ?? ""))) return;
   const landed = comparableNames([route.nextFocusAfter ?? ""])[0];
   if (!landed) return; // not measured, or focus went somewhere silent — no claim either way
-  const ordinary = comparableNames(input.interaction?.focusOrder)[1];
-  if (!ordinary || landed !== ordinary) return;
+  const ordinary = comparableNames(input.interaction?.focusOrder).slice(0, 2);
+  if (ordinary.length < 2 || !ordinary.includes(landed)) return;
   add("2.4.1 Bypass Blocks",
-    "The skip link does not skip anything: activating it left focus exactly where the next Tab would have "
-      + "gone anyway, so the repeated block still has to be tabbed through",
+    "The skip link does not skip anything: activating it left focus where the next Tab would have gone "
+      + "anyway, or earlier, so the repeated block still has to be tabbed through",
     `activating ${JSON.stringify(String(route.control).slice(0, 40))} left focus on ${JSON.stringify(landed)}`);
 }
 
