@@ -599,8 +599,10 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
   //
   // A stop recurring without recurring CONSECUTIVELY means the tab order came back to something it had
   // already visited — the cycle closed. On a conformant page that is the normal wrap, and it does not
-  // reach here: the corroboration above requires focus to have visited FEWER distinct things than the
-  // page has form fields, and a real wrap visits every field plus every link.
+  // reach here: `tabRingCoverage` has already required focus to have visited FEWER distinct things than
+  // the page has, and a real wrap visits everything. (This said "than the page has form fields" until the
+  // denominator learned about tab stops — the sentence stayed true of one branch and became false of the
+  // rule, which is the comment-drift this file records more often than any other defect.)
   //
   // `keyboard-trap-blur-revalidate`'s comment declared this unreachable, correctly about the CYCLE and
   // not about its CONTENTS: "a guard that cycles focus among several fields moves focus every press, so
@@ -614,8 +616,8 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
     add("2.1.2 No Keyboard Trap",
       "Focus cycles among a few controls and never reaches the rest of the page, so a keyboard user who "
         + "enters that group cannot leave it",
-      `focus visited ${reached} distinct control(s) in ${stops.length} tab stops and never reached the `
-        + `other ${total - reached} of ${total} ${unit} the page has`);
+      `focus visited ${reached} distinct ${reached === 1 ? "control" : "controls"} in ${stops.length} `
+        + `tab stops and never reached the other ${total - reached} of ${total} ${unit} the page has`);
   }
 }
 
