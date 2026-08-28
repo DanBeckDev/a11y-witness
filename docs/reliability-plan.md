@@ -40,39 +40,35 @@ Emitted rather than duplicated (`corpus:grants-map`'s route) and pinned by
 forgave nothing — and made that subtype look handled, which is a plausible reason nobody noticed its
 actual worst veto.
 
-## A2 — depth. `2.4.1` done; `2.4.2` next
+## A2 — CLOSED. Both thin subtypes doubled, and the cost in this item was wrong
 
-**The cost in this item was wrong, and correcting it is the point.** It said the only route to the
-`2.4.1` veto was enlarging `ROTATIONS` — 237 cases, 474 captures, protocol-bump territory. That prices a
-different approach. The subtype had **one failure mechanism** across all 7 positives, and adding a second
-draws new rotations, which reaches the veto for the cost of one subtype.
+**The correction is the point.** This said the only route to `2.4.1`'s veto was enlarging `ROTATIONS` —
+237 cases, 474 captures, protocol-bump territory. That prices a different approach. Each subtype had
+**one failure mechanism** across all 7 positives, and adding a second draws new rotations for the cost of
+one subtype.
 
-Measured: appending two hosts to `2.4.1:skip-link-inert` added 14 cases and moved **6 existing pages, all
-inside the subtype** — 12 captures. `bucketFor`'s docstring said "inserting a case re-buckets only that
-subtype's later cases", which is true and reads as "appending is free"; it is not, because a subtype
-orders base cases first and every generated variant is later. Now written down with the measurement.
+| | positives | mechanisms | pages moved |
+|---|---|---|---|
+| `2.4.1:skip-link-inert` | 7 → 14 | 1 → 2 | 6, all inside the subtype |
+| `2.4.2:route-title-stale` | 7 → 14 | 1 → 2 | 6, all inside the subtype |
 
-### `2.4.1:skip-link-inert` — done. 7 positives to 14, one mechanism to two
+Lab: `1461 discriminating, 0 blind, 0 contaminated`, `grants-audit` PASS, pipeline PASSED.
 
-And the capture refuted one of the two proposed mechanisms, which was worth more than the case:
+Three things it turned up that were worth more than the depth:
 
-- **`skip-link-target-not-focusable` is NOT a defect.** Target exists, no `tabindex`, on the belief the
-  browser scrolls without moving focus. `nextFocusAfter` came back byte-identical to the conformant
-  variant — Chromium moves the sequential-focus starting point anyway, so the block IS bypassed. Deleted,
-  with the refutation recorded on the surviving sibling so nobody re-derives it.
-- **`skip-link-target-hidden` found a real blind spot.** Its target keeps `tabindex="-1"` and is `hidden`,
-  so focus resets to the top and the next Tab lands on the SKIP LINK ITSELF. Both layers tested only
-  "landed where Tab would have gone anyway" (index 1) and neither could see "landed before you started"
-  (index 0), which is strictly worse.
+- **A proposed mechanism was REFUTED by capturing it.** `skip-link-target-not-focusable` — target exists,
+  no `tabindex` — returned `nextFocusAfter` byte-identical to the conformant variant, because Chromium
+  moves the sequential-focus starting point anyway. Deleted, with the refutation recorded where somebody
+  proposing it again will read it.
+- **A real blind spot in both layers.** `skip-link-target-hidden` lands focus on the SKIP LINK ITSELF;
+  the rule and the signal both tested only "landed where Tab would have gone anyway", never "landed
+  before you started", which is strictly worse.
+- **`bucketFor`'s docstring was true and misleading.** "Inserting a case re-buckets only that subtype's
+  later cases" reads as "appending is free". It is not: a subtype orders base cases first, so every
+  generated variant is later than every base case. Measured and written down.
 
-0 fires on a conformant page across 2,140 captures; the lab reports `1454 discriminating, 0 blind,
-0 contaminated`. `skip-link.corpus.test.ts` pins the corpus predicate and the shipped rule equal.
-
-**Done when** (`2.4.2` half): `2.4.2:route-title-stale` has more than one mechanism, its signals still
-discriminate on the lab, and the added pairings are measured rather than assumed.
-
-**Still deliberately not done:** enlarging `ROTATIONS`. That remains a bundled change at 237 cases and
-474 captures, and nothing here needs it.
+**Still deliberately not done:** enlarging `ROTATIONS`. It remains a bundled change at 237 cases and 474
+captures, and nothing here needed it.
 
 ## A3 — the residual modal-trap gap needs Escape, and Escape is ambiguous
 
