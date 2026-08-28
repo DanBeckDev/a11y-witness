@@ -78,7 +78,17 @@ if [ -d runs/screenreader-dataset/captures ]; then
   signals_status=0
   npm run --silent training:check-signals >/tmp/a11y-signals.$$ 2>&1 || signals_status=$?
   case $signals_status in
-    0) echo "  ok      check-signals" ;;
+    0) echo "  ok      check-signals"
+       # A PASS THAT EXAMINED A FRACTION OF THE CORPUS MUST SAY SO. check-signals is honest — it reports
+       # "all N case(s) with usable evidence discriminate. M case(s) could not be checked here" — and this
+       # hook threw that away, printing a bare "ok" for 226 examined of 1,461. The comment fifteen lines
+       # above is about exactly this and covered only the extreme case: examining NOTHING is caught by the
+       # exit-2 floor, and examining 15% read as clean. That is the `examinedNothing` defect again, whose
+       # own guard "named the general rule and then covered only `compared === 0`, calling that the extreme
+       # case rather than a different one".
+       #
+       # Printed only when the summary says cases were missed, so a complete corpus stays a bare "ok".
+       grep -E "could not be checked here" /tmp/a11y-signals.$$ | sed 's/^/            /' || true ;;
     # 2 is INCONCLUSIVE, never a pass: it is reported in the SKIPPED list, which the hook prints and which
     # exists so "not examined" can never read as "examined and clean".
     2) skipped+=("check-signals (INCONCLUSIVE — too little usable evidence in this copy of runs/; the authoritative answer is npm run lab:job -- -e job=check-signals)") ;;
