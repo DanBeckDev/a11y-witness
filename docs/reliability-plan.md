@@ -70,7 +70,7 @@ Three things it turned up that were worth more than the depth:
 **Still deliberately not done:** enlarging `ROTATIONS`. It remains a bundled change at 237 cases and 474
 captures, and nothing here needed it.
 
-## A3 — OPEN, and WIDER than it was. Two rules withdrawn; 2.1.2 now detects only a stall
+## A3 — NOT CLOSABLE AS WRITTEN. The Escape probe was built, and `anchorToTop` had been pressing Escape all along
 
 **Status: open. Attempted 2026-08-28, measured, withdrawn. Far better specified than it was.**
 
@@ -167,18 +167,76 @@ and a green `rules:gate`. All of that was real and none of it was evidence about
   they stood, so they are re-creatable; what they lack is a conformant sibling whose dialog RELEASES focus.
 - `criterion-coverage.ts` records 2.1.2 as `partial` with the measured boundary rather than an assumed one.
 
+### THIRD ATTEMPT: the Escape probe, built and retired the same hour
+
+The done-condition below said this needs a probe that presses Escape on a confined ring. That was built,
+deployed to all five workers, and captured against a purpose-built pair: two variants **byte-identical
+apart from one `keydown` handler**, both carrying the same focus guard, so the ring SIZE is constant across
+the pair and no rule fitted to it could learn "is there a modal" instead of "is there a trap". That pair is
+the control the corpus has never had, and it was the right idea.
+
+The capture retired the approach:
+
+| variant | ring | swept | cycled | Escape probe | result |
+|---|---|---|---|---|---|
+| bad | 3 | 5 | true | asked; all 4 stops inside the ring | trapped, correctly |
+| good | **12** | 5 | **false** | never asked | **its dialog was already closed** |
+
+The good variant's walk never touched a dialog field. **`anchorToTop` presses Escape as its first action**,
+and `probeFocusOrder` calls it before the walk — so any dialog that responds to Escape is gone before the
+ring is ever measured. The probe could only ever run on dialogs that IGNORE Escape, where it reports "no
+release" by construction. Inert, in the `refreshBrowseBuffer` sense: it ran, and it could not change an
+outcome.
+
+**And the consequence retires the item, not just the attempt.** A confined ring already means *confined
+after an Escape has been pressed*. That is exactly the condition of the rule withdrawn the same morning —
+the one that produced 7 false positives on 86 conformant real pages. So confinement-despite-Escape is
+demonstrably not a 2.1.2 failure, and no amount of pressing Escape was going to make it one.
+
+The reason is in the criterion. 2.1.2 asks that focus can be moved away *using only a keyboard*. Dismissing
+a consent banner with its Accept button is exactly that. So deciding this case requires ACTIVATING the
+dialog's dismiss control — and `probeForms` is deliberately OFF for real pages, because "pressing *Book* on
+a stranger's site is not a review". **The blocker is a policy this project chose on purpose, not a missing
+probe.**
+
+One incidental finding, recorded because it cost nothing to see and would cost a lot to rediscover: the
+good variant's first stop announced `"Full name, edit, focused, H"` — an `h` typed into the field. Releasing
+focus into an editable mid-capture puts NVDA in focus mode, and the sweep's quick-nav keys then type
+themselves into the page. That is the 353-capture defect this repo already records, reproduced by a page
+built to press Escape.
+
+### Where this leaves the item
+
+**2.1.2 assesses the STALLED case and nothing else, and that is now a measured boundary rather than a gap
+waiting for effort.** Three attempts, each refuted by evidence the previous one could not see:
+
+| attempt | refuted by |
+|---|---|
+| ring vs swept form fields | 7 false positives on 86 conformant real pages |
+| ring vs rendered tab stops | 9 false positives on the same pages |
+| press Escape and re-walk | `anchorToTop` already presses Escape; the probe cannot observe a release |
+
+Closing it needs one of two things, and both are decisions rather than tasks:
+
+- **Activate the dismiss control** on a detected confinement, which means `probeForms` semantics on pages
+  we do not own. That is a policy change and belongs to whoever owns the tool's conduct, not to this item.
+- **Report the confinement without claiming a failure** — a `cantTell` naming the ring and what it excludes.
+  Cheap, honest, and it would have fired on 7 of 86 conformant pages, which is noise rather than triage. The
+  combo-box referrals are kept because they mark a genuinely ambiguous ANNOUNCEMENT; "this page has a cookie
+  banner" is not a finding.
+
 ### Done when
 
-- A probe presses Escape after a CLOSED, confined ring and records whether focus left, attributing the
-  result — Escape is also NVDA's `script_disablePassThrough`, so the probe must distinguish "the page
-  released focus" from "the screen reader changed mode". `press("Escape")` not
-  `perform(exitFocusMode)`; that difference is already measured and documented in CLAUDE.md.
-- It runs **only** on a detected confinement, so a conformant page with no dialog never pays for it and
-  never produces the ambiguous evidence.
-- `keyboard-trap-modal-total` is restored WITH a conformant sibling whose dialog releases on Escape — the
-  control, without which the corpus cannot express the distinction the rule turns on.
-- `rules-real-pages` shows **0 new findings** on the 86 conformant pages. That gate, not the corpus, is
-  what settles this: the corpus has no modals-by-design and structurally cannot answer it.
+This item is **BLOCKED ON A DECISION, not on work**, and should not be picked up as though it were a task.
+It closes when either:
+
+- somebody decides the tool may activate a dismiss control on a page it does not own (a change to the
+  conduct `probeForms` encodes), and a probe does that on a detected confinement only; **or**
+- somebody decides a bare confinement is worth a `cantTell` at a rate of ~7 per 86 conformant pages.
+
+Whichever is chosen, the gate that settles it is `rules-real-pages` showing **0 new findings on the 86
+conformant pages** — not the corpus, which contains no consent banner, no date picker, and no modal that
+confines focus legitimately, and which said 4/4 exact for all three refuted attempts.
 
 ### The lesson worth more than the branch
 
