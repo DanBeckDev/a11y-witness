@@ -597,33 +597,57 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
       `focus stopped at "${stops[stops.length - 1]}" after reaching ${reached} of ${total} ${unit}`);
     return;
   }
-  // THE CYCLING BRANCH IS WITHDRAWN, and what it measured is worth more than the branch.
+  // THE CYCLING CASE, on the fourth attempt, and the first three are why this one is shaped as it is.
   //
-  // It fired when a stop recurred without recurring CONSECUTIVELY — the tab order returning to something
-  // already visited, over a ring smaller than the swept form fields. Exact on the corpus, wrong on the web:
-  // `rules-real-pages` scored it on 86 conformant real pages and produced SEVEN new 2.1.2 findings.
+  // Three rules asked HOW MUCH of the page the ring covers — against swept form fields, then against
+  // rendered tab stops, then with an Escape probe. Each was exact on the corpus and wrong on the web (7 and
+  // 9 new findings on 86 conformant real pages; the third was inert). They all failed the same way: SIZE is
+  // exactly what a consent banner also differs by, so a rule fitted to it learns "is there a modal".
   //
-  // networkrail.co.uk/careers/ shows the mechanism in one line:
+  // The question is not how big the ring is. It is what the ring OFFERS. Measured on the pages that
+  // accused the earlier rules:
   //
-  //     distinct=4  stops=7  sweptFormFields=7   ->  4 < 7, fires
-  //     formFields: [..., "This website uses cookies, region, Allow all cookies, button",
-  //                       "Customise cookies, button"]
+  //     tfl.gov.uk        ring 5   link, link, button, button, button   <- "Accept all cookies"
+  //     networkrail       ring 4   link, button, button, button         <- "Allow all cookies"
+  //     the corpus trap   ring 3   edit, edit, edit                     <- nothing to activate
   //
-  // The ring is the CONSENT BANNER's four controls; the sweep sees seven because quick-nav walks the whole
-  // document, banner and page alike. Now compare the corpus case this was built for — ring 3, swept 5.
-  // They are the same evidence. A modal confining Tab is a modal doing its job, and under 2.1.2 it CONFORMS
-  // whenever the user can leave by a documented means.
+  // Every consent banner offers a control that dismisses it. The trap offers nothing: you can type, and Tab
+  // cycles. That is 2.1.2 read literally — focus must be movable away "using only a keyboard", and
+  // activating a button in the ring is exactly that, whereas a ring of bare text fields has no such move.
   //
-  // Nothing in a capture separates them. The only candidate features are the banner's own words, and a
-  // wordlist is the shortcut this repo already removed from 2.4.4 — a feature answering a different
-  // question, taken because it was the cheapest separator available.
+  // A ROLE TEST, NOT A WORDLIST. It asks `parseAnnouncement` for the role and never looks at the words, so
+  // it cannot become the 2.4.4 shortcut — a feature answering a different question, taken because it was
+  // the cheapest separator available. It would behave identically on a banner written in any language.
   //
-  // So 2.1.2 keeps only the STALLED case above: Tab not moving at all. That is unambiguous — a control that
-  // will not release focus on Tab offers no documented means to leave — and it is what the one real-page
-  // 2.1.2 in the baseline (scotcourts) comes from.
+  // DELIBERATELY CONSERVATIVE. Any actionable role anywhere in the ring silences it, including a Submit
+  // button inside a genuinely trapped form. That is a miss, and the right one to accept: this criterion is
+  // NON-INTERFERENCE under WCAG 5.2.5, so a wrong accusation says the whole page is unusable.
   //
-  // Closing this needs a probe that presses Escape after a confined ring and can attribute the result. A3
-  // in `docs/reliability-plan.md` records what BOTH withdrawn attempts measured.
+  // And it composes with a fact established the same day: `anchorToTop` presses Escape before the walk, so
+  // a ring that survives to be measured here has ALREADY outlived an Escape. A ring that offers no control
+  // and did not respond to Escape has no documented means out left to test.
+  if (reached < stops.length && ringOffersNoWayOut(stops)) {
+    add("2.1.2 No Keyboard Trap",
+      "Focus cycles among a few controls and never reaches the rest of the page, and none of them can be "
+        + "activated to leave — so a keyboard user who enters that group cannot get out",
+      `focus visited ${reached} distinct ${reached === 1 ? "control" : "controls"} in ${stops.length} `
+        + `tab stops, none of them operable, and never reached the other ${total - reached} of ${total} `
+        + `${unit} the page has`);
+  }
+}
+
+/**
+ * Roles whose activation is a keyboard means of LEAVING — the test that separates a trap from a modal.
+ *
+ * Broad on purpose. Every role counted here makes the rule quieter, and a wrong 2.1.2 says a keyboard user
+ * cannot use the page at all.
+ */
+const OFFERS_A_WAY_OUT = /\b(button|link|tab|menu item)\b/;
+
+/** True when nothing in the ring can be activated — you can type, and Tab cycles. */
+function ringOffersNoWayOut(stops: string[]): boolean {
+  return stops.every((stop) => parseAnnouncement(stop, "sweep").objects
+    .every((object) => !OFFERS_A_WAY_OUT.test(object.role)));
 }
 
 /**
