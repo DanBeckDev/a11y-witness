@@ -24,7 +24,7 @@
  * not against a book's strings.
  */
 import type { Channel } from "@a11y-witness/evidence";
-import type { PageCensus, DomCensus } from "@a11y-witness/evidence/verify";
+import type { PageCensus, DomCensus, ProbeStates } from "@a11y-witness/evidence/verify";
 import { parseAnnouncement } from "@a11y-witness/evidence";
 // The ONE list of criteria the rules may emit. Imported rather than restated: writing a second
 // copy here is the defect this file has recorded five times, and I made it once before deleting it.
@@ -81,6 +81,16 @@ export interface RuleInput {
    * every user. Absent on a capture taken before the count existed; a rule must make NO claim then.
    */
   dom?: DomCensus;
+  /**
+   * THE FINGERPRINT EACH PROBE OBSERVED THE PAGE UNDER — determinism-plan D7.
+   *
+   * A capture is not an instant: the sweep's disclosure probe activates a control, so the focus walk can
+   * run against a page that has since opened a panel. `sameState: false` says the page MOVED between the
+   * two channels, directly, where `channelRelation.disjoint` only ever inferred it from zero overlap.
+   *
+   * Absent, or `sameState: undefined`, means nobody asked — never that the page held still.
+   */
+  probes?: ProbeStates;
   /**
    * Media elements the PAGE declares, from the DOM rather than the accessibility tree — `autoplay` and
    * `muted` are attributes, not accessibility properties, so no screen reader can report them.
@@ -564,6 +574,13 @@ interface ChannelRelation {
   cycleClosed: boolean;
   /** Nothing in common. The counts may still match; that is the trap. */
   disjoint: boolean;
+  /**
+   * Did the two probes MEASURE the same page? Read from the capture, not inferred.
+   *
+   * `false` is a statement that the page's shape changed between the sweep and the focus walk;
+   * `undefined` means the capture cannot say and no claim follows from it.
+   */
+  sameState?: boolean;
 }
 
 function channelRelation(input: RuleInput): ChannelRelation {
@@ -596,6 +613,10 @@ function channelRelation(input: RuleInput): ChannelRelation {
     // Guarded on the NAMED sets, because overlap can only ever be computed between things that have names.
     // A page whose controls are all unnamed is not "disjoint", it is unanswerable by this comparison.
     disjoint: named.length > 0 && reachedNames.length > 0 && overlap === 0,
+    // PASSED THROUGH, NOT RECOMPUTED. This function owns the cross-channel question, so the direct
+    // answer belongs beside the inferred one rather than being read separately by each rule -- which is
+    // how there came to be four hand-rolled spellings of the overlap comparison.
+    sameState: input.probes?.sameState,
   };
 }
 
@@ -1011,7 +1032,22 @@ function tabOrderCanProveAbsence(tabbedNames: string[], input: RuleInput): boole
   // Overlap is the honest test, and it is not a count: if Tab reached NOT ONE of the controls the sweep
   // announced, the two channels are describing different states and no absence claim is available.
   // Read from `channelRelation`, which owns this comparison for every rule that makes it.
-  if (channelRelation(input).disjoint) return false;
+  const relation = channelRelation(input);
+  // THE PAGE MOVED, stated by the capture rather than inferred from overlap — determinism-plan D7.
+  //
+  // This is the same refusal as the overlap test below and it is strictly better evidence, so it comes
+  // first: `disjoint` cannot tell "the page changed" from "the sweep found nothing", and it says nothing
+  // at all when the two channels overlap a little. Measured on `nls.uk/join/`, where the sweep opens a
+  // search panel and the tab ring goes from 150 stops to 10 — a page where SOME names still match, so
+  // `disjoint` is false and an absence claim was available on a comparison of two different pages.
+  //
+  // `=== false` deliberately: `undefined` means the capture never took the fingerprint, and treating
+  // that as "the page moved" would silence this rule on every capture predating D7.
+  if (relation.sameState === false) return false;
+  // Kept, and NOT redundant: a capture with no fingerprint reaches here with `sameState: undefined`, and
+  // the whole corpus captured before 2026-08-28 is in that state. Removing this would make the older
+  // half of the evidence unguarded.
+  if (relation.disjoint) return false;
 
   // NO SECOND GUARD ON RING SIZE, and the attempt is worth recording. `tabRingCoverage` — "the ring is
   // smaller than the swept controls" — was added here and SUBSUMED THE RULE: that is 2.1.1's own premise,

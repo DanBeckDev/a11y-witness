@@ -269,10 +269,86 @@ export type DomCensus = NonNullable<ReturnType<typeof domCensus>>;
 export interface OracleCounts {
   census?: PageCensus;
   dom?: DomCensus;
+  probes?: ProbeStates;
 }
 
 export function oracleCounts(capture: CapturedAnnouncements): OracleCounts {
-  return { census: pageCensus(capture) ?? undefined, dom: domCensus(capture) ?? undefined };
+  return {
+    census: pageCensus(capture) ?? undefined,
+    dom: domCensus(capture) ?? undefined,
+    probes: probeStates(capture) ?? undefined,
+  };
+}
+
+/** The structural counts a page-state fingerprint compares. Named once; the order is the report order. */
+const FINGERPRINT_KEYS = ["tabbable", "formField", "link", "landmark", "heading", "graphic"] as const;
+
+export interface ProbeStates {
+  /** The fingerprint taken immediately BEFORE each probe, keyed by that probe's name. */
+  states: Record<string, Record<string, number>>;
+  /**
+   * Did the two probes observe the same page?
+   *
+   * `undefined` IS A THIRD ANSWER and must never be read as `true`. Fewer than two usable fingerprints
+   * means nobody asked — a capture predating the mark, or a census that failed — and a rule that treats
+   * that as agreement is asserting on a comparison it never made.
+   */
+  sameState?: boolean;
+  /** WHICH counts moved, so a rule can say what changed rather than only that something did. */
+  changed?: string[];
+}
+
+/**
+ * DID THE TWO CHANNELS SEE THE SAME PAGE? — determinism-plan D7.
+ *
+ * A capture is not an instant. The sweep's disclosure probe ACTIVATES a control, so a page whose search
+ * panel opens is a different page by the time the focus walk runs — measured on `nls.uk/join/`, where the
+ * tab ring is 10 stops under one probe order and 150 under the other. No amount of restoring the SCREEN
+ * READER's state undoes a click, which is why D3 was necessary and not sufficient.
+ *
+ * Until now the rules INFERRED this from overlap: `channelRelation.disjoint` reasons that two channels
+ * sharing no control names probably saw different pages. That inference is load-bearing for 2.1.1 and it
+ * is a guess — it cannot distinguish "the page moved" from "the sweep found nothing", and it is silent
+ * whenever the two channels overlap a little. The capture has recorded the answer per probe since D7's
+ * first half; this makes it READABLE instead of re-derived.
+ *
+ * Compared on structural COUNTS rather than content, deliberately. A page whose clock ticks or whose link
+ * turns `visited` has not changed shape, and a fingerprint that flagged it would refuse every real site —
+ * exactly the ticking-clock trap `gate:probe-order` already had to learn on `tfl.gov.uk`.
+ */
+export function probeStates(capture: CapturedAnnouncements): ProbeStates | null {
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  const states: Record<string, Record<string, number>> = {};
+  for (const mark of marks) {
+    if (typeof mark !== "object" || mark === null) continue;
+    const record = mark as Record<string, unknown>;
+    // A FAILED CENSUS IS NOT A READING. `markPageState` marks even when the count failed, precisely so
+    // "not counted" stays distinguishable from "none" — so it must be skipped here, not read as zeroes.
+    if (record.event !== "pageState" || record.error) continue;
+    const probe = typeof record.beforeProbe === "string" ? record.beforeProbe : null;
+    if (!probe) continue;
+    const counts: Record<string, number> = {};
+    for (const key of FINGERPRINT_KEYS) {
+      if (typeof record[key] === "number") counts[key] = record[key] as number;
+    }
+    if (Object.keys(counts).length > 0) states[probe] = counts;
+  }
+  if (Object.keys(states).length === 0) return null;
+  return { states, ...compareStates(states) };
+}
+
+/** @returns `sameState`/`changed`, or NEITHER when there is not enough to compare — see `sameState`. */
+function compareStates(states: Record<string, Record<string, number>>):
+  { sameState?: boolean; changed?: string[] } {
+  const taken = Object.values(states);
+  if (taken.length < 2) return {};
+  const changed = FINGERPRINT_KEYS.filter((key) => {
+    // Only keys EVERY fingerprint carries can be compared. One probe counting `tabbable` and another not
+    // is a capture straddling a census change, not a page that moved.
+    const values = taken.map((state) => state[key]);
+    return values.every((value) => typeof value === "number") && new Set(values).size > 1;
+  });
+  return { sameState: changed.length === 0, changed: changed.length ? [...changed] : undefined };
 }
 
 export function pageCensus(capture: CapturedAnnouncements):
