@@ -32,24 +32,35 @@ the maintainer can take, because it is a major release:
 
 Until then the gate is correctly red, which is the honest state rather than a defect in the gate.
 
-## 2. Sixty free vetoes across eighteen heads
+## 2. Free vetoes — the worst one is now reachable, the count is not yet re-measured
 
-Measured on the lab, latest chain run. **One feature on three heads has been fixed; 60 pairs remain.**
+`vague_link_without_context` was the worst free veto on all three focus heads —
+`2.1.1:control-unreachable-by-keyboard`, `2.1.2:focus-trapped`,
+`2.4.3:focus-order-scrambled` — because it is 0 on every positive of each, so a linear head may penalise
+it at no cost. The cost is real: a page with a bare "Read more" is ordinary, and the penalty pushes those
+heads down on exactly the pages they should fire on.
 
-| head | positives | vetoes | worst |
-|---|---|---|---|
-| `2.1.1:control-unreachable-by-keyboard` | 8 | 9 | `vague_link_without_context` |
-| `2.1.2:focus-trapped` | 8 | 9 | `vague_link_without_context` |
-| `2.4.3:focus-order-scrambled` | 8 | 9 | `vague_link_without_context` |
-| `4.1.2:state-change-silent` | 87 | 7 | `form_change_nonempty` |
+`vague-link` was excluded from those hosts with a recorded reason — an anchor is a tab stop, injected into
+the BAD variant only, so it corrupts the channel those subtypes are measured on. **Checked against the
+predicates rather than accepted:** `controlUnreachableByKeyboard` and `focusOrderIsScrambled` both compare
+`structure.formFields` against `interaction.focusOrder`, and neither reads `structure.links`. An inert
+anchor enters neither channel.
 
-A veto is a feature 0 on every training positive of a subtype, which a linear head may penalise for free —
-and no accuracy number can see it, because the held-out split has the same structure (ADR 0015).
+`vague-link-inert` is `bare-edit-inert`'s trick one feature along, and the claim it rests on is verified:
+a captured page announces `"More, same page, link"` on the bad variant and not the good, so NVDA's `k`
+quick-nav reaches a `tabindex="-1"` anchor. 6 cases gain it, **zero existing pages move**, the host signals
+still discriminate, and the lab's `grants-audit` reports `PASS — every accompanying defect grants` the
+feature it declares.
 
-`vague_link_without_context` has **no remedy of the kind that fixed `form_field_unnamed`**: that one was
-solved with `tabindex="-1"`, an unnamed field the tab order never sees. A link IS a tab stop by nature, so
-there is no inert form of it — making one unreachable is a different defect that collides with 2.1.1's own
-signal. Closing it needs a corpus page that fails twice in a way no current pairing produces.
+**What is NOT yet true:** the veto COUNT is unchanged until a retrain, because
+`scorer:shortcuts` measures trained weights and a retrain on unchanged weights reproduces the old vetoes
+faithfully. The corpus-side audit cannot confirm it either — the three focus subtypes have too few
+positives in the export to appear in its table at all. So the mechanism is in and proven to grant the
+feature; the number moves when the model is next trained.
+
+The other 17 heads are untouched. Their worst are `form_change_nonempty` on
+`4.1.2:state-change-silent` (7) and `heading_present` on `1.3.1:no-headings` (5) — the second
+definitionally unavoidable, since the subtype IS the absence of headings, and rule-decided anyway.
 
 ## 3. CLOSED — a cycling modal trap is now detected, and the residual gap is named
 
