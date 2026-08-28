@@ -597,30 +597,33 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
       `focus stopped at "${stops[stops.length - 1]}" after reaching ${reached} of ${total} ${unit}`);
     return;
   }
-  // THE CYCLING TRAP, and it is the shape the corpus could not express until 2026-08-28.
+  // THE CYCLING BRANCH IS WITHDRAWN, and what it measured is worth more than the branch.
   //
-  // A stop recurring without recurring CONSECUTIVELY means the tab order came back to something it had
-  // already visited — the cycle closed. On a conformant page that is the normal wrap, and it does not
-  // reach here: `tabRingCoverage` has already required focus to have visited FEWER distinct things than
-  // the page has, and a real wrap visits everything. (This said "than the page has form fields" until the
-  // denominator learned about tab stops — the sentence stayed true of one branch and became false of the
-  // rule, which is the comment-drift this file records more often than any other defect.)
+  // It fired when a stop recurred without recurring CONSECUTIVELY — the tab order returning to something
+  // already visited, over a ring smaller than the swept form fields. Exact on the corpus, wrong on the web:
+  // `rules-real-pages` scored it on 86 conformant real pages and produced SEVEN new 2.1.2 findings.
   //
-  // `keyboard-trap-blur-revalidate`'s comment declared this unreachable, correctly about the CYCLE and
-  // not about its CONTENTS: "a guard that cycles focus among several fields moves focus every press, so
-  // it reads as `cycled`, which is exactly what a conformant page's tab order does when it wraps".
-  // Measured on `keyboard-trap-modal-cycle`, whose dialog holds three controls on a page of seven: the
-  // trapped variant closes over 3 distinct stops against 5 swept fields, the conformant one over 14.
+  // networkrail.co.uk/careers/ shows the mechanism in one line:
   //
-  // A truncated probe cannot fire this: truncation cuts the walk short, and a walk cut short before it
-  // wrapped has no repeat at all.
-  if (reached < stops.length) {
-    add("2.1.2 No Keyboard Trap",
-      "Focus cycles among a few controls and never reaches the rest of the page, so a keyboard user who "
-        + "enters that group cannot leave it",
-      `focus visited ${reached} distinct ${reached === 1 ? "control" : "controls"} in ${stops.length} `
-        + `tab stops and never reached the other ${total - reached} of ${total} ${unit} the page has`);
-  }
+  //     distinct=4  stops=7  sweptFormFields=7   ->  4 < 7, fires
+  //     formFields: [..., "This website uses cookies, region, Allow all cookies, button",
+  //                       "Customise cookies, button"]
+  //
+  // The ring is the CONSENT BANNER's four controls; the sweep sees seven because quick-nav walks the whole
+  // document, banner and page alike. Now compare the corpus case this was built for — ring 3, swept 5.
+  // They are the same evidence. A modal confining Tab is a modal doing its job, and under 2.1.2 it CONFORMS
+  // whenever the user can leave by a documented means.
+  //
+  // Nothing in a capture separates them. The only candidate features are the banner's own words, and a
+  // wordlist is the shortcut this repo already removed from 2.4.4 — a feature answering a different
+  // question, taken because it was the cheapest separator available.
+  //
+  // So 2.1.2 keeps only the STALLED case above: Tab not moving at all. That is unambiguous — a control that
+  // will not release focus on Tab offers no documented means to leave — and it is what the one real-page
+  // 2.1.2 in the baseline (scotcourts) comes from.
+  //
+  // Closing this needs a probe that presses Escape after a confined ring and can attribute the result. A3
+  // in `docs/reliability-plan.md` records what BOTH withdrawn attempts measured.
 }
 
 /**

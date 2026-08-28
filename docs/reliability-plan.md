@@ -70,7 +70,7 @@ Three things it turned up that were worth more than the depth:
 **Still deliberately not done:** enlarging `ROTATIONS`. It remains a bundled change at 237 cases and 474
 captures, and nothing here needed it.
 
-## A3 — OPEN. It does need Escape, and I closed it wrongly before the measurement said so
+## A3 — OPEN, and WIDER than it was. Two rules withdrawn; 2.1.2 now detects only a stall
 
 **Status: open. Attempted 2026-08-28, measured, withdrawn. Far better specified than it was.**
 
@@ -128,15 +128,43 @@ whether focus can **leave**. Nothing in the capture presses Escape, so nothing c
 until real pages went quiet would fit a threshold to a symptom — the way a rule comes to be clean by going
 deaf.
 
+### And then the SAME measurement condemned the rule underneath it
+
+Withdrawing the tab-stop denominator took the real-page count from 9 to **7**, not to 0. The remaining
+seven were not from it — they came from the CYCLING branch added earlier the same day (`127fb24`), which
+the baseline predates.
+
+Measured on two of them, with the swept form fields printed:
+
+    tfl.gov.uk/modes/tube/        ring 5   swept 28   ->  5 < 28 fires
+      swept includes: "Manage cookies, button", "Accept only essential cookies, button",
+                      "Accept all cookies, button"
+    networkrail.co.uk/careers/    ring 4   swept  7   ->  4 <  7 fires
+      swept includes: "This website uses cookies, region, Allow all cookies, button"
+
+The ring is the CONSENT BANNER. The sweep sees more because quick-nav walks the whole document, banner and
+page alike. Now compare the corpus case the branch was built for: **ring 3, swept 5**. They are the same
+evidence, and no threshold separates them — the only candidate features are the banner's own words, which
+is the wordlist shortcut this repo already removed from 2.4.4.
+
+So the cycling branch went too, and `keyboard-trap-modal-cycle` with it: without a branch that can fire,
+`check-signals` correctly reports the case BLIND. **2.1.2 now detects only the STALLED case** — Tab pressed
+and the same control announced each time — which is unambiguous, and is what the single real-page 2.1.2 in
+the baseline (scotcourts) has always been.
+
+That was the harder call of the two. The denominator was one day old; this branch had a case, a gate entry
+and a green `rules:gate`. All of that was real and none of it was evidence about the web.
+
 ### What is left in the tree
 
 - `domCensus.tabbable` **stays**. It was never the wrong measurement, only an insufficient one, and it is
   the denominator the Escape-based rule will need. Additive, so no protocol bump.
-- The rule and the corpus signal are back to the form-field denominator, pinned equal by
+- The rule and the corpus signal keep only the STALLED test, pinned equal by
   `focus-trap-parity.corpus.test.ts`.
-- `keyboard-trap-modal-total` is **removed**. With no branch that can fire on it, `check-signals` reported
-  it BLIND — correctly, a case whose signal cannot fire is a training record with no discriminating
-  evidence. Its page shape is recorded in `case-matrix.mjs` where it stood, so it is re-creatable.
+- `keyboard-trap-modal-total` and `keyboard-trap-modal-cycle` are both **removed**. With no branch that can
+  fire on them, `check-signals` reported them BLIND — correctly, a case whose signal cannot fire is a
+  training record with no discriminating evidence. Both page shapes are recorded in `case-matrix.mjs` where
+  they stood, so they are re-creatable; what they lack is a conformant sibling whose dialog RELEASES focus.
 - `criterion-coverage.ts` records 2.1.2 as `partial` with the measured boundary rather than an assumed one.
 
 ### Done when
