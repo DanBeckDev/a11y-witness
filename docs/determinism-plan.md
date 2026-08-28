@@ -245,7 +245,7 @@ has actually cost this project four rules is not among them.
 
 ## D6 — A verdict cannot be built without saying what it examined
 
-**Status: MET 2026-08-28, with one done-condition explicitly OUTSTANDING — see the last bullet.**
+**Status: MET 2026-08-28. All done-conditions, including the unserved-page refusal.**
 
 `gateVerdict` in `packages/lab/src/gates/verdict.mjs` derives the verdict from coverage, so a PASS with
 `examined < of` is unconstructible. Five gates migrated; `verdict-adoption.test.ts` discovers every gate
@@ -299,10 +299,29 @@ function of coverage, not merely accompanied by it.**
 - A discovery test finds every gate script and requires it to return that shape or be exempt with a reason,
   the way `cli-flags.test.ts` does for argv readers. A list would rot; this is the mechanism that does not.
 - Mutation-checked on the five rows above: each must become impossible to state, not merely unlikely.
-- **A capture must refuse a page nothing is serving. STILL OUTSTANDING as of 2026-08-28** — and the count
-  is now FOUR, not three: `stability-gate` was the fourth, caught while migrating it to the verdict
-  shape. Every instance so far has been caught by a person noticing, which is exactly the mechanism
-  this bullet argues cannot be relied on. Added after the same trap caught me THREE TIMES in
+- **A capture must refuse a page nothing is serving. DONE 2026-08-28**, proved on bare-metal
+  `a11y-worker-6` rather than argued:
+
+  ```
+  landedOnRequested  ok: true   actual: "http://127.0.0.1:59999/nothing"   <- the URL guard PASSED
+  pageServed         status: 0                                            <- the new guard refused
+  fault: "page-unreachable"                                       HTTP 500, in 532 ms
+  ```
+
+  The URL guard passing in the same response is the whole point: the address WAS the one requested, and
+  the page behind it was missing. On a served page the same mark reads `status: 200` and the capture
+  proceeds, so "checked and clean" and "never ran" cannot leave the same silence.
+
+  **A guard for this already existed and structurally could not see it.** `BROWSER_ERROR_TITLE_RE` matches
+  Chromium's error PHRASES, but Chromium titles a network-error page with the HOST — so an unserved
+  `http://192.168.1.15:3000/x` is titled `192.168.1.15` and matched nothing. A title is a proxy for the
+  status; the status is the status. Both are kept.
+
+  Audited for false refusals before shipping: **89 of 89 real corpus sites return 200**, so it refuses
+  nothing that should capture. Positive control `capture:check` ALL PASSED on the fleet.
+
+  The count reached FOUR before it was fixed — `stability-gate` was the fourth, caught while migrating it
+  to the verdict shape. Added after the same trap caught me THREE TIMES in
   one session — in `gate:probe-order` before it shipped, in a diagnostic script twenty minutes after fixing
   it there, and in a third script two hours after writing the commit message about it. Edge serves its own
   error page on a dead port, so two orders compare IDENTICAL and a gate reports PASS; an ad-hoc capture
