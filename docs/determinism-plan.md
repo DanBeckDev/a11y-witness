@@ -340,3 +340,29 @@ npm run rules:real-pages        # PASS, 0 new findings on 86 conformant pages
 ```
 
 And one behaviour: **`nls.uk/join/` gives the same answer twice.**
+
+### MET 2026-08-28, and here is exactly what that is worth
+
+```
+=== https://www.nls.uk/join/ (5x) ===
+  STABLE — 5 usable, all fields identical
+8/8 canaries stable
+```
+
+The page that gave two different verdicts at the same commit — silent in one run, ACCUSED in another — now
+repeats identically five times, as a `gate:stability` canary rather than as an observation somebody made.
+
+**What five clean runs establish, stated honestly.** Zero failures in five bounds the failure rate at
+roughly 45% upper by the rule of three; it does not prove determinism. `identity:rate` already prints that
+caveat for its own zero counts and this deserves the same. The defensible claim is "five consecutive
+captures of a live page agreed on every compared field", which is exactly the observation the plan was
+written to make possible — and not "the tool is deterministic on nls.uk".
+
+**And it is not attributable to one fix.** The original disagreement predates the caret anchoring, the
+browse-mode restoration and D4's denominator change, any of which could have addressed it. The value here is
+that the question is now ASKED ON EVERY RUN by a gate, so the next disagreement is caught rather than
+noticed.
+
+**The gap it does not close:** `gate:probe-order` still reports `nls.uk` as PAGE-MOVED, because the sweep's
+disclosure probe opens a search panel before the focus walk sees it. Run-to-run determinism is met;
+probe-order independence on that page is not, and D7 records why.
