@@ -13,7 +13,7 @@
     "rules-check": "tsx packages/lab/src/eval/rules-check.ts",
     "test": "npm run test:ts && npm run test:python",
     "test:ts": "tsx --test \"packages/*/src/**/*.test.ts\"",
-    "test:python": "if [ -x .venv/bin/pytest ]; then .venv/bin/pytest packages/*/tests -q; else echo \"SKIPPED: no .venv/bin/pytest — python tests need it. This is an honest skip, not a pass.\"; fi",
+    "test:python": "if [ -x .venv/bin/pytest ]; then .venv/bin/pytest packages/*/tests -q; else echo \"SKIPPED: no .venv/bin/pytest \u2014 python tests need it. This is an honest skip, not a pass.\"; fi",
     "eval:capture": "A11Y_PYTHON=.venv/bin/python node packages/lab/src/harnesses/capture-fixtures.mjs",
     "eval:gate": "A11Y_PYTHON=.venv/bin/python EVAL_GATE=1 EVAL_RUNS=3 tsx packages/lab/src/eval/run.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.mjs.json",
@@ -110,7 +110,8 @@
     "corpus:urls": "node packages/lab/scripts/audit-corpus-urls.mjs",
     "scorer:verify": "node packages/lab/scripts/verify-safetensors.mjs packages/scorer/models/screenreader-scorer",
     "release:provenance": "node packages/lab/scripts/check-shipped-provenance.mjs",
-    "corpus:distribution": "node packages/lab/scripts/check-dataset-distribution.mjs"
+    "corpus:distribution": "node packages/lab/scripts/check-dataset-distribution.mjs",
+    "gate:probe-order": "node packages/lab/scripts/gate-probe-order.mjs"
   },
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
