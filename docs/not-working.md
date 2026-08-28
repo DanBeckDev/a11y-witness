@@ -259,6 +259,41 @@ with something changed and noticing the answers disagreed. The third was found b
 CONFORMANT capture would look like. Neither is a technique a gate can run — but both become cheap once a
 check names what it examined, which is what all three fixes now do.
 
+## 10. FOUND AND CLOSED 2026-08-28 — a modal makes two channels describe DISJOINT halves of one page
+
+Not on any list, and found only because a new corpus case gave the corpus its first CONFORMANT page with a
+focus-confining dialog. `rules:gate` failed on it, with 2.1.1 reporting:
+
+    never focused: ["Full name","Email","Phone","Delivery notes"] — while Tab completed a full cycle
+
+Every word true and the conclusion wrong: close the dialog and all four are reachable.
+
+**The cause generalises past the rule.** Measured on that capture:
+
+| channel | found |
+|---|---|
+| quick-nav sweep (`structure.formFields`) | 4 — the page BEHIND the dialog |
+| tab walk (`interaction.focusOrder`) | 4 — House number, Street, Town, Close, INSIDE it |
+
+**Disjoint sets with matching counts.** Every count-based guard in that function compared 4 against 4 and
+concluded the walk had covered the page. This whole family of rules compares a count from quick-nav against
+a count from Tab, assuming both survey the same universe — and on a modal they survey different halves, so
+the counts can agree while describing nothing in common.
+
+The guard is therefore not another count: if Tab reached NOT ONE of the controls the sweep announced, the
+two channels describe different states and no absence claim is available. A rule accusing 100% of a page's
+announced controls has found a broken measurement, not a broken page.
+
+**The first fix subsumed the rule**, and that is the part worth remembering. Guarding on "the ring is
+smaller than the swept controls" is 2.1.1's own PREMISE, so it silenced every genuine finding — caught in
+seconds by a unit test written for exactly that case. The two criteria read that comparison in opposite
+directions; overlap is what separates them.
+
+**Two pieces of tooling made this findable**, and neither existed that morning: the fetchable `capture`
+artifact (the lab named two failing records and nothing could show what the rule SAW on them — the same
+capture from a laptop was clean, so the difference WAS the defect), and the gate's evidence line, which had
+been describing a branch withdrawn hours earlier and now reports `focusOrder on 80 of 2482 record(s)`.
+
 ## Closed since this list was written
 
 **`2.4.4` reading validated here and never-fired on the lab** — it was never a contradiction. The lab's
