@@ -19,6 +19,8 @@ human or agent, *working on* the repo rather than using it.
 |---|---|
 | [**not-working.md**](./not-working.md) | **what the tool does wrong, cannot do, or cannot show.** Not a backlog — everything here is a live defect or a measured limitation, each with what was measured and on what. Read it before quoting any number about this project |
 | [known-gaps.md](./known-gaps.md) | **the RECORD of what was closed on 2026-08-27**, kept for what each defect cost. Originally the honest list, in the order to do it — what this project does not do or does not yet know, phased by what CONSUMES what: tooling, then the capture path, then the corpus, then the model. Training is LAST because it consumes everything above it |
+| [**determinism-plan.md**](./determinism-plan.md) | **the OPEN plan, and the one property behind it:** same page in, same evidence out, whatever order the probes ran. Written after four rules for one criterion were withdrawn in a day, all of them comparing two measurements taken in different states of the page. `reliability-plan.md` is the closed one that preceded it |
+| [reliability-plan.md](./reliability-plan.md) | the CLOSED plan (A1–A3), kept for the three refutations inside A3 — a rule that is exact on the corpus and wrong on the web, four times over |
 | [**proving-a-gate.md**](./proving-a-gate.md) | **how to take a check from BELIEVED to WATCHED FAILING** — the recipe, and the measurements behind it. Nine defects in one session were all checks that could not report themselves, and none had ever been observed to fire. `gates-are-proven.test.ts` holds the count: 5 of 16 |
 
 ## Running the long jobs
