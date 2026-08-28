@@ -52,9 +52,23 @@ We follow the applicable subset of *Clean Code* (Martin). It has two halves, enf
 
 ## Working on a Mac (the usual case)
 
-Everything except capture runs natively. Capture needs a Windows worker, and there is a
-scripted local one — start here: **`docs/getting-started.md`**, details in
-`docs/local-worker-vm.md`.
+> **THE LOCAL UTM WORKER VMs ARE DEPRECATED. Capture on the bare-metal fleet.** Five boxes
+> (`a11y-worker-2` … `-6`, in `inventory.yml`) serve `/health` without a laptop in the path, and
+> `npm run fleet:status` is the one command that says so. Deploy with **`npm run fleet:deploy`**, never
+> `worker:deploy` — that one is `utmctl file push` to a VM UUID and cannot reach a physical box.
+>
+> **This note exists because the omission cost a wrong turn on 2026-08-28.** The section below opened with
+> `worker:ctl -- up`, so a capture-path change was taken to a laptop VM while five bare-metal workers sat
+> `ready` and CONSISTENT. Nothing in this file recorded the deprecation, and an agent reading it did the
+> documented thing. **A deprecated path that is still the first one documented is not deprecated**, which
+> is this file's own rule about anything relying on a human to remember.
+>
+> Everything below about VM sizing, `utmctl`, pausing and the pool is kept because the MEASUREMENTS behind
+> it are still the reasoning for how the fleet is run — the negative-scaling finding, the ~8 GB-per-guest
+> figure, `phys_footprint` vs RSS. Read it as the record of why, not as instructions.
+
+Everything except capture runs natively. Capture needs a Windows worker. The fleet is the answer;
+`docs/getting-started.md` and `docs/local-worker-vm.md` describe the deprecated local VM.
 
 ```bash
 npm run worker:ctl -- up        # start/resume the VM, wait for /health
