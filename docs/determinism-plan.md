@@ -208,6 +208,51 @@ has actually cost this project four rules is not among them.
 
 ---
 
+## D6 — A verdict cannot be built without saying what it examined
+
+**Status: open. Added 2026-08-28 after the question "how is it so easy to examine the wrong thing?"**
+
+It is easy because **a result crosses a boundary as a bare verdict and its SCOPE does not travel with it.**
+Every instance in one session:
+
+| where | the verdict | what it left behind |
+|---|---|---|
+| pre-push hook | `ok check-signals` | "226 of 1461 examined" |
+| `worker:code` | "nothing to compare" | "…of the LOCAL pool; inventory.yml has 5, all stale" |
+| capture preflight | "Fleet runs this checkout" | "0 worker(s) checked" |
+| `rules:gate` | `2.1.2:focus-trapped 12/12 EXACT` | which 12 records, and that the new case was not among them |
+| `gate:probe-order` (mine, before it shipped) | would have said `PASS` | that it never reached a real page — Edge serves its own error page, so both orders compare identical |
+
+**This is NOT a modularity problem, and more packages would make it worse**: every package boundary is one
+more place for scope to be dropped. The package boundaries here already work, and they work because they are
+enforced by DISCOVERY TESTS rather than convention — adding one file tripped six of them (budget ladder,
+flag guard, entry-point guard, git-tracking, the `GUARDED` registry with a required reason, and CLAUDE.md's
+own count of guarded CLIs). Each caught a real defect and named the incident behind it.
+
+**Nor is printing the number sufficient.** Surveyed across the gate scripts:
+
+```
+score-rules.ts       population-in-verdict: 6
+evidence-check.mjs   population-in-verdict: 4     <- and it STILL passed on 2 of 48
+stability-gate.mjs   population-in-verdict: 0
+```
+
+`evidence-check` printed its coverage and passed anyway, because the guard tested `compared === 0` rather
+than `compared < expected` — the extreme case, not the middle. So the rule is: **the verdict must be a
+function of coverage, not merely accompanied by it.**
+
+**Done when:**
+
+- One shared result shape — `{ verdict, examined, of, source }` — that a gate cannot construct without
+  stating its population and where that population came from.
+- The verdict is DERIVED from coverage: a gate that examined fewer than it expected reports INCONCLUSIVE,
+  and cannot report PASS. `evidence-check`'s 2-of-48 must be inexpressible, not merely caught.
+- A discovery test finds every gate script and requires it to return that shape or be exempt with a reason,
+  the way `cli-flags.test.ts` does for argv readers. A list would rot; this is the mechanism that does not.
+- Mutation-checked on the five rows above: each must become impossible to state, not merely unlikely.
+
+---
+
 ## Not in this plan, and why
 
 - **Replacing guidepup with our own NVDA layer.** Considered and rejected on evidence. Every capture in the
