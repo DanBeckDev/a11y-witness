@@ -32,35 +32,43 @@ the maintainer can take, because it is a major release:
 
 Until then the gate is correctly red, which is the honest state rather than a defect in the gate.
 
-## 2. Free vetoes — the worst one is now reachable, the count is not yet re-measured
+## 2. Free vetoes — 60 to 57, and the worst is gone from the three biggest focus heads
 
-`vague_link_without_context` was the worst free veto on all three focus heads —
-`2.1.1:control-unreachable-by-keyboard`, `2.1.2:focus-trapped`,
-`2.4.3:focus-order-scrambled` — because it is 0 on every positive of each, so a linear head may penalise
-it at no cost. The cost is real: a page with a bare "Read more" is ordinary, and the penalty pushes those
-heads down on exactly the pages they should fire on.
+**Measured on freshly trained weights** (`train -e out=scratch`, so nothing touched the candidate
+awaiting a promotion decision):
 
-`vague-link` was excluded from those hosts with a recorded reason — an anchor is a tab stop, injected into
-the BAD variant only, so it corrupts the channel those subtypes are measured on. **Checked against the
-predicates rather than accepted:** `controlUnreachableByKeyboard` and `focusOrderIsScrambled` both compare
-`structure.formFields` against `interaction.focusOrder`, and neither reads `structure.links`. An inert
-anchor enters neither channel.
+| head | positives | worst veto before | worst veto now |
+|---|---|---|---|
+| `2.1.1:control-unreachable-by-keyboard` | 8 | `vague_link_without_context` | `state_unchanged (-2.05)` |
+| `2.1.2:focus-trapped` | 12 | `vague_link_without_context` | `state_unchanged (-3.08)` |
+| `2.4.3:focus-order-scrambled` | 8 | `vague_link_without_context` | `state_unchanged (-3.37)` |
 
-`vague-link-inert` is `bare-edit-inert`'s trick one feature along, and the claim it rests on is verified:
-a captured page announces `"More, same page, link"` on the bad variant and not the good, so NVDA's `k`
-quick-nav reaches a `tabindex="-1"` anchor. 6 cases gain it, **zero existing pages move**, the host signals
-still discriminate, and the lab's `grants-audit` reports `PASS — every accompanying defect grants` the
-feature it declares.
+`vague-link-inert` is what moved them — `bare-edit-inert`'s trick one feature along. The exclusion it
+replaced had a recorded reason (an anchor is a tab stop and would corrupt the channel those subtypes are
+measured on), and checking it against the actual predicates showed it did not hold: both compare
+`structure.formFields` against `interaction.focusOrder`, and neither reads `structure.links`.
 
-**What is NOT yet true:** the veto COUNT is unchanged until a retrain, because
-`scorer:shortcuts` measures trained weights and a retrain on unchanged weights reproduces the old vetoes
-faithfully. The corpus-side audit cannot confirm it either — the three focus subtypes have too few
-positives in the export to appear in its table at all. So the mechanism is in and proven to grant the
-feature; the number moves when the model is next trained.
+### What is still open, precisely
 
-The other 17 heads are untouched. Their worst are `form_change_nonempty` on
-`4.1.2:state-change-silent` (7) and `heading_present` on `1.3.1:no-headings` (5) — the second
-definitionally unavoidable, since the subtype IS the absence of headings, and rule-decided anyway.
+**`2.4.1:skip-link-inert` now carries `vague_link_without_context (-4.51)` as its worst.** Its three
+multi-defect cases drew rotations `[filename-alt, bare-edit-inert]`, `[generic-alt, position-only-table]`
+and `[fake-heading, unnamed-graphic]` — none contains `vague-link`, so the substitution never fires. That
+is chance, not design.
+
+Reaching it means enlarging `ROTATIONS`, and that table's own comment prices it: going from 5 entries to
+11 changed **all 237 multi-defect cases and invalidated 474 captures**. "Enlarging an option space
+necessarily re-rolls selections from it, and the only honest response is to treat it like a
+CAPTURE_PROTOCOL_VERSION bump: do it deliberately, bundled, and pay the recapture once." So this waits
+for a bundled corpus change rather than being forced now.
+
+**`state_unchanged` is the new worst on all three focus heads.** A focus case activates nothing, so the
+feature is 0 on every one of its positives while other subtypes carry it. The same inert trick will not
+work — a disclosure that is never activated produces no state change either — so this needs a different
+lever, and it is the next one to design.
+
+**And 57 is measured on 18 heads with the corpus as it stands.** The remaining vetoes concentrate in
+subtypes with few positives; `2.4.1` and `2.4.2` have 7 each against a recall cliff CLAUDE.md puts near
+140. Corpus DEPTH is the underlying constraint, not the veto mechanism.
 
 ## 3. CLOSED — a cycling modal trap is now detected, and the residual gap is named
 
