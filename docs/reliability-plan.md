@@ -40,26 +40,39 @@ Emitted rather than duplicated (`corpus:grants-map`'s route) and pinned by
 forgave nothing — and made that subtype look handled, which is a plausible reason nobody noticed its
 actual worst veto.
 
-## A2 — `2.4.1` and `2.4.2` have 7 positives each, against a recall cliff near 140
+## A2 — depth. `2.4.1` done; `2.4.2` next
 
-**Status: open. Blocked on a bundled corpus change, deliberately.**
+**The cost in this item was wrong, and correcting it is the point.** It said the only route to the
+`2.4.1` veto was enlarging `ROTATIONS` — 237 cases, 474 captures, protocol-bump territory. That prices a
+different approach. The subtype had **one failure mechanism** across all 7 positives, and adding a second
+draws new rotations, which reaches the veto for the cost of one subtype.
 
-`2.4.1:skip-link-inert` carries `vague_link_without_context (-4.51)` as its worst veto, because its three
-multi-defect cases drew rotations containing no `vague-link` and the `vague-link-inert` substitution
-therefore never fires. Chance, not design.
+Measured: appending two hosts to `2.4.1:skip-link-inert` added 14 cases and moved **6 existing pages, all
+inside the subtype** — 12 captures. `bucketFor`'s docstring said "inserting a case re-buckets only that
+subtype's later cases", which is true and reads as "appending is free"; it is not, because a subtype
+orders base cases first and every generated variant is later. Now written down with the measurement.
 
-Reaching it means enlarging `ROTATIONS`, and that table prices itself:
+### `2.4.1:skip-link-inert` — done. 7 positives to 14, one mechanism to two
 
-> going from 5 entries to 11 changes which pairing every existing host gets. Measured when this was
-> extended: all 237 multi-defect cases changed, invalidating 474 captures. … the only honest response is
-> to treat it like a CAPTURE_PROTOCOL_VERSION bump: do it deliberately, bundled, and pay the recapture
-> once.
+And the capture refuted one of the two proposed mechanisms, which was worth more than the case:
 
-**Done when** a bundled corpus change lands that (a) enlarges `ROTATIONS` so every focus criterion can
-draw `vague-link`, (b) adds depth to the subtypes under 20 positives, and (c) pays one recapture for all
-of it. Not before — forcing it now buys one veto for 474 captures.
+- **`skip-link-target-not-focusable` is NOT a defect.** Target exists, no `tabindex`, on the belief the
+  browser scrolls without moving focus. `nextFocusAfter` came back byte-identical to the conformant
+  variant — Chromium moves the sequential-focus starting point anyway, so the block IS bypassed. Deleted,
+  with the refutation recorded on the surviving sibling so nobody re-derives it.
+- **`skip-link-target-hidden` found a real blind spot.** Its target keeps `tabindex="-1"` and is `hidden`,
+  so focus resets to the top and the next Tab lands on the SKIP LINK ITSELF. Both layers tested only
+  "landed where Tab would have gone anyway" (index 1) and neither could see "landed before you started"
+  (index 0), which is strictly worse.
 
----
+0 fires on a conformant page across 2,140 captures; the lab reports `1454 discriminating, 0 blind,
+0 contaminated`. `skip-link.corpus.test.ts` pins the corpus predicate and the shipped rule equal.
+
+**Done when** (`2.4.2` half): `2.4.2:route-title-stale` has more than one mechanism, its signals still
+discriminate on the lab, and the added pairings are measured rather than assumed.
+
+**Still deliberately not done:** enlarging `ROTATIONS`. That remains a bundled change at 237 cases and
+474 captures, and nothing here needs it.
 
 ## A3 — the residual modal-trap gap needs Escape, and Escape is ambiguous
 
