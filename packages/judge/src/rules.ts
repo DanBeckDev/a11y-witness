@@ -24,6 +24,7 @@
  * not against a book's strings.
  */
 import type { Channel } from "@a11y-witness/evidence";
+import type { PageCensus, DomCensus } from "@a11y-witness/evidence/verify";
 import { parseAnnouncement } from "@a11y-witness/evidence";
 // The ONE list of criteria the rules may emit. Imported rather than restated: writing a second
 // copy here is the defect this file has recorded five times, and I made it once before deleting it.
@@ -71,7 +72,15 @@ export interface RuleInput {
    * accidentally left NVDA in focus mode typing its own keys into the page — which it did, on 353
    * captures. So a rule about absence must corroborate with the tree, or it is guessing.
    */
-  census?: { heading?: number; link?: number; graphic?: number; graphicUnnamed?: number };
+  census?: PageCensus;
+  /**
+   * The DOM's own counts, which the tree census cannot supply: a page's TAB STOPS among them.
+   *
+   * Built by `oracleCounts` and therefore present on every path — it was exported and nowhere else until
+   * 2026-08-28, so the first rule to read it would have scored perfectly on the corpus and been mute for
+   * every user. Absent on a capture taken before the count existed; a rule must make NO claim then.
+   */
+  dom?: DomCensus;
   /**
    * Media elements the PAGE declares, from the DOM rather than the accessibility tree — `autoplay` and
    * `muted` are attributes, not accessibility properties, so no screen reader can report them.
