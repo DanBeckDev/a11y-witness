@@ -14,41 +14,31 @@ done-condition of "it looks right" is not on this list.
 
 ---
 
-## A1 — the weights-side audit reports vetoes nobody can close, and cannot say so
+## A1 — CLOSED. The weights-side audit now says which vetoes nobody can close
 
-**Status: doing.**
+Measured on the lab, `job=shortcuts -e out=scratch`:
 
-`audit-corpus-starvation.mjs` carries `IMPOSSIBLE_BY_DEFINITION` and its comment states the cost:
-
-> Not a shortcut when the subtype is DEFINED by not hearing it. Reporting those put items on a work list
-> that nobody can complete, and inflated the two features at the top of the ranking.
-
-`audit-scorer-shortcuts.py` has no such concept — grep it for `impossible` and there is nothing. So
-`scorer:shortcuts` reports **57 veto pairs across 18 heads** with no way to distinguish a veto that is
-worth corpus work from one that is structurally unclosable. That is a lesson learned at one layer and not
-carried to the next, which CLAUDE.md already names as its own recurring shape.
-
-Measured 2026-08-28, the case that makes it concrete: `state_unchanged` is now the worst veto on all three
-focus heads. It is 0 on every focus positive because a focus case activates no control — and it cannot be
-made 1 without turning `probeForms` on, which runs at `capture-core.mjs:1834`, **before**
-`probeFocusOrder` at 1840, on a path whose own comment says "ORDER IS LOAD-BEARING". Activating a control
-changes the page before focus is walked, which corrupts the very channel those subtypes are measured on.
-
-So it is unreachable *without perturbing the channel under test* — a category the corpus-side table does
-not have either, and a real one.
-
-**Done when:**
-
-```bash
-npm run lab:job -- -e job=shortcuts -e out=scratch
-# the report separates closable vetoes from unclosable ones, names the reason for each unclosable
-# one, and the headline count is of the CLOSABLE ones
+```
+41 CLOSABLE veto pairs across 18 heads (57 in total).
+16 further veto pair(s) are UNCLOSABLE and excluded from the counts above:
+  by-definition — the subtype IS the absence of that announcement, so no page can carry both
+  perturbs-measurement — capturing it would destroy the channel the subtype is measured on
 ```
 
-and the two tables cannot drift: the JS side emits them, Python reads them, a test pins them equal —
-the same shape `corpus:grants-map` → `audit_grants.py` → `test_grants_map_is_current.py` already has.
+**The number people steer by went from 57 to 41**, and every excluded pair is named with its reason. The
+two kinds stay separate because a reader acts on them differently: `by-definition` is permanent,
+`perturbs-measurement` is a statement about this probe and would change if the probe did.
 
----
+The bar for a `perturbs-measurement` entry is naming the call site whose ORDER makes it unreachable —
+`capture-core.mjs:1834` activating controls before `probeFocusOrder` at 1840, on a path whose comment
+says "ORDER IS LOAD-BEARING". "We could not think how" is not a reason; it is the state every entry
+started in.
+
+Emitted rather than duplicated (`corpus:grants-map`'s route) and pinned by
+`test_unclosable_map_is_current.py`, which caught a real stale entry on its first run:
+`2.4.1:skip-link-inert: ["skip_link_moves_focus"]` named a feature the pipeline has never computed. It
+forgave nothing — and made that subtype look handled, which is a plausible reason nobody noticed its
+actual worst veto.
 
 ## A2 — `2.4.1` and `2.4.2` have 7 positives each, against a recall cliff near 140
 

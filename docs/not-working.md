@@ -32,10 +32,13 @@ the maintainer can take, because it is a major release:
 
 Until then the gate is correctly red, which is the honest state rather than a defect in the gate.
 
-## 2. Free vetoes — 60 to 57, and the worst is gone from the three biggest focus heads
+## 2. Free vetoes — 41 closable, down from an undifferentiated 60
 
 **Measured on freshly trained weights** (`train -e out=scratch`, so nothing touched the candidate
-awaiting a promotion decision):
+awaiting a promotion decision). Two things moved: the total 60 → 57, and the audit now separates vetoes
+worth corpus work from vetoes nothing can close — **41 closable, 16 unclosable and each named with its
+reason**. See `reliability-plan.md` A1; before that split, the work list included items nobody could
+complete.
 
 | head | positives | worst veto before | worst veto now |
 |---|---|---|---|
