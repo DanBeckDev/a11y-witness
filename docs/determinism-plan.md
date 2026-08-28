@@ -404,6 +404,73 @@ move underneath.
 
 ---
 
+## What the plan did not anticipate, found by running it
+
+Three things surfaced only once the gates ran on the real fleet rather than on one laptop VM. None is a
+plan item; all three were costing evidence the whole time.
+
+### The transport was dropping a fifth of all responses, and the work was never lost
+
+`gate:stability` kept turning INCONCLUSIVE on `FAILED read ETIMEDOUT` — three different canaries, three
+different boxes, so neither the page nor the machine. **The asymmetry is the diagnosis:**
+
+| | measured, 2026-08-28 |
+|---|---|
+| the WORKERS, across 242 captures | 1 failure (a deliberate dead-port test), 0 recoveries |
+| the CLIENT, in one gate run | **9 lost responses in 40 captures** |
+| 12 consecutive SHORT requests | 3-11 ms, none lost |
+
+The work completed every time; only the answer was lost. The worker writes status and body together at the
+END of a capture, so the socket carries **zero bytes for 12-520 s** — an idle connection to every NAT,
+firewall and Wi-Fi power-save in the path, and this host reaches the fleet over Wi-Fi. It presented as
+`read ETIMEDOUT`, the OS syscall, never as our own deadline (which says "timed out after N ms").
+
+Two fixes, and the second is the one that removes the fault rather than surviving it:
+
+```
+recovery only (captureId)        9 sockets recovered / 40 captures   PASS 8/8
+recovery + TCP keepalive 15 s    0 sockets recovered                 PASS 8/8
+```
+
+**Confirmed by PREDICTION, not by a green result.** The 8/8 arrived one run before the keepalive did, and
+was deliberately not credited: nothing in the output could then say whether the recovery had fired or the
+network had simply been quiet. Printing the count — always, including the zero — is what made the next
+result mean something.
+
+Note `worker-http.mjs` is control-plane, not a worker file, so this needed no `fleet:deploy`.
+
+### Ten capture clients POSTed to `/capture` and ONE survived a lost socket
+
+The `captureId` store has returned a completed capture verbatim for months. Nine clients never asked. That
+is the remedy-at-one-call-site shape at its largest here, and it only became visible on bare metal: on
+three VMs sharing one Mac the socket was a virtual bridge and effectively lossless.
+
+### The gates ran on ONE box while four idled
+
+Every gate took a single `--worker`. `gate:stability` did 40 captures on one machine; `gate:probe-order`
+refused to start without one. Both now **shard**: 8 canaries over 5 boxes is 2 deep instead of 8, and 5
+pages over 5 boxes is 1 deep instead of 5.
+
+The shard boundary is the load-bearing part. A page's REPEATS stay on one box, and both ORDERS of a page
+stay on one box — splitting either would make a difference between runs, or between orders,
+indistinguishable from a difference between machines, which is the conflation these gates exist to detect
+arriving through the scheduler instead of through the probes.
+
+### An OPEN TENSION, recorded rather than resolved by redefinition
+
+D3's done-condition says `gate:probe-order` should PASS on `tfl.gov.uk`. It cannot, and the reason is D7,
+which was written later: tfl carries a clock (`now at 22:43` -> `22:47`) and live disruption banners, so
+the page moves under its own probes on every run and the ordering question is unanswerable there. The gate
+correctly reports PAGE-MOVED and reduces coverage — which means **with a live page in the list this gate is
+permanently INCONCLUSIVE.**
+
+That is honest and it is also a problem: a gate that can never pass is a gate people stop reading. The
+options are to gate on the corpus pages and report live pages as evidence, or to accept a standing
+INCONCLUSIVE. It is a product decision about what the gate promises, so it is written down rather than
+made silently — the same reasoning as the abstention threshold in `docs/adr/`.
+
+---
+
 ## Not in this plan, and why
 
 - **Replacing guidepup with our own NVDA layer.** Considered and rejected on evidence. Every capture in the
