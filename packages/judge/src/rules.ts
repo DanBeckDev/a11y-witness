@@ -884,25 +884,77 @@ function controlsWithRoles(
   return out;
 }
 
+/**
+ * Can this tab order support a claim that a control was NEVER reachable?
+ *
+ * Three ways it cannot, each learned from a page it accused wrongly.
+ *
+ * THE WHOLE TAB CYCLE, OR NO CLAIM. Tab wraps: past the last control it returns to the first, so a
+ * recording that revisits its own starting control has observed every focusable there is — and a control
+ * the page announces but that cycle never contains is genuinely unreachable, whatever the stop cap.
+ * 
+ * This replaced a READING-ORDER proxy ("something later in reading order was reached, so the probe got
+ * past this point"), which is unsound for the exact reason 2.4.3 exists: the two orders can differ.
+ * Measured on developer.mozilla.org — 18 controls read, 12 stops, truncated, cycle never closed — the
+ * proxy reported the theme switch, language picker and sidebar toggle as keyboard-unreachable. They sit
+ * early in READING order and late in TAB order, so the probe simply stopped before them. A well-built
+ * page, accused on the first run.
+ * ...and the cycle has to account for the page. See `cycleCoversThePage`: a wrap the tab order detects
+ * in itself can be a repeated nav block, and then every control past it reads as unreachable.
+ * A CONFINED RING IS NOT A SURVEY OF THE PAGE, so absence from it proves nothing about the page.
+ * 
+ * Found by `rules:gate` on 2026-08-28, on the CONFORMANT variant of `keyboard-trap-modal-cycle`: a dialog
+ * holds focus, and this reported the four fields behind it as
+ * `never focused: ["Full name","Email","Phone","Delivery notes"] — while Tab completed a full cycle`.
+ * Every word true, and the conclusion wrong — close the dialog and all four are reachable. "A capture is
+ * not an instant", which this repo already records for sportengland's search panel, reaching 2.1.1.
+ * 
+ * `cycleCoversThePage` was supposed to catch this and its floor is computed from STOPS (7 here) rather
+ * than DISTINCT stops (4), so a ring that revisits itself looks like a walk that covered ground.
+ * `tabRingCoverage` compares what was actually VISITED against what the page holds, which is the same
+ * question this guard was reaching for.
+ * 
+ * It is also the right division of labour: on a confined ring the finding is the CONFINEMENT, which 2.1.2
+ * owns and reports when nothing in the ring can be activated. Two criteria describing one dialog from
+ * opposite ends would be the same evidence counted twice.
+ */
+function tabOrderCanProveAbsence(tabbedNames: string[], input: RuleInput): boolean {
+  if (!cycleClosed(tabbedNames)) return false;
+  if (!cycleCoversThePage(tabbedNames, input)) return false;
+
+  // THE TWO CHANNELS MUST BE DESCRIBING THE SAME PAGE, and on a modal they are not.
+  //
+  // Measured on the CONFORMANT variant of `keyboard-trap-modal-cycle`, which reported
+  // `never focused: ["Full name","Email","Phone","Delivery notes"] — while Tab completed a full cycle`:
+  //
+  //     swept formFields  4   ["Full name, edit", "Email, edit", "Phone, edit", "Delivery notes, edit"]
+  //     distinct stops    4   the dialog's three fields and its Close button
+  //
+  // Quick-nav surveyed the page BEHIND the dialog; Tab was held INSIDE it. The two sets are DISJOINT, and
+  // their counts happen to match — so every count-based guard here passed and the rule accused all four.
+  // A rule reporting 100% of a page's announced controls as unreachable has found a broken measurement,
+  // not a broken page: close the dialog and all four are reachable. "A capture is not an instant", which
+  // this repo already records for sportengland's search panel, reaching 2.1.1.
+  //
+  // Overlap is the honest test, and it is not a count: if Tab reached NOT ONE of the controls the sweep
+  // announced, the two channels are describing different states and no absence claim is available.
+  if (!comparableNames(input.structure?.formFields).some((name) => tabbedNames.includes(name))) return false;
+
+  // NO SECOND GUARD ON RING SIZE, and the attempt is worth recording. `tabRingCoverage` — "the ring is
+  // smaller than the swept controls" — was added here and SUBSUMED THE RULE: that is 2.1.1's own premise,
+  // so guarding on it silenced every genuine finding. Two unit tests caught it immediately, including
+  // "a cycle that DOES account for the page still reports a genuinely missed control", which exists for
+  // exactly this. On a confinement the finding is 2.1.2's; the way to keep them apart is the overlap test
+  // above, not a size comparison that both criteria read in opposite directions.
+  return true;
+}
+
 function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void {
   const reading = comparableNames(input.structure?.formFields);
   const tabbedNames = comparableNames(input.interaction?.focusOrder);
   const tabbed = new Set(tabbedNames);
   if (reading.length < 2 || tabbed.size === 0) return;
-  // THE WHOLE TAB CYCLE, OR NO CLAIM. Tab wraps: past the last control it returns to the first, so a
-  // recording that revisits its own starting control has observed every focusable there is — and a control
-  // the page announces but that cycle never contains is genuinely unreachable, whatever the stop cap.
-  //
-  // This replaced a READING-ORDER proxy ("something later in reading order was reached, so the probe got
-  // past this point"), which is unsound for the exact reason 2.4.3 exists: the two orders can differ.
-  // Measured on developer.mozilla.org — 18 controls read, 12 stops, truncated, cycle never closed — the
-  // proxy reported the theme switch, language picker and sidebar toggle as keyboard-unreachable. They sit
-  // early in READING order and late in TAB order, so the probe simply stopped before them. A well-built
-  // page, accused on the first run.
-  if (!cycleClosed(tabbedNames)) return;
-  // ...and the cycle has to account for the page. See `cycleCoversThePage`: a wrap the tab order detects
-  // in itself can be a repeated nav block, and then every control past it reads as unreachable.
-  if (!cycleCoversThePage(tabbedNames, input)) return;
+  if (!tabOrderCanProveAbsence(tabbedNames, input)) return;
   // A control whose announced name is shared with another cannot be said to have been missed: its name
   // appearing in the tab order may be the OTHER control, and its absence may mean the other one was
   // reached. Same reasoning as 2.4.3 — see `unambiguous`.
