@@ -88,7 +88,15 @@ rounds routing around a state problem none of them addressed.
 
 ## D1 — A page that can express the fault
 
-**Status: open. Cheapest item here, and every other item is unfalsifiable without it.**
+**Status: MET 2026-08-28.** Two conformant overlay pages: `image-missing-alt-behind-consent` (a consent
+banner over an unlabelled image) and `keyboard-trap-modal-cycle` (a dialog whose two variants differ ONLY
+by a Close button in the ring). `check-signals` reports both discriminating, 0 blind, 0 contaminated.
+
+The reproduce-the-fault condition was met in a stronger form than written. Rather than temporarily
+restoring the withdrawn tab-stop rule, the new page was captured against the LIVE rules — and produced a
+**real 2.1.1 false positive** that had been latent in the corpus the whole time (disjoint channels with
+matching counts, which is why counting never saw it). The page proved it can express the fault against a
+rule that ships, and the fault it exposed was then fixed.
 
 The corpus is hermetic and single-state. Measured: exactly **one** page carries `role="dialog"` (added
 2026-08-28), and **zero** conformant pages carry a consent overlay. `gate:stability` — the determinism gate —
@@ -116,7 +124,12 @@ dismissible, so nothing about it is a WCAG failure, and any finding on it is the
 
 ## D2 — The probe-order invariance gate
 
-**Status: open. This is the item that makes "immutable tool" falsifiable, and it must FAIL when written.**
+**Status: MET 2026-08-28.** `npm run gate:probe-order` compares by CONTENT across two probe orders and
+reports INCONCLUSIVE — never PASS — for a page it could not capture both ways.
+
+**And it did fail when written, which is the condition that mattered.** Not on the corpus, where it passes
+3/3 after D3; on live sites, where it found the `nls.uk` ordering effect that became D7. A gate that had
+gone green on first run would have been evidence that it could not see anything.
 
 The property: **capture the same page twice with the probes in different orders, and the evidence must be
 identical.** Nothing today asserts this. `capture-core.mjs` declares the opposite in a comment.
@@ -141,7 +154,16 @@ this session, at a cost of two reverts and most of a day.
 
 ## D3 — A known starting state for every probe
 
-**Status: open. The actual fix. D2 goes green here or the diagnosis was wrong.**
+**Status: MET 2026-08-28.** `establishBrowseMode` runs between probes; `probeSequence` makes the order an
+option; `markPageState` stamps the state each probe observed. `gate:probe-order` PASSES 3/3 on the corpus,
+`evidence:check` on the lab reports **48/48 same** — so this shipped without a recapture — and the
+`ORDER IS LOAD-BEARING` constraint is deleted, surviving only as a historical note explaining the option.
+
+**One correction worth keeping.** `Control+Home` was the obvious anchor and it made the gate WORSE: it
+puts the caret ON the `h1`, and quick navigation can never reach the element the caret occupies — so the
+`h1` was lost on all three pages. The anchor is `Control+End`, which is the position the read-through
+already leaves. A known starting point must be the one the pipeline establishes, not the one that sounds
+principled. This generalised a note the repo had recorded as a landmark-only quirk.
 
 *Continuous Delivery* again: establish a known-good starting point; make the steps atomic so order does not
 matter. Today the only thing resembling this is `anchorToTop`, which is partial (browse mode and caret only)
@@ -171,7 +193,14 @@ across a change instead of comparing blindly.
 
 ## D4 — One owner for the cross-channel question
 
-**Status: open. Removes the brittleness, and it is the reason "every change breaks something else".**
+**Status: MET 2026-08-28.** `channelRelation` in `rules.ts` is the single owner; a discovery test forbids a
+second spelling. Authoritative `rules:gate`: **PASS, all 14 of 14 from rule-ownership.json, 2484 records,
+0 false positives**, with 2.1.1 8/8 and 2.1.2 10/10.
+
+**The refactor introduced a regression and the corpus caught it**, which is the point of having one. The
+shared function counted `comparableNames(formFields)` — and that helper drops empty names, which IS the
+4.1.2 defect. `rules:gate` reported `rule-decided on 10 record(s) and caught only 9`. Count raw, compare
+by name.
 
 `addKeyboardTrap`, `addKeyboardUnreachableControl`, `addBrokenFocusOrder` and `cycleCoversThePage` all
 hand-roll comparisons between the sweep and the tab walk. There is no single place that owns *"do these two
@@ -194,7 +223,13 @@ in **opposite directions**, and nothing in the code said so.
 
 ## D5 — Make `gate:stability` able to see what it is for
 
-**Status: open. Small, and it closes the loop D1 opens.**
+**Status: MET 2026-08-28.** Eight canaries, each naming its mechanism in the existing style: the two-state
+overlay page from D1, and `nls.uk/join/` — the first REAL page this gate has ever watched. **8/8 STABLE,
+5/5 repeats each.**
+
+A load-time guard requires every canary to name exactly one of `path`/`url`, because the first attempt at
+the real-page canary silently passed `url: undefined` and reported `=== undefined (5x) === STABLE` — a
+canary comparing nothing to nothing, which is this plan's own subject arriving in the fix for it.
 
 Its five canaries are static local corpus pages. It has never watched a real page or an overlay. Its own
 header says every canary is present "because of a specific mechanism it can exercise" — the mechanism that
@@ -210,7 +245,21 @@ has actually cost this project four rules is not among them.
 
 ## D6 — A verdict cannot be built without saying what it examined
 
-**Status: open. Added 2026-08-28 after the question "how is it so easy to examine the wrong thing?"**
+**Status: MET 2026-08-28, with one done-condition explicitly OUTSTANDING — see the last bullet.**
+
+`gateVerdict` in `packages/lab/src/gates/verdict.mjs` derives the verdict from coverage, so a PASS with
+`examined < of` is unconstructible. Five gates migrated; `verdict-adoption.test.ts` discovers every gate
+script and fails in BOTH directions — an unmigrated gate must be exempt, and a migrated one must NOT be.
+It caught a stale exemption on three of the five migrations, including one made minutes after committing
+a message about that exact habit.
+
+**Two gates were nearly identical and needed opposite answers, which is the result worth keeping.**
+`score-rules` ranks a proven defect above a stale corpus — the same ordering as `gateVerdict` — so it
+migrated, and now reports `14 of 14 from rule-ownership.json` where it used to report a bare record count.
+`evidence-check` ranks incomplete coverage ABOVE a detected change, deliberately, because its sample is
+stratified one case per family. It is recorded as `deliberate`, not `owed`, with a reason long enough to
+argue with. Adding a flag to `gateVerdict` to serve both would have been the conflation this item exists
+to remove, wearing a shared function's clothes.
 
 It is easy because **a result crosses a boundary as a bare verdict and its SCOPE does not travel with it.**
 Every instance in one session:
@@ -250,7 +299,10 @@ function of coverage, not merely accompanied by it.**
 - A discovery test finds every gate script and requires it to return that shape or be exempt with a reason,
   the way `cli-flags.test.ts` does for argv readers. A list would rot; this is the mechanism that does not.
 - Mutation-checked on the five rows above: each must become impossible to state, not merely unlikely.
-- **A capture must refuse a page nothing is serving.** Added after the same trap caught me THREE TIMES in
+- **A capture must refuse a page nothing is serving. STILL OUTSTANDING as of 2026-08-28** — and the count
+  is now FOUR, not three: `stability-gate` was the fourth, caught while migrating it to the verdict
+  shape. Every instance so far has been caught by a person noticing, which is exactly the mechanism
+  this bullet argues cannot be relied on. Added after the same trap caught me THREE TIMES in
   one session — in `gate:probe-order` before it shipped, in a diagnostic script twenty minutes after fixing
   it there, and in a third script two hours after writing the commit message about it. Edge serves its own
   error page on a dead port, so two orders compare IDENTICAL and a gate reports PASS; an ad-hoc capture
@@ -269,7 +321,18 @@ function of coverage, not merely accompanied by it.**
 
 ## D7 — The PAGE's state, not the screen reader's
 
-**Status: open. Found by D2's gate on 2026-08-28, once it was pointed at real pages.**
+**Status: PARTIALLY MET 2026-08-28. Run-to-run determinism is met; probe-order independence on a page that
+moves is not, and the residual is stated below rather than closed.**
+
+`markPageState` records a DOM fingerprint per probe rather than once per capture, and `gate:probe-order`
+reports `PAGE-MOVED` separately from `CHANGED` — so a ticking clock on `tfl.gov.uk` no longer reads as an
+ordering fault. `PAGE-MOVED` reduces coverage rather than counting as examined, so such a run is
+INCONCLUSIVE and cannot pass.
+
+**Residual, open:** `nls.uk/join/` still reports `PAGE-MOVED` under permutation, because the sweep's
+disclosure probe opens a search panel and no restoration of NVDA's state undoes a click. What is NOT yet
+built is the third bullet: rules DECLINING to compare two channels that observed different fingerprints.
+Today `channelRelation.disjoint` still infers that from overlap instead of reading it directly.
 
 D3 restores what the SCREEN READER carries between probes — browse mode and caret position — and
 `gate:probe-order` passes on all three corpus pages because of it. Pointed at live sites, it found the half
