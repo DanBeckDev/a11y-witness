@@ -534,6 +534,53 @@ function trailingRepeats(stops: string[]): number {
  * pipeline produces often enough to have a whole section about.
  */
 /**
+ * HOW THE TWO CHANNELS RELATE — computed once, so four rules cannot each decide it differently.
+ *
+ * The sweep walks the document with quick navigation; the focus probe walks the tab ring. Four functions
+ * here asked variations of "how do those two compare?" and none of them said so, which is *Fundamentals of
+ * Software Architecture*'s definition of brittle: "a single implementation change can cause unexpected
+ * rippling side effects that break many other (ostensibly unrelated) things… the broader the scope, the
+ * looser the coupling should be." A comparison shared by four rules is the broadest scope in this file and
+ * had the loosest contract: none.
+ *
+ * MEASURED COST, 2026-08-28. A guard added to 2.1.1 asserted "the ring is smaller than the swept controls",
+ * which is 2.1.1's OWN PREMISE, and silenced every genuine finding — the two criteria read that comparison
+ * in OPPOSITE directions and nothing in the code said so. A denominator changed for 2.1.2 the same day
+ * moved a rule nobody was editing.
+ *
+ * `disjoint` is the field that matters most and the one no caller had. When Tab reached NOT ONE of the
+ * controls the sweep announced, the two channels are describing different STATES of the page — a modal
+ * holds Tab inside it while quick-nav walks the document behind — and their COUNTS can still agree.
+ * Measured: swept 4, reached 4, overlap 0, and every count-based guard passed while 2.1.1 accused all four.
+ */
+interface ChannelRelation {
+  /** Distinct controls the SWEEP announced. */
+  swept: number;
+  /** Distinct stops the TAB WALK reached. */
+  reached: number;
+  /** How many the two channels agree on. Zero means they describe different states, not a smaller page. */
+  overlap: number;
+  /** A stop recurred, so the walk wrapped — it saw the whole ring rather than being cut short. */
+  cycleClosed: boolean;
+  /** Nothing in common. The counts may still match; that is the trap. */
+  disjoint: boolean;
+}
+
+function channelRelation(input: RuleInput): ChannelRelation {
+  const swept = comparableNames(input.structure?.formFields);
+  const stops = input.interaction?.focusOrder ?? [];
+  const reachedNames = comparableNames(stops);
+  const overlap = swept.filter((name) => reachedNames.includes(name)).length;
+  return {
+    swept: swept.length,
+    reached: new Set(stops).size,
+    overlap,
+    cycleClosed: cycleClosed(reachedNames),
+    disjoint: swept.length > 0 && reachedNames.length > 0 && overlap === 0,
+  };
+}
+
+/**
  * How much of the page the tab ring covers, measured against the swept FORM FIELDS — or null when nothing
  * corroborates a trap.
  *
@@ -546,9 +593,10 @@ function trailingRepeats(stops: string[]): number {
  */
 function tabRingCoverage(stops: string[], input: RuleInput):
   { reached: number; total: number; unit: string } | null {
-  const reached = new Set(stops).size;
-  const onPage = (input.structure?.formFields ?? []).length;
-  if (onPage > 0 && reached < onPage) return { reached, total: onPage, unit: "control" };
+  // From `channelRelation`, which owns this comparison. `stops` stays a parameter because the two branches
+  // below read the ring's SHAPE (whether a stop recurred, what roles it holds) and not just its size.
+  const { reached, swept } = channelRelation(input);
+  if (swept > 0 && reached < swept) return { reached, total: swept, unit: "control" };
 
   // THE TAB-STOP DENOMINATOR IS WITHDRAWN, and what it cost to learn is worth more than the branch was.
   //
@@ -803,6 +851,11 @@ function cycleClosed(tabOrder: string[]): boolean {
 const CYCLE_COVERAGE_FLOOR = 0.5;
 
 function cycleCoversThePage(tabOrder: string[], input: RuleInput): boolean {
+  // DELIBERATELY A WIDER DENOMINATOR THAN `channelRelation.swept`, and that is why it is not folded in.
+  // This asks whether the tab order accounts for everything FOCUSABLE the sweep found — links and buttons
+  // as well as form fields — because a false wrap is detected against the whole focus ring, not against the
+  // form. `channelRelation` answers "do these two channels describe one page"; this answers "did the walk
+  // cover it". Two questions, and merging them would make one of them wrong.
   const structure = input.structure ?? {};
   const sweptFocusable = ["links", "formFields", "buttons"]
     .reduce((total, key) => total + ((structure as Record<string, unknown>)[key] as unknown[] ?? []).length, 0);
@@ -938,7 +991,8 @@ function tabOrderCanProveAbsence(tabbedNames: string[], input: RuleInput): boole
   //
   // Overlap is the honest test, and it is not a count: if Tab reached NOT ONE of the controls the sweep
   // announced, the two channels are describing different states and no absence claim is available.
-  if (!comparableNames(input.structure?.formFields).some((name) => tabbedNames.includes(name))) return false;
+  // Read from `channelRelation`, which owns this comparison for every rule that makes it.
+  if (channelRelation(input).disjoint) return false;
 
   // NO SECOND GUARD ON RING SIZE, and the attempt is worth recording. `tabRingCoverage` — "the ring is
   // smaller than the swept controls" — was added here and SUBSUMED THE RULE: that is 2.1.1's own premise,
