@@ -70,51 +70,98 @@ Three things it turned up that were worth more than the depth:
 **Still deliberately not done:** enlarging `ROTATIONS`. It remains a bundled change at 237 cases and 474
 captures, and nothing here needed it.
 
-## A3 — CLOSED. The gap did not need Escape; it needed a denominator
+## A3 — OPEN. It does need Escape, and I closed it wrongly before the measurement said so
 
-**Status: closed 2026-08-28.**
+**Status: open. Attempted 2026-08-28, measured, withdrawn. Far better specified than it was.**
 
-The item as written said the probe must press Escape and watch whether focus leaves, and that Escape is
-ambiguous because it is *also* NVDA's route out of focus mode. **The premise was wrong before the
-ambiguity mattered.** On a conformant page with no dialog, Escape reveals no control the walk had not
-already reached — so the evidence is identical on both variants of the pair. Neither does Shift+Tab. A
-signal that cannot differ between good and bad is not weak; it is not a signal. The three-whys question
-that broke it open was "what would the conformant capture look like?", not "how do we disambiguate
-Escape?".
+I marked this closed earlier the same day, on corpus evidence. `rules-real-pages` then scored the change on
+86 conformant real pages and it produced **9 new 2.1.2 findings**. The closure was wrong and this section
+is the correction.
 
-The real defect was the DENOMINATOR. `addKeyboardTrap` compared the tab ring against the swept FORM
-FIELDS — "did focus reach every field" — where 2.1.2 asks "did focus reach the page". While some fields
-sit outside the dialog the two agree; when the dialog holds them all, `reached >= onPage` and the rule
-returns silently. **It was blindest where the trap is most total**, which is an inverted rule rather than
-a conservative one.
+### What was tried, and why it looked right
 
-`domCensus.tabbable` counts the page's RENDERED tab stops (`checkVisibility()`, and `inert` separately —
-an inert subtree renders and takes no focus, which is the modal pattern exactly). Measured on captures
-taken for this item:
+The item said the gap needs an Escape probe and that Escape is ambiguous (it is also NVDA's route out of
+focus mode). I argued the premise was wrong: on a conformant page with no dialog, Escape reveals no control
+the walk had not already reached, so it cannot discriminate.
+
+**That is true and it answers the wrong question.** The comparison that matters is not conformant-page
+versus trapped-page in the corpus — it is **a dialog that RELEASES focus against one that does not**. Escape
+is precisely that test. The original item was right and I dismissed it for a reason that does not apply.
+
+The replacement was a better denominator: measure the ring against `domCensus.tabbable` — the page's
+rendered tab stops — instead of the swept FORM FIELDS, which go silent when a dialog holds them all. On the
+corpus it was exact:
 
 | case | variant | distinct stops | swept fields | tab stops | verdict |
 |---|---|---|---|---|---|
 | `keyboard-trap-modal-cycle` | good | 14 | 5 | 14 | silent (1.00) |
-| `keyboard-trap-modal-cycle` | bad | 3 | 5 | 14 | reported either way |
+| `keyboard-trap-modal-cycle` | bad | 3 | 5 | 14 | reported |
 | `keyboard-trap-modal-total` | good | 16 | 1 | 16 | silent (1.00) |
-| `keyboard-trap-modal-total` | bad | 3 | **3** | **16** | **silent before, reported now** |
+| `keyboard-trap-modal-total` | bad | 3 | 3 | 16 | silent before, reported now |
 
-The conformant variants matching the tab-stop count EXACTLY is what makes it a denominator rather than
-one more estimate.
+### What the real pages said
 
-**Done when — met:**
+    9 NEW 2.1.2 findings on 86 conformant real pages (~10%)
 
-- `docs/screenreader-coverage.md` records the closure and why the Escape route was refused. ✅
-- A corpus case whose dialog holds *every* form field discriminates: `keyboard-trap-modal-total`,
-  `check-signals` **226 discriminating, 0 blind, 0 contaminated**. ✅
-- Proved with the CONTROL, not a green result: the same capture with the census withheld — which is every
-  capture taken before today — yields 0 findings, and with it, 1. ✅
+Measured on three, with the probe's own marks beside the rule's:
 
-**What it cost that the item did not predict:** the decision is stated twice (`focusIsTrappedIn` in the
-plain-node corpus generator, `tabRingCoverage` in the TypeScript rules) and drifted within the hour —
-`check-signals` said BLIND while the rule fired on the same capture. `focus-trap-parity.corpus.test.ts`
-pins them over every capture on disk AND pins the floor by exported value, because mutation-checking
-showed the verdict comparison alone could not see a floor moved 0.5 → 0.95 on a thin local corpus.
+| page | distinct | tabbable | ratio | probe |
+|---|---|---|---|---|
+| tfl.gov.uk/modes/tube/ | 5 | 67 | 0.075 | `cycled=true truncated=false` |
+| gov.scot/publications/ | 7 | 116 | 0.060 | `cycled=true truncated=false` |
+| nls.uk/join/ | 7 | 7 | **1.00** | `cycled=true truncated=false` |
+
+Two hypotheses going in — truncation misread as a wrap, or a weak `cycleClosed` test — and **both are
+refuted**: the probe and the rule agree on every page, so the walks genuinely closed. The rings are real.
+tfl's first stop is inside the cookie banner; gov.scot's is a date-picker overlay. Six of the nine open with
+a consent banner, and a systematic pattern across independent publishers is the signature of a TOOL problem,
+not nine site bugs.
+
+nls.uk is worth its own line: it read **7 of 7** in my capture and was accused in the lab's. Same page, same
+code, different state — "a capture is not an instant", which this repo already records for the sportengland
+search panel.
+
+### Why no floor fixes it
+
+The difference between a conformant modal and a trap is not how much of the page the ring covers. It is
+whether focus can **leave**. Nothing in the capture presses Escape, so nothing can ask, and tuning the floor
+until real pages went quiet would fit a threshold to a symptom — the way a rule comes to be clean by going
+deaf.
+
+### What is left in the tree
+
+- `domCensus.tabbable` **stays**. It was never the wrong measurement, only an insufficient one, and it is
+  the denominator the Escape-based rule will need. Additive, so no protocol bump.
+- The rule and the corpus signal are back to the form-field denominator, pinned equal by
+  `focus-trap-parity.corpus.test.ts`.
+- `keyboard-trap-modal-total` is **removed**. With no branch that can fire on it, `check-signals` reported
+  it BLIND — correctly, a case whose signal cannot fire is a training record with no discriminating
+  evidence. Its page shape is recorded in `case-matrix.mjs` where it stood, so it is re-creatable.
+- `criterion-coverage.ts` records 2.1.2 as `partial` with the measured boundary rather than an assumed one.
+
+### Done when
+
+- A probe presses Escape after a CLOSED, confined ring and records whether focus left, attributing the
+  result — Escape is also NVDA's `script_disablePassThrough`, so the probe must distinguish "the page
+  released focus" from "the screen reader changed mode". `press("Escape")` not
+  `perform(exitFocusMode)`; that difference is already measured and documented in CLAUDE.md.
+- It runs **only** on a detected confinement, so a conformant page with no dialog never pays for it and
+  never produces the ambiguous evidence.
+- `keyboard-trap-modal-total` is restored WITH a conformant sibling whose dialog releases on Escape — the
+  control, without which the corpus cannot express the distinction the rule turns on.
+- `rules-real-pages` shows **0 new findings** on the 86 conformant pages. That gate, not the corpus, is
+  what settles this: the corpus has no modals-by-design and structurally cannot answer it.
+
+### The lesson worth more than the branch
+
+**The corpus said 4/4 exact and the real pages said 9 false positives, and the corpus could not have known.**
+It contains no consent banner, no date picker, no modal that confines focus legitimately — so the feature
+that separated it perfectly was measuring "is there a dialog", not "is there a trap". That is ADR 0019's
+thesis arriving again, and the specific reason `rules-real-pages` exists.
+
+Second: **I recorded this as closed before the check that could refute it had run.** The corpus evidence was
+real and the conclusion did not follow from it. A done-condition naming the gate that can see the failure —
+which this item now has — is what stops that.
 
 ---
 
