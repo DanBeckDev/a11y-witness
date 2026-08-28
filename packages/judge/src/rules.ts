@@ -567,16 +567,35 @@ interface ChannelRelation {
 }
 
 function channelRelation(input: RuleInput): ChannelRelation {
-  const swept = comparableNames(input.structure?.formFields);
+  // THE COUNT IS RAW AND THE OVERLAP IS BY NAME, and conflating those two was a real regression.
+  //
+  // `comparableNames` ends in `.filter(Boolean)`, so it DROPS every entry whose accessible name is empty —
+  // and an empty name IS the 4.1.2 and 3.3.2 finding. Counting the comparable names therefore excludes
+  // exactly the controls this corpus is built around. Measured on
+  // `keyboard-trap-modal-cycle+also-bare-edit-inert-vague-link-inert.bad`:
+  //
+  //     raw        5   ["Full name, edit", "Email, edit", "Phone, edit", "Delivery notes, edit", "edit"]
+  //     by name    4   the bare "edit" — the defect — silently gone
+  //
+  // The tab ring holds 4, so `4 < 5` reported the trap and `4 < 4` did not. `rules:gate` caught it as
+  // "2.1.2:focus-trapped is rule-decided on 10 record(s) and caught only 9".
+  //
+  // This is the rule that cost this project the most, arriving inside a refactor meant to prevent that
+  // class: A CHECK MUST NEVER REJECT EVIDENCE WHOSE ABSENCE IS THE FINDING. An unnamed control is still a
+  // control; it just cannot be compared BY NAME, which is a fact about the comparison, not about the page.
+  const sweptControls = input.structure?.formFields ?? [];
+  const named = comparableNames(sweptControls);
   const stops = input.interaction?.focusOrder ?? [];
   const reachedNames = comparableNames(stops);
-  const overlap = swept.filter((name) => reachedNames.includes(name)).length;
+  const overlap = named.filter((name) => reachedNames.includes(name)).length;
   return {
-    swept: swept.length,
+    swept: sweptControls.length,
     reached: new Set(stops).size,
     overlap,
     cycleClosed: cycleClosed(reachedNames),
-    disjoint: swept.length > 0 && reachedNames.length > 0 && overlap === 0,
+    // Guarded on the NAMED sets, because overlap can only ever be computed between things that have names.
+    // A page whose controls are all unnamed is not "disjoint", it is unanswerable by this comparison.
+    disjoint: named.length > 0 && reachedNames.length > 0 && overlap === 0,
   };
 }
 
