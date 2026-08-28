@@ -112,29 +112,42 @@ has no diagnostics — a formulation needing the mark could not be the same deci
 this repo pays more for one fact stated two ways than for a slightly indirect test.
 `keyboard-trap.corpus.test.ts` pins the two equal over the whole corpus.
 
-**CLOSED 2026-08-28, and not by pressing Escape.** This said the residual gap "stays": a dialog holding
-MOST of a page's controls cycles over nearly everything, so the subset shrinks toward nothing — worst
-exactly where the failure is most total, which is an inverted rule rather than a conservative one.
+**STILL OPEN, and 2026-08-28 established what it will actually take.** A dialog holding MOST of a page's
+controls cycles over nearly everything, so the subset shrinks toward nothing — worst exactly where the
+failure is most total.
 
-The remedy it predicted was Escape or Shift+Tab, and **both are wrong for the same reason**: on a
-CONFORMANT page with no dialog, neither reveals a control the walk had not already reached, so the
-evidence is identical on both variants. A signal that cannot differ between them is not weak, it is not a
-signal. The complication recorded below — that Escape is also NVDA's own route out of focus mode — was
-real but secondary; the discrimination failure comes first.
+**A tab-stop denominator was built for this and withdrawn the same day.** The idea: stop asking "did focus
+reach every FORM FIELD" (2.1.2 asks about the page) and measure the ring against `domCensus.tabbable`, the
+page's rendered tab stops. It separated the corpus perfectly — conformant **14 distinct stops of 14
+tabbable**, trapped **3 of 14** — and then `rules-real-pages` scored it on 86 conformant real pages:
 
-What the rule lacked was a **denominator**. It asked "did focus reach every FORM FIELD", where 2.1.2 asks
-"did focus reach the PAGE". `domCensus.tabbable` counts the page's rendered tab stops, so links outside a
-dialog are in the denominator and the dialog does not contain them. Measured on
-`keyboard-trap-modal-cycle` the moment the count existed: conformant **14 distinct stops of 14 tabbable**,
-trapped **3 of 14**; and on `keyboard-trap-modal-total`, where the dialog holds every field, **3 of 3
-swept fields (silent) against 3 of 16 tab stops (reported)**. The conformant variants matching EXACTLY is
-what makes it a denominator rather than one more estimate — and the same capture shows why the old one
-was weak: the sweep found 5 form fields where the DOM has 8.
+    9 NEW 2.1.2 findings, ~10% of conformant pages
 
-Two guards, neither optional, because this is the only branch here that can make the rule LOUDER: an
-absent `tabbable` makes no claim (every capture predating the count omits it), and it applies only to a
-CLOSED cycle — the focus probe stops at `MAX_TAB_STOPS` and a real page can hold hundreds, so a truncated
-walk would read as covering a fraction of the page and accuse every large site.
+Measured on three of them, with the probe's own marks beside the rule's:
+
+| page | distinct | tabbable | probe |
+|---|---|---|---|
+| tfl.gov.uk/modes/tube/ | 5 | 67 | `cycled=true truncated=false` |
+| gov.scot/publications/ | 7 | 116 | `cycled=true truncated=false` |
+
+**The walks genuinely closed** — probe and rule agree, so it is neither truncation nor a weak wrap test,
+which were the two hypotheses. The rings are real: tfl's first stop sits inside the cookie banner,
+gov.scot's is a date-picker overlay. Six of the nine open with a consent banner, and a systematic pattern
+across independent publishers is the signature of a TOOL problem rather than nine site bugs.
+
+So no floor fixes it. **The difference between a conformant modal and a trap is not how much of the page
+the ring covers — it is whether focus can LEAVE**, and nothing here presses Escape, so nothing here can
+ask. Tuning the floor until real pages went quiet would be fitting a threshold to a symptom, which is how
+a rule comes to be clean by going deaf.
+
+`tabbable` is KEPT in the census: it was never the wrong measurement, only an insufficient one, and it is
+the denominator the Escape-based rule will need.
+
+**And the Escape route below was dismissed for a reason that does not apply.** The argument was that on a
+conformant page with no dialog Escape reveals nothing new, so it cannot discriminate. True, and it answers
+the wrong question — the comparison that matters is a dialog that RELEASES focus against one that does not.
+Escape is exactly that test. What stands is the complication the entry already names: Escape is also NVDA's
+own route out of focus mode, so a probe pressing it must be able to attribute the result.
 
 Two routes in, and a THIRD that turned out to be the right one — see above. The original pair:
 

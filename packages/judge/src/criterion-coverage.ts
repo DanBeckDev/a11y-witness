@@ -92,15 +92,17 @@ export type EvidenceChannel =
   /**
    * The DOM tab-stop census — how many RENDERED, non-`inert` elements Tab can reach.
    *
-   * The second channel that is not screen-reader output, and it is here for the same reason `media` is: a
-   * sweep reports what it REACHED, and 2.1.2 asks what it SHOULD have reached. No screen-reader channel can
-   * supply that denominator. Measured on `keyboard-trap-modal-cycle` the moment it existed — the conformant
-   * variant walks 14 distinct stops against 14 counted, and the trapped one 3 — where the swept form fields
-   * it replaced read 5 against a DOM holding 8.
+   * CAPTURED SINCE 2026-08-28 AND CLAIMED BY NO CRITERION, which is deliberate rather than an oversight.
    *
-   * Declared as its own channel rather than folded into `focusOrder`, because a criterion's channel list is
-   * what `criteriaAssessableFrom` uses to answer "could this rule have fired at all" — and a capture taken
-   * before this census exists carries `focusOrder` and not this, which are different amounts of evidence.
+   * A 2.1.2 rule read it for one afternoon: the ring against the page's tab stops, which separated the
+   * corpus perfectly (conformant 14 of 14, trapped 3 of 14) and then produced NINE new findings on 86
+   * conformant real pages. A consent banner or a date-picker overlay confines Tab by design, the walks
+   * genuinely closed, and no floor distinguishes that from a trap — the difference is not how much of the
+   * page the ring covers but whether focus can LEAVE.
+   *
+   * Kept in the census because it is correct evidence and it is the denominator an Escape-based rule will
+   * need. Listed here so the next reader finds the channel and its verdict together, rather than
+   * rediscovering the measurement.
    */
   | "tabStops"
   /**
@@ -179,7 +181,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   // `dom.tabbable`, which no capture taken before 2026-08-28 carries, and it makes NO claim without it. So
   // it is exercised only on captures taken since — `rules:gate` reports `dom.tabbable on N record(s)` so
   // that a green 2.1.2 cannot silently mean "not one record could have tripped it".
-  "2.1.2": { status: "partial", needs: ["screen-reader"], channels: ["focusOrder", "tabStops"], note: "Keyboard trap, from `focusOrder`. TWO failure modes are assessed: focus STALLING on one control, and focus CYCLING within a group that is a strict subset of the page. Four corpus cases, `decidedBy: \"rules\"`, and `rules:gate` reports `2.1.2:focus-trapped` with 0 false positives over the conformant records. PARTIAL because the cycling branch measures the tab ring against `dom.tabbable` — the page's rendered tab stops — which captures taken before 2026-08-28 do not carry, and it makes NO claim without it; on an older corpus that branch is silent rather than clean, and `rules:gate` states which it is. NOT assessed: a trap a user escapes by a documented means (an ARIA dialog closing on Escape) is conformant, and nothing here presses Escape — such a page is REFERRED, never asserted." },
+  "2.1.2": { status: "partial", needs: ["screen-reader"], channels: ["focusOrder"], note: "Keyboard trap, from `focusOrder`. TWO failure modes are assessed: focus STALLING on one control, and focus CYCLING within a group smaller than the page's swept form fields. Three corpus cases, `decidedBy: \"rules\"`, 0 false positives over the conformant records. PARTIAL, and the boundary was MEASURED on 2026-08-28 rather than assumed: a dialog holding EVERY form field is not detected, because the denominator is the swept fields and `reached >= onPage` then holds. A tab-stop denominator was built for exactly that and withdrawn — it produced 9 new findings on 86 conformant real pages, since a consent banner or a date-picker overlay confines Tab by design and the walks genuinely closed. NOT assessed, and this is the same fact from the other side: a trap the user escapes by a documented means (an ARIA dialog closing on Escape) CONFORMS, and nothing here presses Escape. Until it does, a confined ring is REFERRED (`cantTell`), never asserted." },
   "2.4.4": { status: "assessed", channels: ["links", "transcript"], note: "Vague link text. Rules cover a six-phrase subset (19 of 100 corpus records, a declared overlap); the head owns the rest." },
   "2.4.6": { status: "assessed", channels: ["headings", "transcript"], note: "Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the page, so this head is document-pooled." },
   "3.3.1": { status: "assessed", realPageEvidence: { available: false, because: "the form probe is OFF for real-page captures — pressing submit on a site we do not own is not a review — so `formChanges` is absent from all 77 real captures" }, channels: ["formChanges", "postSubmitFields"], note: "A validation error that is displayed but never announced. Needs the form probe, which is on by default in the Action and off in the CLI -- and therefore OFF for every real-page capture, because submitting a form on a site we do not own is not a review. Measured: 0 of 77 real captures carry `formChanges`, so on a real page this criterion cannot fire in either direction." },

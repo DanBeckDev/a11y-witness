@@ -79,7 +79,7 @@ lever, and it is the next one to design.
 subtypes with few positives; `2.4.1` and `2.4.2` have 7 each against a recall cliff CLAUDE.md puts near
 140. Corpus DEPTH is the underlying constraint, not the veto mechanism.
 
-## 3. CLOSED — a cycling modal trap is detected, and the residual gap is closed too
+## 3. PARTLY CLOSED — a cycling modal trap is detected; the total-dialog gap is measured and open
 
 `stalled` requires the SAME control to repeat, so a trap letting focus cycle among a dialog's controls
 read as `cycled` — identical to a conformant page whose Tab order wraps. Both routes out were costed and
@@ -100,14 +100,12 @@ the dialog, four fields behind it:
 with 0 false positives over 934 conformant records. No probe change and no recapture — the evidence was
 in every capture already taken.
 
-**The residual gap is CLOSED too, 2026-08-28, and this paragraph's remedy was wrong.** It said closing it
-"needs Escape, and Escape changes two things at once". The Escape ambiguity is real and it never got to
-matter: on a conformant page with no dialog, Escape reveals no control the walk had not already reached,
-so the evidence is the same on both variants of the pair. Neither does Shift+Tab. What the rule lacked was
-a DENOMINATOR — it asked "did focus reach every form field", where 2.1.2 asks "did focus reach the page".
-`domCensus.tabbable` counts the page's rendered tab stops, so `keyboard-trap-modal-total` (a dialog holding
-EVERY field, six links behind it) reads 3 of 3 swept fields — silent — and 3 of 16 tab stops — reported.
-See A3 in `docs/reliability-plan.md`.
+**The residual gap is STILL OPEN, and an attempt to close it on 2026-08-28 was measured and withdrawn.**
+A tab-stop denominator (`domCensus.tabbable` instead of swept form fields) separated the corpus perfectly
+and then produced **9 new 2.1.2 findings on 86 conformant real pages** — consent banners and date-picker
+overlays confine Tab by design, the walks genuinely closed, and no floor tells that from a trap. The
+difference is whether focus can LEAVE, and nothing presses Escape. A3 in `docs/reliability-plan.md` carries
+the numbers and what closing it now requires.
 
 **Cost to the corpus, paid:** adding a third `focus-trapped` case re-rolls that subtype's multi-defect
 pairings, so 6 existing pages moved and need recapturing on the lab. Measured before committing rather

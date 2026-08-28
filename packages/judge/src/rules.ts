@@ -534,48 +534,50 @@ function trailingRepeats(stops: string[]): number {
  * pipeline produces often enough to have a whole section about.
  */
 /**
- * How much of the page the tab ring covers, measured against the best denominator available — or null when
- * nothing corroborates a trap.
+ * How much of the page the tab ring covers, measured against the swept FORM FIELDS — or null when nothing
+ * corroborates a trap.
  *
- * THE DENOMINATOR IS THE WHOLE RULE, and it used to be the wrong quantity. Swept FORM FIELDS answer "did
- * focus reach every field", where 2.1.2 asks "did focus reach the page". While some fields sit outside the
- * dialog the two agree; when the dialog holds them all, `reached >= onPage` and the rule goes silent on the
- * most total trap there is. `keyboard-trap-modal-cycle` recorded that as its residual gap and
- * `keyboard-trap-modal-total` is the case that fails it.
+ * A denominator is the whole rule. Swept form fields answer "did focus reach every field", where 2.1.2
+ * asks "did focus reach the page" — so when a dialog holds every field, `reached >= onPage` and this goes
+ * silent on the most total trap there is. That gap is REAL and still open; `keyboard-trap-modal-total` is
+ * the case that fails it, and A3 in `docs/reliability-plan.md` records why the obvious fix does not work.
  *
- * `dom.tabbable` is the right quantity: the page's RENDERED tab stops, counted by the browser rather than
- * inferred from what a sweep happened to hear. Measured on `keyboard-trap-modal-cycle` the moment it
- * existed — conformant 14 distinct stops of 14 tabbable, trapped 3 of 14. The conformant variant matching
- * EXACTLY is what makes it a denominator rather than one more estimate. The same capture also shows why
- * the old one was weak: the sweep found 5 form fields where the DOM has 8.
- *
- * TWO GUARDS, and neither is optional, because this is the only branch here that can make a rule LOUDER:
- *
- *   - Absent `tabbable` makes NO claim. Every capture taken before the census counted tab stops omits it,
- *     and "cannot say" must never collapse into "none".
- *   - It applies ONLY to a CLOSED cycle. The focus probe stops at `MAX_TAB_STOPS`, and a real page can
- *     hold hundreds — so a truncated walk would read as covering a fraction of the page and accuse every
- *     large site. A repeated stop proves the walk WRAPPED, and a walk cut short before wrapping has no
- *     repeat at all. That turns "we stopped early" into something the rule cannot mistake for a trap,
- *     using only the stops, which is the same reason `cycleClosed` reads them rather than the diagnostic.
- *
- * Deliberately generous, like `CYCLE_COVERAGE_FLOOR` and for a sharper reason: `reached` counts DISTINCT
- * ANNOUNCEMENTS, so a page with two "Read more, link" collapses them into one stop and undercounts its own
- * ring. The floor absorbs that. It rejects the order-of-magnitude gap a trap produces (0.21 measured) and
- * never adjudicates a near miss.
+ * A tab-stop denominator was built, measured on real pages, and withdrawn — see below.
  */
-export const TAB_RING_FLOOR = 0.5;
-
 function tabRingCoverage(stops: string[], input: RuleInput):
   { reached: number; total: number; unit: string } | null {
   const reached = new Set(stops).size;
   const onPage = (input.structure?.formFields ?? []).length;
   if (onPage > 0 && reached < onPage) return { reached, total: onPage, unit: "control" };
 
-  const tabbable = input.dom?.tabbable;
-  if (tabbable === undefined || !cycleClosed(stops)) return null;
-  if (reached >= tabbable * TAB_RING_FLOOR) return null;
-  return { reached, total: tabbable, unit: "tab stop" };
+  // THE TAB-STOP DENOMINATOR IS WITHDRAWN, and what it cost to learn is worth more than the branch was.
+  //
+  // It compared the ring against `dom.tabbable` when the cycle had closed, and it worked exactly as
+  // designed on the corpus: `keyboard-trap-modal-total` 3 of 16 reported, both conformant variants at
+  // 1.00 silent. Then `rules-real-pages` scored it on 86 conformant real pages and it produced NINE new
+  // 2.1.2 findings. Measured on three of them, with the probe's own marks beside the rule's:
+  //
+  //     tfl.gov.uk/modes/tube/     5 distinct of 67 tabbable   cycled=true truncated=false
+  //     gov.scot/publications/     7 distinct of 116           cycled=true truncated=false
+  //
+  // The walks genuinely CLOSED — the probe and the rule agree, so this is not truncation and not a weak
+  // wrap test, which were the two hypotheses. The rings are real: tfl's first stop is inside the cookie
+  // banner, gov.scot's is a date-picker overlay. A modal confining Tab is a modal DOING ITS JOB, and
+  // under 2.1.2 it conforms whenever the user can leave by a documented means.
+  //
+  // Six of the nine open with a consent banner. A systematic pattern across independent publishers is the
+  // signature of a TOOL problem rather than nine site bugs — this repo's own rule about uniform inflation
+  // across independent guests, pointed at findings instead of timings.
+  //
+  // So the evidence cannot tell a conformant modal from a trap, and no floor fixes that: the difference is
+  // not how MUCH of the page the ring covers, it is whether focus can LEAVE. Nothing here presses Escape,
+  // so nothing here can ask. Tuning the floor until real pages go quiet would be fitting a threshold to a
+  // symptom, which is how a rule comes to be clean by going deaf.
+  //
+  // `dom.tabbable` is KEPT in the census. It is correct evidence, it is additive, and it is the
+  // denominator the Escape-based rule will need — it was never the wrong measurement, only an insufficient
+  // one. See A3 in `docs/reliability-plan.md` for what closing this actually requires.
+  return null;
 }
 
 function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
