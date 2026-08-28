@@ -39,9 +39,16 @@ capture differently.
 
 ```js
 import { ruleFindings } from "@a11y-witness/judge/rules";
+import { oracleCounts } from "@a11y-witness/evidence/verify";
 
-ruleFindings({ transcript, structure, census });   // → Finding[]
+ruleFindings({ ...capture, ...oracleCounts(capture) });   // → Finding[]
 ```
+
+**Use `oracleCounts`, and do not spell the extraction yourself.** A capture records both censuses as
+DIAGNOSTICS, so passing the bare capture leaves every absence rule reading `undefined` and returning on its
+first line — silently, because a rule with nothing to say and a rule that was never given its evidence
+produce the same empty array. Four of this repo's six rule callers had that bug at some point, and each fix
+reached the callers in front of whoever was looking. `rule-oracles.test.ts` discovers the callers now.
 
 These are absence rules: an unnamed graphic, a control announced as a bare role, a heading that says nothing.
 They need no scorer, no network and no Python.

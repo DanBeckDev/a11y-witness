@@ -227,6 +227,54 @@ export function domCensus(capture: CapturedAnnouncements):
   return null;
 }
 
+/**
+ * The two ORACLE COUNTS the deterministic rules may read, attached in ONE place.
+ *
+ * Both are recorded as DIAGNOSTICS (`structureCensus`, `domCensus`), and `diagnostics` is on the
+ * exporter's `FORBIDDEN_INPUT_KEYS` so the model never sees them — that separation is deliberate and
+ * documented. Extracting them is therefore a step every rule caller must take, and until 2026-08-28 six
+ * callers took it six ways: the CLI inline, two audits with byte-identical private `withCensus` helpers,
+ * the exporter inline, the eval runner inline, and `score-rules` by spreading `ruleEvidence`.
+ *
+ * That is not a tidiness complaint, and the evidence is in the repo twice, pointing in OPPOSITE directions:
+ *
+ *   - The AX census reached the CLI and NOT the two audits, so every census-reading rule was unreachable
+ *     exactly where it was being CHECKED while working in the product. Caught only by two gates
+ *     disagreeing about one corpus (`1.3.1:no-headings`: `29/29 EXACT` from one, `fired 0x` from the other).
+ *   - The DOM census reached the EXPORTER and nothing else — so the first rule to read it would have passed
+ *     `rules:gate` on 1,183 conformant records and never once fired for a user. Nothing would have said so:
+ *     a rule that is silent in the product looks exactly like a page with nothing to report.
+ *
+ * The second is the worse half and it was already loaded. A gate that does not exercise what ships is this
+ * repo's most-recorded defect; a gate that exercises what does NOT ship is the same defect with the alarm
+ * disconnected, because the green result actively vouches for the silence.
+ *
+ * So there is ONE step, and `rule-oracles.test.ts` DISCOVERS every module that builds a rule input and
+ * requires it to call this. Adding an oracle is then one line here rather than six edits and a hope.
+ *
+ * ABSENT STAYS ABSENT. A capture predating either census yields `undefined`, which every rule must read as
+ * "cannot say" and none as "none" — the distinction the whole census exists to preserve. `undefined` also
+ * disappears through `JSON.stringify`, so an exported record carries the key only when the count is real.
+ */
+export type PageCensus = NonNullable<ReturnType<typeof pageCensus>>;
+export type DomCensus = NonNullable<ReturnType<typeof domCensus>>;
+
+/**
+ * What a rule may read BESIDE the announcements. One type, because there were three and they had drifted:
+ * `{heading, link}` in `judge.ts`, `{heading, link, graphic, graphicUnnamed}` in `rules.ts`, and
+ * `Record<string, number>` in `conformance.ts`. The narrowest won wherever a value crossed a boundary, so
+ * `graphicUnnamed` — which the 1.1.1 rule asserts on — could not be passed through the judge's own input
+ * type at all. Widening one of three is how the next reader gets a field the writer already sends.
+ */
+export interface OracleCounts {
+  census?: PageCensus;
+  dom?: DomCensus;
+}
+
+export function oracleCounts(capture: CapturedAnnouncements): OracleCounts {
+  return { census: pageCensus(capture) ?? undefined, dom: domCensus(capture) ?? undefined };
+}
+
 export function pageCensus(capture: CapturedAnnouncements):
   { heading?: number; link?: number; graphic?: number; graphicUnnamed?: number } | null {
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];

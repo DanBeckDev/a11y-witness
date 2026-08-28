@@ -24,7 +24,7 @@ import { layerOf } from "@a11y-witness/judge/layers";
 import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fleet";
 import { requestJson, CAPTURE_CLIENT_TIMEOUT_MS } from "@a11y-witness/worker-fleet/worker-http";
-import { captureDoubt, captureMentionsTitle, pageCensus, type CaptureDoubt } from "@a11y-witness/evidence/verify";
+import { captureDoubt, captureMentionsTitle, oracleCounts, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
 import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics, type ConformanceRequirement }
   from "@a11y-witness/evidence/conformance";
@@ -318,9 +318,9 @@ async function runWitness(
     transcript: cap.transcript,
     structure: cap.structure,
     interaction: cap.interaction,
-    // The tree's own counts, so the rules that assert an ABSENCE can corroborate it. Without this a page
+    // The oracle counts, so the rules that assert an ABSENCE can corroborate it. Without these a page
     // with no headings and a capture that failed to reach them are the same input.
-    census: pageCensus(cap) ?? undefined,
+    ...oracleCounts(cap),
   });
 
   const conformance = conformanceFor(cap, ruleFindings);

@@ -1,3 +1,4 @@
+import type { PageCensus, DomCensus } from "@a11y-witness/evidence/verify";
 import { spawn } from "node:child_process";
 import { writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -68,7 +69,12 @@ export interface JudgeInput {
    * What the PAGE exposes, from the accessibility tree — an oracle for the deterministic rules only, never
    * shown to the model (`docs/local-model.md` bars the tree as a model feature).
    */
-  census?: { heading?: number; link?: number };
+  /**
+   * The oracle counts. Spread from `oracleCounts` at every construction site, so the CLI, the exporter,
+   * the eval runner and the two audits cannot disagree about what a rule is allowed to see.
+   */
+  census?: PageCensus;
+  dom?: DomCensus;
   /** Optional interaction pass: how each interactive control is announced (found
    * via quick-nav), the announced state after activating disclosures, and what
    * was announced after submitting a form with no valid input. */
