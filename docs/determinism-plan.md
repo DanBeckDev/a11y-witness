@@ -250,6 +250,20 @@ function of coverage, not merely accompanied by it.**
 - A discovery test finds every gate script and requires it to return that shape or be exempt with a reason,
   the way `cli-flags.test.ts` does for argv readers. A list would rot; this is the mechanism that does not.
 - Mutation-checked on the five rows above: each must become impossible to state, not merely unlikely.
+- **A capture must refuse a page nothing is serving.** Added after the same trap caught me THREE TIMES in
+  one session — in `gate:probe-order` before it shipped, in a diagnostic script twenty minutes after fixing
+  it there, and in a third script two hours after writing the commit message about it. Edge serves its own
+  error page on a dead port, so two orders compare IDENTICAL and a gate reports PASS; an ad-hoc capture
+  returns `focusOrder: ["192.168.1.15, document, read only"]` and reads as a valid capture of a document.
+  The tool already refuses a page whose URL is not the one requested (`landedVerdict`), and that check does
+  not fire here: the URL IS right, it is the page behind it that is missing.
+
+  **This cannot be a discipline, and the evidence is that the person who had just fixed it could not hold
+  it.** The guarded path is always the ceremonial one — a five-line diagnostic skips the lease because
+  leasing feels like overhead for one question, and a diagnostic is exactly when you are moving fast and
+  least inclined to doubt the answer. The fix is structural: the worker reports the navigation's HTTP
+  status from the DevTools Protocol, and a non-2xx is a refused capture rather than evidence. Then every
+  ad-hoc script gets the property for free, which is the only way it survives a hurry.
 
 ---
 
