@@ -73,7 +73,25 @@ for a bundled corpus change rather than being forced now.
 **`state_unchanged` is the new worst on all three focus heads.** A focus case activates nothing, so the
 feature is 0 on every one of its positives while other subtypes carry it. The same inert trick will not
 work — a disclosure that is never activated produces no state change either — so this needs a different
-lever, and it is the next one to design.
+lever.
+
+**Two findings on 2026-08-29 that reframe it, neither acted on because both cost a capture.**
+
+*The zero means two things.* `state_unchanged = float(any(...))` over the recorded state changes, and
+`any([])` is `False` — so `0` is BOTH "a control was activated and its state changed" (a real non-finding)
+and "nothing was ever activated, so this capture cannot say". That is absence collapsed into zero, in the
+feature layer: the same defect as `census.heading` absent vs 0, `sameState: undefined` vs false, and the
+recovery metric read with `?? 0`. It does not by itself remove the free veto — a feature constant at 0
+across a subtype's positives is a free veto whatever the 0 means — but the constancy is partly an ARTEFACT
+of the encoding rather than a fact about focus pages.
+
+*The exclusion that makes the remedy "unavailable" rests on a stale measurement.*
+`audit_applicability.py` says corpus furniture cannot fix these three heads, citing `component-index`'s
+`notFor`, whose recorded reason is: *"`focusOrder` truncates at 12 stops, so four more push the case's own
+controls out of the window"*. **`MAX_TAB_STOPS` is 150 now.** The exclusion may still be correct, but not
+for the reason written down — and one command settles it:
+`npm run lab:pipeline -- --pipeline=verify --only=focus-order-tabindex+`. Until that runs, "unavailable"
+means "not re-measured since the cap changed".
 
 **And 57 is measured on 18 heads with the corpus as it stands.** The remaining vetoes concentrate in
 subtypes with few positives; `2.4.1` and `2.4.2` have 7 each against a recall cliff CLAUDE.md puts near
