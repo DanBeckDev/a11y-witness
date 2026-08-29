@@ -175,3 +175,48 @@ test("the original wrong-content wording survives for results that carry no reas
   const out = renderSummary(result({ captureVerified: false }));
   assert.match(out, /did not contain the page's own title/i);
 });
+
+/**
+ * THE PR COMMENT COULD NOT SAY "cantTell", and it is the most public thing this tool produces.
+ *
+ * `cli.ts --json` has emitted `outcomes` all along; `RunResult` did not declare the field, so this
+ * renderer dropped it. A page where six of the ten covered criteria came back undetermined rendered
+ * identically to one where all ten passed — an empty findings table under a bold "No blocking findings".
+ * The CLI report prints the tally with "Neither is clean"; this could not.
+ */
+const withOutcomes = (outcomes: { criterion: string; outcome: string; reason: string }[]) => ({
+  url: "https://example.com", task: "Book a ticket", screenReader: "NVDA 2026.1",
+  ruleBased: [], verdict: { taskCompletable: true, summary: "", findings: [], confidence: 1 },
+  outcomes,
+}) as never;
+
+test("UNDETERMINED CRITERIA ARE STATED, not left to an empty findings table", () => {
+  const md = renderSummary(withOutcomes([
+    { criterion: "1.3.1", outcome: "cantTell", reason: "the landmark sweep was short" },
+    { criterion: "2.4.4", outcome: "cantTell", reason: "the link sweep was short" },
+    { criterion: "1.4.3", outcome: "untested", reason: "no assessor covers it" },
+    { criterion: "4.1.2", outcome: "passed", reason: "examined in full" },
+  ]));
+  assert.match(md, /Not determined/);
+  assert.match(md, /2 criteria we cover came back/);
+  assert.match(md, /1 are not covered/);
+  assert.match(md, /Neither is a pass/, "the caveat is the point, not the numbers");
+});
+
+test("AN OLDER RESULT WITH NO OUTCOMES SAYS NOTHING, rather than a tally of zeroes", () => {
+  // Absent must not render as "0 undetermined". That would turn "we did not record this" into "nothing
+  // was undetermined" — the substitution this entire file exists to prevent.
+  const md = renderSummary({
+    url: "https://example.com", task: "t", screenReader: "NVDA", ruleBased: [],
+    verdict: { taskCompletable: true, summary: "", findings: [], confidence: 1 },
+  } as never);
+  assert.doesNotMatch(md, /Not determined/);
+});
+
+test("a run where everything WAS determined adds no noise", () => {
+  const md = renderSummary(withOutcomes([
+    { criterion: "4.1.2", outcome: "passed", reason: "examined in full" },
+    { criterion: "1.1.1", outcome: "inapplicable", reason: "no images" },
+  ]));
+  assert.doesNotMatch(md, /Not determined/);
+});

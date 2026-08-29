@@ -45,6 +45,18 @@ export interface RunResult {
     findings: RunFinding[];
     confidence: number;
   };
+  /**
+   * Per-criterion ACT outcomes, when the result carries them.
+   *
+   * `cli.ts --json` has emitted these all along and this renderer dropped them, so the most PUBLIC output
+   * this tool produces — a comment on somebody's pull request, in bold — could not say `cantTell`. A page
+   * where six of the ten covered criteria came back undetermined rendered identically to one where all ten
+   * passed. The CLI prints the tally with "Neither is clean"; the PR comment could not.
+   *
+   * Optional because an older result JSON has none, and absent must render as SILENCE rather than as a
+   * tally of zeroes — a fabricated "0 untested" would be worse than the omission it replaced.
+   */
+  outcomes?: { criterion: string; outcome: string; reason: string }[];
 }
 
 /** Ordered worst-first, so a threshold can be "this severity or worse". */
@@ -115,6 +127,28 @@ function findingsSection(findings: RunFinding[], limit: number): string[] {
     lines.push("", `_… and ${findings.length - shown.length} more, omitted to keep this summary within GitHub's size limit. The full JSON is in the workflow artifacts._`);
   }
   return lines;
+}
+
+/**
+ * What was NOT determined, as a count — the half a findings list cannot express.
+ *
+ * A findings table answers "what did you find". It cannot answer "what could you not tell", and on a PR
+ * comment those read the same: an empty table looks like a clean page. `criterionOutcomes` has computed
+ * the difference all along and this renderer discarded it.
+ *
+ * Silent when the result carries no outcomes: an older run cannot say, and inventing a tally of zeroes
+ * would turn "we did not record this" into "nothing was undetermined", which is the exact substitution
+ * this whole file is written against.
+ */
+function outcomeSection(outcomes: RunResult["outcomes"]): string[] {
+  if (!outcomes) return [];
+  const tally = (name: string) => outcomes.filter((o) => o.outcome === name).length;
+  const undetermined = tally("cantTell");
+  const untested = tally("untested");
+  if (undetermined === 0 && untested === 0) return [];
+  return ["", `**Not determined:** ${undetermined} criteria we cover came back \`cantTell\` and `
+    + `${untested} are not covered by any assessor of ours. Neither is a pass — see the run artifact for `
+    + "the per-criterion reasons."];
 }
 
 /**
@@ -210,6 +244,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     verdict.summary,
     "",
     ...findingsSection(verdict.findings, limit),
+    ...outcomeSection(result.outcomes),
     "",
     ...ruleSection(result.ruleBased, limit),
     "",
