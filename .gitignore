@@ -52,7 +52,7 @@ packages/worker-fleet/tailscale-acl.hujson
 # Hosts that are ours and are not capture infrastructure. `tailscale.yml` merges this with the inventory
 # when it exists, so a personal machine can be reachable over the tailnet without being published in a
 # public repo as though it were part of the fleet.
-packages/worker-fleet/ansible/*.local.yml
+packages/control/ansible/*.local.yml
 
 # Whatever agent tooling the person at the keyboard happens to use.
 #

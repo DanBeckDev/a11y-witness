@@ -6,7 +6,7 @@ Provision, update, restart and diagnose N bare-metal capture workers from the co
 pipx install ansible-core                       # 2.18+ — Debian's apt version is too old for Windows SSH
 ansible-galaxy collection install -r requirements.yml   # BOTH collections; see requirements.yml
 
-cd packages/worker-fleet/ansible
+cd packages/control/ansible
 ansible-playbook deploy.yml                     # git pull + npm install + restart + PROVE it took
 ansible-playbook deploy.yml -l a11y-worker-3    # one box
 ansible-playbook restart.yml                    # the remedy for a wedged worker
@@ -307,7 +307,7 @@ which served the previous code for another hour. A reboot always picks up pushed
 
   ```bash
   ssh root@<control>                       # NOT `pct exec` on the Proxmox host: see below
-  cd a11y-witness/packages/worker-fleet/ansible
+  cd a11y-witness/packages/control/ansible
   LC_ALL=C.UTF-8 LANG=C.UTF-8 ansible-playbook deploy.yml
   ```
 

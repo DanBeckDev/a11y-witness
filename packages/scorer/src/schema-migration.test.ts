@@ -76,7 +76,7 @@ test("promotion runs the candidate gate FIRST, and cannot commit", () => {
     "promotion must be gated: testing the code and the weights TOGETHER is the whole reason this exists");
 
   const job = readFileSync(
-    fileURLToPath(new URL("../../worker-fleet/ansible/lab-job.yml", import.meta.url)), "utf8");
+    fileURLToPath(new URL("../../control/ansible/lab-job.yml", import.meta.url)), "utf8");
   const promoteBlock = job.slice(job.indexOf("      promote:"), job.indexOf("      promote-diff:"));
   assert.ok(!/\/bin\/sh|shell:/.test(promoteBlock),
     "a shell here reintroduces the quoting class that sent four capture shards at http://:8765");

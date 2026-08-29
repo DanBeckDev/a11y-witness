@@ -128,7 +128,7 @@ test("the provision stamp is the ENVIRONMENT, not the moment it was applied", ()
   // This repo already made the same call one field over: workerCode is deliberately OUTSIDE the cache key
   // because "it changes when a comment changes". A git SHA changes for strictly more reasons.
   const script = readFileSync(fileURLToPath(
-    new URL("../src/provisioning/stamp-provision-revision.ps1", import.meta.url)), "utf8");
+    new URL("../../worker-fleet/src/provisioning/stamp-provision-revision.ps1", import.meta.url)), "utf8");
   const code = script.split("\n").filter((line) => !line.trimStart().startsWith("#")).join("\n");
 
   assert.match(code, /^\$stamp = \$combined$/m,
