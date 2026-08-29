@@ -1,6 +1,9 @@
 # Take the laptop out of the path
 
-Written 2026-08-29, after the transport investigation ended somewhere nobody was looking.
+Written 2026-08-29, after the transport investigation ended somewhere nobody was looking. Revised the same
+day for a requirement that changes the shape of it: **more than one person drives this, so everything has to
+live in the control plane.** A laptop is not a small exception when there are N of them — it is N unreliable
+control planes, N copies of every credential, and N places where state nobody else can see accumulates.
 
 ## Why this plan exists
 
@@ -142,25 +145,75 @@ that is what it is for.
 - `refuseUnknownFlags` knows `--local`, and the discovery test that requires every argv reader to be
   guarded still passes.
 
-## L3. Decide what the control plane IS
+## L3. EVERYTHING runs on the control plane, because more than one person drives this
 
-**Status: open. A decision, and the only item here that is not mechanical.**
+**Status: open. No longer a decision — the requirement settles it, and the objection I recorded turns out
+not to apply.**
 
-L1 moves gates. It does not answer the general question, and three things still run from the laptop today:
-`fleet:deploy`, `fleet:provision`, and `lab:pipeline`'s sequencing.
+The requirement is *"this could be controlled by multiple people so everything has to live in the control
+plane"*, and it changes the analysis completely. A laptop is not a small exception when there are N of
+them: it is N unreliable control planes, N copies of every credential, and N places where state that
+nobody else can see accumulates.
 
-The options, with what each costs:
+### The split I thought this violated is ALREADY violated, on the laptop
 
-| | what it means | cost |
+ADR 0012's argument is specific: *"the credential able to reconfigure the entire fleet would sit next to
+the largest supply-chain surface in the system. A compromised transitive dependency in the capture pipeline
+could reach the SSH key and, from there, twelve Windows boxes."* So the thing being kept apart is **npm's
+transitive dependencies** and **the fleet SSH key**.
+
+**Those are already together on every operator's laptop** — which holds fleet access, the `a11y-pve` key,
+AND runs the entire workspace with `npm test`, `npm run`, a browser and everything else. It is the least
+controlled machine in the system and it sits outside the architecture the ADR describes. With multiple
+operators that is not one violation, it is one per person.
+
+So moving orchestration onto the control plane does not weaken ADR 0012. It is the first thing that
+actually enforces it.
+
+### And the direction of the key is what preserves the threat model
+
+Measured 2026-08-29 on CT 120: **no `node_modules`**, the fleet key present, and `192.168.1.79:22`
+REACHABLE — it lacks a key, not a route.
+
+Give control a key **to the lab**, and:
+
+| | control (CT 120) | lab (CT 121) |
 |---|---|---|
-| **leave deploy/provision on the laptop** | they are operator-initiated, minutes long, and a failure is loud (`fleet:deploy` refuses and names the box). The battery fault hurt long silent runs, which these are not | nothing, but the laptop stays load-bearing for the fleet |
-| **give the lab the fleet SSH key** | one machine drives everything; `lab:pipeline` becomes a lab job | puts BOTH halves of ADR 0012's split behind one credential — the thing that ADR exists to prevent |
-| **give the control plane (CT 120) the `a11y-pve` key** | the mirror image: the control plane drives the lab | same objection, opposite direction |
-| **a third box that holds neither corpus nor weights** | a real control plane: reaches workers over HTTP and SSH, reaches the lab, holds nothing valuable | one more machine to provision and keep current |
+| fleet SSH key | yes | no |
+| key to the lab | **yes, new** | — |
+| key back to control | — | **no, and this is the point** |
+| `node_modules` | **no** | yes |
+| the corpus, the weights | no | yes |
 
-The last is the only one that both removes the laptop and respects the split. It is also the only one that
-costs hardware. **This is a decision about what the project's operational surface should be, so it is
-written here rather than made by whoever next needs a gate to run.**
+The supply-chain surface stays on the lab; the fleet key stays on a box with no npm dependencies; and the
+new key points **control → lab**, so a compromised lab dependency cannot reach the fleet key. That is
+ADR 0012's guarantee intact, which giving the LAB a fleet key would not be.
+
+### What moves
+
+- `fleet:deploy`, `fleet:provision` — already Ansible over SSH from control's own credentials; they run
+  there rather than from a laptop that happens to hold a copy.
+- `lab:pipeline`'s sequencing — the thing that needed both credentials, which is exactly what this closes.
+- Gate dispatch (L2a) — `--local` stops being an escape hatch for one person and becomes what it should be:
+  a debugging path that announces itself.
+- **An operator drives the control plane. They do not hold the keys.**
+
+### What gets better with more than one person, specifically
+
+- **The unit name is already the lock.** `lab:job` refuses a second job of the same name rather than
+  queueing it, and that holds across operators because it is enforced by systemd on one host — not by a
+  flag in one person's process. Two people cannot start the same capture twice.
+- **`lab:status` is a shared view.** Today, "is a run in flight?" is answerable only by whoever started it.
+- **A verdict has one provenance.** With N laptops, N gate results look identical and were produced under
+  N different conditions — which is how a transport fault went two days without being attributed.
+
+**Done when:**
+
+- Control holds a key to the lab, and `lab:job`/`lab:status`/`lab:log` work from there.
+- `fleet:deploy` and `fleet:provision` run from control.
+- A laptop needs NO key to either the fleet or the lab to do ordinary work.
+- ADR 0012 gets an amendment recording that the split was silently broken by the operator machine, and that
+  this is what restores it — because an ADR whose guarantee is void in practice is worse than none.
 
 ---
 
