@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   captureDoubt, captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle,
-  captureRanRequestedProbes, probeStates, captureReachedThePage,
+  captureRanRequestedProbes, probeStates, sweepCompleteness, captureReachedThePage,
 } from "./verify.js";
 
 const TITLE = "Aquarium 001 schedule";
@@ -332,4 +332,66 @@ test("a fingerprint key the old hand-rolled copy ignored is still a page that mo
   ] } as never);
   assert.equal(states?.sameState, false);
   assert.deepEqual(states?.changed, ["graphic"]);
+});
+
+/**
+ * IS THE SWEEP COMPLETE? — capture-integrity-plan C1.
+ *
+ * The sweep is a SAMPLE that everything downstream reads as a CENSUS, and when they differ an absence
+ * claim describes the walk rather than the page. Comparing them honestly took two corrections: the census
+ * counting DISTINCT NAMES rather than elements (75% of named elements on real pages share a name), and
+ * then extracting the NAME from each announcement, because the sweep dedupes on the announcement and
+ * "Contact, heading, level 2" / "level 3" are two announcements of one name.
+ */
+test("a sweep that announced every distinct name is EXACT", () => {
+  const verdict = sweepCompleteness({
+    structure: { headings: ["Overview, heading, level 1", "Contact, heading, level 2"], landmarks: [], formFields: [] },
+    diagnostics: [{ event: "structureCensus", distinct: { heading: 2, link: 0, landmark: 0, graphic: 0 } }],
+  } as never);
+  assert.equal(verdict.heading, "exact");
+});
+
+test("TWO ANNOUNCEMENTS OF ONE NAME ARE ONE NAME — the finer gap the census fix exposed", () => {
+  // The sweep dedupes on the ANNOUNCEMENT, so a page with "Contact" at two heading levels produces two
+  // entries. The census counts names. Comparing lengths would call this a phantom; comparing names does
+  // not. Measured on tfl.gov.uk, which reported `heading sweep 23 vs 17` for exactly this reason.
+  const verdict = sweepCompleteness({
+    structure: { headings: ["Contact, heading, level 2", "Contact, heading, level 3"], landmarks: [], formFields: [] },
+    diagnostics: [{ event: "structureCensus", distinct: { heading: 1, link: 0, landmark: 0, graphic: 0 } }],
+  } as never);
+  assert.equal(verdict.heading, "exact", "two announcements of one name match a census of one name");
+});
+
+test("a sweep that missed names is TRUNCATED — the claim absence rules must not rest on", () => {
+  // Measured on scotcourts.gov.uk after the census fix: `link sweep 1 vs 22 distinct`. A real failure that
+  // the old element-count noise buried.
+  const verdict = sweepCompleteness({
+    structure: { headings: [], links: ["Judgments, link"], landmarks: [], formFields: [] },
+    diagnostics: [{ event: "structureCensus", distinct: { heading: 0, link: 22, landmark: 0, graphic: 0 } }],
+  } as never);
+  assert.equal(verdict.link, "truncated");
+});
+
+test("UNKNOWN IS A VERDICT, and an older capture must never read as EXACT", () => {
+  // A census predating `distinct` cannot answer. Absence treated as agreement is the defect this project
+  // pays for most often — census.heading absent read as zero, sameState undefined read as false.
+  const old = sweepCompleteness({
+    structure: { headings: ["A, heading, level 1"], landmarks: [], formFields: [] },
+    diagnostics: [{ event: "structureCensus", heading: 4 }],
+  } as never);
+  assert.equal(old.heading, "unknown");
+  const none = sweepCompleteness({ structure: { headings: [], landmarks: [], formFields: [] }, diagnostics: [] } as never);
+  assert.equal(none.heading, "unknown");
+});
+
+test("AN ENTIRELY UNNAMED SWEEP CANNOT SAY, rather than reading as truncated", () => {
+  // The census counts unnamed controls; extracting names drops them. So a page whose sweep announced only
+  // unnamed graphics would compare 0 names against a census of 3 and report TRUNCATED — a capture defect
+  // invented out of a page whose graphics genuinely have no names, which is the 1.1.1 finding itself.
+  const verdict = sweepCompleteness({
+    structure: { headings: [], graphics: ["graphic", "graphic", "graphic"], landmarks: [], formFields: [] },
+    diagnostics: [{ event: "structureCensus", distinct: { heading: 0, link: 0, landmark: 0, graphic: 3 } }],
+  } as never);
+  assert.equal(verdict.graphic, "unknown",
+    "unnamed controls are what 1.1.1 is ABOUT; reading them as a sweep failure would hide the finding");
 });
