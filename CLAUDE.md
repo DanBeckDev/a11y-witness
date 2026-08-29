@@ -1950,6 +1950,7 @@ failure as `capture-check` being mandatory and never running once.
 | `layers:compare` | **the project's central claim, demonstrated**: which findings can ONLY the screen-reader layer produce? Asserted for a long time before anyone ran the two side by side |
 | `verdict:stability` | is an OCCURRENCE verdict stable on a flaky substrate? |
 | `eval:capture` | recapture the eval fixtures, over a live worker or in-process on the guest |
+| `capture:explain` | **what actually happened on a page, in sentences, from marks the capture already recorded** — did it reach the page, did the screen reader reach the CONTENT, was a consent banner in the way, did the page move under its own probes. A capture carries ~30 diagnostic marks and NOTHING read them: every question was answered by ssh, hand-written Python and a guess at the JSON shape, which produced four wrong answers in one session — the worst being the wrapper read instead of `capture`, reporting 0 of 20 tab stops. Absent prints as NOT RECORDED, never as OK |
 | `rules:score` | `rules:gate` without the gate — the per-criterion detail rather than a pass/fail |
 | `scorer:verify` | **is the SHIPPED model directory free of unsafe artefact types?** `.pt`, `.pkl`, `.ckpt` and friends are executable-on-load weight formats; safetensors is not. The script existed and NOTHING invoked it — not an npm script, not a playbook, not another module — so a security check on the one artefact this project publishes had never run. First stage of `release:gate` now |
 | `release:provenance` | **do the weights about to ship have a changelog entry saying where they came from?** ADR 0007 makes the weights the API and `promote:model` writes their provenance into a changeset, which is the only record of it — and nothing checked that the entry described the weights actually present. Found the shipped model at 2,485 records while both pending changesets said 2,403 and were BYTE-IDENTICAL to each other, so a first release would have published weights nothing accounts for beside one note printed twice. Both are invisible elsewhere: a changeset is prose, and `changeset-provenance.test.ts` asserts how a row RENDERS, never that it describes what ships. Second stage of `release:gate` |
@@ -2043,7 +2044,7 @@ Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth
 - **Every `.mjs` CLI here ignored an unrecognised flag**, because they all parse argv by looking for what
   they know — so a mistyped one ran the default and reported success. `refuseUnknownFlags`
   (`cli-flags.mjs`) refuses it, names the near miss, and prints what the command does take.
-  **ALL 49 are guarded as of 2026-08-28**, and `cli-flags.test.ts` DISCOVERS every argv-reading
+  **ALL 50 are guarded as of 2026-08-29**, and `cli-flags.test.ts` DISCOVERS every argv-reading
   module and requires each to be guarded or exempted with a reason. The exemption list is empty.
   > **The flag lists are READ out of each file, never derived, and every batch proved why.**
   > `stability-gate` builds flags from a variable and `repeat-capture` reads seven through an `arg(name)`
