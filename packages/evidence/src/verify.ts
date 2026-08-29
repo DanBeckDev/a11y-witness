@@ -11,6 +11,7 @@
  * whose title is never spoken; this one only catches the egregious wrong-content case,
  * which is the one that silently poisons results.
  */
+import { parseAnnouncement } from "./announcement.js";
 
 /** Whatever a capture backend returned; only the announcement fields matter here. */
 export interface CapturedAnnouncements {
@@ -267,6 +268,8 @@ export type DomCensus = NonNullable<ReturnType<typeof domCensus>>;
  * type at all. Widening one of three is how the next reader gets a field the writer already sends.
  */
 export interface OracleCounts {
+  /** Per-type: whether the sweep announced everything the page exposes. `unknown` is a real answer. */
+  completeness?: Record<string, Completeness>;
   census?: PageCensus;
   dom?: DomCensus;
   probes?: ProbeStates;
@@ -277,6 +280,7 @@ export function oracleCounts(capture: CapturedAnnouncements): OracleCounts {
     census: pageCensus(capture) ?? undefined,
     dom: domCensus(capture) ?? undefined,
     probes: probeStates(capture) ?? undefined,
+    completeness: sweepCompleteness(capture),
   };
 }
 
@@ -349,6 +353,73 @@ function compareStates(states: Record<string, Record<string, number>>):
     return values.every((value) => typeof value === "number") && new Set(values).size > 1;
   });
   return { sameState: changed.length === 0, changed: changed.length ? [...changed] : undefined };
+}
+
+/**
+ * IS THE SWEEP COMPLETE? — capture-integrity-plan C1, computed HOST-SIDE and here is why.
+ *
+ * The sweep is a SAMPLE that everything downstream reads as a CENSUS. `structure.headings` is what NVDA
+ * announced during a quick-nav walk; rules read it as what the page HAS. When those differ, an absence
+ * claim is a claim about the walk rather than about the page — which is how `1.3.1:no-headings` and every
+ * other absence rule can be wrong without anything noticing.
+ *
+ * ## Comparing like with like took two corrections
+ *
+ * The worker's `structureCrossCheck` compared the sweep's length against the ELEMENT count, and
+ * `collectPhrase` dedupes — so it compared a deduplicated list against a raw count. Measured 2026-08-29
+ * across 106 real captures: 75% of named elements share a name with another, every page has duplicates,
+ * and the median sweep/element ratio was 0.24. That produced "97% of pages disagree", about half of it
+ * definitional.
+ *
+ * Counting DISTINCT NAMES in the census fixed most of it — tfl's graphics went from `20 vs 34` to
+ * `20 vs 19` — and exposed a finer gap: the sweep dedupes on the ANNOUNCEMENT, so two headings both named
+ * "Contact" at different levels are two announcements and one name. This resolves it by extracting the
+ * NAME from each announcement, which is why it lives here and not in the worker: `parseAnnouncement` is
+ * the single grammar for that, validated on 6,555 cross-channel comparisons, and it is TypeScript the
+ * plain-node worker cannot import.
+ *
+ * ## `unknown` is a verdict
+ *
+ * A capture whose census predates `distinct` cannot answer, and that must never read as `exact`. Absence
+ * treated as agreement is the defect this project pays for most often — `census.heading` absent read as
+ * zero, `sameState: undefined` read as false, a recovery metric read with `?? 0`.
+ */
+export type Completeness = "exact" | "truncated" | "phantom" | "unknown";
+
+/** The sweep field each census type is counted from. Named once; the two must not drift. */
+const SWEEP_OF: Record<string, "headings" | "links" | "landmarks" | "graphics"> = {
+  heading: "headings", link: "links", landmark: "landmarks", graphic: "graphics",
+};
+
+/**
+ * Per-type: did the sweep announce as many distinct names as the page exposes?
+ *
+ * @param capture a capture, unwrapped
+ * @returns one verdict per type the census counts, or `unknown` where it cannot say
+ */
+export function sweepCompleteness(capture: CapturedAnnouncements): Record<string, Completeness> {
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  const census = marks.find((m) => typeof m === "object" && m !== null
+    && (m as { event?: unknown }).event === "structureCensus") as
+    { distinct?: Record<string, number> } | undefined;
+  const out: Record<string, Completeness> = {};
+  for (const [type, field] of Object.entries(SWEEP_OF)) {
+    const expected = census?.distinct?.[type];
+    const announced = (capture.structure as Record<string, string[]> | undefined)?.[field];
+    if (typeof expected !== "number" || !Array.isArray(announced)) { out[type] = "unknown"; continue; }
+    // The NAME, not the announcement: "Contact, heading, level 2" and "Contact, heading, level 3" are one
+    // name and two announcements, and the census counts names.
+    const names = new Set(announced
+      .map((a) => parseAnnouncement(String(a), "sweep").objects[0]?.name ?? "")
+      .map((n) => n.replace(/[\s,]+/g, " ").trim())
+      .filter(Boolean));
+    // UNNAMED CONTROLS ARE COUNTED BY THE CENSUS AND DROPPED BY THE SET ABOVE, so a page whose sweep is
+    // entirely unnamed would read as truncated when it is not. Compare only when the sweep produced names;
+    // otherwise this cannot say, which is the honest answer and not a pass.
+    if (names.size === 0 && announced.length > 0) { out[type] = "unknown"; continue; }
+    out[type] = names.size === expected ? "exact" : names.size < expected ? "truncated" : "phantom";
+  }
+  return out;
 }
 
 export function pageCensus(capture: CapturedAnnouncements):
