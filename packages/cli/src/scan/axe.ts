@@ -14,8 +14,18 @@
  * lived-experience layer — the part only this project does — never depends on them.
  */
 
-// A/AA across WCAG 2.0/2.1/2.2 (axe tags conformance level + version).
-const WCAG_AA_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
+/**
+ * A/AA across WCAG 2.0/2.1/2.2 (axe tags conformance level + version).
+ *
+ * EXPORTED so a test can hold it against what axe-core actually offers. Verified 2026-08-29: axe's level
+ * tags are exactly `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa` and `wcag2aaa` — this list is
+ * every A/AA one, with AAA correctly out of scope, and there is no `wcag22a` (WCAG 2.2's two Level A
+ * additions, 3.2.6 and 3.3.7, have no axe rule at all).
+ *
+ * The reason it is pinned rather than left correct: a tag added by a future axe version would silently
+ * narrow the scan, and a scan that quietly checks less still reports "0 violations".
+ */
+export const WCAG_AA_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 export interface AxeFinding {
   source: "axe-core";
