@@ -97,3 +97,27 @@ test("running WITHOUT axe is reported differently from running with it", () => {
     "the conformance scope is identical whether or not the rule layer ran — unchecked is being reported "
     + "as clean");
 });
+
+test("A FAILED AXE SCAN IS NOT '0 violations' — pageContext decides nullness", () => {
+  // `pageContext` returned `[]` when the scan threw, and `runWitness` decided nullness with
+  // `ruleLayer === "none" ? null : axe.findings`. So a scan that was REQUESTED, ran and failed came out as
+  // an empty array and the report rendered "Rule layer (axe-core): 0 violations." — a clean bill of health
+  // for a scan that did not happen.
+  //
+  // The ternary's own comment describes exactly this defect and fixed it for `--no-axe` only. Asserted on
+  // the SOURCE because the failure path needs a browser to exercise: what is pinned is that nullness is no
+  // longer decided by a caller who cannot know, and that the catch returns null.
+  // COMMENTS STRIPPED FIRST. The fix's own comment QUOTES the old ternary to explain what it replaced,
+  // so a raw match flagged the very documentation of the fix — the "expectations derived from source TEXT"
+  // trap, hit twice already today and fixed the same way both times.
+  const source = readFileSync(new URL("./cli.ts", import.meta.url), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  assert.doesNotMatch(source, /ruleLayer === "none" \? null : axe\.findings/,
+    "nullness must be decided by pageContext, which knows whether results were produced");
+  const context = source.slice(source.indexOf("async function pageContext"));
+  const body = context.slice(0, context.indexOf("\ninterface"));
+  assert.doesNotMatch(body, /findings: \[\] as AxeFinding\[\]/,
+    "a failed scan must return null findings, never an empty array");
+  assert.match(body, /catch[\s\S]*?findings: null/,
+    "the catch for a failed scan must produce null");
+});
