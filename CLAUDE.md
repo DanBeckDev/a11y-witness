@@ -27,7 +27,7 @@ assess them in the sense of concluding anything. Measured on the product path, 1
 
 | | |
 |---|---|
-| **rules** (`rule-ownership.json` → `decidedBy: "rules"`) | conformance-mapped, so `criterionOutcomes` reports `failed`. **This is the only layer that ASSERTS.** Exact on every criterion it owns, 0 false positives across 1,183 conformant records. |
+| **rules** (`rule-ownership.json` → `decidedBy: "rules"`) | the only layer that MAY assert — but owning a subtype and conformance-mapping it are two independent facts, and **only 4 of the 11 rules-owned subtypes actually assert** (measured 2026-08-29; see `known-gaps.md` §14). Exact on every criterion it owns, 0 false positives across 1,183 conformant records. |
 | **the trained scorer** (`judge-backend: local`, no rented LLM) | `findingsFromScores` sets NO `mapping`, and `RequirementMapping` defines absent as `secondary` — so every model finding becomes `cantTell`. It TRIAGES: finds the moment worth a human's attention and quotes the announcement. |
 
 ADR 0021 records why that is the right division rather than a shortfall, and moved

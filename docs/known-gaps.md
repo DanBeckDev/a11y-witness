@@ -496,6 +496,50 @@ host judge, which is the split C1 established. Additive and diagnostic-only, so 
 recapture. **Deliberately NOT done mid-run:** deploying restarts a worker mid-capture and destroys
 12-520 s of unresumable work, which `sleep.yml` already refuses for provisioning.
 
+## 14. Owning a subtype and ASSERTING it are two unconnected facts — 7 of 11 refer
+
+Found 2026-08-29 by reading `rules.ts` and auditing every `add()` call site.
+
+CLAUDE.md's headline table said `decidedBy: "rules"` means "conformance-mapped, so `criterionOutcomes`
+reports `failed`". Those are two independent facts and nothing connects them: `rule-ownership.json` has no
+`mapping` field, and `add()` in `rules.ts` DEFAULTS to `secondary`. Corrected in CLAUDE.md.
+
+Measured — 16 assertion sites, 4 pass `"conformance"`:
+
+| rules-owned subtype | mapping | outcome |
+|---|---|---|
+| `4.1.2:unnamed-control` | conformance | **failed** |
+| `4.1.2:state-change-silent` | conformance | **failed** |
+| `3.3.2:unnamed-form-field` | conformance | **failed** |
+| `1.1.1:missing-alt` | conformance on the "Unlabeled graphic" branch, `secondary` on the empty-name branch | mixed |
+| `1.1.1:filename-alt` | secondary | cantTell |
+| `1.3.1:no-headings` | secondary | cantTell |
+| `2.1.1:control-unreachable-by-keyboard` | secondary | cantTell |
+| `2.1.2:focus-trapped` | secondary | cantTell |
+| `2.4.1:skip-link-inert` | secondary | cantTell |
+| `2.4.2:route-title-stale` | secondary | cantTell |
+| `2.4.3:focus-order-scrambled` | secondary | cantTell |
+
+Verified end to end rather than read off the source: a capture with a genuinely stale route title produces
+`mapping=secondary` and `2.4.2: cantTell`.
+
+**This is NOT recorded as a bug, and the mappings are deliberately left alone.** Turning a referral into an
+assertion is the most dangerous single change available in this repo — it converts "worth a human's
+attention" into "this page does not conform", which is the accusation ADR 0022 exists to be careful about.
+Each of the seven is a judgement about whether the rule is stricter or looser than its criterion, which is
+exactly what ACT's secondary mapping means, and several have a documented reason to be narrow:
+`route-title-stale` "covers ONE of 2.4.2's failure modes and deliberately not the others".
+
+**What IS wrong is that the fact was undiscoverable.** The mapping lives only at an `add()` call site, four
+of sixteen, with no declaration beside the ownership it appears to follow from — so the project's own
+summary of its two-layer design was wrong about its own behaviour, and reading `rule-ownership.json` could
+not tell you.
+
+**Done when:** `rule-ownership.json` declares the intended mapping per subtype and a test pins the `add()`
+sites to it, so the two cannot disagree — and the maintainer has decided, per subtype, which of the seven
+should assert. ADR 0021 is the precedent: it moved `4.1.2:state-change-silent` to the rules specifically so
+it could be **stated rather than suggested**, which is the same decision, taken once.
+
 ## What is NOT on this list, deliberately
 
 - **`1.3.1`** — closed. `29/29 rules: EXACT`, validated on a real page. Was "the claim rests on nothing"
