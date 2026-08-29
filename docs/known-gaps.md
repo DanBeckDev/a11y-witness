@@ -584,7 +584,7 @@ argues for at length.
 `structure-declarations.test.ts` fails on any inline restatement naming three or more sweep fields —
 mutation-checked by putting `cli.ts`'s back.
 
-## 16. The discriminative gate's rules-owned list is frozen at two criteria of nine
+## 16. ~~The discriminative gate's rules-owned list is frozen at two criteria of nine~~ — DONE
 
 Found 2026-08-29 reading `verify-gate.ts`. `ABSENCE_CRITERIA = new Set(["1.1.1", "4.1.2"])` decides which
 findings the gate drops so the deterministic rule's authoritative one can stand. It was correct when the
@@ -608,10 +608,24 @@ rest — so dropping the model's 2.4.4 would discard the half nothing else suppl
 the `decidedBy: "rules"` set, and it lives in `packages/lab/rule-ownership.json`, which this package cannot
 import.
 
-**Done when:** the rules-owned criteria are readable from the judge package — the same problem
-`local-judge.ts` already solved for the scorer by having `score.py` carry `ruleOwned` across in the model
-artefact — and a test pins the gate's set equal to it. A generative finding for a rules-owned criterion
-must lose to the rule, on every backend.
+**DONE 2026-08-29.** `ABSENCE_CRITERIA` now holds the nine criteria the rules own AND report under their
+own criterion, and `rules-owned-criteria.test.ts` — in the LAB, which can see both — derives that set from
+`rule-ownership.json` and refuses any difference. The artefact route this entry proposed does not work
+here: `applyGate` runs for the GENERATIVE backends, which never load the model artefact `ruleOwned` rides
+in. Pinning the two sides equal where both are visible is the remedy that does, and it is the same one
+`name-normalisation.test.ts` uses.
+
+**Both halves of the membership test are asserted, not just the first.** A criterion qualifies when the
+rules decide the subtype AND report it under that subtype's own criterion — one they decide but report
+elsewhere must not be suppressed, or the model is silenced while nothing supplies a finding and the
+criterion is decided by neither layer. `2.4.4` stays out, as this entry required, because its ownership is
+`overlap`; a mutation adding it fails with that reason named.
+
+**A stale example found on the way.** `score.py` states the same test and cites
+`3.3.2:unnamed-form-field` as "decided by the rules and reported as 4.1.2, so it is NOT owned here". That
+subtype reports as **3.3.2** in both `rule-ownership.json` and the shipped training report. The rule the
+comment states is right and is the one implemented; only its example is wrong, and it is corrected beside
+the new set rather than left to mislead the next reader.
 
 ## 17. `landmark_present` is a model feature whose zero always means the SWEEP failed
 
