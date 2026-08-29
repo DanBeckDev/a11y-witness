@@ -451,10 +451,29 @@ function sweptElements(announced: string[], type: string): { names: Set<string>;
     : parsed.map((p) => p.objects[0]?.name ?? "");
   return {
     names: new Set(found.map(clean).filter(Boolean)),
-    // Only landmarks are counted unnamed here. For the other types an unnamed element is indistinguishable
-    // from an announcement this grammar could not read, and inventing a count from that is how a capture
-    // defect gets manufactured out of a page's own markup — see the guard in the caller.
-    unnamed: type === "landmark" ? found.filter((name) => !clean(name)).length : 0,
+    // UNNAMED ELEMENTS ARE COUNTED, FOR EVERY TYPE, because that is what the census does.
+    //
+    // This counted them for landmarks only, reasoning that elsewhere an unnamed element is
+    // indistinguishable from an announcement the grammar could not read. The consequence was the opposite
+    // of the one intended: dropping them manufactured a capture defect out of the page's own markup.
+    //
+    // `browser-session.mjs` is explicit about the other side — "An UNNAMED element has no name to be
+    // distinct from, and the sweep still announces it — so it counts once per element rather than being
+    // collapsed. Treating unnamed elements as one would under-count the very thing 1.1.1 and 4.1.2 are
+    // about." So `census.distinct` includes them and this did not, and the two could never agree on a page
+    // carrying one.
+    //
+    // Measured on `keyboard-unreachable-native-button+also-filename-alt-bare-edit-inert.bad`: the sweep
+    // announced `["Full name, edit", "Delete draft, button", "Email, edit", "edit"]` and the census said
+    // `distinct.formControl = 4`. Dropping the bare `"edit"` gave 3 against 4 — TRUNCATED — on a sweep that
+    // was exact. `assertableSweep` then refused 2.1.1's absence claim, and `rules:gate` failed the record.
+    //
+    // AND THE PAGES IT FIRES ON ARE EXACTLY THE ONES THAT MATTER: an unnamed control IS the 4.1.2 and
+    // 3.3.2 finding, so this marked the formControl sweep truncated on precisely the captures whose
+    // finding is an unnamed control. "A check must never reject evidence whose absence is the finding" is
+    // this repo's most expensive rule, and this was that rule inverted — rejecting evidence because the
+    // finding was PRESENT.
+    unnamed: found.filter((name) => !clean(name)).length,
   };
 }
 
@@ -495,6 +514,22 @@ function tableCompleteness(capture: CapturedAnnouncements): Completeness {
     .map((line) => TABLE_DIMENSIONS.exec(String(line)))
     .find((match): match is RegExpExecArray => match !== null);
   if (!dimensions) return "unknown";
+  // A PROBE THAT NEVER RAN IS NOT A SWEEP THAT CAME UP SHORT. `probeTables` is opt-in, so a page with a
+  // table captured without it has `tableCells: []` — and this read that as TRUNCATED, which says the
+  // sweep tried and missed. `assertableSweep` then refused 1.3.1's claim on a capture that had simply
+  // never been asked.
+  //
+  // Measured on `keyboard-unreachable-action+also-position-only-table-bare-edit-inert.bad`: a multi-defect
+  // case whose ACCOMPANYING defect adds a table, on a host whose options carry `probeTables: false`. The
+  // page announces its dimensions in the transcript, so the branch above is reached, and the verdict was
+  // truncated for a probe nobody ran.
+  //
+  // The probe marks `tableCells` whenever it runs, including when it finds none — which is exactly the
+  // distinction `markPageState` draws twenty lines below, and the reason that mark exists.
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  const probeRan = marks.some((m) => typeof m === "object" && m !== null
+    && (m as { event?: unknown }).event === "tableCells");
+  if (!probeRan) return "unknown";
   const expected = Number(dimensions[1]) * Number(dimensions[2]);
   const seen = (capture.structure as { tableCells?: unknown[] } | undefined)?.tableCells?.length ?? 0;
   return seen >= expected * CELLS_ENOUGH ? "exact" : "truncated";
@@ -511,9 +546,15 @@ export function sweepCompleteness(capture: CapturedAnnouncements): Record<string
     const announced = (capture.structure as Record<string, string[]> | undefined)?.[field];
     if (typeof expected !== "number" || !Array.isArray(announced)) { out[type] = "unknown"; continue; }
     const { names, unnamed } = sweptElements(announced, type);
-    // AN ENTIRELY UNREADABLE SWEEP CANNOT SAY. The census counts unnamed controls and the name set drops
-    // them, so a page of unnamed graphics would compare 0 against 3 and report TRUNCATED — inventing a
-    // capture defect out of the 1.1.1 finding itself. Declining is the honest answer and not a pass.
+    // A SWEEP THAT YIELDED NO ELEMENT AT ALL CANNOT SAY.
+    //
+    // Reachable for LANDMARKS only, now that unnamed elements are counted for every type: the other types
+    // take one entry per announcement, so anything announced contributes either a name or an unnamed
+    // count. Landmarks flatMap over CONTAINERS, and an announcement carrying no landmark container
+    // contributes nothing — so a landmark sweep can announce lines and yield zero elements.
+    //
+    // Declining is the honest answer and not a pass. This guard previously also caught pages of unnamed
+    // controls, because they were dropped rather than counted; that was the bug, not the protection.
     if (names.size === 0 && unnamed === 0 && announced.length > 0) { out[type] = "unknown"; continue; }
     const found = names.size + unnamed;
     out[type] = found === expected ? "exact" : found < expected ? "truncated" : "phantom";
