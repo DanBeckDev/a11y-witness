@@ -157,10 +157,50 @@ HEADING_ANNOUNCEMENT = re.compile(r"^heading\s*,\s*level\s+\d+\b", re.IGNORECASE
 # `generic_heading_present` read FALSE on exactly those pages, and 2.4.6 lost its only engineered
 # feature on 50 of 100 pairs. The feature, its vocabulary and its exact-match semantics were all
 # correct; an announcement quirk defeated the lookup.
-LANDMARK_PREFIX = re.compile(
-    r"^(?:" + "|".join(sorted(LANDMARK_ROLES)) + r")\s+landmark\s*,\s*",
+# THREE SHAPES, not one. This matched only "<role> landmark, " and therefore covered exactly the example
+# in the comment above while missing the other two NVDA actually produces. Measured across 9,789 corpus
+# heading announcements:
+#
+#   "main landmark, Welcome, heading, level 2"                  -> "welcome"                      (covered)
+#   "Home energy, region, Home energy, heading, level 2"         -> "home energy, region, home energy"
+#
+# (NVDA's container EXIT prefix, "out of form, ...", is a third shape — but it appears 0 times in the
+# `headings` channel this function is called on, so it is deliberately NOT handled here. An untestable
+# branch is a liability, and `plain_heading_candidate` is where exits actually turn up.)
+#
+# A NAMED region carries its name before the role and has no "landmark" word at all, and NVDA's container
+# EXIT prefix ("out of form") is announced the same way. Both leave container context in the heading's
+# name, which is precisely the failure the comment above says cost 2.4.6 half its feature coverage on 50
+# of 100 pairs. The remedy reached one of the three shapes.
+#
+# The worker's own strip (`CONTAINER_PREFIX` in capture-pure.mjs) has handled all three for months. That is
+# one fact in two languages, and the copies drifted — the shape this repo has paid for five times in a day.
+# It cannot be deleted (this runs under Python in the featurizer, that under Node on the worker), so the
+# remedy is the third one: `test_heading_name_strips_containers.py` asserts the PROPERTY on real corpus
+# announcements — no container context survives — rather than pinning two regexes to each other, which
+# would only add a third copy.
+#
+# Applied REPEATEDLY: containers nest, and NVDA announces every one it entered. A single pass leaves the
+# inner prefix on "main landmark, navigation landmark, ...".
+CONTAINER_PREFIX = re.compile(
+    r"^(?:\w[\w\s'-]*[,\s]\s*)?"
+    r"(?:" + "|".join(sorted(LANDMARK_ROLES | {"landmark", "content info", "form", "article"})) + r")"
+    r"(?:\s+landmark)?\s*,\s*",
     re.IGNORECASE,
 )
+
+
+def strip_container_prefix(value: str) -> str:
+    """Remove every container announcement NVDA prefixed, not just the first."""
+    while True:
+        stripped = CONTAINER_PREFIX.sub("", value, count=1)
+        if stripped == value:
+            return value
+        value = stripped
+
+
+# Kept as the old name so nothing that imported it breaks; it is the same pattern.
+LANDMARK_PREFIX = CONTAINER_PREFIX
 
 TABLE_DATA_ROW = re.compile(r"\brow\s+(?!1\b)(?P<row>\d+)\b(?P<between>.*?)\bcolumn\b", re.IGNORECASE)
 
@@ -307,7 +347,7 @@ def heading_name(value: str) -> str:
     # landmark half of this function was exactly such a latent case until it silently cost 2.4.6 half
     # its feature coverage.
     name = value.split(", heading", 1)[0].strip()
-    name = LANDMARK_PREFIX.sub("", name).strip()
+    name = strip_container_prefix(name).strip()
     return HEADING_ANNOUNCEMENT.sub("", name).lstrip(" ,").strip().lower()
 
 # A line whose first token is a ROLE is an announced control, not prose.
