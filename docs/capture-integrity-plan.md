@@ -265,10 +265,31 @@ unconditional truncation mark, so completeness reads `unknown` on all five types
 and C2's guard correctly protects nothing. Measured: 26 pages, 25 rule findings, unchanged by any of this.
 
 **A recapture is what turns these from correct code into working guards**, and it is the cheap moment to
-take it — C3's residual attribution needs the same captures. Nothing here bumps `CAPTURE_PROTOCOL_VERSION`:
-what the evidence MEANS is unchanged, and the two capture-side changes (`formControl` in the census, the
-unconditional truncation mark) are additive, so an older host reading a newer capture is unaffected. They do
-move `codeVersion()`, so the fleet needs a deploy.
+take it — C3's residual attribution needs the same captures.
+
+> **CORRECTION, made the same day this was written.** The sentence here first read *"nothing here bumps
+> `CAPTURE_PROTOCOL_VERSION`: what the evidence MEANS is unchanged"*. That is wrong twice over, and the
+> second way is the one that matters.
+>
+> **It is wrong by this repo's own stated criterion.** CLAUDE.md says to bump when a change is *"a new
+> field a signal reads"* — and `census.distinct`, `formControl` and the truncation mark are read by rules
+> through `completeness` and `assertableSweep`. They are exactly that.
+>
+> **And without the bump the recapture is a no-op.** `workerCode` is deliberately NOT in `environmentKey`
+> — *"it changes when a comment changes, and invalidating 1,061 pairs over a reworded comment is how a
+> cache gets switched off"* — so nothing about these changes moves a cache key. `training:capture` would
+> serve every cached capture unchanged and **the new fields would never appear**, while every gate stayed
+> green and completeness stayed `unknown` forever. A cache that correctly serves stale-shaped evidence is
+> the quietest possible failure, and it is the same shape as the memoised `browserVersion`.
+>
+> So the order is: **bump 6 -> 7, deploy, recapture.** The bump is not a cost imposed on the recapture, it
+> is what CAUSES it. Note `worker:deploy` refuses a protocol change without `--allow-protocol-change`, and
+> the trap it guards applies here — an UNCOMMITTED bump makes `worker:code` report every worker stale
+> because the LOCAL hash moved.
+
+Measured 2026-08-29: all five workers report `5be5d7838793b58e` against this checkout's `035213934be78eb4`
+— `5 stale worker(s)`, fleet otherwise CONSISTENT. `assertFleetRunsThisCheckout` refuses a capture in that
+state, which is the guard working.
 
 The one number to watch afterwards is the one this plan opened with: per-kind disagreement, now that half of
 it has been shown to be arithmetic rather than instrument.
