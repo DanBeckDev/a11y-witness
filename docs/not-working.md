@@ -16,7 +16,18 @@ distinction has been wrong twice in one afternoon and is the first thing to chec
 
 ---
 
-## 1. The shipped weights are not the weights anything says shipped
+## 1. CLOSED 2026-08-29 — the shipped weights now state where they came from
+
+**Verified by the gate that was written to refuse it:** `npm run release:provenance` exits 0 —
+*"PASS — all 1 of 1 from the shipped weights, 3 pending changeset(s) and the CHANGELOG examined and
+clean"*. `training-report.json` reads `dataset.records = 2487` and
+`.changeset/promote-candidate-198816d2.md` states `records: 2487` with the floor, the encoder hash and
+the feature schema beside it. Promoted in `c3c2bc0`.
+
+Note what closed it: **the DATA changed, not the gate.** The gate was correct and correctly red for as
+long as the shipped weights had no traceable provenance, which is the state this entry described.
+
+<details><summary>What this said while it was open</summary>
 
 `packages/scorer/models/screenreader-scorer` holds a model trained on **2,485 records**. Nothing states
 its provenance. The two pending promotion changesets both describe **2,403**, and are byte-identical to
@@ -37,6 +48,8 @@ the maintainer can take, because it is a major release:
 - promoting it writes the changeset that closes this entry
 
 Until then the gate is correctly red, which is the honest state rather than a defect in the gate.
+
+</details>
 
 ## 2. Free vetoes — 41 closable, down from an undifferentiated 60
 

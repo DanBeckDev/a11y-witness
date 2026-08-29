@@ -343,10 +343,22 @@ evidence or making the conformant variant non-conformant.
 The cost is the ADR 0015 shape pointed the other way: the 2.1.1 head is pushed down 4.6 logits on any
 page that has an unnamed form field, and real pages frequently do.
 
-**A candidate remedy, untested:** an `<input tabindex="-1">` with no label is an unnamed form field in the
-accessibility tree and never enters the tab order, so a focus-safe variant of `bare-edit` might supply the
-feature without perturbing the channel. Whether NVDA's form-field quick-nav still reaches it is the
-question, and `--pipeline=verify --only=` answers it in minutes. Not attempted here.
+**~~A candidate remedy, untested~~ — BUILT 2026-08-28 in `2a2734d`, and this paragraph was stale.** An
+`<input tabindex="-1">` with no label is an unnamed form field in the accessibility tree and never enters
+the tab order, so a focus-safe variant supplies the feature without perturbing the channel.
+`case-matrix.mjs` carries `FOCUS_SAFE = { "bare-edit": "bare-edit-inert", "vague-link": "vague-link-inert" }`
+and substitutes inside the filter rather than enlarging `ROTATIONS` — which would have re-rolled every
+multi-defect pairing, since the choice is `(rotation + round) % ROTATIONS.length`.
+
+`vague-link` was included too, and the reason it had been excluded was CHECKED rather than accepted: both
+`controlUnreachableByKeyboard` and `focusOrderIsScrambled` compare `structure.formFields` against
+`interaction.focusOrder` and neither reads `structure.links`, so an inert anchor enters neither channel.
+
+**What is NOT established is whether it WORKED**, and that cannot be answered from a laptop:
+`npm run scorer:shortcuts` refuses here — *"1868 of 1868 record(s) carry no `parsed` block … this copy of
+runs/ predates the parse"* — which is the guard behaving correctly rather than a failure. The
+authoritative answer is `npm run lab:job -- -e job=shortcuts`, and the question it settles is whether
+`form_field_unnamed` is still a free veto on the three focus heads.
 
 Recorded in the shortcuts baseline rather than left refusing, because that baseline exists to detect
 REGRESSIONS after a deliberate corpus change and these were diagnosed rather than assumed — but the
