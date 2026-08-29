@@ -84,7 +84,12 @@ protocol version does not move because *what the evidence means* does not change
 
 ## A. Make async the PRIMARY capture path
 
-**Status: open. The root fix.**
+**Status: MET 2026-08-29.** `gate:stability` **PASS, all 8 of 8** on the async path across the fleet.
+
+**The proof is arithmetic, not a green result.** A poll is milliseconds and a capture is 12-40 s, so at a
+15 s keepalive delay the first probe never fires during a capture at all — and the run also passed with the
+delay at 60 s, where it provably did nothing. The plan asked for the keepalive to be REMOVED as the test;
+this is the same claim established without leaving the sync escape hatch unprotected.
 
 `POST /capture {async: true}` returns `202 {captureId}` immediately. The client polls `GET /capture/<id>`
 until it is not 202, and may read `/progress` meanwhile. Old behaviour stays until every client has moved.
@@ -109,7 +114,9 @@ migration, which is mechanical because they all now share one client.
 
 ## B. Progress reaches the caller, not just `fleet:status`
 
-**Status: open. Small, and only possible once A lands.**
+**Status: MET 2026-08-29.** `onProgress` reads `/progress` between polls, so a caller sees the phase and its
+age while the capture runs. A failed progress read never fails the capture — pinned by a test, because
+trading a real result for a diagnostic is the wrong way round.
 
 `/progress` has existed since forever and one status command reads it. With A, a polling client can surface
 the phase it is in — which is the difference between "the worker is dead" and "it is 400 s into a sweep".
@@ -124,7 +131,10 @@ the phase it is in — which is the difference between "the worker is dead" and 
 
 ## C. The gates use the pool that exists, not the static split I wrote
 
-**Status: open. A defect I introduced on 2026-08-28.**
+**Status: MET 2026-08-29.** `shardAcrossWorkers` is deleted; both gates call `drainAcrossPool`. Measured on
+the fleet: work landed 2/2/1/1/2 rather than a fixed deal. The test that proves a slow box takes fewer items
+asserted `w1 < fast1 + fast2` at first — which a static 4/4/4 deal satisfies trivially, so the mutation back
+to a static split PASSED. It now asserts strictly fewer than EACH fast box.
 
 `shardAcrossWorkers` deals items up front — 8 canaries over 5 boxes as 2,2,2,1,1. A box three times slower
 still gets 2 and everything waits for it. `drainAcrossPool` already solves this and its own header explains
@@ -148,7 +158,41 @@ for being too slow**.
 
 ## D. Find out why our network reaps in seconds, not minutes
 
-**Status: open. A number that does not add up.**
+**Status: PARTIALLY MET 2026-08-29. Three candidate causes ELIMINATED BY MEASUREMENT; the interval itself is
+still unexplained, and the keepalive stays aggressive until it is.**
+
+| candidate | verdict |
+|---|---|
+| the worker's own `keepAliveTimeout` (Node default 5 s, never overridden) | **real, and not the cause.** Measured: an idle connection closes at 6.0 s — but the response had already arrived at 0.0 s, so that is an idle-AFTER-response close and a capture is mid-response |
+| the worker's `requestTimeout` (Node default 300 s, never overridden, and BELOW both the 520 s capture timeout and the 560 s client budget) | **refuted.** A scaled-down experiment — `requestTimeout` 3 s, response after 5 s — returned 200, so it governs receiving the REQUEST and not a slow response |
+| NIC power management on the boxes | **refuted.** `PnPCapabilities 8` already disables "the computer may turn off this device" while keeping wake armed |
+
+**The first of those was nearly reported as the answer.** "Closed after 6.0 s" is a real number about the
+wrong thing, and only reading the rest of the line — `response arrived at 0.0s` — showed it measured
+`keepAliveTimeout` rather than a capture-case reap.
+
+**Still not measured:** what closes a MID-RESPONSE connection on this path. The attempt to measure it ran
+against a fleet busy with a gate and returned four "responses" at 0.0-1.6 s, which are 429s. That was the
+FOURTH such error in two days, and it is now a guard rather than a rule — see below.
+
+**Why it still matters even though A removed the dependency:** the async path does not need the keepalive,
+but the `A11Y_SYNC_CAPTURE` hatch does, and raising the delay from 15 s to 60 s was tried and REVERTED by
+this file's own test. An unexplained number is not a solved problem.
+
+### The fourth measurement error became a guard
+
+`refuseIfBusy` refuses to sample a worker that is not `ready`, because the rule did not work:
+
+```
+a page-status audit        :5050 held by capture:check with a different root -> 4 false 404s
+a transport probe          against a box running a gate -> 12 straight 429s read as timings
+an idle-reap measurement   timed keepAliveTimeout instead of the capture case
+a capture-reap measurement against a busy fleet -> "responses" at 0.0-1.6 s
+```
+
+Every one produced a NUMBER, which is what makes it dangerous: a measurement that fails loudly is harmless,
+and one that returns a plausible figure gets believed. Keyed on `ready` and never `ok` — `ok` only means the
+HTTP server answered, and a worker answered it while NVDA could not start.
 
 The keepalive works — 9 recoveries to 0 — but it is set to **15 seconds**, and *High Performance Browser
 Networking* says: *"Most mobile carriers set a 5–30 minute NAT connection timeout… **If you find yourself
@@ -171,25 +215,56 @@ somewhere else.
 
 ---
 
-## E. `gate:probe-order` can never pass, and that is a decision
+## E. `gate:probe-order` confounds ORDER with TIME — add the control
 
-**Status: open. Needs a call, not a fix.**
+**Status: MET 2026-08-29** in code and unit-proved; the live-page run is the remaining confirmation.
+Mutation-checked three ways, including the one the plan named as the failure mode to watch: matching the
+control on exact PHRASES rather than on the FIELD makes it inert, and an inert control looks exactly like a
+clean gate.
 
-D3's done-condition says it should PASS on `tfl.gov.uk`. It cannot: D7 came later, tfl carries a clock
-(`now at 22:43` → `22:47`) and live disruption banners, so the page moves under its own probes every run and
-the ordering question is genuinely unanswerable there. The gate correctly reports PAGE-MOVED and reduces
-coverage — **so with any live page in the list this gate is permanently INCONCLUSIVE.**
+The gate captures a page twice, changing the probe order — and letting time pass. So a difference could be
+either, and on `tfl.gov.uk` the clock ticked `22:43` → `22:47` and a disruption banner appeared between the
+two. The gate correctly refuses to call that an ordering fault, which is why it reports PAGE-MOVED and can
+never pass with a live page in the list.
 
-That is honest, and it is also how a gate stops being read.
+The remedy for a confound is a CONTROL, and this repo already owns the instrument: `gate:stability` repeats
+an identical capture to measure the noise floor. The same trick, applied to the comparison next door:
 
-**The options, and neither is obviously right:**
+```
+A₁ (default)  ->  B (focus-first)  ->  A₂ (default)
 
-- **Gate on the corpus pages; report live pages as evidence.** The gate can pass; live-page ordering becomes
-  an observation nobody is accountable for.
-- **Accept a standing INCONCLUSIVE.** Truthful, and it trains people to ignore exit code 2 — which is the
-  code `check-signals` and `rules:gate` also use for "could not tell".
+diff(A₁, A₂)   what TIME alone does          <- the control
+diff(A₁, B)    what time AND order did       <- the treatment
+```
 
-It is a decision about what the gate promises, so it is written here rather than made quietly.
+An ordering fault is what the treatment shows and the control does not. Checked against the two live cases
+already measured:
+
+| page | control | treatment | verdict |
+|---|---|---|---|
+| `tfl.gov.uk` | clock ticks, banner appears | same clock, same banner | explained by time — **PASSES** |
+| `nls.uk/join/` | nothing: the sweep opens the panel both times, 10 stops each | focusOrder 10 -> 150 | not explained — **ORDER**, correctly |
+
+The control spans a LONGER window than the treatment (t=0→2 against t=0→1), so it slightly over-estimates
+drift. That is conservative in the right direction for a tool that asserts: it cannot invent an ordering
+fault, and may miss a marginal one.
+
+**Done when:**
+
+- Three captures per page, in the order `A₁, B, A₂`, so the control brackets the treatment rather than
+  following it.
+- A difference present in BOTH is attributed to time and does not fail the gate; one present only in the
+  treatment is an ordering fault. PAGE-MOVED stays for the case where the fingerprint says the page's shape
+  moved, which is a different statement from content drifting.
+- **Reproduce the fault before trusting the verdict:** `tfl.gov.uk` must PASS, and it must be shown that it
+  passes because the clock appears in the control — not because the comparison went blind. A synthetic pair
+  where only the treatment differs must still FAIL.
+- `nls.uk/join/` still reports an ordering effect. If the control silences that too, the control is too
+  wide and this item is wrong.
+- The gate can therefore reach PASS with live pages in the list, which is what makes it a gate people read.
+
+**Cost:** +50% captures on this gate (3 per page rather than 2). Across the pool that is most of one extra
+round, not a wall-clock problem.
 
 ---
 
