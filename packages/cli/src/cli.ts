@@ -332,6 +332,9 @@ async function runWitness(
     findings: verdict.findings,
     abstained: verdict.abstained === true,
     truncatedSweeps: truncatedSweeps(sweepOutcomes(cap.diagnostics ?? [])),
+    // The SECOND way a sweep is short: it ended cleanly and still missed something. Without this a
+    // capture whose landmark sweep found 0 of 1 reported 1.3.1 as "examined in full".
+    completeness: oracleCounts(cap).completeness,
   });
   if (json) {
     printJson({
