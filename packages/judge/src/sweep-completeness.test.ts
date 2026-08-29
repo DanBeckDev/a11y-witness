@@ -195,3 +195,27 @@ test("2.1.1 DOES NOT ACCUSE ON A NAME THE CAPTURE ITSELF CALLS TRUNCATED", () =>
   assert.equal(of({ ...base, truncated: ["o, button"] }).length, 0,
     "once the capture says the name was truncated, it must leave the comparison entirely");
 });
+
+test("2.4.3 CANNOT be fooled by a truncated name, and the reason is structural", () => {
+  // C5's exclusion lives in `comparableNames`, so `controlsInReadingOrder` — which parses the transcript
+  // itself — never got it. That asymmetry is real: one channel of a two-channel comparison filters
+  // truncated names and the other does not.
+  //
+  // IT CANNOT MATTER, and this pins why rather than adding a guard that does nothing. `shared` is the
+  // INTERSECTION of the two channels minus repeated names, and `comparableNames` has already removed the
+  // truncated name from the tab-order side — so it can never reach `shared`, and both `readingOrder` and
+  // `tabOrder` are filtered by `shared`. Its presence on the reading side is inert by construction.
+  //
+  // I added the guard anyway, and the mutation check caught it: removing it changed nothing, because
+  // there was nothing for it to change. Reverted rather than shipped — an inert remedy with a confident
+  // comment is the `refreshBrowseBuffer` shape, and this file has spent the day finding those.
+  const capture = {
+    transcript: ["Shop, document", "Full name, edit", "Email, edit", "Pho, edit"],
+    structure: { formFields: [] },
+    interaction: { focusOrder: ["Email, edit", "Full name, edit", "Phone number, edit"] },
+  };
+  const evidence = (truncated?: string[]) => ruleFindings({ ...capture, truncated } as never)
+    .filter((f) => f.wcag.startsWith("2.4.3")).map((f) => f.evidence).join(" ");
+  assert.equal(evidence(["Pho, edit"]), evidence(undefined),
+    "marking a name truncated must not change 2.4.3's verdict — it was never in the compared set");
+});
