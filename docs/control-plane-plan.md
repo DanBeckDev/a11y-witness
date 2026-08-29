@@ -189,6 +189,41 @@ The supply-chain surface stays on the lab; the fleet key stays on a box with no 
 new key points **control → lab**, so a compromised lab dependency cannot reach the fleet key. That is
 ADR 0012's guarantee intact, which giving the LAB a fleet key would not be.
 
+### MEASURED 2026-08-29: ADR 0012 IS BROKEN ON THE CONTROL PLANE ITSELF
+
+Looking for what control was missing turned up what it should not have:
+
+```
+/root/a11y-witness/node_modules   56M, 121 packages
+/root/.ssh/a11y-witness_ed25519   the fleet key
+```
+
+**That is verbatim the configuration ADR 0012 exists to prevent** — *"the credential able to reconfigure
+the entire fleet would sit next to the largest supply-chain surface in the system. A compromised transitive
+dependency in the capture pipeline could reach the SSH key and, from there, twelve Windows boxes that
+auto-log-in to unlocked desktops."* 121 packages, beside that key, on that box.
+
+**And nothing on control needs them.** Checked rather than assumed:
+
+- `code-version.mjs` — the one thing fleet management imports — has **zero bare imports**: `node:crypto`,
+  `node:fs`, `node:path`, `node:url` and one sibling module. `deploy.yml` imports it BY PATH for exactly
+  this reason, and says so in a comment.
+- The only `npm install` in the fleet playbooks is `ansible.windows.win_shell`, which runs on the WINDOWS
+  WORKER, not here.
+
+So the split described in the ADR is not implemented on either machine that matters: control carries the
+dependencies it was designed to exclude, and every operator laptop carries both credentials AND the whole
+workspace. The document is accurate about the intent and describes a system that does not exist.
+
+**The remedy is a deletion, and it is one command** — `rm -rf /root/a11y-witness/node_modules`, recoverable
+with `npm install` if something unexpected turns out to need it. It is NOT done in this plan because
+deleting 56 MB on a live box is the operator's call, not a side effect of a documentation change.
+
+**A guard belongs with it.** A deletion nobody re-checks is a deletion that reverts the next time somebody
+runs `npm install` on that box to debug something — this repo's own rule about anything relying on a human
+to remember. `fleet:status` or `doctor` should assert that the control plane has no `node_modules`, and say
+what it costs if it does.
+
 ### What moves
 
 - `fleet:deploy`, `fleet:provision` — already Ansible over SSH from control's own credentials; they run
