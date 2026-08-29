@@ -676,6 +676,39 @@ one channel `dedupeKey` is never applied to. It even carried a `>= 1000` anti-va
 exactly that, and the floor was satisfied by the wrong data. *A guard pointed at the wrong evidence channel
 is the count-based check in a new costume.*
 
+## 19. 69 cases are labelled `1.3.1:unassociated-table` and none captures a table cell
+
+Found 2026-08-29 while diagnosing a `rules:gate` failure that turned out to be something else entirely.
+Recorded because the investigation is the only reason anyone looked.
+
+`position-only-table` is an accompanying defect: it injects a `<table>` with no `scope`, adds the label
+`1.3.1:unassociated-table`, and declares `grants: "table_position_only"`. Measured over the built case
+list: **69 cases pair it, and all 69 have `probeTables: false`** — because `withAccompanyingDefects`
+spreads `...template`, inheriting the HOST's probe settings, and no host that pairs a table probes one.
+
+So `structure.tableCells` is `[]` on every one of them. The label claims a defect whose rule-side evidence
+was never captured.
+
+**Nothing fails today, and the reason matters.** No rule reads `tableCells` — `1.3.1:unassociated-table`
+is not in `rule-ownership.json` at all, so the subtype belongs to the model's head, and
+`table_position_only` is computed from the TRANSCRIPT, which carries the table fine. `corpus:grants-audit`
+therefore passes, correctly: the FEATURE is present. Two consumers of one defect, and only the absent one
+needs the probe.
+
+**What would break.** The moment a deterministic rule for unassociated tables is written — the natural
+next step, since 1.3.1's declared channels already include `tableCells` — it will find nothing on all 69
+and read as a rule that never fires. That is `rules:coverage`'s *"NEVER FIRED ANYWHERE — the claim rests on
+nothing"*, pre-arranged.
+
+**The fix, and why it is not applied.** Let an accompanying defect declare the probes its evidence needs
+(`probes: { probeTables: true }`) and union them in `withAccompanyingDefects`. Written and reverted: the
+probe set is part of the capture options and therefore the cache key, so it recaptures **138 captures** to
+change a field nothing reads. *"Check the premise before re-running the expensive thing."* Do it when the
+rule is written, in the same change, so the recapture buys something.
+
+**What tells you it is fixed:** every `+also-position-only-table` case carries `probeTables: true`, and
+`structure.tableCells` is non-empty on their bad variants.
+
 ## What is NOT on this list, deliberately
 
 - **`1.3.1`** — closed. `29/29 rules: EXACT`, validated on a real page. Was "the claim rests on nothing"
