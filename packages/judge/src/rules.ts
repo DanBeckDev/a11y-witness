@@ -23,7 +23,7 @@
  * on spacing). Validate any new announcement-string rule against our own captures,
  * not against a book's strings.
  */
-import type { Channel } from "@a11y-witness/evidence";
+import type { Channel, CaptureStructure } from "@a11y-witness/evidence";
 import type { PageCensus, DomCensus, ProbeStates, Completeness } from "@a11y-witness/evidence/verify";
 import { parseAnnouncement } from "@a11y-witness/evidence";
 // The ONE list of criteria the rules may emit. Imported rather than restated: writing a second
@@ -37,7 +37,18 @@ export interface RuleInput {
   transcript: string[];
   /** Capture diagnostics. `readingOrder` needs the sweep mark to know which half of a sweep is reversed. */
   diagnostics?: unknown[];
-  structure?: { formFields?: string[]; headings?: string[]; links?: string[]; graphics?: string[] };
+  /**
+   * A GENUINE SUBSET OF THE WIRE TYPE, derived rather than restated — known-gaps §15.
+   *
+   * `Pick` keeps the omission meaningful: no rule reads `landmarks`, `lists` or `tableCells` (the two
+   * mentions of landmarks in this file are comments), so declaring them would claim a capability that
+   * does not exist. `Partial` because a rule must treat every sweep as possibly absent — that is the
+   * whole of the completeness work.
+   *
+   * Derived so it cannot drift: the sibling declaration in `judge.ts` omitted `graphics` while a rule
+   * read it, and object spread hid that at runtime for as long as it existed.
+   */
+  structure?: Partial<Pick<CaptureStructure, "formFields" | "headings" | "links" | "graphics">>;
   interaction?: {
     controls?: string[];
     stateChanges?: { control: string; after: string }[];

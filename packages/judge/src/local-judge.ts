@@ -39,6 +39,7 @@
  */
 import { spawn } from "node:child_process";
 
+import type { CaptureStructure } from "@a11y-witness/evidence";
 import { annotateCapture } from "@a11y-witness/evidence";
 import { scorerPaths as artefact } from "@a11y-witness/scorer";
 
@@ -67,10 +68,12 @@ interface ScorerOutput {
 /** The evidence a capture must actually contain before a criterion may be reported. */
 export interface CaptureEvidence {
   transcript?: string[];
-  structure?: {
-    headings?: string[]; landmarks?: string[]; formFields?: string[];
-    links?: string[]; lists?: string[]; graphics?: string[]; tableCells?: string[];
-  };
+  /**
+   * ALL SEVEN, all optional — known-gaps §15. Derived rather than restated: this is a gate on what a
+   * capture CONTAINS, so it reads every sweep, and `Partial` because every one of them may legitimately
+   * be absent. That is the question this interface exists to ask.
+   */
+  structure?: Partial<CaptureStructure>;
   interaction?: {
     controls?: string[]; stateChanges?: unknown[]; postSubmitFields?: string[];
     /**

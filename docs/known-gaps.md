@@ -541,7 +541,7 @@ above were about prose that had drifted from the code.
 trained head, nothing to arbitrate), so an audit driven by that file cannot see it. It has an
 `act-rules.ts` description declaring `secondary`, so it is documented — just not where ownership is.
 
-## 15. A capture's structure is declared FOUR times, and they disagree
+## 15. ~~A capture's structure is declared FOUR times, and they disagree~~ — DONE, and it was SEVEN
 
 Found 2026-08-29 while reading `judge.ts`. The shape of `capture.structure` — the sweeps, which are the
 central data of this whole tool — is declared independently in four places:
@@ -565,14 +565,24 @@ understated what flows, and a caller building the literal by hand would have sil
 The same shape as the oracle-counts defect fixed the same day — a comment naming the requirement while the
 type enforced none of it.
 
-**Not unified here, deliberately.** `Partial<CaptureStructure>` everywhere would make `JudgeInput`'s
-currently-required `headings`/`landmarks`/`formFields` optional, which cascades into every reader and is a
-change worth making on purpose rather than in passing.
+**DONE 2026-08-29.** Each declaration now derives from `CaptureStructure`, and the concern above turned
+out not to bind: nothing needed `Partial<CaptureStructure>` everywhere. `JudgeInput` reads the whole thing
+and IS `CaptureStructure`; the others use `Pick<>` or `Partial<Pick<>>`, so every omission stays a visible
+decision rather than an accident. `tsc` then enforces the keys — a `Pick` of a field the wire does not
+carry does not compile.
 
-**Done when:** each internal declaration is expressed as a subset of `CaptureStructure` — `Pick<>` where a
-consumer reads a genuine subset, so the omissions stay meaningful — and a test proves no declaration names
-a field the wire does not carry. `wire-types-describe-the-wire.test.ts` already does that for the published
-type and is the pattern to follow.
+**There were SEVEN, not four**, and the extra three were found only by running the discovery test rather
+than by working the list: `cli.ts`, `judge-file.ts` and `evidence-units.ts`. That is the argument for
+discovering over enumerating, in a gap entry that had itself enumerated.
+
+`ScorableCapture` in `evidence-units.ts` keeps its `[other: string]: unknown` index signature, because it
+is an allowlist of what the model READS rather than a description of what a capture carries — the three
+named fields derive, everything else passes through untyped and unread. Deriving them made the exclusion
+of `landmarks` a visible `Pick` rather than an omission somebody might "fix", which is what that file
+argues for at length.
+
+`structure-declarations.test.ts` fails on any inline restatement naming three or more sweep fields —
+mutation-checked by putting `cli.ts`'s back.
 
 ## 16. The discriminative gate's rules-owned list is frozen at two criteria of nine
 

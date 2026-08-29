@@ -11,17 +11,18 @@
  * whose title is never spoken; this one only catches the egregious wrong-content case,
  * which is the one that silently poisons results.
  */
+import type { CaptureStructure } from "./index.js";
 import { parseAnnouncement, isLandmarkRole } from "./announcement.js";
 
 /** Whatever a capture backend returned; only the announcement fields matter here. */
 export interface CapturedAnnouncements {
   transcript: string[];
-  structure?: {
-    headings: string[];
-    landmarks: string[];
-    formFields: string[];
-    tableCells?: string[];
-  };
+  /**
+   * A SUBSET OF THE WIRE TYPE, derived — known-gaps §15. `Pick` keeps the omission meaningful: nothing in
+   * this file reads `links`, `lists` or `graphics` off `structure` (the census supplies those counts),
+   * and declaring them would claim a read that does not happen.
+   */
+  structure?: Pick<CaptureStructure, "headings" | "landmarks" | "formFields" | "tableCells">;
   interaction?: {
     controls: string[];
     stateChanges: { control: string; after: string }[];
