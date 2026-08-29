@@ -57,7 +57,19 @@ question below is real.
 
 ## L1. Gates become lab jobs
 
-**Status: open. The whole point, and it is additive — nothing is taken away.**
+**Status: MET 2026-08-29, and demonstrated by accident — the best kind of evidence.**
+
+Both gates are in `lab-job.yml`. `gate-stability` was dispatched, the LAPTOP-SIDE PROCESS WAS THEN KILLED,
+and the job carried on:
+
+```
+a11y-job-gate-stability.service  loaded active running  gate-stability at 3ce6bb3cc16f
+SubState=running
+```
+
+Killing the dispatch did not touch the run: it is a systemd unit parented by PID 1 on a wired,
+mains-powered host. (`Result=success` appears in that same output and means NOTHING while `SubState` is
+`running` — `Result` and `ExecMainStatus` are populated during a run, which `lab-job.test.ts` pins.)
 
 `lab-job.yml` has no gate entries; `rules-gate` is there because it needs no worker. Add the two that do:
 
@@ -82,22 +94,53 @@ They need no new flags: both already default to every worker in `inventory.yml` 
 - `lab-pipeline.test.ts` already requires every job named in a pipeline to exist in the catalogue; the new
   entries are covered by it the moment a pipeline references them.
 
-## L2. The laptop stops being able to do it silently
+## L2. ~~Warn when the control plane is on battery~~ — WITHDRAWN, and the reason matters
 
-**Status: open. Without this, L1 is a preference and preferences decay.**
+**Status: withdrawn 2026-08-29, replaced by L2a below.**
 
-Running a gate from a laptop must still be POSSIBLE — it is the debugging path — but it must SAY so, the way
-`--worker` already announces a one-box run. A verdict produced from an unreliable control plane should carry
-that in its provenance, because this session spent two days attributing a transport fault to the capture
-protocol and the evidence for where it came from was in `pmset`, not in any report.
+The original item was: a run names its control plane, and says when that host is on battery. It was
+challenged with *"why do we need to say it runs on low battery as everything will be in the control
+plane?"*, and the challenge is right on two counts.
+
+**A warning is the weak form of a fix.** It depends on somebody reading it — this plan's own subject is
+removing that class, and proposing a notice was the same mistake in miniature.
+
+**And it warns about a case L1 removes.** Checked rather than assumed: `capture`, `capture-real-pages`,
+`capture-acceptance`, `evidence-check`, `rules-real-pages` were already lab jobs, and L1 added the two
+gates. So **everything that produces corpus evidence or a gate verdict now runs on the lab.** What remains
+on a laptop is diagnostics — `capture:check`, `identity:rate`, `bench-capture`, `worker:compare` — plus
+`fleet:deploy` and `fleet:provision`, which are short SSH operations that fail loudly and produce no
+evidence.
+
+A diagnostic taken from a flaky host is a much smaller problem than a corpus captured from one, and
+`refuseIfBusy` already covers the measurement-hygiene half of it.
+
+## L2a. A verdict-producing gate DISPATCHES to the lab; running it locally is the escape hatch
+
+**Status: open. The strong form of what L2 was reaching for.**
+
+The residual is narrow but real: `npm run gate:stability` still executes locally, and its verdict looks
+identical to one produced on the lab. Someone debugging will run it, paste the result, and nothing in the
+output distinguishes the two.
+
+The fix is the convention this repo already uses everywhere else — **the safe thing is the default and the
+other one announces itself** — rather than a label on the unsafe thing:
+
+- `npm run gate:stability` dispatches to the lab, the way a capture run already does.
+- `--local` runs it here, and the verdict's `source` says so, exactly as `--worker` already announces a
+  one-box run.
+
+**The friction is real and is the correct friction.** Dispatching needs the ref pushed, because
+`run-job.yml` refuses a commit other than the one asked for — *"a job that quietly runs four commits behind
+reports success for code you did not ask for"*. So `--local` stays genuinely useful for a working tree, and
+that is what it is for.
 
 **Done when:**
 
-- A gate run names its control plane in the verdict's `source`, the way it now names the workers.
-- On a host that is on battery, it says so, and says what that cost measurably: 9 of 40 responses at 1%.
-  Refusing outright would be wrong — the debugging path is real — but an unlabelled number from a laptop is
-  how this went unnoticed.
-- `doctor` reports the same, since it is already the "can I run right now?" command.
+- The two gate scripts dispatch by default and run locally under `--local`.
+- A local verdict names its control plane in `source`; a dispatched one names the lab.
+- `refuseUnknownFlags` knows `--local`, and the discovery test that requires every argv reader to be
+  guarded still passes.
 
 ## L3. Decide what the control plane IS
 
