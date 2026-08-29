@@ -95,7 +95,7 @@ lighter ONNX path would remove torch entirely and is the obvious next optimisati
 ## Testing it without spending runner minutes
 
 ```bash
-npm run worker:ctl -- up
+npm run doctor                  # whatever worker you have — fleet, or a local VM
 ./packages/lab/scripts/action-dry-run.sh https://example.com "Complete the checkout"
 FAIL_ON=blocker ./packages/lab/scripts/action-dry-run.sh ...      # check the exit contract
 ```
