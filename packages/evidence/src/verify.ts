@@ -273,6 +273,12 @@ export interface OracleCounts {
   census?: PageCensus;
   dom?: DomCensus;
   probes?: ProbeStates;
+  /** Announcements heard in truncated form. A truncated name matches nothing and must not be compared. */
+  truncated?: string[];
+  /** What this capture can bear a claim about, per claim, with the reason. */
+  supports?: CaptureSupports;
+  /** Whether the page opened on a consent banner, and whether focus ever escaped it. */
+  banner?: ConsentBanner;
 }
 
 export function oracleCounts(capture: CapturedAnnouncements): OracleCounts {
@@ -281,6 +287,9 @@ export function oracleCounts(capture: CapturedAnnouncements): OracleCounts {
     dom: domCensus(capture) ?? undefined,
     probes: probeStates(capture) ?? undefined,
     completeness: sweepCompleteness(capture),
+    truncated: truncatedAnnouncements(capture),
+    supports: captureSupports(capture),
+    banner: consentBanner(capture),
   };
 }
 
@@ -387,8 +396,12 @@ function compareStates(states: Record<string, Record<string, number>>):
 export type Completeness = "exact" | "truncated" | "phantom" | "unknown";
 
 /** The sweep field each census type is counted from. Named once; the two must not drift. */
-const SWEEP_OF: Record<string, "headings" | "links" | "landmarks" | "graphics"> = {
+const SWEEP_OF: Record<string, "headings" | "links" | "landmarks" | "graphics" | "formFields"> = {
   heading: "headings", link: "links", landmark: "landmarks", graphic: "graphics",
+  // `formControl` and not `formField`: the census counts the roles NVDA's `f` quick-nav actually visits,
+  // which includes buttons. `dom.formField` is a narrower set and is 2.1.2's denominator; comparing the
+  // sweep against THAT would report a phantom on every page with a button. See `FORM_CONTROL_ROLES`.
+  formControl: "formFields",
 };
 
 /**
@@ -420,6 +433,160 @@ export function sweepCompleteness(capture: CapturedAnnouncements): Record<string
     out[type] = names.size === expected ? "exact" : names.size < expected ? "truncated" : "phantom";
   }
   return out;
+}
+
+/**
+ * The announcements this capture believes are TRUNCATED — capture-integrity-plan C5.
+ *
+ * A truncated announcement is not a shorter announcement, it is a DIFFERENT STRING. `"o, button"` for a
+ * control really named "Open account search" matches nothing, so every name comparison in this codebase
+ * silently drops it: `comparableNames` produces "o", the tab order produces "Open account search", and
+ * 2.1.1 reads the difference as a control the keyboard never reached.
+ *
+ * That is the U+FFFC and U+E604 class exactly — a name that cannot match itself because a second alphabet
+ * got into it — and it is at 40% of real captures rather than 3%. The capture has detected this since
+ * `truncatedAnnouncements` was written; it lands as a DIAGNOSTIC, and `diagnostics` is on the exporter's
+ * `FORBIDDEN_INPUT_KEYS`, so no rule could ever reach it. The same shape as the census before C1.
+ *
+ * @param capture a capture, unwrapped
+ * @returns the announcements heard in truncated form, verbatim, or `[]`
+ */
+export function truncatedAnnouncements(capture: CapturedAnnouncements): string[] {
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  const mark = marks.find((m) => typeof m === "object" && m !== null
+    && (m as { event?: unknown }).event === "truncatedAnnouncements") as
+    { truncated?: { heard?: unknown }[] } | undefined;
+  return (mark?.truncated ?? [])
+    .map((t) => typeof t?.heard === "string" ? t.heard : "")
+    .filter(Boolean);
+}
+
+/** A claim a capture can or cannot bear, with the reason — never a bare boolean. */
+export interface Support { ok: boolean; why: string }
+
+/** What a capture can support. `absence` is per element type; the other two are whole-capture. */
+export interface CaptureSupports {
+  absence: Record<string, Support>;
+  ordering: Support;
+  naming: Support;
+}
+
+/** Read-through stop reasons that mean the read REACHED THE END, rather than ran out of budget. */
+const REACHED_THE_END = new Set(["exhausted", "repeatBottom", "wrap"]);
+
+/**
+ * WHAT CAN THIS CAPTURE SUPPORT? — capture-integrity-plan C6.
+ *
+ * The property that makes the rest of the plan checkable, and the reason it lives HERE rather than in the
+ * three tools that each derived it: `capture:explain` computed it by reading marks after the fact, the
+ * rules inferred it per-rule, and a CLI finding could not cite it at all. Three re-derivations of one
+ * fact is the shape this repo pays for most often — the probe order was written down in six places and
+ * they drifted.
+ *
+ * Deliberately host-side rather than on the worker, for C1's reason: `parseAnnouncement` is the single
+ * announcement grammar and it is TypeScript the plain-node worker cannot import. The worker records
+ * evidence; the host interprets it.
+ *
+ * Every answer carries its reason, because `ok: false` alone sends a reader back to the capture to find
+ * out which of four things went wrong.
+ *
+ * @param capture a capture, unwrapped
+ * @returns per-type absence support, plus ordering and naming
+ */
+export function captureSupports(capture: CapturedAnnouncements): CaptureSupports {
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  const mark = (event: string) => marks.find((m) => typeof m === "object" && m !== null
+    && (m as { event?: unknown }).event === event) as Record<string, unknown> | undefined;
+
+  const completeness = sweepCompleteness(capture);
+  // A BLOCKING BANNER OUTRANKS EVERY PER-TYPE VERDICT. If focus never left the consent dialog, the sweep
+  // is a complete and accurate account of the BANNER, and "this page has no headings" is a statement
+  // about a dialog. An exact sweep of the wrong thing is the most confident way to be wrong.
+  const banner = consentBanner(capture);
+  const absence: Record<string, Support> = {};
+  for (const [type, verdict] of Object.entries(completeness)) {
+    if (banner.blocking) { absence[type] = { ok: false, why: banner.why }; continue; }
+    absence[type] = verdict === "exact"
+      ? { ok: true, why: "the sweep announced exactly what the tree exposes" }
+      : verdict === "unknown"
+        ? { ok: false, why: "this capture cannot say whether the sweep was complete" }
+        : { ok: false, why: `the sweep is ${verdict} against the tree` };
+  }
+
+  // ORDERING rests on the READ-THROUGH, which is the only ordered channel this tool has: the sweep is a
+  // count walk and its order is an artefact of where the caret was. A read that ran out of budget saw a
+  // PREFIX of the page, so an ordering claim about what it saw is sound and one about the page is not.
+  const read = mark("readThrough");
+  const stop = read?.stopReason;
+  const ordering: Support = !read
+    ? { ok: false, why: "no read-through was recorded" }
+    : REACHED_THE_END.has(String(stop))
+      ? { ok: true, why: `the read reached the end of the page (${String(stop)})` }
+      : { ok: false, why: `the read stopped at ${JSON.stringify(stop)}, so it saw a prefix of the page` };
+
+  // NAMING rests on names being comparable at all. A truncated announcement is a different string, not a
+  // shorter one, so it matches nothing — see C5.
+  // AN ABSENT MARK IS NOT A CLEAN ONE. The capture used to write this mark only when it FOUND a
+  // truncation, so "none" and "never checked" were one silence — and the first version of this function
+  // read that as `ok: true`, handing a confident clean answer to every capture predating the detector.
+  // Caught by `explain-capture.test.ts`, whose whole subject is absent-read-as-zero.
+  const truncationMark = mark("truncatedAnnouncements");
+  const cut = truncatedAnnouncements(capture);
+  const naming: Support = !truncationMark
+    ? { ok: false, why: "this capture cannot say whether any announcement was truncated" }
+    : cut.length === 0
+      ? { ok: true, why: "no announcement arrived truncated" }
+      : { ok: false, why: `${cut.length} announcement(s) arrived truncated and cannot be matched by name` };
+
+  return { absence, ordering, naming };
+}
+
+/** Words that open a consent banner. Matched against the OPENING announcements only. */
+const CONSENT_WORDS = /cookie|consent|accept all|privacy settings|manage preferences/i;
+
+/** How many opening announcements can be a banner before the page itself must have started. */
+const OPENING_ANNOUNCEMENTS = 3;
+
+/** Whether a consent banner was present, and — a DIFFERENT question — whether it blocked the capture. */
+export interface ConsentBanner { present: boolean; blocking: boolean; why: string }
+
+/**
+ * WAS THERE A CONSENT BANNER, AND DID IT STOP US? — capture-integrity-plan C4.
+ *
+ * Over half the real-page corpus opens behind one, and the decision recorded in ADR 0023 is to CAPTURE
+ * THE PAGE AS IT IS and say so, rather than to click somebody's "Accept all". The tool's own rule about
+ * `probeForms` settles it: pressing a stranger's button is not a review, and consenting to tracking on a
+ * visitor's behalf is a stronger act than pressing *Book*. A first-time visitor genuinely meets the
+ * banner, so the capture is honest; what was missing is that findings did not SAY which page they
+ * describe.
+ *
+ * TWO QUESTIONS, DELIBERATELY SEPARATE, and merging them is a mistake already made here: a metric once
+ * reported "50 of 86 captures read the site's furniture" by combining "has a cookie banner" — which is
+ * nearly every UK government site and costs nothing — with "never got past one", which was a single page
+ * and invalidates everything downstream. `present` is context; `blocking` is a defect.
+ *
+ * @param capture a capture, unwrapped
+ * @returns whether a banner opened the capture, and whether focus never escaped it
+ */
+export function consentBanner(capture: CapturedAnnouncements): ConsentBanner {
+  const transcript = Array.isArray(capture.transcript) ? capture.transcript : [];
+  const opening = transcript.slice(0, OPENING_ANNOUNCEMENTS).join(" ");
+  const present = CONSENT_WORDS.test(opening);
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  const confinement = marks.find((m) => typeof m === "object" && m !== null
+    && (m as { event?: unknown }).event === "focusConfinement") as
+    { confined?: boolean; ring?: number } | undefined;
+  const blocking = present && confinement?.confined === true;
+  if (!present) return { present, blocking, why: "no consent banner in the opening announcements" };
+  return {
+    present,
+    blocking,
+    why: blocking
+      ? `focus never left the banner (ring of ${confinement?.ring ?? "?"}), so this capture describes the `
+        + "banner and not the page behind it"
+      : "the page opens on a consent banner, so this evidence describes the page WITH it present — which "
+        + "is what a first-time visitor meets",
+  };
 }
 
 export function pageCensus(capture: CapturedAnnouncements):
