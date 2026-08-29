@@ -37,7 +37,7 @@ const OBJECT_REPLACEMENT = /￼/g; // ￼ — strip the empty-name marker for cl
  *
  * **STALE, DELIBERATELY NOT WIDENED, and recorded rather than guessed at — see `known-gaps.md` §16.**
  *
- * It was written when the rules owned exactly these two. `rule-ownership.json` now declares many more
+ * WIDENED 2026-08-29 from the two it was frozen at. It was written when the rules owned exactly those. `rule-ownership.json` now declares many more
  * with `decidedBy: "rules"` — 1.3.1, 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3 and 3.3.2 among them — so a
  * generative model's 1.3.1 or 3.3.2 finding survives the gate and then SUPPRESSES the rule's, because
  * `withRuleFindings` drops a rule finding whose criterion the model already flagged. That is backwards
@@ -51,8 +51,33 @@ const OBJECT_REPLACEMENT = /￼/g; // ￼ — strip the empty-name marker for cl
  *
  * Reachable only on a path nobody runs by default: `applyGate` is called for the GENERATIVE backends only,
  * and `ENABLED` additionally requires `JUDGE_GATE=on` and a local ONNX model at `GATE_MODEL_PATH`.
+ *
+ * ## The test that decides membership, and why it is not "decidedBy: rules"
+ *
+ * A criterion belongs here when a rule's finding SUBSTITUTES for the model's — the rule decides the
+ * subtype AND reports it under that subtype's OWN criterion. `score.py` states the same test for the
+ * scorer's `ruleOwned` and says why the second half matters: a subtype the rules decide but report under
+ * a DIFFERENT criterion must not be suppressed, or the model's finding is silenced while nothing supplies
+ * one, leaving a criterion decided by neither layer. (Its example — `3.3.2:unnamed-form-field` reporting
+ * as 4.1.2 — is stale; that subtype reports as 3.3.2 in both `rule-ownership.json` and the shipped
+ * training report. The rule it states is still right and is the one applied here.)
+ *
+ * `2.4.4` is therefore ABSENT and must stay absent: its ownership is `overlap`, so the rules cover a
+ * deliberate subset and the head owns the rest. Suppressing the model's 2.4.4 would discard the half
+ * nothing else supplies — which is why widening this to `RULE_CRITERIA` is the obvious move and the
+ * wrong one.
+ *
+ * ## Kept in step
+ *
+ * `packages/lab/rule-ownership.json` is the single declaration of the boundary and this package cannot
+ * import it — the lab depends on the judge, not the reverse. So the set is written out here and
+ * `rules-owned-criteria.test.ts` in the LAB, which can read both, derives it from that file and refuses
+ * any difference. Same remedy as `name-normalisation.test.ts`: when neither copy can be deleted, pin
+ * them equal where both are visible.
  */
-export const ABSENCE_CRITERIA = new Set(["1.1.1", "4.1.2"]);
+export const ABSENCE_CRITERIA = new Set([
+  "1.1.1", "1.3.1", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "3.3.2", "4.1.2",
+]);
 
 /** Per-criterion violation hypotheses; entailment of any one means a real failure. */
 const HYPOTHESES: Record<string, string[]> = {
