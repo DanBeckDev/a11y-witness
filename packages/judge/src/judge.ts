@@ -64,7 +64,16 @@ export interface JudgeInput extends OracleCounts {
   transcript: string[];
   /** Optional structural navigation passes (skim by element type). An empty list
    * for a type means the page exposes none of it, even if it looks like it does. */
-  structure?: { headings: string[]; landmarks: string[]; formFields: string[]; links?: string[] };
+  /**
+   * The sweeps. `graphics` was missing until 2026-08-29 while `addUnnamedGraphics` read it — so a
+   * JudgeInput built to this type carried no graphics and that rule's evidence string reported the screen
+   * reader had reached zero of them. Runtime was unaffected (both callers pass a whole capture through),
+   * which is exactly why it survived: the type understated what flows.
+   *
+   * Still one of FOUR internal declarations of this shape — see `known-gaps.md` §15.
+   */
+  structure?: { headings: string[]; landmarks: string[]; formFields: string[]; links?: string[];
+    graphics?: string[]; lists?: string[]; tableCells?: string[] };
   /**
    * The oracle counts arrive by EXTENDING `OracleCounts` rather than by restating two of its fields.
    *

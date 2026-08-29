@@ -540,6 +540,39 @@ sites to it, so the two cannot disagree — and the maintainer has decided, per 
 should assert. ADR 0021 is the precedent: it moved `4.1.2:state-change-silent` to the rules specifically so
 it could be **stated rather than suggested**, which is the same decision, taken once.
 
+## 15. A capture's structure is declared FOUR times, and they disagree
+
+Found 2026-08-29 while reading `judge.ts`. The shape of `capture.structure` — the sweeps, which are the
+central data of this whole tool — is declared independently in four places:
+
+| where | declares |
+|---|---|
+| `CaptureStructure` (evidence/index.ts) | all seven — **fixed 2026-08-29**, it declared three |
+| `CapturedAnnouncements.structure` (evidence/verify.ts) | its own subset |
+| `JudgeInput.structure` (judge.ts) | omitted `graphics` until 2026-08-29, while `addUnnamedGraphics` read it |
+| `RuleInput.structure` (rules.ts) | `formFields`, `headings`, `links`, `graphics` — no landmarks, lists or tableCells |
+| `CaptureEvidence.structure` (local-judge.ts) | all seven |
+
+`RuleInput`'s omissions are currently CORRECT — no rule reads `structure.landmarks` (the two mentions in
+`rules.ts` are comments), so declaring it would claim a capability that does not exist. That is the
+argument for keeping them separate: each interface says what its consumer actually reads, which is real
+information.
+
+The argument against is what happened: `JudgeInput` omitted `graphics` while a rule read it, and nothing
+noticed because **object spread preserves what a type does not mention**. Runtime was unaffected; the type
+understated what flows, and a caller building the literal by hand would have silently starved the rule.
+The same shape as the oracle-counts defect fixed the same day — a comment naming the requirement while the
+type enforced none of it.
+
+**Not unified here, deliberately.** `Partial<CaptureStructure>` everywhere would make `JudgeInput`'s
+currently-required `headings`/`landmarks`/`formFields` optional, which cascades into every reader and is a
+change worth making on purpose rather than in passing.
+
+**Done when:** each internal declaration is expressed as a subset of `CaptureStructure` — `Pick<>` where a
+consumer reads a genuine subset, so the omissions stay meaningful — and a test proves no declaration names
+a field the wire does not carry. `wire-types-describe-the-wire.test.ts` already does that for the published
+type and is the pattern to follow.
+
 ## What is NOT on this list, deliberately
 
 - **`1.3.1`** — closed. `29/29 rules: EXACT`, validated on a real page. Was "the claim rests on nothing"
