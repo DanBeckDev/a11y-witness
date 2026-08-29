@@ -461,6 +461,41 @@ because of the lockfile. That is wrong — `lint.yml` had not run since 23 Augus
 guidepup one above. Two red workflows, two unrelated causes, and I attributed both to the one I had just
 found. Exactly the shape this repo's diagnostics table warns about: the first plausible cause, believed.
 
+## 13. The WORKER's cross-check compares entry counts against distinct names
+
+Found 2026-08-29 by validating the corpus run 90 minutes in rather than waiting for it, which is the only
+reason it was caught before the whole run carried it.
+
+`crossCheckStructure` runs on the worker, and the worker has no announcement grammar — it is plain node,
+and `parseAnnouncement` is TypeScript. So it compares `structure.links.length`, an ENTRY COUNT, against
+`census.distinct.link`, a count of distinct NAMES. Those are different quantities in both directions:
+
+- two links sharing a name are two announcements and one name -> reported `phantom`
+- one landmark entry can announce several landmarks, and some announce none -> reported `truncated`
+
+Measured on 675 fresh protocol-7 captures, worker-side against host-side on the same evidence:
+
+| | worker `structureCrossCheck` | host `sweepCompleteness` |
+|---|---|---|
+| agreement | **51%** | **47 of 60 captures exact on ALL FIVE types** |
+| link | 191 `phantom` | **60/60 exact** |
+| landmark | 139 `truncated` | 47/60 exact, 13 truncated — and those 13 are REAL |
+
+The 13 are the documented caret rule: quick navigation cannot reach a landmark containing the caret, so a
+page-wrapping `<main>` is missed. One checked directly — the tree exposes 1, the sweep announced `[]`. C1
+is making a known limitation visible instead of silent, which is what it is for.
+
+**This is the C3 fix reaching one call site and not the other, and I wrote both.** Same shape as
+`anchorToTop`, `ensureSpeechChannel` and `refreshBrowseBuffer`.
+
+**Already mitigated where it mattered:** `capture:explain` now reports the HOST verdict and prints the
+worker's number as raw, labelled. No rule reads the cross-check, so nothing asserted on it.
+
+**Done when:** the worker stops rendering a `kind` it cannot compute — record the raw inputs and let the
+host judge, which is the split C1 established. Additive and diagnostic-only, so it needs a deploy and no
+recapture. **Deliberately NOT done mid-run:** deploying restarts a worker mid-capture and destroys
+12-520 s of unresumable work, which `sleep.yml` already refuses for provisioning.
+
 ## What is NOT on this list, deliberately
 
 - **`1.3.1`** — closed. `29/29 rules: EXACT`, validated on a real page. Was "the claim rests on nothing"
