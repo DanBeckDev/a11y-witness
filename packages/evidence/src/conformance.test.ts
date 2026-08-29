@@ -15,7 +15,7 @@ import {
   notAConformanceClaim,
   NON_INTERFERENCE_CRITERIA,
   sweepOutcomes,
-  truncatedSweeps, sweepCoverage } from "./conformance.js";
+  truncatedSweeps, sweepCoverage, censusCountsDistinctNames, censusFromDiagnostics } from "./conformance.js";
 
 const CLEAN = {
   assessedCriteria: ["1.1.1", "1.3.1", "2.4.4", "2.4.6", "3.3.1", "4.1.2", "4.1.3", "2.1.2"],
@@ -248,4 +248,49 @@ test("types with no census entry are omitted rather than given an invented denom
     census: { link: 10 }, swept: { link: 10, formField: 13, list: 4 },
   });
   assert.deepEqual(coverage.map((c) => c.type), ["link"]);
+});
+
+test("THE COVERAGE SENTENCE COMPARES LIKE WITH LIKE when the census has distinct names", () => {
+  // Its own comment has named this since it was written: the sweep deduplicates by announcement, so 66
+  // images with 47 distinct alt values were reported as "5 of 66" — "understating our own coverage is the
+  // safe direction to be wrong in, but it is still wrong". `census.distinct` is the number that fixes it.
+  const scope = conformanceScope({
+    assessedCriteria: ["1.1.1"], screenReader: "NVDA 2026.1", ruleLayerRan: false,
+    census: { graphic: 47 }, swept: { graphic: 47 }, censusCountsDistinctNames: true,
+  } as never);
+  const text = JSON.stringify(scope);
+  assert.match(text, /DISTINCT NAMES the browser/, "the sentence must say which denominator it used");
+  assert.match(text, /like compared with like/);
+});
+
+test("an older capture keeps the honest caveat, rather than claiming a comparison it cannot make", () => {
+  // Absent `distinct` is not a licence to pretend. Every capture before 2026-08-29 is in this state.
+  const scope = conformanceScope({
+    assessedCriteria: ["1.1.1"], screenReader: "NVDA 2026.1", ruleLayerRan: false,
+    census: { graphic: 66 }, swept: { graphic: 5 },
+  } as never);
+  assert.match(JSON.stringify(scope), /identical announcements collapse/);
+});
+
+test("censusCountsDistinctNames reads the MARK, and absence is false rather than a throw", () => {
+  assert.equal(censusCountsDistinctNames([{ event: "structureCensus", distinct: { link: 3 } }]), true);
+  assert.equal(censusCountsDistinctNames([{ event: "structureCensus", link: 3 }]), false,
+    "a census without `distinct` cannot support the like-for-like sentence");
+  assert.equal(censusCountsDistinctNames([]), false);
+});
+
+test("censusFromDiagnostics PREFERS the distinct-name count, which is what the sweep can be compared with", () => {
+  // The test above asserts the SENTENCE and feeds `conformanceScope` a census directly, so it never
+  // exercised the merge — a mutation removing the merge left it green. Caught by mutation, not by reading:
+  // a test that cannot see its own subject disabled is the shape this repo keeps paying for.
+  const census = censusFromDiagnostics([
+    { event: "structureCensus", graphic: 66, link: 58, distinct: { graphic: 47, link: 51 } },
+  ]);
+  assert.equal(census?.graphic, 47, "66 elements collapse to 47 distinct alt values; the sweep sees 47");
+  assert.equal(census?.link, 51);
+});
+
+test("and falls back to the element count when the capture predates `distinct`", () => {
+  const census = censusFromDiagnostics([{ event: "structureCensus", graphic: 66 }]);
+  assert.equal(census?.graphic, 66, "an older capture keeps its only number, and the sentence says so");
 });
