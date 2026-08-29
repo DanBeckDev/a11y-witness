@@ -16,6 +16,7 @@
  *
  * https://www.w3.org/WAI/standards-guidelines/earl/
  */
+import { WCAG_22_AA } from "./wcag.js";
 
 /** ACT's five outcomes, which EARL names identically. */
 export type EarlOutcome = "passed" | "failed" | "cantTell" | "inapplicable" | "untested";
@@ -32,9 +33,27 @@ export interface EarlAssertionInput {
   outcomes: readonly { criterion: string; outcome: EarlOutcome; reason: string }[];
 }
 
-/** WCAG success criteria have stable URIs; citing them is what makes an assertion resolvable. */
-const criterionUri = (num: string): string =>
-  `https://www.w3.org/TR/WCAG22/#${num}`;
+/**
+ * WCAG success criteria have stable URIs; citing them is what makes an assertion resolvable.
+ *
+ * **AND THE URI HAS TO BE THE REAL ONE.** This built `https://www.w3.org/TR/WCAG22/#1.1.1`, which does not
+ * exist: WCAG 2.2 identifies a criterion by a SLUG of its name — `id="non-text-content"` — so every
+ * `earl:test` in every report resolved to the top of the document. In a machine-readable, vendor-neutral
+ * format whose entire purpose is that another tool can follow the reference.
+ *
+ * Verified against the published spec on 2026-08-29 rather than assumed: lowercasing each criterion NAME
+ * and hyphenating its non-alphanumerics matches a real `id` for ALL of `WCAG_22_AA`, with no exceptions to
+ * special-case.
+ *
+ * A criterion this tool does not know falls back to the document itself. A bare document URI is honest —
+ * "here is the standard" — where a fabricated fragment claims a precision it does not have.
+ */
+const criterionUri = (num: string): string => {
+  const name = WCAG_22_AA.find((criterion) => criterion.num === num)?.name;
+  if (!name) return "https://www.w3.org/TR/WCAG22/";
+  return `https://www.w3.org/TR/WCAG22/#${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")}`;
+};
 
 /**
  * One EARL assertion per criterion.

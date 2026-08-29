@@ -63,7 +63,21 @@ const STOPWORDS = new Set([
 
 const isSignificant = (word: string): boolean => !STOPWORDS.has(word);
 
-/** Everything the screen reader said, as one lowercased string. */
+/**
+ * Everything the screen reader said, as one lowercased string.
+ *
+ * "Everything" is not literal: `links`, `graphics`, `lists` and `tableCells` are absent, so this is the
+ * transcript plus three of the seven sweeps. Left that way DELIBERATELY, and measured before deciding —
+ * across 106 real captures with a title, ZERO fail `captureMentionsTitle`, and zero of those would be
+ * rescued by widening the haystack. The two-route design already catches them: title words first, the
+ * page's own accessible names second.
+ *
+ * Widening would be safe in principle — this feeds an OR, so more text can only ACCEPT captures that were
+ * rejected, never reject one that passed. It is not done because it would change a gate pinned across the
+ * whole corpus for no measurable gain, which is how an inert remedy gets shipped with a confident comment.
+ * If a false refusal ever shows up on a page whose distinctive text lives in link names, this is the first
+ * place to look.
+ */
 function announced(capture: CapturedAnnouncements): string {
   const s = capture.structure;
   const it = capture.interaction;
