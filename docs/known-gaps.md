@@ -632,6 +632,50 @@ reasoning sits beside `landmark_present` in `screenreader_features.py` rather th
 encoder's exclusion. If it stays, `sweepCompleteness` now makes the honest version available — the feature
 could read `unknown` on a truncated sweep instead of `0`.
 
+## 18. `dedupeKey` strips ONE container prefix, so a nested landmark is recorded twice
+
+**MUST RIDE THE NEXT `CAPTURE_PROTOCOL_VERSION` BUMP.** This is the only entry here whose fix is written
+and deliberately not applied, so it is the one most likely to be lost.
+
+`CONTAINER_PREFIX` in `capture-pure.mjs` removes one leading container announcement. NVDA announces *every*
+container it entered, so a nested one survives and the same element keys two ways:
+
+```
+"main landmark, Home energy, region, Home energy"     <- reached from outside
+"Home energy, region, Home energy"                    <- reached from inside
+```
+
+`collectPhrase` keys on that, so `structure.landmarks` reports **3 landmarks on a page with 2**.
+
+**Measured** (5,304 captures on the local copy): 146 of 24,774 sweep announcements are affected, in **34
+captures, every one a `landmark-*` case**. The transcript channel is clean — 0 of 35,647 — because
+`dedupeKey` is never applied to it.
+
+**Blast radius, checked rather than assumed.** No rule counts the list. The model's `landmark_present` and
+`landmark_named` are booleans, so an inflated list does not move a feature. `sweptElements` sets names, so
+the completeness verdicts added in the capture-integrity work collapse it too. Nothing downstream reads a
+wrong answer *today* — which is exactly why it survived, and exactly why it must not be forgotten: the
+first check that compares a sweep's LENGTH to a census will read a phantom as evidence of completeness.
+
+**Why it is not fixed now.** `dedupeKey` runs at capture time, so the fix changes `structure.*` and needs a
+protocol bump plus a full recapture. Applying it without one produces a corpus where some captures deduped
+twice and some once — the mixed-evidence state the cache key exists to prevent. A recapture was in flight
+when this was found; paying for a second one to remove 146 duplicate strings is the wrong trade.
+
+**The fix, verified against the corpus:** apply the strip repeatedly until it stops matching. Measured on
+all 24,774 sweep announcements — 146 keys change, **0 are reduced to empty**, which is the over-strip
+signature this would otherwise risk. Do not reorder `heading_name`-style strip-before-split logic while
+doing it: `"Supplier form, heading, level 1"` is a real corpus h1 whose accessible name *is* "Supplier
+form", confirmed against that capture's `structureCensus`.
+
+**What tells you it is fixed:** `capture-pure.corpus.test.ts`'s bounded assertion becomes a strict
+`assert.equal(dedupeKey(key), key)` over the sweep channel, and passes.
+
+**How it hid.** `capture-pure.corpus.test.ts` guarded `dedupeKey` and read only `capture.transcript` — the
+one channel `dedupeKey` is never applied to. It even carried a `>= 1000` anti-vacuity floor, added to stop
+exactly that, and the floor was satisfied by the wrong data. *A guard pointed at the wrong evidence channel
+is the count-based check in a new costume.*
+
 ## What is NOT on this list, deliberately
 
 - **`1.3.1`** — closed. `29/29 rules: EXACT`, validated on a real page. Was "the claim rests on nothing"
