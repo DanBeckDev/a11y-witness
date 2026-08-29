@@ -461,7 +461,7 @@ because of the lockfile. That is wrong — `lint.yml` had not run since 23 Augus
 guidepup one above. Two red workflows, two unrelated causes, and I attributed both to the one I had just
 found. Exactly the shape this repo's diagnostics table warns about: the first plausible cause, believed.
 
-## 13. The WORKER's cross-check compares entry counts against distinct names
+## 13. ~~The WORKER's cross-check compares entry counts against distinct names~~ — DONE
 
 Found 2026-08-29 by validating the corpus run 90 minutes in rather than waiting for it, which is the only
 reason it was caught before the whole run carried it.
@@ -491,10 +491,20 @@ is making a known limitation visible instead of silent, which is what it is for.
 **Already mitigated where it mattered:** `capture:explain` now reports the HOST verdict and prints the
 worker's number as raw, labelled. No rule reads the cross-check, so nothing asserted on it.
 
-**Done when:** the worker stops rendering a `kind` it cannot compute — record the raw inputs and let the
-host judge, which is the split C1 established. Additive and diagnostic-only, so it needs a deploy and no
-recapture. **Deliberately NOT done mid-run:** deploying restarts a worker mid-capture and destroys
-12-520 s of unresumable work, which `sleep.yml` already refuses for provisioning.
+**DONE 2026-08-29**, once the corpus run finished and deploying could no longer destroy unresumable work.
+
+`crossCheckStructure` now records `sweepEntries` and `oracleDistinctNames` and renders no `kind`, and the
+result is `sameCounts` / `differsOn` rather than `agrees` / `disagreements` — both old names read as
+verdicts on the PAGE, when these two numbers differing is usually a fact about how they are counted.
+
+`capture:explain` reads BOTH shapes, deliberately: it is pointed at captures of any age, and every capture
+taken before this carries the old spelling. A reader that understood only the new names would make the
+existing corpus unexplainable to fix a naming problem — and a pre-§13 capture's `kind` is still PRINTED,
+labelled as a verdict the worker cannot compute, because it is what that capture actually recorded and a
+reader comparing an old report with a new one needs to see why they differ.
+
+**Still needs a deploy** for new captures to carry the new shape; nothing recaptures, and the old shape
+keeps explaining until then.
 
 ## 14. ~~Owning a subtype and ASSERTING it are unconnected~~ — MOSTLY WRONG, and the code refuted me
 
