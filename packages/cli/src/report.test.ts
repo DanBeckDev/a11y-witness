@@ -189,3 +189,24 @@ test("the report says how far the page sat from what the scorer was validated on
   // And the LLM backends, which have no support region, must not grow a line about one.
   assert.doesNotMatch(render({ verdict: { ...verdict, findings: [] } as Report["verdict"] }), /Support:/);
 });
+
+test("A CONFIDENCE OF 1 IS NOT PRINTED OVER AN EMPTY FINDINGS LIST", () => {
+  // `local-judge` defines confidence as the weakest FINDING's — "a report is only as good as its shakiest
+  // claim" — and returns 1 when there are none. Printed, that read
+  // `Findings at BLOCKER severity: none (overall confidence 1)`, which claims certainty about the
+  // ABSENCE. Same unearned reassurance as a bare "0 findings", in the line rewritten to stop making it.
+  const clean = render({ verdict: { taskCompletable: true, summary: "", findings: [], confidence: 1 } });
+  assert.doesNotMatch(clean, /overall confidence/,
+    "with nothing found there is no shakiest claim, so there is no confidence to report");
+});
+
+test("and IS printed when there are findings, because then it describes them", () => {
+  const found = render({
+    verdict: {
+      taskCompletable: false, summary: "", confidence: 0.72,
+      findings: [{ issue: "x", wcag: "4.1.2 Name, Role, Value (A)", severity: "blocker",
+        evidence: "button", confidence: 0.72 }],
+    },
+  });
+  assert.match(found, /overall confidence 0\.72/);
+});
