@@ -593,6 +593,45 @@ import.
 artefact — and a test pins the gate's set equal to it. A generative finding for a rules-owned criterion
 must lose to the rule, on every backend.
 
+## 17. `landmark_present` is a model feature whose zero always means the SWEEP failed
+
+Measured 2026-08-29, and only measurable because C1 exists — this is what the completeness work was for.
+
+`screenreader_features.py` computes two structured features from `structure.landmarks`:
+
+```
+values["landmark_present"] = float(bool(landmarks))
+values["landmark_named"]   = float(any(named_landmark(v) for v in landmarks))
+```
+
+On 80 fresh protocol-7 captures, **16 have `landmark_present = 0`, and all 16 have a TRUNCATED landmark
+sweep** — the page exposes landmarks and quick navigation did not reach one. **Zero are genuinely
+landmark-free.**
+
+So the feature does not mean what its name says. It reads as "the page has a landmark"; it measures "the
+sweep reached one". The model is being taught a feature that encodes an artefact of the capture, and the
+artefact has a known cause: quick navigation cannot reach a landmark containing the caret, so a
+page-wrapping `<main>` is systematically missed.
+
+**The exclusion already exists one layer over, and did not reach here.** `evidence-units.ts` states at
+length that "`landmarks` is deliberately NOT a model feature", with the measurement: the same unchanged
+page gave `[]` in one capture and `["Cycling guide"]` in the next, swinging a CONFORMANT page's 3.3.2
+score from 0.004 to 0.39 across a 0.35 threshold. That exclusion covers the ENCODER's text units. The
+STRUCTURED features kept the field, and no comment, doc or ADR anywhere discusses it.
+
+**What was checked and REFUTED**, so nobody re-derives it: this is not a train/serve skew and not an
+ADR 0015 free veto. `landmark_present = 1` on 80% of corpus captures and 88% of real pages — the
+distributions match, and the feature is not constant on either side.
+
+**Not changed here, deliberately.** Removing a feature changes the model's schema and forces a retrain,
+and a retrain is running right now. It is also a judgement about whether a coarse binary is stable enough
+where the text was not — the structured feature may be defensible precisely because it is coarser.
+
+**Done when:** the decision is taken with the numbers above in front of it, and whichever way it goes, the
+reasoning sits beside `landmark_present` in `screenreader_features.py` rather than only beside the
+encoder's exclusion. If it stays, `sweepCompleteness` now makes the honest version available — the feature
+could read `unknown` on a truncated sweep instead of `0`.
+
 ## What is NOT on this list, deliberately
 
 - **`1.3.1`** — closed. `29/29 rules: EXACT`, validated on a real page. Was "the claim rests on nothing"
