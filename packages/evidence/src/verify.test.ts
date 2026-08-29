@@ -385,16 +385,31 @@ test("UNKNOWN IS A VERDICT, and an older capture must never read as EXACT", () =
   assert.equal(none.heading, "unknown");
 });
 
-test("AN ENTIRELY UNNAMED SWEEP CANNOT SAY, rather than reading as truncated", () => {
-  // The census counts unnamed controls; extracting names drops them. So a page whose sweep announced only
-  // unnamed graphics would compare 0 names against a census of 3 and report TRUNCATED — a capture defect
-  // invented out of a page whose graphics genuinely have no names, which is the 1.1.1 finding itself.
+test("AN ENTIRELY UNNAMED SWEEP IS COMPLETE when it reached everything the tree exposes", () => {
+  // REVERSED 2026-08-29, and the old assertion is kept in this comment because it was pinning a defect.
+  //
+  // It read: "AN ENTIRELY UNNAMED SWEEP CANNOT SAY, rather than reading as truncated", asserting
+  // `graphic: "unknown"` here. The reasoning was that the census counts unnamed elements while extracting
+  // names drops them, so the comparison is meaningless. The remedy chosen was to drop unnamed elements
+  // from the sweep side and DECLINE when nothing was left — which fixed the symptom on a page of wholly
+  // unnamed elements and created a worse one on every page carrying a MIX.
+  //
+  // Three named controls and one unnamed compare 3 against a census of 4: TRUNCATED, on a sweep that
+  // announced all four. And an unnamed control IS the 4.1.2 and 3.3.2 finding, so the verdict fired on
+  // exactly the captures whose finding was present. `assertableSweep` then refused 2.1.1's absence claim
+  // and `rules:gate` failed the record — which is how it was found, on the real corpus, after this test
+  // had been green for the whole time.
+  //
+  // The honest comparison is to count unnamed elements on BOTH sides, which is what `census.distinct`
+  // already does: "an UNNAMED element has no name to be distinct from, and the sweep still announces it".
+  // Three announcements against a census of three is a complete sweep, whether or not it could name them.
   const verdict = sweepCompleteness({
     structure: { headings: [], graphics: ["graphic", "graphic", "graphic"], landmarks: [], formFields: [] },
     diagnostics: [{ event: "structureCensus", distinct: { heading: 0, link: 0, landmark: 0, graphic: 3 } }],
   } as never);
-  assert.equal(verdict.graphic, "unknown",
-    "unnamed controls are what 1.1.1 is ABOUT; reading them as a sweep failure would hide the finding");
+  assert.equal(verdict.graphic, "exact",
+    "the sweep announced three graphics and the tree exposes three; being unable to NAME them is the "
+    + "1.1.1 finding, not a failure of the sweep");
 });
 
 test("A LANDMARK'S NAME IS IN `containers`, NOT `objects` — the channel this got wrong first", () => {
@@ -464,6 +479,9 @@ test("A TABLE'S COMPLETENESS COMES FROM NVDA'S OWN WORDS, not the census", () =>
   const capture = {
     transcript: ["Prices, table, with 3 rows and 7 columns"],
     structure: { tableCells: Array.from({ length: 18 }, (_, i) => `cell ${i}`) },
+    // The mark says the probe RAN. Without it the verdict is `unknown`, because `probeTables` is opt-in
+    // and an empty `tableCells` from a probe nobody ran is not a sweep that came up short.
+    diagnostics: [{ event: "tableCells", found: 18 }],
   } as unknown as CapturedAnnouncements;
   assert.equal(sweepCompleteness(capture).tableCells, "exact");
 });
@@ -474,6 +492,9 @@ test("a cell sweep that barely started is TRUNCATED, which is the case this was 
   const capture = {
     transcript: ["Prices, table, with 3 rows and 7 columns"],
     structure: { tableCells: [] },
+    // The probe RAN and found none — which is the case this test is about, and is a different fact from
+    // the probe never running. Only the mark separates them.
+    diagnostics: [{ event: "tableCells", found: 0 }],
   } as unknown as CapturedAnnouncements;
   assert.equal(sweepCompleteness(capture).tableCells, "truncated");
 });
@@ -485,6 +506,7 @@ test("A FRACTION AND NOT EQUALITY, because merged cells make exactness wrong", (
   const capture = {
     transcript: ["Prices, table, with 4 rows and 4 columns"],
     structure: { tableCells: Array.from({ length: 9 }, (_, i) => `cell ${i}`) },
+    diagnostics: [{ event: "tableCells", found: 9 }],
   } as unknown as CapturedAnnouncements;
   assert.equal(sweepCompleteness(capture).tableCells, "exact", "9 of 16 is a real table, not a short sweep");
 });
@@ -495,3 +517,71 @@ test("no table announced means UNKNOWN, never complete", () => {
   assert.equal(sweepCompleteness({ transcript: ["Home, document"], structure: {} } as never).tableCells,
     "unknown");
 });
+
+/**
+ * COMPLETENESS MUST NOT FIRE ON THE FINDING ITSELF.
+ *
+ * `sweptElements` counted unnamed elements for landmarks only. `browser-session.mjs` builds
+ * `census.distinct` the other way and says why: "An UNNAMED element has no name to be distinct from, and
+ * the sweep still announces it — so it counts once per element rather than being collapsed. Treating
+ * unnamed elements as one would under-count the very thing 1.1.1 and 4.1.2 are about."
+ *
+ * So the two sides could never agree on a page carrying an unnamed control, and the verdict was TRUNCATED
+ * on exactly the captures whose finding IS an unnamed control. `assertableSweep` then refused 2.1.1's
+ * absence claim and `rules:gate` failed the record — which is how this was found.
+ */
+const censusOf = (distinct: Record<string, number>) =>
+  [{ event: "structureCensus", distinct }];
+
+test("an unnamed control does not make its own sweep read as truncated", () => {
+  // Verbatim from `keyboard-unreachable-native-button+also-filename-alt-bare-edit-inert.bad`: four
+  // controls, one of them unnamed, and a census that counts all four.
+  const verdicts = sweepCompleteness({
+    structure: { formFields: ["Full name, edit", "Delete draft, button", "Email, edit", "edit"] },
+    diagnostics: censusOf({ formControl: 4 }),
+  } as never);
+  assert.equal(verdicts.formControl, "exact",
+    "the sweep announced all four; dropping the unnamed one invents a truncation");
+});
+
+test("a genuinely short sweep is still truncated", () => {
+  // The guard must not become permissive: counting unnamed elements must not turn a real miss into a pass.
+  const verdicts = sweepCompleteness({
+    structure: { formFields: ["Full name, edit"] },
+    diagnostics: censusOf({ formControl: 4 }),
+  } as never);
+  assert.equal(verdicts.formControl, "truncated");
+});
+
+test("a sweep that announced MORE than the tree exposes is a phantom", () => {
+  const verdicts = sweepCompleteness({
+    structure: { headings: ["A, heading, level 1", "B, heading, level 2", "C, heading, level 2"] },
+    diagnostics: censusOf({ heading: 2 }),
+  } as never);
+  assert.equal(verdicts.heading, "phantom");
+});
+
+test("a table probe that never ran is UNKNOWN, not truncated", () => {
+  // `probeTables` is opt-in. A page whose transcript announces a table, captured without the probe, has
+  // `tableCells: []` — and reading that as TRUNCATED says the sweep tried and missed, which refuses
+  // 1.3.1's claim on a capture that was never asked. Measured on
+  // `keyboard-unreachable-action+also-position-only-table-bare-edit-inert.bad`.
+  const verdicts = sweepCompleteness({
+    transcript: ["table with 2 rows and 2 columns"],
+    structure: { tableCells: [] },
+    diagnostics: [],
+  } as never);
+  assert.equal(verdicts.tableCells, "unknown");
+});
+
+test("a table probe that RAN and came up short is truncated", () => {
+  // The probe marks `tableCells` whenever it runs, including when it finds none — which is the whole
+  // reason that mark exists, and the only thing separating these two cases.
+  const verdicts = sweepCompleteness({
+    transcript: ["table with 2 rows and 2 columns"],
+    structure: { tableCells: [] },
+    diagnostics: [{ event: "tableCells", found: 0 }],
+  } as never);
+  assert.equal(verdicts.tableCells, "truncated");
+});
+
