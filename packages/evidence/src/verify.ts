@@ -453,6 +453,42 @@ function sweptElements(announced: string[], type: string): { names: Set<string>;
  * @param capture a capture, unwrapped
  * @returns one verdict per type the census counts, or `unknown` where it cannot say
  */
+/**
+ * NVDA states a table's size when the caret enters it: "table, with 3 rows and 7 columns".
+ *
+ * The census cannot answer this — it counts landmarks, headings, links, graphics and form controls, not
+ * cells — so the screen reader's OWN WORDS are the only ground truth available, which arguably makes this
+ * the better oracle of the two. Carried over from `completeness.ts`, which computed it correctly on
+ * 2026-08-24 and was never wired to anything.
+ *
+ * A FRACTION, not equality, and that is not laziness. A sweep legitimately reports fewer cells than
+ * rows x columns — merged cells, a caption row, cells NVDA groups — so demanding exactness would mark
+ * healthy captures incomplete and suppress real findings. Measured at this threshold: 122 of 122 corpus
+ * table captures complete, and the real page that prompted it 0 of 21, which is the separation it has to
+ * make.
+ */
+const TABLE_DIMENSIONS = /\btable,?\s+with\s+(\d+)\s+rows?\s+and\s+(\d+)\s+columns?/i;
+
+/** A cell sweep reaching at least this fraction of rows x columns counts as complete. */
+const CELLS_ENOUGH = 0.5;
+
+/**
+ * Did the cell sweep reach enough of the table NVDA announced?
+ *
+ * @param capture a capture, unwrapped
+ * @returns a verdict, or `unknown` when no table announced its dimensions
+ */
+function tableCompleteness(capture: CapturedAnnouncements): Completeness {
+  const transcript = Array.isArray(capture.transcript) ? capture.transcript : [];
+  const dimensions = transcript
+    .map((line) => TABLE_DIMENSIONS.exec(String(line)))
+    .find((match): match is RegExpExecArray => match !== null);
+  if (!dimensions) return "unknown";
+  const expected = Number(dimensions[1]) * Number(dimensions[2]);
+  const seen = (capture.structure as { tableCells?: unknown[] } | undefined)?.tableCells?.length ?? 0;
+  return seen >= expected * CELLS_ENOUGH ? "exact" : "truncated";
+}
+
 export function sweepCompleteness(capture: CapturedAnnouncements): Record<string, Completeness> {
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
   const census = marks.find((m) => typeof m === "object" && m !== null
@@ -471,6 +507,7 @@ export function sweepCompleteness(capture: CapturedAnnouncements): Record<string
     const found = names.size + unnamed;
     out[type] = found === expected ? "exact" : found < expected ? "truncated" : "phantom";
   }
+  out.tableCells = tableCompleteness(capture);
   return out;
 }
 

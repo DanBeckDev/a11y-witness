@@ -1121,39 +1121,39 @@ function tabOrderCanProveAbsence(tabbedNames: string[], input: RuleInput): boole
  * Absence is the one claim a sweep cannot make alone, and this repo already states that rule and then
  * applies it BY HAND in the two places somebody remembered: `addMissingHeadings` corroborates with
  * `census.heading === 0`, `tabOrderCanProveAbsence` checks `channelRelation.disjoint`. Nothing made the
- * NEXT absence rule do either, which is this project's most expensive recurring shape — a remedy that
- * reaches one call site when the behaviour reaches several.
+ * NEXT absence rule do either, which is this project's most expensive recurring shape.
  *
- * `phantom` is refused because it produces a wrong ASSERTION rather than a missed finding: a name the
- * sweep announced but the page does not expose cannot appear in the tab order, so it reads as a control
- * the keyboard never reached. `truncated` is refused for the same claim in the other direction — a list
- * we KNOW is short cannot carry "this was never reached", because the thing that reached it may simply
- * not have been announced.
+ * **THE CLAIM KIND IS REQUIRED, and the first version of this did not have it.** It refused `phantom` AND
+ * `truncated` for every caller, which silently discarded real findings: measured directly, a page with an
+ * unnamed button reported 1 finding on an `exact` sweep and 0 on a `truncated` one. The button was
+ * ANNOUNCED — we heard it — and a short sweep does not make it less real.
  *
- * `unknown` is deliberately ALLOWED, and that is a judgement worth stating rather than burying. Every
- * capture taken before the counter existed reports it, so refusing here would silence 2.1.1 and 2.4.3
- * across the entire corpus and read as a model regression. The honest handling of "we cannot tell" is to
- * proceed and COUNT it — `assertionsOnUnverifiedSweeps` — never to let it read as `exact`.
+ *   PRESENCE  "here is a control with no name"    one instance proves it. A short sweep is still enough,
+ *                                                   and withholding discards a true finding on exactly the
+ *                                                   pages a publisher already admits are broken.
+ *   ABSENCE   "Tab never reached this control"    ranges over the WHOLE channel. A list we know is short
+ *                                                   cannot support it.
+ *
+ * That distinction is not mine: `completeness.ts` made it on 2026-08-24 and was never wired to anything,
+ * so C2 rebuilt half of it and got this half wrong. `phantom` refuses BOTH, because a sweep announcing
+ * things the page does not have may have announced this one.
  *
  * @param input the rule input, carrying `completeness` from `oracleCounts`
  * @param type the census type the rule's evidence is swept from
- * @returns whether an assertion may rest on this sweep
+ * @param claim whether the rule concludes something IS there or that something is NOT
+ * @returns whether the claim may rest on this sweep
  */
-export function assertableSweep(input: RuleInput, type: string): boolean {
+export function assertableSweep(input: RuleInput, type: string, claim: "presence" | "absence"): boolean {
   const verdict = input.completeness?.[type];
-  return verdict !== "phantom" && verdict !== "truncated";
+  // A sweep that announced more than the page exposes may have announced THIS one. Fatal to either claim.
+  if (verdict === "phantom") return false;
+  // Short: it cannot rule anything out, but what it DID hear was still heard.
+  if (verdict === "truncated") return claim === "presence";
+  // `exact`, and `unknown` — which is deliberately allowed and COUNTED rather than refused, because every
+  // capture predating the counter reports it and refusing would silence 2.1.1 across the whole corpus.
+  return true;
 }
 
-/**
- * How many of these findings rest on a sweep whose completeness nothing could verify?
- *
- * A number, not a word: "some assertions are unverified" cannot tell you whether it is two or two
- * thousand. `rules:coverage` reports it so the corpus's own blind spot is visible rather than implied.
- *
- * @param input the rule input
- * @param types the census types the rules that fired read from
- * @returns the types whose completeness is `unknown`
- */
 export function unverifiedSweeps(input: RuleInput, types: string[]): string[] {
   return types.filter((type) => (input.completeness?.[type] ?? "unknown") === "unknown");
 }
@@ -1165,7 +1165,7 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
   if (reading.length < 2 || tabbed.size === 0) return;
   // C2. This rule's whole claim is "the sweep announced it and Tab never landed on it", so it is exactly
   // as good as the sweep's fidelity. A phantom name is unreachable by construction — it is not there.
-  if (!assertableSweep(input, "formControl")) return;
+  if (!assertableSweep(input, "formControl", "absence")) return;
   if (!tabOrderCanProveAbsence(tabbedNames, input)) return;
   // A control whose announced name is shared with another cannot be said to have been missed: its name
   // appearing in the tab order may be the OTHER control, and its absence may mean the other one was
@@ -1590,7 +1590,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   // different channel entirely; silencing it because the SWEEP is unreliable would trade a real finding
   // for a caution about a different measurement.
   addUnnamedControls([
-    ...(assertableSweep(input, "formControl") ? (input.structure?.formFields ?? []) : []),
+    ...(assertableSweep(input, "formControl", "presence") ? (input.structure?.formFields ?? []) : []),
     ...(input.interaction?.controls ?? []),
   ], "sweep", add);
 
@@ -1599,7 +1599,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   // The transcript is ordered by construction and always trustworthy here; the link sweep is not. 2.4.4 is
   // not rules-owned so this is a referral rather than an assertion, but a phantom link is a phantom link.
   addVagueLinks([...input.transcript,
-    ...(assertableSweep(input, "link") ? (input.structure?.links ?? []) : [])], add);
+    ...(assertableSweep(input, "link", "presence") ? (input.structure?.links ?? []) : [])], add);
   addMissingHeadings(input, add);
   addUnnamedGraphics(input, add);
   addAutoplayingAudio(input, add);

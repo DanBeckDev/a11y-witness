@@ -70,14 +70,38 @@ test("the exemption list names only functions that EXIST", () => {
   }
 });
 
-test("PHANTOM AND TRUNCATED BOTH REFUSE; unknown and exact allow", () => {
-  const at = (verdict: string | undefined) =>
-    assertableSweep({ completeness: verdict ? { link: verdict } : {} } as unknown as RuleInput, "link");
-  assert.equal(at("phantom"), false, "a sweep announcing things the page lacks cannot bear an assertion");
-  assert.equal(at("truncated"), false, "a list we know is short cannot say something was never reached");
-  assert.equal(at("exact"), true);
-  assert.equal(at("unknown"), true, "refusing here would silence 2.1.1 across the whole corpus");
-  assert.equal(at(undefined), true, "an older capture behaves as it did before this existed");
+test("PHANTOM REFUSES EITHER CLAIM; TRUNCATED refuses only ABSENCE", () => {
+  // The distinction the first version of this file did not have, and its absence discarded real findings.
+  const at = (verdict: string | undefined, claim: "presence" | "absence") =>
+    assertableSweep({ completeness: verdict ? { link: verdict } : {} } as unknown as RuleInput,
+      "link", claim);
+  assert.equal(at("phantom", "presence"), false,
+    "a sweep announcing things the page lacks may have announced THIS one");
+  assert.equal(at("phantom", "absence"), false);
+  assert.equal(at("truncated", "absence"), false,
+    "a list we know is short cannot say something was never reached");
+  assert.equal(at("truncated", "presence"), true,
+    "what a short sweep DID announce was still announced — withholding it discards a true finding");
+  assert.equal(at("exact", "absence"), true);
+  assert.equal(at("unknown", "absence"), true, "refusing would silence 2.1.1 across the whole corpus");
+  assert.equal(at(undefined, "absence"), true, "an older capture behaves as it did before this existed");
+});
+
+test("A TRUNCATED SWEEP STILL REPORTS THE UNNAMED CONTROL IT HEARD", () => {
+  // Measured on the shipped code before this fix: 1 finding on `exact`, 0 on `truncated`. The button was
+  // ANNOUNCED. `completeness.ts` had warned about exactly this on 2026-08-24 — withholding a presence
+  // claim "discards a true finding on exactly the pages a publisher already admits are broken" — and that
+  // module was never wired to anything, so C2 rebuilt half of it and got this half wrong.
+  const base = {
+    transcript: ["Shop, document"],
+    structure: { formFields: ["button", "Search, edit"] },
+    interaction: {},
+  };
+  const of = (verdict: string) => ruleFindings({ ...base, completeness: { formControl: verdict } } as never)
+    .filter((f) => f.wcag.startsWith("4.1.2")).length;
+  assert.equal(of("exact"), 1);
+  assert.equal(of("truncated"), 1, "a short sweep does not unhear the control it announced");
+  assert.equal(of("phantom"), 0, "but a sweep announcing things that are not there might have invented it");
 });
 
 test("AN UNKNOWN-BACKED ASSERTION IS COUNTED, because `unknown` must never read as `exact`", () => {
