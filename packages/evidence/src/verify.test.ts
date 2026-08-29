@@ -5,6 +5,7 @@ import {
   captureDoubt, captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle,
   captureRanRequestedProbes, probeStates, sweepCompleteness, captureReachedThePage,
 } from "./verify.js";
+import type { CapturedAnnouncements } from "./verify.js";
 
 const TITLE = "Aquarium 001 schedule";
 const empty = { headings: [], landmarks: [], formFields: [] };
@@ -394,4 +395,64 @@ test("AN ENTIRELY UNNAMED SWEEP CANNOT SAY, rather than reading as truncated", (
   } as never);
   assert.equal(verdict.graphic, "unknown",
     "unnamed controls are what 1.1.1 is ABOUT; reading them as a sweep failure would hide the finding");
+});
+
+test("A LANDMARK'S NAME IS IN `containers`, NOT `objects` — the channel this got wrong first", () => {
+  // `announcement.ts` treats a landmark as CONTEXT by deliberate design: reading one as the object's role
+  // once reported three conformant W3C pages as 4.1.2 failures. So `objects[0]` is correctly undefined for
+  // "complementary landmark, Related WCAG resources", and the first version of `sweepCompleteness` read
+  // `objects` for every type — yielding nothing for 100 of 267 real landmark announcements and reporting
+  // `unknown` on essentially every page. It was recorded as a grammar gap. The grammar was right.
+  const capture = {
+    structure: { landmarks: ["Page Contents, navigation landmark, Page Contents"] },
+    diagnostics: [{ event: "structureCensus", distinct: { landmark: 1 } }],
+  } as unknown as CapturedAnnouncements;
+  assert.equal(sweepCompleteness(capture).landmark, "exact");
+});
+
+test("AN UNNAMED LANDMARK COUNTS, because the census counts it per element", () => {
+  // "complementary landmark, Related WCAG resources" is an UNNAMED complementary landmark followed by its
+  // content. Dropping it — as the name-set does for every other type — would make a page of unnamed
+  // landmarks read as truncated, which is a capture defect invented out of the page's own markup.
+  const capture = {
+    structure: { landmarks: ["complementary landmark, Related WCAG resources", "form, Explore Site by Topic:"] },
+    diagnostics: [{ event: "structureCensus", distinct: { landmark: 2 } }],
+  } as unknown as CapturedAnnouncements;
+  assert.equal(sweepCompleteness(capture).landmark, "exact");
+});
+
+test("EVERY landmark container is counted, not just the first", () => {
+  // 5% of real entries carry more than one, because NVDA announces the containers it passed through on
+  // the way in. Taking `containers[0]` alone would under-count and read as truncated.
+  const capture = {
+    structure: { landmarks: ["banner landmark, Meta and Search, navigation landmark, list, with 3 items"] },
+    diagnostics: [{ event: "structureCensus", distinct: { landmark: 2 } }],
+  } as unknown as CapturedAnnouncements;
+  assert.equal(sweepCompleteness(capture).landmark, "exact",
+    "one entry announcing two landmarks is two landmarks");
+});
+
+test("an entry with NO landmark in it contributes nothing rather than counting as one", () => {
+  // 35 of 267 real entries are the landmark sweep announcing something that is not a landmark —
+  // "Get Involved, link". Counting those would inflate the found total into a phantom.
+  //
+  // When NOTHING resolves, the verdict is `unknown` and not `truncated`, and the test first asserted the
+  // wrong one. "The page has no landmarks and NVDA announced something else" and "our extraction failed"
+  // are indistinguishable from here, so declining is the honest answer — the same reasoning as the
+  // entirely-unnamed-sweep guard. Claiming `truncated` would be inventing a capture defect.
+  const capture = {
+    structure: { landmarks: ["Get Involved, link"] },
+    diagnostics: [{ event: "structureCensus", distinct: { landmark: 1 } }],
+  } as unknown as CapturedAnnouncements;
+  assert.equal(sweepCompleteness(capture).landmark, "unknown");
+});
+
+test("but a non-landmark entry ALONGSIDE real ones is a short sweep, and says so", () => {
+  // The common shape on a real page: most entries resolve, one is the sweep landing on a link. Here we
+  // CAN tell — landmarks were found, and fewer than the tree exposes.
+  const capture = {
+    structure: { landmarks: ["Page Contents, navigation landmark, x", "Get Involved, link"] },
+    diagnostics: [{ event: "structureCensus", distinct: { landmark: 2 } }],
+  } as unknown as CapturedAnnouncements;
+  assert.equal(sweepCompleteness(capture).landmark, "truncated");
 });
