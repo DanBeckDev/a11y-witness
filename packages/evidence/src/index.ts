@@ -29,6 +29,22 @@ export interface CaptureStructure {
   headings: string[];
   landmarks: string[];
   formFields: string[];
+  /**
+   * The other four sweeps, all of which a real capture carries and none of which this type declared until
+   * 2026-08-29.
+   *
+   * `@a11y-witness/evidence`'s `.` subpath IS the published wire description, so a consumer typing against
+   * it would have concluded a capture exposes no links, graphics, lists or table cells. Verified against a
+   * live protocol-7 capture, whose `structure` keys are exactly the seven below.
+   *
+   * OPTIONAL, which is both backward-compatible and true: an older capture predating a sweep carries none,
+   * and absence there means "this capture has no such field", never "the page has none of them" — the
+   * distinction `sweepCompleteness` exists to make.
+   */
+  links?: string[];
+  graphics?: string[];
+  lists?: string[];
+  tableCells?: string[];
 }
 
 /** Screen-reader-derived results of operating controls. Empty `after` strings
@@ -38,6 +54,14 @@ export interface CaptureInteraction {
   stateChanges: { control: string; after: string }[];
   formChanges: { control: string; after: string }[];
   postSubmitFields: string[];
+  /**
+   * What each Tab press announced, in order — present when `probeFocus` was asked for.
+   *
+   * Optional because it is opt-in over the wire, and its ABSENCE is load-bearing: a page nobody tabbed and
+   * a page with no tab stops are different facts, and 2.1.1, 2.1.2 and 2.4.3 all decline rather than guess
+   * when it is missing.
+   */
+  focusOrder?: string[];
 }
 
 /** What a screen reader announced, plus capture metadata. `task` is request
