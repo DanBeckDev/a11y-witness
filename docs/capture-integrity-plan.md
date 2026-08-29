@@ -55,7 +55,9 @@ Every capture defect this project has recorded is a special case of it —
 
 ## C1. Completeness becomes a FIELD, per element type
 
-**Status: open. Everything else here depends on it.**
+**Status: MET 2026-08-29.** `sweepCompleteness` in `packages/evidence/src/verify.ts`, reaching the rules
+through `oracleCounts` -> `RuleInput.completeness`. Host-side deliberately: `parseAnnouncement` is the
+single announcement grammar and it is TypeScript the plain-node worker cannot import.
 
 `structureCrossCheck` already compares the sweep against the tree, per type, and records
 `{type, sweep, elementsList, kind}` where `kind` is `phantom` or `truncated`. It is a diagnostic nobody
@@ -76,7 +78,29 @@ Make it evidence: alongside `structure.headings`, a `structure.completeness.head
 
 ## C2. A rule that reads ABSENCE must refuse incomplete evidence
 
-**Status: open. This is what C1 is for.**
+**Status: MET 2026-08-29.** `assertableSweep` refuses `phantom` and `truncated`; `sweep-completeness.test.ts`
+DISCOVERS every rule reading a sweep and requires it to be gated or exempted with a reason. Mutation-checked
+three ways.
+
+**What the search found, and it is not what the plan assumed.** Only ONE asserting rule concludes from a
+sweep — 2.1.1, plus the sweep half of 4.1.2's mixed-channel call. The other candidates were already safe and
+for good reasons worth recording: `addMissingHeadings` and `addUnnamedGraphics` decide on the CENSUS and use
+the sweep only as corroboration or in the evidence string, and 2.4.3 was moved to the transcript on
+2026-08-25 precisely because the sweep cannot answer ordering.
+
+**Two judgements had to be made explicit rather than buried.**
+
+- **`unknown` is ALLOWED, and counted.** Every capture predating the counter reports it, so refusing there
+  would silence 2.1.1 across the whole corpus and read as a model regression. `unverifiedSweeps` reports
+  how many assertions rest on it — a number, because "some are unverified" cannot say whether it is two or
+  two thousand.
+- **Only the untrustworthy CHANNEL is dropped, never the whole call.** 4.1.2 reads the sweep and the focus
+  probe together; silencing the probe because the sweep is in doubt trades a real finding for a caution
+  about a different measurement.
+
+**Measured before and after, as this item required: 26 pages, 25 rule findings, unchanged.** Every type on
+every local capture reads `unknown`, so the guard is correct and protects nothing until a recapture. That
+is the honest statement of where this stands.
 
 Absence is the one claim a sweep cannot make alone — the rule this repo already states and then applies by
 hand, in the two places somebody remembered. `addMissingHeadings` requires `census.heading === 0`;
@@ -94,7 +118,29 @@ does either.
 
 ## C3. Find out WHY phantom and truncated happen — they are different faults
 
-**Status: open. Diagnosis, not repair, and it must come before C4.**
+**Status: MET 2026-08-29 for the dominant cause, which was DEFINITIONAL.**
+
+The 97% headline was about half instrument and half arithmetic. `collectPhrase` dedupes, so `structure.links`
+is a list of distinct ANNOUNCEMENTS; the census counted ELEMENTS. Measured across 106 real captures, 75% of
+named elements share a name with another and every page has duplicates, so the two were never comparable:
+
+```
+median sweep / raw element count     0.24
+median sweep / DISTINCT name count   0.49
+tfl graphics:      20 vs 34 (truncated -14)  ->  20 vs 19 (phantom +1)
+scotcourts links:  sweep 1 vs 22 distinct    <- a REAL failure the noise had buried
+```
+
+The census now counts distinct names per type, and completeness compares NAMES rather than announcements —
+"Contact, heading, level 2" and "level 3" are one name and two announcements. What remains after that is the
+finding rather than the artefact, and `scotcourts` is the proof it was worth separating.
+
+**`formControl` was added for C2**, counting the roles NVDA's `f` quick-nav actually visits. `dom.formField`
+is a narrower set and is 2.1.2's denominator; comparing the sweep against it would report a phantom on every
+page carrying a button — two alphabets compared as one, which is this plan's own subject.
+
+**Still open:** attributing the residual per-kind disagreement to specific causes with counts. That needs a
+recapture to produce captures carrying `distinct`, since every capture on disk predates it.
 
 70 `link/phantom` and 58 `heading/truncated` are not one bug. Candidate causes exist for each and none has
 been measured:
@@ -114,7 +160,20 @@ been measured:
 
 ## C4. Decide what a consent banner IS
 
-**Status: open. A product decision, and 55% of real pages wait on it.**
+**Status: DECIDED 2026-08-29 — ADR 0023. Capture the page as it is, and RECORD the banner.**
+
+Dismissing is refused on the project's OWN existing rule rather than a new one: `probeForms` is off in the
+CLI because "pressing *Book* on a stranger's site is not a review", and clicking *Accept all* is a stronger
+version of that act. Capturing both is not refused on principle — it is the most truthful answer and buys
+nothing until the recording exists, because without it a reader cannot tell the two captures apart.
+
+**The banner was never the defect. A finding that could not say which page it described was.**
+
+`consentBanner()` reports two things that must never be merged, and merging them is a mistake already made
+here: a metric once said *"50 of 86 captures read the site's furniture"* by combining "has a cookie banner"
+(nearly every UK government site, costs nothing) with "never got past one" (ONE page, invalidates everything
+downstream). `present` is context; `blocking` is a defect, and a blocking banner outranks every per-type
+completeness verdict — an exact sweep of a dialog is the most confident way to be wrong.
 
 Over half the real-page corpus opens behind a banner. Today that is invisible to every rule: a capture of
 "the page" is a capture of the banner plus whatever was reachable behind it. Three coherent answers, and
@@ -131,7 +190,19 @@ reader of a finding knows which page it describes.
 
 ## C5. Truncation must never be comparable
 
-**Status: open. 40% of captures, and it corrupts by NAME.**
+**Status: MET 2026-08-29.** `comparableNames` excludes truncated announcements before normalisation — on the
+announcement AS HEARD, which is what the capture marked; normalising first would make the exclusion set and
+the entries two different alphabets, which is the defect being fixed. `namesExcluded` counts the exclusion.
+
+Applied at all seven call sites reading the capture, with a DISCOVERY test requiring it, because a remedy
+reaching one call site is this repo's most expensive recurring shape. Mutation-checked by removing the
+exclusion and by making one call site forget it; both fail.
+
+**A second defect fell out of it, and the existing tests caught it.** The capture wrote the truncation mark
+only when it FOUND truncation, so an absent mark meant either "none" or "never checked" — and C6's naming
+verdict read that silence as a clean bill of health. `explain-capture.test.ts` exists for exactly that shape
+and failed. The mark is now written unconditionally with `checked: true`, and an absent mark reports that
+the capture cannot say. Same rule as `refreshBrowseBuffer` marking when it skips.
 
 A truncated announcement is not a shorter announcement, it is a different string. Comparing it by name —
 which `namesOf` and `comparableNames` do everywhere — silently fails to match. That is the U+FFFC and
@@ -143,7 +214,16 @@ without saying so is the vanishing-denominator defect at the evidence layer.
 
 ## C6. Every capture states what it can support
 
-**Status: open. The property that makes the rest checkable.**
+**Status: MET 2026-08-29.** `captureSupports` returns per-type `absence`, plus `ordering` and `naming`, each
+carrying its REASON rather than a bare boolean — `ok: false` alone sends a reader back to the capture to find
+out which of four things went wrong.
+
+`capture:explain` now asks it instead of keeping its own copy of `REACHED_THE_END` and its own banner regex.
+That was the point of the item: three re-derivations of one fact is the shape that cost five incidents in a
+day, and a reporting tool that disagrees with the rules is worse than one that says nothing.
+
+Measured on the 26 local captures: **ordering is claimable on 11 of 26** — the rest stopped at `deadline` or
+`maxSteps`, so any claim about what they contain is a claim about a prefix of the page.
 
 `capture:explain` computes this by reading marks after the fact. The CAPTURE should compute it, so the
 corpus, the gates and a finding can all cite the same answer instead of three tools re-deriving it.
@@ -176,3 +256,19 @@ npm run capture:explain -- <any real page>     # says what the capture can suppo
 And one number, on the corpus that produced this plan: **the 97% falls, and whatever remains is
 ATTRIBUTED** — a known cause with a known cost, rather than a disagreement nobody has looked at. A capture
 that knows it is incomplete is trustworthy. One that does not is the problem this plan is about.
+
+## Where this stands, 2026-08-29
+
+All six items are closed, and the honest summary is that **the machinery is in place and the evidence to
+feed it is not yet on disk.** Every capture in the corpus predates `census.distinct`, `formControl` and the
+unconditional truncation mark, so completeness reads `unknown` on all five types, naming reads "cannot say",
+and C2's guard correctly protects nothing. Measured: 26 pages, 25 rule findings, unchanged by any of this.
+
+**A recapture is what turns these from correct code into working guards**, and it is the cheap moment to
+take it — C3's residual attribution needs the same captures. Nothing here bumps `CAPTURE_PROTOCOL_VERSION`:
+what the evidence MEANS is unchanged, and the two capture-side changes (`formControl` in the census, the
+unconditional truncation mark) are additive, so an older host reading a newer capture is unaffected. They do
+move `codeVersion()`, so the fleet needs a deploy.
+
+The one number to watch afterwards is the one this plan opened with: per-kind disagreement, now that half of
+it has been shown to be arithmetic rather than instrument.
