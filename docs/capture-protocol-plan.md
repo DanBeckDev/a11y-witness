@@ -158,26 +158,35 @@ for being too slow**.
 
 ## D. Find out why our network reaps in seconds, not minutes
 
-**Status: PARTIALLY MET 2026-08-29. Three candidate causes ELIMINATED BY MEASUREMENT; the interval itself is
-still unexplained, and the keepalive stays aggressive until it is.**
+**Status: the original DIAGNOSIS IS REFUTED, and the losses are unexplained. Four candidate causes
+eliminated by measurement, including my own.**
 
 | candidate | verdict |
 |---|---|
-| the worker's own `keepAliveTimeout` (Node default 5 s, never overridden) | **real, and not the cause.** Measured: an idle connection closes at 6.0 s — but the response had already arrived at 0.0 s, so that is an idle-AFTER-response close and a capture is mid-response |
-| the worker's `requestTimeout` (Node default 300 s, never overridden, and BELOW both the 520 s capture timeout and the 560 s client budget) | **refuted.** A scaled-down experiment — `requestTimeout` 3 s, response after 5 s — returned 200, so it governs receiving the REQUEST and not a slow response |
-| NIC power management on the boxes | **refuted.** `PnPCapabilities 8` already disables "the computer may turn off this device" while keeping wake armed |
+| the worker's `keepAliveTimeout` (Node default 5 s, never overridden) | **real, and not the cause.** An idle connection closes at 6.0 s — but the response had already arrived at 0.0 s, so that is an idle-AFTER-response close and a capture is mid-response |
+| the worker's `requestTimeout` (Node default 300 s, below both the 520 s capture timeout and the 560 s client budget) | **refuted.** `requestTimeout` 3 s with a response after 5 s returned 200, so it governs receiving the REQUEST |
+| NIC power management on the boxes | **refuted.** `PnPCapabilities 8` already correct |
+| **"a silent connection is reaped by NAT" — MY OWN diagnosis** | **REFUTED TWICE OVER.** By TOPOLOGY: the control plane is `192.168.1.15/24`, every worker is `192.168.1.x/24`, and the route is `link#14` — direct, no gateway hop. **There is no NAT between these hosts at all**; it happens at `192.168.1.1` on the way out. And by MEASUREMENT: 0 of 23 lost with keepalive explicitly OFF — 8 sequential, then 15 across five boxes at once, the exact condition the 9/40 came from. At the old 22% rate P(0 in 23) = 0.4% |
 
-**The first of those was nearly reported as the answer.** "Closed after 6.0 s" is a real number about the
-wrong thing, and only reading the rest of the line — `response arrived at 0.0s` — showed it measured
-`keepAliveTimeout` rather than a capture-case reap.
+**The literature was quoted correctly and applied to the wrong network.** *High Performance Browser
+Networking*'s "most mobile carriers set a 5-30 minute NAT connection timeout" is about mobile carriers and
+the public internet. It was cited here — twice, approvingly — for a LAN with no translation in it. The
+quotation fitted the SYMPTOM, so the mismatch went unnoticed; it took someone saying *"I am confused as all
+are LAN connections"* to see it. **Research grounds an argument; it does not check that the argument is
+about your system.**
 
-**Still not measured:** what closes a MID-RESPONSE connection on this path. The attempt to measure it ran
-against a fleet busy with a gate and returned four "responses" at 0.0-1.6 s, which are 429s. That was the
-FOURTH such error in two days, and it is now a guard rather than a rule — see below.
+**The keepalive was credited for a fix it is not shown to have made.** Losses went 9/40 → 0 when it landed,
+and the causal story was never tested by REMOVING it. Tested now, without it, the fault does not reproduce
+at all — so the rate genuinely changed, and the keepalive is not demonstrably why. A transient network
+condition fits the evidence as well as anything.
 
-**Why it still matters even though A removed the dependency:** the async path does not need the keepalive,
-but the `A11Y_SYNC_CAPTURE` hatch does, and raising the delay from 15 s to 60 s was tried and REVERTED by
-this file's own test. An unexplained number is not a solved problem.
+That is the "a green result vouches for the mechanism" trap, committed inside the work that kept finding it
+elsewhere. The keepalive stays for the sync escape hatch on precautionary grounds, labelled
+**unexplained rather than fixed**.
+
+**Item A is unaffected**, and this is the useful part: async removes long-lived connections entirely, so it
+is immune to this fault whatever caused it. A structural fix does not depend on the diagnosis being right —
+which is the strongest argument for preferring one.
 
 ### The fourth measurement error became a guard
 
