@@ -257,6 +257,31 @@ And one number, on the corpus that produced this plan: **the 97% falls, and what
 ATTRIBUTED** — a known cause with a known cost, rather than a disagreement nobody has looked at. A capture
 that knows it is incomplete is trustworthy. One that does not is the problem this plan is about.
 
+### MEASURED 2026-08-29, mid-recapture, on protocol-7 captures
+
+Taken 90 minutes into the corpus run rather than after it — which is why the reporting defect below was
+found while it still cost nothing. Two samples of the freshest captures, scored host-side:
+
+| | 60 captures | 80 captures |
+|---|---|---|
+| `heading` / `link` / `graphic` / `formControl` | **100% exact** | **100% exact** |
+| `landmark` | 47 exact, 13 truncated | 64 exact, 16 truncated |
+| **all five types exact** | **47/60 (78%)** | **64/80 (80%)** |
+| ordering claimable | 60/60 | 80/80 |
+| naming claimable | 60/60 | 80/80 |
+
+**So the residual is ONE type, and it is attributed.** Every landmark truncation checked is the caret rule
+this repo already documents — quick navigation cannot reach a landmark containing the caret, so a
+page-wrapping `<main>` is missed. Verified directly on one: the tree exposes 1, the sweep announced `[]`.
+That is C1 making a known limitation VISIBLE rather than silent, which is the whole point of it; an
+absence claim about landmarks is now refused instead of being made on a short list.
+
+**And a reporting defect the same measurement exposed.** The worker's own `structureCrossCheck` put
+agreement at 40-51% on the same captures, with 191 `link/phantom` and 139 `landmark/truncated`, because it
+compares the sweep's ENTRY COUNT against the census's distinct NAMES — it is plain node and cannot parse
+an announcement. Links are 100% exact host-side. See `known-gaps.md` §13; `capture:explain` now reports
+the host verdict.
+
 ## Where this stands, 2026-08-29
 
 All six items are closed, and the honest summary is that **the machinery is in place and the evidence to
