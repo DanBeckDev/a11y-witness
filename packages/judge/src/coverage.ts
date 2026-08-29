@@ -2,9 +2,14 @@
  * WHICH WCAG criteria the shipped assessors can return a finding for.
  *
  * Needed because WCAG Conformance Requirement 1 is about a LEVEL: to say anything about Level AA you must
- * have assessed every AA criterion. We assess eight of fifty-five, so the only honest statement is the
+ * have assessed every AA criterion. We assess a MINORITY of them, so the only honest statement is the
  * count plus "the rest are unchecked, not clean" — and that statement is worthless if this list drifts
  * from what actually ships.
+ *
+ * The count is deliberately not written here. `assessedCriteria().length` is the number, and the last
+ * numeral in this header said EIGHT while the answer was fourteen — in the file whose entire job is to
+ * stop coverage claims going stale. `local-judge.ts` states the rule this violated: "a number in prose is
+ * a number that stops being true". `criteria-counts-are-not-spelled-out.test.ts` now refuses one.
  *
  * So it is pinned by `coverage.test.ts` against two things at once: the trained model's own
  * `training-report.json`, and the criteria the deterministic rules can emit. Retrain with a new head and

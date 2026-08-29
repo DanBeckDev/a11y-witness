@@ -1,7 +1,7 @@
 /**
  * The coverage list is a CLAIM, so it is pinned to the things it claims about.
  *
- * "We assessed 8 of 55 criteria" is printed on every report and is the whole basis of the Conformance
+ * "We assessed N of 55 criteria" is printed on every report and is the whole basis of the Conformance
  * Requirement 1 statement. A hand-maintained list behind that number goes stale the first time somebody
  * retrains with a new head — and it goes stale silently, because nothing else in the pipeline reads it.
  *
@@ -20,7 +20,7 @@ import { ruleFindings } from "./rules.js";
 
 test("SCORED_CRITERIA equals the shipped model's own criteria", () => {
   // The pin that matters. Train a ninth head and this fails until the list is updated, which is the only
-  // thing standing between "assessed 8 of 55" and a number that quietly stops being true.
+  // thing standing between the printed coverage count and a number that quietly stops being true.
   const report = JSON.parse(readFileSync(scorerPaths().trainingReport, "utf8"));
   assert.deepEqual([...SCORED_CRITERIA].sort(), Object.keys(report.criteria).sort(),
     "SCORED_CRITERIA must match training-report.json — retraining changed what ships");

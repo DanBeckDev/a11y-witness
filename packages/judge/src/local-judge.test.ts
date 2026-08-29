@@ -78,7 +78,7 @@ test("severity follows the conformance level, and the score sharpens it", () => 
 });
 
 test("an unknown criterion is never reportable", () => {
-  // The scorer has heads for eight criteria. If a ninth key ever appears, inventing a finding for it
+  // The scorer has heads for a fixed set of criteria. If an unknown key appears, inventing a finding for it
   // would be claiming coverage this layer does not have.
   assert.equal(hasEvidenceFor("2.5.8", unnamedButton), false);
   assert.deepEqual(findingsFromScores({ predictions: { "2.5.8": true }, scores: { "2.5.8": 0.99 } }, unnamedButton).findings, []);

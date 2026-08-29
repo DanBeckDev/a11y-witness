@@ -1,8 +1,9 @@
 /**
  * WHY each WCAG 2.2 AA criterion is or is not assessed — all 55, in one place.
  *
- * `coverage.ts` answers WHICH criteria ship. This answers WHY the other 45 do not, and what each would
- * take. That distinction is the whole point: `criterionOutcomes` returns 45 criteria as `untested`, one
+ * `coverage.ts` answers WHICH criteria ship. This answers WHY the rest do not, and what each would
+ * take. That distinction is the whole point: `criterionOutcomes` returns every uncovered criterion as
+ * `untested`, one
  * undifferentiated bucket in which "impossible from assistive-technology evidence" (1.4.3 Contrast) and
  * "trivial, the data is already on disk" (2.4.2 Page Titled) look identical. For anyone deciding what to
  * build next, that is the only distinction that matters.
