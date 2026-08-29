@@ -627,7 +627,7 @@ subtype reports as **3.3.2** in both `rule-ownership.json` and the shipped train
 comment states is right and is the one implemented; only its example is wrong, and it is corrected beside
 the new set rather than left to mislead the next reader.
 
-## 17. `landmark_present` is a model feature whose zero always means the SWEEP failed
+## 17. ~~`landmark_present` is a model feature whose zero always means the SWEEP failed~~ — DONE, REMOVED
 
 Measured 2026-08-29, and only measurable because C1 exists — this is what the completeness work was for.
 
@@ -657,14 +657,29 @@ STRUCTURED features kept the field, and no comment, doc or ADR anywhere discusse
 ADR 0015 free veto. `landmark_present = 1` on 80% of corpus captures and 88% of real pages — the
 distributions match, and the feature is not constant on either side.
 
-**Not changed here, deliberately.** Removing a feature changes the model's schema and forces a retrain,
-and a retrain is running right now. It is also a judgement about whether a coarse binary is stable enough
-where the text was not — the structured feature may be defensible precisely because it is coarser.
+**DECIDED 2026-08-30: both features REMOVED**, and the reasoning now sits beside where they were computed
+rather than only beside the encoder's exclusion. `FEATURE_SCHEMA_VERSION` moves v15 -> v16.
 
-**Done when:** the decision is taken with the numbers above in front of it, and whichever way it goes, the
-reasoning sits beside `landmark_present` in `screenreader_features.py` rather than only beside the
-encoder's exclusion. If it stays, `sweepCompleteness` now makes the honest version available — the feature
-could read `unknown` on a truncated sweep instead of `0`.
+The measurement decides it. The feature's name claims "the page has a landmark" and its negative class is
+**100% capture artefact** — 16 of 16 zeros are truncated sweeps, none is a landmark-free page — with a
+documented systematic cause. A feature whose 0 always means "the sweep failed" teaches the head about the
+INSTRUMENT, not the page. `landmark_named` shares the source and the artefact: an unreached landmark is
+also unnamed.
+
+**The measurement was re-checked against this session's completeness fix before it was trusted.** That fix
+changed how `unnamed` elements are counted for every type EXCEPT landmarks, which already counted them —
+so landmark verdicts are unchanged and the 16-of-16 figure still stands.
+
+**Why not the `unknown` option this entry suggested.** It is unreachable from here. The heads are
+`torch.nn.Linear`, which can only ADD, so "unknown" needs a companion MASK feature rather than a middle
+value — and the census that would supply the true answer lives in `ruleEvidence`, a deliberate SIBLING of
+the model's input that the featurizer may not read. Removal is the option that does not cross that
+boundary.
+
+**This OPENS a schema migration**, which is the intended consequence and what `scorer:migration` exists to
+report: the shipped v15 weights cannot be scored by a v16 runtime. It closes when a v16 candidate is
+trained and promoted — no recapture and no re-export, because the features are computed at train time from
+an unchanged `record.input`.
 
 ## 18. `dedupeKey` strips ONE container prefix, so a nested landmark is recorded twice
 

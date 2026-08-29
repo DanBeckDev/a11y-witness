@@ -74,14 +74,12 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # every weight file trained under v7 was fitted to a different function of the same captures. Bumping is
 # what stops a v7 model being scored with v8 features and the difference being read as model behaviour.
 # Measured before bumping: 73 corpus records change, all of them labelled `violation`, none clean.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v15"
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v16"
 
 FEATURE_NAMES = (
     "transcript_present",
     "heading_present",
     "plain_heading_candidate_present",
-    "landmark_present",
-    "landmark_named",
     "form_field_present",
     "form_field_named",
     "form_field_unnamed",
@@ -325,10 +323,6 @@ def all_evidence(record: dict[str, Any]) -> list[str]:
         for unit in record["input"].get("evidenceUnits", [])
         if isinstance(unit.get("text"), str)
     ]
-
-def named_landmark(value: str) -> bool:
-    first_part = value.split(",", 1)[0].strip().lower()
-    return bool(first_part) and first_part not in LANDMARK_ROLES
 
 def state_word(value: str) -> str:
     match = STATE_WORD.search(value)
@@ -628,7 +622,6 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     interaction = input_data.get("interaction") or {}
     transcript = input_data.get("transcript") or []
     headings = structure.get("headings") or []
-    landmarks = structure.get("landmarks") or []
     form_fields = structure.get("formFields") or []
     table_cells = [value for value in structure.get("tableCells") or [] if isinstance(value, str)]
     controls = interaction.get("controls") or []
@@ -647,8 +640,33 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # Document view: the same fact as `plain_heading_candidate_present`. The instance view overwrites this
     # column per announcement, which is the whole point of the feature.
     values["unit_is_plain_heading_candidate"] = values["plain_heading_candidate_present"]
-    values["landmark_present"] = float(bool(landmarks))
-    values["landmark_named"] = float(any(named_landmark(value) for value in landmarks))
+    # `landmark_present` AND `landmark_named` WERE REMOVED HERE — known-gaps §17, decided 2026-08-30.
+    #
+    # They read `float(bool(landmarks))` off `structure.landmarks`, and the name claims "the page has a
+    # landmark". Measured on 80 protocol-7 captures: 16 have `landmark_present = 0`, and ALL SIXTEEN have
+    # a TRUNCATED landmark sweep. **Zero are genuinely landmark-free.** So the feature's negative class is
+    # entirely an artefact of the capture, with a documented systematic cause -- quick navigation cannot
+    # reach a landmark containing the caret, so a page-wrapping `<main>` is missed every time.
+    #
+    # A feature whose 0 always means "the sweep failed" teaches the head about the INSTRUMENT rather than
+    # the page. `landmark_named` shares the source and the artefact: an unreached landmark is also unnamed.
+    #
+    # THE EXCLUSION ALREADY EXISTED ONE LAYER OVER and did not reach here. `evidence-units.ts` states at
+    # length that "`landmarks` is deliberately NOT a model feature", with its own measurement: the same
+    # unchanged page gave `[]` in one capture and `["Cycling guide"]` in the next, swinging a CONFORMANT
+    # page's 3.3.2 score from 0.004 to 0.39 across a 0.35 threshold. That covered the ENCODER's text
+    # units. The structured features kept the field, and no comment, doc or ADR discussed it -- the same
+    # one-layer shape this repo records most often.
+    #
+    # WHAT WAS CHECKED AND REFUTED, so nobody re-derives it: not a train/serve skew and not an ADR 0015
+    # free veto. `landmark_present` was 1 on 80% of corpus captures and 88% of real pages, so the
+    # distributions matched and the feature was constant on neither side.
+    #
+    # WHY NOT MASK IT INSTEAD. `sweepCompleteness` can now say `truncated`, so the honest three-valued
+    # version is available in principle. It is not reachable here: the heads are `torch.nn.Linear`, which
+    # can only ADD, so "unknown" needs a companion mask feature rather than a middle value -- and the
+    # census that would supply the true answer sits in `ruleEvidence`, a deliberate SIBLING of the model's
+    # input that the featurizer may not read. Removal is the option that does not cross that boundary.
     values["form_field_present"] = float(bool(form_fields))
     # Read from the PARSE, never re-derived here. `LEADING_ROLE` is anchored and role-first, and
     # `structure.formFields` is a NAME-first channel — so on GOV.UK Design System captures it matched the

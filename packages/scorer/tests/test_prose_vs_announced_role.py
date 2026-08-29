@@ -80,8 +80,23 @@ def test_the_role_vocabulary_covers_what_the_featurizer_itself_knows_about():
 
 
 def test_the_schema_version_moved_with_the_meaning():
+    # v16: `landmark_present` and `landmark_named` are no longer model inputs -- known-gaps §17. Measured
+    # on 80 protocol-7 captures: 16 have `landmark_present = 0` and ALL SIXTEEN have a truncated landmark
+    # sweep, so the negative class was entirely a capture artefact with a documented systematic cause.
+    # The head width changed, so weights fitted before it were fitted to a different input space.
+    #
     # v15: `vague_link_present` is no longer a model input at all. It answers 2.4.9 (text alone, AAA, not
     # reported here) and the 2.4.4 head used it because it was the cheapest separator -- firing on 22 of the
-    # 44 conformant pages that carry "Details" inside a peer index. The head width changed, so weights
-    # fitted before it were fitted to a different input space.
-    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v15"
+    # 44 conformant pages that carry "Details" inside a peer index.
+    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v16"
+
+
+def test_no_landmark_feature_survives_in_the_vector():
+    # The removal is the point of v16, and a feature list is exactly the kind of thing that gets a name
+    # added back by someone reading `structure.landmarks` and assuming it is available. known-gaps §17
+    # records why it is not: the feature reads "the page has a landmark" and measures "the sweep reached
+    # one", and quick navigation cannot reach a landmark containing the caret.
+    assert not [name for name in F.FEATURE_NAMES if "landmark" in name], (
+        "a landmark feature is back in the vector; its zero means the SWEEP failed, never that the page "
+        "has no landmark -- see known-gaps §17 before re-adding one"
+    )
