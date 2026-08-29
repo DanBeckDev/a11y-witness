@@ -58,9 +58,18 @@ test("all five outcomes survive the export, not just failures", () => {
 test("every assertion cites a resolvable WCAG criterion URI", () => {
   // An assertion whose `earl:test` is a bare string is not interoperable — the point of the format is that
   // another tool can resolve what was tested.
+  //
+  // THIS TEST USED TO REQUIRE THE UNRESOLVABLE FORM. It asserted
+  // `/^https:\/\/www\.w3\.org\/TR\/WCAG22\/#\d+\.\d+\.\d+$/` — a NUMERIC fragment — and WCAG 2.2 has no such
+  // anchor: it identifies a criterion by a slug of its name, `id="non-text-content"`. So a test named for
+  // resolvability pinned the one shape that does not resolve, and would have blocked the fix.
+  //
+  // It was testing the shape the code produced rather than the property its name claims, which is the
+  // failure mode this whole file is written against. The assertion is now the property.
   for (const node of assertions()) {
     const test = node["earl:test"] as { "@id": string };
-    assert.match(test["@id"], /^https:\/\/www\.w3\.org\/TR\/WCAG22\/#\d+\.\d+\.\d+$/);
+    assert.match(test["@id"], /^https:\/\/www\.w3\.org\/TR\/WCAG22\/#[a-z0-9-]+$/,
+      "a WCAG 2.2 anchor is a slug of the criterion's NAME, never its number");
   }
 });
 
@@ -93,4 +102,34 @@ test("an empty outcome list still produces a valid, honest document", () => {
   const nodes = graph(earlReport({ ...INPUT, outcomes: [] }));
   assert.equal(nodes.filter((n) => n["@type"] === "earl:Assertion").length, 0);
   assert.ok(nodes.some((n) => n["@id"] === "_:subject"));
+});
+
+test("EVERY criterion URI resolves to a real WCAG 2.2 anchor, not a fabricated one", () => {
+  // This emitted `https://www.w3.org/TR/WCAG22/#1.1.1`, which does not exist — WCAG 2.2 identifies a
+  // criterion by a SLUG of its name (`id="non-text-content"`). So every `earl:test` in every report
+  // resolved to the top of the document, in the one output format whose whole purpose is that another
+  // tool can follow the reference.
+  //
+  // The slug rule was verified against the published spec: lowercasing each criterion NAME and hyphenating
+  // its non-alphanumerics matches a real id for all 55, with no special cases. These three are pinned as
+  // literals, checked against the spec on 2026-08-29, so a change to the rule has to face them.
+  const uriFor = (criterion: string) => {
+    const report = earlReport({ ...INPUT, outcomes: [{ criterion, outcome: "failed", reason: "r" }] });
+    const found = graph(report).find((n) => n["@type"] === "earl:Assertion") as
+      { "earl:test": { "@id": string } } | undefined;
+    return found!["earl:test"]["@id"];
+  };
+  assert.equal(uriFor("1.1.1"), "https://www.w3.org/TR/WCAG22/#non-text-content");
+  assert.equal(uriFor("1.3.1"), "https://www.w3.org/TR/WCAG22/#info-and-relationships");
+  assert.equal(uriFor("2.4.4"), "https://www.w3.org/TR/WCAG22/#link-purpose-in-context");
+  assert.doesNotMatch(uriFor("4.1.2"), /#\d/, "a numeric fragment is never a real WCAG anchor");
+});
+
+test("an UNKNOWN criterion cites the document, rather than inventing an anchor", () => {
+  // A bare document URI is honest — "here is the standard". A fabricated fragment claims a precision it
+  // does not have, which is the failure this whole fix is about.
+  const report = earlReport({ ...INPUT, outcomes: [{ criterion: "9.9.9", outcome: "untested", reason: "r" }] });
+  const assertion = graph(report).find((n) => n["@type"] === "earl:Assertion") as
+    { "earl:test": { "@id": string } } | undefined;
+  assert.equal(assertion!["earl:test"]["@id"], "https://www.w3.org/TR/WCAG22/");
 });
