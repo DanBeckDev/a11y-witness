@@ -111,3 +111,37 @@ test("a URL mismatch warns without throwing, because a trailing slash is not an 
   assert.equal(warnings.length, 2,
     `only a genuinely different URL warns — identical and absent must stay silent; got ${JSON.stringify(warnings)}`);
 });
+
+test("A FILE THAT IS NOT AXE OUTPUT IS REJECTED, not turned into findings", async () => {
+  // The header promises "anything else is rejected loudly", and a bare array was accepted
+  // UNCONDITIONALLY. Measured before the fix: a Lighthouse report became 1 finding, an array of URL
+  // strings became 2, an array of numbers became 3 — each rendered into the rule layer with empty
+  // `rule`, `impact` and `help`, beside real screen-reader findings.
+  //
+  // Worse than the "0 violations from a file we did not understand" the header warns about, because a
+  // fabricated count reads as a real one.
+  for (const notAxe of [
+    [{ audits: {}, finalUrl: "https://x" }],
+    ["https://a", "https://b"],
+    [1, 2, 3],
+  ]) {
+    await assert.rejects(() => loadAxeResults(fixture(notAxe)), /does not look like axe results/,
+      `${JSON.stringify(notAxe).slice(0, 30)} must be refused, not counted`);
+  }
+});
+
+test("and the real shapes still load, including a CLEAN empty run", async () => {
+  // The tolerance is the point of this module: "axe results" means several files depending on which tool
+  // wrote them. Refusing a packaging variant would be the opposite defect, and an empty array is a
+  // legitimate clean run that must stay accepted as zero.
+  const shapes: [string, unknown, number][] = [
+    ["empty array — a clean run", [], 0],
+    ["bare violations array", [{ id: "image-alt", help: "Images must have alternate text" }], 1],
+    ["{ violations: [...] }", { violations: [{ id: "label", help: "Form elements must have labels" }] }, 1],
+    ["axe CLI, one entry per URL", [{ url: "https://x", violations: [{ id: "region", help: "h" }] }], 1],
+  ];
+  for (const [label, value, expected] of shapes) {
+    const { findings } = await loadAxeResults(fixture(value));
+    assert.equal(findings.length, expected, label);
+  }
+});

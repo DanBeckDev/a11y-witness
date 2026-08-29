@@ -27,12 +27,34 @@ interface ImportedAxe {
   scannedUrl: string;
 }
 
+/**
+ * Does this element look like an axe violation at all?
+ *
+ * A bare array was accepted UNCONDITIONALLY, so `--axe-results` pointed at the wrong JSON produced
+ * fabricated findings rather than the loud rejection this module's header promises. Measured: a Lighthouse
+ * report became 1 finding, an array of URL strings became 2, an array of numbers became 3 — each rendered
+ * into the rule layer with empty `rule`, `impact` and `help`, beside real screen-reader findings.
+ *
+ * That is worse than the "0 violations from a file we did not understand" the header warns about, because
+ * a fabricated count reads as a real one.
+ *
+ * `id` and `help` are the two fields every axe violation carries and no reporter renames. Requiring EITHER
+ * keeps the deliberate tolerance about packaging — the whole point of this module — while refusing a file
+ * that is not axe output at all.
+ */
+const looksLikeViolation = (value: unknown): boolean =>
+  typeof value === "object" && value !== null
+  && (typeof (value as { id?: unknown }).id === "string"
+    || typeof (value as { help?: unknown }).help === "string");
+
 function violationsFrom(parsed: unknown): AxeViolation[] | null {
   if (Array.isArray(parsed)) {
+    // `every` on an EMPTY array is true, which is correct here: `[]` is a legitimate clean axe run and
+    // must stay accepted as zero violations rather than falling through to the shape check below.
     if (parsed.every((e) => e && typeof e === "object" && "violations" in e)) {
       return parsed.flatMap((e) => (e as { violations: AxeViolation[] }).violations ?? []);
     }
-    return parsed as AxeViolation[];
+    return parsed.every(looksLikeViolation) ? (parsed as AxeViolation[]) : null;
   }
   if (parsed && typeof parsed === "object" && Array.isArray((parsed as { violations?: unknown }).violations)) {
     return (parsed as { violations: AxeViolation[] }).violations;
