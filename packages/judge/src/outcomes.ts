@@ -94,6 +94,16 @@ const SWEEPS_FEEDING: Record<string, readonly string[]> = {
 export interface OutcomeInput {
   capture: CaptureEvidence;
   /**
+   * Per-type sweep completeness from `oracleCounts`, the SECOND way a sweep can be short.
+   *
+   * `truncatedSweeps` reads a sweep's own STOP REASON: it says "I gave up". Completeness compares what the
+   * sweep announced against what the browser exposes, and catches the case where the sweep stopped
+   * cleanly and still missed something — which is the norm, not the exception. Quick navigation cannot
+   * reach a landmark containing the caret, so `structure.landmarks` misses a page-wrapping `<main>` on
+   * 2,063 of 2,064 corpus captures, every one of which reported "examined in full".
+   */
+  completeness?: Readonly<Record<string, string>>;
+  /**
    * Findings produced by any layer. `wcag` starts with the criterion number; `mapping` says whether a
    * failure asserts non-conformance, and absent means `secondary` — see `RequirementMapping`.
    */
@@ -105,6 +115,36 @@ export interface OutcomeInput {
   abstained?: boolean;
   /** Sweeps that stopped before the page ran out of elements. */
   truncatedSweeps?: readonly { type: string }[];
+}
+
+/**
+ * Sweep label -> the census type its completeness is measured against.
+ *
+ * `formField` maps to `formControl` because the census counts the roles NVDA's form-field quick-nav
+ * actually visits — buttons included — which the DOM's narrower `formField` does not. `list`,
+ * `routeChange` and `focusOrder` have no census type, so nothing is claimed about them here; that is the
+ * same honesty `sweepCoverage` applies, and an invented denominator would be worse than an omission.
+ */
+const COMPLETENESS_OF: Readonly<Record<string, string>> = {
+  heading: "heading", link: "link", landmark: "landmark", graphic: "graphic", formField: "formControl",
+};
+
+/**
+ * Which of this criterion's sweeps DISAGREE with the browser's own count?
+ *
+ * `unknown` is deliberately not incomplete — every capture predating the counter reports it, and treating
+ * it as incompleteness would turn the whole corpus `cantTell` overnight. The same trade C2 makes, for the
+ * same reason.
+ *
+ * @param criterion the WCAG criterion number
+ * @param completeness per-type verdicts from `oracleCounts`
+ * @returns the sweep names whose completeness is `truncated` or `phantom`
+ */
+function incompleteFeeds(criterion: string, completeness: Readonly<Record<string, string>>): string[] {
+  return (SWEEPS_FEEDING[criterion] ?? []).filter((sweep) => {
+    const verdict = completeness[COMPLETENESS_OF[sweep] ?? ""];
+    return verdict === "truncated" || verdict === "phantom";
+  });
 }
 
 /** Did a truncated sweep feed this criterion? Returns the sweep names, so the reason can name them. */
@@ -183,6 +223,17 @@ function outcomeFor(criterion: string, input: OutcomeInput): CriterionOutcome {
       criterion, outcome: "cantTell",
       reason: `The ${stalled.join(" and ")} sweep stopped before the page did, so content past that point `
         + "was never examined for this criterion.",
+    };
+  }
+  // THE SECOND TRUNCATION SOURCE, and the one that fires on a healthy-looking capture. A sweep that ended
+  // cleanly can still have missed elements — the caret rule alone costs one per type, per position — and
+  // before this, such a capture reported "examined in full".
+  const short = incompleteFeeds(criterion, input.completeness ?? {});
+  if (short.length) {
+    return {
+      criterion, outcome: "cantTell",
+      reason: `The ${short.join(" and ")} sweep announced a different number of elements than the browser `
+        + "exposes, so this criterion rests on an examination known to be partial.",
     };
   }
   const applies = applicabilityOf(criterion, input.capture);

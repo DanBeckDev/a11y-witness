@@ -233,3 +233,67 @@ test("the tally accounts for every criterion exactly once", () => {
   const total = Object.values(tally).reduce((sum, n) => sum + n, 0);
   assert.equal(total, WCAG_22_AA.length);
 });
+
+/**
+ * COMPLETENESS IS THE SECOND WAY A SWEEP IS SHORT, and the one that fires on a healthy-looking capture.
+ *
+ * `truncatedSweeps` reads a sweep's own stop reason — it says "I gave up". Completeness compares what the
+ * sweep announced against what the browser exposes, and catches the sweep that ended CLEANLY and still
+ * missed something. That is the norm: quick navigation cannot reach a landmark containing the caret, so
+ * `structure.landmarks` misses a page-wrapping `<main>` on 2,063 of 2,064 corpus captures — every one of
+ * which reported "Content of the relevant kind was examined in full".
+ *
+ * Measured on 80 fresh protocol-7 captures: 16 flip, all `1.3.1 passed -> cantTell`, none any other way.
+ */
+const bare = {
+  transcript: ["Home, document", "Welcome, heading, level 1"],
+  structure: { headings: ["Welcome, heading, level 1"], landmarks: [], links: ["About, link"] },
+  interaction: {},
+} as never;
+
+test("A TRUNCATED FEEDING SWEEP WITHDRAWS THE PASS, and the reason names the sweep", () => {
+  const [outcome] = criterionOutcomes({
+    capture: bare, findings: [], truncatedSweeps: [],
+    completeness: { landmark: "truncated", heading: "exact", link: "exact" },
+  }).filter((o) => o.criterion === "1.3.1");
+  assert.equal(outcome.outcome, "cantTell");
+  assert.match(outcome.reason, /landmark sweep/, "a reader must be told WHICH channel was short");
+});
+
+test("a criterion whose own sweeps are exact is UNTOUCHED by another's shortfall", () => {
+  // Per-criterion, not blanket. 2.4.4 reads links; a short landmark sweep says nothing about it, and
+  // withdrawing that pass too would be the over-broad guard this repo has shipped before.
+  const [outcome] = criterionOutcomes({
+    capture: bare, findings: [], truncatedSweeps: [],
+    completeness: { landmark: "truncated", link: "exact" },
+  }).filter((o) => o.criterion === "2.4.4");
+  assert.equal(outcome.outcome, "passed");
+});
+
+test("UNKNOWN IS NOT INCOMPLETE — or every capture predating the counter goes cantTell", () => {
+  // The same trade `assertableSweep` makes. Refusing on `unknown` would turn the entire corpus
+  // undetermined overnight and read as a catastrophic regression, for no new information.
+  const [outcome] = criterionOutcomes({
+    capture: bare, findings: [], truncatedSweeps: [],
+    completeness: { landmark: "unknown", heading: "unknown", link: "unknown" },
+  }).filter((o) => o.criterion === "1.3.1");
+  assert.equal(outcome.outcome, "passed");
+});
+
+test("a FINDING still outranks it, so evidence of a failure is never softened into cantTell", () => {
+  // Step 1 of the precedence order, and it must survive: what we found is real even if the sweep that
+  // found it was later shown to be partial. Softening a real failure would be the worse error.
+  const [outcome] = criterionOutcomes({
+    capture: bare,
+    findings: [{ wcag: "1.3.1 Info and Relationships", mapping: "conformance" }],
+    truncatedSweeps: [], completeness: { landmark: "truncated" },
+  }).filter((o) => o.criterion === "1.3.1");
+  assert.equal(outcome.outcome, "failed");
+});
+
+test("a PHANTOM sweep withdraws the pass too — it announced things the page does not have", () => {
+  const [outcome] = criterionOutcomes({
+    capture: bare, findings: [], truncatedSweeps: [], completeness: { link: "phantom" },
+  }).filter((o) => o.criterion === "2.4.4");
+  assert.equal(outcome.outcome, "cantTell");
+});
