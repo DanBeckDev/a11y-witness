@@ -104,6 +104,34 @@ export const CONTAINER_ROLES = Object.freeze([
   "list", "table", "form", "article", "banner", "navigation", "main", "blockquote",
 ]);
 
+/**
+ * The ARIA landmark roles, as NVDA speaks them.
+ *
+ * A subset of `CONTAINER_ROLES`, named because "is this container a LANDMARK" is a real question with a
+ * real consumer (`sweepCompleteness` compares landmark coverage against the census) and the answer must
+ * not be restated elsewhere. It was: a `/landmark$|^form$|^region$/` regex in `verify.ts`, which missed a
+ * landmark announced as bare "banner", "navigation" or "main" — all three of which this list carries and
+ * that regex did not.
+ *
+ * NVDA announces a landmark either with the word ("navigation landmark") or without it ("form,
+ * Explore Site by Topic:"), and BOTH forms occur in the corpus, so both are recognised.
+ */
+const LANDMARK_WORDS = Object.freeze([
+  "banner", "complementary", "content info", "contentinfo", "navigation", "main", "search", "form", "region",
+]);
+
+/**
+ * Is this container role a landmark?
+ *
+ * @param role a container role as NVDA spoke it
+ * @returns true for "navigation landmark", "form", "landmark", and the rest of `LANDMARK_WORDS`
+ */
+export function isLandmarkRole(role: string): boolean {
+  const spoken = String(role ?? "").trim().toLowerCase();
+  if (spoken === "landmark") return true;
+  return LANDMARK_WORDS.some((word) => spoken === word || spoken === `${word} landmark`);
+}
+
 /** Roles a control is announced WITH. A phrase ending or beginning with one names a control. */
 export const CONTROL_ROLES = Object.freeze([
   "button", "link", "graphic", "heading", "edit text", "edit", "checkbox", "radio button", "radio",
