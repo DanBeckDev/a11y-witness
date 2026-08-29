@@ -24,6 +24,7 @@ import { layerOf } from "@a11y-witness/judge/layers";
 import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fleet";
 import { requestJson, CAPTURE_CLIENT_TIMEOUT_MS } from "@a11y-witness/worker-fleet/worker-http";
+import type { CaptureStructure } from "@a11y-witness/evidence";
 import { captureDoubt, captureMentionsTitle, oracleCounts, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
 import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics,
@@ -134,7 +135,8 @@ export interface CaptureResponse {
   url: string;
   screenReader: string;
   transcript: string[];
-  structure?: { headings: string[]; landmarks: string[]; formFields: string[] };
+  /** A subset of the wire type, derived — known-gaps §15. `Pick` keeps the omission meaningful. */
+  structure?: Pick<CaptureStructure, "headings" | "landmarks" | "formFields">;
   interaction?: {
     controls: string[];
     stateChanges: { control: string; after: string }[];

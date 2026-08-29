@@ -34,6 +34,7 @@
  */
 
 /** One channel-tagged piece of evidence. The featurizer's unit of input. */
+import type { CaptureStructure } from "@a11y-witness/evidence";
 import { annotateCapture } from "@a11y-witness/evidence";
 
 export interface EvidenceUnit {
@@ -50,12 +51,18 @@ interface AnnouncedChange {
 /** Exactly the capture fields the model is allowed to see. See the note above on why this is not `CaptureResult`. */
 export interface ScorableCapture {
   transcript?: string[];
-  structure?: {
-    headings?: string[];
-    formFields?: string[];
-    tableCells?: string[];
-    [other: string]: unknown;
-  } | null;
+  /**
+   * The NAMED fields derived from the wire type — known-gaps §15 — with the index signature kept.
+   *
+   * This is an allowlist of what the model READS, not a description of what a capture carries, which is
+   * why it keeps `[other: string]: unknown`: anything else on a capture passes through untyped and
+   * unread. Deriving the three that ARE read means they cannot drift from the wire, while the exclusion
+   * of `landmarks` stays visible as the decision this file argues for at length — the encoder's text
+   * units exclude it because the same unchanged page gave `[]` in one capture and `["Cycling guide"]` in
+   * the next, swinging a conformant page's 3.3.2 score across the threshold.
+   */
+  structure?: (Partial<Pick<CaptureStructure, "headings" | "formFields" | "tableCells">>
+    & { [other: string]: unknown }) | null;
   interaction?: {
     controls?: string[];
     stateChanges?: AnnouncedChange[];

@@ -1,3 +1,4 @@
+import type { CaptureStructure } from "@a11y-witness/evidence";
 import type { OracleCounts } from "@a11y-witness/evidence/verify";
 import { spawn } from "node:child_process";
 import { writeFile, unlink } from "node:fs/promises";
@@ -72,8 +73,19 @@ export interface JudgeInput extends OracleCounts {
    *
    * Still one of FOUR internal declarations of this shape — see `known-gaps.md` §15.
    */
-  structure?: { headings: string[]; landmarks: string[]; formFields: string[]; links?: string[];
-    graphics?: string[]; lists?: string[]; tableCells?: string[] };
+  /**
+   * THE WIRE TYPE, not a fourth spelling of it — known-gaps §15.
+   *
+   * This restated the seven fields by hand and omitted `graphics` until 2026-08-29, while
+   * `addUnnamedGraphics` read it. Nothing noticed, because object spread preserves what a type does not
+   * mention: the runtime was unaffected and the TYPE understated what flows, so a caller building the
+   * literal by hand would have silently starved the rule.
+   *
+   * `JudgeInput` reads the whole structure, so it is `CaptureStructure` exactly. `RuleInput` reads a
+   * genuine subset and says so with `Pick`, which keeps its omissions meaningful — no rule reads
+   * `landmarks`, and declaring it would claim a capability that does not exist.
+   */
+  structure?: CaptureStructure;
   /**
    * The oracle counts arrive by EXTENDING `OracleCounts` rather than by restating two of its fields.
    *
