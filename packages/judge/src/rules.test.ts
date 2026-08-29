@@ -290,7 +290,12 @@ test("focus repeating while most controls were never reached is a trap", () => {
   } as never);
   const trap = findings.filter((f) => f.wcag.startsWith("2.1.2"));
   assert.equal(trap.length, 1);
-  assert.match(trap[0].evidence, /reaching 2 of 5 controls/);
+  // WAS `/reaching 2 of 5 controls/`, and that was correct HERE and wrong elsewhere. `reached` counts
+  // distinct raw stops and `total` counts swept controls, while the DECISION is a name-based set
+  // difference — so on a disjoint modal (sweep sees the page behind the dialog, Tab sees inside it) both
+  // were 4 and the message read "never reached the other 0 of 4 controls" beside a trap finding. The
+  // evidence now reports the number the decision was actually made on.
+  assert.match(trap[0].evidence, /3 of 5 controls the page announced were never reached/);
   assert.equal(trap[0].mapping, "secondary",
     "WCAG permits an escape by other standard means if the page says so, which we cannot see");
 });
@@ -504,4 +509,24 @@ test("a genuinely unnamed field still fails — bare role, nothing trailing", ()
   const found = ruleFindings(unlabelled);
   assert.ok(found.length >= 1, "the corpus's own unnamed-field shape stopped being reported");
   assert.ok(found.some((f) => f.wcag.startsWith("4.1.2")));
+});
+
+test("A TRAP'S EVIDENCE COUNTS THE CONTROLS IT MISSED, not a subtraction on a different basis", () => {
+  // The disjoint modal: the sweep announces the page BEHIND the dialog and Tab visits what is INSIDE it,
+  // so both sets hold four and `swept - reached` is zero. `channelRelation` already had to become a set
+  // difference for exactly this reason — the decision was fixed and the MESSAGE was not, so this printed
+  // "never reached the other 0 of 4 controls" while asserting a keyboard trap.
+  //
+  // A number computed on a different basis from the claim it accompanies, in the sentence a human reads.
+  const findings = ruleFindings({
+    transcript: ["Checkout, document"],
+    structure: { formFields: ["Full name, edit", "Email, edit", "Phone, edit", "Notes, edit"] },
+    interaction: { focusOrder: ["Card number, edit", "Expiry, edit", "CVC, edit", "Postcode, edit",
+      "Card number, edit"] },
+  } as never).filter((f) => f.wcag.startsWith("2.1.2"));
+  assert.equal(findings.length, 1, "the disjoint modal is a real trap and must still be reported");
+  assert.doesNotMatch(findings[0].evidence, /reached (the other )?0 /,
+    "an evidence string that says zero controls were missed contradicts the finding it is evidence for");
+  assert.match(findings[0].evidence, /never reached 4 of the 4 controls/,
+    "the missed count is the set difference, which is what the decision was made on");
 });

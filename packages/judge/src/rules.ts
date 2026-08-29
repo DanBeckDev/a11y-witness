@@ -674,7 +674,7 @@ function channelRelation(input: RuleInput): ChannelRelation {
  * A tab-stop denominator was built, measured on real pages, and withdrawn — see below.
  */
 function tabRingCoverage(stops: string[], input: RuleInput):
-  { reached: number; total: number; unit: string } | null {
+  { reached: number; total: number; unit: string; missed: number } | null {
   // From `channelRelation`, which owns this comparison. `stops` stays a parameter because the two branches
   // below read the ring's SHAPE (whether a stop recurred, what roles it holds) and not just its size.
   const { reached, swept, unreached } = channelRelation(input);
@@ -682,7 +682,14 @@ function tabRingCoverage(stops: string[], input: RuleInput):
   // the announced controls; a modal makes them disjoint, so two sets of four compared as `4 < 4`
   // and a real trap was invisible. Non-empty here means there are controls the page announced
   // and focus never visited, which is the corroboration this was always meant to be.
-  if (unreached.length > 0) return { reached, total: swept, unit: "control" };
+  // `missed` TRAVELS WITH THE DECISION, because the evidence string cannot recompute it.
+  //
+  // The comment above explains why `unreached` had to be a set difference rather than `swept - reached`:
+  // for a modal the two sets are DISJOINT, so both hold four and a count comparison reads `4 < 4`. The
+  // decision was fixed and the MESSAGE was not — it said "never reached the other ${total - reached}",
+  // which on exactly that case printed "never reached the other 0 of 4 controls" while asserting a trap.
+  // A number computed on a different basis from the claim it accompanies, in the sentence a human reads.
+  if (unreached.length > 0) return { reached, total: swept, unit: "control", missed: unreached.length };
 
   // THE TAB-STOP DENOMINATOR IS WITHDRAWN, and what it cost to learn is worth more than the branch was.
   //
@@ -739,7 +746,8 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
     add("2.1.2 No Keyboard Trap",
       "Tab stopped moving: focus repeated the same control and never reached the rest of the page, so a "
         + "keyboard user cannot get past it",
-      `focus stopped at "${stops[stops.length - 1]}" after reaching ${reached} of ${total} ${unit}`);
+      `focus stopped at "${stops[stops.length - 1]}"; ${coverage.missed} of ${total} ${unit} the page `
+        + "announced were never reached");
     return;
   }
   // THE CYCLING CASE, on the fourth attempt, and the first three are why this one is shaped as it is.
@@ -776,8 +784,8 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
       "Focus cycles among a few controls and never reaches the rest of the page, and none of them can be "
         + "activated to leave — so a keyboard user who enters that group cannot get out",
       `focus visited ${reached} distinct ${reached === 1 ? "control" : "controls"} in ${stops.length} `
-        + `tab stops, none of them operable, and never reached the other ${total - reached} of ${total} `
-        + `${unit} the page has`);
+        + `tab stops, none of them operable, and never reached ${coverage.missed} of the ${total} `
+        + `${unit} the page announced`);
   }
 }
 
