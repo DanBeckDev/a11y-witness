@@ -24,6 +24,21 @@ revision behind. That is the wrong order and it is worth saying why: **training 
 the corpus consumes the capture path.** Retrain first and you retrain again after every item below it.
 The same logic puts publishing last — a changeset describes weights, so it should describe the final ones.
 
+> **RE-OPENED 2026-08-29 at phase B, and that is this table working rather than failing.** Every item
+> below reads DONE, and then `capture-integrity-plan.md` changed the capture path again — `census.distinct`,
+> `formControl`, and the truncation mark written unconditionally, shipped as `CAPTURE_PROTOCOL_VERSION 7`.
+> By the rule this table states, that re-opens **C** and **D**: the corpus must be recaptured before the
+> model is trained on it, or the model is trained on evidence the capture path no longer produces.
+>
+> The bump is what MAKES the recapture happen. `workerCode` is deliberately not a cache key, so without it
+> `training:capture` would serve every cached capture unchanged and the new fields would never appear —
+> completeness reading `unknown` for ever with every gate green.
+>
+> **And the "prove one subtype first" rule below paid for itself within the hour.** The first real capture
+> after the deploy carried `"formControl": null` — a bucket added to `ROLE_BUCKET` without a top-level
+> counter, so `undefined + 1` = NaN, which JSON writes as null. A full recapture would have produced 2,122
+> captures carrying it.
+
 | phase | items | why here |
 |---|---|---|
 | **A — tooling** | §1 progress files, §2 url audit, §3 typecheck, §4 CLI flags | touch no evidence and block nothing. Do them whenever; they make every later phase easier to watch and harder to get wrong |
