@@ -224,7 +224,38 @@ runs `npm install` on that box to debug something — this repo's own rule about
 to remember. `fleet:status` or `doctor` should assert that the control plane has no `node_modules`, and say
 what it costs if it does.
 
-### What moves
+### What moves — and MOST OF IT ALREADY HAD, which the plan got wrong
+
+This item claimed three things still ran from the laptop: `fleet:deploy`,
+`fleet:provision`, and `lab:pipeline`'s sequencing. **Two of those were already correct.**
+`fleet-playbook.mjs` SSHes to `192.168.1.172` and runs `ansible-playbook` THERE — its header says so
+outright, *"typing `ansible-playbook` on the control plane — the hand-crank this file exists to remove"*.
+Written into the plan without checking, which is the failure this document is otherwise about.
+
+So the residual was one thing, and it was a credential rather than a command:
+
+**The laptop held a SECOND fleet key, and it opened nothing.** Measured 2026-08-29:
+
+```
+laptop   SHA256:4SsFx2Ej3MHH4HX0Wr8MDbnKhEoDE4fTnlmTjyfgOjc   Permission denied on ALL FIVE workers
+control  SHA256:6hbVhrdIpvSDPo3nn++nDov5J8sgFNN17g1GgwQJY7s   opens them (A11Y-IDT01MNFPA)
+```
+
+Not a copy — a different key, dead, and the sole reason `doctor` reported this machine in violation of
+ADR 0012. `bootstrap-control-plane.sh` says why it should never have existed: *"a key on a Mac makes that
+Mac load-bearing again by a different route. Generated rather than copied, so this box is
+self-contained."*
+
+Moved to `~/.ssh/retired-a11y/` with a note recording the fingerprints and the verification, rather than
+deleted — a private key deletion is not reversible and keeping it costs nothing. `doctor` now reads
+`OK isolation — no fleet key here, so nothing to isolate it from`, and `worker:code` still reaches all
+five boxes, because the fleet tooling never used the local key.
+
+**What genuinely remains on the laptop is `lab:pipeline`'s sequencing**, and it is now the only thing: it
+needs a route to both the fleet and the lab, which is exactly what L3's control→lab key made possible. That
+is the next mechanical step and it is small.
+
+### What moved, historically
 
 - `fleet:deploy`, `fleet:provision` — already Ansible over SSH from control's own credentials; they run
   there rather than from a laptop that happens to hold a copy.
