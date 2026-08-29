@@ -41,7 +41,7 @@ test("every WCAG 2.2 A/AA criterion gets an outcome — silence about the rest i
 });
 
 test("criteria no assessor covers are UNTESTED, not passed", () => {
-  // 47 of 55. A consumer reading only the eight we cover and inferring the rest are fine is exactly what
+  // The majority of them. A consumer reading only the ones we cover and inferring the rest are fine is what
   // this prevents, and ACT gives the word for it.
   const outcomes = criterionOutcomes({ capture: RICH, findings: [] });
   const tally = outcomeTally(outcomes);

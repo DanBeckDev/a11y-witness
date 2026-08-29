@@ -16,7 +16,7 @@
  * can act on it.
  *
  * **Applicability is NOT redefined here.** `hasEvidenceFor` already answers "is there anything of the right
- * kind here to be right or wrong about?" for all eight criteria, and its table carries rationale measured
+ * kind here to be right or wrong about?" for every criterion we cover, and its table carries rationale measured
  * the hard way — Wikipedia navigating on submit, apache.org's search toggle that submitted nothing. A
  * second applicability table would drift from that one, and the drift would be silent.
  *
@@ -260,7 +260,7 @@ function outcomeFor(criterion: string, input: OutcomeInput): CriterionOutcome {
 /**
  * Every WCAG 2.2 A/AA criterion with its ACT outcome for this run.
  *
- * All 55 are returned, not just the eight we cover. The 47 we cannot assess come back as `untested`,
+ * ALL of them are returned, not just the ones we cover. The rest come back as `untested`,
  * which is the point: a consumer reading a list of eight and inferring the rest are fine is the failure
  * this exists to prevent, and ACT has a word for it.
  */

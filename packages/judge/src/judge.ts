@@ -581,7 +581,7 @@ export async function judge(input: JudgeInput): Promise<Judgment> {
   // result is rules + scorer. What it does NOT get is `applyGate`, which exists to filter a GENERATIVE
   // model's over-flagging; the scorer is already discriminative and carries its own evidence guard.
   //
-  // Narrower than an LLM and deliberately so: eight criteria, 14 heads, and silent on everything else.
+  // Narrower than an LLM and deliberately so: a minority of criteria, and silent on everything else.
   // `local-judge.ts` states what that does and does not cover.
   if (BACKEND === "local") return withRuleFindings(await judgeLocally(input), input);
   const verdict = await runModelJudge(input);

@@ -452,8 +452,10 @@ Promise<ScorerOutput> {
  * And it counts the LAYER, not this scorer. It used `SCORED_CRITERIA.length` — the trained heads, 8 — while
  * the same section prints findings the deterministic rules produced. On the first real page this was ever
  * pointed at, a 2.4.3 and a 2.1.1 finding appeared directly beneath a sentence claiming the layer scores
- * eight criteria that include neither, and three different totals were readable in one report: 8 here, 10
- * rule-assessed, and "Assessed 14 of 55" in the conformance section, with nothing saying which was which.
+ * criteria that include neither, and THREE DIFFERENT TOTALS were readable in one report — the scorer's
+ * head count, the rule-assessed count, and the conformance section's — with nothing saying which was
+ * which. The numerals are deliberately not repeated here; they were the symptom, and quoting them would
+ * make this comment the fourth total.
  *
  * **It states SCOPE and makes no claim about counts**, which is the second half of the same lesson. It said
  * "No failures were confirmed for the N criteria this layer covers" — computed from the SCORER's findings,
