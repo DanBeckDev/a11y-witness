@@ -423,6 +423,40 @@ across channels, the way the existing grammar was.
 above reaches 0 of 267 — and `sweepCompleteness` returns a verdict other than `unknown` for `landmark` on
 a capture where the other four types agree. Re-run with the snippet in this entry's commit.
 
+## 12. CI on `main` is RED, and the fix is on this branch, unmerged
+
+Established 2026-08-29 while chasing why `action-smoke` was failing, which was a different fault (see
+below). `origin/main` is at `7dd7fb9`, and `lint.yml` — which gates ESLint, `tsc` and the whole unit suite
+— **failed on exactly that commit** and has not run since, because it triggers only on pushes to `main`
+and on pull requests. Work on a branch never fires it.
+
+The failure is `Error: No available supported screen readers`, thrown at IMPORT by guidepup on a Linux
+runner. `packages/nvda-worker/src/diagnostics.test.ts` and `packages/cli/src/action/summary.test.ts`
+imported the worker BY PACKAGE NAME, and the package index re-exports `capture-core.mjs`.
+
+**It is already fixed**, in `94b0209` (2026-08-25), which switched both to relative imports and added
+`no-win32-imports.test.ts` to keep them that way. That commit is on `v8-feature-schema` and not on `main`.
+
+**Why it stayed invisible for a week, and this is the general lesson:** the throw is invisible on macOS,
+because VoiceOver satisfies guidepup's "is a screen reader available" check. So the suite passes locally,
+the pre-push hook passes, and the only environment that can see it is the one nobody watches — a branch
+does not trigger `lint.yml`, and `main` has had no push since.
+
+**Done when:** this branch merges and `lint.yml` reports success on `main`. Nothing else is required; do
+not "fix" it again.
+
+### The separate fault found at the same time, which was mine
+
+`action-smoke` was red on every commit today for an unrelated reason: `packages/control` was extracted
+without refreshing `package-lock.json`, so `npm ci` — the first step of every workflow — refused with
+`Missing: @a11y-witness/control@0.1.0 from lock file`. Fixed, with `lockfile-in-sync.test.ts` to close the
+class offline.
+
+**Correcting a claim in that commit's own message:** it says `lint.yml` "has been failing on every commit"
+because of the lockfile. That is wrong — `lint.yml` had not run since 23 August and its failure is the
+guidepup one above. Two red workflows, two unrelated causes, and I attributed both to the one I had just
+found. Exactly the shape this repo's diagnostics table warns about: the first plausible cause, believed.
+
 ## What is NOT on this list, deliberately
 
 - **`1.3.1`** — closed. `29/29 rules: EXACT`, validated on a real page. Was "the claim rests on nothing"
