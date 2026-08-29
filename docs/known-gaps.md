@@ -496,56 +496,40 @@ host judge, which is the split C1 established. Additive and diagnostic-only, so 
 recapture. **Deliberately NOT done mid-run:** deploying restarts a worker mid-capture and destroys
 12-520 s of unresumable work, which `sleep.yml` already refuses for provisioning.
 
-## 14. Owning a subtype and ASSERTING it are two unconnected facts — 7 of 11 refer
+## 14. ~~Owning a subtype and ASSERTING it are unconnected~~ — MOSTLY WRONG, and the code refuted me
 
-Found 2026-08-29 by reading `rules.ts` and auditing every `add()` call site.
+**Written and then largely retracted the same evening, by reading two files further.** Kept because the
+retraction is the useful part.
 
-CLAUDE.md's headline table said `decidedBy: "rules"` means "conformance-mapped, so `criterionOutcomes`
-reports `failed`". Those are two independent facts and nothing connects them: `rule-ownership.json` has no
-`mapping` field, and `add()` in `rules.ts` DEFAULTS to `secondary`. Corrected in CLAUDE.md.
+**What was real, and is fixed.** CLAUDE.md's headline table said `decidedBy: "rules"` means
+"conformance-mapped, so `criterionOutcomes` reports `failed`". It does not: `rule-ownership.json` has no
+`mapping` field, `add()` defaults to `secondary`, and only 4 of 16 call sites pass `"conformance"`. So
+`1.3.1:no-headings`, `2.1.1`, `2.1.2`, `2.4.1`, `2.4.2`, `2.4.3` and `1.1.1:filename-alt` are rules-owned
+and all report `cantTell`. Verified end to end. CLAUDE.md corrected.
 
-Measured — 16 assertion sites, 4 pass `"conformance"`:
+**What was WRONG.** I wrote that the mapping "lives only at an `add()` call site … with no declaration
+beside the ownership it appears to follow from", called it undiscoverable, and said the maintainer needed
+to decide per subtype. All three are false:
 
-| rules-owned subtype | mapping | outcome |
-|---|---|---|
-| `4.1.2:unnamed-control` | conformance | **failed** |
-| `4.1.2:state-change-silent` | conformance | **failed** |
-| `3.3.2:unnamed-form-field` | conformance | **failed** |
-| `1.1.1:missing-alt` | conformance on the "Unlabeled graphic" branch, `secondary` on the empty-name branch | mixed |
-| `1.1.1:filename-alt` | secondary | cantTell |
-| `1.3.1:no-headings` | secondary | cantTell |
-| `2.1.1:control-unreachable-by-keyboard` | secondary | cantTell |
-| `2.1.2:focus-trapped` | secondary | cantTell |
-| `2.4.1:skip-link-inert` | secondary | cantTell |
-| `2.4.2:route-title-stale` | secondary | cantTell |
-| `2.4.3:focus-order-scrambled` | secondary | cantTell |
+- **It IS declared.** `act-rules.ts` states every mapping in the W3C's ACT Rules Format —
+  `accessibilityRequirements: [{ criterion, mapping }]` — which is the correct home for it and is
+  published. Audited against the code: all twelve agree.
+- **It IS pinned.** `act-rules.test.ts` drives `ruleFindings` and asserts every produced mapping is
+  declared, and separately pins the asserting set as an exhaustive list, so promoting a rule to an
+  assertion is a visible edit in two places.
+- **The decision HAS been taken**, and its rationale is one line in that test: *"These two read the failure
+  directly; everything else infers it."* That is exactly the ACT distinction — a rule stricter or looser
+  than its criterion maps as `secondary` — applied deliberately, not overlooked.
 
-And one more the ownership file does not cover at all: **1.4.2 Audio Control** is RULE-ONLY — no trained
-head exists for it, so `rule-ownership.json` declares no subtype and there is nothing to arbitrate. It also
-refers. Its evidence is a DOM read (`autoplay && !muted && !controls`), about as deterministic as anything
-here, and it is a NON-INTERFERENCE criterion under WCAG §5.2.5 — which cuts both ways: a wrong assertion
-there says the whole page fails, and a referral on a page that genuinely autoplays unstoppable audio
-under-states a failure that masks the screen reader's own speech. Worth deciding alongside the seven.
+**The lesson, which is why this entry survives.** I audited `rules.ts`, found four assertion sites against
+eleven rules-owned subtypes, and concluded a design gap from ONE file. The answer was two files away, in
+the file whose entire purpose is to state it. Recording a gap that is not one, in the document that exists
+to be the trustworthy record of gaps, is worse than not recording it — and I did it while three entries
+above were about prose that had drifted from the code.
 
-Verified end to end rather than read off the source: a capture with a genuinely stale route title produces
-`mapping=secondary` and `2.4.2: cantTell`.
-
-**This is NOT recorded as a bug, and the mappings are deliberately left alone.** Turning a referral into an
-assertion is the most dangerous single change available in this repo — it converts "worth a human's
-attention" into "this page does not conform", which is the accusation ADR 0022 exists to be careful about.
-Each of the seven is a judgement about whether the rule is stricter or looser than its criterion, which is
-exactly what ACT's secondary mapping means, and several have a documented reason to be narrow:
-`route-title-stale` "covers ONE of 2.4.2's failure modes and deliberately not the others".
-
-**What IS wrong is that the fact was undiscoverable.** The mapping lives only at an `add()` call site, four
-of sixteen, with no declaration beside the ownership it appears to follow from — so the project's own
-summary of its two-layer design was wrong about its own behaviour, and reading `rule-ownership.json` could
-not tell you.
-
-**Done when:** `rule-ownership.json` declares the intended mapping per subtype and a test pins the `add()`
-sites to it, so the two cannot disagree — and the maintainer has decided, per subtype, which of the seven
-should assert. ADR 0021 is the precedent: it moved `4.1.2:state-change-silent` to the rules specifically so
-it could be **stated rather than suggested**, which is the same decision, taken once.
+**Residual, and it is small:** 1.4.2 Audio Control is rule-only with no `rule-ownership.json` entry (no
+trained head, nothing to arbitrate), so an audit driven by that file cannot see it. It has an
+`act-rules.ts` description declaring `secondary`, so it is documented — just not where ownership is.
 
 ## 15. A capture's structure is declared FOUR times, and they disagree
 
