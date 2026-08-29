@@ -1,4 +1,4 @@
-import type { PageCensus, DomCensus } from "@a11y-witness/evidence/verify";
+import type { OracleCounts } from "@a11y-witness/evidence/verify";
 import { spawn } from "node:child_process";
 import { writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -56,7 +56,7 @@ const CONSENSUS = Math.max(1, Number(process.env.JUDGE_CONSENSUS ?? 1));
 
 export type Severity = "blocker" | "serious" | "moderate" | "minor";
 
-export interface JudgeInput {
+export interface JudgeInput extends OracleCounts {
   url: string;
   task: string;
   screenReader: string;
@@ -66,15 +66,19 @@ export interface JudgeInput {
    * for a type means the page exposes none of it, even if it looks like it does. */
   structure?: { headings: string[]; landmarks: string[]; formFields: string[]; links?: string[] };
   /**
-   * What the PAGE exposes, from the accessibility tree — an oracle for the deterministic rules only, never
-   * shown to the model (`docs/local-model.md` bars the tree as a model feature).
+   * The oracle counts arrive by EXTENDING `OracleCounts` rather than by restating two of its fields.
+   *
+   * They were declared here as `census?` and `dom?` with a comment saying "spread from `oracleCounts` at
+   * every construction site" — the comment named the requirement and the type did not enforce it. By
+   * 2026-08-29 `oracleCounts` also returned `completeness`, `truncated`, `supports` and `banner`, and this
+   * interface said nothing about any of them: they reached the rules only because object spread preserves
+   * what a type does not mention. A construction site that built the literal by hand would have compiled
+   * cleanly and silently disabled C2's guard.
+   *
+   * What the PAGE exposes is an oracle for the deterministic rules ONLY, never shown to the model —
+   * `docs/local-model.md` bars the accessibility tree as a model feature, and `modelInput()`'s allowlist
+   * is what enforces that.
    */
-  /**
-   * The oracle counts. Spread from `oracleCounts` at every construction site, so the CLI, the exporter,
-   * the eval runner and the two audits cannot disagree about what a rule is allowed to see.
-   */
-  census?: PageCensus;
-  dom?: DomCensus;
   /** Optional interaction pass: how each interactive control is announced (found
    * via quick-nav), the announced state after activating disclosures, and what
    * was announced after submitting a form with no valid input. */
