@@ -456,3 +456,42 @@ test("but a non-landmark entry ALONGSIDE real ones is a short sweep, and says so
   } as unknown as CapturedAnnouncements;
   assert.equal(sweepCompleteness(capture).landmark, "truncated");
 });
+
+test("A TABLE'S COMPLETENESS COMES FROM NVDA'S OWN WORDS, not the census", () => {
+  // The census counts landmarks, headings, links, graphics and form controls — never cells. NVDA states
+  // the dimensions when the caret enters ("table, with 3 rows and 7 columns"), which is the only ground
+  // truth there is, and arguably the better oracle: it is what the screen reader actually said.
+  const capture = {
+    transcript: ["Prices, table, with 3 rows and 7 columns"],
+    structure: { tableCells: Array.from({ length: 18 }, (_, i) => `cell ${i}`) },
+  } as unknown as CapturedAnnouncements;
+  assert.equal(sweepCompleteness(capture).tableCells, "exact");
+});
+
+test("a cell sweep that barely started is TRUNCATED, which is the case this was built for", () => {
+  // The real page that prompted it reached 0 of 21 cells. A 1.3.1 finding of "no cell announces a header"
+  // ranges over every cell, so a sweep that did not look cannot support it.
+  const capture = {
+    transcript: ["Prices, table, with 3 rows and 7 columns"],
+    structure: { tableCells: [] },
+  } as unknown as CapturedAnnouncements;
+  assert.equal(sweepCompleteness(capture).tableCells, "truncated");
+});
+
+test("A FRACTION AND NOT EQUALITY, because merged cells make exactness wrong", () => {
+  // Demanding rows x columns exactly would mark healthy captures incomplete and suppress real findings:
+  // merged cells, a caption row, and cells NVDA groups all legitimately reduce the count. 122 of 122
+  // corpus table captures are complete at this threshold.
+  const capture = {
+    transcript: ["Prices, table, with 4 rows and 4 columns"],
+    structure: { tableCells: Array.from({ length: 9 }, (_, i) => `cell ${i}`) },
+  } as unknown as CapturedAnnouncements;
+  assert.equal(sweepCompleteness(capture).tableCells, "exact", "9 of 16 is a real table, not a short sweep");
+});
+
+test("no table announced means UNKNOWN, never complete", () => {
+  // A page with no table has nothing to be incomplete about, and saying `exact` would let a 1.3.1 absence
+  // claim rest on a channel that was never exercised.
+  assert.equal(sweepCompleteness({ transcript: ["Home, document"], structure: {} } as never).tableCells,
+    "unknown");
+});
