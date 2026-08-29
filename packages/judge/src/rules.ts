@@ -572,6 +572,14 @@ interface ChannelRelation {
   overlap: number;
   /** A stop recurred, so the walk wrapped — it saw the whole ring rather than being cut short. */
   cycleClosed: boolean;
+  /**
+   * The announced controls the tab ring never visited, BY NAME.
+   *
+   * Named rather than counted so a finding can say which controls a keyboard user cannot reach:
+   * "four unreached" and "Full name, Email, Phone, Delivery notes unreached" are different
+   * claims, and only the second can be checked against the page by a human.
+   */
+  unreached: string[];
   /** Nothing in common. The counts may still match; that is the trap. */
   disjoint: boolean;
   /**
@@ -605,10 +613,17 @@ function channelRelation(input: RuleInput): ChannelRelation {
   const stops = input.interaction?.focusOrder ?? [];
   const reachedNames = comparableNames(stops);
   const overlap = named.filter((name) => reachedNames.includes(name)).length;
+  // WHICH announced controls the ring never reached — the set, not its size. `swept - reached`
+  // assumes the ring is a SUBSET of the announced controls, and for a modal it is DISJOINT from
+  // them by construction: the dialog hides the page, so the sweep announces what is behind it
+  // and Tab visits what is inside it. Measured on `keyboard-trap-modal-cycle`, where both sets
+  // held four and the count comparison read `4 < 4` — a real trap, invisible.
+  const unreached = named.filter((name) => !reachedNames.includes(name));
   return {
     swept: sweptControls.length,
     reached: new Set(stops).size,
     overlap,
+    unreached,
     cycleClosed: cycleClosed(reachedNames),
     // Guarded on the NAMED sets, because overlap can only ever be computed between things that have names.
     // A page whose controls are all unnamed is not "disjoint", it is unanswerable by this comparison.
@@ -635,8 +650,12 @@ function tabRingCoverage(stops: string[], input: RuleInput):
   { reached: number; total: number; unit: string } | null {
   // From `channelRelation`, which owns this comparison. `stops` stays a parameter because the two branches
   // below read the ring's SHAPE (whether a stop recurred, what roles it holds) and not just its size.
-  const { reached, swept } = channelRelation(input);
-  if (swept > 0 && reached < swept) return { reached, total: swept, unit: "control" };
+  const { reached, swept, unreached } = channelRelation(input);
+  // A SET DIFFERENCE, NOT `reached < swept`. The count version assumed the ring is a subset of
+  // the announced controls; a modal makes them disjoint, so two sets of four compared as `4 < 4`
+  // and a real trap was invisible. Non-empty here means there are controls the page announced
+  // and focus never visited, which is the corroboration this was always meant to be.
+  if (unreached.length > 0) return { reached, total: swept, unit: "control" };
 
   // THE TAB-STOP DENOMINATOR IS WITHDRAWN, and what it cost to learn is worth more than the branch was.
   //
