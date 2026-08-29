@@ -147,8 +147,18 @@ that is what it is for.
 
 ## L3. EVERYTHING runs on the control plane, because more than one person drives this
 
-**Status: open. No longer a decision — the requirement settles it, and the objection I recorded turns out
-not to apply.**
+**Status: MET 2026-08-29. Verified end to end: laptop dispatches, control sequences under systemd, the lab
+executes, a real verdict returns — with the connection gone.**
+
+```
+$ npm run lab:pipeline -- --pipeline=gates
+started as a11y-pipeline-gates on 192.168.1.172. It now outlives this terminal.
+...
+FAIL — 2 signal(s) do not discriminate        <- from check-signals, ON THE LAB
+```
+
+The requirement settles what was written as a decision, and the objection recorded as blocking turns out
+not to apply.
 
 The requirement is *"this could be controlled by multiple people so everything has to live in the control
 plane"*, and it changes the analysis completely. A laptop is not a small exception when there are N of
