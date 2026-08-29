@@ -413,6 +413,46 @@ const SWEEP_OF: Record<string, "headings" | "links" | "landmarks" | "graphics" |
  * @param capture a capture, unwrapped
  * @returns one verdict per type the census counts, or `unknown` where it cannot say
  */
+/**
+ * WHAT THE SWEEP FOUND, counted the way the census counts it.
+ *
+ * The census counts distinct NAMES for named elements and each UNNAMED element individually, so the sweep
+ * has to be reduced the same way or the two are not comparable — which is the definitional error that made
+ * "97% of pages disagree" half arithmetic.
+ *
+ * A LANDMARK'S NAME IS IN `containers`, NOT `objects`, and reading `objects` for every type is what made
+ * 100 of 267 real landmark announcements yield nothing. `announcement.ts` treats a landmark as CONTEXT by
+ * deliberate design — reading one as the object's role once reported three conformant W3C pages as 4.1.2
+ * failures — so `objects[0]` is correctly undefined there and the question had to be asked of the other
+ * channel.
+ *
+ * @param announced the sweep's announcements for one type
+ * @param type the census type, which decides WHICH channel carries the name
+ * @returns distinct names, and how many unnamed elements were announced
+ */
+function sweptElements(announced: string[], type: string): { names: Set<string>; unnamed: number } {
+  const clean = (name: string) => name.replace(/[\s,]+/g, " ").trim();
+  const parsed = announced.map((a) => parseAnnouncement(String(a), "sweep"));
+  // EVERY landmark container, not just the first: 5% of real entries carry more than one, because NVDA
+  // announces the containers it passed through on the way in.
+  const found = type === "landmark"
+    ? parsed.flatMap((p) => p.containers.filter((c) => LANDMARK_ROLE.test(c.role)).map((c) => c.name))
+    : parsed.map((p) => p.objects[0]?.name ?? "");
+  return {
+    names: new Set(found.map(clean).filter(Boolean)),
+    // Only landmarks are counted unnamed here. For the other types an unnamed element is indistinguishable
+    // from an announcement this grammar could not read, and inventing a count from that is how a capture
+    // defect gets manufactured out of a page's own markup — see the guard in the caller.
+    unnamed: type === "landmark" ? found.filter((name) => !clean(name)).length : 0,
+  };
+}
+
+/**
+ * Per-type: did the sweep announce as many distinct names as the page exposes?
+ *
+ * @param capture a capture, unwrapped
+ * @returns one verdict per type the census counts, or `unknown` where it cannot say
+ */
 export function sweepCompleteness(capture: CapturedAnnouncements): Record<string, Completeness> {
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
   const census = marks.find((m) => typeof m === "object" && m !== null
@@ -423,41 +463,17 @@ export function sweepCompleteness(capture: CapturedAnnouncements): Record<string
     const expected = census?.distinct?.[type];
     const announced = (capture.structure as Record<string, string[]> | undefined)?.[field];
     if (typeof expected !== "number" || !Array.isArray(announced)) { out[type] = "unknown"; continue; }
-    // The NAME, not the announcement: "Contact, heading, level 2" and "Contact, heading, level 3" are one
-    // name and two announcements, and the census counts names.
-    //
-    // A LANDMARK'S NAME IS IN `containers`, NOT `objects`, and the first version of this read `objects`
-    // for every type — so 100 of 267 real landmark announcements yielded nothing and the verdict was
-    // `unknown` on essentially every page. That was recorded as a grammar gap. It is not: the grammar
-    // parses them exactly right, and `announcement.ts` treats a landmark as CONTEXT by deliberate design
-    // — reading one as the object's role once reported three conformant W3C pages as 4.1.2 failures.
-    // Asking the object channel a container's question is the same defect this plan is about, committed
-    // inside the fix for it.
-    const parsed = announced.map((a) => parseAnnouncement(String(a), "sweep"));
-    const clean = (n: string) => n.replace(/[\s,]+/g, " ").trim();
-    const names = new Set((type === "landmark"
-      // EVERY landmark container, not just the first: 5% of entries carry more than one, because NVDA
-      // announces the containers it passed through on the way in.
-      ? parsed.flatMap((p) => p.containers.filter((c) => LANDMARK_ROLE.test(c.role)).map((c) => c.name))
-      : parsed.map((p) => p.objects[0]?.name ?? ""))
-      .map(clean)
-      .filter(Boolean));
-    // An UNNAMED landmark is legitimate and the census counts it per ELEMENT, so it must be counted here
-    // too or a page of unnamed landmarks reads as truncated — the same asymmetry the graphics guard below
-    // exists for.
-    const unnamed = type === "landmark"
-      ? parsed.flatMap((p) => p.containers.filter((c) => LANDMARK_ROLE.test(c.role)))
-        .filter((c) => !clean(c.name)).length
-      : 0;
-    // UNNAMED CONTROLS ARE COUNTED BY THE CENSUS AND DROPPED BY THE SET ABOVE, so a page whose sweep is
-    // entirely unnamed would read as truncated when it is not. Compare only when the sweep produced names;
-    // otherwise this cannot say, which is the honest answer and not a pass.
+    const { names, unnamed } = sweptElements(announced, type);
+    // AN ENTIRELY UNREADABLE SWEEP CANNOT SAY. The census counts unnamed controls and the name set drops
+    // them, so a page of unnamed graphics would compare 0 against 3 and report TRUNCATED — inventing a
+    // capture defect out of the 1.1.1 finding itself. Declining is the honest answer and not a pass.
     if (names.size === 0 && unnamed === 0 && announced.length > 0) { out[type] = "unknown"; continue; }
     const found = names.size + unnamed;
     out[type] = found === expected ? "exact" : found < expected ? "truncated" : "phantom";
   }
   return out;
 }
+
 
 /**
  * The announcements this capture believes are TRUNCATED — capture-integrity-plan C5.
