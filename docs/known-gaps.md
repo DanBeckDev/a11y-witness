@@ -385,43 +385,47 @@ JSON file.
 Same reason as §3: a changeset count restated here goes stale the moment one is added, and one was. §8
 carries the live state and the reason the last step is a human's.
 
-## 11. The announcement grammar cannot read a LANDMARK — 37% of them, measured
+## 11. ~~The announcement grammar cannot read a LANDMARK~~ — WRONG CAUSE. Fixed, and it was mine
 
-Found 2026-08-29 by `sweepCompleteness` returning `unknown` for landmarks on a page where every other type
-read `exact`. Measured over the real-page corpus rather than inferred:
+**Recorded and then corrected the same afternoon, which is the useful part.** The entry claimed
+`announcement.ts` could not read a landmark, citing 100 of 267 real announcements yielding no name, and
+argued the fix needed NVDA's announcement forms established from source rather than pattern-matched.
+
+**The grammar was right the whole time.** It parses every one of those correctly:
 
 ```
-landmark announcements: 267   unparsed: 100 (37%)
-  17x  "complementary landmark, Related WCAG resources"
-  17x  "Page, content info landmark, Status:, Updated "
-  10x  "Page Contents, navigation landmark, Page Conte"
-   4x  "form, Explore Site by Topic:"
+"complementary landmark, Related WCAG resources"   containers[0] = {name: "",             role: "complementary landmark"}
+"Page Contents, navigation landmark, Page Contents" containers[0] = {name: "Page Contents", role: "navigation landmark"}
+"form, Explore Site by Topic:"                      containers[0] = {name: "",             role: "form"}
 ```
 
-`packages/evidence/src/announcement.ts` is the single grammar and is told its CHANNEL — the 2026-08-24 fix
-that replaced seven partial regexes, validated on 6,555 cross-channel comparisons at 0.08% disagreement.
-It reads `structure.*` as name-first, which is right for headings, links and graphics. **Landmarks are
-announced in BOTH orders** — `<role> landmark, <name>` and `<name>, <role> landmark` — and neither is what
-the name-first reading expects, so 37% yield no name at all.
+A landmark is CONTEXT, not the object — `announcement.ts` says so at line 15, because reading one as the
+object's role *"reported three conformant W3C pages as 4.1.2 failures"*. So `objects[0]` is correctly
+`undefined`, and `sweepCompleteness` was reading `objects` for every type. **Asking the object channel a
+container's question**, which is the same defect `capture-integrity-plan` is about, committed inside the
+fix for it — and then written up as somebody else's bug.
 
-**Nothing is currently wrong because of it.** No rule reads `structure.landmarks`; the two mentions in
-`rules.ts` are comments. And `sweepCompleteness` reports `unknown` rather than guessing, because of the
-guard written for a different reason: *an entirely unnamed sweep cannot say*, which exists so a page of
-unnamed graphics is not read as a truncated one. It declines instead of inventing a verdict.
+Three things had to be right, and each was established by measuring the corpus rather than reasoning:
 
-**What it costs:** landmark completeness is unavailable, so C2 could never gate a landmark-reading rule.
-That matters the moment one exists — 2.4.1 is the obvious candidate, since ARIA11 makes landmarks one of
-the two ways to satisfy bypass.
+| | |
+|---|---|
+| the name lives in `containers`, per type | 267 -> 232 entries resolve to a landmark |
+| an UNNAMED landmark still counts | 121 of 262 are unnamed, and the census counts them per element — dropping them would read a page of unnamed landmarks as truncated |
+| **every** container, not just the first | 5% of entries carry more than one, because NVDA announces the containers it passed through on the way in |
 
-**Why this is recorded rather than fixed here.** The 2026-08-24 entry is explicit that the defect was
-*seven partial regexes each guessing at one order*, and the remedy was one grammar told its channel and
-then MEASURED. Adding a landmark branch by pattern-matching these four shapes would be the same mistake in
-the same file. It needs the announcement forms established from NVDA's `getPropertiesSpeech` and validated
-across channels, the way the existing grammar was.
+Measured after: a real W3C capture went from `landmark: unknown` to **`landmark: exact`**, with all five
+types now exact on that page.
 
-**Done when:** `parseAnnouncement` extracts a name from every landmark shape in the corpus — the count
-above reaches 0 of 267 — and `sweepCompleteness` returns a verdict other than `unknown` for `landmark` on
-a capture where the other four types agree. Re-run with the snippet in this entry's commit.
+**The residual is 35 of 267 and is NOT a parse failure.** Those entries contain no landmark at all — `"Get
+Involved, link"`, `"Overview, heading, level 2"` — the landmark sweep announcing something that is not a
+landmark. They contribute nothing, which is right: counting them would inflate the total into a phantom.
+When an ENTIRE page resolves to none, the verdict is `unknown` rather than `truncated`, because "the page
+has no landmarks" and "our extraction failed" are indistinguishable from there.
+
+**The lesson, and it is why this entry is kept rather than deleted.** The original diagnosis was reached by
+running one function, seeing `undefined`, and blaming the function. Nothing was measured before it was
+written down. The 2026-08-24 rule it invoked — *establish the forms, do not pattern-match* — was the right
+rule cited to justify not looking.
 
 ## 12. CI on `main` is RED, and the fix is on this branch, unmerged
 
