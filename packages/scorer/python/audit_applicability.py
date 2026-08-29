@@ -38,6 +38,14 @@ import screenreader_features as features  # noqa: E402
 #:     `focusOrder` truncates at 12 stops — measured on `focus-order-tabindex`, which reported
 #:     CONTAMINATED for precisely that reason. Their evidence IS the focus order.
 #:
+#:     THAT PREMISE IS STALE as of 2026-08-29: `MAX_TAB_STOPS` is 150, not 12, so four extra links cannot
+#:     push a case's own controls out of the window any more. The exclusion may still be right for another
+#:     reason, but the reason RECORDED for it no longer holds -- and this file cites it as why the
+#:     free-veto remedy is unavailable for these three heads, the exact three whose worst veto is
+#:     `state_unchanged`. Settling it is one command, written at the exclusion itself in `case-matrix.mjs`.
+#:     Until somebody runs it, "unavailable" here means "not re-measured since the cap changed", which is
+#:     a weaker claim than it reads as.
+#:
 #: So 25 of the 44 vetoes are on features that ARE defects (`form_field_unnamed`, `state_unchanged`,
 #: `validation_error_missing`), which no conformant page can carry by definition; and the rest are on
 #: features whose furniture would contaminate the case. Recorded so the next reader does not spend an
