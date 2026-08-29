@@ -564,6 +564,35 @@ consumer reads a genuine subset, so the omissions stay meaningful — and a test
 a field the wire does not carry. `wire-types-describe-the-wire.test.ts` already does that for the published
 type and is the pattern to follow.
 
+## 16. The discriminative gate's rules-owned list is frozen at two criteria of nine
+
+Found 2026-08-29 reading `verify-gate.ts`. `ABSENCE_CRITERIA = new Set(["1.1.1", "4.1.2"])` decides which
+findings the gate drops so the deterministic rule's authoritative one can stand. It was correct when the
+rules owned exactly those two.
+
+`rule-ownership.json` now declares many more as `decidedBy: "rules"`: 1.1.1, 1.3.1, 2.1.1, 2.1.2,
+2.4.1, 2.4.2, 2.4.3, 3.3.2 and 4.1.2. Deliberately listed rather than counted — `criteria-counts-are-not-
+spelled-out.test.ts` refuses a numeral beside the word, and it caught this entry's first draft.
+
+So a generative model's 1.3.1 or 3.3.2 finding survives the gate — and then SUPPRESSES the rule's, because
+`withRuleFindings` adds only rule findings "whose criterion the model did not already flag". The model's
+weaker finding wins over the rule's exact one, which inverts the ownership design.
+
+**Reachable only on a path nobody runs by default**, and that is why it is recorded rather than urgent:
+`applyGate` runs for the GENERATIVE backends only (`local` is the default and skips it), and `ENABLED`
+additionally requires `JUDGE_GATE=on` plus a local ONNX model at `GATE_MODEL_PATH`.
+
+**Not fixed by widening it to `RULE_CRITERIA`**, which is the obvious move and the wrong one: that list
+contains 2.4.4, whose ownership is `overlap` — the rules cover a deliberate subset and the head owns the
+rest — so dropping the model's 2.4.4 would discard the half nothing else supplies. The correct source is
+the `decidedBy: "rules"` set, and it lives in `packages/lab/rule-ownership.json`, which this package cannot
+import.
+
+**Done when:** the rules-owned criteria are readable from the judge package — the same problem
+`local-judge.ts` already solved for the scorer by having `score.py` carry `ruleOwned` across in the model
+artefact — and a test pins the gate's set equal to it. A generative finding for a rules-owned criterion
+must lose to the rule, on every backend.
+
 ## What is NOT on this list, deliberately
 
 - **`1.3.1`** — closed. `29/29 rules: EXACT`, validated on a real page. Was "the claim rests on nothing"
