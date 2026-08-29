@@ -31,7 +31,27 @@ const THRESHOLD = Number(process.env.GATE_THRESHOLD ?? DEFAULT_THRESHOLD);
 const EVIDENCE_LOG_LEN = 48; // truncate evidence in drop logs
 const OBJECT_REPLACEMENT = /￼/g; // ￼ — strip the empty-name marker for clean premises
 
-/** Absence-of-name criteria owned by the deterministic rules, never gated here. */
+/**
+ * Criteria owned by the deterministic rules, so a generative model's finding for them is dropped here and
+ * the rule's authoritative one stands.
+ *
+ * **STALE, DELIBERATELY NOT WIDENED, and recorded rather than guessed at — see `known-gaps.md` §16.**
+ *
+ * It was written when the rules owned exactly these two. `rule-ownership.json` now declares many more
+ * with `decidedBy: "rules"` — 1.3.1, 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3 and 3.3.2 among them — so a
+ * generative model's 1.3.1 or 3.3.2 finding survives the gate and then SUPPRESSES the rule's, because
+ * `withRuleFindings` drops a rule finding whose criterion the model already flagged. That is backwards
+ * from the design.
+ *
+ * Not simply widened to `RULE_CRITERIA`, because that list is the wrong source: it contains 2.4.4, whose
+ * ownership is `overlap` — the rules cover a deliberate subset and the head owns the rest — so dropping
+ * the model's 2.4.4 would discard the half nothing else supplies. The right source is the
+ * `decidedBy: "rules"` set, which lives in `packages/lab/rule-ownership.json` and is not importable from
+ * this package.
+ *
+ * Reachable only on a path nobody runs by default: `applyGate` is called for the GENERATIVE backends only,
+ * and `ENABLED` additionally requires `JUDGE_GATE=on` and a local ONNX model at `GATE_MODEL_PATH`.
+ */
 export const ABSENCE_CRITERIA = new Set(["1.1.1", "4.1.2"]);
 
 /** Per-criterion violation hypotheses; entailment of any one means a real failure. */
