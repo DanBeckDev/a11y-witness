@@ -530,3 +530,20 @@ test("A TRAP'S EVIDENCE COUNTS THE CONTROLS IT MISSED, not a subtraction on a di
   assert.match(findings[0].evidence, /never reached 4 of the 4 controls/,
     "the missed count is the set difference, which is what the decision was made on");
 });
+
+test("2.4.2 MAKES NO CLAIM when the probe could not read a heading", () => {
+  // `headingAfter` is `string | null` and null means the read FAILED, not that the page has no heading.
+  // The title guard one line above already required both to be present; this one did not, so
+  // `"Welcome" -> null` differed and the rule fired quoting `the page moved to null`.
+  //
+  // The rule's entire premise is that the VIEW MOVED. A failed read does not establish that.
+  const route = (headingAfter: string | null) => ({
+    transcript: ["Home, document"], structure: {},
+    interaction: { routeChange: { control: "News, link", navigated: true,
+      titleBefore: "Home", titleAfter: "Home", headingBefore: "Welcome", headingAfter } },
+  } as never);
+  assert.equal(ruleFindings(route("Latest news")).filter((f) => f.wcag.startsWith("2.4.2")).length, 1,
+    "a heading that really changed is still a finding, or this passes by breaking the rule");
+  assert.equal(ruleFindings(route(null)).filter((f) => f.wcag.startsWith("2.4.2")).length, 0,
+    "an unread heading is 'cannot say', never 'the page moved to null'");
+});

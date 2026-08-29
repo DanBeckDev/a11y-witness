@@ -850,6 +850,22 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
   if (NOTHING_FURTHER.test(String(route.control ?? ""))) return;
   const { titleBefore, titleAfter, headingBefore, headingAfter } = route;
   if (!titleBefore || !titleAfter) return;
+  // BOTH HEADINGS MUST HAVE BEEN READ, and the title guard above had this and this line did not.
+  //
+  // `headingAfter` is `string | null`, and null means the probe could not read a heading — not that the
+  // page has none. Without this, `headingBefore: "Welcome"` with `headingAfter: null` differs, so the rule
+  // fired and quoted `the page moved to null while the title stayed "Home"`. Absence read as a value, in
+  // a sentence shown to a user, in the one rule whose entire premise is that the VIEW MOVED — which a
+  // failed read does not establish.
+  //
+  // Latent rather than live: no capture on disk carries `routeChange` at all, because `probeNavigation` is
+  // opt-in and the dataset runner never sets it. It becomes reachable the moment that changes, which is
+  // the same shape as `focusOrder` before its rule existed.
+  //
+  // It costs the `null -> "Latest news"` case, where the before-read failed and the after-read succeeded.
+  // That is a MISSED finding rather than an invented one, which is the direction this file fails in
+  // deliberately, and the comparison there was never between two known values anyway.
+  if (!headingBefore || !headingAfter) return;
   if (headingBefore === headingAfter) return; // nothing navigated; there is no transition to judge
   if (titleBefore !== titleAfter) return;
   add("2.4.2 Page Titled",
