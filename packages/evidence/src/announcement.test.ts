@@ -263,3 +263,24 @@ test("NVDA says a landmark BOTH ways, and both are recognised", () => {
   assert.equal(isLandmarkRole("main"), true);
   assert.equal(isLandmarkRole(""), false);
 });
+
+test("AN ANNOUNCEMENT PAST THE OLD 12-OBJECT CAP IS PARSED, not spilled into `trailing`", () => {
+  // The cap was a runaway backstop doing double duty as a content limit. Anything past it fell into
+  // `trailing`, where `addUnnamedControls` reads unplaced text as "the name may exist and not have been
+  // repeated" and downgrades a 4.1.2 ASSERTION to a referral — silently, and in the quiet direction.
+  //
+  // Measured across 7,082 real announcements the busiest held ELEVEN objects, one below the old cap. This
+  // pins the headroom rather than the number: 20 objects must all parse.
+  const line = Array.from({ length: 20 }, (_, i) => `Item ${i}, link`).join(", ");
+  const parsed = parseAnnouncement(line, "sweep");
+  assert.equal(parsed.objects.length, 20, "every announced control must be parsed, not truncated");
+  assert.deepEqual(parsed.trailing, [], "nothing should be left unplaced, which is what downgrades a finding");
+});
+
+test("and the loop still terminates on its own, without leaning on the backstop", () => {
+  // The no-progress break is what actually guarantees termination; the constant is belt-and-braces. A
+  // token the parser cannot consume must end the loop rather than spin to the cap.
+  const parsed = parseAnnouncement("some, unparseable, prose, with, no, roles", "sweep");
+  assert.deepEqual(parsed.objects, []);
+  assert.ok(parsed.trailing.length > 0, "unconsumed tokens are reported as trailing, not dropped");
+});

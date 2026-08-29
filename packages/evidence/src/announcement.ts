@@ -355,6 +355,21 @@ function takeNameFirst(tokens: string[]): ParsedObject | null {
 }
 
 /**
+ * A RUNAWAY BACKSTOP, not a limit on how much an announcement may say.
+ *
+ * The loop below already guarantees progress — `if (tokens.length === before) break` — so it terminates on
+ * its own, and this only bounds a hypothetical non-shrinking case. It was 12, and 12 was doing double
+ * duty: a backstop AND an implicit cap on real content, because anything past it falls into `trailing`,
+ * where `addUnnamedControls` reads it as "the announcement carries unplaced text" and downgrades a 4.1.2
+ * ASSERTION to a referral. Silent, and in the quiet direction.
+ *
+ * Measured 2026-08-29 across 7,082 announcements from the real-page corpus and a fresh protocol-7 sample:
+ * the busiest holds ELEVEN objects. One below the old cap. Nothing had hit it, and one busier page would
+ * have — so this is headroom rather than a fix.
+ */
+const MAX_OBJECTS_PER_ANNOUNCEMENT = 64;
+
+/**
  * Parse one announcement.
  *
  * `channel` is required and never inferred. The order is a property of how the caret moved, which the caller
@@ -370,7 +385,7 @@ export function parseAnnouncement(raw: string, channel: Channel): ParsedAnnounce
   // A loop, because NVDA packs several objects into one line — measured at 8.1% of real-page announcements
   // that mention a link, against 0% in the corpus, which is why a single-object parser looked correct here
   // and merged three links into one name out there.
-  for (let guard = 0; guard < 12 && tokens.length; guard += 1) {
+  for (let guard = 0; guard < MAX_OBJECTS_PER_ANNOUNCEMENT && tokens.length; guard += 1) {
     const before = tokens.length;
     leaving.push(...takeLeaving(tokens));
     containers.push(...takeContainers(tokens));
