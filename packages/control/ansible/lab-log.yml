@@ -110,7 +110,7 @@
         src: "/tmp/a11y-job-{{ job }}.log"
         # ANCHORED to the repo root, not relative. A bare `runs/fetched/...` resolves against the
         # PLAYBOOK directory, so the first version landed the file in
-        # `packages/worker-fleet/ansible/runs/fetched/` and reported success. `lab-fetch.yml` had the
+        # `packages/control/ansible/runs/fetched/` and reported success. `lab-fetch.yml` had the
         # correct form twelve lines away; I wrote a second path convention rather than reading it.
         dest: "{{ playbook_dir }}/../../../runs/fetched/{{ job }}.log"
         flat: true

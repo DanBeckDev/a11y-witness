@@ -168,7 +168,7 @@ moment it matters. `lab-job.test.ts` pins all three.
 **A job of a given name is refused, not killed, while one is running.** The unit name is the lock and it
 holds against the ssh path too, which an in-process flag could not.
 
-`packages/worker-fleet/ansible/README.md` is the map: why SSH and not WinRM (the blank-password guard),
+`packages/control/ansible/README.md` is the map: why SSH and not WinRM (the blank-password guard),
 why not an `/admin/update` route (the worker has no auth and binds all interfaces), and the two Windows
 gotchas that otherwise cost an afternoon — `administrators_authorized_keys` and OpenSSH's `DefaultShell`.
 The fleet is defined **once**, in `inventory.yml`.

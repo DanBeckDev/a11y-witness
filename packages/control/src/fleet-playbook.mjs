@@ -38,7 +38,13 @@
  */
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "./cli-flags.mjs";
+// RELATIVE, NEVER `@a11y-witness/worker-fleet/cli-flags`. A package-name import resolves through
+// `node_modules`, and the control plane deliberately has none — ADR 0012 keeps npm's transitive surface
+// away from the key that can reconfigure twelve auto-logging-in Windows boxes. So this package runs from a
+// RAW GIT CHECKOUT, and every import it makes has to work without an install.
+// `control-has-no-dependencies.test.ts` asserts that, because the same claim in prose was violated on both
+// machines it described.
+import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 
 /**
  * `--serial=` and `--limit=` decide how many of twelve machines an operation touches at once, and
@@ -221,7 +227,7 @@ function main() {
     // from your code and `served_code` from theirs, and the deploy fails with a mismatch that reads like a
     // corrupted guest checkout. Measured 2026-08-24: all four workers held 1f7cb7e88070235d against an
     // expected c6e66caa481b76c0, having faithfully fetched a branch nobody had changed.
-    ssh(`cd ${CHECKOUT}/packages/worker-fleet/ansible && ANSIBLE_CONFIG=ansible.cfg `
+    ssh(`cd ${CHECKOUT}/packages/control/ansible && ANSIBLE_CONFIG=ansible.cfg `
       + `ansible-playbook -i inventory.yml ${chosen} -e a11y_git_ref=${ref}`
       // The COMMIT that ref resolves to here, so each guest can assert it landed on it rather than the
       // deploy inferring success from a shell that exited 0. The 2026-08-24 note above fixed WHICH ref

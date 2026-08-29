@@ -47,7 +47,13 @@
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "./cli-flags.mjs";
+// RELATIVE, NEVER `@a11y-witness/worker-fleet/cli-flags`. A package-name import resolves through
+// `node_modules`, and the control plane deliberately has none — ADR 0012 keeps npm's transitive surface
+// away from the key that can reconfigure twelve auto-logging-in Windows boxes. So this package runs from a
+// RAW GIT CHECKOUT, and every import it makes has to work without an install.
+// `control-has-no-dependencies.test.ts` asserts that, because the same claim in prose was violated on both
+// machines it described.
+import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 
 /**
  * a mistyped `--ref=` falls back to the local branch, which is how the fleet and the lab came to be on

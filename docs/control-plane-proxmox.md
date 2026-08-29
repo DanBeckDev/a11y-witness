@@ -137,7 +137,7 @@ Two ways it reaches a worker:
 packages/worker-fleet/src/provisioning/bare-metal/serve-bootstrap.sh ~/.ssh/a11y-witness_ed25519.pub
 
 # a box already running — needs a way in already, so this is for rotation
-cd packages/worker-fleet/ansible
+cd packages/control/ansible
 ansible-playbook ssh-key.yml -l <host> -e a11y_operator_key="$(cat ~/.ssh/a11y-witness_ed25519.pub)"
 ```
 
@@ -155,7 +155,7 @@ here. They are a development convenience; the bare-metal fleet is the thing.
 ```bash
 npm run doctor                    # every check names its own fix
 npm run fleet:discover            # does it see the workers, and does the inventory agree
-cd packages/worker-fleet/ansible && ansible a11y_workers -m ansible.windows.win_ping
+cd packages/control/ansible && ansible a11y_workers -m ansible.windows.win_ping
 ```
 
 The middle one is the specific answer to "is this box on the right network" — if it can scan and find

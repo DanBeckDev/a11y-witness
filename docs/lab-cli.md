@@ -227,5 +227,5 @@ run as exit 0, because the shell's last statement had succeeded.
 
 - [`ADR 0013`](adr/0013-lab-job-control.md) — why named jobs and not a shell, an HTTP API, or a job queue
 - [`ADR 0012`](adr/0012-control-plane-split.md) — the credential split, and why exactly one machine can drive both halves
-- [`packages/worker-fleet/ansible/README.md`](../packages/worker-fleet/ansible/README.md) — why SSH and not WinRM, and the two Windows gotchas
+- [`packages/control/ansible/README.md`](../packages/control/ansible/README.md) — why SSH and not WinRM, and the two Windows gotchas
 - [`CLAUDE.md`](../CLAUDE.md) — every command in the context of the problem it solves
