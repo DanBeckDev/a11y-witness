@@ -293,3 +293,19 @@ state, which is the guard working.
 
 The one number to watch afterwards is the one this plan opened with: per-kind disagreement, now that half of
 it has been shown to be arithmetic rather than instrument.
+
+### One follow-up the running corpus will NOT pick up
+
+The recapture was dispatched at `58c4671`, and the landmark fix — reading a landmark's name from
+`containers` rather than `objects` — landed after it. `sweepCompleteness` is HOST-side, so it applies
+retroactively whenever a capture is READ: nothing needs recapturing for it.
+
+But `ruleEvidence` is baked in at EXPORT time (`export-screenreader-dataset.mjs` calls `oracleCounts`
+once and stores the result), so the exported dataset from this run will carry `landmark: unknown` where a
+re-export would say `exact`. **Nothing consumes it** — no rule reads `structure.landmarks`, and
+`assertableSweep` is only ever asked about `formControl` and `link` — so this is a reporting difference,
+not a wrong assertion.
+
+Fixing it costs one re-export, measured at **13 s** in `known-gaps.md` §1, and the captures are cached, so
+it does not re-capture. Do it with the next deliberate export rather than restarting nine hours of fleet
+time for a field with no consumer.
