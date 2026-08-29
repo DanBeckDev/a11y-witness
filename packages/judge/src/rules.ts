@@ -24,7 +24,7 @@
  * not against a book's strings.
  */
 import type { Channel } from "@a11y-witness/evidence";
-import type { PageCensus, DomCensus, ProbeStates } from "@a11y-witness/evidence/verify";
+import type { PageCensus, DomCensus, ProbeStates, Completeness } from "@a11y-witness/evidence/verify";
 import { parseAnnouncement } from "@a11y-witness/evidence";
 // The ONE list of criteria the rules may emit. Imported rather than restated: writing a second
 // copy here is the defect this file has recorded five times, and I made it once before deleting it.
@@ -73,6 +73,33 @@ export interface RuleInput {
    * captures. So a rule about absence must corroborate with the tree, or it is guessing.
    */
   census?: PageCensus;
+  /**
+   * PER TYPE: DID THE SWEEP ANNOUNCE EVERYTHING THE PAGE EXPOSES? — capture-integrity-plan C1/C2.
+   *
+   * `structure.headings` is what NVDA announced during a quick-nav walk, and rules read it as what the
+   * page HAS. Measured across 106 real captures, those differ on most pages in one direction or the
+   * other, and the sweep's output looks the same either way: a list.
+   *
+   * `phantom` is the direction that produces a WRONG ASSERTION. A name the sweep announced but the page
+   * does not expose can never appear in the tab order, so 2.1.1 reports it as a control the keyboard
+   * cannot reach — a criterion this tool STATES is unsatisfied, resting on an element that is not there.
+   *
+   * `unknown` is a real answer and must never read as `exact`. Every capture taken before the counter
+   * existed reports it, so a rule that refused on `unknown` would go silent on the whole corpus; the
+   * choice made instead is that unknown-backed assertions are COUNTED rather than blocked. See
+   * `assertableSweep`.
+   */
+  completeness?: Record<string, Completeness>;
+  /**
+   * ANNOUNCEMENTS HEARD IN TRUNCATED FORM — capture-integrity-plan C5, and 40% of real captures.
+   *
+   * A truncated announcement is a DIFFERENT STRING, not a shorter one. `"o, button"` for a control named
+   * "Open account search" matches nothing, so a name comparison drops it silently and 2.1.1 reads the
+   * absence as a control the keyboard never reached. Excluded from comparison by `comparableNames`, and
+   * the exclusion is COUNTED — a comparison that skipped 40% of its inputs without saying so is the
+   * vanishing-denominator defect at the evidence layer.
+   */
+  truncated?: string[];
   /**
    * The DOM's own counts, which the tree census cannot supply: a page's TAB STOPS among them.
    *
@@ -609,9 +636,9 @@ function channelRelation(input: RuleInput): ChannelRelation {
   // class: A CHECK MUST NEVER REJECT EVIDENCE WHOSE ABSENCE IS THE FINDING. An unnamed control is still a
   // control; it just cannot be compared BY NAME, which is a fact about the comparison, not about the page.
   const sweptControls = input.structure?.formFields ?? [];
-  const named = comparableNames(sweptControls);
+  const named = comparableNames(sweptControls, input.truncated);
   const stops = input.interaction?.focusOrder ?? [];
-  const reachedNames = comparableNames(stops);
+  const reachedNames = comparableNames(stops, input.truncated);
   const overlap = named.filter((name) => reachedNames.includes(name)).length;
   // WHICH announced controls the ring never reached — the set, not its size. `swept - reached`
   // assumes the ring is a SUBSET of the announced controls, and for a modal it is DISJOINT from
@@ -1088,11 +1115,57 @@ function tabOrderCanProveAbsence(tabbedNames: string[], input: RuleInput): boole
   return true;
 }
 
+/**
+ * MAY A RULE ASSERT FROM THIS SWEEP? — capture-integrity-plan C2.
+ *
+ * Absence is the one claim a sweep cannot make alone, and this repo already states that rule and then
+ * applies it BY HAND in the two places somebody remembered: `addMissingHeadings` corroborates with
+ * `census.heading === 0`, `tabOrderCanProveAbsence` checks `channelRelation.disjoint`. Nothing made the
+ * NEXT absence rule do either, which is this project's most expensive recurring shape — a remedy that
+ * reaches one call site when the behaviour reaches several.
+ *
+ * `phantom` is refused because it produces a wrong ASSERTION rather than a missed finding: a name the
+ * sweep announced but the page does not expose cannot appear in the tab order, so it reads as a control
+ * the keyboard never reached. `truncated` is refused for the same claim in the other direction — a list
+ * we KNOW is short cannot carry "this was never reached", because the thing that reached it may simply
+ * not have been announced.
+ *
+ * `unknown` is deliberately ALLOWED, and that is a judgement worth stating rather than burying. Every
+ * capture taken before the counter existed reports it, so refusing here would silence 2.1.1 and 2.4.3
+ * across the entire corpus and read as a model regression. The honest handling of "we cannot tell" is to
+ * proceed and COUNT it — `assertionsOnUnverifiedSweeps` — never to let it read as `exact`.
+ *
+ * @param input the rule input, carrying `completeness` from `oracleCounts`
+ * @param type the census type the rule's evidence is swept from
+ * @returns whether an assertion may rest on this sweep
+ */
+export function assertableSweep(input: RuleInput, type: string): boolean {
+  const verdict = input.completeness?.[type];
+  return verdict !== "phantom" && verdict !== "truncated";
+}
+
+/**
+ * How many of these findings rest on a sweep whose completeness nothing could verify?
+ *
+ * A number, not a word: "some assertions are unverified" cannot tell you whether it is two or two
+ * thousand. `rules:coverage` reports it so the corpus's own blind spot is visible rather than implied.
+ *
+ * @param input the rule input
+ * @param types the census types the rules that fired read from
+ * @returns the types whose completeness is `unknown`
+ */
+export function unverifiedSweeps(input: RuleInput, types: string[]): string[] {
+  return types.filter((type) => (input.completeness?.[type] ?? "unknown") === "unknown");
+}
+
 function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void {
-  const reading = comparableNames(input.structure?.formFields);
-  const tabbedNames = comparableNames(input.interaction?.focusOrder);
+  const reading = comparableNames(input.structure?.formFields, input.truncated);
+  const tabbedNames = comparableNames(input.interaction?.focusOrder, input.truncated);
   const tabbed = new Set(tabbedNames);
   if (reading.length < 2 || tabbed.size === 0) return;
+  // C2. This rule's whole claim is "the sweep announced it and Tab never landed on it", so it is exactly
+  // as good as the sweep's fidelity. A phantom name is unreachable by construction — it is not there.
+  if (!assertableSweep(input, "formControl")) return;
   if (!tabOrderCanProveAbsence(tabbedNames, input)) return;
   // A control whose announced name is shared with another cannot be said to have been missed: its name
   // appearing in the tab order may be the OTHER control, and its absence may mean the other one was
@@ -1173,9 +1246,9 @@ function addInertSkipLink(input: RuleInput, add: AddFinding): void {
   // It has to BE a skip link. The probe activates the first link on the page, which elsewhere is a logo or
   // a cookie banner — finding focus unmoved after activating one of those says nothing about bypassing.
   if (!/\b(skip|jump)\b/i.test(String(route.control ?? ""))) return;
-  const landed = comparableNames([route.nextFocusAfter ?? ""])[0];
+  const landed = comparableNames([route.nextFocusAfter ?? ""], input.truncated)[0];
   if (!landed) return; // not measured, or focus went somewhere silent — no claim either way
-  const ordinary = comparableNames(input.interaction?.focusOrder).slice(0, 2);
+  const ordinary = comparableNames(input.interaction?.focusOrder, input.truncated).slice(0, 2);
   if (ordinary.length < 2 || !ordinary.includes(landed)) return;
   add("2.4.1 Bypass Blocks",
     "The skip link does not skip anything: activating it left focus where the next Tab would have gone "
@@ -1252,7 +1325,7 @@ function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
   // READING order from the transcript, ordered by construction. `structure.formFields` is a count sweep
   // and cannot answer this — see `controlsInReadingOrder`.
   const reading = firstVisitEach(controlsInReadingOrder(input));
-  const tabbed = firstVisitEach(comparableNames(input.interaction?.focusOrder));
+  const tabbed = firstVisitEach(comparableNames(input.interaction?.focusOrder, input.truncated));
   if (reading.length < 2 || tabbed.length < 2) return; // absent or too short proves nothing
   // Only names that identify one control in BOTH sequences. A repeated name cannot be tracked between
   // them, and comparing it invents a reordering — see `unambiguous`.
@@ -1332,11 +1405,32 @@ const FOCUS_ONLY_STATES = /\b(focused|blank|visited|same page|linked|has auto ?c
  */
 export const comparableNamesForTest = (entries: string[] | undefined): string[] => comparableNames(entries);
 
-function comparableNames(entries: string[] | undefined): string[] {
+function comparableNames(entries: string[] | undefined, truncated?: string[]): string[] {
+  // C5. A TRUNCATED ANNOUNCEMENT IS EXCLUDED BEFORE NORMALISATION, never normalised and then compared.
+  // The exclusion is on the announcement as heard, which is what the capture marked; normalising first
+  // would make the exclusion set and the entries two different alphabets, which is the defect this fixes.
+  const drop = new Set(truncated ?? []);
   return (entries ?? [])
+    .filter((entry) => !drop.has(String(entry)))
     .map((entry) => parseAnnouncement(String(entry), "sweep").objects[0]?.name ?? "")
     .map((name) => name.replace(FOCUS_ONLY_STATES, " ").replace(/[\s,]+/g, " ").trim())
     .filter(Boolean);
+}
+
+/**
+ * How many announcements a comparison could not use, and why — capture-integrity-plan C5.
+ *
+ * `namesExcluded` is reported rather than inferred: "the tab order and the reading order disagree" and
+ * "we dropped nine names before comparing them" are different claims, and only the second explains a
+ * denominator that moved.
+ *
+ * @param entries the announcements a rule was about to compare
+ * @param truncated the announcements this capture marked as truncated
+ * @returns how many of `entries` were excluded
+ */
+export function namesExcluded(entries: string[] | undefined, truncated?: string[]): number {
+  const drop = new Set(truncated ?? []);
+  return (entries ?? []).filter((entry) => drop.has(String(entry))).length;
 }
 
 /**
@@ -1490,12 +1584,22 @@ export function ruleFindings(input: RuleInput): Finding[] {
   // addUnnamedControls).
   addSilentStateChanges(input.interaction?.stateChanges ?? [], add);
   addUnnamedControls(input.transcript, "transcript", add);
-  addUnnamedControls([...(input.structure?.formFields ?? []), ...(input.interaction?.controls ?? [])],
-    "sweep", add);
+  // C2. DROP ONLY THE UNTRUSTWORTHY CHANNEL, never the whole call. 4.1.2 is rules-owned, so an unnamed
+  // control here is ASSERTED — and a phantom form control has no name by construction, which is the
+  // finding itself manufactured out of a capture defect. `interaction.controls` is the focus probe and a
+  // different channel entirely; silencing it because the SWEEP is unreliable would trade a real finding
+  // for a caution about a different measurement.
+  addUnnamedControls([
+    ...(assertableSweep(input, "formControl") ? (input.structure?.formFields ?? []) : []),
+    ...(input.interaction?.controls ?? []),
+  ], "sweep", add);
 
   // 2.4.4 and 1.3.1 — both about what a screen reader user CANNOT do: tell two links apart, or skim.
   // Neither is reported by axe, which is the point of having them here.
-  addVagueLinks([...input.transcript, ...(input.structure?.links ?? [])], add);
+  // The transcript is ordered by construction and always trustworthy here; the link sweep is not. 2.4.4 is
+  // not rules-owned so this is a referral rather than an assertion, but a phantom link is a phantom link.
+  addVagueLinks([...input.transcript,
+    ...(assertableSweep(input, "link") ? (input.structure?.links ?? []) : [])], add);
   addMissingHeadings(input, add);
   addUnnamedGraphics(input, add);
   addAutoplayingAudio(input, add);
