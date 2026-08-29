@@ -11,7 +11,7 @@
  * whose title is never spoken; this one only catches the egregious wrong-content case,
  * which is the one that silently poisons results.
  */
-import { parseAnnouncement } from "./announcement.js";
+import { parseAnnouncement, isLandmarkRole } from "./announcement.js";
 
 /** Whatever a capture backend returned; only the announcement fields matter here. */
 export interface CapturedAnnouncements {
@@ -396,9 +396,6 @@ function compareStates(states: Record<string, Record<string, number>>):
 export type Completeness = "exact" | "truncated" | "phantom" | "unknown";
 
 /** The sweep field each census type is counted from. Named once; the two must not drift. */
-/** A container role that IS a landmark. NVDA writes them as "<role> landmark", plus bare `form`. */
-const LANDMARK_ROLE = /landmark$|^form$|^region$/;
-
 const SWEEP_OF: Record<string, "headings" | "links" | "landmarks" | "graphics" | "formFields"> = {
   heading: "headings", link: "links", landmark: "landmarks", graphic: "graphics",
   // `formControl` and not `formField`: the census counts the roles NVDA's `f` quick-nav actually visits,
@@ -436,7 +433,7 @@ function sweptElements(announced: string[], type: string): { names: Set<string>;
   // EVERY landmark container, not just the first: 5% of real entries carry more than one, because NVDA
   // announces the containers it passed through on the way in.
   const found = type === "landmark"
-    ? parsed.flatMap((p) => p.containers.filter((c) => LANDMARK_ROLE.test(c.role)).map((c) => c.name))
+    ? parsed.flatMap((p) => p.containers.filter((c) => isLandmarkRole(c.role)).map((c) => c.name))
     : parsed.map((p) => p.objects[0]?.name ?? "");
   return {
     names: new Set(found.map(clean).filter(Boolean)),

@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { announces, nameOf, parseAnnouncement } from "./announcement.js";
+import { announces, nameOf, parseAnnouncement, isLandmarkRole, CONTAINER_ROLES } from "./announcement.js";
 
 test("transcript is role-first: the browse-mode reading order", () => {
   const parsed = parseAnnouncement("heading, level 1, Marina 022 schedule", "transcript");
@@ -235,4 +235,31 @@ test("`property page` is a container, not part of the control's name", () => {
   assert.deepEqual(parsed.containers.map((c) => c.role), ["property page", "form"]);
   assert.equal(parsed.containers[0].name, "Search the site");
   assert.equal(parsed.objects[0].name, "Search site by keyword or category");
+});
+
+test("EVERY landmark in CONTAINER_ROLES is recognised as one, and no other container is", () => {
+  // The duplication this replaced: a `/landmark$|^form$|^region$/` regex in `verify.ts`, which missed a
+  // landmark announced as bare "banner", "navigation" or "main". Pinning the predicate against the
+  // vocabulary it is a subset of is the "make the copies unable to disagree" remedy — the list can grow
+  // and this test decides whether the predicate must grow with it.
+  const landmarks = CONTAINER_ROLES.filter((r) => r.endsWith("landmark") || r === "landmark");
+  assert.ok(landmarks.length >= 8, `only found ${landmarks.length} landmark roles; the filter is broken`);
+  for (const role of landmarks) {
+    assert.equal(isLandmarkRole(role), true, `"${role}" is a landmark and must be recognised`);
+  }
+  // Containers that are emphatically NOT landmarks. A false positive here inflates landmark coverage and
+  // would make a short sweep read as complete.
+  for (const role of ["frame", "dialog", "list", "table", "grouping", "menu", "tab control", "article"]) {
+    assert.equal(isLandmarkRole(role), false, `"${role}" is a container but not a landmark`);
+  }
+});
+
+test("NVDA says a landmark BOTH ways, and both are recognised", () => {
+  // "navigation landmark, Page Contents" and "form, Explore Site by Topic:" both occur in the corpus.
+  assert.equal(isLandmarkRole("navigation landmark"), true);
+  assert.equal(isLandmarkRole("navigation"), true);
+  assert.equal(isLandmarkRole("form"), true, "the bare form the old regex got right");
+  assert.equal(isLandmarkRole("banner"), true, "and the bare forms it did NOT");
+  assert.equal(isLandmarkRole("main"), true);
+  assert.equal(isLandmarkRole(""), false);
 });
