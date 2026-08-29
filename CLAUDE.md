@@ -942,6 +942,40 @@ and attaches a fault code, so an error with neither cannot have come from there.
 **When you find a screen-reader behaviour worth a comment, grep every path that can reach it.** Lint and
 `tsc` cannot see this — it is `.mjs` and the paths are unrelated functions.
 
+### A LIST OF FIELDS TO CHECK, and the one field with a different SHAPE
+
+Found twice on 2026-08-29, in two tools, an hour apart. Both had a hand-written list of evidence fields
+and both silently examined nothing for the one member that is an OBJECT rather than an array.
+
+| the checker | what it walked | the field it could not see |
+|---|---|---|
+| `evidence:check` (`evidence-diff.mjs`) | `EVIDENCE_FIELDS`, via `Array.isArray(v) ? v.map(...) : []` | `interaction.routeChange` — and `postSubmitNames` was not even listed |
+| `channelsPresent` (`criterion-coverage.ts`) | `INTERACTION_CHANNELS`, via `nonEmpty = Array.isArray(v) && v.length > 0` | `routeChange`, which is also absent from the array while being in the `EvidenceChannel` union |
+
+`routeChange` is `{control, titleBefore, titleAfter, headingBefore, headingAfter}`, and it is **the whole
+of 2.4.2's evidence** — the transition a static analyser structurally cannot reach. Measured on
+`route-title-stale.good.json`, the fixture built to demonstrate 2.4.2: the capture carries the evidence and
+`criteriaAssessableFrom` answered `BLOCKED: 2.4.2 -> routeChange`. On every capture ever taken.
+
+Three rules, and the second is the one that is easy to get wrong:
+
+- **Adding the field to the list is half the fix.** Both tools would then have *listed* `routeChange` while
+  the reader still returned `[]` for it — coverage that looks real and examines nothing, which is worse
+  than the omission, because the omission is at least visible in a diff.
+- **A union and a parallel array cannot be checked by `tsc`**, because every member of a wider union is a
+  valid element of a narrower array. `EvidenceChannel` gained `routeChange` and `INTERACTION_CHANNELS` did
+  not, and the build stayed green. The remedy is to DERIVE the arrays from an exhaustive
+  `Record<TheUnion, ...>`, which fails to compile until a new member is classified — verified by adding a
+  fake channel and watching the build break. Classify rather than omit: `tabStops` is `"unclaimed"`, so
+  "nothing needs this" and "somebody forgot" stay different states.
+- **Check the list against what captures actually carry, in BOTH directions.** A field on disk that is
+  neither compared nor explicitly excluded is a hole; a field in the list that no capture has is a phantom
+  contributing nothing to a coverage count. `evidence-fields.test.ts` asserts both.
+
+This is the `repeat-capture` lesson — *"compared ten fields and not `formChanges` or `postSubmitFields` …
+the ones this fault lives in were not among them"* — reaching a third and fourth tool, and it is why the
+guard now discovers the fields rather than trusting anyone's memory of them.
+
 ### A comment that names an ambiguity, above code that resolves it by assumption
 
 The sharpest version of the pattern above, and it cost the most on the first real website this tool was aimed
