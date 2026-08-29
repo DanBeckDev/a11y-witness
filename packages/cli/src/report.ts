@@ -148,14 +148,25 @@ function outcomesSection(outcomes: CriterionOutcome[] | undefined): string[] {
  */
 function verdictHeadline(verdict: Judgment): string {
   const label = taskVerdictLabel();
-  const confidence = `(overall confidence ${verdict.confidence})`;
+  // CONFIDENCE DESCRIBES THE FINDINGS, so with none there is nothing for it to describe.
+  //
+  // `local-judge` defines it as `Math.min(...findings.map(f => f.confidence))` — "a report is only as good
+  // as its shakiest claim" — and returns 1 when the list is empty. Printed, that became
+  // `Findings at BLOCKER severity: none (overall confidence 1)`, which reads as certainty about the
+  // ABSENCE. It is the same unearned reassurance as a bare "0 findings", in the line this function was
+  // rewritten to stop making. The ACT tally below says what was and was not determined; this line should
+  // not appear to answer it first.
+  //
+  // Abstention is unaffected: it returns 0 findings AND confidence 0, and its own sentence says nothing
+  // was scored.
+  const confidence = verdict.findings.length === 0 ? "" : ` (overall confidence ${verdict.confidence})`;
   if (label.isTaskClaim) {
-    return `${label.question}: ${verdict.taskCompletable ? "yes" : "no"} ${confidence}`;
+    return `${label.question}: ${verdict.taskCompletable ? "yes" : "no"}${confidence}`;
   }
   const blockers = verdict.findings.filter((f) => f.severity === "blocker").length;
   const rest = verdict.findings.length - blockers;
   const others = rest ? `; ${rest} finding(s) below that severity` : "";
-  return `Findings at BLOCKER severity: ${blockers === 0 ? "none" : blockers}${others} ${confidence}`;
+  return `Findings at BLOCKER severity: ${blockers === 0 ? "none" : blockers}${others}${confidence}`;
 }
 
 /**
