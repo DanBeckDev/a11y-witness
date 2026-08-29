@@ -317,12 +317,68 @@ export interface ChannelBearingCapture {
   diagnostics?: Array<Record<string, unknown>> | null;
 }
 
-const STRUCTURE_CHANNELS: EvidenceChannel[] =
-  ["headings", "landmarks", "formFields", "graphics", "links", "lists", "tableCells"];
-const INTERACTION_CHANNELS: EvidenceChannel[] =
-  ["controls", "stateChanges", "formChanges", "postSubmitFields", "focusOrder"];
+/**
+ * WHERE `channelsPresent` LOOKS FOR EACH CHANNEL — one classification, exhaustive by construction.
+ *
+ * This replaced two hand-written arrays that had to be kept in step with the `EvidenceChannel` union by
+ * memory, and were not. `routeChange` was added to the union and never to `INTERACTION_CHANNELS`, so
+ * `channelsPresent` could not report it and 2.4.1 and 2.4.2 read as BLOCKED on every capture ever taken —
+ * measured on `route-title-stale.good.json`, the fixture built to demonstrate 2.4.2, which carries the
+ * evidence and was told it did not.
+ *
+ * `tsc` could not catch that: every member of a wider union is a valid element of a narrower array. It CAN
+ * catch this, because `Record<EvidenceChannel, ...>` is exhaustive — a channel added to the union above
+ * fails to compile until it is classified here. That is the difference between a rule a human must
+ * remember and one the build enforces, which is this repo's first-choice remedy for a fact stated twice.
+ */
+const CHANNEL_LOCATION: Record<EvidenceChannel, "structure" | "interaction" | "read-specially" | "unclaimed"> = {
+  transcript: "read-specially",
+  headings: "structure",
+  landmarks: "structure",
+  formFields: "structure",
+  graphics: "structure",
+  links: "structure",
+  lists: "structure",
+  tableCells: "structure",
+  controls: "interaction",
+  stateChanges: "interaction",
+  formChanges: "interaction",
+  postSubmitFields: "interaction",
+  focusOrder: "interaction",
+  routeChange: "interaction",
+  // Read from somewhere other than `structure`/`interaction`: `media` sits at the top level, `title`
+  // inside the `documentReady` diagnostic, `structureCensus` is a diagnostic's presence.
+  media: "read-specially",
+  title: "read-specially",
+  structureCensus: "read-specially",
+  // CAPTURED AND CLAIMED BY NO CRITERION, deliberately — see the union's own note: the 2.1.2 rule that
+  // read it produced nine findings on conformant real pages and was withdrawn. Classified rather than
+  // omitted, so "nothing needs it" and "somebody forgot" are different states.
+  tabStops: "unclaimed",
+};
 
-const nonEmpty = (value: unknown): boolean => Array.isArray(value) && value.length > 0;
+const channelsIn = (where: "structure" | "interaction"): EvidenceChannel[] =>
+  (Object.keys(CHANNEL_LOCATION) as EvidenceChannel[]).filter((c) => CHANNEL_LOCATION[c] === where);
+
+const STRUCTURE_CHANNELS: EvidenceChannel[] = channelsIn("structure");
+const INTERACTION_CHANNELS: EvidenceChannel[] = channelsIn("interaction");
+
+/**
+ * Does the capture actually CARRY this channel?
+ *
+ * Arrays are the common case and emptiness counts as absence, deliberately — see `channelsPresent`.
+ *
+ * OBJECTS COUNT TOO, and classifying `routeChange` above without this would have fixed nothing: it is
+ * `{control, titleBefore, titleAfter, headingBefore, headingAfter}`, not a list, so an `Array.isArray`
+ * test rejects it and the channel stays permanently absent. The identical trap caught `evidence-diff.mjs`
+ * the same day — a field listed as covered while the reader cannot see its shape is coverage that
+ * examines nothing, which is worse than the omission it replaces.
+ */
+const nonEmpty = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") return Object.keys(value).length > 0;
+  return false;
+};
 
 /**
  * Which channels this capture actually CARRIES — populated, not merely declared.

@@ -98,3 +98,45 @@ test("out-of-scope criteria are absent from BOTH lists, not reported as blocked"
   const names = [...assessable, ...blocked.map((b) => b.criterion)];
   assert.ok(!names.includes("1.4.3"), "contrast is out of scope, not blocked");
 });
+
+test("routeChange is a channel a capture can CARRY, not one permanently absent", () => {
+  // It was in the `EvidenceChannel` union and missing from `INTERACTION_CHANNELS`, so `channelsPresent`
+  // could never report it — and 2.4.1 and 2.4.2, which declare it, read as BLOCKED on every capture ever
+  // taken. Measured on `route-title-stale.good.json`, the fixture built to demonstrate 2.4.2: it carries
+  // the evidence and was told it did not.
+  //
+  // `tsc` could not see it: every member of a wider union is a valid element of a narrower array. The
+  // arrays are now derived from an exhaustive `Record<EvidenceChannel, ...>`, so a new channel fails to
+  // compile until it is classified.
+  const present = channelsPresent({
+    transcript: ["x"],
+    interaction: { routeChange: { titleBefore: "Home", titleAfter: "Bookings - Home" } },
+  });
+  assert.ok(present.has("routeChange"), `routeChange must be reported present: ${[...present]}`);
+});
+
+test("an OBJECT channel counts as carried; classifying it alone would not have been enough", () => {
+  // `routeChange` is `{control, titleBefore, ...}`, not a list. `nonEmpty` tested `Array.isArray`, so
+  // adding it to the enumeration without widening that test leaves it permanently absent — a channel
+  // listed as covered while the reader cannot see its shape, which examines nothing.
+  assert.ok(!channelsPresent({ interaction: { routeChange: {} } }).has("routeChange"),
+    "an EMPTY object is absence, exactly as an empty array is");
+  assert.ok(channelsPresent({ interaction: { routeChange: { titleAfter: "x" } } }).has("routeChange"));
+});
+
+test("2.4.2 is assessable from a capture carrying a routeChange", () => {
+  // Its declared channels are `title` and `routeChange`. `title` lives in the `documentReady` DIAGNOSTIC
+  // rather than in the capture result, which `channelsPresent` documents — my first version of this test
+  // supplied `structure.links` instead and failed, because `SWEEPS_FEEDING` in outcomes.ts lists
+  // `["link", "routeChange"]` for the same criterion and I read one for the other. They answer different
+  // questions and both are right: which sweeps, if truncated, make the CLAIM unsafe, versus which
+  // evidence must be present to DECIDE at all.
+  const { assessable } = criteriaAssessableFrom({
+    transcript: ["Home, document"],
+    diagnostics: [{ event: "documentReady", title: "Home" }],
+    interaction: { routeChange: { titleBefore: "Home", titleAfter: "Home" } },
+  });
+  assert.ok(assessable.includes("2.4.2"),
+    `2.4.2 needs title+routeChange and both are present: ${JSON.stringify(assessable)}`);
+});
+
