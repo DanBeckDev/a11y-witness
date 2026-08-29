@@ -120,7 +120,13 @@ A diagnostic taken from a flaky host is a much smaller problem than a corpus cap
 
 ## L2a. A verdict-producing gate DISPATCHES to the lab; running it locally is the escape hatch
 
-**Status: open. The strong form of what L2 was reaching for.**
+**Status: MET 2026-08-29.** `npm run gate:stability` and `gate:probe-order` dispatch to the lab; `--local`
+runs here and names the control plane in the verdict's own `source`, beside the workers it used.
+
+`LOCAL_FLAG` is exported so a caller's `refuseUnknownFlags` list and the dispatcher cannot disagree, and
+`dispatch.mjs` takes `argv` as a REQUIRED argument rather than reading `process.argv` — the argv-guard
+discovery test correctly flagged it as an unguarded CLI when it did, and the honest answer was to stop
+reaching for global state rather than to exempt it.
 
 The residual is narrow but real: `npm run gate:stability` still executes locally, and its verdict looks
 identical to one produced on the lab. Someone debugging will run it, paste the result, and nothing in the
