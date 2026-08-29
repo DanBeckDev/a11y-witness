@@ -257,6 +257,31 @@ async function recaptureUntilItReadsThePage(
   return cap;
 }
 
+/**
+ * What the run says about the capture BEFORE judging it — diagnostics on request, and the one warning that
+ * has to survive an empty transcript.
+ *
+ * Extracted because `function-size.test.ts` refused `runWitness` at 92 physical lines against a budget of
+ * 90, and it was right to: this is a distinct phase, it reads as one, and the gate exists precisely
+ * because ESLint's `skipComments: true` lets a comment-dense function grow to twice its stated budget
+ * without complaint.
+ *
+ * @param cap the capture, already verified or not
+ * @param debug whether the caller asked for the diagnostic marks
+ */
+function reportOnTheCapture(cap: CaptureResponse, debug: boolean): void {
+  if (debug && cap.diagnostics) {
+    process.stderr.write("-- capture diagnostics --\n");
+    for (const e of cap.diagnostics) process.stderr.write("  " + JSON.stringify(e) + "\n");
+  }
+  if (cap.transcript.length === 0) {
+    process.stderr.write(
+      "WARNING: 0 announcements captured. Run with --debug; if afterStart.lastSpoken is empty, " +
+        "NVDA is running but not producing speech (the worker likely needs a clean restart/reboot).\n"
+    );
+  }
+}
+
 async function runWitness(
   { url, task, worker, json, debug, probeForms, probeFocus, axe: wantAxe, axeResults }: RunOptions,
 ): Promise<void> {
@@ -274,7 +299,9 @@ async function runWitness(
   // (`ruleLayer === "none" ? null : ...`) while the --json path emitted the bare array, so `--no-axe`
   // produced `"ruleBased": []` and any consumer rendered it as "0 violations". The text report and the
   // JSON disagreed about whether contrast had been checked, and the JSON was the one that lied.
-  const ruleFindings = ruleLayer === "none" ? null : axe.findings;
+  // `pageContext` decides this now — see its header. The ternary that used to live here knew only about
+  // `--no-axe` and rendered a FAILED scan as "0 violations".
+  const ruleFindings = axe.findings;
 
   // Verify-and-retry (the Root-1 fix, brought to the product). Browser focus on
   // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
@@ -300,16 +327,8 @@ async function runWitness(
   const captureVerified = unverifiedReason === undefined;
   if (unverifiedReason) warnUnverified(unverifiedReason, axe.title);
 
-  if (debug && cap.diagnostics) {
-    process.stderr.write("-- capture diagnostics --\n");
-    for (const e of cap.diagnostics) process.stderr.write("  " + JSON.stringify(e) + "\n");
-  }
-  if (cap.transcript.length === 0) {
-    process.stderr.write(
-      "WARNING: 0 announcements captured. Run with --debug; if afterStart.lastSpoken is empty, " +
-        "NVDA is running but not producing speech (the worker likely needs a clean restart/reboot).\n"
-    );
-  }
+  reportOnTheCapture(cap, debug);
+
   process.stderr.write(`Captured ${cap.transcript.length} announcements; judging ...\n`);
   await shadowScreenReaderCapture(cap);
   const verdict = await judge({
@@ -471,17 +490,29 @@ async function chooseRuleLayer({ wantAxe, axeResults }: { wantAxe: boolean; axeR
 // The rule-based findings plus the page title, from whichever source is available. The
 // title is NOT optional the way the rule layer is: without it the capture cannot be checked
 // for having read the wrong page, so it falls back to a plain fetch.
-async function pageContext(url: string, layer: RuleLayer, axeResults: string | null): Promise<{ findings: AxeFinding[]; title: string }> {
+/**
+ * `findings: null` means THE RULE LAYER PRODUCED NO RESULTS, which is not the same as finding none.
+ *
+ * A FAILED axe scan returned `[]`, and the caller decided nullness from the layer NAME alone — so a scan
+ * that was requested, ran and threw rendered as "Rule layer (axe-core): 0 violations". A clean bill of
+ * health for a scan that did not happen. The caller's own comment describes that defect and had fixed it
+ * for `--no-axe` only: the remedy reached one of the two paths producing no results.
+ *
+ * Decided here now, by the function that knows. There is no second place to get it wrong.
+ */
+async function pageContext(url: string, layer: RuleLayer, axeResults: string | null): Promise<{ findings: AxeFinding[] | null; title: string }> {
   if (layer === "import" && axeResults) {
     const imported = await loadAxeResults(axeResults);
     warnOnUrlMismatch(imported.scannedUrl, url);
     process.stderr.write(`Using ${imported.findings.length} imported axe violation(s) from ${axeResults}\n`);
     return { findings: imported.findings, title: await fetchPageTitle(url) };
   }
-  if (layer === "none") return { findings: [], title: await fetchPageTitle(url) };
+  if (layer === "none") return { findings: null, title: await fetchPageTitle(url) };
   return scanWithAxe(url).catch(async (e: Error) => {
     process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
-    return { findings: [] as AxeFinding[], title: await fetchPageTitle(url) };
+    // NULL, not []. The visual criteria are unchecked, and saying "0 violations" here would be the one
+    // thing this tool must never do.
+    return { findings: null, title: await fetchPageTitle(url) };
   });
 }
 
