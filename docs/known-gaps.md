@@ -520,6 +520,13 @@ Measured — 16 assertion sites, 4 pass `"conformance"`:
 | `2.4.2:route-title-stale` | secondary | cantTell |
 | `2.4.3:focus-order-scrambled` | secondary | cantTell |
 
+And one more the ownership file does not cover at all: **1.4.2 Audio Control** is RULE-ONLY — no trained
+head exists for it, so `rule-ownership.json` declares no subtype and there is nothing to arbitrate. It also
+refers. Its evidence is a DOM read (`autoplay && !muted && !controls`), about as deterministic as anything
+here, and it is a NON-INTERFERENCE criterion under WCAG §5.2.5 — which cuts both ways: a wrong assertion
+there says the whole page fails, and a referral on a page that genuinely autoplays unstoppable audio
+under-states a failure that masks the screen reader's own speech. Worth deciding alongside the seven.
+
 Verified end to end rather than read off the source: a capture with a genuinely stale route title produces
 `mapping=secondary` and `2.4.2: cantTell`.
 
