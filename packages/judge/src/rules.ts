@@ -697,7 +697,18 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
   // and it is also asserted on by tests — where `control(s)` inside a regex is a CAPTURE GROUP matching
   // "controls", so the literal spelling silently stops matching the string it was copied from.
   const unit = total === 1 ? coverage.unit : `${coverage.unit}s`;
-  if (trailingRepeats(stops) >= 2) {
+  // THE STALLED PATH NEEDS THE SAME GUARD AS THE CYCLE ONE, and it did not have it.
+  //
+  // It was unreachable on a page like this only because `reached < swept` happened to return null when the
+  // ring was BIGGER than the sweep — an accident, not a guard. Making the coverage test honest (a set
+  // difference) exposed it immediately: nrscotland.gov.uk/publications, a page whose publisher declares it
+  // conformant, where Tab stalls on a policy link INSIDE a cookie banner whose ring also holds "Accept all
+  // cookies, button". WCAG 2.1.2 asks whether focus CAN be moved away; there it can.
+  //
+  // `ringOffersNoWayOut` is the discriminator that survived three withdrawn versions of this rule, each of
+  // which fired on consent banners. Applying it to one of the two paths and not the other is this repo's
+  // most expensive recurring shape — a remedy that reaches one caller.
+  if (trailingRepeats(stops) >= 2 && ringOffersNoWayOut(stops)) {
     add("2.1.2 No Keyboard Trap",
       "Tab stopped moving: focus repeated the same control and never reached the rest of the page, so a "
         + "keyboard user cannot get past it",
