@@ -24,10 +24,19 @@
  * nothing to learn. A page carrying such a feature can go silent on a criterion it genuinely fails.
  *
  * So `status: "assessed"` means "we have evidence and a decider", never "this answer is exact". Which it
- * is depends on the owner, and `rule-ownership.json` is where that is declared. The nine subtypes the head
- * decides alone are 1.1.1:generic-alt, 1.3.1:fake-heading, 1.3.1:unassociated-table, 2.4.4:regex,
- * 2.4.6:regex, 3.3.1:validation-error-silent, 3.3.2:placeholder-only, 3.3.2:unnamed-form-field,
- * 4.1.2:state-change-silent and 4.1.3:form-activation-silent. See
+ * is depends on the owner, and **`packages/lab/rule-ownership.json` is where that is declared** — read it
+ * there rather than here.
+ *
+ * This paragraph used to enumerate them, and by 2026-08-29 the list said "the nine subtypes the head
+ * decides alone", listed TEN, and named several that had since moved to the rules — `4.1.2:state-change-
+ * silent` among them, which ADR 0021 moved deliberately and which this file went on citing as head-owned.
+ * A prose copy of a machine-readable fact, in the file whose entire purpose is honesty about coverage.
+ *
+ * The shape is what is worth stating, because it is stable and the membership is not: `rules` (exact,
+ * measured at 0 false positives across 1,183 conformant records), `overlap` (the rules cover a deliberate
+ * subset and the head owns the rest), and `unavailable` — **nobody decides it**, which is a stronger claim
+ * than "the head decides it alone" and the one the old list obscured. `subtype-ownership.test.ts` pins the
+ * counts so this can drift no further. See
  * `docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md`.
  *
  * **`needs` is a claim about EVIDENCE, not about difficulty.** It says which source could decide the
