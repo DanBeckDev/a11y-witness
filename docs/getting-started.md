@@ -44,18 +44,25 @@ If you already run axe in your own pipeline, skip that and pass your results in 
 
 ## 2. Set up the judge
 
-The judge needs a model. By default it uses your local **Codex** login, which costs
-nothing per run:
+**There is no step here.** The judge is this project's own trained scorer, which ships in
+the repo — `JUDGE_BACKEND` defaults to `local`, so there is nothing to log into, no API key,
+and no per-run cost. Skip to step 3.
 
-```bash
-codex login
-```
+> This section used to say "by default it uses your local **Codex** login" and open with
+> `codex login`. That default was flipped on 2026-08-04, and the instruction survived here
+> for months — so a new user's very first action was authenticating against a rented model
+> the tool does not use. `README.md` was corrected; this file and `METHODOLOGY.md` were not.
+> A remedy that reaches one of several documents is the same defect as one that reaches one
+> of several call sites, and `judge-backend-default.test.ts` now checks every document that
+> makes the claim rather than just the README.
 
-Alternatives, if you would rather use an API or a local model:
+The rented backends remain available, for **comparison only** — they are never the default,
+and the trained scorer is what the GitHub Action ships:
 
 ```bash
 export JUDGE_BACKEND=anthropic   # plus ANTHROPIC_API_KEY
 export JUDGE_BACKEND=openai      # plus JUDGE_BASE_URL — hosted OpenAI, or llama.cpp/vLLM/Ollama
+export JUDGE_BACKEND=codex       # your local Codex login
 ```
 
 ## 3. Get a worker
