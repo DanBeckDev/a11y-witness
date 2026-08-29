@@ -385,6 +385,44 @@ JSON file.
 Same reason as §3: a changeset count restated here goes stale the moment one is added, and one was. §8
 carries the live state and the reason the last step is a human's.
 
+## 11. The announcement grammar cannot read a LANDMARK — 37% of them, measured
+
+Found 2026-08-29 by `sweepCompleteness` returning `unknown` for landmarks on a page where every other type
+read `exact`. Measured over the real-page corpus rather than inferred:
+
+```
+landmark announcements: 267   unparsed: 100 (37%)
+  17x  "complementary landmark, Related WCAG resources"
+  17x  "Page, content info landmark, Status:, Updated "
+  10x  "Page Contents, navigation landmark, Page Conte"
+   4x  "form, Explore Site by Topic:"
+```
+
+`packages/evidence/src/announcement.ts` is the single grammar and is told its CHANNEL — the 2026-08-24 fix
+that replaced seven partial regexes, validated on 6,555 cross-channel comparisons at 0.08% disagreement.
+It reads `structure.*` as name-first, which is right for headings, links and graphics. **Landmarks are
+announced in BOTH orders** — `<role> landmark, <name>` and `<name>, <role> landmark` — and neither is what
+the name-first reading expects, so 37% yield no name at all.
+
+**Nothing is currently wrong because of it.** No rule reads `structure.landmarks`; the two mentions in
+`rules.ts` are comments. And `sweepCompleteness` reports `unknown` rather than guessing, because of the
+guard written for a different reason: *an entirely unnamed sweep cannot say*, which exists so a page of
+unnamed graphics is not read as a truncated one. It declines instead of inventing a verdict.
+
+**What it costs:** landmark completeness is unavailable, so C2 could never gate a landmark-reading rule.
+That matters the moment one exists — 2.4.1 is the obvious candidate, since ARIA11 makes landmarks one of
+the two ways to satisfy bypass.
+
+**Why this is recorded rather than fixed here.** The 2026-08-24 entry is explicit that the defect was
+*seven partial regexes each guessing at one order*, and the remedy was one grammar told its channel and
+then MEASURED. Adding a landmark branch by pattern-matching these four shapes would be the same mistake in
+the same file. It needs the announcement forms established from NVDA's `getPropertiesSpeech` and validated
+across channels, the way the existing grammar was.
+
+**Done when:** `parseAnnouncement` extracts a name from every landmark shape in the corpus — the count
+above reaches 0 of 267 — and `sweepCompleteness` returns a verdict other than `unknown` for `landmark` on
+a capture where the other four types agree. Re-run with the snippet in this entry's commit.
+
 ## What is NOT on this list, deliberately
 
 - **`1.3.1`** — closed. `29/29 rules: EXACT`, validated on a real page. Was "the claim rests on nothing"
