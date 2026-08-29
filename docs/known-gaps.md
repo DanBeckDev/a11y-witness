@@ -681,10 +681,18 @@ report: the shipped v15 weights cannot be scored by a v16 runtime. It closes whe
 trained and promoted — no recapture and no re-export, because the features are computed at train time from
 an unchanged `record.input`.
 
-## 18. `dedupeKey` strips ONE container prefix, so a nested landmark is recorded twice
+## 18. ~~`dedupeKey` strips ONE container prefix, so a nested landmark is recorded twice~~ — DONE, protocol 8
 
-**MUST RIDE THE NEXT `CAPTURE_PROTOCOL_VERSION` BUMP.** This is the only entry here whose fix is written
-and deliberately not applied, so it is the one most likely to be lost.
+**DONE 2026-08-30, and it rode the bump it was waiting for.** `CAPTURE_PROTOCOL_VERSION` 7 -> 8, applied
+together with §19 — each needed a full recapture on its own and neither was urgent, so paying once is the
+whole point. `dedupeKey` now strips to a FIXED POINT, bounded at four containers (the deepest observed in
+24,774 corpus announcements is two).
+
+The bounded assertion this opened in `capture-pure.corpus.test.ts` (`<= 146 known non-idempotent keys`) is
+strict again.
+
+**Requires a recapture to take effect.** Until one runs, captures on disk carry the old keys — which is
+old evidence, not a regression, and the test says so.
 
 `CONTAINER_PREFIX` in `capture-pure.mjs` removes one leading container announcement. NVDA announces *every*
 container it entered, so a nested one survives and the same element keys two ways:
@@ -725,7 +733,7 @@ one channel `dedupeKey` is never applied to. It even carried a `>= 1000` anti-va
 exactly that, and the floor was satisfied by the wrong data. *A guard pointed at the wrong evidence channel
 is the count-based check in a new costume.*
 
-## 19. 69 cases are labelled `1.3.1:unassociated-table` and none captures a table cell
+## 19. ~~69 cases are labelled `1.3.1:unassociated-table` and none captures a table cell~~ — DONE, protocol 8
 
 Found 2026-08-29 while diagnosing a `rules:gate` failure that turned out to be something else entirely.
 Recorded because the investigation is the only reason anyone looked.
@@ -749,11 +757,19 @@ next step, since 1.3.1's declared channels already include `tableCells` — it w
 and read as a rule that never fires. That is `rules:coverage`'s *"NEVER FIRED ANYWHERE — the claim rests on
 nothing"*, pre-arranged.
 
-**The fix, and why it is not applied.** Let an accompanying defect declare the probes its evidence needs
-(`probes: { probeTables: true }`) and union them in `withAccompanyingDefects`. Written and reverted: the
-probe set is part of the capture options and therefore the cache key, so it recaptures **138 captures** to
-change a field nothing reads. *"Check the premise before re-running the expensive thing."* Do it when the
-rule is written, in the same change, so the recapture buys something.
+**DONE 2026-08-30, bundled with §18's protocol bump** — which is exactly the condition this entry set. On
+its own it cost 138 recaptures to populate a field nothing reads; alongside a bump that recaptures anyway,
+it costs nothing extra.
+
+An accompanying defect now declares `probes: { probeTables: true }` and `withAccompanyingDefects` UNIONS
+them over the host's. A union and never an override: a host that already probes keeps doing so, and no
+defect can turn a probe OFF. `probeForms` is deliberately unreachable this way — no defect declares it and
+`accompanying-probes.test.ts` refuses one that does, because making this tool press buttons is a decision
+for the case author, not a side effect of a pairing.
+
+The guard is by SHAPE, not by list: a defect whose markup contains a `<table>` and does not declare
+`probeTables` fails, so a second opt-in channel is caught by the same rule rather than by someone
+remembering this entry.
 
 **What tells you it is fixed:** every `+also-position-only-table` case carries `probeTables: true`, and
 `structure.tableCells` is non-empty on their bad variants.
