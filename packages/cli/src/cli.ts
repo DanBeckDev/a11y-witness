@@ -26,7 +26,8 @@ import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fle
 import { requestJson, CAPTURE_CLIENT_TIMEOUT_MS } from "@a11y-witness/worker-fleet/worker-http";
 import { captureDoubt, captureMentionsTitle, oracleCounts, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
-import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics, type ConformanceRequirement }
+import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics,
+  censusCountsDistinctNames, type ConformanceRequirement }
   from "@a11y-witness/evidence/conformance";
 import { assessedCriteria } from "@a11y-witness/judge/coverage";
 import { earlReport } from "@a11y-witness/evidence/earl";
@@ -373,11 +374,15 @@ export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): 
   // `crossCheckStructure` computes the same sweep-versus-census comparison for the diagnostics. This is the
   // REPORTING path for it, and it existed unread: the disagreement that answers "how much of the page did you
   // examine?" was being written to a diagnostic every run and shown to nobody.
-  const census = censusFromDiagnostics((cap as { diagnostics?: unknown[] }).diagnostics ?? []);
+  // Named once. Three readers of the same cast-and-default is repetition the complexity gate correctly
+  // refused at 16, and the third was added the moment a fourth reader would have been.
+  const diagnostics = (cap as { diagnostics?: unknown[] }).diagnostics ?? [];
+  const census = censusFromDiagnostics(diagnostics);
   const structure = (cap.structure ?? {}) as Record<string, unknown[] | undefined>;
   return conformanceScope({
     assessedCriteria: assessedCriteria(),
-    sweeps: sweepOutcomes((cap as { diagnostics?: unknown[] }).diagnostics ?? []),
+    sweeps: sweepOutcomes(diagnostics),
+    censusCountsDistinctNames: censusCountsDistinctNames(diagnostics),
     screenReader: version("screenReader", "screenReaderVersion") ?? cap.screenReader,
     browser: version("browser", "browserVersion"),
     ruleLayerRan: axe !== null,

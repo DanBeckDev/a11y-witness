@@ -67,6 +67,8 @@ export interface ConformanceScopeInput {
   browser?: string | null;
   /** Did the rule-based (axe) layer run? It owns the visual criteria this one cannot perceive. */
   ruleLayerRan: boolean;
+  /** Whether `census` counts distinct NAMES (comparable with the deduplicated sweep) or raw elements. */
+  censusCountsDistinctNames?: boolean;
   /**
    * The browser's own count of elements per type, from the AX tree over CDP — the GROUND TRUTH.
    *
@@ -139,6 +141,17 @@ export function censusFromDiagnostics(diagnostics: readonly unknown[]): Record<s
   for (const [key, value] of Object.entries(mark)) {
     if (key !== "event" && key !== "atMs" && typeof value === "number") counts[key] = value;
   }
+  // DISTINCT NAMES WHEN THE CENSUS HAS THEM, because the sweep this is compared against DEDUPLICATES.
+  // The comment on `coverageSentence` has named this mismatch since the sentence was written — 66 images
+  // with 47 distinct alt values reported as "5 of 66" — and called it "still wrong" while having no better
+  // number to use. `census.distinct` is that number, added 2026-08-29; it is absent on older captures, and
+  // `censusCountsDistinctNames` says which basis a given capture supports so the sentence can too.
+  const distinct = (mark as { distinct?: Record<string, unknown> }).distinct;
+  if (distinct && typeof distinct === "object") {
+    for (const [key, value] of Object.entries(distinct)) {
+      if (typeof value === "number") counts[key] = value;
+    }
+  }
   return Object.keys(counts).length > 0 ? counts : null;
 }
 
@@ -158,11 +171,32 @@ function coverageSentence(input: ConformanceScopeInput): string {
   // distinct alt values those are different denominators, and reporting "5 of 66" as though it were elements
   // reached overstates the gap — understating our own coverage is the safe direction to be wrong in, but it is
   // still wrong, and a reader acting on the number deserves to know which number it is.
-  return " Reach, as DISTINCT announcements the screen reader produced against elements the browser reports"
-    + ` (the two differ where identical announcements collapse): ${parts.join(", ")}.`
+  return (input.censusCountsDistinctNames
+    ? " Reach, as distinct announcements the screen reader produced against DISTINCT NAMES the browser"
+      + ` reports — like compared with like: ${parts.join(", ")}.`
+    : " Reach, as DISTINCT announcements the screen reader produced against elements the browser reports"
+      + ` (the two differ where identical announcements collapse): ${parts.join(", ")}.`)
     + (gaps.length
       ? " A shortfall here is a coverage question about this tool, not a finding about the page."
       : " Every type with ground truth was reached in full.");
+}
+
+/**
+ * Does this capture's census count DISTINCT NAMES, or raw elements?
+ *
+ * The sweep deduplicates by announcement, so only the first is comparable with it. Older captures have
+ * only the element count, and a sentence quoting one as though it were the other overstates the gap —
+ * which is the whole reason this is asked rather than assumed.
+ *
+ * @param diagnostics a capture's diagnostic marks
+ * @returns true when the census carries `distinct`
+ */
+export function censusCountsDistinctNames(diagnostics: readonly unknown[]): boolean {
+  const mark = (diagnostics ?? []).find(
+    (d): d is Record<string, unknown> =>
+      typeof d === "object" && d !== null && (d as { event?: unknown }).event === "structureCensus");
+  const distinct = (mark as { distinct?: unknown } | undefined)?.distinct;
+  return typeof distinct === "object" && distinct !== null;
 }
 
 /** Sweeps that stopped before the page did, i.e. examined only part of it. */
