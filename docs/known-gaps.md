@@ -804,6 +804,43 @@ remembering this entry.
 **What tells you it is fixed:** every `+also-position-only-table` case carries `probeTables: true`, and
 `structure.tableCells` is non-empty on their bad variants.
 
+## 20. `candidate:gate` audits the SHIPPED weights, not the candidate
+
+Found 2026-08-30 when a promote was refused and the refusal did not describe the model being promoted.
+
+`candidate:gate` chains `npm run scorer:shortcuts`, and that script's `--model` defaults to
+`packages/scorer/models/screenreader-scorer` — the SHIPPED weights. The candidate-specific variant
+`scorer:shortcuts:candidate` exists (`--model runs/model-candidate`), is wired into `lab-job.yml`, and is
+**not** the one the gate runs.
+
+**Measured on the same corpus, same audit, both models:**
+
+| model | positives | closable | total | sum logits | worst |
+|---|---|---|---|---|---|
+| shipped v15 | 142 | 1 | 1 | −5.13 | `table_header_associated` |
+| candidate v16 | 142 | **0** | 1 | **0.00** | — |
+
+So the v16 candidate takes NO closable veto on that subtype and was refused for a −5.13 weight belonging
+to the weights it was going to replace.
+
+**This is the repo's most-recorded shape, inverted.** The usual form is *"a gate that does not exercise
+what ships"* — `JUDGE_BACKEND` defaulting to `codex` while the Action shipped `local`, the abstention sweep
+scoring raw predictions rather than the product path, `npm run eval` resolving the shipped artefact so a
+candidate's judge quality was unknowable until after promotion. That last one is this one exactly, one
+gate over: **a gate meant to decide a candidate, examining the incumbent.**
+
+**Note what it does NOT change.** The baseline comparison would still fire for the candidate — it carries
+1 TOTAL veto against a baseline of 0, and the comparison is on totals by deliberate design
+(`compare_to_baseline`'s docstring: an unclosable veto is still a negative weight, so counting it "cannot
+let a genuine regression through"). Fixing the model the gate reads makes the refusal *true about the
+candidate*; it does not by itself unblock the promote.
+
+**Done when:** `candidate:gate` audits `runs/model-candidate` — WITH the baseline, not with
+`--no-baseline`, which is how the standalone job silences the comparison and would trade one blind spot
+for another. A test should pin that every stage in `candidate:gate` names an artefact under `runs/`
+rather than `packages/scorer/models/`, because this is the second gate in this repo to have read the
+wrong one and a discovery test is what caught the first.
+
 ## What is NOT on this list, deliberately
 
 - **`1.3.1`** — closed. `29/29 rules: EXACT`, validated on a real page. Was "the claim rests on nothing"
