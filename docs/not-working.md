@@ -93,6 +93,39 @@ Until then the gate is correctly red, which is the honest state rather than a de
 > where the gate reaches 10), the focus cases genuinely never captured what a user hears, and four chain
 > defects were real. What does not survive is the size of the claim.
 
+### The four that remain, priced
+
+`3.3.1:validation-error-silent` and `4.1.3:form-activation-silent`, each on `form_change_nonempty` and
+`state_unchanged`, 143 positives apiece. They split into two different problems and only one is worth
+paying for.
+
+**`state_unchanged` needs an accompanying defect that does not exist.** It can only be 1 when a toggle was
+activated and its state did NOT change — a silent disclosure, which is `4.1.2:state-change-silent`'s own
+defect. `ROTATIONS` offers eight accompanying defects and not one of them is a broken disclosure:
+
+```
+bare-edit  fake-heading  filename-alt  generic-alt  generic-heading  position-only-table
+unnamed-graphic  vague-link
+```
+
+So closing it means adding a ninth, and `case-matrix.mjs:3049` prices that in its own words: *"GROWING
+THIS LIST RE-ROLLS EVERY MULTI-DEFECT CASE, and there is no version of it that does not"* — measured at
+**237 cases changed and 474 captures invalidated** when it last went from 5 entries to 11. A2's cheaper
+trick does not apply: a second failure mechanism draws new rotations from the SAME list.
+
+**Recommendation: do not pay it for this.** 474 captures to close two free vetoes on two heads of 143
+positives each is poor value, and the repo's own rule is that enlarging `ROTATIONS` is a deliberate,
+BUNDLED change. If a future protocol bump is happening anyway, add the ninth rotation in the same run —
+that is the only moment it is cheap.
+
+**`form_change_nonempty` may not be closable at all, and should be examined before anyone tries.** These
+two subtypes ARE the absence of an announcement after a form change, so a positive carrying a non-empty
+form change looks close to a contradiction in terms. If it is, it belongs in `IMPOSSIBLE_BY_DEFINITION`
+beside `3.3.1`'s existing `validation_error_announced` and `status_update_announced` entries, and the
+work list drops from four items to two. That is a reading of the subtype definitions, not a capture, so
+it costs minutes — and putting an unclosable item on a work list is the exact harm that section exists
+to prevent.
+
 **And the shape underneath is not what this entry assumed.** Cross-tabulating the baseline against the ten
 features whose ONLY source is a form probe (`not-working.md` §11):
 
