@@ -112,6 +112,7 @@
     "scorer:verify": "node packages/lab/scripts/verify-safetensors.mjs packages/scorer/models/screenreader-scorer",
     "release:provenance": "node packages/lab/scripts/check-shipped-provenance.mjs",
     "corpus:distribution": "node packages/lab/scripts/check-dataset-distribution.mjs",
+    "corpus:observation-ambiguity": "node packages/lab/scripts/audit-observation-ambiguity.mjs",
     "gate:probe-order": "node packages/lab/scripts/gate-probe-order.mjs"
   },
   "dependencies": {
