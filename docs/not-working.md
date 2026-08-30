@@ -486,6 +486,36 @@ withdrawn once the fallback was read. And it says nothing about whether removing
 IMPROVE anything: a new column correlated with capture conditions is itself a shortcut, which is
 ADR 0015's whole subject. That is a measurement somebody still has to take.
 
+**MEASURED, v16 -> v17 on the same corpus, the featurizer the only variable:**
+
+```
+3.3.1:validation-error-silent   0.876 -> 0.950   +0.074   <- the head `kind` was added for
+4.1.3:form-activation-silent    0.874 -> 0.882   +0.008
+1.1.1:filename-alt              0.938 -> 0.950   +0.012
+all 15 others                          unchanged, none down
+```
+
+The targeted head gained 7.4 points of recall and its threshold fell from 0.851 to 0.448 — a cleaner
+signal it can lean on earlier. The two neighbours moved because every head reads the same shared vector.
+`calibrationBlockers: 0`, `releaseEligible: true`.
+
+**And the same report confirms the focusOrder analysis outright:**
+
+```
+2.1.1:control-unreachable-by-keyboard   recall 0.000
+2.1.2:focus-trapped                     recall 0.000
+2.4.3:focus-order-scrambled             recall 0.000
+2.4.1:skip-link-inert                   recall 0.077
+2.4.2:route-title-stale                 recall 0.286
+```
+
+**The model detects none of them.** It cannot see the tab ring — no evidence unit encodes `focusOrder` and
+no feature reads it — so a head asked to find a focus defect has nothing to find it with. Every head in
+this report with poor recall is `decidedBy: "rules"`, and every model-alone head is strong
+(`1.3.1:unassociated-table` 1.000, `3.3.1` 0.950, `4.1.3` 0.882). That is the layer split working exactly
+as ADR 0021 designed it, and the strongest argument yet that those heads' free vetoes were never the
+problem worth solving.
+
 **`baselineQuiet` is the same defect, still open.** `capture-core` attaches it to every `formChanges`
 entry beside `kind`, with the same argument — *"a consumer deciding what this activation proves needs to
 know whether the measurement was sound. Carried on the evidence rather than left in a log, because a log
