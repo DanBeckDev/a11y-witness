@@ -62,6 +62,37 @@ Until then the gate is correctly red, which is the honest state rather than a de
 > describes a veto that no longer exists**, and the 237-case / 474-capture price it quotes is not owed here.
 > Deriving a section from memory when the number is committed to the repo is the mistake, not the number.
 
+> **AND THEN THE SAME MISTAKE AGAIN, ONE LAYER OUT — corrected the same day.** Everything below was
+> computed over all 18 heads, and **44 of the 53 vetoes are on subtypes `rule-ownership.json` marks
+> `decidedBy: "rules"`.** The model does not decide those, so those vetoes cannot reach a report at all.
+> ADR 0015 already made this exact self-correction once, and states the rule: *"A defect in a component is
+> not a defect in the product until you check what the product does with it."* I did not check, and the
+> 96% headline below is a component number presented as a product one.
+>
+> **The product number is four.**
+>
+> ```
+> RULES-owned  44 vetoes (42 probe-gated) — cannot reach a report
+> MODEL-alone   9 vetoes ( 8 probe-gated) — these do
+> of those, CLOSABLE and able to reach a report:  4
+>   3.3.1:validation-error-silent   pos=143   form_change_nonempty, state_unchanged
+>   4.1.3:form-activation-silent    pos=143   form_change_nonempty, state_unchanged
+> ```
+>
+> Four vetoes, two heads, 143 positives each. That is the whole of §2 as a PRODUCT defect, and the remedy
+> is ordinary ADR 0015 corpus work: give some of those positives a working disclosure so `state_unchanged`
+> can be 1, and a non-empty form change. Neither needs a protocol bump.
+>
+> **The three focus heads are the clearest case and the reason this matters.** They carry 24 of the vetoes
+> and they are ALL rules-owned — 2.1.1, 2.1.2 and 2.4.3 are decided by rules that read `focusOrder`
+> directly and are exact. The model cannot see `focusOrder` at all: no evidence unit encodes it and no
+> feature reads it. That blindness is CORRECT under the layer split rather than a defect, and a head with
+> no relevant signal and 8 positives will fit whatever separates them, which is what a free veto is.
+>
+> What survives from the work below regardless: the classification was genuinely incomplete (5 features
+> where the gate reaches 10), the focus cases genuinely never captured what a user hears, and four chain
+> defects were real. What does not survive is the size of the claim.
+
 **And the shape underneath is not what this entry assumed.** Cross-tabulating the baseline against the ten
 features whose ONLY source is a form probe (`not-working.md` §11):
 
@@ -410,6 +441,11 @@ withdrawn once the fallback was read. And it says nothing about whether removing
 IMPROVE anything: a new column correlated with capture conditions is itself a shortcut, which is
 ADR 0015's whole subject. That is a measurement somebody still has to take.
 
+**READ THE 96% WITH §2's SECOND CORRECTION.** The "50 of 52 vetoes" above is a fact about the 18 HEADS.
+Only 9 of those vetoes are on subtypes the model actually decides, and only 4 of those are closable — the
+rest are on `decidedBy: "rules"` subtypes and cannot reach a report. The observation ambiguity this section
+documents is real and measured; its consequence for the shipped product is four vetoes on two heads.
+
 **The fix, and what it rests on.** The three focus subtypes ran NO form probe at all — 0 of 28 cases —
 which is the whole reason all 8 of their vetoes are probe-gated. They now do, with
 `probeOrder: "focus-first"` so the tab ring is walked before the sweep activates anything. Bounded to
@@ -422,6 +458,31 @@ name while the manifest hop forwards `probe*` by prefix. `probe-chain.test.ts` c
 because it derives its flag list FROM THE CASES — so an option no case uses is never checked, and
 therefore no case can start using it. It now also runs from the worker's boundary inward, and that
 inversion found a second unreachable option (`probeElementsList`) unprompted.
+
+**MEASURED 2026-08-30, 27 of 28 cases recaptured** (one transient `NVDA is not running`, retryable).
+Read from `focus-order-tabindex.bad`:
+
+```
+probeOrder mark   {"order":"focus,sweep","requested":"focus-first"}   <- plumbing works end to end
+focusOrder        14 stops                                            <- the ring SURVIVED activation
+formProbe mark    {"activated":0}                                     <- the probe RAN
+formChanges       0     stateChanges 0     postSubmitFields 0
+```
+
+**`activated: 0` is the result, and it is not a failure.** These pages carry inputs and links and no
+submit control, so there was nothing to activate — a real user tabbing this form would find the same. What
+changed is the MEANING of the zero: it was "nobody asked" and it is now "we asked and the page had
+nothing". Those were indistinguishable before, `observationAmbiguity` counts these captures as asked, and
+that distinction is the whole of §11.
+
+It also proves the ordering claim the gate could not: focus-first leaves `focusOrder` intact **with** the
+form probe running, which is what `gate:probe-order` structurally could not answer because it captures
+with `probeForms: false`.
+
+**What it does NOT buy, stated plainly: the free vetoes.** All three of these subtypes are
+`decidedBy: "rules"`, so their vetoes never reach a report — see §2's second correction. Filling those
+channels would need the pages to grow an activatable control, and that work is not worth doing for a head
+whose output the product does not use.
 
 **`gate:probe-order` had never run once through its documented route.** Dispatched as a lab job it died
 `sh: 1: ansible-playbook: not found`, exit 127 — the gate dispatches to the control plane by default, and
