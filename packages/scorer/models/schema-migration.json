@@ -1,8 +1,0 @@
-{
-  "shippedSchema": "screenreader-structured-v15",
-  "pendingSchema": "screenreader-structured-v16",
-  "openedAt": "2026-08-30",
-  "why": "known-gaps \u00a717: `landmark_present` and `landmark_named` are removed from the feature vector, so the head width changed and v15 weights were fitted to a different input space. Measured on 80 protocol-7 captures: 16 have `landmark_present = 0` and ALL SIXTEEN have a truncated landmark sweep \u2014 zero are genuinely landmark-free. The feature's name claims 'the page has a landmark' and its negative class is entirely a capture artefact, with a documented systematic cause: quick navigation cannot reach a landmark containing the caret, so a page-wrapping <main> is missed every time. A feature whose 0 always means 'the sweep failed' teaches the head about the instrument rather than the page. The same exclusion already existed for the ENCODER's text units in evidence-units.ts and had never reached the structured features.",
-  "closesWith": "A v16 candidate trained and promoted. No recapture and no re-export are needed: features are computed at train time from an unchanged `record.input`, so `npm run lab:pipeline -- --pipeline=recalibrate` (train -> shortcuts -> acceptance -> promote) is the whole of it.",
-  "deleteThisFileWhen": "the shipped weights carry v16. `scorer-artifact.test.ts` FAILS on a declaration left behind after the retrain lands \u2014 a stale one turns that guard off without anyone deciding to."
-}
