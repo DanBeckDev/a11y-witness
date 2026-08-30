@@ -39,6 +39,29 @@ The same logic puts publishing last — a changeset describes weights, so it sho
 > counter, so `undefined + 1` = NaN, which JSON writes as null. A full recapture would have produced 2,122
 > captures carrying it.
 
+> **CLOSED OUT 2026-08-30, and phase B re-opened a second time — by the same rule.** §13, §15, §16, §17,
+> §18 and §19 were worked in one pass. Two of them changed the capture path again, so **C and D re-opened
+> exactly as this table says they must**: `CAPTURE_PROTOCOL_VERSION 7 -> 8`, a full recapture, then export
+> and train on evidence the capture path actually produces.
+>
+> **The "bundle phase B" rule below is what made it affordable, and it was followed literally.** §18
+> (`dedupeKey` stripping one container prefix) and §19 (an accompanying defect's probe never reaching the
+> capture) each needed a full recapture and neither was urgent. Each was written, measured, and
+> DELIBERATELY NOT SHIPPED — §19 was even written and reverted in August — until one bump could carry
+> both. That is the difference between two four-hour recaptures and one.
+>
+> **§17 opened a SCHEMA migration as well**, which is a different axis from the protocol: removing
+> `landmark_present` changed the feature vector, so v15 weights cannot be scored by a v16 runtime.
+> `scorer:migration` reports it and `release:gate` refuses while it is open; it closes when the same run
+> trains and promotes a v16 candidate. Two invalidations, one run — the same bundling logic one layer up.
+>
+> **What re-opening cost, measured:** two dispatches refused before the run started, both correctly — a
+> dirty lab checkout holding promoted weights, then an orphaned changeset. `run-job.yml` named the commit
+> it would have run at each time. A job that pulled anyway would have captured ~2,900 pages at the wrong
+> commit.
+>
+> Only **§12** remains, and it is not code: it closes when this branch merges to `main`.
+
 | phase | items | why here |
 |---|---|---|
 | **A — tooling** | §1 progress files, §2 url audit, §3 typecheck, §4 CLI flags | touch no evidence and block nothing. Do them whenever; they make every later phase easier to watch and harder to get wrong |
@@ -448,6 +471,13 @@ does not trigger `lint.yml`, and `main` has had no push since.
 
 **Done when:** this branch merges and `lint.yml` reports success on `main`. Nothing else is required; do
 not "fix" it again.
+
+**THE ONLY GAP IN THIS FILE STILL OPEN, as of 2026-08-30**, and deliberately so: merging is a decision
+about what ships, not a code change. The fix has been on `v8-feature-schema` since `94b0209`; the branch
+is green locally (lint, `tsc`, the full unit suite) and every other entry here is closed. Note that the
+branch now also carries `CAPTURE_PROTOCOL_VERSION 8` and an OPEN v15 -> v16 schema migration, so `main`
+would inherit a state where `release:gate` refuses until a v16 candidate is promoted — which is the
+migration working, not a problem, but it is worth knowing before merging rather than after.
 
 ### The separate fault found at the same time, which was mine
 
