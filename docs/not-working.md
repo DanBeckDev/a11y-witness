@@ -410,6 +410,41 @@ withdrawn once the fallback was read. And it says nothing about whether removing
 IMPROVE anything: a new column correlated with capture conditions is itself a shortcut, which is
 ADR 0015's whole subject. That is a measurement somebody still has to take.
 
+**The fix, and what it rests on.** The three focus subtypes ran NO form probe at all — 0 of 28 cases —
+which is the whole reason all 8 of their vetoes are probe-gated. They now do, with
+`probeOrder: "focus-first"` so the tab ring is walked before the sweep activates anything. Bounded to
+**56 captures of 2,924**: `probeOrder` is forwarded under the omit-when-absent rule, so 1,434 non-focus
+cases serialise byte-identically and no case is added, so nothing is re-bucketed.
+
+`probeOrder` had to be plumbed first. `capture-core.mjs` and `server.mjs` have accepted it since the
+determinism work and **no case could ever ask for it**, because the host runner enumerates its options by
+name while the manifest hop forwards `probe*` by prefix. `probe-chain.test.ts` could not see that,
+because it derives its flag list FROM THE CASES — so an option no case uses is never checked, and
+therefore no case can start using it. It now also runs from the worker's boundary inward, and that
+inversion found a second unreachable option (`probeElementsList`) unprompted.
+
+**`gate:probe-order` had never run once through its documented route.** Dispatched as a lab job it died
+`sh: 1: ansible-playbook: not found`, exit 127 — the gate dispatches to the control plane by default, and
+a `lab-job.yml` entry IS the control plane's dispatch, so it called itself. Three jobs were wired that
+way. Its first real run:
+
+```
+SAME   form-unlabelled/good                     SAME   keyboard-trap-modal-cycle/good
+SAME   image-missing-alt-behind-consent/good    SAME   https://tfl.gov.uk/modes/tube/
+PAGE-MOVED  https://www.nls.uk/join/   interaction.focusOrder: 10 -> 150
+INCONCLUSIVE — only 4 of 5 examined
+```
+
+Focus-first is **evidence-neutral on every corpus page**. The one exception is a live site whose search
+panel opens under its own probes, which is D7 and not an ordering fault. Note what it does NOT establish:
+the gate captures with `probeForms: false`, so it shows the ORDER is neutral, not that activation leaves
+the ring intact. That is what `--pipeline=verify --only=` on the seven cases answers.
+
+**And the job is unusable as a gate while that row stands.** `nls.uk` moving under its own probes makes
+the verdict permanently INCONCLUSIVE, so `gate-probe-order` always exits 2 and the job always reports
+failure. A gate that cannot pass is one people stop dispatching — this repo's own reason for not letting
+a refusal become routine. Either the page earns a documented exception or D7 closes; it is not fixed here.
+
 **Correction to §2 while here.** This is NOT the fix for `state_unchanged`'s free veto, which an earlier
 draft of the plan claimed. Splitting it into observed-columns leaves the focus positives reading `0` on
 the new column too, so the veto simply moves — exactly as `landmark_present`'s moved onto
