@@ -124,6 +124,24 @@ export function evidenceUnits(capture: ScorableCapture): EvidenceUnit[] {
   appendChangeUnits(units, "state-change", capture.interaction?.stateChanges);
   appendChangeUnits(units, "form-change", capture.interaction?.formChanges);
   appendTextUnits(units, "post-submit-navigation", capture.interaction?.postSubmitFields);
+  // `focusOrder` is absent DELIBERATELY, and saying so is the point — it was simply missing, which reads
+  // identically to an oversight and was noticed only when somebody asked why the three focus heads behave
+  // as they do. Every other exclusion above carries its reason; this one carried none.
+  //
+  // Two reasons, and the first is the one that settles it. Every criterion the tab ring decides —
+  // `2.1.1`, `2.1.2`, `2.4.3`, and `2.4.1`/`2.4.2` beside them — is `decidedBy: "rules"` in
+  // `rule-ownership.json`. The rules read `interaction.focusOrder` directly and compare two sequences
+  // arithmetically; the model does not decide those subtypes, so giving it the ring would add an input to
+  // heads whose output the product does not use. Their free vetoes are a component fact for the same
+  // reason, and ADR 0015 already records the rule: a defect in a component is not a defect in the product
+  // until you check what the product does with it.
+  //
+  // And second, it would reproduce the `lists`/`links` defect exactly. `probeFocus` is opt-in — 43 cases
+  // of 1,462 — so the channel is EMPTY on 97% of records, and empty would reach the encoder as "this page
+  // has no tab stops" when the truth is "nobody asked". That is the same sentence as the comment above,
+  // measured on a different field.
+  //
+  // So this is a decision, not an omission, and it changes if the ownership does.
   return units;
 }
 
