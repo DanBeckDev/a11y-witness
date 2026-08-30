@@ -486,6 +486,22 @@ withdrawn once the fallback was read. And it says nothing about whether removing
 IMPROVE anything: a new column correlated with capture conditions is itself a shortcut, which is
 ADR 0015's whole subject. That is a measurement somebody still has to take.
 
+**`baselineQuiet` is the same defect, still open.** `capture-core` attaches it to every `formChanges`
+entry beside `kind`, with the same argument — *"a consumer deciding what this activation proves needs to
+know whether the measurement was sound. Carried on the evidence rather than left in a log, because a log
+nothing reads is a comment."* `kind` is now read (schema v17). `baselineQuiet` still is not, by anything.
+
+It means the speech baseline was not settled when the delta was taken, so `after` is untrustworthy **in
+either direction** — and `validation_error_missing` reads an empty `after` as "nothing was announced",
+which is the fixed-sleep defect exactly: *"a fixed wait expired early, the probe timed out, and the miss
+was recorded as 'the page announced nothing' — precisely the signature of a non-conformant disclosure."*
+
+**Deliberately not fixed in v17, and the reason is the discipline rather than the risk.** Adding a
+condition on a field whose distribution nobody has measured could make the feature deaf, and "run
+`rules:gate` after any change that makes a rule quieter" applies to a feature just as well. The
+measurement is one line against the exported corpus — how many records carry `baselineQuiet: false` — and
+until it exists this stays recorded rather than acted on.
+
 **READ THE 96% WITH §2's SECOND CORRECTION.** The "50 of 52 vetoes" above is a fact about the 18 HEADS.
 Only 9 of those vetoes are on subtypes the model actually decides, and only 4 of those are closable — the
 rest are on `decidedBy: "rules"` subtypes and cannot reach a report. The observation ambiguity this section
