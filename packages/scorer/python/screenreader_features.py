@@ -74,7 +74,13 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # every weight file trained under v7 was fitted to a different function of the same captures. Bumping is
 # what stops a v7 model being scored with v8 features and the difference being read as model behaviour.
 # Measured before bumping: 73 corpus records change, all of them labelled `violation`, none clean.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v16"
+# v17, 2026-08-30: `validation_error_missing` requires the silent activation to be a SUBMIT.
+# `kind` has travelled on every `formChanges` entry since protocol 8 and NOTHING read it -- not this file
+# and not `rules.ts` -- so a disclosure that announced nothing satisfied a feature about forms rejected
+# without an error. capture-core added the field after apache.org's search toggle was reported exactly
+# that way. A MEANING change: the same evidence now produces different feature values, and 3.3.1 is one of
+# only three subtypes the model decides alone, so this one reaches a report.
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v17"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -734,9 +740,35 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
         any(ERROR_WORD.search(value) for value in post_submit_fields)
         or any(ERROR_WORD.search(change.get("after", "")) for change in form_changes)
     )
+    # THE SILENT ACTIVATION MUST BE A SUBMIT, and `kind` has travelled with the evidence to say so since
+    # protocol 8 while nothing read it.
+    #
+    # `capture-core` attaches it for exactly this feature's benefit, and names the measured cost of not
+    # having it: "3.3.1 is about a SUBMIT that was rejected silently; it was previously satisfied by any
+    # non-empty formChanges, so opening a disclosure counted -- and apache.org's SEARCH toggle was reported
+    # as a form submitted with invalid input and no error announced. Nothing was submitted and nothing was
+    # invalid."
+    #
+    # That remedy reached the CAPTURE and neither consumer: `rules.ts` contains the string `kind` zero
+    # times and so did this file. So a disclosure that announced nothing still satisfies the "and something
+    # was silent" clause here, and `3.3.1:validation-error-silent` is MODEL-decided -- it is one of only
+    # three subtypes whose findings reach a report without a rule ahead of them -- so the defect the field
+    # was added to prevent has been live in the path that ships.
+    #
+    # A remedy applied at one of the layers the behaviour reaches: this repo's most expensive recurring
+    # shape, and the reason CLAUDE.md says to grep every layer that decides on a control when a comment
+    # names its behaviour.
+    #
+    # Absent `kind` is treated as a submit, deliberately: captures older than protocol 8 carry no `kind`,
+    # and reading their absence as "not a submit" would silently make this feature deaf on every one of
+    # them -- absence read as a negative, which is the defect this whole schema revision is about.
+    submitted_silently = [
+        change for change in form_changes
+        if change.get("kind", "submit") == "submit" and not change.get("after", "").strip()
+    ]
     values["validation_error_missing"] = float(
         any(FORM_FIELD_ROLE.search(value) for value in post_submit_fields)
-        and any(not change.get("after", "").strip() for change in form_changes)
+        and bool(submitted_silently)
         and not values["validation_error_announced"]
     )
     values["generic_heading_present"] = float(

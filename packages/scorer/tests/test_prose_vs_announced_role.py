@@ -80,6 +80,13 @@ def test_the_role_vocabulary_covers_what_the_featurizer_itself_knows_about():
 
 
 def test_the_schema_version_moved_with_the_meaning():
+    # v17: `validation_error_missing` requires the silent activation to be a SUBMIT. `kind` has travelled
+    # on every `formChanges` entry since CAPTURE_PROTOCOL_VERSION 8 and NOTHING read it -- not this
+    # featurizer and not `rules.ts`, which contains the string zero times -- so a disclosure that announced
+    # nothing satisfied a feature about forms rejected without an error. capture-core added the field after
+    # apache.org's search toggle was reported exactly that way, and 3.3.1 is one of only three subtypes the
+    # model decides alone, so this one reached a report. Same evidence, different values: a meaning change.
+    #
     # v16: `landmark_present` and `landmark_named` are no longer model inputs -- known-gaps §17. Measured
     # on 80 protocol-7 captures: 16 have `landmark_present = 0` and ALL SIXTEEN have a truncated landmark
     # sweep, so the negative class was entirely a capture artefact with a documented systematic cause.
@@ -88,7 +95,7 @@ def test_the_schema_version_moved_with_the_meaning():
     # v15: `vague_link_present` is no longer a model input at all. It answers 2.4.9 (text alone, AAA, not
     # reported here) and the 2.4.4 head used it because it was the cheapest separator -- firing on 22 of the
     # 44 conformant pages that carry "Details" inside a peer index.
-    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v16"
+    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v17"
 
 
 def test_no_landmark_feature_survives_in_the_vector():
