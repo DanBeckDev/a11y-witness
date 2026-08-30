@@ -1,0 +1,6 @@
+{
+  "openedAt": "2026-08-30",
+  "shippedSchema": "screenreader-structured-v16",
+  "pendingSchema": "screenreader-structured-v17",
+  "why": "validation_error_missing now requires the silent activation to be a SUBMIT. `kind` has travelled on every formChanges entry since CAPTURE_PROTOCOL_VERSION 8 and nothing read it -- not this featurizer and not rules.ts -- so a disclosure that announced nothing satisfied a feature about forms rejected without an error. capture-core added the field after apache.org's search toggle was reported exactly that way, and 3.3.1:validation-error-silent is one of only three subtypes the model decides alone, so the defect reached a report. No recapture: the field is already in the corpus. Close it by promoting weights stamped v17."
+}
