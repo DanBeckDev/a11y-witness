@@ -57,8 +57,32 @@ jobs:
       #
       # NOT `continue-on-error`. A release that ships past its own gate is the thing this file exists to
       # prevent; if the gate cannot run in CI, fix the gate rather than skipping it here.
-      - name: The release gate
-        run: npm run release:gate
+      #
+      # SO IT WAS FIXED, BY SPLITTING IT -- 2026-08-30, on this workflow's first ever dry run, which died
+      # `sh: 1: .venv/bin/python: not found` at stage 4 of 12. Seven of the twelve stages need the Python
+      # venv or the CORPUS, and the corpus is gitignored and hours of fleet time: `scorer:shortcuts`,
+      # `corpus:distribution`, `check-signals`, `rules:gate`, `rules:coverage`, `rules:real-pages`,
+      # `evaluate-acceptance:shipped` and `eval:gate`. No amount of runner setup makes them possible, so
+      # `npm run release:gate` here could only ever fail -- and a gate that cannot pass is one people stop
+      # dispatching, which is how this file's own five locks would come to be bypassed.
+      #
+      # `release:gate:ci` is the part a runner CAN prove: the artefact is safetensors, the weights have a
+      # changelog entry accounting for them, no schema migration is open, and every package is usable when
+      # installed from a tarball. The rest must have passed ON THE LAB, and that is asserted by the human
+      # who types `publish-for-real` rather than pretended to here.
+      #
+      # This is the same argument the consumer-path check below already makes for `action-smoke`: "a
+      # verification sharing a failure mode with the action it guards" verifies nothing, and re-running a
+      # check on the machine that wants to publish is not evidence. The difference is only that a lab job
+      # leaves no artefact this workflow can query, so it says so instead of implying otherwise.
+      - name: The release gate — the part a runner can prove
+        run: npm run release:gate:ci
+
+      - name: Name what this runner did NOT check
+        run: |
+          echo "::warning::release:gate:ci ran 4 of release:gate's 12 stages. The other 8 need the Python"
+          echo "::warning::venv or the corpus and cannot run on a runner. Run them on the lab BEFORE"
+          echo "::warning::publishing for real:  npm run lab:job -- -e job=release-gate"
 
       # `changeset version` does NOT update package-lock.json under npm workspaces. Without the install
       # that follows, the lockfile ships describing the PREVIOUS versions — invisible until a consumer's
