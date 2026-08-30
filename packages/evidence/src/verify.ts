@@ -410,8 +410,15 @@ function compareStates(states: Record<string, Record<string, number>>):
  */
 export type Completeness = "exact" | "truncated" | "phantom" | "unknown";
 
-/** The sweep field each census type is counted from. Named once; the two must not drift. */
-const SWEEP_OF: Record<string, "headings" | "links" | "landmarks" | "graphics" | "formFields"> = {
+/**
+ * The sweep field each census type is counted from. Named once; the two must not drift.
+ *
+ * EXPORTED so `audit-observation-ambiguity.mjs` reads this list rather than restating it. A second
+ * hand-written copy is this repo's most expensive recurring shape -- the signal-type regex that
+ * scraped its subject and then asserted over an empty set is the worked example -- and the remedy
+ * the record prefers is the first one: delete a copy.
+ */
+export const SWEEP_OF: Record<string, "headings" | "links" | "landmarks" | "graphics" | "formFields"> = {
   heading: "headings", link: "links", landmark: "landmarks", graphic: "graphics",
   // `formControl` and not `formField`: the census counts the roles NVDA's `f` quick-nav actually visits,
   // which includes buttons. `dom.formField` is a narrower set and is 2.1.2's denominator; comparing the
