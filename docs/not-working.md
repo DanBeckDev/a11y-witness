@@ -118,13 +118,25 @@ positives each is poor value, and the repo's own rule is that enlarging `ROTATIO
 BUNDLED change. If a future protocol bump is happening anyway, add the ninth rotation in the same run —
 that is the only moment it is cheap.
 
-**`form_change_nonempty` may not be closable at all, and should be examined before anyone tries.** These
-two subtypes ARE the absence of an announcement after a form change, so a positive carrying a non-empty
-form change looks close to a contradiction in terms. If it is, it belongs in `IMPOSSIBLE_BY_DEFINITION`
-beside `3.3.1`'s existing `validation_error_announced` and `status_update_announced` entries, and the
-work list drops from four items to two. That is a reading of the subtype definitions, not a capture, so
-it costs minutes — and putting an unclosable item on a work list is the exact harm that section exists
-to prevent.
+**`form_change_nonempty` is a real question and I got its cost wrong.** An earlier draft here said it was
+"a reading of the subtype definitions, so it costs minutes". It is not, and the check that refuted it took
+one command: **29 of the 143 cases in each subtype already carry disclosure furniture** (`SCALE_BUCKETS`'s
+fourth bucket), a disclosure activation lands in `formChanges` with `kind: "disclosure"`, and a working one
+announces something. So `form_change_nonempty` should be 1 on those 29 positives and the veto should not
+exist — and the baseline says it does.
+
+One of these is true and they need different responses:
+
+- the disclosure furniture is not being ACTIVATED on those pages, so the channel is empty for the
+  probe-coverage reason §11 is about — a capture question;
+- or it is activated and announces nothing, which would make the furniture a silent disclosure and
+  therefore an undeclared accompanying DEFECT on 29 conformant-by-construction pages, which is worse;
+- or the entry is stale and the veto has already gone.
+
+**Answerable by reading the exported corpus** — `form_change_nonempty` against `provenance.subtype` on
+records carrying the disclosure bucket — which is `lab:job`, not minutes of thought. Nobody has looked,
+and until somebody does this item's cost is unknown rather than small. Recording that is the point:
+"a count is where an investigation stops", and so is a guess about one.
 
 **And the shape underneath is not what this entry assumed.** Cross-tabulating the baseline against the ten
 features whose ONLY source is a form probe (`not-working.md` §11):
