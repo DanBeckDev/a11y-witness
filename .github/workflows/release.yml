@@ -84,16 +84,24 @@ jobs:
           echo "::warning::venv or the corpus and cannot run on a runner. Run them on the lab BEFORE"
           echo "::warning::publishing for real:  npm run lab:job -- -e job=release-gate"
 
+      # BEFORE `version`, and the order is the whole point. `changeset status` reports what is PENDING, so
+      # after `version` has consumed them it says "Some packages have been changed but no changesets were
+      # found" and exits 1 — which is correct behaviour for a question asked at the wrong moment. Measured
+      # 2026-08-30 on this workflow's second ever dry run, where it failed the step it was meant to
+      # illustrate.
+      - name: What is pending, before anything is applied
+        run: npx changeset status
+
       # `changeset version` does NOT update package-lock.json under npm workspaces. Without the install
       # that follows, the lockfile ships describing the PREVIOUS versions — invisible until a consumer's
       # clean install resolves the wrong tree. `npm run release:version` does both; see .changeset/README.md.
       - name: Apply the pending changesets
         run: npm run release:version
 
-      - name: What this would publish
-        run: |
-          npx changeset status
-          git --no-pager diff --stat
+      # AFTER, and it asks a different question: what did `version` actually write? The two together are
+      # "what was asked for" and "what happened", which is the shape every verification here takes.
+      - name: What the version bump actually changed
+        run: git --no-pager diff --stat
 
       # PACK, not publish. This is the last step on the default path and it is the one that would have
       # caught the failures M0 found: `npm pack` includes untracked files, so "it worked locally" was never
