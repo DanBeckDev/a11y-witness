@@ -804,7 +804,7 @@ remembering this entry.
 **What tells you it is fixed:** every `+also-position-only-table` case carries `probeTables: true`, and
 `structure.tableCells` is non-empty on their bad variants.
 
-## 20. `candidate:gate` audits the SHIPPED weights, not the candidate
+## 20. ~~`candidate:gate` audits the SHIPPED weights, not the candidate~~ — DONE
 
 Found 2026-08-30 when a promote was refused and the refusal did not describe the model being promoted.
 
@@ -835,11 +835,19 @@ gate over: **a gate meant to decide a candidate, examining the incumbent.**
 let a genuine regression through"). Fixing the model the gate reads makes the refusal *true about the
 candidate*; it does not by itself unblock the promote.
 
-**Done when:** `candidate:gate` audits `runs/model-candidate` — WITH the baseline, not with
-`--no-baseline`, which is how the standalone job silences the comparison and would trade one blind spot
-for another. A test should pin that every stage in `candidate:gate` names an artefact under `runs/`
-rather than `packages/scorer/models/`, because this is the second gate in this repo to have read the
-wrong one and a discovery test is what caught the first.
+**DONE 2026-08-30.** `candidate:gate` now passes `--model runs/model-candidate` to the shortcuts audit and
+KEEPS the baseline comparison — reaching for `scorer:shortcuts:candidate` would have fixed the model and
+lost the regression check, which is the failure mode of every "make the gate pass" change.
+
+`candidate-gate-examines-the-candidate.test.ts` walks the chain rather than asserting one string: no stage
+may resolve `packages/scorer/models`, the shortcuts stage must name the candidate explicitly (the DEFAULT
+is the quiet form of this defect — a stage passing no `--model` reads the incumbent while looking
+innocent), and no stage in the resolved chain may carry `--no-baseline`.
+
+**Its own first version was a half-guard**, and mutation showed it. The `--no-baseline` check matched
+`candidate:gate`'s own text, so swapping in `scorer:shortcuts:candidate` — where the flag lives one script
+away — sailed past it and was caught only by the `--model` assertion. A guard that passes because the
+defect moved is not a guard; it now resolves each stage's body.
 
 ## What is NOT on this list, deliberately
 
