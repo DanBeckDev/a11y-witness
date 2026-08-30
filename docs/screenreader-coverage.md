@@ -341,13 +341,39 @@ guidepup command that would do it, because that is the part that takes the diggi
 | **Status messages / live regions** | 4.1.3 is *only* about announcements with no focus change. We catch these solely as a side effect of form submit, so a filter result or "3 items added to basket" is untested. | trigger a control, diff `spokenPhraseLog` — the machinery exists in `activateAndCaptureDelta`, it needs non-form triggers |
 | **Dialogs and modals** | Focus on open, focus *return* on close, whether Escape works, whether the background is still reachable. A focus trap here is the classic blocker. | activate a trigger, then `reportCurrentFocus`, `Escape`, `reportCurrentFocus` |
 | **Arrow-key widgets** | Tabs, menus, radio groups, comboboxes, sliders. Their whole interaction model is arrow keys plus `aria-activedescendant`; we currently only ever *land* on them. | `moveToNextRadioButton` / `moveToNextComboBox` to land, then raw arrows |
-| **Heading hierarchy** | A skipped level (h2 → h4) is a 1.3.1 failure that a flat heading list cannot show. | `moveToNextHeadingLevel` |
 | **iframes** | Embedded content with no accessible name is a dead end a user cannot label. | `moveToNextFrame` |
 | **Language changes** | 3.1.2. NVDA switches synthesiser voice on `lang`; without it, foreign text is read as gibberish in the wrong voice. | needs synth-level observation, not a keystroke — hardest of these |
 | **Typing feedback** | Live validation that fires while typing, and character echo. | `press` into a focused edit, diff the log |
 | **SPA route changes** | 4.1.3 again: a client-side navigation that announces nothing leaves the user on a page they cannot tell changed. | activate a link, wait, diff the log |
 | **Reading order vs visual order** | 1.3.2. Needs the DOM/visual comparison that axe-core and the visual layer own — probably **not** ours. | out of scope, deliberately |
 | **Focus visible** | 2.4.7 is visual. Belongs to the axe/visual layer, not the screen reader. | out of scope, deliberately |
+
+### REFUTED 2026-08-30: heading hierarchy is not ours, and was never a WCAG failure
+
+This table listed **heading hierarchy** as a gap, on the stated grounds that *"a skipped level (h2 → h4)
+is a 1.3.1 failure that a flat heading list cannot show"*. The premise is wrong and the row is removed.
+
+Read from axe-core's own rule metadata rather than from memory:
+
+```
+heading-order   "Heading levels should only increase by one"
+                tags: ["cat.semantics", "best-practice"]      <- no wcag131, no wcag2a
+```
+
+**`best-practice`, not a WCAG tag.** WCAG 2.2 nowhere requires sequential heading levels; H42 asks that
+headings be marked up as headings, and G141 asks for a logical structure. So a rule built on that row
+would have fired on conformant pages for something no criterion requires — which is exactly the mistake
+2.4.1 made before somebody read the Understanding page and found that a skip link is not required either.
+
+And it is doubly not ours: axe-core already reports it, and this tool runs **alongside** axe-core rather
+than instead of it. Duplicating a best-practice check from the rule layer is the one thing the division
+in `CLAUDE.md`'s header exists to prevent.
+
+**Worth knowing what IS there, because the evidence is real even though the finding is not.** NVDA
+announces the level, `announcement.ts` parses it into `states` (`/^level \d+$/i`), and the corpus carries
+6,846 `level 1` and 817 `level 2` announcements. Real pages go deeper — 121 / 355 / 76 / 29 across levels
+1 to 4 — while the generator emits only `<h1>` and `<h2>` and never `<h3>`. So the data exists, nothing
+reads it, and after this the correct answer is that nothing should.
 
 ## Two facts worth not rediscovering
 
