@@ -2027,6 +2027,15 @@ deliberately does not commit, since promoting is a MAJOR release. `run-job.yml` 
 a dirty checkout — correctly, it cannot tell a stray artefact from work in progress — so the next job runs
 at the pre-promotion commit and the `gates` pipeline fails at stage 1 saying so.
 
+**KEEP THE NAME `promote:model` GAVE THE CHANGESET.** It names the file after the candidate it promoted
+(`promote-candidate-<hash>.md`), and the natural thing after `lab:fetch -e artifact=promoted-changeset` is
+to commit it under a name that means something to you. Do that and the LAB's copy stays untracked at a
+path origin does not have, so `run-job.yml` refuses every later job — *"the checkout is dirty, so it was
+left alone"* — and `lab:reset` will not touch it, because it deliberately never discards untracked work.
+Measured 2026-08-30: three round trips, and `-e remove=` refused it too (*"neither untracked nor a tracked
+modification"*). Renaming the committed file to match the lab's fixed it at once. Two names for one
+artefact is the fact-stated-twice shape in its cheapest form.
+
 It **refuses anything origin does not already have**, comparing each dirty path against `origin/<ref>`
 before touching it, and reports without applying unless `-e apply=true`. That containment is not decorum:
 the manual alternative is `git checkout --`, the command that once destroyed release-eligible weights in
