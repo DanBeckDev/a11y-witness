@@ -1,3 +1,4 @@
+import { judgeBackend } from "./index.js";
 import type { CaptureStructure } from "@a11y-witness/evidence";
 import type { OracleCounts } from "@a11y-witness/evidence/verify";
 import { spawn } from "node:child_process";
@@ -27,9 +28,9 @@ import { applyGate } from "./verify-gate.js";
  * `codex` uses a local subscription login (no metered cost), `anthropic` and `openai` need the caller's
  * own key. The backend is one clean seam: evidence in, findings out.
  */
-// `||`, not `??`: an env var set to the EMPTY string is how CI passes "unset", and `??` only defaults on
-// nullish — so an empty JUDGE_BACKEND selected no backend at all here rather than the intended default.
-const BACKEND = (process.env.JUDGE_BACKEND || "local").toLowerCase();
+// ONE RESOLUTION, in `index.ts`. The `||`-not-`??` rule this comment used to state lived here and in
+// three other copies of the same expression, and `eval/run.ts` had the `??` — see `judgeBackend`.
+const BACKEND = judgeBackend();
 const JUDGE_MODEL = process.env.JUDGE_MODEL ?? "claude-opus-4-8";
 // OpenAI-compatible backend (JUDGE_BACKEND=openai): works against hosted OpenAI
 // or any local server that speaks /v1/chat/completions (llama.cpp, vLLM, Ollama,

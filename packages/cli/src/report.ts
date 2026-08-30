@@ -10,7 +10,7 @@
  * too small to hold a bug.
  */
 import type { Judgment } from "@a11y-witness/judge";
-import { taskVerdictLabel } from "@a11y-witness/judge";
+import { taskVerdictLabel, judgeBackend } from "@a11y-witness/judge";
 import type { AxeFinding } from "./scan/axe.js";
 import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11y-witness/judge/layers";
 import { notAConformanceClaim, type ConformanceRequirement }
@@ -69,9 +69,14 @@ function axeSection(axe: AxeFinding[] | null): string[] {
  * Most fundamental first, because a page you cannot perceive is not worth reporting navigation
  * problems on.
  */
-/** Which assessor ran, read from the same env var the judge selects on, so the two cannot disagree. */
+/**
+ * Which assessor ran, from the judge's OWN resolver so the two cannot disagree.
+ *
+ * The comment here already claimed that and it was not true: this read the env var itself, defaulting
+ * "local" in a second place. Four copies of that expression existed and one had drifted to `??`.
+ */
 function judgeLabel(): string {
-  const backend = (process.env.JUDGE_BACKEND || "local").toLowerCase();
+  const backend = judgeBackend();
   return backend === "local" ? "trained scorer" : `${backend} judge`;
 }
 

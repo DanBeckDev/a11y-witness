@@ -12,6 +12,28 @@ export { judge, validateJudgment } from "./judge.js";
 export type { JudgeInput, Judgment, Finding, Severity } from "./judge.js";
 
 /**
+ * WHICH BACKEND IS ACTIVE — the one resolution, so four readers cannot disagree about it.
+ *
+ * This expression was written out independently in FOUR places (`judge.ts`, here, `cli/report.ts`,
+ * `lab/eval/run.ts`), and they had already drifted: three used `||` and `eval/run.ts` used `??`.
+ *
+ * `judge.ts` carries the reason the difference matters, having been bitten by it: "`||`, not `??`: an env
+ * var set to the EMPTY string is how CI passes 'unset', and `??` only defaults on nullish — so an empty
+ * JUDGE_BACKEND selected no backend at all here rather than the intended default."
+ *
+ * The remedy reached one of the four. Measured with `JUDGE_BACKEND=""`: `judge.ts` resolves `"local"` and
+ * `eval/run.ts` resolved `""` — and it uses that value for `c.notApplicableTo?.includes(BACKEND)`, so no
+ * case ever matched and cases the local scorer CANNOT assess were scored instead of excluded. The comment
+ * three lines below that read says exactly what is at stake: "excluded from recall rather than scored as a
+ * zero, and announced so the exclusion can never be mistaken for a pass."
+ *
+ * One function, exported, so the default and the empty-string rule are stated once.
+ */
+export function judgeBackend(): string {
+  return (process.env.JUDGE_BACKEND || "local").toLowerCase();
+}
+
+/**
  * How to LABEL a judgment's `taskCompletable`, which means different things per backend.
  *
  * The LLM backends read the task and answer "could someone finish this?", so for them the field is what
@@ -24,7 +46,7 @@ export type { JudgeInput, Judgment, Finding, Severity } from "./judge.js";
  * answering it in bold, on someone's pull request, from a signal that never looked at the task.
  */
 export function taskVerdictLabel(): { question: string; isTaskClaim: boolean } {
-  const backend = (process.env.JUDGE_BACKEND || "local").toLowerCase();
+  const backend = judgeBackend();
   return backend === "local"
     ? { question: "No blocking findings", isTaskClaim: false }
     : { question: "Could a screen-reader user complete the task?", isTaskClaim: true };
