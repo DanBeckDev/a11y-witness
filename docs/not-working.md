@@ -51,13 +51,40 @@ Until then the gate is correctly red, which is the honest state rather than a de
 
 </details>
 
-## 2. Free vetoes — 41 closable, down from an undifferentiated 60
+## 2. Free vetoes — and 96% of them are NOT corpus problems
 
-**Measured on freshly trained weights** (`train -e out=scratch`, so nothing touched the candidate
-awaiting a promotion decision). Two things moved: the total 60 → 57, and the audit now separates vetoes
-worth corpus work from vetoes nothing can close — **41 closable, 16 unclosable and each named with its
-reason**. See `reliability-plan.md` A1; before that split, the work list included items nobody could
-complete.
+> **THE NUMBERS BELOW WERE STALE AND ARE NOW CORRECTED FROM THE ARTEFACT, 2026-08-30.** This section said
+> "41 closable, 16 unclosable" against a total of 57, measured on scratch weights before protocol 8 and the
+> v16 promotion. `packages/lab/scripts/scorer-shortcuts.baseline.json` — which is TRACKED, so it could have
+> been read at any time — says **52 total, 35 closable, 17 unclosable across 18 heads**. It also says
+> `2.4.1:skip-link-inert` no longer carries `vague_link_without_context` at all: it has 14 positives after
+> A2's doubling and exactly two vetoes. **So the ROTATIONS argument this section used to hang on that veto
+> describes a veto that no longer exists**, and the 237-case / 474-capture price it quotes is not owed here.
+> Deriving a section from memory when the number is committed to the repo is the mistake, not the number.
+
+**And the shape underneath is not what this entry assumed.** Cross-tabulating the baseline against the ten
+features whose ONLY source is a form probe (`not-working.md` §11):
+
+```
+ALL vetoes:      50 of 52 sit on a purely probe-gated feature   (96%)
+CLOSABLE vetoes: 34 of 35 sit on a purely probe-gated feature   (97%)
+```
+
+A veto exists because the feature is 0 on every positive of the subtype. For 96% of these the zero is not
+a fact about any page — it is a fact about which probes the case definition turned on. **No page can fix
+that**, so ADR 0015's "the remedy is the CORPUS, never the weights" does not apply to them, and the work
+list said otherwise for as long as it has existed.
+
+`UNREACHABLE_WITHOUT_PERTURBING` already made this argument and **applied it to five features where the
+gate reaches ten** — corrected 2026-08-30. `probeForms` also gates `postSubmitFields`
+(`capture-core.mjs:2061`), so `post_submit_present`, `validation_error_announced` and
+`validation_error_missing` were unreachable for the identical reason, and `status_update_announced` reads
+`formChanges` itself. Twelve items — four on each focus subtype — were on a work list nobody could
+complete. The unclosable map went 22 → 37 pairs.
+
+**Reclassifying is not fixing, and the falling number must not be read as progress.** The weights are
+unchanged and every one of those negative weights still fires on a real page. What changed is that the
+list now says which of them a corpus could ever close.
 
 | head | positives | worst veto before | worst veto now |
 |---|---|---|---|
@@ -324,6 +351,69 @@ directions; overlap is what separates them.
 artifact (the lab named two failing records and nothing could show what the rule SAW on them — the same
 capture from a laptop was clean, so the difference WAS the defect), and the gate's evidence line, which had
 been describing a branch withdrawn hours earlier and now reports `focusOrder on 80 of 2482 record(s)`.
+
+## 11. Ten of the 28 model features read a `0` that means "nobody asked"
+
+Measured 2026-08-30 on the authoritative corpus, 6,467 captures, `lab:job -e job=observation-ambiguity`.
+
+Every structured feature is `float(bool(channel))` or `float(any(...))`, and `any([])` is `False`. So a
+`0` means BOTH *"the page has none of these"* and *"nothing looked"*, and no column can tell them apart.
+This asks how often each is which, which nothing had ever done.
+
+**Ten features have no source but a probe-gated channel** — `stateChanges`, `formChanges` and
+`postSubmitFields`, none of which has a transcript fallback the way all four `table_*` features do:
+
+```
+state_change_present  state_changed  state_unchanged
+form_change_present   form_change_nonempty  form_change_empty  status_update_announced
+post_submit_present   validation_error_announced  validation_error_missing
+```
+
+And the probe that fills them did not run on most of the corpus:
+
+```
+formChanges       empty on 4830 captures, of which 3006 never asked   62.2%
+postSubmitFields  empty on 5496 captures, of which 3070 never asked   55.9%
+```
+
+`probeForms` is off by default (`case-matrix.mjs:222`) and on for ~17 cases. So on roughly three
+records in five, all ten features read `0` for a reason that is nothing to do with the page — and the
+model has no way to know that. This is the same fact `applicability.py:147-152` records from the other
+end: *"a precondition may only rule a subtype out when the subject is KNOWN absent, and the record does
+not currently carry which probes ran."*
+
+**The sweeps are FINE, and that correction is the more useful half.** The first version of this audit
+put "the sweep missed it" and "there is no census to compare against" in one column and reported
+`heading 94.9% UNSUPPORTED`, which reads as a capture path missing nine headings in ten. Split apart:
+
+| channel | empty | sweep MISSED it | nobody asked / no census | page really has none |
+|---|---|---|---|---|
+| `heading` | 568 | **9 (1.6%)** | 530 | 29 |
+| `link` | 3103 | **8 (0.3%)** | 2597 | 498 |
+| `graphic` | 5200 | **4 (0.1%)** | 2865 | 2331 |
+| `formControl` | 2797 | **29 (1.0%)** | 1925 | 843 |
+| `landmark` | 2740 | **416 (15.2%)** | 2242 | 82 |
+| `tableCells` | 6095 | 1 (0.0%) | **6094 (100%)** | **0** |
+
+Two things fall out of that table and neither was known:
+
+- **`landmark` is the outlier at 15.2%**, and that is the independent confirmation of why
+  `landmark_present` was deleted — measured on 6,467 captures rather than on the 16 that prompted it.
+  Every other sweep is under 2%. **Do not go looking for a general sweep defect; there is not one.**
+- **`tableCells` is never observable when empty** — 6,094 of 6,095, because `probeTables` is opt-in.
+  The four `table_*` features survive this only because each falls back to the transcript
+  (`table_evidence`, `screenreader_features.py:691`). The channel is unusable; the features are not.
+
+**What this does NOT establish, so nobody quotes it as if it did.** The audit measures CHANNELS, and a
+feature is only as ambiguous as its weakest source — which is why the `table_*` claim above had to be
+withdrawn once the fallback was read. And it says nothing about whether removing the ambiguity would
+IMPROVE anything: a new column correlated with capture conditions is itself a shortcut, which is
+ADR 0015's whole subject. That is a measurement somebody still has to take.
+
+**Correction to §2 while here.** This is NOT the fix for `state_unchanged`'s free veto, which an earlier
+draft of the plan claimed. Splitting it into observed-columns leaves the focus positives reading `0` on
+the new column too, so the veto simply moves — exactly as `landmark_present`'s moved onto
+`heading_present` at the next retrain. A free veto is closed by the CORPUS, and ADR 0015 says so.
 
 ## Closed since this list was written
 
