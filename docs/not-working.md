@@ -93,6 +93,28 @@ Until then the gate is correctly red, which is the honest state rather than a de
 > where the gate reaches 10), the focus cases genuinely never captured what a user hears, and four chain
 > defects were real. What does not survive is the size of the claim.
 
+### PROMOTED 2026-08-30 as schema v17 — and one of the four turned out to be definitional
+
+The v17 candidate passed held-out acceptance and shipped. **The promotion gate refused the first
+attempt**, which is the most useful thing that happened:
+
+```
+REGRESSION  4.1.3:form-activation-silent: 2 -> 3 closable veto(es)
+            worst: validation_error_missing (-5.97)
+```
+
+Making `validation_error_missing` require a SUBMIT turned it definitionally absent from a subtype whose
+activation is a FILTER — *"Filter the catalogue to show only bags and notice how many results remain"*.
+Measured: **4.1.3 has 143 cases and 0 with a `type=submit` control; 3.3.1 has 143 of 143.** Not 142 of
+143. So it is `IMPOSSIBLE_BY_DEFINITION`, it is now classified as such, and the re-run passed on its own
+terms rather than by anyone lowering a bar.
+
+**A fix that made one head better surfaced a relationship nobody had written down**, and it could only
+appear once the feature was precise enough to be constant. Worth remembering before the next entry is
+added to that list: a more precise feature will keep finding these, and each has to be argued.
+
+That removes one of the four below. Recount after the next baseline recording.
+
 ### The four that remain, priced
 
 `3.3.1:validation-error-silent` and `4.1.3:form-activation-silent`, each on `form_change_nonempty` and
