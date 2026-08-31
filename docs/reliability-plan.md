@@ -326,7 +326,7 @@ corpus change did what it was supposed to.
 
 ---
 
-## B2 — IN PROGRESS. Protocol 9 is deployed; two of its intended passengers did not board
+## B2 — CLOSED 2026-08-31. Protocol 10 shipped and the corpus was recaptured under it
 
 **Status: the root-cause fix has shipped and is being verified.** What changed against the plan below is
 worth reading before the next bundle is scoped, because two items came off it for opposite reasons.
@@ -407,7 +407,38 @@ the design is wrong), `--pipeline=verify --only=` on one subtype passes before t
 
 ---
 
-## B3 — Publish, which is a decision and not a task
+## B3 — CLOSED as far as it is WORK. What remains is three decisions
+
+**Status: the mechanism is proven end to end on the recaptured corpus.** `release:gate` passes all twelve
+stages on the lab (FITNESS PASS, recall 92%, **0 false positives**), and the publish dry run passes with
+all five locks exercised and `action-smoke for aee4195f: success` — *"versioned and packed, published
+nothing."*
+
+**Getting there found a real defect, and it is the reason this item took a second pass.** `release:gate`
+refused first, with two REGRESSIONs. They were not regressions: `scorer:shortcuts` audited
+`screenreader-evidence.jsonl` while the trainer trains on — and the BASELINE is recorded against —
+`with-realism.jsonl`. A report from one corpus compared against a baseline from another. The "new" veto
+`form_change_nonempty` is strictly `{0.0}` on the base corpus and carried by 2 of 184 positives on the one
+the head actually saw, so it could never have been taken for free. *A gate that does not exercise what
+ships*, for the fifth time here, and the first where the two halves of ONE gate disagreed.
+
+**Three decisions remain, all yours, and none of them is work:**
+
+1. **The name** — PLAN.md B5. ADR 0006's AGPL/Apache split is gated on it and is effectively irreversible.
+2. **`access`** — `.changeset/config.json` says `"restricted"`, which is the fourth publish lock. A real
+   run fails at the publish step until it says `public`.
+3. **The changelog's shape** — five promotion changesets are pending and only one describes the shipped
+   weights. The other four record promotions no consumer ever had. Collapsing them or keeping the lineage
+   is a call about what a first release says, not a tidy-up: ADR 0007 makes the weights the API and the
+   changeset is the only record of their provenance.
+
+**Before a real publish, run the full gate on the lab** — `npm run lab:job -- -e job=release-gate`. The
+workflow can only prove 4 of its 12 stages, and the person typing `publish-for-real` is asserting the
+other eight passed somewhere a corpus and a venv exist.
+
+---
+
+## B3 (as originally scoped) — the reasoning, kept
 
 **Status: waiting on a person.** `not-working.md` §8 records the dry run: three attempts, two real
 workflow defects found and fixed, and all five locks exercised on the third. What remains is not
