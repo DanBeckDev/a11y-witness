@@ -729,8 +729,19 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # truthy `after`. This one did not: `bool(state_changes)` counts the error entry, so a capture whose
     # only interaction FAILED reported that a state change was present.
     #
-    # Latent rather than active -- zero such entries exist in the corpus today, which is exactly when it is
-    # cheap to fix and exactly why no gate could have caught it.
+    # Latent rather than active, and MEASURED rather than assumed: `scorer:explain-feature` on
+    # `4.1.2:state-change-silent` reports `stateChanges entries: 104, of which ERRORED: 0` -- the subtype
+    # where such an entry would appear if anywhere, since it is the one the disclosure probe is about.
+    #
+    # NO SCHEMA BUMP, deliberately. The function changed; the values cannot. A v17 model scored under this
+    # pipeline produces identical numbers on every record that exists, so no mismatch is possible and the
+    # guarantee `FEATURE_SCHEMA_VERSION` exists to give is not at risk. Bumping would force a retrain and
+    # burn a MAJOR release of `@a11y-witness/scorer` -- the weights are the API -- for a provably
+    # zero-difference change.
+    #
+    # WHAT WOULD CHANGE THAT: the first capture that records an errored disclosure probe. At that point
+    # this feature genuinely differs from its v17 self and the next promotion carries it, which is the
+    # normal path rather than a special case.
     values["state_change_present"] = float(bool(measured_state_changes(state_changes)))
     state_pairs = [
         (state_word(change.get("control") or ""), state_word(change.get("after") or ""))
