@@ -91,3 +91,24 @@ def test_an_unknown_subtype_examines_nothing_and_says_so(capsys):
 def test_an_unknown_feature_names_what_it_takes(capsys):
     assert ef.report([record([SUB], SPOKE)], SUB, "not_a_feature", 3) == 2
     assert "no such feature" in capsys.readouterr().out
+
+
+def test_it_reports_what_the_channels_CONTAIN_not_only_whether_they_are_empty(capsys):
+    # `kind` and `baselineQuiet` are the two fields that kept turning out to hold the answer while nothing
+    # read them. A tool that says "the channel is empty" and stops repeats that.
+    records = [
+        record([SUB], [{"control": "a", "kind": "submit", "after": "", "baselineQuiet": True}]),
+        record([SUB], [{"control": "b", "kind": "disclosure", "after": "", "baselineQuiet": False}]),
+        record([], SPOKE),
+    ]
+    ef.report(records, SUB, "form_change_nonempty", 3)
+    out = capsys.readouterr().out
+    assert "by kind: disclosure=1, submit=1" in out
+    assert "baselineQuiet: true=1 false=1" in out
+    assert "not soundly measured" in out, "a false baselineQuiet must say what it costs, not just count"
+
+
+def test_no_activation_at_all_is_said_plainly(capsys):
+    # "nothing was activated" and "activated, and the page said nothing" are the distinction §11 is about.
+    ef.report([record([SUB], [])], SUB, "form_change_nonempty", 3)
+    assert "no entries at all" in capsys.readouterr().out
