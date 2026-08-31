@@ -80,7 +80,7 @@
     "rules:coverage": "tsx packages/lab/scripts/audit-rule-coverage.ts",
     "rules:real-pages": "tsx packages/lab/scripts/check-real-page-findings.ts",
     "scorer:migration": "node scripts/check-schema-migration.mjs",
-    "scorer:shortcuts": "npm run --silent corpus:unclosable-map && .venv/bin/python packages/lab/scripts/audit-scorer-shortcuts.py",
+    "scorer:shortcuts": "npm run --silent corpus:unclosable-map && .venv/bin/python packages/lab/scripts/audit-scorer-shortcuts.py --data runs/screenreader-dataset/with-realism.jsonl",
     "promote:model": "node packages/lab/scripts/promote-model.mjs",
     "docs:coverage": "tsx packages/lab/scripts/generate-coverage-doc.ts",
     "corpus:starvation": "node packages/lab/scripts/audit-corpus-starvation.mjs",
