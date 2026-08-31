@@ -158,6 +158,17 @@ with `argv:` never invokes a shell, which removes the quoting class that sent fo
 `--worker=http://:8765` for 29 minutes. **The lab is reached DIRECTLY at its own IP; there is no `pct exec`
 hop**, and that second hop was the whole source of the quoting problem.
 
+**AND EXIT ON A POSITIVE VERDICT, never on the absence of a marker.** The third variant, and it completes
+the set — all three are this file's oldest defect wearing a poll's clothing. A waiter written as
+`until ! <status> | grep -q RUNNING` finishes the moment the status command FAILS: a dropped connection
+prints nothing, `grep` finds no `RUNNING`, and the loop reports a finished run for one still going. The
+sound form names the outcomes it will accept — `grep -qE "SUCCEEDED|FAILED|NOT LOADED"` — so a silent
+status keeps waiting instead of being read as success.
+
+Together, the three: poll a field that EXISTS, wait for the state to LEAVE `running` rather than to equal
+one of the terminal values you happened to think of, and finish on something the tool SAID rather than on
+something it did not say.
+
 **And before backgrounding ANY waiter, prove its condition can be true at all.** The sibling of the
 SubState rule, and it has now bitten three times in one session. A waiter polling
 `capture-progress.json` for `p.captured` ran for an hour against a file whose keys are
