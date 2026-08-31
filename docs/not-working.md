@@ -51,7 +51,7 @@ Until then the gate is correctly red, which is the honest state rather than a de
 
 </details>
 
-## 2. Free vetoes — and 96% of them are NOT corpus problems
+## 2. Free vetoes — FOUR of which can reach a report, not the 41 this said
 
 > **THE NUMBERS BELOW WERE STALE AND ARE NOW CORRECTED FROM THE ARTEFACT, 2026-08-30.** This section said
 > "41 closable, 16 unclosable" against a total of 57, measured on scratch weights before protocol 8 and the
