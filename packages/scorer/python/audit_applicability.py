@@ -26,35 +26,35 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import applicability  # noqa: E402
 import screenreader_features as features  # noqa: E402
 
-#: Subtypes whose free vetoes are STRUCTURAL, with the measurement that says so.
+#: Subtypes whose free vetoes are STRUCTURAL — now ONE reason, because the other was refuted.
 #:
 #: ADR 0015's remedy for a free veto is the corpus: give the subtype's positives pages that carry the
-#: feature, so a head cannot penalise it for nothing. That remedy is UNAVAILABLE for these, and the reason
-#: is recorded in `case-matrix.mjs` where the exclusion lives:
+#: feature, so a head cannot penalise it for nothing. One reason that remedy is limited here survives:
 #:
 #:   - Their pages carry their own control, so `probeForms` furniture would give the probe two things to
 #:     press and change which one the case's own signal reads.
-#:   - `component-index` is `notFor` exactly these criteria because it adds four focusable links, and
-#:     `focusOrder` truncates at 12 stops — measured on `focus-order-tabindex`, which reported
-#:     CONTAMINATED for precisely that reason. Their evidence IS the focus order.
 #:
-#:     THAT PREMISE IS STALE as of 2026-08-29: `MAX_TAB_STOPS` is 150, not 12, so four extra links cannot
-#:     push a case's own controls out of the window any more. The exclusion may still be right for another
-#:     reason, but the reason RECORDED for it no longer holds -- and this file cites it as why the
-#:     free-veto remedy is unavailable for these three heads, the exact three whose worst veto is
-#:     `state_unchanged`. Settling it is one command, written at the exclusion itself in `case-matrix.mjs`.
-#:     Until somebody runs it, "unavailable" here means "not re-measured since the cap changed", which is
-#:     a weaker claim than it reads as.
+#: THE SECOND REASON WAS REFUTED BY MEASURING IT, 2026-08-31. It read: "`component-index` is `notFor`
+#: exactly these criteria because it adds four focusable links, and `focusOrder` truncates at 12 stops."
+#: `MAX_TAB_STOPS` became 150 on 2026-08-25 and the exclusion was never re-measured. Capturing all seven
+#: affected families with the piece applied returned `1469 discriminating, 0 blind, 0 CONTAMINATED` and
+#: every one of the seven OK, so the exclusion is lifted in `case-matrix.mjs` and these three heads have
+#: their conformant-furniture remedy back.
 #:
-#: So 25 of the 44 vetoes are on features that ARE defects (`form_field_unnamed`, `state_unchanged`,
-#: `validation_error_missing`), which no conformant page can carry by definition; and the rest are on
-#: features whose furniture would contaminate the case. Recorded so the next reader does not spend an
-#: evening re-deriving that furniture is not the answer here.
+#: THE COST OF LEAVING IT WAS NOT TIDINESS. This file cited that exclusion as why the remedy was
+#: UNAVAILABLE for the exact three heads whose worst veto is `state_unchanged` — so a stale sentence here
+#: was, for two days, a recorded reason not to try. "Unavailable" meant "not re-measured since the cap
+#: changed", which is a weaker claim than it reads as, and this file said so itself before anyone acted.
+#:
+#: What remains: vetoes on features that ARE defects (`form_field_unnamed`, `state_unchanged`,
+#: `validation_error_missing`), which no conformant page can carry by definition. Furniture is not the
+#: answer to those, and that part was never in doubt.
 STRUCTURAL_VETOES = {
-    "2.1.1:control-unreachable-by-keyboard": "its evidence IS the focus order; furniture that adds "
-                                             "focusable links contaminates it",
+    "2.1.1:control-unreachable-by-keyboard": "its page carries its own control, so probeForms furniture "
+                                             "would change which one the case's signal reads",
     "2.1.2:focus-trapped": "same — the page's own controls are the evidence",
-    "2.4.3:focus-order-scrambled": "measured CONTAMINATED when component-index was applied",
+    "2.4.3:focus-order-scrambled": "same. The component-index exclusion that also covered this was "
+                                   "REFUTED 2026-08-31: 0 contaminated across all seven families",
 }
 
 #: Gates somebody has proposed but not applied, reported so the cost is a measurement rather than a guess.
