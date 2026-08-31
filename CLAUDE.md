@@ -158,6 +158,15 @@ with `argv:` never invokes a shell, which removes the quoting class that sent fo
 `--worker=http://:8765` for 29 minutes. **The lab is reached DIRECTLY at its own IP; there is no `pct exec`
 hop**, and that second hop was the whole source of the quoting problem.
 
+**And before backgrounding ANY waiter, prove its condition can be true at all.** The sibling of the
+SubState rule, and it has now bitten three times in one session. A waiter polling
+`capture-progress.json` for `p.captured` ran for an hour against a file whose keys are
+`startedAt, updatedAt, finishedAt, outcome, worker, baseUrl, captureTimeoutMs, total, workers, current,
+cases` — there is no `captured` field, the progress is a per-case map under `cases`, and `?? 0` turned the
+absence into a number that could never grow. One command against the real artefact answers it; a
+backgrounded loop against a guessed shape reports nothing for as long as you let it. This is the
+repo's own "a test written against a shape you did not verify" rule, applied to a poll instead of a test.
+
 **WAIT FOR `SubState` TO LEAVE `running`. Never wait for it to EQUAL a terminal value.** A unit has
 several terminal SubStates — `exited`, `failed`, `dead` — and which one you get depends on how it ended
 and whether anything reaped it. Measured 2026-08-30: two waiters written an hour apart, one polling for
