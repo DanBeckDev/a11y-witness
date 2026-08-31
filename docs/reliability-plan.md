@@ -414,6 +414,27 @@ workflow defects found and fixed, and all five locks exercised on the third. Wha
 mechanical — `.changeset/config.json` says `access: "restricted"` and PLAN.md B5 (the name) is unsettled,
 and ADR 0006's licence split is gated on the same decision and is effectively irreversible.
 
+**A DECISION WAITING AT PUBLISH TIME, found while checking the prerequisites.** Five promotion changesets
+are pending and **only one describes the shipped weights**:
+
+```
+promote-candidate-d7762085.md   records=2525  v17   <- the shipped weights
+promote-candidate-876f3d15.md   records=2525  v16
+promote-candidate-198816d2.md   records=2487  v15
+promote-candidate-4.md          records=2403  v15
+promote-v15-scorer.md                         v7
+```
+
+`release:provenance` PASSES, and correctly: it asks whether the shipped weights are accounted for, and
+they are. But nothing has ever been published, so the other four describe promotions no consumer ever
+had — internal history rather than release notes, and a first CHANGELOG carrying all five reads as four
+changes that never happened to anybody.
+
+**Not resolved here, deliberately.** Deleting a release note is not a tidy-up: ADR 0007 makes the weights
+the API and the changeset is the only record of their provenance. Whether a first release collapses them
+into one entry or keeps the lineage is a call for whoever decides the name, and it is the same
+conversation. Flagged so it is not discovered mid-publish.
+
 **Before a real publish, run the full gate on the lab** — `npm run lab:job -- -e job=release-gate`. The
 workflow can only prove 4 of its 12 stages; the human typing `publish-for-real` is asserting the other
 eight passed somewhere a corpus and a venv exist.
