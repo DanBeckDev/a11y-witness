@@ -566,6 +566,47 @@ honest only once somebody has decided which of the first two is right.
 **Not decided here, and not forced.** Overriding a gate that caught a real regression is the thing it
 exists to prevent, and this one was found by the gate rather than by anybody looking.
 
+## 13. DECIDED 2026-08-31 — five heads stay trained despite detecting nothing
+
+`2.1.1:control-unreachable-by-keyboard`, `2.1.2:focus-trapped` and `2.4.3:focus-order-scrambled` read
+recall **0.000** in the shipped training report; `2.4.1:skip-link-inert` reads 0.077 and
+`2.4.2:route-title-stale` 0.286. The model cannot see `focusOrder` — no evidence unit encodes it and no
+feature reads it — so a head asked to find a focus defect has nothing to find it with.
+
+**Kept, and the reasoning is worth more than the outcome.** Removing them would be a MAJOR release of
+`@a11y-witness/scorer` (ADR 0007: the weights are the API) for **no user-visible change**, because all
+five are `decidedBy: "rules"` and the rules read `focusOrder` directly and are exact. And the heads are
+independent `nn.Linear` — a head that fits nothing does not degrade the others, so the cost of keeping
+them is training seconds and vector space, not accuracy.
+
+**What would change this.** If ownership of any of the five moved to the model, a head at recall 0.000
+would start deciding a criterion it cannot see — so the day `rule-ownership.json` changes for one of them
+is the day this decision must be revisited, and that is the trigger to watch rather than the recall number.
+
+Recorded as a DECISION rather than left open, because "five heads detect nothing" reads as neglect and is
+not: it is the layer split working exactly as ADR 0021 designed it.
+
+## 14. DECIDED 2026-08-31 — the model is not given the observation metadata
+
+Protocol 10 made every capture record what it ASKED, per channel. The RULES read it (`oracleCounts` feeds
+`ruleEvidence`). The model does not, because `modelInput()` is an allowlist drawn around announced content.
+
+**Not crossed, and the reason changed during this work.** The original argument was that the boundary
+exists to keep the DOM out, and "did we ask?" is not a DOM fact — which is true, and was a good reason to
+consider crossing it. What settled it the other way is that the measurable harm has gone: the ten features
+reading probe-gated channels carried the free vetoes this register was largely about, and **that count is
+now zero**. Every closable veto remaining is on a rules-decided subtype.
+
+So the trade is a feature correlated with CAPTURE CONDITIONS — which ADR 0015 is entirely about, and which
+`corpus:starvation` would have to police — bought against a harm nobody can now measure. That is the wrong
+side of this project's own rule: *before optimising any number, run the path a user runs and check the
+number is the one they would see.*
+
+**What would change this.** A measured false finding traceable to one of those ten features reading a `0`
+that means "nobody asked". `capture:explain` now names every such channel per capture, so the evidence for
+that would be in hand rather than inferred — which is the difference between this being a decision and
+being an assumption.
+
 ## 11. Ten of the 28 model features read a `0` that means "nobody asked"
 
 Measured 2026-08-30 on the authoritative corpus, 6,467 captures, `lab:job -e job=observation-ambiguity`.
