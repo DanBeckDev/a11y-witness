@@ -287,9 +287,32 @@ which this item now has — is what stops that.
 
 ---
 
-## B1 — The three measurements that are nearly free, and two of them could shrink this list
+## B1 — CLOSED 2026-08-31. All three ran, and two of them shrank B2
 
-**Status: open. Each is one `lab:job`, minutes, no fleet.** They exist because each is a question I
+**Status: CLOSED.** `scorer:explain-feature` was built for the first two and answered both in one output.
+
+| measurement | answer |
+|---|---|
+| `form_change_nonempty` on `3.3.1` / `4.1.3` | **DEFINITIONAL, both.** 143 positives each, 143 read 0, and each carries exactly ONE form change — `submit=142 taskButton=1` and `taskButton=143` — whose `after` is empty, which IS the finding. Classified in `IMPOSSIBLE_BY_DEFINITION` |
+| `baselineQuiet: false` | **0 of 286.** True on every record in both subtypes. Conditioning the featurizer on it would add a latent guard rather than fix anything, so it is recorded and not shipped |
+| `observation-ambiguity` re-run | `formChanges never asked` **62.2% → 61.3%**, `postSubmitFields` 55.9% → 55.0% — a delta of exactly 56 on each, which is exactly the 56 captures recaptured. The change did what it was meant to |
+
+**A plausible hypothesis was refuted, which is why the tool was worth building.** 29 cases in each subtype
+carry disclosure furniture and a working disclosure announces something, so `form_change_nonempty` should
+have been 1 on those. It is not: **a disclosure activation lands in `stateChanges` and never in
+`formChanges`**. Reasoning from the case definitions gave the wrong answer twice, in two different
+directions; one command gave the right one.
+
+**§2 is now two vetoes.** Recorded against the re-run baseline: 51 total, 21 closable, and exactly **two**
+that are both closable AND on a subtype the model decides — `state_unchanged` on `3.3.1` and `4.1.3`.
+Closing them needs a broken-disclosure accompanying defect, which is a ninth `ROTATIONS` entry, which is
+priced inside B2 and worth doing only there.
+
+---
+
+## B1 (superseded) — the original framing
+
+**Status: CLOSED, see above. Each was one `lab:job`, minutes, no fleet.** They exist because each is a question I
 answered with a guess during the 2026-08-30 session and then had to withdraw.
 
 | what | why | done when |
