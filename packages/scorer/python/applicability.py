@@ -80,6 +80,23 @@ def _reads_as_an_unmarked_heading(record: Record) -> bool:
     )
 
 
+def _measured_state_change(record: Record) -> bool:
+    """A state change was actually MEASURED — an errored probe does not make the subtype applicable.
+
+    `_interacted("stateChanges")` counted a failed disclosure probe, which `capture-core` records as
+    `{control, after: null, error}` precisely so it stays distinguishable from silence. So a capture whose
+    only interaction THREW satisfied the precondition for `4.1.2:state-change-silent`, and the subtype was
+    scored on a page nobody successfully interacted with — the inverse of this module's own rule, which is
+    that a precondition may only rule a subtype IN when its subject is known present.
+    """
+    # Filtered HERE rather than by importing `screenreader_features.measured_state_changes`: this module
+    # deliberately imports nothing but `typing`, and pulling the feature pipeline into it to reuse one
+    # comprehension would end that for no gain. The duplication is therefore forced, and forced duplication
+    # is pinned equal by a test rather than trusted — `test_errored_probe_is_not_evidence.py` drives both.
+    changes = _interaction(record).get("stateChanges") or []
+    return any(not change.get("error") for change in changes)
+
+
 def _interacted(field: str) -> Callable[[Record], bool]:
     """The capture actually performed the interaction this subtype reasons about."""
     def present(record: Record) -> bool:
@@ -119,7 +136,7 @@ SUBTYPE_REQUIRES: dict[str, Callable[[Record], bool]] = {
     "3.3.2:unnamed-form-field": _has("formFields"),
     # A claim about a CONTROL that was activated. The finding is that nothing was announced, so the
     # precondition is that a state change occurred — not that one was spoken.
-    "4.1.2:state-change-silent": _interacted("stateChanges"),
+    "4.1.2:state-change-silent": _measured_state_change,
     # A claim about a form SUBMISSION. Same shape: the error being unspoken is the finding, so the
     # precondition is that the form was submitted at all.
     "3.3.1:validation-error-silent": _interacted("postSubmitFields"),

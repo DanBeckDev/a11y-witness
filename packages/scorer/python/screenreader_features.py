@@ -564,6 +564,18 @@ UNCLOSED_CONTAINERS = frozenset({
 })
 
 
+def measured_state_changes(changes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The state-change entries that were actually MEASURED — an errored probe is not evidence.
+
+    `capture-core` stores a failed disclosure probe as `{control, after: null, error}` instead of dropping
+    it, so a consumer can tell "we did not measure" from "there was nothing to hear". Shared rather than
+    inlined at each site because two consumers already disagreed about it: `state_changed` and
+    `state_unchanged` filtered on a truthy `after`, `state_change_present` did not, and
+    `applicability.py` gated a whole subtype on the unfiltered list.
+    """
+    return [change for change in changes if not change.get("error")]
+
+
 def vague_link_lacks_context(record: dict[str, Any]) -> bool:
     """A vague link name with nothing around it to disambiguate.
 
@@ -708,7 +720,18 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     values["table_header_associated"] = float(bool(associated_rows) or bool(associated_cells))
     values["table_position_only"] = float(bool(position_only_rows) or bool(position_only_cells))
 
-    values["state_change_present"] = float(bool(state_changes))
+    # A PROBE THAT ERRORED IS NOT A STATE CHANGE, and `capture-core` records the difference on purpose.
+    #
+    # A failed disclosure probe is stored as `{control, after: null, error}` rather than dropped, under a
+    # comment that states why: "a failed measurement is not silence, and must never be recorded as one" --
+    # written after 1 in 20 captures of a CORRECTLY implemented page recorded nothing and so became
+    # indistinguishable from a broken one. `state_changed` and `state_unchanged` honour that by requiring a
+    # truthy `after`. This one did not: `bool(state_changes)` counts the error entry, so a capture whose
+    # only interaction FAILED reported that a state change was present.
+    #
+    # Latent rather than active -- zero such entries exist in the corpus today, which is exactly when it is
+    # cheap to fix and exactly why no gate could have caught it.
+    values["state_change_present"] = float(bool(measured_state_changes(state_changes)))
     state_pairs = [
         (state_word(change.get("control") or ""), state_word(change.get("after") or ""))
         for change in state_changes
