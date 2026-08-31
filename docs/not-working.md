@@ -470,6 +470,55 @@ artifact (the lab named two failing records and nothing could show what the rule
 capture from a laptop was clean, so the difference WAS the defect), and the gate's evidence line, which had
 been describing a branch withdrawn hours earlier and now reports `focusOrder on 80 of 2482 record(s)`.
 
+## 12. The protocol-10 recapture cost two heads a free veto, and `release:gate` refuses
+
+**OPEN, and it is blocking a release.** The corpus was fully recaptured under
+`CAPTURE_PROTOCOL_VERSION 10` on 2026-08-31 — 1,394 captured, 0 failed, and every corpus gate green:
+
+```
+check-signals      1462 discriminating, 0 blind, 0 contaminated, 0 stale
+rules:gate         RULES PASS — 14 of 14, 2,488 records examined and clean
+rules:coverage     PASS — every rule-only criterion has fired on a real page
+rules:real-pages   PASS — all 86 of 86 conformant real pages clean
+```
+
+Then `release:gate` refused at `scorer:shortcuts`:
+
+```
+REGRESSION  3.3.2:unnamed-form-field: 2 -> 3 closable veto(es)
+REGRESSION  4.1.2:unnamed-control:    2 -> 3 closable veto(es)
+```
+
+**The new veto is `form_change_nonempty` on both**, identified with `corpus:starvation` after two wrong
+guesses — `validation_error_missing` reads 1 on 4 of 184 and `post_submit_present` on 10 of 184, so
+neither was constant. Guessing one feature at a time is the wrong shape for this question and the tool
+that answers it already existed.
+
+**Why it moved, measured.** `3.3.2:unnamed-form-field` has 184 positives and **13 form-change entries
+between them** — `route=3, submit=4, taskButton=6`, every `after` empty, every `baselineQuiet` true. So
+the feature was riding on a handful of records either way, and a full recapture tipped it from
+non-constant to constant. It is fragile rather than broken, and it was marginal before.
+
+**What it is NOT.** Not definitional: nothing about an unlabelled form field precludes a form change
+announcing something. Not `perturbs-measurement`: these subtypes are measured on names, not on
+`formChanges`. So it does not belong on either unclosable list, and classifying it there to clear the gate
+would be exactly the move `audit-corpus-starvation.mjs` warns against — *"this list is not a way of
+lowering a number"*.
+
+**And BOTH are `decidedBy: "rules"`**, so neither veto can reach a report. That makes this a component
+defect rather than a product one, by the same argument §2 had to be corrected for — but it still blocks
+`release:gate`, because the gate is deliberately blind to ownership and should be: a head the rules
+override today is one the rules may not override tomorrow.
+
+**The options, none of them free.** Give more of those subtypes' positives an activatable control so the
+feature can vary (a corpus change, and therefore another recapture); establish that 13 entries across 184
+positives is too thin for the audit's `MIN_CORPUS_OCCURRENCES` and fix the threshold rather than the
+corpus; or re-record the baseline, which asserts the veto is understood and accepted, and would be
+honest only once somebody has decided which of the first two is right.
+
+**Not decided here, and not forced.** Overriding a gate that caught a real regression is the thing it
+exists to prevent, and this one was found by the gate rather than by anybody looking.
+
 ## 11. Ten of the 28 model features read a `0` that means "nobody asked"
 
 Measured 2026-08-30 on the authoritative corpus, 6,467 captures, `lab:job -e job=observation-ambiguity`.
