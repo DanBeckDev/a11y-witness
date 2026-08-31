@@ -364,16 +364,36 @@ The floor is 0.20, chosen from those two measurements rather than from preferenc
 like the one above it: raise it when real-page calibration lifts the model's own contribution, never
 lower it to make a run pass.
 
-## 8. Nothing has ever been published
+## 8. EXERCISED 2026-08-30 — the dry run found two real defects on its first attempt
 
-Five changesets pending, `access: "restricted"`, and `release.yml` has never run for real. Every guard
-around publishing is therefore **untested against an actual publish** — including guard 5, the
-consumer-path query added today, which has been mutation-checked but never seen a real dispatch.
+This said five changesets were pending, `access: "restricted"`, and `release.yml` had never run for real —
+so *"every guard around publishing is untested against an actual publish"*, and *"the first release will
+exercise all five for the first time simultaneously, which is the one thing this repo's own rules say not
+to do."*
 
-The first release will exercise all five for the first time simultaneously, which is the one thing this
-repo's own rules say not to do. Worth a dry run before the real one, which the workflow supports.
+**It has now been dry-run, and the warning was earned.** Three attempts, two genuine defects, both in the
+workflow rather than in the packages:
 
----
+| attempt | what happened |
+|---|---|
+| 1 | `sh: 1: .venv/bin/python: not found` — **`release:gate` cannot run on a runner.** Seven of its twelve stages need the Python venv or the CORPUS, and the corpus is gitignored and hours of fleet time. `npm run release:gate` there could only ever fail |
+| 2 | `changeset status` ran AFTER `release:version` consumed the changesets, so it reported *"packages changed but no changesets found"* and exited 1 — failing the very step it was meant to illustrate |
+| 3 | **PASS.** All five locks exercised: dispatch-only, `dry-run` defaulting true, the `confirm` string, `access: restricted`, and `action-smoke for e51c34fd: success` |
+
+Both fixes are in. `release:gate:ci` is the part a runner can prove — safetensors, provenance, no open
+migration, every package usable from a tarball — and the workflow now emits a warning naming the eight
+stages it did NOT run and the lab command that does. The step's own comment demanded exactly this: *"if
+the gate cannot run in CI, fix the gate rather than skipping it here."*
+
+**A third thing the run taught, about the guards rather than the code.** `action-smoke` is path-filtered,
+so a commit touching only `.github/workflows/release.yml` never gets one — and guard 5 requires a run for
+the EXACT commit. The refusal already names the remedy (`gh workflow run action-smoke.yml --ref <sha>`),
+which is the guard being usable rather than merely correct. Worth knowing before someone reads a refusal
+as a broken pipeline.
+
+**Still not published, deliberately.** `.changeset/config.json` says `access: "restricted"` and PLAN.md B5
+(the name) is unsettled and is the user's call. What has changed is that publishing is no longer a path
+nobody has walked.
 
 ## 9. FOUND AND CLOSED 2026-08-28 — three defects that were on no list
 
