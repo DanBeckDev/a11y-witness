@@ -123,6 +123,12 @@ def report(records: list[dict[str, Any]], subtype: str, feature: str, samples: i
     print(f"    reads 0      : {len(off)}")
     print(f"  elsewhere      : {negative_on} of {len(negatives)} non-positive record(s) read 1")
     print("")
+    # ALWAYS, before any verdict returns. What the channels CONTAIN is the answer to a different question
+    # from "is this a free veto", and the early return withheld it from every head where the feature is
+    # never 0 -- which is exactly where you ask it when you want to know whether a change can move a record.
+    for line in channel_composition(positives):
+        print(line)
+    print("")
     if not off:
         print("  Never 0 on a positive, so it cannot be a free veto for this head.")
         return 0
@@ -133,9 +139,6 @@ def report(records: list[dict[str, Any]], subtype: str, feature: str, samples: i
     elif not on:
         print("  0 everywhere, positives and negatives alike. A feature no record carries predicts")
         print("  nothing and vetoes nothing; check it is still computed at all.")
-    print("")
-    for line in channel_composition(positives):
-        print(line)
     print("")
     print(f"  the channels this feature reads, on {min(samples, len(off))} record(s) that read 0:")
     for record in off[:samples]:
