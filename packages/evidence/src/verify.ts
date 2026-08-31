@@ -411,6 +411,28 @@ function compareStates(states: Record<string, Record<string, number>>):
 export type Completeness = "exact" | "truncated" | "phantom" | "unknown";
 
 /**
+ * WHAT THE CAPTURE ITSELF SAYS IT ASKED — capture-protocol 9, preferred over inferring it.
+ *
+ * Everything else in this file is archaeology: it reconstructs, from a census and a scatter of diagnostic
+ * marks, what the capture should have recorded at the time. That works and it degrades with age, which is
+ * why `unknown` had to be invented as a fourth verdict. Protocol 9 records the fact first-hand, so where
+ * `observed` is present it is the answer and no inference is needed.
+ *
+ * ABSENT means a capture older than protocol 9, and absent must not read as `asked: true` — a pre-9
+ * capture cannot say, and saying it can is the exact defect this field was added to remove. So the caller
+ * falls back to its inference rather than to an assumption.
+ *
+ * @returns the recorded observation, or `undefined` when this capture predates the field
+ */
+function observationOf(capture: CapturedAnnouncements, channel: string):
+  { asked?: unknown; complete?: unknown } | undefined {
+  const observed = (capture as { observed?: unknown }).observed;
+  if (typeof observed !== "object" || observed === null) return undefined;
+  const seen = (observed as Record<string, unknown>)[channel];
+  return typeof seen === "object" && seen !== null ? seen as { asked?: unknown } : undefined;
+}
+
+/**
  * The sweep field each census type is counted from. Named once; the two must not drift.
  *
  * EXPORTED so `audit-observation-ambiguity.mjs` reads this list rather than restating it. A second
@@ -534,10 +556,16 @@ function tableCompleteness(capture: CapturedAnnouncements): Completeness {
   //
   // The probe marks `tableCells` whenever it runs, including when it finds none — which is exactly the
   // distinction `markPageState` draws twenty lines below, and the reason that mark exists.
+  //
+  // PROTOCOL 9 SAYS SO DIRECTLY, and this now asks before inferring. Hunting for the mark still works and
+  // stays as the fallback for older captures — deleting it would make every pre-9 capture unreadable to
+  // answer a question they can answer.
+  const recorded = observationOf(capture, "tableCells");
+  if (recorded && recorded.asked === false) return "unknown";
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
   const probeRan = marks.some((m) => typeof m === "object" && m !== null
     && (m as { event?: unknown }).event === "tableCells");
-  if (!probeRan) return "unknown";
+  if (!recorded && !probeRan) return "unknown";
   const expected = Number(dimensions[1]) * Number(dimensions[2]);
   const seen = (capture.structure as { tableCells?: unknown[] } | undefined)?.tableCells?.length ?? 0;
   return seen >= expected * CELLS_ENOUGH ? "exact" : "truncated";
@@ -550,6 +578,10 @@ export function sweepCompleteness(capture: CapturedAnnouncements): Record<string
     { distinct?: Record<string, number> } | undefined;
   const out: Record<string, Completeness> = {};
   for (const [type, field] of Object.entries(SWEEP_OF)) {
+    // A CHANNEL NOBODY ASKED ABOUT CANNOT BE COMPARED, and under protocol 9 the capture says so itself
+    // rather than being inferred from a census that may simply be absent. Checked BEFORE the census, so
+    // "we never asked" is never reported as "the sweep came up short".
+    if (observationOf(capture, field)?.asked === false) { out[type] = "unknown"; continue; }
     const expected = census?.distinct?.[type];
     const announced = (capture.structure as Record<string, string[]> | undefined)?.[field];
     if (typeof expected !== "number" || !Array.isArray(announced)) { out[type] = "unknown"; continue; }

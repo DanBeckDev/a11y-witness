@@ -585,3 +585,30 @@ test("a table probe that RAN and came up short is truncated", () => {
   assert.equal(verdicts.tableCells, "truncated");
 });
 
+
+test("protocol 9: a channel the capture says nobody asked about is `unknown`, not `truncated`", () => {
+  // The whole point of `observed`. Before it, a page with a table captured without `probeTables` read
+  // TRUNCATED — "the sweep tried and missed" — and `assertableSweep` then refused 1.3.1's claim on a
+  // capture that had simply never been asked. The capture now says so itself.
+  const capture = {
+    url: "https://example.test/", screenReader: "NVDA", transcript: ["Example, document"],
+    structure: { headings: [], links: [], landmarks: [], graphics: [], formFields: [], lists: [] },
+    diagnostics: [{ event: "structureCensus", distinct: { heading: 4 } }],
+    observed: { headings: { asked: false, why: "not asked" } },
+  } as unknown as Parameters<typeof sweepCompleteness>[0];
+  assert.equal(sweepCompleteness(capture).heading, "unknown",
+    "the census counts 4 and the sweep found 0, which WITHOUT `observed` is truncated — the recorded "
+    + "fact must win, because a sweep nobody ran did not come up short");
+});
+
+test("protocol 9: absent `observed` falls back to inference rather than assuming it was asked", () => {
+  // A pre-9 capture cannot say, and reading absence as `asked: true` is the defect this field removes.
+  const capture = {
+    url: "https://example.test/", screenReader: "NVDA", transcript: ["Example, document"],
+    structure: { headings: [], links: [], landmarks: [], graphics: [], formFields: [], lists: [] },
+    diagnostics: [{ event: "structureCensus", distinct: { heading: 4 } }],
+  } as unknown as Parameters<typeof sweepCompleteness>[0];
+  assert.equal(sweepCompleteness(capture).heading, "truncated",
+    "with no `observed` the census comparison still decides — deleting that would make every pre-9 "
+    + "capture unreadable to answer a question they can answer");
+});
