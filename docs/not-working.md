@@ -51,7 +51,33 @@ Until then the gate is correctly red, which is the honest state rather than a de
 
 </details>
 
-## 2. Free vetoes — FOUR of which can reach a report, not the 41 this said
+## 2. CLOSED 2026-08-31 — ZERO free vetoes can now reach a report
+
+> **CLOSED 2026-08-31, and the number is zero.** Every closable veto that remains is on a subtype
+> `rule-ownership.json` marks `decidedBy: "rules"`, so none can reach a report:
+>
+> ```
+> corpus-wide closable      21 -> 13
+> 3.3.1:validation-error-silent   1 -> 0 closable
+> 4.1.3:form-activation-silent    1 -> 0 closable
+> closable AND model-decided       2 -> 0
+> ```
+>
+> `state_unchanged` was the last one, and it took a `silent-toggle-inert` accompanying defect — a
+> disclosure that never opens — to make it vary. It now reads 1 on one of 143 positives in each subtype,
+> which is enough: the audit's criterion is strictly `{0.0}` across every positive.
+>
+> **The two attempts are the interesting part.** The first was withdrawn this morning because the ninth
+> rotation starved `2.4.3` of furniture. What changed was not the piece: lifting a STALE exclusion
+> elsewhere in this register took `2.4.3` from 8 cases to 35, and a subtype with 35 sees every furniture
+> shape by construction. Two items this file listed separately were one item.
+>
+> **And I read the result wrong before reading it right.** The first check said the fix had failed —
+> `state_unchanged` 0 of 143 — because `explain-feature` reads `with-realism.jsonl` and I had re-run
+> `export` but not `build-realism`. Same shape as the `scorer:shortcuts` corpus defect found the same day:
+> a number computed from a file nobody refreshed. The capture had been right all along.
+>
+> Cost: 712 captures, 178 ids renamed and 178 added, ~2 hours of fleet time.
 
 > **THE NUMBERS BELOW WERE STALE AND ARE NOW CORRECTED FROM THE ARTEFACT, 2026-08-30.** This section said
 > "41 closable, 16 unclosable" against a total of 57, measured on scratch weights before protocol 8 and the
