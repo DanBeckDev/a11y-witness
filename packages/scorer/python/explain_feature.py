@@ -61,6 +61,34 @@ def describe(record: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def channel_composition(records: list[dict[str, Any]]) -> list[str]:
+    """What the form-probe channels actually CONTAIN across these records, not just whether they are empty.
+
+    The fields a feature does not read are where the answers keep turning out to be. `kind` decides whether
+    a silent activation was a SUBMIT (schema v17 was that fix), and `baselineQuiet` says whether the delta
+    was measured soundly at all -- an untrustworthy one read as "nothing was announced" is the fixed-sleep
+    defect, which inverted findings rather than adding noise. Both travelled on every entry unconsulted.
+    """
+    kinds: dict[str, int] = {}
+    quiet = {"true": 0, "false": 0, "absent": 0}
+    entries = 0
+    for record in records:
+        for change in ((record.get("input", {}).get("interaction") or {}).get("formChanges") or []):
+            entries += 1
+            kinds[str(change.get("kind", "(absent)"))] = kinds.get(str(change.get("kind", "(absent)")), 0) + 1
+            flag = change.get("baselineQuiet")
+            quiet["absent" if flag is None else ("true" if flag else "false")] += 1
+    if not entries:
+        return ["  formChanges: no entries at all across these records — nothing was ever activated"]
+    by_kind = ", ".join(f"{k}={n}" for k, n in sorted(kinds.items()))
+    return [
+        f"  formChanges entries: {entries}   by kind: {by_kind}",
+        f"    baselineQuiet: true={quiet['true']} false={quiet['false']} absent={quiet['absent']}"
+        + ("   <- a FALSE here means the delta was not soundly measured, in either direction"
+           if quiet["false"] else ""),
+    ]
+
+
 def report(records: list[dict[str, Any]], subtype: str, feature: str, samples: int) -> int:
     if feature not in features.FEATURE_NAMES:
         print(f"no such feature: {feature}\n  it takes one of: {', '.join(features.FEATURE_NAMES)}")
@@ -92,6 +120,9 @@ def report(records: list[dict[str, Any]], subtype: str, feature: str, samples: i
     elif not on:
         print("  0 everywhere, positives and negatives alike. A feature no record carries predicts")
         print("  nothing and vetoes nothing; check it is still computed at all.")
+    print("")
+    for line in channel_composition(positives):
+        print(line)
     print("")
     print(f"  the channels this feature reads, on {min(samples, len(off))} record(s) that read 0:")
     for record in off[:samples]:
