@@ -158,6 +158,14 @@ with `argv:` never invokes a shell, which removes the quoting class that sent fo
 `--worker=http://:8765` for 29 minutes. **The lab is reached DIRECTLY at its own IP; there is no `pct exec`
 hop**, and that second hop was the whole source of the quoting problem.
 
+**WAIT FOR `SubState` TO LEAVE `running`. Never wait for it to EQUAL a terminal value.** A unit has
+several terminal SubStates — `exited`, `failed`, `dead` — and which one you get depends on how it ended
+and whether anything reaped it. Measured 2026-08-30: two waiters written an hour apart, one polling for
+`SubState=exited` and one for `exited|failed`, both hung indefinitely on jobs that had long since
+finished, because the units read `failed` and `dead` respectively. That is the `is-active` defect wearing
+its own remedy — the right field, tested the wrong way round — and `run-job.yml` already gets it right
+with `until: 'Running' not in ...`, which is the form to copy.
+
 **Three systemd facts, measured, that any status check must respect.** Poll `SubState`, **never
 `systemctl is-active`** — under `--remain-after-exit` an exited unit reads `active (exited)` forever, so a
 waiter on `is-active` hangs indefinitely reporting "still running" for a finished job. `Result` and
