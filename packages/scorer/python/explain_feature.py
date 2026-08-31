@@ -70,18 +70,31 @@ def channel_composition(records: list[dict[str, Any]]) -> list[str]:
     defect, which inverted findings rather than adding noise. Both travelled on every entry unconsulted.
     """
     kinds: dict[str, int] = {}
+    state_total = state_errored = 0
     quiet = {"true": 0, "false": 0, "absent": 0}
     entries = 0
     for record in records:
+        # STATE CHANGES that ERRORED. `capture-core` keeps a failed probe as `{after: null, error}` so it
+        # stays distinguishable from silence; whether any exist decides whether a change to the features
+        # reading them is a MEANING change or a latent one, and that decides a schema bump.
+        for change in ((record.get("input", {}).get("interaction") or {}).get("stateChanges") or []):
+            state_total += 1
+            if change.get("error"):
+                state_errored += 1
         for change in ((record.get("input", {}).get("interaction") or {}).get("formChanges") or []):
             entries += 1
             kinds[str(change.get("kind", "(absent)"))] = kinds.get(str(change.get("kind", "(absent)")), 0) + 1
             flag = change.get("baselineQuiet")
             quiet["absent" if flag is None else ("true" if flag else "false")] += 1
+    state_line = (f"  stateChanges entries: {state_total}   of which ERRORED: {state_errored}"
+                  + ("   <- a failed probe is not silence; the features reading it must exclude these"
+                     if state_errored else ""))
     if not entries:
-        return ["  formChanges: no entries at all across these records — nothing was ever activated"]
+        return [state_line,
+                "  formChanges: no entries at all across these records — nothing was ever activated"]
     by_kind = ", ".join(f"{k}={n}" for k, n in sorted(kinds.items()))
     return [
+        state_line,
         f"  formChanges entries: {entries}   by kind: {by_kind}",
         f"    baselineQuiet: true={quiet['true']} false={quiet['false']} absent={quiet['absent']}"
         + ("   <- a FALSE here means the delta was not soundly measured, in either direction"
