@@ -326,6 +326,42 @@ corpus change did what it was supposed to.
 
 ---
 
+## B2 — IN PROGRESS. Protocol 9 is deployed; two of its intended passengers did not board
+
+**Status: the root-cause fix has shipped and is being verified.** What changed against the plan below is
+worth reading before the next bundle is scoped, because two items came off it for opposite reasons.
+
+**DONE — `observed`, the root-cause fix.** Every capture now records what it ASKED beside what it heard,
+generalising the only channel (`media`) that ever did. `collectByType` writes its own terminus, the opt-in
+flags are recorded in one extracted helper, and `verify.ts` prefers the recorded fact over its inference
+while still falling back for pre-9 captures. Additive: the 28 files reading those channels are untouched.
+Deployed to 5/5 workers, 0 failures.
+
+**NARROWED — live regions were not the gap this plan described.** It said 4.1.3's announcements are caught
+"solely as a side effect of form submit". They are not: `probeKindFor` also activates a button the TASK
+names, and all 143 `4.1.3` cases use exactly that. The real gap is a live region triggered by a link, a
+`<select>` or a checkbox — and reaching those is a `SECURITY.md` decision (*"pressing Book on a stranger's
+site is not a review"*) before it is a capture change. **That makes it a different item, and it is not in
+this bump.**
+
+**WITHDRAWN — the ninth `ROTATIONS` entry.** Written, type-checked, speech declared, collision check
+passed — then `furniture-spread` refused it: the re-roll left `2.4.3:focus-order-scrambled` with 8 cases
+and no table furniture, **a new free veto created while closing two**. Withdrawn rather than forced,
+because a corpus change whose second-order effects need a guard to find them does not belong in the same
+recapture as a protocol bump: two variables, and afterwards no way to say which caused what. The design is
+kept in `case-matrix.mjs` where somebody proposing it again will read it, including the sound half.
+
+**So §2's last two vetoes stay open**, and the honest position is that they may stay open indefinitely:
+they are worth neither their own 474-capture re-roll nor the collateral one measured above.
+
+**STILL UNBUILT from the list below:** dialogs and modals, and arrow-key widgets. Both are real, both need
+their own probe, and both would need another bump — which is the argument for scoping the next bundle
+deliberately rather than treating this one as having emptied the list.
+
+---
+
+## B2 (as originally scoped) — the bundle's reasoning, kept
+
 ## B2 — ONE `CAPTURE_PROTOCOL_VERSION` 9, carrying everything that needs a recapture
 
 **Status: open, and it is a BUNDLE rather than a task.** A bump invalidates every cached capture —
