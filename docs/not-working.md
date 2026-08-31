@@ -705,11 +705,38 @@ either direction** — and `validation_error_missing` reads an empty `after` as 
 which is the fixed-sleep defect exactly: *"a fixed wait expired early, the probe timed out, and the miss
 was recorded as 'the page announced nothing' — precisely the signature of a non-conformant disclosure."*
 
-**Deliberately not fixed in v17, and the reason is the discipline rather than the risk.** Adding a
-condition on a field whose distribution nobody has measured could make the feature deaf, and "run
-`rules:gate` after any change that makes a rule quieter" applies to a feature just as well. The
-measurement is one line against the exported corpus — how many records carry `baselineQuiet: false` — and
-until it exists this stays recorded rather than acted on.
+**MEASURED 2026-09-01, and the answer is DO NOT BUILD IT.** `lab:job -e job=observation-ambiguity`, on
+the authoritative corpus:
+
+```
+1719 formChanges entr(ies): 1117 settled  65.0%   0 NOISY  0.0%   602 unstated  35.0%
+```
+
+**`baselineQuiet` has never once read `false`.** A feature conditioned on it would gate on a value that
+occurs zero times in 1,117 stated observations — dead code, not a safeguard. That closes the item in the
+opposite direction to the one the plan assumed, which is what taking the measurement was for.
+
+**The instrument was checked before the result was believed**, because a field that has never taken its
+other value is indistinguishable from one that CANNOT. `waitForSpeechQuiet` genuinely returns
+`{quiet:false}` on budget exhaustion and the caller writes `BASELINE-NOT-QUIET` to `sweepLog`, so the path
+exists and is reachable. The zero is a real result: at `BASELINE_QUIET_BUDGET_MS = 20_000` the baseline
+settles every time. That budget was raised once already *"because it was too short for a browser recycle
+AND nothing could say so"* — this is that fix, measured.
+
+**And the measurement immediately exposed the next one, which the corpus could not answer.** "Settles
+comfortably" and "settles at 19.9 s of 20" both print `true`. The verdict is now a constant and carries no
+information; the MARGIN is what distinguishes a robust wait from one record from the cliff — the shape
+`choose_threshold` already cost this repo, where three heads sit at the top of the grid and one negative
+crossing leaves them no valid cut. `baselineWaitedMs` is now recorded on the entry and the audit reports
+p50/p95/max against the budget. It rides the same bundled protocol bump as the frame sweep and the dialog
+probe, so it costs no recapture of its own.
+
+Until captures carry it the audit prints `waited: NOT RECORDED on any entry -- so headroom is unknown, not
+comfortable`, which is the rule this whole section is about applied to its own report.
+
+**`unstated` is counted apart from `notQuiet` and never folded in**, and there is a test that fails if it
+is. A capture taken before the field existed has not said its baseline was noisy — reading that absence as
+`false` would commit this section's own subject inside the audit that reports it.
 
 **READ THE 96% WITH §2's SECOND CORRECTION.** The "50 of 52 vetoes" above is a fact about the 18 HEADS.
 Only 9 of those vetoes are on subtypes the model actually decides, and only 4 of those are closable — the
