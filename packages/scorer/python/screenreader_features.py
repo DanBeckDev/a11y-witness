@@ -564,6 +564,31 @@ UNCLOSED_CONTAINERS = frozenset({
 })
 
 
+def soundly_measured(changes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The form changes whose delta was measured against a SETTLED speech log.
+
+    `capture-core` attaches `baselineQuiet` to every entry with a stated reason: "a consumer deciding what
+    this activation proves needs to know whether the measurement was sound. Carried on the evidence rather
+    than left in a log, because a log nothing reads is a comment." Nothing read it.
+
+    It matters ASYMMETRICALLY, which is why only the features claiming SILENCE consult it. An unsettled
+    baseline can credit a late phrase to the wrong activation, so an entry whose `after` is empty may be
+    empty because nobody waited — and "nothing was announced" is the finding for 3.3.1 and 4.1.3. That is
+    the fixed-sleep defect, which INVERTED a finding rather than adding noise: 1 in 20 captures of a
+    correct page looked broken. A feature claiming PRESENCE fails the safe way round — an untrustworthy
+    delta that did show something is at worst noise, never a false accusation.
+
+    ABSENT counts as sound: captures older than the field carry no `baselineQuiet`, and reading that
+    absence as "unsound" would make these features deaf on every one of them — absence read as a negative,
+    which is the defect this whole revision is about.
+
+    Latent today and measured, not assumed: `scorer:explain-feature` reports `baselineQuiet: true=143
+    false=0` on both `3.3.1:validation-error-silent` and `4.1.3:form-activation-silent`. So this changes no
+    value on any record that exists, and needs no schema bump for the same reason the `kind` fix did not.
+    """
+    return [change for change in changes if change.get("baselineQuiet", True)]
+
+
 def measured_state_changes(changes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The state-change entries that were actually MEASURED — an errored probe is not evidence.
 
@@ -765,7 +790,10 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
 
     values["form_change_present"] = float(bool(form_changes))
     values["form_change_nonempty"] = float(any(change.get("after", "").strip() for change in form_changes))
-    values["form_change_empty"] = float(any(not change.get("after", "").strip() for change in form_changes))
+    # SILENCE claims consult `baselineQuiet`; presence claims do not. See `soundly_measured`.
+    values["form_change_empty"] = float(
+        any(not change.get("after", "").strip() for change in soundly_measured(form_changes))
+    )
     values["status_update_announced"] = float(
         any(STATUS_UPDATE.match(change.get("after", "").strip()) for change in form_changes)
     )
@@ -797,7 +825,7 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # and reading their absence as "not a submit" would silently make this feature deaf on every one of
     # them -- absence read as a negative, which is the defect this whole schema revision is about.
     submitted_silently = [
-        change for change in form_changes
+        change for change in soundly_measured(form_changes)
         if change.get("kind", "submit") == "submit" and not change.get("after", "").strip()
     ]
     values["validation_error_missing"] = float(
