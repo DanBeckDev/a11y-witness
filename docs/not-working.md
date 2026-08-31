@@ -470,7 +470,28 @@ artifact (the lab named two failing records and nothing could show what the rule
 capture from a laptop was clean, so the difference WAS the defect), and the gate's evidence line, which had
 been describing a branch withdrawn hours earlier and now reports `focusOrder on 80 of 2482 record(s)`.
 
-## 12. The protocol-10 recapture cost two heads a free veto, and `release:gate` refuses
+## 12. RESOLVED — it was the INSTRUMENT, not the corpus. The two "regressions" were not real
+
+> **EVERYTHING BELOW WAS WRITTEN BEFORE THE CAUSE WAS FOUND, and the cause was this gate reading the
+> wrong corpus.** `scorer:shortcuts` audited `screenreader-evidence.jsonl`; the trainer trains on — and
+> `scorer:shortcuts:baseline` records the baseline against — `with-realism.jsonl`. So a report built from
+> one corpus was compared against a baseline built from another.
+>
+> `form_change_nonempty` is strictly `{0.0}` across the positives on the base corpus and carried by **2 of
+> 184** on the one the head actually saw. The head could never have taken it for free. There was no
+> regression, and nothing about the recapture caused one.
+>
+> **I had written up three remedies and was about to ask which to take. All three were wrong**, because
+> there was nothing to remedy — and one of them was "re-record the baseline", which would have written the
+> instrument's error into the artefact that defines what is accepted.
+>
+> Fixed by pointing all three veto audits at the trainer's dataset, with a guard that they agree and a
+> second anchoring on the trainer script so a rename cannot re-open it. `release:gate` then passed all
+> twelve stages.
+>
+> **The analysis below is kept because the reasoning was sound and the premise was not** — that is the
+> useful half. "Two gates disagreeing about one corpus is the signal" is written in `CLAUDE.md`, and here
+> the two halves of ONE gate disagreed, which is why it read as a finding rather than as silence.
 
 **OPEN, and it is blocking a release.** The corpus was fully recaptured under
 `CAPTURE_PROTOCOL_VERSION 10` on 2026-08-31 — 1,394 captured, 0 failed, and every corpus gate green:
