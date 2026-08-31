@@ -72,7 +72,7 @@ captures, and nothing here needed it.
 
 ## A3 — CLOSED on the fourth attempt. Ask what the ring OFFERS, not how big it is
 
-**Status: open. Attempted 2026-08-28, measured, withdrawn. Far better specified than it was.**
+**Status: CLOSED on the fourth attempt, 2026-08-28.** This line read `open` under a `CLOSED` heading for two days — a file that states an item's status twice will eventually disagree with itself, and the heading is the half people read.
 
 I marked this closed earlier the same day, on corpus evidence. `rules-real-pages` then scored the change on
 86 conformant real pages and it produced **9 new 2.1.2 findings**. The closure was wrong and this section
@@ -287,8 +287,89 @@ which this item now has — is what stops that.
 
 ---
 
+## B1 — The three measurements that are nearly free, and two of them could shrink this list
+
+**Status: open. Each is one `lab:job`, minutes, no fleet.** They exist because each is a question I
+answered with a guess during the 2026-08-30 session and then had to withdraw.
+
+| what | why | done when |
+|---|---|---|
+| `form_change_nonempty` on `3.3.1` / `4.1.3` | `not-working.md` §2 has four vetoes that reach a report and two are this feature. **29 of 143 cases in each subtype already carry disclosure furniture**, a disclosure lands in `formChanges` with `kind: "disclosure"`, and a working one announces something — so the feature should be 1 on those positives and the veto should not exist | the report says which of three it is: the furniture is never activated (a capture question), it is activated and silent (which would make furniture an undeclared DEFECT on 29 conformant-by-construction pages), or the entry is stale |
+| `baselineQuiet: false` count over the corpus | `capture-core` attaches it beside `kind` with the same argument and **nothing reads it**. An untrustworthy delta read as "nothing was announced" is the fixed-sleep defect, which inverted a finding rather than adding noise | a number. Above ~0, `validation_error_missing` should require a sound baseline; at 0 it is a latent guard and can be recorded as such rather than shipped |
+| `lab:job -e job=observation-ambiguity` | the focus cases now run the form probe. Whether the "never asked" count actually MOVED is the confirmation, and assuming it did is the defect this whole item is about | `formChanges … never asked` falls from 62.2%, or it does not and the change bought less than claimed |
+
+**Do these before B2.** Two of them can remove work from it, and the third tells you whether the last
+corpus change did what it was supposed to.
+
+---
+
+## B2 — ONE `CAPTURE_PROTOCOL_VERSION` 9, carrying everything that needs a recapture
+
+**Status: open, and it is a BUNDLE rather than a task.** A bump invalidates every cached capture —
+2,924, measured at ~4.5 h across the bare-metal fleet — so the repo's own rule is to pay it once:
+*"do it deliberately, bundled, and pay the recapture once."* Nothing below is worth its own bump; together
+they are worth one.
+
+**The root-cause fix, first, because it is mostly a relocation.** A capture records what it HEARD and never
+what it ASKED (`not-working.md` §11). `media` is the only channel that gets this right. Generalise it:
+
+```js
+observed: {
+  tableCells:   { asked: false },
+  headings:     { asked: true, terminus: "exhausted" },
+  stateChanges: { asked: true, terminus: "deadline" },
+}
+```
+
+Additive, so the twelve existing channels keep their exact types and **the 28 files that read them are
+untouched** — the same shape as `fault` and `captureId`. `collectByType` already computes every terminus
+and writes it to `sweepLog`, a debug channel nothing reads, so this moves a fact rather than measuring a
+new one. Then `verify.ts` stops being archaeology: `sweepCompleteness` reads `observed` when present and
+falls back to today's inference when it is not.
+
+**Then the capture gaps, highest value first.** `docs/screenreader-coverage.md` holds the full list with
+the guidepup command for each; these are the ones worth putting in this bump:
+
+1. **Status messages / live regions.** 4.1.3 is *only* about announcements with no focus change, and we
+   catch them solely as a side effect of form submit — so a filter result or "3 items added to basket" is
+   untested. The machinery is in `activateAndCaptureDelta`; it needs non-form triggers. **We already claim
+   this criterion**, which is what makes it first.
+2. **Dialogs and modals** — focus on open, focus RETURN on close, whether Escape works.
+3. **Arrow-key widgets** — 2.1.1's rule currently ABSTAINS (`SHARES_ONE_TAB_STOP`) because Tab alone
+   cannot tell *reachable by arrows* from *unreachable*. Its own comment names driving the arrows as what
+   would settle it.
+
+**Done when:** `npm run evidence:check` reports CHANGED (if it reports SAME the bump was not needed and
+the design is wrong), `--pipeline=verify --only=` on one subtype passes before the corpus is paid for, and
+`check-signals` reads `0 blind, 0 contaminated` afterwards.
+
+**And if `ROTATIONS` is ever going to be enlarged, this is the only moment it is cheap** — 237 cases and
+474 captures, which is not worth its own recapture for the two `state_unchanged` vetoes in §2.
+
+---
+
+## B3 — Publish, which is a decision and not a task
+
+**Status: waiting on a person.** `not-working.md` §8 records the dry run: three attempts, two real
+workflow defects found and fixed, and all five locks exercised on the third. What remains is not
+mechanical — `.changeset/config.json` says `access: "restricted"` and PLAN.md B5 (the name) is unsettled,
+and ADR 0006's licence split is gated on the same decision and is effectively irreversible.
+
+**Before a real publish, run the full gate on the lab** — `npm run lab:job -- -e job=release-gate`. The
+workflow can only prove 4 of its 12 stages; the human typing `publish-for-real` is asserting the other
+eight passed somewhere a corpus and a venv exist.
+
+---
+
 ## Not on this list, and why
 
-- **Promoting the scorer** and **publishing** are decisions, not tasks. `not-working.md` §1 and §8 carry
-  the state and what each would take.
+- **Promoting the scorer** is a decision, not a task; `not-working.md` §1 carries the state. Publishing is
+  B3 above, because it now has a done-condition and a prerequisite that were only established by running it.
 - **Consumer telemetry** is decided against, in `SECURITY.md`.
+- **Enlarging `ROTATIONS` on its own.** 237 cases and 474 captures to close two free vetoes on heads with
+  143 positives each is poor value. It is named inside B2 because a bundle is the only context where it
+  is cheap, and it is not an item of its own.
+- **Anything for the three focus heads' free vetoes.** They are 24 of the 53 and every one is on a
+  `decidedBy: "rules"` subtype, so none can reach a report. The v17 training report shows those heads at
+  recall 0.000 — the model cannot see `focusOrder` at all, which is correct under the layer split. Work
+  there buys nothing a user would notice.
