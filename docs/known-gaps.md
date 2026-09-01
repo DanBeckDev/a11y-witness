@@ -267,6 +267,47 @@ back on the first clean run.
 
 # Phase C — corpus: authored against a settled capture path
 
+## 21. `4.1.3` has NO real-page grounding, and closing it is a CONSENT decision rather than a code one
+
+**Not a defect. Measured, understood, and deliberately open** — recorded here rather than left on a
+to-do list, because the thing standing in the way is a decision about other people's websites, not work.
+
+`build-realism` reports `4.1.3: 0 of 37` — every real page masked for that head, the only one with no
+real-page evidence at all. Two probe-gated criteria are in the same position and 1.4.2 is a third:
+
+```
+1.4.2, 3.3.1, 4.1.3   assessed on the corpus, 0 of 77 real captures carry the evidence
+```
+
+**Why it is masked is correct.** Those heads read `formChanges` / `postSubmitFields`, and `probeForms` is
+OFF for every real-page capture: submitting a form on a site we do not own is not a review — the same line
+`SECURITY.md` draws and the CLI follows. Unmasked, 41 pages would train 3.3.1 as clean and 39 would train
+4.1.3 as clean from evidence that was structurally absent, which is a label asserting something the
+capture cannot show.
+
+**Why the obvious fix is also wrong**, and this is the part worth not re-deriving. 4.1.3 gained a SECOND
+channel on 2026-09-01: `routeChange.announced`, from `probeNavigation`, which real captures DO run. So the
+map looks like it names one of two channels. But `probeNavigation` follows the FIRST link, and
+`capture-real-pages` states what that is — *"on essentially every real page the first link IS the skip
+link"*. A skip link is not a status-message trigger, so "pressed, and nothing was announced" is CORRECT
+behaviour there. Labelling it 4.1.3 would teach the head that silence after any link is a failure, on 37
+pages at once, all agreeing and all wrong. The refutation is recorded in `build-realism-tier.mjs` beside
+the map, where somebody proposing the change will be standing.
+
+**What would actually close it, and the cost.** A real page whose activated link is known to be a FILTER
+rather than a skip link — a fact about the page, so it belongs in `real-page-corpus.mjs` beside
+`claimExcludes`, plus the ability to tell `probeNavigation` WHICH link to press.
+
+That second half is why this is not queued as ordinary work. Today the tool presses the first link and
+calls it ordinary browsing; pressing a link WE choose on a stranger's site is a different promise, and it
+is the same argument `probeForms` already lost. It is not obviously wrong — following a named in-page
+filter is still browsing — but it widens what this tool does to sites nobody asked, and that belongs to
+whoever owns `SECURITY.md`, not to whoever is closing a coverage number.
+
+**What would tell you it is fixed:** `build-realism` reports `4.1.3: N of 37` with N > 0, and
+`rules:real-pages` shows no new findings on the 86 conformant pages.
+
+
 ## 7. `2.4.4`'s rule has never fired on a real page — DONE, and the gap was the COUNT
 
 **This entry was wrong in both halves, and an audit rather than an argument is what showed it.** It said
