@@ -38,14 +38,14 @@ def load():
 def _fixture():
     """Three records, one evidence unit each. Column 1 is the free veto.
 
-    col 0 varies across positives  -> informative, must survive
-    col 1 is 0 on both positives and 1 on the negative -> a free veto, must be masked
-    col 2 is constant across everything -> also uninformative for this head
+    col 0 varies across positives      -> informative, must survive
+    col 1 is 0 on both positives, 1 on the negative -> THE FREE VETO, must be masked
+    col 2 is 1.0 on every positive     -> the subtype's DEFINING EVIDENCE, must survive
     """
     features = torch.tensor([
-        [1.0, 0.0, 5.0],   # record 0, positive
-        [0.0, 0.0, 5.0],   # record 1, positive
-        [1.0, 1.0, 5.0],   # record 2, negative
+        [1.0, 0.0, 1.0],   # record 0, positive
+        [0.0, 0.0, 1.0],   # record 1, positive
+        [1.0, 1.0, 0.0],   # record 2, negative
     ])
     offsets = [0, 1, 2, 3]
     labels = torch.tensor([1, 1, 0])
@@ -58,7 +58,12 @@ def test_a_column_constant_across_positives_is_uninformative():
     mask = trainer.uninformative_columns(features, offsets, labels, [0, 1, 2])
     assert not bool(mask[0]), "column 0 varies across the positives and must be kept"
     assert bool(mask[1]), "column 1 is 0 on every positive and 1 on the negative — the free veto"
-    assert bool(mask[2]), "column 2 is constant everywhere and can only suppress"
+    # THE REGRESSION THIS FILE EXISTS TO PREVENT. The first version masked any column CONSTANT across
+    # the positives, which includes one constant at 1.0 — a subtype's defining evidence. Held-out
+    # acceptance caught it at once: 2.4.4 lost 20 findings, 1.3.1 lost 16, 2.4.6 gained 10 false
+    # positives. Gradient is proportional to the input, so only a ZERO column is fitted by negatives
+    # alone; a ones column is fitted by both and is what separates them.
+    assert not bool(mask[2]), "column 2 is 1.0 on every positive — that is the evidence, not a veto"
 
 
 def test_the_veto_column_ends_with_a_weight_of_exactly_zero():
@@ -69,7 +74,7 @@ def test_the_veto_column_ends_with_a_weight_of_exactly_zero():
     features, offsets, labels = _fixture()
     weight, _bias = trainer.train_head(features, offsets, labels, [0, 1, 2], epochs=40)
     assert weight[0, 1].item() == 0.0, "the free-veto column must carry exactly zero, not merely a small number"
-    assert weight[0, 2].item() == 0.0, "and so must a column constant everywhere"
+    assert weight[0, 2].item() != 0.0, "the defining-evidence column must still be learned"
     assert weight[0, 0].item() != 0.0, "the informative column must still be learned"
 
 
