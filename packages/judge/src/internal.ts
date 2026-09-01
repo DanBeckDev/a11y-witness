@@ -12,6 +12,6 @@
  */
 export { hasEvidenceFor, evidenceFor, findingsFromScores, scoreCapture } from "./local-judge.js";
 export { applyGate, ABSENCE_CRITERIA } from "./verify-gate.js";
-export { CRITERION_COVERAGE, channelsPresent, criteriaAssessableFrom } from "./criterion-coverage.js";
+export { CRITERION_COVERAGE, CHANNEL_LOCATION, channelsPresent, criteriaAssessableFrom } from "./criterion-coverage.js";
 export type { CriterionCoverage, EvidenceSource, EvidenceChannel, ChannelBearingCapture, BlockedCriterion }
   from "./criterion-coverage.js";

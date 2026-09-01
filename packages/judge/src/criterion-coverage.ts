@@ -88,8 +88,36 @@ export type EvidenceChannel =
   | "transcript"
   /** Quick-nav sweeps, in `structure`. */
   | "headings" | "landmarks" | "formFields" | "graphics" | "links" | "lists" | "tableCells"
+  /**
+   * The iframe sweep, capture-protocol 11. A frame with no accessible name announces as a bare
+   * `"frame, ..."` where a named one is `"Booking options, frame, ..."` — a failure `announcement.ts` has
+   * been able to parse since it was written, on evidence nothing could produce until there was a sweep.
+   */
+  | "frames"
   /** Interaction probes, in `interaction`. */
   | "controls" | "stateChanges" | "formChanges" | "postSubmitFields" | "focusOrder"
+  /**
+   * The form re-read after a submit, as accessible NAMES rather than field values.
+   *
+   * FOUND UNCLASSIFIED 2026-09-01 by the corpus test below, which is the whole reason it exists — this one
+   * was nobody's new addition. It has been on captures since `postSubmitNames` was introduced, is compared
+   * by `evidence:check`, is named in capture-core's protocol note as something criteria read, and the
+   * coverage layer had never heard of it.
+   *
+   * Classified by LOCATION only. Whether 3.3.1 should require it as well as `postSubmitFields` is a real
+   * question about what evidence that criterion needs, and answering it silently inside a classification
+   * fix is how a criterion comes to be BLOCKED on every capture ever taken.
+   */
+  | "postSubmitNames"
+  /**
+   * Escape pressed inside a dialog, capture-protocol 11: focus before, what was announced, focus after.
+   *
+   * Declared here so `channelsPresent` can SEE it, and deliberately not added to 2.1.2's required
+   * `channels`. The trap rule reads it only to SILENCE itself, so its absence blocks nothing — a capture
+   * without it is still assessable for 2.1.2, just less precisely. Requiring it would turn every
+   * pre-protocol-11 capture into `BLOCKED: 2.1.2`, which is the opposite of what it buys.
+   */
+  | "dialogEscape"
   /**
    * The DOM media census — `<audio>`/`<video>` with their `autoplay`, `muted` and `controls` attributes.
    *
@@ -331,7 +359,11 @@ export interface ChannelBearingCapture {
  * fails to compile until it is classified here. That is the difference between a rule a human must
  * remember and one the build enforces, which is this repo's first-choice remedy for a fact stated twice.
  */
-const CHANNEL_LOCATION: Record<EvidenceChannel, "structure" | "interaction" | "read-specially" | "unclaimed"> = {
+// EXPORTED so a corpus test can compare it against what captures actually carry. `tsc` makes this Record
+// exhaustive over the union, which catches a channel added to the UNION and not classified -- and is blind
+// in the direction that actually happens: a channel added to CAPTURES and mentioned in neither. Protocol 11
+// added two and the whole suite stayed green. `evidence-channels.corpus.test.ts` is what asks the corpus.
+export const CHANNEL_LOCATION: Record<EvidenceChannel, "structure" | "interaction" | "read-specially" | "unclaimed"> = {
   transcript: "read-specially",
   headings: "structure",
   landmarks: "structure",
@@ -346,6 +378,9 @@ const CHANNEL_LOCATION: Record<EvidenceChannel, "structure" | "interaction" | "r
   postSubmitFields: "interaction",
   focusOrder: "interaction",
   routeChange: "interaction",
+  dialogEscape: "interaction",
+  postSubmitNames: "interaction",
+  frames: "structure",
   // Read from somewhere other than `structure`/`interaction`: `media` sits at the top level, `title`
   // inside the `documentReady` diagnostic, `structureCensus` is a diagnostic's presence.
   media: "read-specially",
