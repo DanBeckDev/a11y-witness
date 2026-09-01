@@ -962,6 +962,27 @@ and instrumenting it rather than reverting it, is the only reason that evidence 
 and *"it fires and hears nothing"* are the two readings that separate a tool defect from a screen-reader
 behaviour, and without the mark they are the same silence.
 
+### All three of item 3's controls, tested — and what blocks each is different
+
+*"What It Cannot Hear"* item 3 names a live region updated by **a link, a `<select>` or a checkbox**. Each
+was tried:
+
+| control | result | what blocks it |
+|---|---|---|
+| **checkbox** | operable; region heard **2 of 6** | NVDA drops a polite region while it is speaking |
+| **`<select>`** | not operated | `SECURITY.md`: the jump-menu idiom sets `location.href` from an `onchange`, so changing a select can NAVIGATE |
+| **link** | not operated — `formChanges` empty on 6 of 6 | `SECURITY.md`: *"activating one navigates away"*; `probeNavigation` is separately opt-in for exactly that |
+
+**The link test is worth keeping because it measured the tool, not the screen reader.** The page's link
+called `preventDefault` and would have been safe, and the probe still declined it — correctly, because a
+probe cannot know that before pressing. Reading `0 of 6` as an NVDA behaviour would have been wrong, and
+`formChanges` being empty rather than silent is what says so.
+
+**So item 3 is delivered to the limit the safety policy permits, and the remainder is not a defect in this
+tool.** One control is operable and its evidence is bounded by NVDA; the other two are excluded by a
+deliberate decision that activating them can leave the page under measurement. Widening to either would be
+a `SECURITY.md` change argued on its own, never as a way to make a corpus case pass.
+
 ### What follows for the corpus — a conclusion now, not a guess
 
 `filter-status-silent-checkbox` and `validation-live-silent` stay withdrawn. **Not for want of a longer
