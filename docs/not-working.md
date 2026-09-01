@@ -1121,10 +1121,26 @@ positives; nothing about the corpus changed. Only their WEIGHTS crossed the −1
 That is the conclusion the counts supported all along, now with the feature identities to prove it: **a
 retrain moving weights on a 14-positive head**, not a regression anything in this session caused.
 
-**They are closable, and the remedy is ordinary ADR 0015 corpus work**: route-change pages carry no image
-and no plain-heading candidate, so give some of them one. Note why furniture has not already done it —
-`filler()` deliberately withholds images, because *"150 image cases and 141 label cases are defined by
-exactly what those channels contain"*. Protecting 1.1.1 from furniture is why 2.4.2 starves.
+**AND THIS IS THE SAME SITUATION §2 ALREADY PRICED FOR `2.4.1:skip-link-inert` — chance in the rotation
+deal, not a gap anyone left.** 2.4.2 has six multi-defect cases and they drew `silent-toggle-inert`,
+`generic-heading`, `vague-link`, `unnamed-graphic`, `position-only-table` and `bare-edit`. Neither
+`filename-alt` nor `generic-alt` is among them, so no positive of this subtype can carry
+`filename_graphic_present` or `generic_graphic_present`. §2 records the identical finding one subtype
+along, in the same words: *"none contains `vague-link`, so the substitution never fires. That is chance,
+not design."*
+
+Furniture cannot close it either, and the reason is worth keeping: `filler()` deliberately withholds
+images because *"150 image cases and 141 label cases are defined by exactly what those channels contain"*.
+**Protecting 1.1.1 from furniture is why 2.4.2 starves.**
+
+**So the recorded decision applies unchanged**: reaching it means enlarging `ROTATIONS` or adding
+multi-defect cases to this subtype, and that table prices itself — going from 5 entries to 11 changed
+**all 237 multi-defect cases and invalidated 474 captures**. *"Enlarging an option space necessarily
+re-rolls selections from it, and the only honest response is to treat it like a `CAPTURE_PROTOCOL_VERSION`
+bump: do it deliberately, bundled, and pay the recapture once."*
+
+This waits for that bundle, exactly as 2.4.1 does. It is the second instance of one shape, which is the
+argument for doing both in a single deliberate change rather than either alone.
 
 **The near-miss is still the useful half, and it got worse before it got better.**
 
