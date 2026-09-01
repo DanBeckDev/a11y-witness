@@ -876,6 +876,43 @@ describes.
 because a capture carrying them existed. The guard that discovers fields from disk rather than from anyone's
 memory is what turned a routine addition into finding this.
 
+## 17. MEASURED 2026-09-01 — the arrow-key gap is real, and building the PROBE first would be the wrong order
+
+*"What It Cannot Hear"* item 2 says arrow-key widgets *"already cost accuracy"* — 2.1.1 abstains via
+`SHARES_ONE_TAB_STOP` because a capture cannot tell *reachable by arrows* from *unreachable* — and
+prescribes routing in `moveToNextRadioButton` / `moveToNextComboBox`. The claim is TRUE and the prescribed
+first step is wrong, which one measurement settles:
+
+| | arrow-key widget occurrences |
+|---|---|
+| the synthetic corpus, **4,926** captures | **0** — not one radio button, tab, menu item, tree item, option or grid cell |
+| real pages, 26 captures | **13 radio buttons across 2 pages**, both W3C's own WAI tutorials |
+
+**`SHARES_ONE_TAB_STOP` has never fired on the corpus.** The abstention it names costs nothing there and
+everything on real sites — ADR 0019's thesis for the fifth time, and the sharpest instance yet, because
+this is not a thin feature but a *completely absent* one.
+
+**So the first step is a CORPUS CASE, not a probe.** A probe built now would produce evidence that nothing
+could validate: `check-signals` would have no positive to fire on, `rules:gate` no record to score, and the
+whole thing would ship exercised only by the real pages it was written from. That is *"a gate that does not
+exercise what ships is not a gate"*, arrived at from the other end — not a gate reading the wrong corpus,
+but a corpus with nothing in it to read.
+
+A radio-group case is cheap and rides any bundled recapture. The probe is worth building the moment there
+is something for it to be wrong about.
+
+**`combo box` is a different shape and needs saying separately:** 12 occurrences in the corpus against 9 on
+26 real pages. Thin rather than absent — which is what §2 already records about the six combo-box records
+behind 138 disclosure ones — so a combobox probe CAN be validated today, and a radio/tab/menu one cannot.
+
+**And the measurement was wrong twice before it was right**, which is the reason it is written down rather
+than asserted. The first version read `parseAnnouncement(...)?.role`; the role lives at `.objects[].role`,
+so it returned `undefined` for every announcement and reported `0` everywhere — including for `button`,
+which occurs 1,569 times. A zero from a reader that can return nothing else is not a measurement. It was
+caught by asking whether the instrument could find ANYTHING, which is the only question that separates the
+two. Same shape as the landmark-name defect this repo fixed three commits ago: *"a landmark's name is in
+`containers`, not `objects`"*.
+
 ## Closed since this list was written
 
 **`2.4.4` reading validated here and never-fired on the lab** — it was never a contradiction. The lab's
