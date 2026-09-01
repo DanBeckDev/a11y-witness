@@ -306,7 +306,42 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "3.2.2": { status: "reachable", needs: ["screen-reader"], channels: ["formChanges", "stateChanges"], note: "On Input. Same shape as 3.2.1, on change rather than focus." },
   "1.3.5": { status: "reachable", needs: ["dom"], channels: ["formFields"], note: "Identify Input Purpose is the `autocomplete` attribute against a fixed token list — deterministic, and squarely a rule. Needs the DOM, like 1.4.2." },
   "3.1.1": { status: "reachable", needs: ["dom"], channels: ["transcript"], note: "Language of Page: `<html lang>`. NVDA switching synthesiser language is an indirect and unreliable proxy; the attribute is the fact." },
-  "3.1.2": { status: "reachable", needs: ["dom"], channels: ["transcript"], note: "Language of Parts: `lang` on elements whose text differs from the page language." },
+  // 3.1.2 CLAIMED THE TRANSCRIPT AND THE TRANSCRIPT CANNOT CARRY IT — corrected 2026-09-01, measured.
+  //
+  // `/diagnostics` returns NVDA's config on the fleet: 396 characters, no sections, so every setting sits
+  // at its default and `documentFormatting.reportLanguage` carries no override. NVDA's default for Report
+  // Language is OFF, and what automatic language switching does instead is change the VOICE. A voice
+  // change emits no text, and this pipeline reads the speech stream rather than the synthesiser — so at
+  // defaults the speech channel is silent on this criterion in BOTH directions. It cannot see the pass and
+  // it cannot see the fail, which is the symmetry that makes it a non-claim rather than a miss.
+  //
+  // Turning Report Language on would put it in the transcript, and would make every capture describe a
+  // user who has changed a setting most users have not. CLAUDE.md's rule is the deciding one: *"record
+  // them; do not tune them -- NVDA's defaults are what a real user experiences."*
+  //
+  // WHAT REMAINS IS A DOM ROUTE, AND IT IS AXE'S. `lang` is an attribute; reading it needs no screen
+  // reader, exactly as 2.5.3's note says of Label in Name -- *"highly automatable and axe-core covers it
+  // well; worth deciding whether to duplicate or defer."* This project sits ALONGSIDE axe-core rather than
+  // instead of it, and a criterion where the screen-reader layer adds nothing is one to defer.
+  //
+  // `channels` is now absent rather than wrong. That is the whole correction: an aspirational channel that
+  // cannot carry the evidence is a claim, and this file's own header says `status` means "we have evidence
+  // and a decider", never "this answer is exact".
+  "3.1.2": {
+    // `out-of-scope` under this file's own definition, which the test states precisely: "out-of-scope
+    // criteria name NO channel, because none could carry them. Not 'unknown' -- genuinely none." At NVDA's
+    // defaults that is exactly the case, in both directions.
+    //
+    // `needs: ["dom"]` names what WOULD decide it, the same way 1.4.3 names `visual`. The difference is
+    // that this tool HAS a DOM census -- and declining to use it here is a scope decision rather than a
+    // capability one, which is why the note says so out loud.
+    status: "out-of-scope", needs: ["dom"],
+    note: "Language of Parts: `lang` on elements whose text differs from the page language. NOT reachable "
+      + "from the speech stream at NVDA's defaults -- automatic language switching changes the VOICE and "
+      + "emits no text, measured on the fleet (config 396 chars, no overrides). Reachable from the DOM, "
+      + "which needs no screen reader and is axe-core's territory; deferred there rather than duplicated. "
+      + "Report Language ON would put it in the transcript at the cost of describing a non-default user.",
+  },
   "2.5.3": { status: "reachable", needs: ["dom", "accessibility-tree"], channels: ["controls", "structureCensus"], note: "Label in Name — visible text must be contained in the accessible name. Highly automatable and axe-core covers it well; worth deciding whether to duplicate or defer." },
   "2.1.4": { status: "reachable", needs: ["dom"], channels: ["focusOrder", "transcript"], note: "Character Key Shortcuts: single-character key handlers with no way to disable or remap them." },
 
