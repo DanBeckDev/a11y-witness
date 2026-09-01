@@ -1017,6 +1017,63 @@ back what this section assumes, and whether NVDA with it ON actually speaks a la
 Both are one capture on a free fleet, and neither should be assumed — this section has already had to
 correct the claim it was built on once.
 
+## 20. ONE PAGE CAPTURES PATHOLOGICALLY, and `grants-audit` is what caught it — OPEN
+
+The protocol-13 corpus run captured **1,481 of 1,481 cases with 0 failures** and then STOPPED at
+`grants-audit`, which is the pipeline working: *"a label for a defect nothing captured teaches the head to
+predict it from something else."*
+
+**One record of 2,667.** `headings-none-refunds+also-filename-alt` is labelled with the `filename-alt`
+accompanying defect, which declares it grants `filename_graphic_present`, and its capture carries no
+graphic. 35 of the other 36 `filename-alt` records carry it.
+
+**The page is CORRECT and the capture is not**, which is the distinction `observed` exists to make:
+
+```
+structureCensus  graphic 1   names include "DSC_0421.jpg"     <- the tree sees it, by name
+domCensus        graphic 1                                     <- the DOM sees it
+graphics swept   []
+observed.graphics {asked: true, complete: false, stop: {prev: "silent", next: "silent"}}
+```
+
+Without `observed` this reads as *"the page has no image"* and sends you to fix the corpus. It says
+instead that the sweep asked, twice, and NVDA answered nothing.
+
+**Reproduced, and it is the whole capture rather than one channel.** Recaptured on a free fleet at the
+same commit and it came back identical:
+
+| | read-through | stop | links | graphics |
+|---|---|---|---|---|
+| `headings-none-refunds` | **22 s / 30 lines** | `repeatBottom` | 6/6 | 0/0 |
+| `…+also-filename-alt` | **330 s / 12 lines** | `maxSteps` | **0/6** | **0/1** |
+| `…+also-generic-alt-fake-heading` | 19 s / 21 lines | — | 0/0 | **1/1** |
+| `…+also-silent-toggle-inert` | 21 s / 25 lines | — | 6/6 | 0/0 |
+
+27 seconds per read step, against about one second on every sibling. Every sweep silent except `lists`,
+which completed normally — so it is not a dead speech channel.
+
+**Three hypotheses ruled out by measurement, so nobody re-runs them:**
+
+- **Not the pointer.** `pointerParked {x: 0, y: 0, attempts: 1}` — parked cleanly, first try, nowhere near
+  the image. The Ctrl-over-an-image magnifier that `pointer.mjs` exists for is not this.
+- **Not "an image on a heading-less page".** `+also-generic-alt-fake-heading` carries an image on the same
+  base page and captures in 19 s **with its graphic found**.
+- **Not a missing file.** Both images 404 — `/DSC_0421.jpg` and `/summary-panel.png` are equally absent
+  from the page server, and only one page is pathological.
+
+**What is left, and it is unverified:** the two differ in their ALT TEXT — `alt="DSC_0421.jpg"` against
+`alt="graphic"`. A filename alt is the one NVDA might spell character by character, and this pipeline has
+already seen NVDA spell a field name out (`"T, o, w, n"`). That would not obviously cost 27 s a step, so
+it is a lead rather than a diagnosis.
+
+**Why the record must not simply be dropped.** `MAX_SILENT_STEPS` cannot fire here: it needs NVDA to have
+been silent at STARTUP as well, and `speechChannel` heard the first line fine. So the read ground through
+its whole budget correctly, by a rule that is right in general. Whatever is wrong is upstream of that.
+
+**The chain is left STOPPED rather than forced green.** Making this pass means either fixing the capture or
+withdrawing a label, and both need the cause. `retrain` and `export-acceptance` completed; the train and
+the thirteen gates after it have not run.
+
 ## Closed since this list was written
 
 **`2.4.4` reading validated here and never-fired on the lab** — it was never a contradiction. The lab's
