@@ -96,7 +96,17 @@ def test_the_shared_decision_actually_combines_BOTH_halves():
 
     with_graphic = {"input": {"structure": {"graphics": ["graphic, a kiln"]}}}
     without = {"input": {"structure": {}}}
-    subtype = "1.1.1:missing-alt"
+    # `filename-alt`, NOT `missing-alt`, and the choice is load-bearing rather than arbitrary.
+    #
+    # This test proves `decide` consults BOTH halves, so it needs a subtype that actually HAS a
+    # precondition -- one without a precondition is applicable everywhere and the second assertion below
+    # can never fail, which would make this test pass while examining nothing.
+    #
+    # It named `missing-alt` until 2026-09-01, when that subtype's precondition was removed:
+    # `_has("graphics")` there required the very thing the defect makes invisible, because NVDA's sweep
+    # walks straight past an image with no accessible name. `filename-alt` is the right example precisely
+    # because its image IS announced -- the bad NAME is the defect, so a graphic is genuinely expected.
+    subtype = "1.1.1:filename-alt"
 
     assert applicability.decide(subtype, 0.9, 0.5, with_graphic) is True
     assert applicability.decide(subtype, 0.1, 0.5, with_graphic) is False, "the threshold half is missing"
