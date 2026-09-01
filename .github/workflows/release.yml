@@ -42,6 +42,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # REQUIRED BY PROVENANCE, and only by it. npm signs the attestation with a short-lived OIDC token
+      # from this job; without the claim it fails the publish rather than shipping unsigned. Scoped to
+      # exactly this and nothing else -- `contents` stays read, so the job still cannot push.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -152,11 +156,27 @@ jobs:
             exit 1
           fi
 
+      # NPM PROVENANCE, which ADR 0006 requires and nothing implemented.
+      #
+      # That ADR lists it as one of "two operational requirements that are easy to forget and expensive to
+      # retrofit", and gives the reason this project specifically cannot skip it: *"Provenance is worth more
+      # here than usual: the whole product claim is trustworthy evidence, and a supply-chain story that
+      # stops at 'trust us' undercuts it."* A tool that asks people to believe its findings about their
+      # site, shipping tarballs nobody can trace to this repo, is arguing against itself.
+      #
+      # `NPM_CONFIG_PROVENANCE` rather than a `--provenance` flag, because changesets runs `npm publish`
+      # itself across six interdependent packages and there is no argv to pass through. It needs
+      # `id-token: write` on the job, added above -- without it npm fails the publish rather than quietly
+      # omitting the attestation, which is the right way round.
+      #
+      # RETROFITTING IS THE EXPENSIVE PART, exactly as the ADR says: provenance attaches at publish time,
+      # so a version shipped without it can never gain it. The first publish is the only chance.
       - name: Publish
         if: inputs.dry-run == false && inputs.confirm == 'publish-for-real'
         run: npx changeset publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
 
       - name: Say plainly what happened
         run: |

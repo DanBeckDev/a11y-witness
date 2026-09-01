@@ -63,7 +63,21 @@ Public npmjs.com, scope `@a11y-witness`. Rejected alternatives:
 Two operational requirements that are easy to forget and expensive to retrofit:
 reserve the `@a11y-witness` scope **and** the unscoped `a11y-witness` name before
 M2 publishes anything, and enable npm **provenance** (`--provenance` from a trusted
-CI publish) so a consumer can verify a tarball came from this repo. Provenance is
+CI publish) so a consumer can verify a tarball came from this repo.
+
+> **STATUS 2026-09-01, checked rather than assumed.** Provenance is now enabled in
+> `release.yml` — `NPM_CONFIG_PROVENANCE` plus `id-token: write`, and by the env var
+> rather than a flag because changesets runs `npm publish` itself with no argv to
+> pass through. It was missing until it was looked for, which is what "easy to
+> forget" means in practice.
+>
+> The names are **still unreserved** and all three are available: `a11y-witness`,
+> `@a11y-witness/scorer` and `@a11y-witness/judge` all return 404 from the registry.
+> Every package already carries its own `LICENSE`, so the split below is implemented
+> rather than merely decided — verified across all six publishable packages.
+>
+> So what is left of this ADR is the reservation itself, which is an account action
+> on a name this document has already chosen. Provenance is
 worth more here than usual: the whole product claim is trustworthy evidence, and a
 supply-chain story that stops at "trust us" undercuts it.
 
