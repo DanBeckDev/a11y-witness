@@ -807,6 +807,44 @@ made the gate worse — the anchor is `Control+End`.
 already refuses to let truncation read as absence. That is unfinished: `collectByType` does not yet report
 the element it could not reach.
 
+### NVDA EATS THE FIRST ESCAPE, and `anchorToTop`'s Escape does not test what you think
+
+Three facts about Escape, each found by capturing and each having produced a wrong answer first. They
+matter to anything that asks whether a dialog can be left, which is WCAG 2.1.2's actual question.
+
+- **After a focus probe, NVDA consumes Escape and the page never sees it.**
+  `autoPassThroughOnFocusChange` switches focus mode on when focus lands on an editable, and Escape is
+  flagged `ignoreTreeInterceptorPassThrough` *precisely so it stays reachable there* — so it leaves focus
+  mode rather than reaching the application. `probeDialogEscape` presses **twice**: the first pays the
+  toll, the second asks the question. Measured on one page whose only variable was the handler.
+- **`anchorToTop`'s Escape is pressed in BROWSE MODE with focus on the body**, so a dialog that scopes its
+  handler to itself — which is every real dialog — never sees it. `rules.ts` carried a paragraph claiming
+  the opposite as a safety net (*"a ring that survives to be measured here has ALREADY outlived an
+  Escape"*), and that claim was doing no work: it let the 2.1.2 rule accuse a conformant modal that closes
+  on Escape and holds no operable control in its ring.
+- **A sweep is browse mode and never moves DOM focus.** So a probe placed after the sweep observes Escape
+  on the *document*, and a `focusin`-based focus guard never engages. The dialog probe rides with
+  `probeFocusOrder` for this reason and is gated on it — the observation is not about a dialog otherwise.
+
+**The general rule, and it is not about Escape.** A probe's precondition is established by *another probe*,
+so where it sits in the sequence is part of its correctness. `probeOrder` exists to make that visible;
+`observed.<channel>.why` now names *which* precondition was missing rather than reporting a bare `false`,
+because "nobody asked" and "asked without the probe that makes it meaningful" need opposite fixes.
+
+### `evidence:check` compared the interaction channels BY COUNT — fixed 2026-09-01
+
+`normalise` is `String(entry)`, which is `"[object Object]"` for every object, so mapping it over a list of
+objects made every entry identical. Exactly two compared fields hold objects — `interaction.formChanges`
+and `interaction.stateChanges` — and they carry the evidence for 3.3.1, 4.1.2 and 4.1.3.
+
+Measured on the real function: a `formChanges` entry whose `after` went from `"Error: name is required"` to
+`""` reported **SAME**, from the one gate that decides whether 2,122 cached captures may be kept.
+
+It is the same defect the object branch was written to fix, one shape along — that branch was added for
+`routeChange`, a bare object, and objects *inside* an array kept reading as a count. `gate:stability` had
+it too, on `stateChanges`, surviving the fix its own `formChanges` comment describes. **When you fix a
+shape, grep for the shape, not for the field.**
+
 ### Focus mode makes quick-nav keys TYPE THEMSELVES INTO THE PAGE
 
 The worst evidence defect this project has had, and it ran for 2,122 captures with every check green.

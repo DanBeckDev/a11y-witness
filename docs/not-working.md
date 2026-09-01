@@ -808,6 +808,64 @@ draft of the plan claimed. Splitting it into observed-columns leaves the focus p
 the new column too, so the veto simply moves — exactly as `landmark_present`'s moved onto
 `heading_present` at the next retrain. A free veto is closed by the CORPUS, and ADR 0015 says so.
 
+## 15. CLOSED 2026-09-01 — the capture can now ask whether a dialog can be LEFT, and the answer moved a rule
+
+Capture-protocol 11 bundles three additions: `structure.frames`, `interaction.dialogEscape` and
+`formChanges[].baselineWaitedMs`. Bundling is the point rather than an economy on it — each is individually
+too small to justify ~4.5 h of fleet time and this register says so about the frame sweep outright.
+
+**The dialog probe's first finding is against this project's own shipped rule.** `addKeyboardTrap` ended
+with a paragraph claiming a safety net it did not have: *"`anchorToTop` presses Escape before the walk, so
+a ring that survives to be measured here has ALREADY outlived an Escape."* That Escape is pressed in browse
+mode with focus on the body, and a real dialog scopes its handler to itself, so it never fires. The
+false-positive class the paragraph assumed away is real: **any modal that closes on Escape and holds no
+operable control in its ring.** The rule accused exactly such a page the moment one existed.
+
+An observed release now silences it, on both paths. **Absence is not a release** — a capture that never ran
+the probe cannot say, and reading that silence as conformance is the opposite error.
+
+**Proved not deaf, exactly rather than statistically.** Re-run over 2,150 focus captures with and without
+the observation, the guard silenced **exactly one**: the conformant page it was built for. Confirmed on the
+authoritative corpus — `rules:gate` PASS 14 of 14 over 2,502 records, `rules:real-pages` PASS 86 of 86.
+
+**Three captures, each correcting the one before, and none of it was reasoning.**
+
+| what the capture said | what was actually wrong |
+|---|---|
+| good and bad byte-identical, Escape recorded on the DOCUMENT | the probe sat after the sweep, and a sweep is browse mode — it never moves DOM focus, so the `focusin` guard never engaged |
+| the conformant ring walked the whole page, the failing one cycled 4 fields | a document-level Escape handler let `anchorToTop` release the trap, so the pair differed by RING SHAPE — the confound three withdrawn rules died of |
+| scoped handler, identical rings, still no reaction | **NVDA consumes the first Escape** to leave focus mode; the probe presses twice |
+
+`keyboard-trap-modal-escape` is the sibling of `keyboard-trap-modal-cycle`, which structurally cannot
+express this — it conforms via a Close BUTTON, correctly, so neither of its pages handles Escape at all.
+`MODAL_TRAP_TOTAL_FORM` was withdrawn 2026-08-28 with a note saying the page *"will be needed the moment a
+probe can ask whether Escape releases focus"*. This is that moment.
+
+**Still open, and honestly so:** the frame sweep has run and correctly found none, on pages that have none.
+That is not proof it works — it is the `canary that cannot express the fault` rule pointed at my own new
+channel. It needs a page with a named and an unnamed iframe before anything may rest on it.
+
+## 16. FOUND AND CLOSED 2026-09-01 — the gate that guards the cache was comparing by COUNT
+
+`evidence:check` decides whether a capture change is evidence-neutral, which is whether 2,122 cached
+captures may be kept. `normalise` is `String(entry)` — `"[object Object]"` for every object — so mapping it
+over a list of objects made every entry identical.
+
+**Measured on the real function: a `formChanges` entry whose `after` went from `"Error: name is required"`
+to `""` reported SAME.** Exactly two compared fields hold objects, `interaction.formChanges` and
+`interaction.stateChanges`, and they are the evidence for 3.3.1, 4.1.2 and 4.1.3 — including the head that
+gained 7.4 points of recall in v17 by reading `formChanges[].kind`.
+
+It is the same defect the object branch was written to fix, one shape along: that branch was added for
+`routeChange`, a bare object, and objects INSIDE an array went on reading as a count. Its own comment states
+the principle — *"comparing nothing while appearing to compare something is worse than the omission it
+fixes"*. `gate:stability` had it too, on `stateChanges`, surviving the fix its own `formChanges` comment
+describes.
+
+**Found because `evidence-fields.test.ts` fired on the new protocol-11 fields**, which it could only do
+because a capture carrying them existed. The guard that discovers fields from disk rather than from anyone's
+memory is what turned a routine addition into finding this.
+
 ## Closed since this list was written
 
 **`2.4.4` reading validated here and never-fired on the lab** — it was never a contradiction. The lab's
