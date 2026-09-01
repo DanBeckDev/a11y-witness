@@ -29,7 +29,10 @@ import { resolve } from "node:path";
 import type { CaptureStructure, CaptureInteraction } from "./index.js";
 
 /** The sweep names `capture-core` writes into `structure`, and the probes it writes into `interaction`. */
-const EMITTED_STRUCTURE = ["headings", "landmarks", "formFields", "links", "graphics", "lists", "tableCells"];
+// `frames` added with capture-protocol 11 — the iframe sweep. This list and the type must move
+// together, which is the whole point of the test below.
+const EMITTED_STRUCTURE = ["headings", "landmarks", "formFields", "links", "graphics", "lists",
+  "tableCells", "frames"];
 const EMITTED_INTERACTION = ["controls", "stateChanges", "formChanges", "postSubmitFields", "focusOrder"];
 
 test("CaptureStructure declares every sweep a capture emits", () => {
@@ -37,6 +40,7 @@ test("CaptureStructure declares every sweep a capture emits", () => {
   // IS the assertion — `tsc` is the check, and the runtime lines below only stop it being vacuous.
   const declared: Required<CaptureStructure> = {
     headings: [], landmarks: [], formFields: [], links: [], graphics: [], lists: [], tableCells: [],
+    frames: [],
   };
   assert.deepEqual(Object.keys(declared).sort(), [...EMITTED_STRUCTURE].sort(),
     "the published type and the emitted sweeps must be the same set");

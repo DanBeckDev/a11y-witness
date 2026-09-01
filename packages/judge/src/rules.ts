@@ -48,7 +48,7 @@ export interface RuleInput {
    * Derived so it cannot drift: the sibling declaration in `judge.ts` omitted `graphics` while a rule
    * read it, and object spread hid that at runtime for as long as it existed.
    */
-  structure?: Partial<Pick<CaptureStructure, "formFields" | "headings" | "links" | "graphics">>;
+  structure?: Partial<Pick<CaptureStructure, "formFields" | "headings" | "links" | "graphics" | "frames">>;
   interaction?: {
     controls?: string[];
     stateChanges?: { control: string; after: string }[];
@@ -405,6 +405,49 @@ function enterActivates(announcement: string | null | undefined): boolean {
   if (typeof announcement !== "string" || !announcement) return false;
   return parseAnnouncement(announcement, "sweep").objects
     .some((object) => ENTER_ACTIVATES.has(object.role));
+}
+
+/**
+ * 4.1.2 — a FRAME with no accessible name.
+ *
+ * The completion of the protocol-11 frame sweep, and without it that sweep produced evidence nothing
+ * decided on. `rules:gate` said so directly: *"4.1.2:unnamed-control is rule-decided on 236 record(s) and
+ * caught only 227"*, naming `iframe-unnamed.bad` and its variants — a case labelled for a rules-owned
+ * subtype whose rule could not see its defect.
+ *
+ * IT CANNOT REUSE `addUnnamedControls`, and the reason is structural rather than an oversight. NVDA
+ * announces a frame as CONTEXT, so `parseAnnouncement` puts it in `containers` while that function walks
+ * `objects`. Verified rather than assumed:
+ *
+ *     "Booking options, frame, ..."  ->  containers [{name: "Booking options", role: "frame"}]
+ *     "frame, ..."                   ->  containers [{name: "", role: "frame"}]
+ *
+ * This repo fixed the mirror of this three days ago — *"a landmark's name is in `containers`, not
+ * `objects` — §11 was my bug"* — and it is the same shape read from the other end.
+ *
+ * ASSERTED, not referred, because the evidence is unambiguous in a way a combo box's is not. A frame's
+ * name has no value to be confused with: NVDA either prefixes one or it does not, and there is no second
+ * reading of an empty one. That is why `addUnnamedControls` needs its `ambiguous` escape and this does
+ * not.
+ *
+ * WHY IT MATTERS TO A USER, which is the test for whether a rule earns its place: a frame is announced on
+ * entry and then not again. An unnamed one tells a screen-reader user only that they have entered
+ * something, with no way to know what is inside before committing to reading it.
+ */
+function addUnnamedFrames(frames: string[], add: AddFinding): void {
+  for (const entry of frames) {
+    // "sweep", the same channel the swept-control call uses -- the grammar is told its channel
+    // rather than inferring it, because name-first and role-first orders differ by channel and
+    // guessing was 884-vs-0 wrong across 300 captures.
+    const parsed = parseAnnouncement(entry, "sweep");
+    for (const container of parsed.containers) {
+      if (container.role !== "frame" || container.name.trim() !== "") continue;
+      add("4.1.2 Name, Role, Value",
+        "A frame is announced with no name, so a screen-reader user is told they have entered something "
+          + "and not what it contains",
+        `heard "${entry.slice(0, 80)}"`);
+    }
+  }
 }
 
 /** The expandable states a control announced, via the shared grammar rather than a fourth state vocabulary. */
@@ -1669,6 +1712,11 @@ export function ruleFindings(input: RuleInput): Finding[] {
     ...(assertableSweep(input, "formControl", "presence") ? (input.structure?.formFields ?? []) : []),
     ...(input.interaction?.controls ?? []),
   ], "sweep", add);
+  // Frames go to their own rule, because a frame's name is a CONTAINER prefix and `addUnnamedControls`
+  // walks objects. Not gated on `assertableSweep`: a phantom frame is not a shape this sweep produces --
+  // the guard above exists for a truncated FORM-CONTROL sweep manufacturing an unnamed control out of a
+  // capture defect, and an empty `frames` array simply yields no findings.
+  addUnnamedFrames(input.structure?.frames ?? [], add);
 
   // 2.4.4 and 1.3.1 — both about what a screen reader user CANNOT do: tell two links apart, or skim.
   // Neither is reported by axe, which is the point of having them here.
