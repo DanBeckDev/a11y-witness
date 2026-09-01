@@ -115,3 +115,37 @@ def test_the_refusal_is_about_the_DIRECTORY_not_the_filename():
     # into an output directory, which is what the lab pulls into.
     with pytest.raises(SystemExit):
         evaluator.refuse_to_stamp_source_tree(Path("packages/scorer/models/anything-at-all.json"))
+
+
+def test_a_named_failure_carries_its_SCORE_and_the_cut_it_missed():
+    """A name is where the next investigation stops, and the difference is one float.
+
+    `metrics` already learned that a count is where an investigation stops rather than starts, and began
+    naming the records. Measured 2026-09-01, one layer further out: a candidate that closed every free
+    veto failed acceptance on exactly one case, and the report could not say whether it scored 0.90
+    against a 0.9153 cut — threshold variance, ship it — or 0.30, which would mean the head had genuinely
+    lost the finding. Those need opposite responses. Answering it meant reverting the change and reading
+    the training report, which is the expensive direction.
+
+    The scores are derived in the SAME loop from the same mask as the names, never as a second list: two
+    structures naming one set of records is this repo's most-recorded defect, and the truncation would
+    have had to be applied identically to both.
+    """
+    import numpy as np
+
+    scores = np.array([0.10, 0.95, 0.80])
+    labels = np.array([True, False, True])
+    result = evaluator.metrics(scores, labels, 0.90, ["missed-low.bad", "alarmed.good", "missed-high.bad"])
+
+    assert result["falseNegativeCases"] == ["missed-high.bad", "missed-low.bad"]
+    assert result["falseNegativeScores"] == {"missed-high.bad": 0.8, "missed-low.bad": 0.1}, (
+        "each named miss must carry the score it achieved, or 'just under the cut' and 'nowhere near' "
+        "stay indistinguishable")
+    assert result["falsePositiveScores"] == {"alarmed.good": 0.95}
+    assert result["threshold"] == 0.9, (
+        "and the cut those scores are measured against — without it the numbers are unanchored")
+
+    # The names and the scores must describe the SAME records. Derived together, so this can only fail if
+    # somebody splits them back into two computations.
+    assert set(result["falseNegativeCases"]) == set(result["falseNegativeScores"]), \
+        "the two views of one failure set must not be able to disagree"
