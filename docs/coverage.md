@@ -10,11 +10,11 @@ the WCAG list and what actually ships — so this page cannot drift from the cod
 |---|---|---|
 | **assessed** | 7 | a finding can be produced today |
 | **partial** | 7 | assessed, but a named failure mode of it is not covered |
-| **reachable** | 8 | not built, and the evidence to build it exists or could be captured |
-| **out of scope** | 33 | not answerable by this tool at all |
+| **reachable** | 7 | not built, and the evidence to build it exists or could be captured |
+| **out of scope** | 34 | not answerable by this tool at all |
 
 **14 of 55 produce findings.** That is not a small number
-for screen-reader evidence, and it is not a substitute for a rule scanner: the 33
+for screen-reader evidence, and it is not a substitute for a rule scanner: the 34
 out-of-scope criteria are mostly **visual**, which is exactly what axe-core is good at. Run both.
 
 ## Two things to read this table with
@@ -65,7 +65,6 @@ The evidence exists, or could be captured with a probe. Nothing here is a resear
 | 2.1.4 | Character Key Shortcuts | A | dom |
 | 2.5.3 | Label in Name | A | dom + accessibility-tree |
 | 3.1.1 | Language of Page | A | dom |
-| 3.1.2 | Language of Parts | AA | dom |
 | 3.2.1 | On Focus | A | screen-reader |
 | 3.2.2 | On Input | A | screen-reader |
 | 3.3.3 | Error Suggestion | AA | screen-reader |
@@ -105,6 +104,7 @@ competing with it.
 | 2.5.4 | Motion Actuation | A | dom |
 | 2.5.7 | Dragging Movements | AA | dom |
 | 2.5.8 | Target Size (Minimum) | AA | visual |
+| 3.1.2 | Language of Parts | AA | dom |
 | 3.2.3 | Consistent Navigation | AA | multi-page |
 | 3.2.4 | Consistent Identification | AA | multi-page |
 | 3.2.6 | Consistent Help | A | multi-page |
