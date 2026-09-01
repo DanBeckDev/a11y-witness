@@ -30,6 +30,55 @@ activated unconditionally, because expanding something is side-effect-free.
 
 **If you enable `probeForms` against a page you do not own, you are operating someone else's application.**
 
+#### What else may be operated, and the line that decides it — 2026-09-01
+
+4.1.3 asks whether a status message is announced. Buttons were the only control that could fire one here,
+so a live region updated by a **checkbox** or a **radio button** was structurally unreachable: real
+filters, consent toggles and "show prices including VAT" controls are checkboxes far more often than they
+are buttons.
+
+**Checkboxes and radio buttons are now operated too, under `probeForms` and nothing else.** The line is
+not "how likely is this to be destructive" — that is a judgement about somebody else's code that we cannot
+make — it is **can activating this control navigate away or leave the page under measurement**:
+
+| | operated? | why |
+|---|---|---|
+| disclosure | yes, ungated | expanding is side-effect-free; this predates the rest and is the loosest rule here |
+| button | yes, if submit-like or task-named | activation is its whole purpose, so the NAME has to carry the consent |
+| **checkbox, radio button** | **yes, under `probeForms`** | toggling a form control is the archetypal act of using a page, and it cannot navigate |
+| `<select>` / combo box | **already was, and this does not widen it** | see below — it announces as *collapsed*, so the disclosure rule has always caught it |
+| link | no | activating one navigates away. `probeNavigation` is separately opt-in for exactly this |
+
+**A combo box has been operated all along, and writing this section is what found that.** The first draft
+of this table said selects were not activated, citing the jump-menu idiom. Running `probeKindFor` on a real
+announcement refuted it in one line: NVDA announces a `<select>` as `"Sort by, combo box, collapsed"`, and
+rule 1 matches `collapsed` — so it is activated **unconditionally, without even `probeForms`**, and has
+been since that rule was written.
+
+That is worth stating plainly rather than quietly correcting, because the exposure is real and predates
+this decision. It is also **smaller than it looks, for a reason that is checkable**: the disclosure probe
+presses **Enter**, and Enter does not change a `<select>`'s value — arrow keys do. The jump-menu idiom
+fires on `change`. So the navigation risk needs a value change that this tool never performs.
+
+This is the same fact `screenreader_features.py` already records from the evidence side — *"Enter is not a
+combo box's activation; the evidence is identical to a broken disclosure's, character for character apart
+from the role"* — which cost 3 false positives when it was left implicit, and 12 more when the state-change
+rule reproduced it. Here it is the third time, in the safety gate: **the control that is hardest to
+classify is the one three separate layers have now each had to learn about separately.**
+
+Two things bound this and both are load-bearing:
+
+- **It changes nothing on a stranger's site.** `probeForms` is off in the CLI, so this only widens what
+  happens where the operator has already said they own the page. A widening inside an existing consent is
+  a different decision from granting one.
+- **It is strictly more conservative than the disclosure rule already shipped.** Disclosures are activated
+  with no gate at all, on the reasoning that expanding is harmless — which is an assumption about author
+  behaviour, not a guarantee. Toggling a checkbox behind `probeForms` assumes less.
+
+We are not claiming a checkbox can never do something surprising; an `onchange` handler can do anything a
+disclosure's can. The claim is narrower and checkable: **it cannot navigate**, and navigation is what
+separates "we observed the page" from "we left it".
+
 ### The capture worker has no authentication, and binds all interfaces
 
 The Windows worker that runs NVDA serves plain HTTP on port 8765 with **no authentication of any kind** and
