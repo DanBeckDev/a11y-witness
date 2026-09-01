@@ -116,7 +116,8 @@
     "corpus:distribution": "node packages/lab/scripts/check-dataset-distribution.mjs",
     "scorer:explain-feature": ".venv/bin/python packages/scorer/python/explain_feature.py",
     "corpus:observation-ambiguity": "node packages/lab/scripts/audit-observation-ambiguity.mjs",
-    "gate:probe-order": "node packages/lab/scripts/gate-probe-order.mjs"
+    "gate:probe-order": "node packages/lab/scripts/gate-probe-order.mjs",
+    "lab:collect-promotion": "node packages/lab/scripts/collect-promotion.mjs"
   },
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",

@@ -2095,6 +2095,14 @@ deliberately does not commit, since promoting is a MAJOR release. `run-job.yml` 
 a dirty checkout — correctly, it cannot tell a stray artefact from work in progress — so the next job runs
 at the pre-promotion commit and the `gates` pipeline fails at stage 1 saying so.
 
+**`npm run lab:collect-promotion` does this whole dance, and exists because the paragraph below is a
+procedure a human has to remember.** It fetches all four promoted artefacts, reads the changeset's real
+name OFF THE LAB rather than guessing it, installs them, and runs `scorer:verify` and `release:provenance`
+on the result — the one check that can see weights and a changeset describing different models, which it
+found on 2026-09-01 (tree at 2,525 records, lab at 2,607). It does not commit, push or clear the lab;
+those are the deliberate steps and it prints the exact commands. Measured cost of not having it: three
+round trips on 2026-08-30 and four more on 2026-09-01, both times over the changeset's NAME.
+
 **KEEP THE NAME `promote:model` GAVE THE CHANGESET.** It names the file after the candidate it promoted
 (`promote-candidate-<hash>.md`), and the natural thing after `lab:fetch -e artifact=promoted-changeset` is
 to commit it under a name that means something to you. Do that and the LAB's copy stays untracked at a
@@ -2157,7 +2165,7 @@ Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth
 - **Every `.mjs` CLI here ignored an unrecognised flag**, because they all parse argv by looking for what
   they know — so a mistyped one ran the default and reported success. `refuseUnknownFlags`
   (`cli-flags.mjs`) refuses it, names the near miss, and prints what the command does take.
-  **ALL 51 are guarded as of 2026-08-30**, and `cli-flags.test.ts` DISCOVERS every argv-reading
+  **ALL 52 are guarded as of 2026-09-01**, and `cli-flags.test.ts` DISCOVERS every argv-reading
   module and requires each to be guarded or exempted with a reason. The exemption list is empty.
   > **The flag lists are READ out of each file, never derived, and every batch proved why.**
   > `stability-gate` builds flags from a variable and `repeat-capture` reads seven through an `arg(name)`
