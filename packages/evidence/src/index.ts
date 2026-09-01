@@ -45,6 +45,16 @@ export interface CaptureStructure {
   graphics?: string[];
   lists?: string[];
   tableCells?: string[];
+  /**
+   * The iframe sweep, capture-protocol 11 — optional for the same reason as the four above, and here the
+   * reason is live rather than historical: every capture taken before protocol 11 carries no `frames`,
+   * and absence means "this capture did not sweep for frames", never "the page has none".
+   *
+   * `@a11y-witness/evidence`'s `.` subpath IS the published wire description, so a consumer typing
+   * against it would otherwise conclude a capture cannot expose frames at all — which is what happened to
+   * links, graphics, lists and table cells until 2026-08-29.
+   */
+  frames?: string[];
 }
 
 /** Screen-reader-derived results of operating controls. Empty `after` strings
