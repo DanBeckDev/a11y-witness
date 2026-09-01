@@ -1061,6 +1061,52 @@ back what this section assumes, and whether NVDA with it ON actually speaks a la
 Both are one capture on a free fleet, and neither should be assumed — this section has already had to
 correct the claim it was built on once.
 
+## 20. CLOSED 2026-09-01 — the capture was transient; what was broken is that NOTHING REFUSED IT
+
+The pathological capture was never a page defect. A fresh `--no-cache` capture of the same page was clean
+in 22 s with `graphics 1/1` and `observed.graphics.complete: true`; the "reproduction" that sent three
+hypotheses down the wrong road was `capture-only` serving the CACHE, now fixed.
+
+**So the open question was never "why was that capture bad" — transient faults happen and
+`/health.vitals.recoveries` exists to count them. It was "why did the pipeline accept it".**
+
+`captureIsSelfConsistent` is the check that should have refused it, and it asks about HEADINGS only:
+*"the read-through announced a heading but the heading sweep found none"*. `headings-none-refunds` is a
+**no-headings case by construction**, so the check was vacuous on the one page where it was needed.
+
+What the capture actually held:
+
+```
+readThrough  330 s / 12 lines (maxSteps)     against ~20 s / 30 for the same base page
+links        swept 0, census 6               observed.complete false, stop {prev,next} silent
+graphics     swept 0, census 1               likewise — the tree even named it, "DSC_0421.jpg"
+```
+
+**The census cross-check already existed and nothing rejected on it.** `crossCheckStructure` has computed
+that comparison into a diagnostic every run — the same shape as the 604 unread `sweepLog` crashes, one
+check along.
+
+The rule now also refuses a sweep that went SILENT on a page the tree says is populated, and **all four
+conditions are required** because each rules out a legitimate shape:
+
+| | |
+|---|---|
+| census > 0 | the tree says it is there, so "the page has none" is excluded |
+| sweep found 0 | a total absence, not a shortfall |
+| `complete: false` | not the documented residual gap between quick-nav and the tree |
+| `stop` silent both ways | NVDA answered nothing, rather than "no next link" — its own terminus |
+
+That last pair is the whole discipline of `observed`: **`exhausted` is the screen reader's own answer and
+`silent` is an inference we refuse to trust.**
+
+**It does not reject evidence whose absence is the finding**, which is this project's oldest rule. An
+unnamed control, a missing alt, a page with no headings — in every one the CENSUS is 0 too, so the first
+condition excludes them. Verified rather than argued: run over **2,164 captures on disk it rejects 0**,
+and the pathological signature is pinned in `silent-sweep.test.ts` alongside each legitimate shape it must
+still accept. Mutation-checked.
+
+### The original entry
+
 ## 20. ONE PAGE CAPTURES PATHOLOGICALLY, and `grants-audit` is what caught it — OPEN
 
 The protocol-13 corpus run captured **1,481 of 1,481 cases with 0 failures** and then STOPPED at

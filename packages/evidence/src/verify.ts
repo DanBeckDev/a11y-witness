@@ -880,7 +880,54 @@ export function captureHasSubstance(capture: CapturedAnnouncements, title: strin
 export function captureIsSelfConsistent(capture: CapturedAnnouncements): boolean {
   const heardAHeading = capture.transcript.some((phrase) => /\bheading, level \d/i.test(phrase));
   const sweptAHeading = (capture.structure?.headings.length ?? 0) > 0;
-  return !heardAHeading || sweptAHeading;
+  return (!heardAHeading || sweptAHeading) && !sweepWentSilentOnAPopulatedPage(capture);
+}
+
+/**
+ * Did a sweep go SILENT on a page the accessibility tree says has that element?
+ *
+ * The heading check above is vacuous on a page with no headings, and that is exactly where it was needed.
+ * Measured 2026-09-01 on `headings-none-refunds+also-filename-alt`, which is a no-headings case:
+ *
+ *     readThrough  330 s / 12 lines (maxSteps)      -- against ~20 s / 30 for the same base page
+ *     links        swept 0, census 6                -- observed.complete false, stop {prev,next} silent
+ *     graphics     swept 0, census 1                -- likewise; the tree even names it, "DSC_0421.jpg"
+ *
+ * `heardAHeading` was false, so the capture passed, went into the corpus, and surfaced hours later as a
+ * `grants-audit` failure — a record labelled for a defect its capture did not carry. A fresh capture of
+ * the same page was clean in 22 s, so the page was never at fault.
+ *
+ * ALL FOUR CONDITIONS ARE REQUIRED, and each rules out a legitimate shape:
+ *
+ *   census > 0        the tree says the element is there, so "the page has none" is excluded
+ *   sweep found 0     not a shortfall, a total absence
+ *   complete false    the sweep did NOT run to exhaustion, so this is not the documented residual gap
+ *                     between quick-nav and the tree ("a question about this tool, not the page")
+ *   stop silent       NVDA answered nothing, rather than "no next link" — the announced terminus
+ *
+ * That last pair is the whole discipline of `observed`: `exhausted` is the screen reader's own answer and
+ * `silent` is an inference we refuse to trust. A sweep that ran out honestly is evidence; one that heard
+ * nothing while the tree names the element is a capture that could not ask.
+ *
+ * This does NOT reject evidence whose absence is the finding — the rule this file exists to protect. An
+ * unnamed control, a missing alt, a page with no headings: in every one of those the CENSUS is 0 too, so
+ * the first condition already excludes them.
+ */
+function sweepWentSilentOnAPopulatedPage(capture: CapturedAnnouncements): boolean {
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  const census = marks.find((m) => typeof m === "object" && m !== null
+    && (m as { event?: unknown }).event === "structureCensus") as
+    { distinct?: Record<string, number> } | undefined;
+  if (!census?.distinct) return false;
+  return Object.entries(SWEEP_OF).some(([type, field]) => {
+    if ((census.distinct?.[type] ?? 0) <= 0) return false;
+    const announced = (capture.structure as Record<string, string[]> | undefined)?.[field];
+    if (!Array.isArray(announced) || announced.length > 0) return false;
+    const seen = observationOf(capture, field) as
+      { complete?: boolean; stop?: { prev?: string; next?: string } } | undefined;
+    if (seen?.complete !== false) return false;
+    return seen.stop?.prev === "silent" && seen.stop?.next === "silent";
+  });
 }
 
 /**
