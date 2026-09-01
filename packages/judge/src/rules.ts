@@ -732,6 +732,32 @@ function tabRingCoverage(stops: string[], input: RuleInput):
   return null;
 }
 
+/**
+ * Did the capture OBSERVE Escape leaving the dialog? Absent evidence is not a release.
+ *
+ * Read from `interaction.dialogEscape`, which exists only when `probeDialog` and `probeFocus` both ran --
+ * Escape from the browse caret measures the document rather than any dialog, so the pair is required for
+ * the observation to be about a dialog at all.
+ *
+ * A release is EITHER an announcement or focus moving to a different control, and requiring both would
+ * make this deaf: NVDA re-announces the same control differently depending on how the caret reached it
+ * ("T, o, w, n" then "Town, edit, focused, blank" on one real capture), so a page could release focus and
+ * still look stationary by name. The asymmetry is deliberate and matches which error costs more -- this
+ * function SILENCES an accusation, so it should be generous about evidence of a way out. 2.1.2 is
+ * non-interference under WCAG 5.2.5: a wrong accusation says the whole page is unusable.
+ */
+function escapeReleasedFocus(input: RuleInput): boolean {
+  const observed = (input.interaction as { dialogEscape?: unknown } | undefined)?.dialogEscape;
+  if (!observed || typeof observed !== "object") return false;
+  const { announced, focusBefore, focusAfter } = observed as Record<string, unknown>;
+  if (String(announced ?? "").trim() !== "") return true;
+  const settle = (value: unknown) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const before = settle(focusBefore);
+  const after = settle(focusAfter);
+  if (before === "" || after === "") return false;
+  return after !== before && !after.startsWith(before);
+}
+
 function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
   const stops = input.interaction?.focusOrder;
   if (!stops || stops.length < 3) return; // absent means the probe did not run; too short proves nothing
@@ -753,7 +779,10 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
   // `ringOffersNoWayOut` is the discriminator that survived three withdrawn versions of this rule, each of
   // which fired on consent banners. Applying it to one of the two paths and not the other is this repo's
   // most expensive recurring shape — a remedy that reaches one caller.
-  if (trailingRepeats(stops) >= 2 && ringOffersNoWayOut(stops)) {
+  // The SAME guard on both paths. Applying a remedy to one of two callers is this file's own stated
+  // "most expensive recurring shape", and the paragraph three lines below says so about `ringOffersNoWayOut`
+  // for these exact two branches.
+  if (trailingRepeats(stops) >= 2 && ringOffersNoWayOut(stops) && !escapeReleasedFocus(input)) {
     add("2.1.2 No Keyboard Trap",
       "Tab stopped moving: focus repeated the same control and never reached the rest of the page, so a "
         + "keyboard user cannot get past it",
@@ -787,10 +816,22 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
   // button inside a genuinely trapped form. That is a miss, and the right one to accept: this criterion is
   // NON-INTERFERENCE under WCAG 5.2.5, so a wrong accusation says the whole page is unusable.
   //
-  // And it composes with a fact established the same day: `anchorToTop` presses Escape before the walk, so
-  // a ring that survives to be measured here has ALREADY outlived an Escape. A ring that offers no control
-  // and did not respond to Escape has no documented means out left to test.
-  if (reached < stops.length && ringOffersNoWayOut(stops)) {
+  // THAT LAST CLAIM WAS WRONG, AND MEASURING IT IS WHAT FOUND THE HOLE. This comment used to end:
+  // *"`anchorToTop` presses Escape before the walk, so a ring that survives to be measured here has
+  // ALREADY outlived an Escape."* It has not. `anchorToTop` presses Escape in BROWSE MODE with focus still
+  // on the document body, and a real dialog scopes its Escape handler to itself -- so the handler never
+  // fires and the ring is measured with the dialog fully intact.
+  //
+  // Measured 2026-09-01 on `keyboard-trap-modal-escape`, whose two pages differ in that one handler and
+  // nothing else: with a DOCUMENT-level handler `anchorToTop`'s Escape did release the trap; scoped to the
+  // dialog, it did not, and this rule then accused the conformant page. So the safety net the paragraph
+  // claimed was doing no work, and the false-positive class it was thought to cover is real -- any modal
+  // that closes on Escape and holds no operable control in its ring.
+  //
+  // `probeDialog` now asks the question directly, and an OBSERVED release silences this. Absence is not a
+  // release: a capture that never ran the probe cannot say, and reading that silence as conformance would
+  // be the opposite error to the one being fixed.
+  if (reached < stops.length && ringOffersNoWayOut(stops) && !escapeReleasedFocus(input)) {
     add("2.1.2 No Keyboard Trap",
       "Focus cycles among a few controls and never reaches the rest of the page, and none of them can be "
         + "activated to leave — so a keyboard user who enters that group cannot get out",
