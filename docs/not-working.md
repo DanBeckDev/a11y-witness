@@ -1074,6 +1074,51 @@ its whole budget correctly, by a rule that is right in general. Whatever is wron
 withdrawing a label, and both need the cause. `retrain` and `export-acceptance` completed; the train and
 the thirteen gates after it have not run.
 
+## 21. THE CHAIN NOW CLEARS SEVEN GATES AND STOPS AT `promote` — a veto regression I did not cause
+
+Four dispatches, each stopping later than the last, and every stop was a real defect. Recorded in order
+because the sequence is the useful part:
+
+| stage | what it caught |
+|---|---|
+| `grants-audit` | one record labelled for a defect its capture did not carry — and `capture-only` had no `--no-cache`, so it "reproduced" the bad capture twice from the cache |
+| `applicability-audit` | `1.1.1:missing-alt` required `_has("graphics")`, which its own defect makes invisible |
+| `acceptance` | my radio-group case invented the subtype `2.1.1:arrow-keys-inert`, unowned and therefore model-decided |
+| `promote` | **`2.4.2:route-title-stale`: 1 → 5 closable vetoes** |
+
+**`retrain`, `export-acceptance`, `grants-audit`, `applicability-audit`, `train`, `shortcuts` and
+`acceptance` all pass.** The model trains and the held-out set is clean.
+
+**The veto regression is not mine, and the numbers say so.** Against the tracked baseline:
+
+```
+baseline   2.4.2:route-title-stale   positives 14   closable 1   worst validation_error_missing (-2.79)
+now        2.4.2:route-title-stale   positives 14   closable 5   worst validation_error_missing (-2.72)
+```
+
+Positives unchanged, worst veto the same feature at the same weight, and nothing in this session touched
+2.4.2's cases. A free veto needs the feature to be `{0.0}` across the positives AND its weight to reach
+−1.0; the first did not change, so the second did. **That is a retrain moving weights on a 14-positive
+head**, which is the instability CLAUDE.md already documents for small heads — *"the threshold is set by
+the single worst negative, so one record reads as a model regression"*, one layer along.
+
+**The likely real fix is a CLASSIFICATION, and it is deliberately not made here.** `2.4.2` appears in
+neither unclosable category, while the three focus subtypes — `2.1.1`, `2.1.2`, `2.4.3` — all carry the
+identical form and state features under `perturbs-measurement`. 2.4.2's evidence is `routeChange`, produced
+by the one probe that *"ACTIVATES A LINK and can leave the page under measurement"*, so the same argument
+plausibly applies.
+
+Plausibly is not good enough. Deciding it means answering whether a 2.4.2 case *should* run `probeForms`,
+and this file's own rule is that **reclassifying is not fixing** — the weights are unchanged either way and
+every one of those negative weights still fires on a real page. It is a design decision on a 14-positive
+head, and making it at the end of a long session to turn a gate green is exactly how a work list becomes
+a place findings go to die.
+
+**`unclosable-vetoes` is now fetchable**, because it was not when it mattered: `promote` names only the
+worst veto per subtype and the transcript truncates the rest at *"... and 13 more"*. Reading the four
+features needed an ssh shell, which `lab-fetch.yml` exists to remove — the `grants-audit` lesson one report
+along.
+
 ## Closed since this list was written
 
 **`2.4.4` reading validated here and never-fired on the lab** — it was never a contradiction. The lab's
