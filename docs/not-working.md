@@ -989,9 +989,33 @@ rather than inside a probe. And guidepup 0.30+ has `getSetting('section.key')`, 
 on can be RECORDED per capture rather than assumed — which is what makes the difference between evidence
 and a guess about the guest's configuration.
 
-**This does not make item 7 easy.** It makes it a probe with a corpus case, like items 2 and 6, rather
-than an impossibility. The measurement that would settle it is whether NVDA+F reports a language at all in
-this pipeline — and that is one capture.
+**MEASURED ON THE FLEET, and it sharpens the item rather than closing it.** `/diagnostics` returns NVDA's
+config: **396 characters, no sections at all**, so every setting is at NVDA's default and `reportLanguage`
+carries no override. That is the fact; the citation that follows it is NVDA's documented default for
+Report Language, which is **off**.
+
+So the shape of item 7 is now precise, and it is not the shape the entry describes:
+
+| | |
+|---|---|
+| **at NVDA's defaults** | automatic language switching changes the VOICE and emits no text. A voice change is exactly what this pipeline cannot capture — it reads the speech stream, not the synthesiser |
+| **with Report Language ON** | NVDA speaks the language, and it lands in the transcript like anything else |
+
+**So item 7 is not blocked on a missing command. It is blocked on a PROJECT RULE**, and that is a much more
+useful thing to know: *"record them; do not tune them — NVDA's defaults are what a real user experiences,
+so configuring away from them makes the evidence less representative."*
+
+That rule is right and this is the case that tests its edge. Turning Report Language on would make 3.1.2
+observable and would make every capture describe a user who has changed a setting most users have not. The
+honest options are to capture 3.1.2 under a declared non-default profile and say so in the evidence, or to
+accept that this criterion is out of reach at defaults and record it as such in `criterion-coverage.ts`.
+**That is a product decision, not an engineering one**, which is why it is written here rather than settled
+in a commit.
+
+**What is still worth measuring first:** whether `getSetting('documentFormatting.reportLanguage')` reads
+back what this section assumes, and whether NVDA with it ON actually speaks a language change in a capture.
+Both are one capture on a free fleet, and neither should be assumed — this section has already had to
+correct the claim it was built on once.
 
 ## Closed since this list was written
 
