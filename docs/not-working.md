@@ -1102,17 +1102,34 @@ Positives unchanged, worst veto the same feature at the same weight, and nothing
 head**, which is the instability CLAUDE.md already documents for small heads — *"the threshold is set by
 the single worst negative, so one record reads as a model regression"*, one layer along.
 
-**The likely real fix is a CLASSIFICATION, and it is deliberately not made here.** `2.4.2` appears in
-neither unclosable category, while the three focus subtypes — `2.1.1`, `2.1.2`, `2.4.3` — all carry the
-identical form and state features under `perturbs-measurement`. 2.4.2's evidence is `routeChange`, produced
-by the one probe that *"ACTIVATES A LINK and can leave the page under measurement"*, so the same argument
-plausibly applies.
+**I ALMOST CLASSIFIED THESE AS UNCLOSABLE, AND THE DATA SAYS THEY ARE NOT.** The argument was tidy:
+2.4.2 sits in neither unclosable category while the three focus subtypes carry the identical form and
+state features under `perturbs-measurement`, and 2.4.2's evidence comes from the one probe that
+*"ACTIVATES A LINK and can leave the page under measurement"*. `probeFormSubmit` records
+`navigatedOnSubmit` when the URL moves, so a form probe really can destroy a route-change measurement
+before `probeRouteChange` runs. It reads as decisive.
 
-Plausibly is not good enough. Deciding it means answering whether a 2.4.2 case *should* run `probeForms`,
-and this file's own rule is that **reclassifying is not fixing** — the weights are unchanged either way and
-every one of those negative weights still fires on a real page. It is a design decision on a 14-positive
-head, and making it at the end of a long session to turn a gate green is exactly how a work list becomes
-a place findings go to die.
+One count refutes it:
+
+```
+2.4.3:focus-order-scrambled   already classified perturbs-measurement   probeForms on 10 of 10 cases
+2.4.2:route-title-stale       the regression                            probeForms on  4 of 14 cases
+```
+
+**A subtype that runs the form probe on every case is classified unclosable**, so "the case cannot run
+`probeForms`" was never the criterion — the focus pages run it and have nothing to activate, which is what
+`formProbe: {activated: 0}` records. And 2.4.2 is the case where that differs: a route-change page can
+carry a control that is activated WITHOUT navigating — a disclosure, a non-submitting button — so the
+features can be made non-zero without touching the channel the subtype is measured on.
+
+**So the vetoes are closable, the gate is right, and the remedy is the corpus** exactly as ADR 0015 says.
+The work is bounded: give some of the 14 route-change pages an activatable, non-navigating control.
+
+Recorded rather than done, because it is a design change to a 14-positive head that needs its own capture
+and retrain to verify — and because the near-miss is the more useful half. Reclassifying would have turned
+the gate green, removed four items from a work list somebody CAN complete, and looked like progress.
+`corpus:unclosable-map` exists so that call is made from data; this is the first time it has caught me
+about to make it from a story.
 
 **`unclosable-vetoes` is now fetchable**, because it was not when it mattered: `promote` names only the
 worst veto per subtype and the transcript truncates the rest at *"... and 13 more"*. Reading the four
