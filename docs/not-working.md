@@ -932,6 +932,64 @@ caught by asking whether the instrument could find ANYTHING, which is the only q
 two. Same shape as the landmark-name defect this repo fixed three commits ago: *"a landmark's name is in
 `containers`, not `objects`"*.
 
+## 18. MEASURED IN FULL — every cell is a rate, and "politeness is irrelevant" was wrong
+
+Six repeats per condition, one page shape, `training:repeat`:
+
+| trigger | what NVDA says of its own | region | heard |
+|---|---|---|---|
+| **button**, synchronous update | nothing | `polite` | **6 of 6** |
+| **checkbox**, synchronous update | `"checked"` | `polite` | **2 of 6** |
+| **checkbox**, synchronous update | `"checked"` | `alert` / `assertive` | **5 of 6** |
+| **checkbox**, update deferred 400 ms | `"checked"` | `polite` | **0 of 6** |
+| **typing**, six characters | six echoes | `polite` | **0 of N** |
+
+**The behaviour, and every row is consistent with it.** When NVDA has nothing of its own to say the live
+region is the only thing in the queue and it is announced every time. When NVDA is already speaking, a
+POLITE region — which by definition waits for idle — is usually dropped, while an ASSERTIVE one interrupts
+and mostly survives. Deferring the update past the control's own announcement makes it worse, not better.
+
+**"POLITENESS IS IRRELEVANT" WAS WRONG, AND IT WAS WRONG FOR THE REASON THIS FILE KEEPS RECORDING.** That
+claim came from a diagnostic pair with ONE capture per variant, where both happened to announce. Measured
+properly the difference is 2 of 6 against 5 of 6. **One capture is not a measurement, and I made that
+mistake four times on this entry alone** — politeness, then the control, then the settle window, then
+politeness again from the other side.
+
+**It is not our timing, and proving that is what the instrumented failed remedy bought.**
+`waitPastControlState` fired on 6 of 6 deferred captures, waited a further five seconds each, and marked
+`SECOND-WAIT-AFTER-OWN-STATE caught=false` every time. Keeping a change that failed to move the number,
+and instrumenting it rather than reverting it, is the only reason that evidence exists: *"it never fires"*
+and *"it fires and hears nothing"* are the two readings that separate a tool defect from a screen-reader
+behaviour, and without the mark they are the same silence.
+
+### What follows for the corpus — a conclusion now, not a guess
+
+`filter-status-silent-checkbox` and `validation-live-silent` stay withdrawn. **Not for want of a longer
+wait, not because a live region cannot be heard, and not because the pages are wrong** — but because at
+2 of 6 (and even at 5 of 6) the evidence is inherently non-deterministic, and a case that appears
+intermittently teaches the model noise. `gate:stability` exists to refuse exactly that.
+
+**An `alert`-based variant is NOT the fix**, and the reason is worth stating so nobody tries it: it would
+lift the rate to 5 of 6 and still be flaky, and a result count is a `status`, not an `alert`. Choosing the
+role that captures better rather than the role the content warrants is fitting the page to the tool.
+
+### What follows for the PRODUCT, which is the more valuable half
+
+**A status message fired by a control that announces its own state reaches an NVDA user roughly one time in
+three.** No static analyser can see that: the markup is correct, the region is correct, `aria-live` is
+correct, and the message is genuinely there. It is precisely the class of failure ADR 0019 says the corpus
+cannot express and only a real screen reader can reach — found, in the end, by building two cases that
+ought to have worked.
+
+Two consequences: it bounds what 4.1.3 can claim and belongs in `docs/known-gaps.md`; and **using
+`aria-live="polite"` on a message triggered by a checkbox or radio is advice this project can now give with
+a number attached.**
+
+**What is NOT established.** The mechanism inside NVDA — six captures per condition shows a direction, not
+a queue policy. All of it is one page shape on one NVDA and one guidepup, both pinned in the cache key.
+
+### The earlier entries, kept because each reasoning was sound and each premise was not
+
 ## 18. CHARACTERISED 2026-09-01 — NVDA drops a live region when it is already speaking, and the more it has to say the more reliably
 
 Four measurements, and one explanation fits all of them:
