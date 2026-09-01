@@ -586,6 +586,75 @@ is the day this decision must be revisited, and that is the trigger to watch rat
 Recorded as a DECISION rather than left open, because "five heads detect nothing" reads as neglect and is
 not: it is the layer split working exactly as ADR 0021 designed it.
 
+## 15. REFUTED 2026-09-01 — masking free vetoes at train time IMPROVES the head and fails the gate
+
+Built, measured over three gated chains, and reverted. Recorded here in full because every number in it
+is one somebody proposing this again would otherwise have to buy back at ~6 minutes of lab time each.
+
+**The idea.** ADR 0015's free veto — a feature strictly `{0.0}` across a subtype's positives, which the
+head may weigh negatively at no cost to recall because no held-out split can punish it — has been a
+REPORT for months, and `scorer:shortcuts` can only ever recommend corpus work. Turn it into a training
+CONSTRAINT instead: zero those columns before fitting, so the shortcut cannot be taken.
+
+**Measured 2026-09-01 on the run that finished that morning: 9 closable vetoes across 5 subtypes, and 8
+of the 9 are a head penalising a feature that answers a DIFFERENT criterion's question** —
+`2.4.1:skip-link-inert` and `2.4.2:route-title-stale` both on `validation_error_missing` (3.3.1's);
+`3.3.2:unnamed-form-field` and `4.1.2:state-change-silent` both on `status_update_announced` (4.1.3's)
+and `validation_error_announced` (3.3.1's). The ninth is impossible by definition.
+
+**FIRST: the plan's own remedy was refuted before it was built.** `sparkling-strolling-treasure.md`
+Phase 1a proposed splitting each ambiguous feature into `asked AND x` / `asked AND not-x`, so "never
+asked" becomes both-columns-zero. Checked against these nine first: for a subtype whose positives never
+run `probeForms`, BOTH conjunction columns are constant zero across those positives. One free veto
+becomes two. That would have cost a schema bump, a re-export and a retrain to discover.
+
+**What the constraint actually did, over three chains:**
+
+| | vetoes | held-out acceptance |
+|---|---|---|
+| baseline | 9 closable / 39 total | passes |
+| mask any column CONSTANT across positives | **0 / 0** | 2.4.4 −20 findings, 1.3.1 −16, 1.1.1 −8, 3.3.1 −8 +4 FP, 4.1.3 −8, 2.4.6 −6 +10 FP |
+| mask only STRICTLY-ZERO columns | **0 / 0** | 3.3.1: 2 FN, one case |
+| ...and exempt `by-definition` complements | 0 closable | 3.3.1: 2 FN, the same case |
+
+The first version was simply wrong: a column constant at `1.0` is a subtype's DEFINING evidence, and
+gradient is proportional to the input, so only a ZERO column is fitted by negatives alone. ADR 0015 says
+"strictly {0.0}" and I generalised it to "constant" because it sounded equivalent. That is 58 findings.
+
+**Why the last row is not a regression, and is still a refusal.** On `3.3.1:validation-error-silent` the
+masked head is BETTER on every split that was measured:
+
+```
+                   baseline      masked
+threshold           0.4845       0.9153
+calibration recall  0.9587       1.0000
+calibration prec.   0.9748       0.9918
+train / validation / test        identical
+```
+
+It separates better, so the Neyman–Pearson cut rises, and one marginal acceptance case
+(`acceptance-b2-error-vessel/bad`) falls below the stricter threshold. That is exactly the mechanism
+§6 of CLAUDE.md records — *"the threshold is set by the single worst negative, so one record reads as a
+model regression"* — arriving from the recall side rather than the precision side.
+
+**It is still the right refusal.** At the shipped cut that page's 3.3.1 failure would be missed, and a
+missed finding is a user-visible loss whatever produced it. The gate was not lowered and nothing was
+promoted; `everything` stopped at `acceptance` all three times, which is the pipeline working.
+
+**What would settle it, and what would not.** NOT another retrain — the head is not the variable. The
+open question is that single record's SCORE: at 0.90 this is threshold variance and the constraint should
+ship; at 0.30 the head genuinely lost it and the constraint is wrong. `training:evaluate-acceptance`
+does not currently report per-record scores, so answering it means adding that, which is cheap and is the
+honest next step. Until then this stays reverted, because "better on four splits" does not license
+shipping a model that misses a finding the current one catches.
+
+Two things are worth keeping from the attempt even though the code is gone. The `by-definition` /
+`perturbs-measurement` split in `runs/unclosable-vetoes.json` is exactly the right seam and no consumer
+outside `audit-scorer-shortcuts.py` had ever used it — the two groups need OPPOSITE treatment, because
+one is a true implication and the other suppresses a finding a real page could carry. And `train` runs
+BEFORE `shortcuts` in the `everything` chain, so anything that teaches the trainer to read that map must
+chain `corpus:unclosable-map` itself or it reads a map left by a previous run.
+
 ## 14. DECIDED 2026-08-31 — the model is not given the observation metadata
 
 Protocol 10 made every capture record what it ASKED, per channel. The RULES read it (`oracleCounts` feeds
