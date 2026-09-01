@@ -1314,8 +1314,23 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
     }
   }
   if (toggled.size) return;
+  // THE ARROW EXEMPTION IS LIFTED WHEN THE ARROWS WERE ACTUALLY PRESSED — capture-protocol 13, and the
+  // paragraph above `SHARES_ONE_TAB_STOP` asked for exactly this: *"a capture cannot tell 'reachable by
+  // arrow keys' from 'unreachable', because the probe presses only Tab ... Driving the arrows is what
+  // would settle it."*
+  //
+  // `probeArrowNavigation` drives them. When it records that nothing moved -- no announcement AND focus
+  // unchanged -- a composite widget's members are not reachable by arrows either, and the exemption is
+  // protecting a page that has nothing left to reach them with. Without this the evidence exists and no
+  // rule reads it, which is what `rules:gate` caught: "2.1.1 is rule-decided on 15 record(s) and caught
+  // only 10", naming all five `radio-group-arrows-inert` variants.
+  //
+  // ABSENCE STILL EXEMPTS. A capture that never pressed an arrow cannot say the widget is unreachable, so
+  // `arrowsProvedInert` is false and the members stay untrackable exactly as before. That is the same
+  // asymmetry `escapeReleasedFocus` uses: the observation may only ever REMOVE a reason to abstain.
+  const arrowsProvedInert = arrowKeysDidNotMove(input);
   const untrackable = new Set(announced
-    .filter((c) => SHARES_ONE_TAB_STOP.has(c.role)
+    .filter((c) => (SHARES_ONE_TAB_STOP.has(c.role) && !arrowsProvedInert)
       || c.states.some((state) => NAME_CHANGES_WITH_STATE.has(state)))
     .map((c) => c.name));
   const missed = reading.filter((name) =>
@@ -1325,6 +1340,34 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
     "The page announces a control the keyboard cannot reach: Tab passed the point where it sits and never "
       + "landed on it, so a keyboard user can hear it and not operate it",
     `never focused: ${JSON.stringify(missed)} — while Tab completed a full cycle of the page`);
+}
+
+/**
+ * Were arrows pressed inside a composite widget, and did NOTHING move?
+ *
+ * The twin of `arrowKeysAreInert` in `case-matrix.mjs`, which cannot be imported here — it runs under
+ * plain `node` for the corpus generator, the same constraint `namesOf`/`comparableNames` has. Two copies,
+ * pinned by test rather than trusted.
+ *
+ * Both halves are required and neither alone is sound. Silence on its own is the ambiguity this repo has
+ * paid for repeatedly — a probe that gave up early and a widget that did not move are the same
+ * observation. Focus alone is not enough either: NVDA re-announces the same control differently depending
+ * on how the caret arrived ("T, o, w, n" then "Town, edit, focused, blank" on one real capture), so raw
+ * inequality reads as movement where nothing moved.
+ *
+ * `false` for an absent observation, which is what keeps this safe: it may only ever remove a reason to
+ * abstain, never create a finding on its own.
+ */
+function arrowKeysDidNotMove(input: RuleInput): boolean {
+  const observed = (input.interaction as { arrowNavigation?: unknown } | undefined)?.arrowNavigation;
+  if (!observed || typeof observed !== "object") return false;
+  const { announced, focusBefore, focusAfter } = observed as Record<string, unknown>;
+  if (String(announced ?? "").trim() !== "") return false;
+  const settle = (value: unknown) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const before = settle(focusBefore);
+  const after = settle(focusAfter);
+  if (before === "" || after === "") return false;
+  return after === before || after.startsWith(before);
 }
 
 /**
