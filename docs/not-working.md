@@ -1102,6 +1102,32 @@ Positives unchanged, worst veto the same feature at the same weight, and nothing
 head**, which is the instability CLAUDE.md already documents for small heads — *"the threshold is set by
 the single worst negative, so one record reads as a model regression"*, one layer along.
 
+**THE FIVE, READ AT LAST — and both of my earlier readings of them were wrong.** The audit wrote no
+report; making it write one (`runs/scorer-shortcuts.json`) is what finally showed them:
+
+```
+validation_error_missing          -2.72   the baseline's only veto — form-probe-gated
+filename_graphic_present          -2.59   NEW
+generic_graphic_present           -2.15   NEW
+unit_is_plain_heading_candidate   -1.92   NEW
+plain_heading_candidate_present   -1.78   NEW
+```
+
+**Four of the five are GRAPHIC and HEADING features, not form-probe features at all**, so the entire
+form-probe argument below was aimed at one veto out of five. `NAV_MARKUP` — the 2.4.2 page body — is a nav
+with two links and a view div: no image, no heading-like text. Those four were **always** `0` on all 14
+positives; nothing about the corpus changed. Only their WEIGHTS crossed the −1.0 threshold in this retrain.
+
+That is the conclusion the counts supported all along, now with the feature identities to prove it: **a
+retrain moving weights on a 14-positive head**, not a regression anything in this session caused.
+
+**They are closable, and the remedy is ordinary ADR 0015 corpus work**: route-change pages carry no image
+and no plain-heading candidate, so give some of them one. Note why furniture has not already done it —
+`filler()` deliberately withholds images, because *"150 image cases and 141 label cases are defined by
+exactly what those channels contain"*. Protecting 1.1.1 from furniture is why 2.4.2 starves.
+
+**The near-miss is still the useful half, and it got worse before it got better.**
+
 **I ALMOST CLASSIFIED THESE AS UNCLOSABLE, AND THE DATA SAYS THEY ARE NOT.** The argument was tidy:
 2.4.2 sits in neither unclosable category while the three focus subtypes carry the identical form and
 state features under `perturbs-measurement`, and 2.4.2's evidence comes from the one probe that
