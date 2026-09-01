@@ -798,10 +798,20 @@ panel opens under its own probes, which is D7 and not an ordering fault. Note wh
 the gate captures with `probeForms: false`, so it shows the ORDER is neutral, not that activation leaves
 the ring intact. That is what `--pipeline=verify --only=` on the seven cases answers.
 
-**And the job is unusable as a gate while that row stands.** `nls.uk` moving under its own probes makes
-the verdict permanently INCONCLUSIVE, so `gate-probe-order` always exits 2 and the job always reports
-failure. A gate that cannot pass is one people stop dispatching — this repo's own reason for not letting
-a refusal become routine. Either the page earns a documented exception or D7 closes; it is not fixed here.
+**CLOSED — the page earned the documented exception, which was one of the two options this paragraph
+offered.** It used to end *"it is not fixed here"*, and it is: `nls.uk` carries
+`movesUnderItsOwnProbes: "its search panel opens when a control is activated; focusOrder 10 -> 150"`, and
+`classifyMovers` splits the verdict three ways instead of one. The gate reads **PASS — all 4 of 4**.
+
+Three states rather than two, and that is the whole of it: `undeclared` is a page that moved and nobody
+said it would — a real finding about probe order; `expected` is a declared mover, excluded from coverage
+because a page that rewrites itself cannot answer a question about the ORDER probes ran in; `stale` is a
+declaration on a page that has stopped moving, which must be reported rather than quietly honoured, or the
+exception list becomes a place findings go to die.
+
+That last state is the one worth having. An exception nobody re-checks is indistinguishable from a bug
+somebody decided to live with, and this repo has the `MAX_TAB_STOPS` exclusion — *"the reason written down
+is stale; the exclusion may still be correct, but not for that reason"* — as the worked example.
 
 **Correction to §2 while here.** This is NOT the fix for `state_unchanged`'s free veto, which an earlier
 draft of the plan claimed. Splitting it into observed-columns leaves the focus positives reading `0` on
