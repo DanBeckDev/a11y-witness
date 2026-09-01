@@ -901,6 +901,25 @@ but a corpus with nothing in it to read.
 A radio-group case is cheap and rides any bundled recapture. The probe is worth building the moment there
 is something for it to be wrong about.
 
+**ITEM 6 (typing feedback) MEASURES THE SAME WAY, and the two should be planned together.** Handlers
+across all 3,948 generated pages:
+
+```
+onclick    1407 pages   707 cases        onkeydown    31 pages   31 cases   (Tab and Escape, not typing)
+onsubmit    346 pages   173 cases        onchange     14 pages    7 cases
+oninput       0 pages    0 cases   <-- live validation while typing does not exist in this corpus
+```
+
+So *"route in `press` into a focused edit, diff the log"* would build a probe with nothing to observe. The
+first step is a page that validates on `input`, exactly as item 2's first step is a page with a radio
+group. **Neither probe can be shipped without its case**, because a case whose signal cannot fire is
+reported BLIND and this project's own rule is to remove it rather than leave it — `keyboard-trap-modal-total`
+was withdrawn on precisely that ground.
+
+**The instrument was checked before the zero was believed**, which is now the third time in this section:
+a shell loop reported `onsubmit: 0` — a value I already knew to be 346 — because zsh mangled the quoting.
+A zero is only a measurement when the same instrument can produce a non-zero.
+
 **`combo box` is a different shape and needs saying separately:** 12 occurrences in the corpus against 9 on
 26 real pages. Thin rather than absent — which is what §2 already records about the six combo-box records
 behind 138 disclosure ones — so a combobox probe CAN be validated today, and a radio/tab/menu one cannot.
