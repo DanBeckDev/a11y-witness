@@ -123,11 +123,28 @@ SUBTYPE_REQUIRES: dict[str, Callable[[Record], bool]] = {
     # which is what the subtype is about. The missing heading ROLE is not required, so the absence case
     # this subtype exists to catch is untouched.
     "1.3.1:fake-heading": _reads_as_an_unmarked_heading,
-    # A claim about an IMAGE. All three are absence findings — a missing, generic or filename alt — so the
-    # precondition is that a graphic exists at all, never that its alternative is bad.
+    # A claim about an IMAGE, and the three do NOT share a precondition — which this comment used to say
+    # they did, and `applicability-audit` caught.
+    #
+    # `filename-alt` and `generic-alt` are announced: the image HAS an accessible name and the name is the
+    # defect, so it appears in `graphics` and requiring one is sound.
+    #
+    # `missing-alt` is not. An image with no accessible name is one NVDA'S SWEEP WALKS STRAIGHT PAST -- the
+    # reason the census-based 1.1.1 rule exists at all -- so `graphics` is empty BECAUSE the defect is
+    # present. `_has("graphics")` there is the precondition deleting its own subject.
+    #
+    # Measured 2026-09-01 on `keyboard-trap-modal-escape+also-fake-heading-unnamed-graphic/bad`: the sweep
+    # ran to exhaustion and found 0 graphics while the accessibility tree reported
+    # `graphic: 1, graphicUnnamed: 1`. One of 163 positives, silenced by its own defect.
+    #
+    # SO IT HAS NO PRECONDITION, and that is the honest answer rather than a weaker one. The rule is that a
+    # precondition may rule a subtype out only when the subject is KNOWN ABSENT, and from the model's
+    # evidence an unnamed image is indistinguishable from no image. The census could tell them apart and
+    # sits in `ruleEvidence`, a deliberate sibling the model never sees — so reaching for it here would
+    # cross a boundary drawn for a different reason, which is exactly the move that deleted
+    # `landmark_present` instead of fixing it.
     "1.1.1:filename-alt": _has("graphics"),
     "1.1.1:generic-alt": _has("graphics"),
-    "1.1.1:missing-alt": _has("graphics"),
     # A claim about a LINK.
     "2.4.4:regex": _has("links"),
     # A claim about a HEADING.
