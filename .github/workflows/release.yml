@@ -126,18 +126,45 @@ jobs:
         # so passing here while the consumer path is red would be the one lie this workflow must not tell.
         env:
           GH_TOKEN: ${{ github.token }}
+        #
+        # `smoke_status`, not `status`: prefixed because a bare `status` is READ-ONLY in zsh, and while
+        # this step runs under bash, the second reserved-name collision of the day is enough to stop
+        # relying on the shell being the one I expect. (`$pid` in the worker's PowerShell was the first,
+        # and that one would have thrown only when a dialog appeared.)
+        #
+        # THREE ANSWERS, NEVER TWO. `conclusion` is EMPTY while a run is in progress, so reading it alone
+        # cannot tell "never ran" from "running right now" -- and the first version told you to start a
+        # run in both cases. Measured 2026-09-01 on this workflow's own dry run: action-smoke was in
+        # flight, the guard reported `got: ` and advised `gh workflow run action-smoke.yml`, which would
+        # have queued a second Windows job to answer a question already being answered.
+        #
+        # That is this repo's most expensive recurring shape, in a publish guard: the same distinction
+        # `/capture/<id>` draws between 404 (never heard of it -- re-issue) and 202 (still running --
+        # wait), where "producing one where the other is true" is called out as the defect that costs
+        # days. Fails closed on all three, which is right; it just has to SAY which.
         run: |
           set -euo pipefail
           sha="${{ github.sha }}"
-          conclusion=$(gh run list --workflow=action-smoke.yml --commit="$sha" \
-            --json conclusion --jq 'first(.[] | .conclusion) // "none"')
-          echo "action-smoke for $sha: $conclusion"
-          if [ "$conclusion" != "success" ]; then
-            echo "REFUSING: the consumer path has not passed for this commit (got: $conclusion)."
+          # `status` and `conclusion` together. A completed run has both; an in-flight one has a status
+          # and an empty conclusion; no run at all yields neither.
+          read -r smoke_status smoke_conclusion <<< "$(gh run list --workflow=action-smoke.yml --commit="$sha" \
+            --json status,conclusion --jq 'first(.[] | "\(.status) \(.conclusion // "none")") // "none none"')"
+          echo "action-smoke for $sha: status=$smoke_status conclusion=$smoke_conclusion"
+          if [ "$smoke_conclusion" != "success" ]; then
+            echo "REFUSING: the consumer path has not passed for this commit."
             echo "action-smoke drives the published Action the way a user does, so it is the only check"
             echo "here that exercises these weights through the path a consumer takes."
-            echo "Run it against this commit, then dispatch this workflow again:"
-            echo "  gh workflow run action-smoke.yml --ref $sha"
+            if [ "$smoke_status" = "none" ]; then
+              echo "It has NEVER RUN for this commit. Start it, then dispatch this workflow again:"
+              echo "  gh workflow run action-smoke.yml --ref $sha"
+            elif [ "$smoke_conclusion" = "none" ]; then
+              echo "It is RUNNING NOW ($status). Do NOT start another — wait for it, then dispatch this"
+              echo "workflow again. A second run would answer a question already being answered."
+              echo "  gh run watch \$(gh run list --workflow=action-smoke.yml --commit=$sha --json databaseId --jq 'first(.[].databaseId)')"
+            else
+              echo "It FAILED for this commit ($smoke_conclusion). Fix the consumer path before publishing;"
+              echo "re-running it unchanged would only fail again."
+            fi
             exit 1
           fi
 
