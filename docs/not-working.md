@@ -586,7 +586,7 @@ is the day this decision must be revisited, and that is the trigger to watch rat
 Recorded as a DECISION rather than left open, because "five heads detect nothing" reads as neglect and is
 not: it is the layer split working exactly as ADR 0021 designed it.
 
-## 15. REFUTED 2026-09-01 — masking free vetoes at train time IMPROVES the head and fails the gate
+## 15. REFUTED 2026-09-01 — masking free vetoes closes every one and costs a real finding
 
 Built, measured over three gated chains, and reverted. Recorded here in full because every number in it
 is one somebody proposing this again would otherwise have to buy back at ~6 minutes of lab time each.
@@ -641,12 +641,25 @@ model regression"* — arriving from the recall side rather than the precision s
 missed finding is a user-visible loss whatever produced it. The gate was not lowered and nothing was
 promoted; `everything` stopped at `acceptance` all three times, which is the pipeline working.
 
-**What would settle it, and what would not.** NOT another retrain — the head is not the variable. The
-open question is that single record's SCORE: at 0.90 this is threshold variance and the constraint should
-ship; at 0.30 the head genuinely lost it and the constraint is wrong. `training:evaluate-acceptance`
-does not currently report per-record scores, so answering it means adding that, which is cheap and is the
-honest next step. Until then this stays reverted, because "better on four splits" does not license
-shipping a model that misses a finding the current one catches.
+**ANSWERED 2026-09-01, and the answer is neither hypothesis.** The open question was that record's
+SCORE: at 0.90 this is threshold variance and the constraint should ship; at 0.30 the head genuinely lost
+it. The evaluator could not say, so it was given the ability and the probe re-run on a branch:
+
+```
+3.3.1: 2 acceptance false negative(s):
+  acceptance-b2-error-vessel/bad [3.3.1:validation-error-silent 0.544 vs cut 0.915]
+```
+
+**0.544 against a 0.915 cut — a margin of 0.37.** That is not a record sitting on the threshold, so the
+threshold-variance reading is refuted: the masked head genuinely ranks this case low. **The constraint
+costs a real finding, and it stays reverted permanently rather than pending.**
+
+Note what the first attempt at answering this got wrong, because it is the same defect one level up. The
+score first reported was the CRITERION's, and a criterion is the OR of its heads' decisions — so its
+score is an indicator, and a false negative always reads `0.000` against a `0.5` cut. That looked like a
+total collapse and is merely "false negative" written in decimals. The number that means something is the
+HEAD's, against its own cut, and `subtype_scores` had held it all along three lines from where the report
+is assembled. Both fixes are on `main`; the probe branch is gone.
 
 Two things are worth keeping from the attempt even though the code is gone. The `by-definition` /
 `perturbs-measurement` split in `runs/unclosable-vetoes.json` is exactly the right seam and no consumer
