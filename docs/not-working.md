@@ -932,6 +932,67 @@ caught by asking whether the instrument could find ANYTHING, which is the only q
 two. Same shape as the landmark-name defect this repo fixed three commits ago: *"a landmark's name is in
 `containers`, not `objects`"*.
 
+## 18. A POLITE LIVE REGION DOES NOT ANNOUNCE WHILE NVDA IS SPEAKING — found by two cases that should have worked
+
+Measured 2026-09-01, twice, by two unrelated mechanisms:
+
+| case | what activated | live region | `announced` |
+|---|---|---|---|
+| `filter-status-silent-checkbox` | a checkbox toggle | `role=status aria-live=polite` | **empty on both variants** |
+| `validation-live-silent` | six typed characters | `role=status aria-live=polite` | **empty on both variants** |
+
+Both were withdrawn — the first BLIND, the second CONTAMINATED — and both probes are verified working: the
+toggle records `{kind: "toggle", after: "checked"}` and the typing records
+`{typed: true, echoed: "1 2 3 4 5 6"}`. The activation happens; the page's response is not heard.
+
+**Not a race.** The second waits through `waitForAnnouncement`, which waits for speech and then for it to
+settle. The common factor is that NVDA had something else to say at the moment the region updated — the
+control's own state in one case, the character echo in the other.
+
+**The hypothesis, recorded as a hypothesis.** `aria-live="polite"` means *speak when idle*, and neither
+moment is idle. Switching a case to `assertive` would make it pass and would be fitting the page to the
+tool, which is how a corpus stops describing the web.
+
+**What it costs: 4.1.3 entirely, and the live half of 3.3.1.** Both criteria depend on hearing a live
+region. Every existing 4.1.3 record uses a BUTTON, which announces nothing of its own — so the corpus has
+only ever exercised the one case where the region has silence to speak into.
+
+**The measurement that settles it, and nobody has taken it:** does a polite region EVER announce in a
+capture, and does an assertive one? One page, two variants, one capture run. Until then this is a
+capability gap of the same kind as the seven in *"What It Cannot Hear"* — found, as three of those were,
+by building something that ought to have worked.
+
+**And `reportDynamicContentChanges` is a candidate route.** NVDA has a command for exactly this and
+guidepup exposes it; nothing here has ever called it.
+
+## 19. ITEM 7's BLOCKER IS WRONG — guidepup does expose a route to 3.1.2
+
+*"What It Cannot Hear"* item 7 says language changes need *"synth-level observation, not a keystroke —
+there is no guidepup command for it"*, and rates it the hardest of the seven. The premise is false, and
+checking it took one command against `NVDAKeyCodeCommands`:
+
+```
+reportTextFormatting          NVDA+F — and NVDA's formatting report INCLUDES LANGUAGE
+reportTextFormattingInReview  the same, at the review cursor
+selectSynthesizer, moveToNextSynthSetting, ...   the synth itself is reachable too
+```
+
+**NVDA's Document Formatting settings carry a "Report language" option**, and with it on, NVDA+F answers
+*what language is the cursor in* — which is not the same question as *did the voice change*, and is a
+checkable proxy for it. 3.1.2 fails when a passage of another language carries no `lang`; a formatting
+report that says the document language everywhere is exactly that failure, observable as text.
+
+**Two cautions before anyone builds it.** The setting is not a default, and CLAUDE.md's rule is *"record
+them; do not tune them — NVDA's defaults are what a real user experiences"*. That rule is about the
+READING experience, and NVDA+F is an explicit thing a user does; but the decision belongs in the open
+rather than inside a probe. And guidepup 0.30+ has `getSetting('section.key')`, so whether the option is
+on can be RECORDED per capture rather than assumed — which is what makes the difference between evidence
+and a guess about the guest's configuration.
+
+**This does not make item 7 easy.** It makes it a probe with a corpus case, like items 2 and 6, rather
+than an impossibility. The measurement that would settle it is whether NVDA+F reports a language at all in
+this pipeline — and that is one capture.
+
 ## Closed since this list was written
 
 **`2.4.4` reading validated here and never-fired on the lab** — it was never a contradiction. The lab's
