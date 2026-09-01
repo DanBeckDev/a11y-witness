@@ -932,6 +932,60 @@ caught by asking whether the instrument could find ANYTHING, which is the only q
 two. Same shape as the landmark-name defect this repo fixed three commits ago: *"a landmark's name is in
 `containers`, not `objects`"*.
 
+## 18. CHARACTERISED 2026-09-01 — NVDA drops a live region when it is already speaking, and the more it has to say the more reliably
+
+Four measurements, and one explanation fits all of them:
+
+| trigger | what NVDA says of its OWN | region announced |
+|---|---|---|
+| button, synchronous update | nothing | **reliable** — `filter-status-silent` has always discriminated |
+| checkbox, synchronous update | `"checked"` | **2 of 6** |
+| checkbox, update deferred 400 ms | `"checked"` | **0 of 6** |
+| typing, six characters | six echoes | **0 of N** |
+
+**A button announces nothing of its own, so the live region is the only thing NVDA has to say and it says
+it every time.** Give NVDA something of its own and the region starts to disappear; give it more and the
+region disappears entirely. That is a fact about the screen reader, not about this tool.
+
+**IT IS NOT OUR TIMING, AND THAT IS THE PART THAT NEEDED PROVING.** `waitPastControlState` waits a second
+time whenever everything heard is the control's own state. On the deferred page it fired on **6 of 6**
+captures, waited a further five seconds each time, and its own mark reads:
+
+```
+toggle SECOND-WAIT-AFTER-OWN-STATE caught=false     x6
+```
+
+**The remedy that "did not work" is what produced this finding.** Keeping it and instrumenting it — rather
+than reverting a change that failed to move the number — is the only reason `caught=false` exists to be
+read. "It never fires" and "it fires and hears nothing" are the two readings that separate a tool defect
+from a screen-reader behaviour, and without the mark they are the same silence.
+
+**Three earlier headlines on this entry were wrong**, each disproved by measurement rather than argument:
+
+1. *"a polite live region does not announce while NVDA is speaking"* — refuted by a diagnostic pair where
+   `polite` and `assertive` both announced
+2. *"the control is the cause"* — refuted, a button with the same region is reliable
+3. *"the settle window loses a race"* — built, deployed, re-measured, 2 of 6 before and 2 of 6 after
+
+**What this means for the corpus, and it is now a justified conclusion rather than a guess.**
+`filter-status-silent-checkbox` and `validation-live-silent` stay withdrawn because their evidence is
+**inherently** unstable — not because a live region cannot be heard, and not for want of a longer wait. A
+case whose evidence appears 2 times in 6 is a training record that teaches the model noise.
+
+**And it is a real accessibility finding, which is what this tool exists to produce.** A status message
+fired by a control that announces its own state is conveyed to an NVDA user unreliably. No static
+analyser can see that — the markup is correct, the region is correct, `aria-live` is correct. It is
+exactly the class of failure ADR 0019 says the corpus cannot express and only a real screen reader can
+reach. It belongs in `docs/known-gaps.md` as a limit on what 4.1.3 can claim, and it is worth reporting
+upstream.
+
+**What is NOT established**, so nobody quotes it as if it were: the mechanism inside NVDA. Six captures per
+condition is enough to show the direction and nowhere near enough to characterise a queue policy. The
+numbers above are rates on one page shape, on one NVDA version, pinned by `guidepupVersion` in the cache
+key.
+
+### The earlier entries, kept because the reasoning was sound and the premise was not
+
 ## 18. A LIVE REGION REACHES THE DELTA 2 TIMES IN 6 — measured, and both earlier headlines were wrong
 
 > **THIS SECTION HAS BEEN WRONG TWICE, AND THE CORRECTION IS THE POINT.** It first said a polite live
