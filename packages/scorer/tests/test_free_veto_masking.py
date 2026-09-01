@@ -97,3 +97,99 @@ def test_a_split_with_no_positives_masks_nothing():
     features, offsets, labels = _fixture()
     mask = trainer.uninformative_columns(features, offsets, labels, [2])
     assert not bool(mask.any()), "no positives means nothing is known to be uninformative"
+
+
+def test_a_by_definition_complement_is_exempt():
+    """A feature the subtype CANNOT carry keeps its weight — the distinction the gate insisted on.
+
+    `3.3.1:validation-error-silent` IS the absence of an announced error, so `validation_error_announced`
+    is 0 on every one of its positives by MEANING. A head weighing that negatively has learned
+    "announced, therefore not silent" — correct, and it generalises. Masking it cost two held-out
+    findings on `acceptance-b2-error-vessel/bad` and removed no shortcut, because there was none there.
+
+    Built at the FULL engineered width rather than the 3-column fixture above, because the exemption is
+    resolved by POSITION — the engineered block is the last `len(FEATURE_NAMES)` columns — and a narrow
+    fixture would skip, which proves nothing.
+    """
+    trainer = load()
+    width = len(trainer.FEATURE_NAMES)
+    name = "validation_error_announced"
+    assert name in trainer.FEATURE_NAMES, "the real feature this exemption exists for must still exist"
+    column = trainer.FEATURE_NAMES.index(name)
+
+    # Two positives with the feature at 0 (definitionally), one negative carrying it: a textbook free
+    # veto, and the one case where the negative weight is CORRECT.
+    features = torch.zeros((3, width))
+    features[2, column] = 1.0
+    offsets = [0, 1, 2, 3]
+    labels = torch.tensor([1, 1, 0])
+
+    assert bool(trainer.uninformative_columns(features, offsets, labels, [0, 1, 2])[column]), \
+        "unexempted it must be masked, or the assertion below proves nothing"
+    exempt = trainer.uninformative_columns(features, offsets, labels, [0, 1, 2], {name})
+    assert not bool(exempt[column]), f"{name} is named by-definition and must keep its weight"
+
+    # And the real map must actually name it, or the wiring is decorative.
+    named = trainer.by_definition_exemptions("3.3.1:validation-error-silent")
+    assert name in named, (
+        "runs/unclosable-vetoes.json must list it for 3.3.1:validation-error-silent — that entry is why "
+        "the held-out gate refused the unexempted version")
+
+
+def test_an_absent_unclosable_map_REFUSES_rather_than_masking_everything():
+    """An absent map is not an empty one.
+
+    Without it the mask cannot tell a shortcut from a true implication and silences both — which the
+    held-out gate has already measured as a real loss of findings. `audit-scorer-shortcuts.py` treats
+    absence as "forgive nothing" and says so on its report; here the safe direction is the opposite, so
+    it refuses instead of guessing. Both are the same rule: never let a missing input read as a value.
+    """
+    trainer = load()
+    missing = trainer.UNCLOSABLE_MAP.with_name("definitely-not-here.json")
+    original, trainer.UNCLOSABLE_MAP = trainer.UNCLOSABLE_MAP, missing
+    try:
+        with pytest.raises(SystemExit) as refusal:
+            trainer.by_definition_exemptions("3.3.1:validation-error-silent")
+        assert "corpus:unclosable-map" in str(refusal.value), "the refusal must name the command that fixes it"
+    finally:
+        trainer.UNCLOSABLE_MAP = original
+
+
+def test_perturbs_measurement_is_NOT_exempt():
+    """The two unclosable groups need OPPOSITE treatment, which is why the emitter keeps them apart.
+
+    `by-definition` means no page can carry the subtype and the feature at once, so a negative weight is
+    a true implication. `perturbs-measurement` means the page COULD carry it and capturing it would
+    destroy the evidence — the three focus subtypes read `state_unchanged = 0` on every positive only
+    because a focus case activates no control. On a real page that feature may be 1 while the failure is
+    present, so a negative weight suppresses a TRUE finding. That is a shortcut and must stay masked.
+
+    Without this, exempting both groups passes every other assertion in this file — verified by mutation.
+    """
+    trainer = load()
+    exempt = trainer.by_definition_exemptions("2.1.1:control-unreachable-by-keyboard")
+    assert exempt == set(), (
+        "2.1.1:control-unreachable-by-keyboard has only `perturbs-measurement` entries; exempting them "
+        f"would leave a real veto in place. Got: {sorted(exempt)}")
+    # And the group is genuinely non-empty in the map, so the assertion above is not vacuous.
+    import json
+    raw = json.loads(trainer.UNCLOSABLE_MAP.read_text(encoding="utf-8"))
+    assert raw["perturbs-measurement"].get("2.1.1:control-unreachable-by-keyboard"), \
+        "the map no longer carries that subtype under perturbs-measurement; this test now proves nothing"
+
+
+def test_the_trainer_is_given_the_map_it_now_requires():
+    """`training:train` must emit the unclosable map, because `train` runs BEFORE `shortcuts`.
+
+    `scorer:shortcuts` chains `corpus:unclosable-map` and is the only thing that did. The trainer now
+    reads the same file, and in the `everything` chain `train` is stage five while `shortcuts` is stage
+    six — so without this the trainer either refuses, or silently reads a map left behind by a PREVIOUS
+    run. `lab-job.test.ts` states the rule for the Ansible side: no job may reach a derived-input script
+    without its chain. This is the npm-script side of it.
+    """
+    import json as _json
+    scripts = _json.loads((REPO / "package.json").read_text(encoding="utf-8"))["scripts"]
+    for name in ("training:train", "scorer:shortcuts"):
+        assert "corpus:unclosable-map" in scripts[name], (
+            f"`{name}` reads runs/unclosable-vetoes.json and must emit it first; a stale map is the "
+            "artefact-freshness defect this repo has hit four times")
