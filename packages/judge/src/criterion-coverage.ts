@@ -119,6 +119,19 @@ export type EvidenceChannel =
    */
   | "dialogEscape"
   /**
+   * An arrow pressed inside a radio group, tab list or menu, capture-protocol 13.
+   *
+   * The observation 2.1.1 abstains without: `SHARES_ONE_TAB_STOP` refuses to decide because a native
+   * widget and a broken one both present ONE tab stop, so the tab ring cannot separate them.
+   */
+  | "arrowNavigation"
+  /**
+   * Characters typed into a focused field, capture-protocol 13 — the half of 3.3.1 a capture could not
+   * reach. Every existing record describes an error surfaced by SUBMITTING; validation that fires while
+   * typing arrives with focus unmoved and only a live region can carry it.
+   */
+  | "typedFeedback"
+  /**
    * The DOM media census — `<audio>`/`<video>` with their `autoplay`, `muted` and `controls` attributes.
    *
    * The one channel that is not screen-reader output, and it has to be: those attributes have no
@@ -379,6 +392,8 @@ export const CHANNEL_LOCATION: Record<EvidenceChannel, "structure" | "interactio
   focusOrder: "interaction",
   routeChange: "interaction",
   dialogEscape: "interaction",
+  arrowNavigation: "interaction",
+  typedFeedback: "interaction",
   postSubmitNames: "interaction",
   frames: "structure",
   // Read from somewhere other than `structure`/`interaction`: `media` sits at the top level, `title`
