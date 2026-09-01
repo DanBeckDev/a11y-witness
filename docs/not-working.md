@@ -1121,8 +1121,38 @@ positives; nothing about the corpus changed. Only their WEIGHTS crossed the −1
 That is the conclusion the counts supported all along, now with the feature identities to prove it: **a
 retrain moving weights on a 14-positive head**, not a regression anything in this session caused.
 
-**AND THIS IS THE SAME SITUATION §2 ALREADY PRICED FOR `2.4.1:skip-link-inert` — chance in the rotation
-deal, not a gap anyone left.** 2.4.2 has six multi-defect cases and they drew `silent-toggle-inert`,
+**THE VETO CANNOT REACH A REPORT, AND THAT IS THE FACT THAT SETTLES THIS.** `rule-ownership.json`:
+
+```
+2.4.1:skip-link-inert     decidedBy=rules
+2.4.2:route-title-stale   decidedBy=rules
+```
+
+§2's own second correction says what follows: *"only 9 of those vetoes are on subtypes the model actually
+decides … the rest are on `decidedBy: "rules"` subtypes and **cannot reach a report**."* The head is
+trained — §13 decided deliberately that five such heads stay trained despite detecting nothing — and its
+finding is discarded before any user sees it. **The free veto is real in the weights and inert in the
+product**, and §2's headline (*zero free vetoes can reach a report*) is still true with this regression
+standing.
+
+So `promote` is refusing on something that cannot change an answer this tool gives. Two responses are
+available and they are not equivalent:
+
+- **Corpus work.** Bounded, and cheaper than the price quoted below: `withAccompanyingDefects` re-rotates
+  *"the hosts after it WITHIN THAT SUBTYPE ONLY"*, so adding host pages to 2.4.2 recaptures 2.4.2's family
+  — tens of captures, not the 474 that enlarging `ROTATIONS` globally costs. 2.4.2 has 2 hosts × 3 rounds
+  = 6 of 12 rotation slots; 4 hosts would cover all 12 and guarantee `filename-alt` and `generic-alt`
+  appear. It would also raise a 14-positive head, which §2 calls the underlying constraint.
+- **Teaching the gate about `decidedBy`.** Tempting, and the higher-risk change by far — **weakening a
+  gate to make it pass is the one move this repo has never survived**. If it is ever made it should be
+  argued on its own, not as the tail of a run it happens to unblock.
+
+**Recorded, not chosen.** The first is real work worth doing and needs its own capture-and-retrain cycle;
+the second is a design decision about what `promote` is for. What is NOT true is the reason I gave first:
+this was never too expensive, and the 474-capture figure belongs to a different change.
+
+**It is also the same shape §2 already priced for `2.4.1:skip-link-inert` — chance in the rotation deal,
+not a gap anyone left.** 2.4.2 has six multi-defect cases and they drew `silent-toggle-inert`,
 `generic-heading`, `vague-link`, `unnamed-graphic`, `position-only-table` and `bare-edit`. Neither
 `filename-alt` nor `generic-alt` is among them, so no positive of this subtype can carry
 `filename_graphic_present` or `generic_graphic_present`. §2 records the identical finding one subtype
