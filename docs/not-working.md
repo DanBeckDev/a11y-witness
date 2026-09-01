@@ -932,6 +932,50 @@ caught by asking whether the instrument could find ANYTHING, which is the only q
 two. Same shape as the landmark-name defect this repo fixed three commits ago: *"a landmark's name is in
 `containers`, not `objects`"*.
 
+## 18. A LIVE REGION REACHES THE DELTA 2 TIMES IN 6 — measured, and both earlier headlines were wrong
+
+> **THIS SECTION HAS BEEN WRONG TWICE, AND THE CORRECTION IS THE POINT.** It first said a polite live
+> region does not announce while NVDA is speaking. A diagnostic pair refuted that outright: same checkbox,
+> one `polite` region and one `assertive`, and **both announced**. It then said the fault was the capture's
+> settle window losing a race. That was refuted too — the fix was built, deployed and re-measured, and the
+> rate did not move.
+>
+> **What is true is a RATE, and nothing below it should be read as a mechanism.** Six repeats of one
+> unchanged page, `training:repeat`:
+>
+> ```
+> 4 x "checked"            <- the checkbox's own state, and nothing from the page
+> 2 x "Showing 2 bags."    <- the live region
+> ```
+>
+> `gate:stability` names it exactly: `VARIES formChanges counts 1,1,1,1,1,1`. **The count never moves,
+> only the content** — the rot a count-based check structurally cannot see, which is why this took three
+> attempts to state correctly.
+>
+> **Every wrong turn today came from concluding off ONE capture.** Three readings of one case, all single
+> captures, all different: `"checked"` on both variants; then good `"Showing 2 bags."` and bad `"checked"`;
+> then `"checked"` on both again. Each looked like a finding, and two of them became withdrawals. This
+> project already knows better — `gate:stability` repeats a page and `identity:rate` prints a 95% upper
+> bound rather than a zero — and **a withdrawal is a conclusion like any other.**
+>
+> **The remedy that did not work is kept and instrumented**, which is the only reason the next person can
+> tell the two apart. `waitPastControlState` waits again whenever everything heard is the control's own
+> state, on sound reasoning, and writes `SECOND-WAIT-AFTER-OWN-STATE caught=…` to `sweepLog` either way.
+> "It never fires" and "it fires and finds nothing" need opposite work, and three inert remedies have
+> shipped here for want of that distinction.
+>
+> **What IS fixed and is independent:** `pageResponseTo` separates a toggle's own state from the page's
+> answer, so `formActivationIsSilent` — a silence test written for buttons, where an empty delta means the
+> page said nothing — can fire on a control that always says "checked". That was a real defect and the
+> earlier withdrawal blamed the live region for it.
+>
+> **What is still open is the intermittency itself**, and it is the one thing nobody has explained: why
+> NVDA voices a `polite` region after some checkbox toggles and not others. Items 3 and 6 wait on that, and
+> `filter-status-silent-checkbox` and `validation-live-silent` stay withdrawn — not because a live region
+> cannot be heard, but because the evidence is not yet stable enough to train on.
+
+### The original entry, kept because the reasoning was sound and the premise was not
+
 ## 18. A POLITE LIVE REGION DOES NOT ANNOUNCE WHILE NVDA IS SPEAKING — found by two cases that should have worked
 
 Measured 2026-09-01, twice, by two unrelated mechanisms:
