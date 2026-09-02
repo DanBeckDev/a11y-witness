@@ -137,6 +137,27 @@ export const CONTROL_ROLES = Object.freeze([
   "button", "link", "graphic", "heading", "edit text", "edit", "checkbox", "radio button", "radio",
   "combo box", "list box", "slider", "spin button", "menu item", "tab", "separator",
   "progress bar", "status", "cell", "list item",
+  // "check box" and "menu button" are NVDA's actual spellings, and their absence was total: this parser
+  // returned NO objects at all for either, so a checkbox and a menu button were invisible to everything
+  // reading `objects` — the name included. Measured 2026-09-02 on the corpus: 18 announcements carrying
+  // ", check box" and 6 carrying ", menu button", against ZERO carrying the "checkbox" spelling that was
+  // already listed. So the entry that was here has never once matched real NVDA output, and the one that
+  // matches it was missing. `radio button` and `combo box` are present, which is what makes this a
+  // hand-built list with members missed rather than a decision about scope.
+  //
+  // Found by pointing `--emit-form-config` at a W3C tutorial page, where a correctly-labelled
+  // "Subscribe to newsletter, check box" was reported as an UNNAMED control — a false 4.1.2 against
+  // conformant markup, which is the failure this whole module exists to prevent.
+  //
+  // ONLY these two, and the restraint is the comment below being taken seriously: over-inclusion is
+  // silent, so `toggle button`, `tree view`, `tab control`, `password edit` and the menu-item variants
+  // are deliberately NOT added. Each is a real NVDA role and each occurs ZERO times in the corpus, so
+  // adding them would be scope chosen from a vendor's list rather than from evidence. They will show up
+  // as unparsed phrases if they ever appear, which is the failure mode this list prefers.
+  //
+  // Both are longer than the roles they contain (`menu button` > `menu item` > `button`), and
+  // `CONTROLS_ORDERED` sorts by length descending, so neither can be shadowed by a shorter match.
+  "check box", "menu button",
   // NOT "clickable": NVDA announces it as a STATE adornment, and listing it here made it win the role match
   // in "…, grouping, clickable, England, radio button" — so the radio's name was consumed as a prefix and a
   // properly named control reported as unnamed. The exact defect this module was written to remove.

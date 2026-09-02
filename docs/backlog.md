@@ -54,6 +54,14 @@ three separate items all touch the capture path and each one costs a recapture i
 
 **3 — ONE capture-path change, ONE protocol bump, ONE recapture.**
 
+> **A SCHEMA MIGRATION IS NOW OPEN AND THIS STAGE CLOSES IT.** `FEATURE_SCHEMA_VERSION` moved v17 -> v18
+> on 2026-09-02 because the announcement grammar can now see a `check box` and a `menu button` — it could
+> see NEITHER, returning no objects at all, so every feature reading `objects` was blind to them. Found by
+> pointing `--emit-form-config` at a W3C tutorial page, where a correctly-labelled
+> `"Subscribe to newsletter, check box"` was reported as an unnamed control: a false 4.1.2 against
+> conformant markup. `release:gate` refuses everything while the migration is open, which is the correct
+> state — it closes when this stage's retrain promotes weights stamped v18.
+
 > **This is the reordering that matters, and the reason the order section exists.** A
 > `CAPTURE_PROTOCOL_VERSION` bump invalidates every cached capture — **measured at ~8 h across the five
 > bare-metal boxes**, not the ~4.5 h an older document claimed. Three items below each change what a
@@ -101,7 +109,6 @@ recapture is not needed; if CHANGED, it is genuine and this is the moment to pay
 |---|---|---|
 | **A capture stalled for 3.5 hours and neither timeout fired** — the worker's 520 s hard bound and the host's 600 s `waitForWorker` both exist and neither ended it. The wedge itself is understood (a notification toast held the foreground, so Edge could never take focus); why two independent bounds failed is not. | A capture that exceeds its bound is abandoned and the run says so — reproduced deliberately, not waited for. | no record entry; found 2026-09-02 on `a11y-worker-6` |
 | **Ten of the 28 model features read a `0` that means "nobody asked"** — every structured feature is `float(bool(channel))` and `any([])` is `False`, so "the page has none" and "nothing looked" are one number. **Both known routes are closed**: masking was REFUTED ([§15](./not-working.md), it cost a real finding), and feeding `observed` to the featurizer was DECIDED AGAINST ([§14](./not-working.md), it trades one shortcut for a feature correlated with capture conditions — ADR 0015's whole subject). So this needs a design, not an implementation. | **Next action, and it needs no decision:** run `npm run lab:job -- -e job=observation-ambiguity` on the authoritative corpus. §14 names exactly that evidence as what would separate a decision from a guess — how many of these zeros are capture artefacts rather than page facts. Measure first; the design follows the number. | [not-working §11](./not-working.md), with [§14](./not-working.md) and [§15](./not-working.md) for the two closed routes |
-| **The announcement grammar cannot see a CHECK BOX** — `CONTROL_ROLES` carries `"checkbox"`; NVDA says `"check box"`. Measured 2026-09-02: **22 occurrences of NVDA's spelling in the local corpus copy and 0 of the grammar's**, so `parseAnnouncement` returns NO objects for every checkbox announcement and everything reading `objects` is blind to them. Found by running `--emit-form-config` against a real W3C tutorial page, where a correctly-labelled `"Subscribe to newsletter, check box"` was reported as an unnamed field. `toggle button`, `tree view`, `menu button` and `password edit` are missing too; `radio button` and `combo box` are present, so this is one hand-built list with members missed rather than a design. | A checkbox announcement parses to an object, and the corpus is re-exported so the model sees the change. **Belongs in stage 3's bundle**: `announcement.ts` moves the model input WITHOUT moving `FEATURE_SCHEMA_VERSION` (CLAUDE.md says so explicitly), so it must ride with a re-export rather than land alone. | no record entry; the CLI draft emitter works around it by reporting `unparsed` separately from `unnamed`, so it never states a false 4.1.2 |
 | **ONE PAGE CAPTURES PATHOLOGICALLY, and `grants-audit` is what caught it** | The page captures like its peers, or is removed with the reason recorded. | [not-working §20](./not-working.md) |
 
 ## Accepted designs, not yet built

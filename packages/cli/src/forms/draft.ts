@@ -21,8 +21,8 @@ import { parseAnnouncement } from "@a11y-witness/evidence";
 export interface FormsDraft {
   /** The YAML text. */
   yaml: string;
-  /** Fields that can be addressed AND filled: announced with a name and a role that takes a value. */
-  addressable: { name: string; within?: string; nth?: number }[];
+  /** Fields that can be addressed AND filled, each with the verb its control's role takes. */
+  addressable: { name: string; verb: "value" | "choose" | "check"; within?: string; nth?: number }[];
   /**
    * Fields NVDA announced with NO name, by position in reading order.
    *
@@ -57,8 +57,20 @@ export interface FormsDraft {
   unparsed: { position: number; announced: string }[];
 }
 
-/** Roles that take a typed or chosen value. A button is not one, and neither is static prose. */
-const FILLABLE = Object.freeze(["edit", "edit text", "combo box", "list box", "spin button", "slider"]);
+/**
+ * Which VERB a control's role takes — the schema's three verbs, matched to the controls that accept them.
+ *
+ * A button is absent on purpose (it is a `submit:` candidate, not something to fill), and so is static
+ * prose. The mapping exists because getting it wrong is not cosmetic: a draft that offers `value: ""` on
+ * a checkbox has told the author to type into it, which is the confusion the three-verb schema was
+ * designed to prevent. Both halves of that were live bugs found by running this against real pages —
+ * a button drafted as typeable, then a checkbox drafted the same way the moment the grammar could see one.
+ */
+const VERB_FOR_ROLE: Readonly<Record<string, "value" | "choose" | "check">> = Object.freeze({
+  "edit": "value", "edit text": "value", "spin button": "value", "slider": "value",
+  "combo box": "choose", "list box": "choose",
+  "check box": "check", "radio button": "check", "radio": "check",
+});
 
 /**
  * One field's name, role and enclosing group, from the capture's OWN grammar.
@@ -85,26 +97,34 @@ const quote = (value: string): string => JSON.stringify(value);
  * may change for reasons unrelated to the field, so a page edit elsewhere breaks a config that did not
  * need the constraint.
  */
-function addressable(fields: { name: string; group?: string }[]): FormsDraft["addressable"] {
+function addressable(
+  fields: { name: string; verb: "value" | "choose" | "check"; group?: string }[],
+): FormsDraft["addressable"] {
   const seen = new Map<string, number>();
   for (const field of fields) seen.set(field.name, (seen.get(field.name) ?? 0) + 1);
   const used = new Map<string, number>();
   return fields.map((field) => {
-    if ((seen.get(field.name) ?? 0) < 2) return { name: field.name };
+    const base = { name: field.name, verb: field.verb };
+    if ((seen.get(field.name) ?? 0) < 2) return base;
     const ordinal = (used.get(field.name) ?? 0) + 1;
     used.set(field.name, ordinal);
     // `within` first, `nth` only when there is no group to name — the ordering ADR 0024 settled, because
     // a group is how a person distinguishes them and a count is how a machine does.
-    return field.group ? { name: field.name, within: field.group } : { name: field.name, nth: ordinal };
+    return field.group ? { ...base, within: field.group } : { ...base, nth: ordinal };
   });
 }
+
+/** The starting value a verb is drafted with — blank for the author to fill, never a guess. */
+const BLANK_FOR: Readonly<Record<string, string>> = Object.freeze({
+  value: '""', choose: '""', check: "false",
+});
 
 function fieldLines(entries: FormsDraft["addressable"]): string[] {
   return entries.flatMap((entry) => [
     `          - field: ${quote(entry.name)}`,
     ...(entry.within ? [`            within: ${quote(entry.within)}   # DRAFTED: two fields share this name`] : []),
     ...(entry.nth ? [`            nth: ${entry.nth}   # DRAFTED: two fields share this name and no group names them`] : []),
-    `            value: ""              # TODO`,
+    `            ${entry.verb}: ${BLANK_FOR[entry.verb]}              # TODO`,
   ]);
 }
 
@@ -160,11 +180,11 @@ export function draftFormsConfig(
   const submitCandidates = [...new Set(
     resolved.filter((field) => field.role === "button" && field.name !== "").map((field) => field.name),
   )];
-  const fillable = resolved.filter((field) => FILLABLE.includes(field.role));
+  const fillable = resolved.filter((field) => VERB_FOR_ROLE[field.role] !== undefined);
   const unnamed = fillable.filter((field) => field.name === "").map(at);
-  const entries = addressable(
-    fillable.filter((field) => field.name !== "").map((f) => ({ name: f.name, group: f.group })),
-  );
+  const entries = addressable(fillable
+    .filter((field) => field.name !== "")
+    .map((f) => ({ name: f.name, verb: VERB_FOR_ROLE[f.role], group: f.group })));
 
   const yaml = [
     "# Drafted by a11y-witness from what NVDA announced. Fill in the values; the names are already right.",
