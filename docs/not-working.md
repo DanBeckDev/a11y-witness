@@ -900,6 +900,37 @@ draft of the plan claimed. Splitting it into observed-columns leaves the focus p
 the new column too, so the veto simply moves — exactly as `landmark_present`'s moved onto
 `heading_present` at the next retrain. A free veto is closed by the CORPUS, and ADR 0015 says so.
 
+**MEASURED 2026-09-03 — the evidence §14 said would separate a decision from a guess now exists.**
+
+§14 declined to give the model observation metadata and named what would reopen it: *"`capture:explain`
+now names every such channel per capture, so the evidence for that would be in hand rather than
+inferred."* Run over the authoritative corpus (`job=observation-ambiguity`):
+
+| channel | empty | of which NEVER ASKED |
+|---|---|---|
+| `formChanges` | 5,148 | **3,177 — 61.7%** |
+| `postSubmitFields` | 5,862 | **3,289 — 56.1%** |
+| `formControl` sweep | 2,865 | **1,872 "cannot say" — 65.3%**, against 950 (33.2%) where the page genuinely has none |
+
+**So the majority of these zeros are artefacts, not page facts** — which is what §11 asserted and nobody
+had counted. It does not by itself overturn §14: that decision rests on the SHORTCUT risk (a feature
+correlated with capture conditions is ADR 0015's whole subject), and a number showing the problem is real
+is not a design that avoids creating a worse one. What it removes is the option of leaving the question
+open on the grounds that the size was unknown.
+
+**Two findings the report surfaced that nothing was looking for.**
+
+- **`baselineQuiet` is UNSTATED on 602 of 1,851 `formChanges` entries (32.5%)** — captures taken before
+  the field existed. The report is explicit that this is not the same as NOISY, and that *"reading absence
+  as false is the defect this whole report is about"*. Zero are actually noisy, which is the good news;
+  a third simply predate the guarantee.
+- **A PAIR WAS SPLIT BY THE INSTRUMENT.** 4 of 6,975 captures failed to park the pointer, and one of them
+  — `icon-button-unnamed.good` — was measured differently from its mate. CLAUDE.md is unambiguous that a
+  pair differing for a reason unrelated to accessibility is *"the one defect this project cannot
+  tolerate"*, and the report notes the sharpest part: Ctrl over an image is Edge's MAGNIFIER overlay, so a
+  split on an `image-*` case is precisely where the remedy mattered most. **That one capture should be
+  retaken**, and it is a single case rather than a corpus problem.
+
 ## 15. CLOSED 2026-09-01 — the capture can now ask whether a dialog can be LEFT, and the answer moved a rule
 
 Capture-protocol 11 bundles three additions: `structure.frames`, `interaction.dialogEscape` and
