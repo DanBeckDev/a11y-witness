@@ -378,6 +378,44 @@ question that would normally justify hesitating is now answered.
 corpus is invalidated and the criteria are not delivered, so the cost is paid and nothing is bought.
 Everything above it can be built and verified without touching a cached capture, which is why it was.
 
+## 24. `server.log` contains no WORKER lines, so a hung capture leaves no record
+
+`CLAUDE.md` tells you what to do when a worker misbehaves: *"`server.log` persists on the guest. You cannot
+pull it while the worker is down, so read it after it recovers — the record of the death is still there."*
+
+Measured 2026-09-02, on all five boxes: it is not there.
+
+A 40-line tail from a11y-worker-2 spans ten worker restarts across two days and contains only three kinds
+of line — the `ForegroundLockTimeout` script's output, `[run-server] starting <node>`, and node's
+`DEP0190` warning. Every one is written by the LAUNCHER or by stderr redirection. Not one line comes from
+the worker's own `log()`, although that function demonstrably works: `warming up NVDA`,
+`warm: NVDA is up and answering`, and `desktop is blocked by 1 dialog(s)` all appear on the worker's
+CONSOLE, captured in `action-smoke` output the same day.
+
+**What it cost.** A capture on a11y-worker-6 ran from 03:00 to 06:32 holding `busy`, and the corpus
+recapture made no progress for three and a half hours. Both bounded timeouts that should have ended it —
+the worker's 520 s hard timeout and the host's 600 s `waitForWorker` — did not, and the log that would say
+which of them failed contains nothing from the period. The fault is still undiagnosed for that reason
+alone.
+
+**The leading hypothesis, stated as one.** `run-server.cmd` redirects stderr into `server.log` and holds
+that handle for the worker's whole lifetime. `createLogWriter` appends to the same path from inside node,
+and on Windows a second writer can be refused. Its write is wrapped — *"the console is the file's
+fallback"* — so a refusal is invisible by design, which is exactly the shape that lets this persist. Its
+`rotate()` renames the file, which a held handle also blocks, and that failure is likewise console-only.
+
+Not proven: it needs a Windows worker to confirm, and `server-log.mjs` is testable with an injected `io`,
+so a test can be written against the real writer without one.
+
+**What would tell you it is fixed:** `/diagnostics.serverLogTail` on any worker shows a line the worker
+itself emitted — a warm-up, a fault, a recovery — rather than only launcher output.
+
+**Worth noting how close this came to staying invisible.** `serverLogTail` exists precisely for this
+question, and its own comment says why the size summary beside it is not enough: *"`serverLog` already
+reported the file's SIZE, which answers 'is it growing' and not 'what does it say' — and the second
+question is the one you have when something did not happen."* I read the size field first, concluded the
+fleet had no logs at all, and was wrong. The right field was already there and already argued for.
+
 ## 21. `4.1.3` has NO real-page grounding, and closing it is a CONSENT decision rather than a code one
 
 **Not a defect. Measured, understood, and deliberately open** — recorded here rather than left on a
