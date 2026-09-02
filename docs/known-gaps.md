@@ -1274,3 +1274,44 @@ change nothing about what the evidence MEANS, so this is additive exactly as `fa
 now `prepareDesktop` — extracted because it does one thing at one level of abstraction, not merely to
 shorten its caller. `function-size.test.ts` caught it; ESLint could not, because `skipComments: true`
 lets a comment-dense function run to twice its budget.
+
+---
+
+## 28. ~~Four criteria were unreachable on a page we do not own~~ — WORKING 2026-09-02
+
+Backlog stage 3, and [ADR 0024](./adr/0024-a-form-is-configured-with-states-not-values.md) built.
+3.3.1, 3.3.3, 4.1.3 and 3.2.2 need a form submitted or typed into, and those probes are off for a page we
+do not own. What makes submitting acceptable is the site's owner telling us what to put in — so the
+consent problem was an API problem, and this is the API.
+
+**Proven, not asserted.** Against `w3.org/WAI/tutorials/forms/labels/` with real NVDA:
+
+```
+formFill: {"state":"error","filled":[{"field":"Search","action":"type"},
+                                     {"field":"First name:","action":"type"}],
+           "unbound":[],"submitted":true}
+```
+
+Both controls located by **accessible name** — the decision everything rests on, and the one that pays a
+dividend no selector-based design can: a field that cannot be addressed by its accessible name is a 4.1.2
+FINDING, not a configuration error, because a screen reader user cannot address it either.
+
+### Four defects, every one found by running it rather than by reasoning
+
+| what happened | why no unit test would have caught it |
+|---|---|
+| a BUTTON was drafted as something to type into | `structure.formFields` is NVDA's form-field quick-nav and it VISITS buttons — the census comment says so, and nothing in the schema knows that |
+| a labelled `"Subscribe to newsletter, check box"` reported as UNNAMED | the grammar could not see a checkbox at all (§27 sibling; `CONTROL_ROLES` had `"checkbox"`, NVDA says `"check box"`) — a false 4.1.2 against conformant markup |
+| `interaction.formFill` came back NULL while the marks read `filled: 1, submitted: true` | the returned interaction is assembled from a HAND-WRITTEN field list and the new field was not on it — this repo's most-repeated shape |
+| the walk filled one field of two and reported the other `unbound` | `applyFill` ends in `restoreBrowseMode`, which ANCHORS — so the caret returned to the end of the document and the walk's position was gone |
+
+**And one wrong turn worth more than the fixes.** Diagnosing the fourth, the walk was ALSO switched from
+forward to backward, on the reasoning that `anchorToTop` presses `Control+End` so forward navigation from
+the end finds nothing. It filled **zero** fields where forward filled one. NVDA's quick navigation WRAPS,
+so `moveToNextFormField` from the end lands on the first field and reads the page in order. Two things
+changed at once and the result got worse, which made neither attributable — the re-anchoring was the fix
+that had been diagnosed and the direction was a guess riding along with it.
+
+**Still open:** the captures run and `formFill` carries the evidence, but no criterion is yet DECIDED from
+it — `criterionOutcomes` does not read `formFill`. That is what closes 3.3.1, 3.3.3, 4.1.3 and 3.2.2 on a
+real page, and it is on the backlog.
