@@ -267,24 +267,13 @@ back on the first clean run.
 
 # Phase C — corpus: authored against a settled capture path
 
-## 22. `3.3.3` Error Suggestion — BUILT, MEASURED, REVERTED. The head cannot learn it at corpus scale
+## 22. CLOSED 2026-09-02 — `3.3.3` ships as a RULE. The head could not learn it; it did not need to
 
-The one screen-reader-reachable criterion this project had never built that needed NO capture change:
-`probeForms` already submits and re-reads, so `criterion-coverage.ts` recorded it as `reachable` with the
-reason worked out — *"whether the announced error names a REMEDY rather than only a problem is a judgement
-a head could learn."* Built end to end on 2026-09-02, and that last clause is the part that failed.
+The first WCAG criterion this project has added since the corpus was built, and the useful part of the
+story is the instrument rather than the criterion.
 
-**The evidence layer WORKS and is the reusable half.** 16 training families / 34 cases, 5 held-out cases,
-signal `error-remedy-missing`. Corpus at 1538 discriminating, 0 blind, 0 contaminated. The pair is
-single-criterion by construction — both variants announce the error correctly (aria-invalid, role=alert,
-focus moved), so both satisfy 3.3.1 and only the message differs:
-
-```
-good  "Visit date, edit, invalid entry, Enter the visit date as DD slash MM slash YYYY., blank"
-bad   "Visit date, edit, invalid entry, Invalid entry., blank"
-```
-
-**The head does not learn it.** Two chains, two poolings, and the failure is the same shape:
+**The head failed, measurably, and that was the right measurement to stop trusting rather than the right
+place to stop.** 16 training families / 34 cases, 5 held-out cases, and:
 
 | | document-mean | instance-max |
 |---|---|---|
@@ -293,45 +282,32 @@ bad   "Visit date, edit, invalid entry, Invalid entry., blank"
 | false positives on conformant | 3 | 2 |
 | held-out scores vs cut | 0.758–0.893 vs 0.967 | 0.730–0.938 vs **0.983** |
 
-Recall 0.0 on its own TRAINING data is the finding. A head that cannot fit what it was shown is not
-starved of examples, and more corpus is not obviously the fix — though 15 positives against ~2,200
-negatives, for a difference of one clause inside a long announcement, is plainly part of it. The cut rose
-with the scores under instance-max, so nothing separated: the head assigns high scores to conformant
-records too, which is what "has not learned the distinction" looks like from outside.
+Recall 0.0 on its own TRAINING data. Pooling was a good hypothesis — `INSTANCE_POOLED_SUBTYPES` says
+pooling is a property of the signal, and 3.3.3 is one clause inside a long announcement, which an average
+dilutes — and it measured no better. **Do not re-run that experiment.**
 
-**Pooling was a good hypothesis and it was wrong.** `INSTANCE_POOLED_SUBTYPES` states that pooling is a
-property of the SIGNAL — local findings pool by max, contextual keep the whole capture — and 3.3.3 is as
-local as a finding gets, so document-mean averaging one clause across every unit on the page looked like
-the cause. It measured no better. Recorded here so nobody re-runs that experiment expecting a different
-answer, which is the same service the 4.1.2 pooling comment performs.
+**It never needed a head.** Whether the announced error carries an INSTRUCTION is READ from the
+announcement, which is this project's own test for what a rule may assert, and the same basis on which
+`1.1.1:filename-alt` is rules-owned. The deterministic signal discriminated 44 captured pairs while the
+head could not fit 15. `a11y-witness:error-announced-without-remedy` is now the THIRD rule permitted to
+claim `conformance` — a list pinned by a test so that promoting an inference to an assertion is a visible
+edit. Measured on 2,170 captures: fires on every positive, **0 false positives**.
 
-**What is most likely right, and was not attempted.** The distinction is DETERMINISTIC — the signal is an
-exact regex over the announced error and discriminated 44 captured pairs with no errors. This project's
-own doctrine is that rules ASSERT what can be read directly and the model TRIAGES judgements, and "does
-the announced error contain an instruction?" is read directly. `1.1.1:filename-alt` is rules-owned on
-exactly that basis. So 3.3.3 probably wants a RULE, not a head.
+**What it cost to wire in, which is the reusable part.** Seven registries had to agree, and every one
+refused until it did: `rule-ownership.json`, `ABSENCE_CRITERIA` (or the model's weaker finding survives
+and suppresses the rule's), `RULE_CRITERIA` (the coverage audit cannot ask about a criterion it does not
+know exists), `ACT_RULES`, the pinned conformance list, `NOT_SWEEP_DERIVED`, and the stranger-facing
+totals in `action.yml` and `RELEASE.md`. Plus `MODEL_EXCLUDED_SUBTYPES`, without which the failing head
+is trained anyway and fails the acceptance gate for ever.
 
-That was not built because it is a larger piece — `rule-ownership.json`, an ACT mapping in `act-rules.ts`,
-`rules:gate`, real-page validation — and because of a caveat worth knowing first: like 3.3.1 and 4.1.3, it
-reads probe-gated channels, so it CANNOT FIRE on a real page at all (see §21). `rules:real-pages` would
-report 0 new findings on the 86 conformant pages trivially, which is no validation.
+**The public claim is narrower than the count, deliberately.** Fifteen criteria can now produce a finding
+and the number that matters on a real page is still ELEVEN. 3.3.3 reads the form probe, which is off for
+pages we do not own — see §21 for the same constraint on 4.1.3 — so on somebody else's site it cannot fire
+in either direction. Adding it to the "always run" list would have been the easy edit and a false one.
 
-**Reverted rather than shelved.** Leaving the corpus in place with the subtype excluded from the model
-would have made 34 records that nothing trains on and nothing decides — "written, embedded and inert",
-which this repo names as its most expensive recurring shape. The commits are `b6f3e0e`, `195bf01`,
-`5fb6e8f`, `90bba4a`; reverting them is one command if the rule route is taken.
-
-**What would tell you it is fixed:** `3.3.3` reads `assessed` in `criterion-coverage.ts` — which
-`criterion-coverage.test.ts` only permits once the judge can actually return that finding — and
-`everything` completes with 3.3.3 held-out recall above 0.
-
-**Two things worth keeping from the attempt, both already on `main` and both independently useful.** The
-acceptance evaluator now reports each miss's HEAD score against its own cut, which is the only reason the
-diagnosis above is a measurement rather than a guess — `0.758 vs cut 0.967` says "the signal arrived and
-was too weak", where "10 false negatives" would have sent me to write more corpus. And the exporter now
-says loudly when cases were skipped because nobody CAPTURED them, which cost two chain runs to learn:
-neither `everything` nor `--pipeline=full` runs `capture-acceptance`, so a new held-out case cannot reach
-the evaluator through either chain.
+**Still true, and the reason 3.2.1 and 3.2.2 are not here:** those two need a probe that does not exist,
+which is a `CAPTURE_PROTOCOL_VERSION` bump and a full recapture. 3.3.3 was the one of the three reachable
+screen-reader criteria that cost no capture change, which is why it was taken first.
 
 ## 21. `4.1.3` has NO real-page grounding, and closing it is a CONSENT decision rather than a code one
 

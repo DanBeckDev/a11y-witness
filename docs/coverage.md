@@ -8,12 +8,12 @@ the WCAG list and what actually ships — so this page cannot drift from the cod
 
 | state | count | meaning |
 |---|---|---|
-| **assessed** | 7 | a finding can be produced today |
+| **assessed** | 8 | a finding can be produced today |
 | **partial** | 7 | assessed, but a named failure mode of it is not covered |
-| **reachable** | 7 | not built, and the evidence to build it exists or could be captured |
+| **reachable** | 6 | not built, and the evidence to build it exists or could be captured |
 | **out of scope** | 34 | not answerable by this tool at all |
 
-**14 of 55 produce findings.** That is not a small number
+**15 of 55 produce findings.** That is not a small number
 for screen-reader evidence, and it is not a substitute for a rule scanner: the 34
 out-of-scope criteria are mostly **visual**, which is exactly what axe-core is good at. Run both.
 
@@ -38,6 +38,7 @@ one of its training examples. See [ADR 0015](./adr/0015-one-defect-per-page-taug
 | **2.4.4** | Link Purpose (In Context) | A | `regex` overlap; rest: trained scorer | Vague link text. Rules cover a six-phrase subset (19 of 100 corpus records, a declared overlap); the head owns the rest. |
 | **2.4.6** | Headings and Labels | AA | trained scorer | Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the page, so this head is document-pooled. |
 | **3.3.1** | Error Identification | A | trained scorer | A validation error that is displayed but never announced. Needs the form probe, which is on by default in the Action and off in the CLI -- and therefore OFF for every real-page capture, because submitting a form on a site we do not own is not a review. Measured: 0 of 77 real captures carry `formChanges`, so on a real page this criterion cannot fire in either direction. |
+| **3.3.3** | Error Suggestion | AA | `error-remedy-missing` rules | Error Suggestion, ASSESSED since 2026-09-02 and decided by a RULE rather than a head. The pair is single-criterion by construction: both variants announce the error correctly (aria-invalid, role=alert, focus moved) so both satisfy 3.3.1, and the only difference is whether the message names a remedy -- 'Enter the visit date as DD slash MM slash YYYY' against 'Invalid entry'. A HEAD WAS TRIED FIRST AND FAILED, measurably: recall 0.0 on its own training data under both document-mean and instance-max pooling, with false positives on conformant records (known-gaps.md §22). One clause inside a long announcement is diluted by an average and was not rescued by a max. It does not need a head: whether the announced error carries an INSTRUCTION is read directly, which is this project's own test for what a rule may assert, and the same basis as 1.1.1:filename-alt. Like 3.3.1 and 4.1.3 it reads probe-gated channels, so it cannot fire on a page we do not own -- probeForms is off there because submitting somebody else's form is not a review. |
 | **4.1.3** | Status Messages | AA | trained scorer | A status message after form activation that the screen reader never speaks. Same probe dependency as 3.3.1 and the same consequence, which was recorded there and not here: it reads `postSubmitFields`, and 0 of 77 real captures carry any, so it cannot fire on a real page. |
 
 ## Partial — assessed, with a named gap
@@ -67,7 +68,6 @@ The evidence exists, or could be captured with a probe. Nothing here is a resear
 | 3.1.1 | Language of Page | A | dom |
 | 3.2.1 | On Focus | A | screen-reader |
 | 3.2.2 | On Input | A | screen-reader |
-| 3.3.3 | Error Suggestion | AA | screen-reader |
 
 ## Out of scope
 

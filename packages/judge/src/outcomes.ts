@@ -59,7 +59,11 @@ export interface CriterionOutcome {
  * Listed explicitly rather than defaulted, so that a criterion missing from BOTH tables is a mistake the
  * parity test can catch — the alternative silently disables the truncation guard for it.
  */
-export const NOT_SWEEP_DERIVED: readonly string[] = ["1.4.2"];
+// 3.3.3 joined 1.4.2 on 2026-09-02. Its evidence is `formChanges` and `postSubmitFields` — the form
+// probe's own output, not a quick-nav sweep — so no sweep can truncate it and there is no completeness
+// caveat to raise. DECLARED rather than left out of `SWEEPS_FEEDING`, because this repo's rule is that
+// "nothing needs this" and "somebody forgot" must stay different states: an omission reads as the second.
+export const NOT_SWEEP_DERIVED: readonly string[] = ["1.4.2", "3.3.3"];
 
 const SWEEPS_FEEDING: Record<string, readonly string[]> = {
   "1.1.1": ["graphic"],
