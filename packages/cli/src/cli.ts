@@ -34,6 +34,10 @@ import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics
 import { assessedCriteria } from "@a11y-witness/judge/coverage";
 import { earlReport } from "@a11y-witness/evidence/earl";
 import { criterionOutcomes, type CriterionOutcome } from "@a11y-witness/judge/outcomes";
+import { readFile } from "node:fs/promises";
+import { parseFormsConfig, refuseIfWrongOrigin, FormsConfigError } from "./forms/config.js";
+import { submissionPlan } from "./forms/coverage.js";
+import { draftFormsConfig } from "./forms/draft.js";
 
 interface Args {
   url: string;
@@ -55,6 +59,16 @@ interface Args {
   probeFocusContext: boolean;
   /** Run the optional axe-core layer. Off with --no-axe or A11Y_AXE=0. */
   axe: boolean;
+  /**
+   * Path to a forms config (ADR 0024). Explicit, never auto-discovered: one implicit config cannot
+   * express more than one scenario, and instructing the tool to submit somebody's form should be
+   * visible in the workflow file rather than inferred from a file being present.
+   */
+  formsConfig: string | null;
+  /** Draft a forms config from what the screen reader announces on this page, and print it. */
+  emitFormConfig: boolean;
+  /** Say what WOULD be submitted, and submit nothing. */
+  plan: boolean;
   /** Path to axe results produced elsewhere, used instead of running our own scan. */
   axeResults: string | null;
 }
@@ -71,6 +85,7 @@ const USAGE =
   'Usage: npm run witness -- <url> --task "..." [--worker http://host:port] ' +
   "[--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms] [--no-probe-focus] "
   + "[--no-probe-navigation] [--no-probe-focus-context] "
+  + "[--forms <file>] [--emit-form-config] [--plan] "
   + "[--no-axe] [--axe-results <file>]";
 
 function defaultArgs(): Args {
@@ -107,6 +122,9 @@ function defaultArgs(): Args {
     // the whole time, and nothing in the product read it back to the user.
     probeNavigation: true,
     probeFocusContext: true,
+    formsConfig: null,
+    emitFormConfig: false,
+    plan: false,
     axe: process.env.A11Y_AXE !== "0",
     axeResults: process.env.A11Y_AXE_RESULTS ?? null,
   };
@@ -133,6 +151,8 @@ const BOOLEAN_FLAGS: Readonly<Record<string, (args: Args) => void>> = Object.fre
   "--no-probe-navigation": (a) => { a.probeNavigation = false; },
   "--no-probe-focus-context": (a) => { a.probeFocusContext = false; },
   "--no-axe": (a) => { a.axe = false; },
+  "--emit-form-config": (a) => { a.emitFormConfig = true; },
+  "--plan": (a) => { a.plan = true; },
 });
 
 export function applyArg(args: Args, argv: string[], i: number): number {
@@ -144,6 +164,7 @@ export function applyArg(args: Args, argv: string[], i: number): number {
     case "--worker": args.worker = argv[++i] ?? args.worker; return i;
     case "--after": args.after = afterRunArg(argv[++i]); return i;
     case "--axe-results": args.axeResults = argv[++i] ?? args.axeResults; return i;
+    case "--forms": args.formsConfig = argv[++i] ?? args.formsConfig; return i;
     default:
       if (!v.startsWith("--")) args.url = v;
       return i;
@@ -192,8 +213,33 @@ const SHADOW_PYTHON = process.env.A11Y_SHADOW_PYTHON
   ?? fileURLToPath(new URL("../.venv/bin/python", import.meta.url));
 const SHADOW_SCORER = scorerArtefact().scoreScript;
 
+/**
+ * `--plan`: say what would be submitted, and submit nothing.
+ *
+ * BEFORE the worker is leased, and that ordering is the whole point. A dry run that first starts a
+ * Windows guest has already done something, and the question this answers — "what is this file about to
+ * do to my site?" — must be answerable without doing any of it. It is also why this reads the config and
+ * nothing else: no capture, no network, no worker.
+ *
+ * @returns true when the run is over
+ */
+async function planOnly(args: Args): Promise<boolean> {
+  if (!args.plan) return false;
+  if (!args.formsConfig) {
+    process.stderr.write("--plan describes what a forms config would submit, so it needs --forms <file>.\n");
+    process.exit(2);
+  }
+  const config = parseFormsConfig(await readFile(args.formsConfig, "utf8"), args.formsConfig);
+  // The origin guard runs HERE too, not only on the real path. A plan against the wrong site would print
+  // a reassuring page of intentions that describe a run which would have been refused.
+  refuseIfWrongOrigin(config, args.url);
+  console.log(submissionPlan(config.forms, config.origin).join("\n"));
+  return true;
+}
+
 async function main(): Promise<void> {
   const args = parseArgs();
+  if (await planOnly(args)) return;
   const lease = await leaseWorker(args);
   // finally, not a catch: the VM must be released whether the run succeeded, threw, or the
   // judge rejected the capture. Leaking a running Windows guest is the failure mode this
@@ -297,6 +343,44 @@ async function recaptureUntilItReadsThePage(
 }
 
 /**
+ * Obtain the evidence — both layers, verified against the page we asked for.
+ *
+ * Extracted when `runWitness` crossed the physical-line budget, and it earns a name: everything here is
+ * ACQUISITION, and everything after it is interpretation. The two run on different clocks (this half is
+ * network- and worker-bound; the other is pure) and fail for unrelated reasons, which is the seam.
+ */
+async function captureAndScan(
+  { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, wantAxe, axeResults }: {
+    url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean;
+    probeNavigation: boolean; probeFocusContext: boolean; wantAxe: boolean; axeResults: string | null;
+  },
+): Promise<{ cap: CaptureResponse; axe: Awaited<ReturnType<typeof pageContext>> }> {
+  const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults });
+  process.stderr.write(`Scanning ${url} (${ruleLayer === "none" ? "" : "rule-based axe-core + "}real screen reader) ...\n`);
+  // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
+  // load the same URL independently, so run them concurrently. axe failure is
+  // non-fatal: we still report the lived-experience layer.
+  const [firstCap, axe] = await Promise.all([
+    captureViaWorker(url, { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext }),
+    pageContext(url, ruleLayer, axeResults),
+  ]);
+  // `null` when the rule layer did not run, so "unchecked" can never be mistaken for "clean". Both
+  // output paths must use THIS, not `axe.findings`: the human report already did
+  // (`ruleLayer === "none" ? null : ...`) while the --json path emitted the bare array, so `--no-axe`
+  // produced `"ruleBased": []` and any consumer rendered it as "0 violations". The text report and the
+  // JSON disagreed about whether contrast had been checked, and the JSON was the one that lied.
+  // `pageContext` decides this now — see its header. The ternary that used to live here knew only about
+  // `--no-axe` and rendered a FAILED scan as "0 violations". The caller reads it off the returned result
+  // for that reason: there must be exactly one place this is derived.
+
+  // Verify-and-retry (the Root-1 fix, brought to the product). Browser focus on
+  // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
+  const cap = await recaptureUntilItReadsThePage(firstCap, axe.title,
+    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext });
+  return { cap, axe };
+}
+
+/**
  * What the run says about the capture BEFORE judging it — diagnostics on request, and the one warning that
  * has to survive an empty transcript.
  *
@@ -323,30 +407,15 @@ function reportOnTheCapture(cap: CaptureResponse, debug: boolean): void {
 
 async function runWitness(
   { url, task, worker, json, debug, probeForms, probeFocus, probeNavigation, probeFocusContext,
-    axe: wantAxe, axeResults }: RunOptions,
+    emitFormConfig, axe: wantAxe, axeResults }: RunOptions,
 ): Promise<void> {
-  const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults });
-  process.stderr.write(`Scanning ${url} (${ruleLayer === "none" ? "" : "rule-based axe-core + "}real screen reader) ...\n`);
-  // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
-  // load the same URL independently, so run them concurrently. axe failure is
-  // non-fatal: we still report the lived-experience layer.
-  const [firstCap, axe] = await Promise.all([
-    captureViaWorker(url, { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext }),
-    pageContext(url, ruleLayer, axeResults),
-  ]);
-  // `null` when the rule layer did not run, so "unchecked" can never be mistaken for "clean". Both
-  // output paths must use THIS, not `axe.findings`: the human report already did
-  // (`ruleLayer === "none" ? null : ...`) while the --json path emitted the bare array, so `--no-axe`
-  // produced `"ruleBased": []` and any consumer rendered it as "0 violations". The text report and the
-  // JSON disagreed about whether contrast had been checked, and the JSON was the one that lied.
-  // `pageContext` decides this now — see its header. The ternary that used to live here knew only about
-  // `--no-axe` and rendered a FAILED scan as "0 violations".
+  const { cap, axe } = await captureAndScan(
+    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, wantAxe, axeResults });
   const ruleFindings = axe.findings;
-
-  // Verify-and-retry (the Root-1 fix, brought to the product). Browser focus on
-  // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
-  const cap = await recaptureUntilItReadsThePage(firstCap, axe.title,
-    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext });
+  // A draft needs the ANNOUNCEMENTS and nothing downstream of them, so it returns before the judge runs.
+  // Scoring a page in order to print a config skeleton would spend a model pass on an answer nobody asked
+  // for, and would make `--emit-form-config` fail on a page the scorer abstains from.
+  if (emitFormConfig) return emitDraft(cap, url);
   // Carry the verdict, do not just warn about it.
   //
   // This wrote a WARNING and carried on. On gov.uk the capture read Edge's image-magnifier overlay
@@ -618,6 +687,27 @@ async function captureViaWorker(
   return res.json as CaptureResponse;
 }
 
+/**
+ * Print a forms-config skeleton drawn from what NVDA announced on this page.
+ *
+ * To STDOUT with the diagnostics on stderr, so `--emit-form-config > forms.yml` produces a file that
+ * loads. A draft printed with a banner in front of it is a draft the author has to edit before the parser
+ * will take it, which defeats the point of generating it.
+ */
+function emitDraft(cap: CaptureResponse, url: string): void {
+  const fields = (cap.structure?.formFields ?? []) as string[];
+  const draft = draftFormsConfig(fields, { origin: new URL(url).origin });
+  if (draft.unnamed.length) {
+    // On STDERR so it survives a redirect to a file, because it is the half of the output that is a
+    // FINDING rather than a template. A field NVDA announced with no name cannot be addressed by this
+    // config and cannot be addressed by a screen reader user either — that is 4.1.2, reported whether or
+    // not this form is ever configured.
+    process.stderr.write(`${draft.unnamed.length} form field(s) have NO accessible name and are named in `
+      + "comments in the draft. That is a 4.1.2 finding about the page, not a gap in the config.\n");
+  }
+  console.log(draft.yaml);
+}
+
 function printReport(report: Report): void {
   console.log(reportLines(report).join("\n"));
 }
@@ -641,5 +731,8 @@ if (isProgram) main().catch((err: unknown) => {
   if (process.argv.includes("--debug") && err instanceof Error && err.stack) {
     process.stderr.write(`\n${err.stack}\n`);
   }
-  process.exit(1);
+  // A CONFIG error is the author's to fix and a tool failure is ours, so they exit differently. A CI job
+  // that treats every non-zero exit as "the scan broke" will retry a malformed forms file for ever;
+  // exit 2 says the input is wrong and retrying it will not help.
+  process.exit(err instanceof FormsConfigError ? 2 : 1);
 });
