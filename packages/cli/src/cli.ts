@@ -697,6 +697,13 @@ async function captureViaWorker(
 function emitDraft(cap: CaptureResponse, url: string): void {
   const fields = (cap.structure?.formFields ?? []) as string[];
   const draft = draftFormsConfig(fields, { origin: new URL(url).origin });
+  if (draft.unparsed.length) {
+    // Ours, and said as ours. An author cannot fix this tool's announcement grammar and must not be sent
+    // looking for a defect on their page that belongs to us.
+    process.stderr.write(`${draft.unparsed.length} announcement(s) could not be read by this tool's `
+      + "grammar and are listed in the draft. That is a gap in a11y-witness, not a finding about the "
+      + "page.\n");
+  }
   if (draft.unnamed.length) {
     // On STDERR so it survives a redirect to a file, because it is the half of the output that is a
     // FINDING rather than a template. A field NVDA announced with no name cannot be addressed by this
