@@ -6,7 +6,7 @@
     "modelSha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db"
   },
   "representation": {
-    "schema": "screenreader-structured-v17",
+    "schema": "screenreader-structured-v18",
     "text": "channel-tagged screen-reader evidenceUnits",
     "embeddingSize": 384,
     "structuredFeatureSize": 28,
@@ -51,7 +51,7 @@
   },
   "dataset": {
     "path": "runs/screenreader-dataset/with-realism.jsonl",
-    "sha256": "201f4ab36a38e29c7deab860162107495e239fc4062ead8e6d7be3edcb1b9ffb",
+    "sha256": "3aeff734041de8d284ba6a35dddf849708cc07730c7f8f3adf0055fbbc3e7277",
     "records": 2790,
     "grade": "release"
   },

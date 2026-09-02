@@ -13,9 +13,9 @@
   "artifact": {
     "screenReader": "NVDA",
     "encoderSha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db",
-    "modelSha256": "d04b4fdc79716a799d6b21233de84bcf092149ee0e061c19d460a40fa5f8ae25",
-    "reportSha256": "d954dd0fab91f57f31fac82aa4a27fb5064bf3d8ed11e88d521094885499871e",
-    "trainingDatasetSha256": "201f4ab36a38e29c7deab860162107495e239fc4062ead8e6d7be3edcb1b9ffb",
+    "modelSha256": "889539b193791e406305a408bd418190ea208300bc2dc0d218b3770cb2dd126f",
+    "reportSha256": "f140c136500982797f4e4755c191ce957786e190af7c5e676a850eecd6c60c31",
+    "trainingDatasetSha256": "3aeff734041de8d284ba6a35dddf849708cc07730c7f8f3adf0055fbbc3e7277",
     "modelPath": "runs/model-candidate/model.safetensors",
     "reportPath": "runs/model-candidate/training-report.json"
   },
