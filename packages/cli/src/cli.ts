@@ -45,6 +45,13 @@ interface Args {
   probeForms: boolean;
   /** Tab through the page and report focus. Covers 2.1.2 No Keyboard Trap. */
   probeFocus: boolean;
+  /**
+   * Follow the FIRST LINK and report the title either side. Covers 2.4.1 Bypass Blocks (an inert skip
+   * link) and 2.4.2 Page Titled (a route that changes without the title following it).
+   */
+  probeNavigation: boolean;
+  /** Focus the first few controls and report the title either side. Covers 3.2.1 On Focus. */
+  probeFocusContext: boolean;
   /** Run the optional axe-core layer. Off with --no-axe or A11Y_AXE=0. */
   axe: boolean;
   /** Path to axe results produced elsewhere, used instead of running our own scan. */
@@ -62,6 +69,7 @@ function parsedAfterRun(): AfterRun {
 const USAGE =
   'Usage: npm run witness -- <url> --task "..." [--worker http://host:port] ' +
   "[--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms] [--no-probe-focus] "
+  + "[--no-probe-navigation] [--no-probe-focus-context] "
   + "[--no-axe] [--axe-results <file>]";
 
 function defaultArgs(): Args {
@@ -83,6 +91,21 @@ function defaultArgs(): Args {
     // applies it to all content whether or not it is relied upon — and a keyboard trap is total: a user
     // who cannot leave a control cannot use the rest of the page. It costs ~8 s per capture.
     probeFocus: true,
+    // ON, on the same side of the consent line as `probeFocus` and for the same reason: following a
+    // link is ordinary browsing -- the thing this tool already did to reach the page -- where
+    // submitting a form writes to somebody's system. On essentially every real page the first link IS
+    // the skip link, which is exactly what 2.4.1 exists to test.
+    //
+    // These two defaulted to ABSENT until 2026-09-02, and the cost was the shape this repo names most
+    // often: a gate that does not exercise what ships. `capture-real-pages.mjs` has set both since
+    // 2026-08-24, so the 86-conformant-page validation behind `addInertSkipLink`, `addStaleRouteTitle`
+    // and 3.2.1 was gathered with flags THE PRODUCT COULD NOT SEND. Three criteria the README headlines
+    // as unreachable by a static analyser were unreachable by this CLI too, silently, because an
+    // un-asked probe returns an empty channel and an empty channel is what a clean page looks like.
+    // `observed` is why that was merely invisible rather than a false pass -- it recorded `asked: false`
+    // the whole time, and nothing in the product read it back to the user.
+    probeNavigation: true,
+    probeFocusContext: true,
     axe: process.env.A11Y_AXE !== "0",
     axeResults: process.env.A11Y_AXE_RESULTS ?? null,
   };
@@ -95,19 +118,31 @@ function defaultArgs(): Args {
  * Apply one argv token. EXPORTED for tests, and that is the whole reason this file had none: it exported
  * nothing, so nothing could import it. Argument handling is pure and this project has already paid for
  * getting it wrong — `--worker=http://:8765` was accepted and burned 29 minutes before anything noticed.
+ *
+ * The two halves are split by SHAPE, not by taste: a flag that swallows the next token has to move `i`,
+ * and one that does not cannot. Keeping the value-taking four in the switch means `i` is only reassigned
+ * where that is the point, and the boolean flags become a table that grows without touching control flow
+ * — which is what pushed this function past the complexity gate when 3.2.1's and 2.4.1's arrived.
  */
+const BOOLEAN_FLAGS: Readonly<Record<string, (args: Args) => void>> = Object.freeze({
+  "--json": (a) => { a.json = true; },
+  "--debug": (a) => { a.debug = true; },
+  "--probe-forms": (a) => { a.probeForms = true; },
+  "--no-probe-focus": (a) => { a.probeFocus = false; },
+  "--no-probe-navigation": (a) => { a.probeNavigation = false; },
+  "--no-probe-focus-context": (a) => { a.probeFocusContext = false; },
+  "--no-axe": (a) => { a.axe = false; },
+});
+
 export function applyArg(args: Args, argv: string[], i: number): number {
   const v = argv[i];
+  const setBoolean = BOOLEAN_FLAGS[v];
+  if (setBoolean) { setBoolean(args); return i; }
   switch (v) {
     case "--task": args.task = argv[++i] ?? args.task; return i;
     case "--worker": args.worker = argv[++i] ?? args.worker; return i;
     case "--after": args.after = afterRunArg(argv[++i]); return i;
     case "--axe-results": args.axeResults = argv[++i] ?? args.axeResults; return i;
-    case "--json": args.json = true; return i;
-    case "--debug": args.debug = true; return i;
-    case "--probe-forms": args.probeForms = true; return i;
-    case "--no-probe-focus": args.probeFocus = false; return i;
-    case "--no-axe": args.axe = false; return i;
     default:
       if (!v.startsWith("--")) args.url = v;
       return i;
@@ -248,7 +283,8 @@ function warnUnverified(reason: CaptureDoubt, title: string | undefined): void {
 async function recaptureUntilItReadsThePage(
   first: CaptureResponse,
   title: string,
-  options: { url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean },
+  options: { url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean;
+    probeNavigation: boolean; probeFocusContext: boolean },
 ): Promise<CaptureResponse> {
   let cap = first;
   const { url, ...captureOptions } = options;
@@ -285,7 +321,8 @@ function reportOnTheCapture(cap: CaptureResponse, debug: boolean): void {
 }
 
 async function runWitness(
-  { url, task, worker, json, debug, probeForms, probeFocus, axe: wantAxe, axeResults }: RunOptions,
+  { url, task, worker, json, debug, probeForms, probeFocus, probeNavigation, probeFocusContext,
+    axe: wantAxe, axeResults }: RunOptions,
 ): Promise<void> {
   const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults });
   process.stderr.write(`Scanning ${url} (${ruleLayer === "none" ? "" : "rule-based axe-core + "}real screen reader) ...\n`);
@@ -293,7 +330,7 @@ async function runWitness(
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
   const [firstCap, axe] = await Promise.all([
-    captureViaWorker(url, { task, worker, probeForms, probeFocus }),
+    captureViaWorker(url, { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext }),
     pageContext(url, ruleLayer, axeResults),
   ]);
   // `null` when the rule layer did not run, so "unchecked" can never be mistaken for "clean". Both
@@ -308,7 +345,7 @@ async function runWitness(
   // Verify-and-retry (the Root-1 fix, brought to the product). Browser focus on
   // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
   const cap = await recaptureUntilItReadsThePage(firstCap, axe.title,
-    { url, task, worker, probeForms, probeFocus });
+    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext });
   // Carry the verdict, do not just warn about it.
   //
   // This wrote a WARNING and carried on. On gov.uk the capture read Edge's image-magnifier overlay
@@ -523,6 +560,8 @@ interface CaptureRequest {
   worker: string;
   probeForms: boolean;
   probeFocus: boolean;
+  probeNavigation: boolean;
+  probeFocusContext: boolean;
 }
 
 /**
@@ -546,13 +585,14 @@ interface CaptureRequest {
 // "it comes from the shared constant", which is now true here.
 
 async function captureViaWorker(
-  url: string, { task, worker, probeForms, probeFocus }: CaptureRequest,
+  url: string,
+  { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext }: CaptureRequest,
 ): Promise<CaptureResponse> {
   let res: { status: number; ok: boolean; text: string; json: unknown };
   try {
     res = await requestJson(`${worker}/capture`, {
       method: "POST",
-      body: { url, task, probeForms, probeFocus },
+      body: { url, task, probeForms, probeFocus, probeNavigation, probeFocusContext },
       timeoutMs: CAPTURE_CLIENT_TIMEOUT_MS,
     });
   } catch (error) {
