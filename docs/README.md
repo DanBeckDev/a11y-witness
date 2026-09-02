@@ -55,6 +55,7 @@ human or agent, *working on* the repo rather than using it.
 | doc | what it is |
 |---|---|
 | [backlog.md](./backlog.md) | **what is open, right now** — the single tracker. Open work lives here; `known-gaps.md` and `not-working.md` hold the closed items and their lessons |
+| [architecture-audit.md](./architecture-audit.md) | **an outside-in structural audit at `dba4278` (2026-09-03)** — package boundaries versus the declared graph, the capture wire contract's many owners, four god-modules with measured seams, the verification blind spots at the consumer edge, and the documentation architecture. Ten ranked findings with `file:line` evidence and a remediation plan sequenced by the repo's own cost model |
 | [adr/](./adr/README.md) | 24 architecture decision records, indexed — the *why*, including the alternatives that were rejected and what would falsify each |
 | [isolation-spike.md](./isolation-spike.md) | the experiment that shaped the package split, run before anything was moved |
 | [history-2026-08.md](./history-2026-08.md) | what happened, month by month, for context a diff cannot give |
