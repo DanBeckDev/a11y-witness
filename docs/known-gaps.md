@@ -309,6 +309,54 @@ in either direction. Adding it to the "always run" list would have been the easy
 which is a `CAPTURE_PROTOCOL_VERSION` bump and a full recapture. 3.3.3 was the one of the three reachable
 screen-reader criteria that cost no capture change, which is why it was taken first.
 
+## 23. `3.2.1` and `3.2.2` are unbuilt, and the blocker is a PROTOCOL BUMP nobody has decided to pay for
+
+The last two screen-reader-reachable criteria this tool does not assess. Recorded properly rather than
+carried as a verbal caveat, because "we could do it" and "here is what it costs" are different statements
+and only the second is useful.
+
+| | |
+|---|---|
+| **3.2.1 On Focus** | focusing a control causes a change of context — the page navigates, a window opens, focus jumps |
+| **3.2.2 On Input** | the same, on changing a control's VALUE rather than focusing it |
+
+**Most of the machinery exists.** `probeTypedFeedback` already lands on an edit field, types
+`TYPED_PROBE_TEXT` and captures the speech delta — 3.2.2 is that plus a context check.
+`probeRouteChange` already records the page title before and after an activation, which is what a context
+check reads. `probeFocusOrder` already walks the tab order for 3.2.1's half. `criterion-coverage.ts` has
+said so for months: *"a probe this tool has the machinery for but does not drive."*
+
+**What it costs is not the code.** Either probe writes a new channel, and `recordWhatWasAsked` gives every
+capture an `observed.<channel>` entry — so the field appears on new captures and is `undefined` on old
+ones. That is exactly the split-corpus failure the protocol-10 note describes: *"a consumer reading
+`observed.links?.asked` gets a fact on some records and `undefined` on others, and `undefined` is the
+ambiguity this whole field removes."* So it is a `CAPTURE_PROTOCOL_VERSION` bump, 13 → 14:
+
+```
+2,677 cached captures invalidated
+~4.5 h across the five-box fleet to recapture
+```
+
+**And it must be BUNDLED, which is the real reason this is a decision rather than a task.** CLAUDE.md's
+own rule: do a bump deliberately, "ideally alongside a recapture that was happening anyway". Protocol 11
+bundled three additions for exactly this reason and says so — *"each of the three is individually too
+small to justify ~4.5 h of fleet time; three together are not, and taking them separately would have cost
+that time three times over."* Two criteria are a reasonable bundle. One, taken alone because a list wanted
+shortening, is the economy that rule warns against.
+
+**Why it was not half-built while waiting.** Landing the probes without paying for the bump gives capture
+code no case exercises and no signal reads — "written, embedded and inert", which this file names as the
+most expensive shape here. §22 is the same judgement made hours earlier and at real cost: the 3.3.3 head
+was measured, refuted and REVERTED rather than shelved behind an exclusion, for precisely this reason.
+Building 3.2.1's probe and leaving it dark would contradict that within a day.
+
+**What would tell you it is fixed:** `criterion-coverage.ts` reads `assessed` for both — which
+`criterion-coverage.test.ts` permits only once the judge can actually return those findings — and
+`everything` completes with them scored.
+
+**The decision, stated once so it can be answered:** bump to 14, bundle both criteria, and spend one
+recapture. Nothing else is in the way — not the design, not the corpus, and not the code.
+
 ## 21. `4.1.3` has NO real-page grounding, and closing it is a CONSENT decision rather than a code one
 
 **Not a defect. Measured, understood, and deliberately open** — recorded here rather than left on a
