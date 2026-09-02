@@ -399,7 +399,7 @@ question that would normally justify hesitating is now answered.
 corpus is invalidated and the criteria are not delivered, so the cost is paid and nothing is bought.
 Everything above it can be built and verified without touching a cached capture, which is why it was.
 
-## 24. `server.log` contains no WORKER lines, so a hung capture leaves no record
+## 24. CLOSED 2026-09-02 — two writers on one file, and the fix is VERIFIED on the fleet
 
 `CLAUDE.md` tells you what to do when a worker misbehaves: *"`server.log` persists on the guest. You cannot
 pull it while the worker is down, so read it after it recovers — the record of the death is still there."*
@@ -428,7 +428,22 @@ fallback"* — so a refusal is invisible by design, which is exactly the shape t
 Not proven: it needs a Windows worker to confirm, and `server-log.mjs` is testable with an injected `io`,
 so a test can be written against the real writer without one.
 
-**What would tell you it is fixed:** `/diagnostics.serverLogTail` on any worker shows a line the worker
+**CLOSED, and the hypothesis was right.** `run-server.cmd` holds `server.log` open for stderr redirection
+for node's whole lifetime while `createLogWriter` appended to the same path — two writers, one file, on
+Windows, with the refusal swallowed because "the console is the file's fallback". The worker now owns
+`worker.log` and the launcher keeps `server.log`; `/diagnostics` returns both tails.
+
+VERIFIED on a11y-worker-2 after deploy, which is the part that matters — the fix was committed before it
+could be tested and a hypothesis held until then:
+
+```
+[2026-09-02T15:43:12.315Z] capture .../input-context-change-archive/good.html (nav=object, probeForms...
+  -> 3 phrases; afterStart.lastSpoken="heading, level 1, Archive search"
+```
+
+40 lines of genuine worker output where there were none. A hung capture now leaves a record.
+
+**What told me it was fixed:** `/diagnostics.serverLogTail` on any worker shows a line the worker
 itself emitted — a warm-up, a fault, a recovery — rather than only launcher output.
 
 **Worth noting how close this came to staying invisible.** `serverLogTail` exists precisely for this
@@ -661,7 +676,16 @@ running one function, seeing `undefined`, and blaming the function. Nothing was 
 written down. The 2026-08-24 rule it invoked — *establish the forms, do not pattern-match* — was the right
 rule cited to justify not looking.
 
-## 12. CI on `main` is RED, and the fix is on this branch, unmerged
+## 12. STALE 2026-09-02 — CI on `main` is GREEN and has been for many pushes
+
+Checked rather than assumed: `lint.yml` reports `success` on `ff13fe4` and `2aaedc1`, the two most recent
+pushes to `main`. The entry below described `origin/main` at `7dd7fb9` with a guidepup import failure, and
+that was true when written — dozens of merges ago. Left in place because the ANALYSIS of why a
+screen-reader import throws on a Linux runner is still the reason `capture-regression.yml` is
+path-filtered, and because an entry that says "this was the fault and here is why it no longer is" is
+worth more than a deletion.
+
+### The original entry, for the reasoning
 
 Established 2026-08-29 while chasing why `action-smoke` was failing, which was a different fault (see
 below). `origin/main` is at `7dd7fb9`, and `lint.yml` — which gates ESLint, `tsc` and the whole unit suite
