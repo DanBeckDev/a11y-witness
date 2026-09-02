@@ -1153,3 +1153,45 @@ it fails naming the flag and the side that lacks it.
 we do not own. They write to somebody's system or press keys inside their widgets. The line moved for two
 probes that only Tab and follow a link — which `probeFocus` already did on every capture — and not for
 the ones the line was drawn against.
+
+---
+
+## 26. The report says "untested" for criteria axe answered in the same run — OPEN
+
+Found 2026-09-02 while checking what the shipped product can actually reach, which is also how §25 turned
+up. This one is a REPORTING defect rather than a coverage defect, and the distinction is the whole entry:
+the tool already has the answer and declines to say it.
+
+`criterionOutcomes()` builds its covered-set from `assessedCriteria()`, which `coverage.ts` pins to the
+trained model's own criteria plus the deterministic rules — **the screen-reader layer only**. Every
+criterion outside that set gets a fixed sentence:
+
+```
+outcome: "untested"
+reason:  "No assessor in this tool covers this criterion. It is unchecked, not clean."
+```
+
+That sentence is false in any run where the axe layer answered the criterion. The CLI runs axe **by
+default** (`--no-axe` opts out), prints `Scanning <url> (rule-based axe-core + real screen reader)`, and
+then reports as though only the screen reader ran.
+
+| criterion | axe rule | in a default CLI scan | the report says |
+|---|---|---|---|
+| 3.1.1 Language of Page | `html-has-lang` | runs | `untested` |
+| 1.3.5 Identify Input Purpose | `autocomplete-valid` | runs | `untested` |
+| 2.5.3 Label in Name | `label-content-name-mismatch` | runs | `untested` |
+| 2.1.4 Character Key Shortcuts | none | — | `untested` — **correct** |
+
+**What makes it cheap: the join key already exists.** `packages/cli/src/scan/axe.ts` parses criterion
+numbers out of axe's tags — the comment says so outright, *"axe tags include `wcag143` for SC 1.4.3;
+extract criterion numbers"* — and `AxeFinding.wcag` carries them. Nothing consumes them for coverage.
+
+**What it must NOT become: one undifferentiated "assessed".** ADR 0021's whole subject is that the layer
+which decides must be the layer allowed to claim, so a finding's ASSESSOR is provenance the report has to
+carry. axe is a rule layer and may therefore assert — that part is compatible — but a criterion answered
+by axe and one answered by the screen reader are different claims about different evidence, and merging
+them silently would undo the distinction this project exists to make.
+
+**What would tell you it is fixed:** a default CLI scan of a page with `<html>` and no `lang` reports 3.1.1
+as failed, naming axe as the assessor; and a scan with `--no-axe` reports it `untested` again, for the
+right reason.
