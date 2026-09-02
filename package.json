@@ -117,7 +117,8 @@
     "scorer:explain-feature": ".venv/bin/python packages/scorer/python/explain_feature.py",
     "corpus:observation-ambiguity": "node packages/lab/scripts/audit-observation-ambiguity.mjs",
     "gate:probe-order": "node packages/lab/scripts/gate-probe-order.mjs",
-    "lab:collect-promotion": "node packages/lab/scripts/collect-promotion.mjs"
+    "lab:collect-promotion": "node packages/lab/scripts/collect-promotion.mjs",
+    "scorer:shortcuts:baseline:candidate": "npm run --silent corpus:unclosable-map && .venv/bin/python packages/lab/scripts/audit-scorer-shortcuts.py --model runs/model-candidate --data runs/screenreader-dataset/with-realism.jsonl --update-baseline"
   },
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
