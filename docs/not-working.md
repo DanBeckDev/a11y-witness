@@ -1381,7 +1381,7 @@ its whole budget correctly, by a rule that is right in general. Whatever is wron
 withdrawing a label, and both need the cause. `retrain` and `export-acceptance` completed; the train and
 the thirteen gates after it have not run.
 
-## 21. THE CHAIN NOW CLEARS SEVEN GATES AND STOPS AT `promote` — a veto regression I did not cause
+## 21. RESOLVED 2026-09-02 — the chain clears all nine stages; the 2.4.2 veto regression is gone
 
 Four dispatches, each stopping later than the last, and every stop was a real defect. Recorded in order
 because the sequence is the useful part:
@@ -1514,6 +1514,31 @@ about to make it from a story.
 worst veto per subtype and the transcript truncates the rest at *"... and 13 more"*. Reading the four
 features needed an ssh shell, which `lab-fetch.yml` exists to remove — the `grants-audit` lesson one report
 along.
+
+**RESOLVED 2026-09-02, and checked against the artefact rather than remembered.** The chain now
+completes all nine stages with `FITNESS: PASS`. The specific regression this entry is about has cleared:
+
+| | when this was written | now |
+|---|---|---|
+| `2.4.2:route-title-stale` closable vetoes | **5** | **1** (`validation_error_missing`, −2.98) |
+| positives | 14 | **25** |
+
+Read from `scorer-shortcuts.baseline.json` at HEAD, not from a run's transcript.
+
+**The cause is probable rather than proven, and the distinction is kept deliberately.** The remedy this
+entry prescribed was corpus work — *"give some of the 14 route-change pages an activatable,
+non-navigating control"* — and the protocol-14 case additions grew the subtype from 14 positives to 25
+while the closable count fell from 5 to 1. That is consistent with the prescription having been satisfied
+as a side effect. It is not the same as having verified that those particular pages carry that particular
+affordance, and nobody has checked. One closable veto remains, which is the ordinary state for a head
+rather than a regression.
+
+**Worth recording about the entry itself:** it was carried on the backlog as "stale — it says the chain
+stops at `promote`, and the chain completes", i.e. as doc hygiene worth minutes. That was wrong. It held
+a real unresolved defect with a bounded remedy, and the only reason the mischaracterisation cost nothing
+is that the defect had independently resolved. **A heading that has stopped being true and an item that
+has stopped being open are different things**, and reading the entry rather than its heading is what
+separated them.
 
 ## Closed since this list was written
 
