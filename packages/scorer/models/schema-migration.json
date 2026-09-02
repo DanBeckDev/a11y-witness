@@ -1,6 +1,0 @@
-{
-  "shippedSchema": "screenreader-structured-v17",
-  "pendingSchema": "screenreader-structured-v18",
-  "why": "The announcement grammar can now see a CHECK BOX and a MENU BUTTON. `CONTROL_ROLES` carried the spelling \"checkbox\", which NVDA never produces, and was missing \"check box\", which it does \u2014 so `parseAnnouncement` returned NO objects at all for either control, name included, and every feature reading `objects` was blind to them. Found by pointing `--emit-form-config` at a W3C tutorial page, where a correctly-labelled \"Subscribe to newsletter, check box\" was reported as an UNNAMED control: a false 4.1.2 against conformant markup. Measured before bumping: 0 of 1,868 records in the current export change, because the affected announcements live only in `runs/real-page-corpus` and no synthetic case produces a checkbox. The bump is still right \u2014 the version guards a risk this corpus cannot express, since the shipped model is scored on somebody's live page and a page with a checkbox now yields a different feature vector from the one the weights were fitted under. CLOSES when stage 3's bundled recapture and retrain land; this rides with them rather than paying a second recapture. See docs/backlog.md.",
-  "openedAt": "2026-09-02"
-}
