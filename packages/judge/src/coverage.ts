@@ -40,12 +40,12 @@ export const SCORED_CRITERIA = [
   // its records stay in the model (they are `decidedBy: "rules"`, not `unavailable`), so the trainer fits
   // a head, and `RULE_SUBSTITUTED_SUBTYPES` makes that head non-blocking because the rule is exact.
   // Listing it answers "is there a head" honestly; `RULE_CRITERIA` below answers who decides.
-  // 3.2.1 and 3.2.2 are NOT here yet, deliberately. This list must equal the SHIPPED model's own criteria
-  // — a test asserts it against training-report.json — and their heads do not exist until the
-  // protocol-14 recapture and retrain have run. `RULE_CRITERIA` already carries them, and
-  // `assessedCriteria()` is the union, so no coverage claim is waiting on this. Added when the model
-  // ships with them, which is the same ordering 3.3.3 followed.
-  "2.4.4", "2.4.6", "3.3.1", "3.3.2", "3.3.3", "4.1.2", "4.1.3",
+  // 3.2.1 and 3.2.2 joined on 2026-09-02, once the protocol-14 retrain had actually produced their heads
+  // — this list must equal the SHIPPED model's own criteria and a test asserts it against
+  // training-report.json, so adding them earlier would have failed for the right reason. Both are ALSO in
+  // `RULE_CRITERIA`: the rules decide them and the heads are substituted, which is the same shape as
+  // 3.3.3 and answers a different question than this list does.
+  "2.4.4", "2.4.6", "3.2.1", "3.2.2", "3.3.1", "3.3.2", "3.3.3", "4.1.2", "4.1.3",
 ] as const;
 
 /**
