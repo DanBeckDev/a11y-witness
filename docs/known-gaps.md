@@ -354,8 +354,27 @@ Building 3.2.1's probe and leaving it dark would contradict that within a day.
 `criterion-coverage.test.ts` permits only once the judge can actually return those findings — and
 `everything` completes with them scored.
 
+**PROVED ON A REAL CAPTURE, 2026-09-02, so the decision rests on evidence and not an estimate.**
+`probeTypedFeedback` now reads the page title either side of the keystrokes, and one pair captured through
+real NVDA answers whether the machinery can see the failure at all:
+
+```
+good   titleBefore "Archive search"   titleAfter "Archive search"
+bad    titleBefore "Archive search"   titleAfter "Results for 123456"
+```
+
+That is 3.2.2's failure, observed. It shipped WITHOUT a bump and safely: no corpus case uses
+`probeTyping`, so no cached capture carries `typedFeedback` and there is nothing to split. What remains
+for 3.2.2 is a corpus family, a rule and the eight registries — mechanical, and none of it needs fleet
+time until the end. 3.2.1 is the same shape against `probeFocusOrder`'s tab walk and is not yet written.
+
 **The decision, stated once so it can be answered:** bump to 14, bundle both criteria, and spend one
-recapture. Nothing else is in the way — not the design, not the corpus, and not the code.
+recapture. Nothing else is in the way — not the design, not the corpus, and not the code; the feasibility
+question that would normally justify hesitating is now answered.
+
+**Why the bump stays LAST rather than first.** A half-finished bump is the worst state available: the
+corpus is invalidated and the criteria are not delivered, so the cost is paid and nothing is bought.
+Everything above it can be built and verified without touching a cached capture, which is why it was.
 
 ## 21. `4.1.3` has NO real-page grounding, and closing it is a CONSENT decision rather than a code one
 
