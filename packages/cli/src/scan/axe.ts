@@ -27,6 +27,12 @@
  */
 export const WCAG_AA_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
+// Imported rather than redeclared: the judge owns the outcomes model, and a second spelling of this type
+// would be the fact-stated-twice defect with a compiler that cannot see it, since structurally identical
+// types unify silently.
+import type { RuleLayerCoverage, RuleLayerVerdict } from "@a11y-witness/judge/outcomes";
+export type { RuleLayerCoverage, RuleLayerVerdict };
+
 export interface AxeFinding {
   source: "axe-core";
   /** WCAG success criteria this violation maps to, e.g. ["1.4.3"]. */
@@ -38,6 +44,43 @@ export interface AxeFinding {
   /** The failing elements (HTML snippet + CSS selector path). */
   nodes: { html: string; target: string[] }[];
 }
+
+/**
+ * Fold axe's four result buckets into one verdict per criterion.
+ *
+ * A criterion usually has SEVERAL axe rules, so the buckets must be reduced with a precedence and it is
+ * the strict one: a violation anywhere beats review-needed, which beats clean. Two rules for a criterion
+ * where one passes and one needs review leaves the criterion needing review — claiming otherwise would let
+ * a passing fragment vouch for a fragment nobody checked.
+ *
+ * `inapplicable` counts as CLEAN rather than as ACT's `inapplicable`, and that is deliberate. axe means
+ * "this RULE found no elements to test"; the criterion may still have aspects no axe rule covers, so the
+ * page having no images tells you nothing about the rest of 1.1.1. Reporting the criterion inapplicable
+ * from a rule's inapplicability would be a claim about the criterion drawn from a claim about one rule.
+ */
+export function coverageFrom(buckets: {
+  violations?: readonly AxeViolation[];
+  incomplete?: readonly AxeViolation[];
+  passes?: readonly AxeViolation[];
+  inapplicable?: readonly AxeViolation[];
+}): RuleLayerCoverage {
+  const out: Record<string, RuleLayerVerdict> = {};
+  const record = (rules: readonly AxeViolation[] | undefined, verdict: RuleLayerVerdict) => {
+    for (const rule of rules ?? []) {
+      for (const criterion of criteriaFromTags(Array.isArray(rule.tags) ? rule.tags.map(str) : [])) {
+        if (!RANK[out[criterion]] || RANK[verdict] > RANK[out[criterion]]) out[criterion] = verdict;
+      }
+    }
+  };
+  // Weakest first, so the precedence above only ever upgrades.
+  record(buckets.inapplicable, "clean");
+  record(buckets.passes, "clean");
+  record(buckets.incomplete, "needsReview");
+  record(buckets.violations, "violated");
+  return out;
+}
+
+const RANK: Record<string, number> = { clean: 1, needsReview: 2, violated: 3 };
 
 /** axe tags include "wcag143" for SC 1.4.3; extract criterion numbers. */
 function criteriaFromTags(tags: string[]): string[] {
@@ -51,6 +94,15 @@ function criteriaFromTags(tags: string[]): string[] {
 
 export interface AxeResult {
   findings: AxeFinding[];
+  /**
+   * Which criteria this scan actually EXAMINED, and what it concluded — the thing that was thrown away.
+   *
+   * `analyze()` returns four buckets and this module kept one. Keeping only `violations` makes "no
+   * violation for 3.1.1" mean both "axe checked and the page has a valid lang" and "axe never ran that
+   * rule", which is the ambiguity this whole project refuses everywhere else. The report then said "No
+   * assessor in this tool covers this criterion" about criteria axe had just checked.
+   */
+  coverage: RuleLayerCoverage;
   /** The page's document.title — used to verify the screen-reader worker
    * actually captured THIS page and not browser chrome (see cli.ts). */
   title: string;
@@ -132,7 +184,7 @@ export async function scanWithAxe(url: string): Promise<AxeResult> {
     await page.goto(url, { waitUntil: "load" });
     const title = await page.title();
     const results = await new AxeBuilder({ page }).withTags(WCAG_AA_TAGS).analyze();
-    return { findings: toFindings(results.violations), title };
+    return { findings: toFindings(results.violations), title, coverage: coverageFrom(results) };
   } finally {
     await browser.close();
   }

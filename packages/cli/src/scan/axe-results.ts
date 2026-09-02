@@ -19,12 +19,45 @@
  * not understand would print "0 violations" and read as a clean bill of health.
  */
 import { readFile } from "node:fs/promises";
-import { toFindings, type AxeFinding, type AxeViolation } from "./axe.js";
+import { coverageFrom, toFindings, type AxeFinding, type AxeViolation, type RuleLayerCoverage }
+  from "./axe.js";
 
 interface ImportedAxe {
   findings: AxeFinding[];
   /** The URL the imported results were produced against, when the file records one. */
   scannedUrl: string;
+  /**
+   * What the imported run examined — and on this path it is usually LESS than on our own.
+   *
+   * Many axe reporters emit `violations` and nothing else, so for those files a criterion with no
+   * violation may have been checked and passed, or never checked at all, and the file cannot tell you
+   * which. `coverageOf` therefore records ONLY violated criteria unless the file actually carries the
+   * other buckets. The result is that `--axe-results` reports fewer criteria as examined than a native
+   * scan, which is correct: it is the difference between what we know and what we would like to claim.
+   */
+  coverage: RuleLayerCoverage;
+}
+
+/**
+ * The rule-layer coverage an imported file supports — never more.
+ *
+ * The tolerance this module is built on cuts the other way here. It accepts three packagings because they
+ * differ in packaging rather than substance; but a bare violations array genuinely CONTAINS less, and
+ * inferring "examined and clean" from a file that only lists failures would manufacture the exact
+ * reassurance the header refuses when it rejects a file it does not understand.
+ */
+function coverageOf(parsed: unknown, violations: readonly AxeViolation[]): RuleLayerCoverage {
+  const buckets = (Array.isArray(parsed) ? parsed[0] : parsed) as Record<string, unknown> | null;
+  const bucket = (name: string): AxeViolation[] | undefined => {
+    const value = buckets && typeof buckets === "object" ? buckets[name] : undefined;
+    return Array.isArray(value) ? (value as AxeViolation[]) : undefined;
+  };
+  return coverageFrom({
+    violations,
+    incomplete: bucket("incomplete"),
+    passes: bucket("passes"),
+    inapplicable: bucket("inapplicable"),
+  });
 }
 
 /**
@@ -82,7 +115,11 @@ export async function loadAxeResults(path: string): Promise<ImportedAxe> {
         "or a bare violations array."
     );
   }
-  return { findings: toFindings(violations), scannedUrl: scannedUrlFrom(parsed) };
+  return {
+    findings: toFindings(violations),
+    scannedUrl: scannedUrlFrom(parsed),
+    coverage: coverageOf(parsed, violations),
+  };
 }
 
 /**

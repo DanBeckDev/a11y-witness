@@ -2271,6 +2271,13 @@ release-time: a 75-minute check on `git push` gets the hook deleted within a day
 Verification is layered; pick the layers your change touches:
 - `npm run lint` and `npm run typecheck` — must pass. **CI gates on both**, and on `npm test`
   (`.github/workflows/lint.yml`).
+- **Run `npm test`, never `npx tsx --test <file>` directly, when you have changed another package's
+  source.** Cross-package imports resolve to `dist` (every `exports` entry points there), and `npm test`
+  has a `pretest` build that keeps it honest. Run the file runner on its own and you test the LAST BUILD:
+  measured 2026-09-02, a mutation check on `packages/judge/src/outcomes.ts` reported the guard as not
+  firing, because the mutation was in source and the test was reading `dist`. That reads as "my test is
+  weak" and is really "my test is old" — the same stale-`dist` shape as `rules:gate` scoring a rule the
+  compiled bundle did not contain, arriving through the test runner instead of through a gate.
 - `npm test` — unit tests (`src/**/*.test.ts`) covering the deterministic rules, the judge layers,
   eval fitness, the capture cache, the run's accept/reject/retry decisions, and the WCAG criteria
   list. Fast and runs anywhere, so there is no reason to skip it.

@@ -37,11 +37,9 @@ three separate items all touch the capture path and each one costs a recapture i
 
 **1 — Now. Consumes nothing, and one of them is a falsehood.**
 
-- **The axe reporting gap.** It goes first not because it is cheapest but because it is the only item
-  where the tool makes a FALSE STATEMENT: it prints *"No assessor in this tool covers this criterion"*
-  about criteria axe checked in the same run. A missing capability is a gap; a wrong claim about our own
-  coverage is worse, and for a conformance tool it is the worst category there is. The join key already
-  exists, and it touches the report layer only.
+- ~~The axe reporting gap.~~ **DONE 2026-09-02** — [known-gaps §26](./known-gaps.md). Left here for one
+  more read because it justifies the stage: it went first as the only item where the tool made a FALSE
+  STATEMENT about its own coverage, and a wrong claim outranks a missing capability.
 - **`not-working` §21 is stale.** Minutes, and a stale entry has already sent me chasing a fixed problem
   twice this week.
 
@@ -100,7 +98,6 @@ recapture is not needed; if CHANGED, it is genuine and this is the moment to pay
 |---|---|---|
 | **A capture stalled for 3.5 hours and neither timeout fired** — the worker's 520 s hard bound and the host's 600 s `waitForWorker` both exist and neither ended it. The wedge itself is understood (a notification toast held the foreground, so Edge could never take focus); why two independent bounds failed is not. | A capture that exceeds its bound is abandoned and the run says so — reproduced deliberately, not waited for. | no record entry; found 2026-09-02 on `a11y-worker-6` |
 | **Readiness treats a non-modal foreground window as harmless** — `noBlockingDialog` looks for modals, so a toast leaves the worker reporting `ready: true` while nothing can take focus. Detection is manual and took 3.5 hours. | `/health` reports not-ready when a foreground window belongs to another process; `fleet:recover` stops being the thing a human has to think of. | no record entry |
-| **The report says "untested" for criteria axe answered in the same run** — `criterionOutcomes()` builds from `assessedCriteria()`, the screen-reader layer only, so 3.1.1, 1.3.5 and 2.5.3 print *"No assessor in this tool covers this criterion"* after axe checked them. The join key already exists. | A default scan of a page with no `lang` reports 3.1.1 failed, naming axe as assessor; `--no-axe` reports it untested again. | [known-gaps §26](./known-gaps.md) |
 | **Ten of the 28 model features read a `0` that means "nobody asked"** — every structured feature is `float(bool(channel))` and `any([])` is `False`, so "the page has none" and "nothing looked" are one number. **Both known routes are closed**: masking was REFUTED ([§15](./not-working.md), it cost a real finding), and feeding `observed` to the featurizer was DECIDED AGAINST ([§14](./not-working.md), it trades one shortcut for a feature correlated with capture conditions — ADR 0015's whole subject). So this needs a design, not an implementation. | **Next action, and it needs no decision:** run `npm run lab:job -- -e job=observation-ambiguity` on the authoritative corpus. §14 names exactly that evidence as what would separate a decision from a guess — how many of these zeros are capture artefacts rather than page facts. Measure first; the design follows the number. | [not-working §11](./not-working.md), with [§14](./not-working.md) and [§15](./not-working.md) for the two closed routes |
 | **ONE PAGE CAPTURES PATHOLOGICALLY, and `grants-audit` is what caught it** | The page captures like its peers, or is removed with the reason recorded. | [not-working §20](./not-working.md) |
 | **`not-working` §21 is stale** — it says the chain stops at `promote`; the chain now completes all nine stages. A stale entry sent me chasing a fixed problem twice this week. | The heading carries its resolution, like every other closed entry. | [not-working §21](./not-working.md) |

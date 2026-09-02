@@ -25,6 +25,7 @@ import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fleet";
 import { requestJson, CAPTURE_CLIENT_TIMEOUT_MS } from "@a11y-witness/worker-fleet/worker-http";
 import type { CaptureStructure } from "@a11y-witness/evidence";
+import type { RuleLayerCoverage } from "@a11y-witness/judge/outcomes";
 import { captureDoubt, captureMentionsTitle, oracleCounts, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
 import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics,
@@ -393,6 +394,10 @@ async function runWitness(
     // The SECOND way a sweep is short: it ended cleanly and still missed something. Without this a
     // capture whose landmark sweep found 0 of 1 reported 1.3.1 as "examined in full".
     completeness: oracleCounts(cap).completeness,
+    // The SECOND assessor. Without it every criterion outside the screen-reader layer printed "No
+    // assessor in this tool covers this criterion" -- in a run that had just started by announcing
+    // "rule-based axe-core + real screen reader".
+    ruleLayer: axe.coverage,
   });
   if (json) {
     printJson({
@@ -539,19 +544,21 @@ async function chooseRuleLayer({ wantAxe, axeResults }: { wantAxe: boolean; axeR
  *
  * Decided here now, by the function that knows. There is no second place to get it wrong.
  */
-async function pageContext(url: string, layer: RuleLayer, axeResults: string | null): Promise<{ findings: AxeFinding[] | null; title: string }> {
+async function pageContext(url: string, layer: RuleLayer, axeResults: string | null):
+Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCoverage }> {
   if (layer === "import" && axeResults) {
     const imported = await loadAxeResults(axeResults);
     warnOnUrlMismatch(imported.scannedUrl, url);
     process.stderr.write(`Using ${imported.findings.length} imported axe violation(s) from ${axeResults}\n`);
-    return { findings: imported.findings, title: await fetchPageTitle(url) };
+    return { findings: imported.findings, title: await fetchPageTitle(url), coverage: imported.coverage };
   }
-  if (layer === "none") return { findings: null, title: await fetchPageTitle(url) };
+  if (layer === "none") return { findings: null, title: await fetchPageTitle(url), coverage: {} };
   return scanWithAxe(url).catch(async (e: Error) => {
     process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
     // NULL, not []. The visual criteria are unchecked, and saying "0 violations" here would be the one
-    // thing this tool must never do.
-    return { findings: null, title: await fetchPageTitle(url) };
+    // thing this tool must never do. `coverage: {}` is the same statement per criterion: a scan that
+    // THREW examined nothing, so nothing may be reported as examined-and-clean.
+    return { findings: null, title: await fetchPageTitle(url), coverage: {} };
   });
 }
 
