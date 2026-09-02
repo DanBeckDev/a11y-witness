@@ -8,12 +8,12 @@ the WCAG list and what actually ships — so this page cannot drift from the cod
 
 | state | count | meaning |
 |---|---|---|
-| **assessed** | 8 | a finding can be produced today |
+| **assessed** | 10 | a finding can be produced today |
 | **partial** | 7 | assessed, but a named failure mode of it is not covered |
-| **reachable** | 6 | not built, and the evidence to build it exists or could be captured |
+| **reachable** | 4 | not built, and the evidence to build it exists or could be captured |
 | **out of scope** | 34 | not answerable by this tool at all |
 
-**15 of 55 produce findings.** That is not a small number
+**17 of 55 produce findings.** That is not a small number
 for screen-reader evidence, and it is not a substitute for a rule scanner: the 34
 out-of-scope criteria are mostly **visual**, which is exactly what axe-core is good at. Run both.
 
@@ -37,6 +37,8 @@ one of its training examples. See [ADR 0015](./adr/0015-one-defect-per-page-taug
 | **1.4.2** | Audio Control | A | deterministic rules | Rule-only, and the exception that proves the boundary: `autoplay` and `muted` are attributes with no accessibility-tree equivalent, so a deterministic rule reads the DOM and no head is trained on it. |
 | **2.4.4** | Link Purpose (In Context) | A | `regex` overlap; rest: trained scorer | Vague link text. Rules cover a six-phrase subset (19 of 100 corpus records, a declared overlap); the head owns the rest. |
 | **2.4.6** | Headings and Labels | AA | trained scorer | Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the page, so this head is document-pooled. |
+| **3.2.1** | On Focus | A | `focus-context-change` rules | ASSESSED since 2026-09-02, decided by a RULE. This entry read `reachable` for months with the reason already worked out — 'a probe this tool has the machinery for but does not drive' — and that was accurate: `probeRouteChange` already read the page title for 2.4.2, and what was missing was a probe reading it either side of focusing a control. A change of context is what the criterion is about, and the title is the part of it a screen reader can observe. Rules-owned because the comparison is READ rather than judged — the title either changed or it did not, with no wording to interpret and no threshold to calibrate. 3.2.2 is the same failure on input, and ONE helper decides both because the evidence differs only in channel. Cost a CAPTURE_PROTOCOL_VERSION bump (13 -> 14) and one full recapture, taken as a bundle for both criteria — protocol 11 records why a bump should carry more than one addition. |
+| **3.2.2** | On Input | A | `input-context-change` rules | ASSESSED since 2026-09-02, decided by a RULE. This entry read `reachable` for months with the reason already worked out — 'a probe this tool has the machinery for but does not drive' — and that was accurate: `probeRouteChange` already read the page title for 2.4.2, and what was missing was a probe reading it either side of typing into a control. A change of context is what the criterion is about, and the title is the part of it a screen reader can observe. Rules-owned because the comparison is READ rather than judged — the title either changed or it did not, with no wording to interpret and no threshold to calibrate. 3.2.1 is the same failure on focus, and ONE helper decides both because the evidence differs only in channel. Cost a CAPTURE_PROTOCOL_VERSION bump (13 -> 14) and one full recapture, taken as a bundle for both criteria — protocol 11 records why a bump should carry more than one addition. |
 | **3.3.1** | Error Identification | A | trained scorer | A validation error that is displayed but never announced. Needs the form probe, which is on by default in the Action and off in the CLI -- and therefore OFF for every real-page capture, because submitting a form on a site we do not own is not a review. Measured: 0 of 77 real captures carry `formChanges`, so on a real page this criterion cannot fire in either direction. |
 | **3.3.3** | Error Suggestion | AA | `error-remedy-missing` rules; rest: trained scorer | Error Suggestion, ASSESSED since 2026-09-02 and decided by a RULE rather than a head. The pair is single-criterion by construction: both variants announce the error correctly (aria-invalid, role=alert, focus moved) so both satisfy 3.3.1, and the only difference is whether the message names a remedy -- 'Enter the visit date as DD slash MM slash YYYY' against 'Invalid entry'. A HEAD WAS TRIED FIRST AND FAILED, measurably: recall 0.0 on its own training data under both document-mean and instance-max pooling, with false positives on conformant records (known-gaps.md §22). One clause inside a long announcement is diluted by an average and was not rescued by a max. It does not need a head: whether the announced error carries an INSTRUCTION is read directly, which is this project's own test for what a rule may assert, and the same basis as 1.1.1:filename-alt. Measured on 2,170 captures: fires on every positive, 0 false positives. |
 | **4.1.3** | Status Messages | AA | trained scorer | A status message after form activation that the screen reader never speaks. Same probe dependency as 3.3.1 and the same consequence, which was recorded there and not here: it reads `postSubmitFields`, and 0 of 77 real captures carry any, so it cannot fire on a real page. |
@@ -66,8 +68,6 @@ The evidence exists, or could be captured with a probe. Nothing here is a resear
 | 2.1.4 | Character Key Shortcuts | A | dom |
 | 2.5.3 | Label in Name | A | dom + accessibility-tree |
 | 3.1.1 | Language of Page | A | dom |
-| 3.2.1 | On Focus | A | screen-reader |
-| 3.2.2 | On Input | A | screen-reader |
 
 ## Out of scope
 

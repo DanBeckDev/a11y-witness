@@ -405,4 +405,43 @@ export const ACT_RULES: ActRuleDescription[] = [
     accessibilitySupport: NVDA_EDGE + " The error text is taken from what the screen reader announced "
       + "after the submit, not from the DOM, so what is judged is what a screen-reader user actually hears.",
   },
+  {
+    id: "a11y-witness:context-change-without-action",
+    version: "2026-09-02",
+    name: "Focusing or typing into a control changes the page's context",
+    description: "A control renames the page the moment it receives focus, or as the user types into it. "
+      + "The screen reader reports one title before the interaction and a different one after — "
+      + "\"Archive search\" becoming \"Results for 123456\" — so a user who meant to reach a field finds "
+      + "themselves somewhere else, with no action they would recognise as navigation.",
+    ruleType: "atomic",
+    accessibilityRequirements: [
+      // ASSERTED, both. The comparison is READ, not judged: two titles are equal or they are not. This is
+      // the same basis as 3.3.3 and 1.1.1:filename-alt, and unlike every `secondary` mapping here, which
+      // INFERS a failure from something adjacent to it.
+      { criterion: "3.2.1", mapping: "conformance" },
+      { criterion: "3.2.2", mapping: "conformance" },
+    ],
+    inputAspects: ["interaction.focusContext", "interaction.typedFeedback"],
+    applicability: "Every capture where the focus-context probe focused a control, or the typing probe "
+      + "entered characters into one, AND the screen reader reported a page title both before and after. "
+      + "A capture where neither happened is out of scope.",
+    expectation: "The page reports the same title after the interaction as before it.",
+    assumptions: [
+      "The TITLE is the part of 'change of context' a screen reader can observe. A context change that "
+        + "leaves the title alone — a new window with the same name, a focus jump within one page — is "
+        + "not witnessed here, so this covers one failure mode of several and `criterion-coverage.ts` "
+        + "says which.",
+      "A `null` title means the probe found nothing to focus or type into. Comparing two nulls would make "
+        + "every such page conformant on a question nobody asked, so both reads must be strings before "
+        + "anything is claimed.",
+      "The title is read AFTER the interaction's speech settles. Reading it immediately races the page's "
+        + "own navigation and returns the OLD title on a page that did change context — reporting "
+        + "conformance for the failure.",
+      "One helper decides both criteria because the evidence differs only in which probe produced it. "
+        + "3.2.2 is 3.2.1 on change rather than on focus, which is how the coverage table has described "
+        + "the pair since long before either was built.",
+    ],
+    accessibilitySupport: NVDA_EDGE + " The title is what NVDA reports on demand, so what is compared is "
+      + "what a screen-reader user would hear if they asked where they were.",
+  },
 ];

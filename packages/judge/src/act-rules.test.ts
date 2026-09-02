@@ -99,6 +99,7 @@ test("only the announcement-reading rules claim conformance", () => {
     .map((r) => r.id)
     .sort();
   assert.deepEqual(asserting, [
+    "a11y-witness:context-change-without-action",
     "a11y-witness:error-announced-without-remedy",
     "a11y-witness:unlabelled-image",
     "a11y-witness:unnamed-control",

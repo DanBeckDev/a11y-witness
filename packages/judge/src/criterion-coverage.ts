@@ -97,6 +97,15 @@ export type EvidenceChannel =
   /** Interaction probes, in `interaction`. */
   | "controls" | "stateChanges" | "formChanges" | "postSubmitFields" | "focusOrder"
   /**
+   * The page title either side of FOCUSING the first control — capture-protocol 14, for 3.2.1 On Focus.
+   *
+   * Its own channel rather than a field on `focusOrder`, because that one is a list of strings 28 files
+   * read and adding a title per stop would change its shape for all of them. A separate channel also
+   * keeps the ABSENCE honest: `focusOrder` present and `focusContext` absent means the tab order was
+   * walked and the context question was never asked, which are different facts.
+   */
+  | "focusContext"
+  /**
    * The form re-read after a submit, as accessible NAMES rather than field values.
    *
    * FOUND UNCLASSIFIED 2026-09-01 by the corpus test below, which is the whole reason it exists — this one
@@ -328,8 +337,36 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
       + "read directly, which is this project's own test for what a rule may assert, and the same basis "
       + "as 1.1.1:filename-alt. Measured on 2,170 captures: fires on every positive, 0 false positives.",
   },
-  "3.2.1": { status: "reachable", needs: ["screen-reader"], channels: ["focusOrder", "stateChanges"], note: "On Focus. Requires focusing each control and detecting a context change — a probe this tool has the machinery for but does not drive." },
-  "3.2.2": { status: "reachable", needs: ["screen-reader"], channels: ["formChanges", "stateChanges"], note: "On Input. Same shape as 3.2.1, on change rather than focus." },
+  "3.2.1": {
+    status: "assessed",
+    channels: ["focusContext"],
+    note:
+      "ASSESSED since 2026-09-02, decided by a RULE. This entry read `reachable` for months with the "
+      + "reason already worked out — 'a probe this tool has the machinery for but does not drive' — and "
+      + "that was accurate: `probeRouteChange` already read the page title for 2.4.2, and what was "
+      + "missing was a probe reading it either side of focusing a control. A change of context is what the criterion "
+      + "is about, and the title is the part of it a screen reader can observe. Rules-owned because the "
+      + "comparison is READ rather than judged — the title either changed or it did not, with no wording "
+      + "to interpret and no threshold to calibrate. 3.2.2 is the same failure on input, and ONE helper decides both because the "
+      + "evidence differs only in channel. Cost a CAPTURE_PROTOCOL_VERSION bump (13 -> 14) and one full "
+      + "recapture, taken as a bundle for both criteria — protocol 11 records why a bump should carry "
+      + "more than one addition.",
+  },
+  "3.2.2": {
+    status: "assessed",
+    channels: ["typedFeedback"],
+    note:
+      "ASSESSED since 2026-09-02, decided by a RULE. This entry read `reachable` for months with the "
+      + "reason already worked out — 'a probe this tool has the machinery for but does not drive' — and "
+      + "that was accurate: `probeRouteChange` already read the page title for 2.4.2, and what was "
+      + "missing was a probe reading it either side of typing into a control. A change of context is what the criterion "
+      + "is about, and the title is the part of it a screen reader can observe. Rules-owned because the "
+      + "comparison is READ rather than judged — the title either changed or it did not, with no wording "
+      + "to interpret and no threshold to calibrate. 3.2.1 is the same failure on focus, and ONE helper decides both because the "
+      + "evidence differs only in channel. Cost a CAPTURE_PROTOCOL_VERSION bump (13 -> 14) and one full "
+      + "recapture, taken as a bundle for both criteria — protocol 11 records why a bump should carry "
+      + "more than one addition.",
+  },
   "1.3.5": { status: "reachable", needs: ["dom"], channels: ["formFields"], note: "Identify Input Purpose is the `autocomplete` attribute against a fixed token list — deterministic, and squarely a rule. Needs the DOM, like 1.4.2." },
   "3.1.1": { status: "reachable", needs: ["dom"], channels: ["transcript"], note: "Language of Page: `<html lang>`. NVDA switching synthesiser language is an indirect and unreliable proxy; the attribute is the fact." },
   // 3.1.2 CLAIMED THE TRANSCRIPT AND THE TRANSCRIPT CANNOT CARRY IT — corrected 2026-09-01, measured.
@@ -455,6 +492,7 @@ export const CHANNEL_LOCATION: Record<EvidenceChannel, "structure" | "interactio
   dialogEscape: "interaction",
   arrowNavigation: "interaction",
   typedFeedback: "interaction",
+  focusContext: "interaction",
   postSubmitNames: "interaction",
   frames: "structure",
   // Read from somewhere other than `structure`/`interaction`: `media` sits at the top level, `title`

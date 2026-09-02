@@ -132,16 +132,17 @@ findings.
 
 ## Known limitations, stated plainly
 
-- **On a real page, ten criteria are actually assessed — five of them partially.** Fifteen in total can
+- **On a real page, ten criteria are actually assessed — five of them partially.** Seventeen in total can
   produce a finding, but four (2.4.6, 3.3.1, 3.3.2, 4.1.3) come only from the trained scorer, which abstains
   on pages unlike its training data — which today is still many real pages. A fifth, 3.3.3, is decided by a
   rule and still cannot fire on a page you do not own: it reads the form probe, which is deliberately off
   there, because submitting somebody else's form is not a review. The ones that always work are the
   deterministic rules:
   - **In full: 1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.4.**
-  - **Only with the form probe: 3.3.3** — an announced validation error that names the problem and not the
-    remedy. Rule-decided and exact, but `probeForms` is off for pages you do not own, so on somebody
-    else's site it cannot fire in either direction.
+  - **Only with an opt-in probe: 3.2.1, 3.2.2, 3.3.3** — a page that renames itself when a control is
+    focused or typed into, and an announced validation error that names the problem and not the remedy.
+    All three are rule-decided and exact, and all three read probes that press, type or submit — off for
+    pages you do not own, so on somebody else's site they cannot fire in either direction.
   - **Partially: 2.1.1, 2.4.1, 2.4.2, 2.4.3, 3.3.2, 4.1.2** — each covers one failure mode of several, and
     `criterion-coverage.ts` records which mode and why the others are out. Three of them (2.4.1, 2.4.2,
     2.4.3, added 2026-08-22) are failures a static analyser structurally cannot reach: a skip link that is
