@@ -334,13 +334,15 @@ ambiguity this whole field removes."* So it is a `CAPTURE_PROTOCOL_VERSION` bump
 
 ```
 2,677 cached captures invalidated
-~4.5 h across the five-box fleet to recapture
+~8 h across the five-box fleet to recapture (MEASURED on the protocol-14 run: 3,188
+captures at 3.1 cases/min, 9.4 s each, 0 failures — not the ~4.5 h this entry first said, which I took
+from `reliability-plan.md` where it contradicted the 7 h 22 m it cited in the same sentence)
 ```
 
 **And it must be BUNDLED, which is the real reason this is a decision rather than a task.** CLAUDE.md's
 own rule: do a bump deliberately, "ideally alongside a recapture that was happening anyway". Protocol 11
 bundled three additions for exactly this reason and says so — *"each of the three is individually too
-small to justify ~4.5 h of fleet time; three together are not, and taking them separately would have cost
+small to justify ~8 h of fleet time; three together are not, and taking them separately would have cost
 that time three times over."* Two criteria are a reasonable bundle. One, taken alone because a list wanted
 shortening, is the economy that rule warns against.
 

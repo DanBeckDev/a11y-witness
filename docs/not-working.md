@@ -904,7 +904,9 @@ the new column too, so the veto simply moves — exactly as `landmark_present`'s
 
 Capture-protocol 11 bundles three additions: `structure.frames`, `interaction.dialogEscape` and
 `formChanges[].baselineWaitedMs`. Bundling is the point rather than an economy on it — each is individually
-too small to justify ~4.5 h of fleet time and this register says so about the frame sweep outright.
+too small to justify ~8 h of fleet time (measured 2026-09-02; the ~4.5 h this said before was an
+estimate nobody had checked against the 7 h 22 m protocol-8 run) and this register says so about the
+frame sweep outright.
 
 **The dialog probe's first finding is against this project's own shipped rule.** `addKeyboardTrap` ended
 with a paragraph claiming a safety net it did not have: *"`anchorToTop` presses Escape before the walk, so
