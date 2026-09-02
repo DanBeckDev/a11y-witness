@@ -2197,6 +2197,27 @@ Three things that cost real time inside those two fixes:
   having examined nothing. Naming `--worker` literally in `repeat-capture` immediately made a pre-existing
   discovery test fire: it had been reading `--worker` and never validating it.
 
+## A GUARD THAT ALREADY EXISTED, and a weaker check substituted for it
+
+Three mistakes in one session on 2026-09-01/02, and only the first was a gap in this repo. The other two
+are the same shape as `A11Y_SKIP_VERIFY=1` being reached for nine times in one day: **a check existed, and
+I put my own judgement in front of it.**
+
+| what happened | the guard that was already there |
+|---|---|
+| a backtick in a comment inside a PowerShell template literal, twice, ten minutes apart — `SyntaxError: Unexpected identifier`, with lint and tsc green both times | NOTHING. This one was a real gap and is now `mjs-parses.test.ts`, which this file had named as "the only real check" and never automated |
+| 32 corpus messages validated OFFLINE against the page SOURCE and reported as correct — the predicate reads what NVDA **said**, and NVDA speaks "e.g." as "e dot g." | `check-signals` runs every signal against real CAPTURES and caught it as one CONTAMINATED case. I ran a weaker check first and believed it, so the real one became a surprise instead of a confirmation |
+| a commit landed on a branch I then deleted, so a fix I had reported as "on main" was gone | `git branch -d` REFUSES an unmerged branch. I used `-D` |
+
+**The rule: a cheap pre-check is for deciding whether to bother running the real one, never for concluding
+the real one will pass.** Both offline checks above were reasonable and both examined the wrong thing —
+the source text rather than the announcement, and my memory of what was merged rather than git's. Reported
+as results, they made the authoritative check look like a regression when it disagreed.
+
+And **prefer the refusing form of a command over the forcing one** when you are about to destroy something:
+`git branch -d`, not `-D`. The forcing form exists for when you know better; used by default it converts a
+guard into a formality.
+
 ## Verifying changes
 
 **Two of these now run themselves. That is deliberate, and it is the point.**
