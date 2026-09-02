@@ -1102,3 +1102,54 @@ two different facts.
 
 The system was largely working and very hard to see working. See CLAUDE.md, *"A diagnostic that cannot
 report itself"*, for the six and the three habits that would have caught them.
+
+---
+
+## 25. ~~The CLI could not ask for two probes the real-page corpus has always asked for~~ — DONE 2026-09-02
+
+Found by auditing what the SHIPPED product can reach, rather than what the lab can. The answer was: less
+than the lab, on three criteria this project headlines.
+
+`packages/lab/src/training/capture-real-pages.mjs` sends
+`{probeForms: false, probeFocus: true, probeNavigation: true, probeFocusContext: true}` — the settled
+judgement about what may be done to a page we do not own, with the consent argument written out beside it
+in twelve lines of comment. `probeNavigation` has been on since 2026-08-24, `probeFocusContext` since the
+morning of 2026-09-02.
+
+**`cli.ts` had neither flag. Not off — absent, with no way to turn them on.** It sent exactly
+`{probeForms, probeFocus}`.
+
+| criterion | rule | reachable from the CLI before this |
+|---|---|---|
+| 2.4.1 Bypass Blocks | `addInertSkipLink` | **no** — needs `interaction.routeChange` |
+| 2.4.2 Page Titled | `addStaleRouteTitle` | **no** — same channel |
+| 3.2.1 On Focus | `addContextChanges` | **no** — needs `interaction.focusContext` |
+
+Two of those three are on the short list of *"three criteria a static analyser structurally cannot
+reach"*, which is the clearest statement of what this tool is FOR. They were unreachable by this tool as
+shipped, and had been validated on 86 conformant real pages through a path the product does not take.
+
+**Why it was invisible, which is the part worth keeping.** An un-asked probe leaves an empty channel, and
+an empty channel is indistinguishable from a page with nothing to report — this repo's oldest defect,
+recorded a dozen times and here reaching the product boundary. `observed` was built precisely to end that
+ambiguity and did its job perfectly: it recorded `asked: false` on every CLI capture ever taken. Nothing
+in the product read it back to the user, so the honest answer sat in the JSON and never became a
+sentence. **A three-valued field nobody renders is a two-valued field.**
+
+**Why the existing guard could not catch it.** `probe-chain.test.ts` was written for exactly this defect —
+a probe flag dropped between hops — after it happened twice in two days. It walks five hops and derives
+its flag list from `CASES`, so it is thorough about the path it covers. Every one of those five hops is
+the LAB's. The CLI is a sixth hop outside the chain, and the corpus case definitions cannot name a flag
+the product ought to send. *A gate that does not exercise what ships is not a gate* — the fifth instance,
+and the first to reach a user-facing default rather than an internal one.
+
+**Fixed** by defaulting both ON in `cli.ts` (with `--no-probe-navigation` and `--no-probe-focus-context`),
+which the GitHub Action inherits. `probe-consent.test.ts` now pins the CLI's defaults equal to the
+real-page corpus's request body, reading both out of source so neither can drift again — the remedy this
+repo prefers over remembering. Mutation-checked by deleting the `probeNavigation` default and confirming
+it fails naming the flag and the side that lacks it.
+
+**Deliberately unchanged:** `probeForms`, `probeTyping`, `probeArrows`, `probeDialog` stay off for a page
+we do not own. They write to somebody's system or press keys inside their widgets. The line moved for two
+probes that only Tab and follow a link — which `probeFocus` already did on every capture — and not for
+the ones the line was drawn against.
