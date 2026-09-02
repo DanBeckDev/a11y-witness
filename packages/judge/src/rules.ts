@@ -66,6 +66,13 @@ export interface RuleInput {
     /** The deliberate re-read of durable field state after a submit. Same probe, same absence rule. */
     postSubmitFields?: string[];
     /**
+     * The page title either side of FOCUSING the first control (3.2.1) and either side of TYPING into a
+     * field (3.2.2). Absent unless the matching probe was asked for; `null` titles mean nothing was
+     * focused or typed, which is not the same as a title that did not change.
+     */
+    focusContext?: { control?: string; titleBefore?: string | null; titleAfter?: string | null; error?: string };
+    typedFeedback?: { titleBefore?: string | null; titleAfter?: string | null; error?: string };
+    /**
      * What each Tab press announced, in order. Absent means the focus probe did not run — which was true
      * of EVERY capture until this rule existed, because `probeFocus` was reachable from no CLI flag and no
      * Action input. Absent must therefore make no claim.
@@ -458,6 +465,42 @@ function addErrorWithoutRemedy(input: RuleInput, add: AddFinding): void {
   add("3.3.3 Error Suggestion",
     "A validation error was announced but names only the problem, never how to correct it",
     spoken.join(" | "), "conformance");
+}
+
+/**
+ * 3.2.1 On Focus and 3.2.2 On Input — a change of CONTEXT the user did not ask for.
+ *
+ * Rules rather than heads, on the same reasoning as 3.3.3: whether the page renamed itself between two
+ * reads is READ directly, not judged. There is no wording to interpret and no threshold to calibrate — a
+ * title either changed or it did not.
+ *
+ * ONE HELPER, TWO CRITERIA, because the evidence is identical in shape and only the channel differs.
+ * `criterion-coverage.ts` says as much: 3.2.2 is "the same shape as 3.2.1, on change rather than focus".
+ *
+ * A `null` title means the probe found nothing to focus or type into, and comparing two nulls would make
+ * every such page conformant on a question nobody asked. Both are required to be strings before anything
+ * is claimed — the absence rule this file applies everywhere.
+ */
+function contextChanged(channel: { titleBefore?: string | null; titleAfter?: string | null; error?: string }
+  | undefined): boolean {
+  if (!channel || channel.error) return false;
+  const { titleBefore, titleAfter } = channel;
+  return typeof titleBefore === "string" && typeof titleAfter === "string" && titleBefore !== titleAfter;
+}
+
+function addContextChanges(input: RuleInput, add: AddFinding): void {
+  const focus = input.interaction?.focusContext;
+  if (contextChanged(focus)) {
+    add("3.2.1 On Focus",
+      "Focusing a control changed the page's title, so the user's context moved without them acting",
+      `${focus?.control ?? "first control"}: ${focus?.titleBefore} -> ${focus?.titleAfter}`, "conformance");
+  }
+  const typed = input.interaction?.typedFeedback;
+  if (contextChanged(typed)) {
+    add("3.2.2 On Input",
+      "Typing into a control changed the page's title, so the user's context moved on input alone",
+      `${typed?.titleBefore} -> ${typed?.titleAfter}`, "conformance");
+  }
 }
 
 /** Is this a control whose activation is Enter? Read through the shared grammar, never a role regex. */
@@ -1836,6 +1879,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addInertSkipLink(input, add);
   addKeyboardUnreachableControl(input, add);
   addErrorWithoutRemedy(input, add);
+  addContextChanges(input, add);
 
   return findings;
 }

@@ -73,7 +73,7 @@ test("the totals quoted to strangers match what the judge can return", () => {
   // "Fourteen in total can produce a finding" — rules plus the scorer-only heads.
   const total = assessedCriteria().length;
   const spelled = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-    "eleven", "twelve", "thirteen", "fourteen", "fifteen"][total];
+    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen"][total];
   for (const file of ["RELEASE.md", "action.yml"]) {
     const text = repoFile(file).toLowerCase();
     assert.ok(text.includes(`${spelled} criteria can produce a finding`)
