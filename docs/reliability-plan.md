@@ -364,8 +364,14 @@ deliberately rather than treating this one as having emptied the list.
 
 ## B2 — ONE `CAPTURE_PROTOCOL_VERSION` 9, carrying everything that needs a recapture
 
-**Status: open, and it is a BUNDLE rather than a task.** A bump invalidates every cached capture —
-2,924, measured at ~4.5 h across the bare-metal fleet — so the repo's own rule is to pay it once:
+**Status: open, and it is a BUNDLE rather than a task.** A bump invalidates every cached capture — and
+the cost is **~8 h across the bare-metal fleet**, not the ~4.5 h this paragraph claimed until 2026-09-02.
+That figure was wrong and contradicted itself in its own sentence: the protocol-8 run it cited took
+**7 h 22 m** for 2,924 captures. Measured again on the protocol-14 recapture — 3,188 captures at a steady
+3.1 cases/min with 0 failures and 0 recoveries — the fleet does **9.4 s per capture**, against 9.1 s for
+protocol 8. The two agree; the estimate never matched either. An understated cost is the worst kind here,
+because the whole point of the paragraph is to make somebody weigh the bump honestly — so the repo's rule
+is to pay it once:
 *"do it deliberately, bundled, and pay the recapture once."* Nothing below is worth its own bump; together
 they are worth one.
 
