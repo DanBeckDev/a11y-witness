@@ -36,6 +36,19 @@ export interface CriterionOutcome {
   criterion: string;
   outcome: ActOutcome;
   /**
+   * WHICH assessor produced this, when it was not the screen-reader layer.
+   *
+   * ADR 0021's subject is that the layer which DECIDES must be the layer allowed to CLAIM, and this is
+   * that distinction reaching the report. A criterion answered by a rule engine reading the DOM and one
+   * answered by driving a real screen reader are different claims resting on different evidence, and
+   * merging them into an undifferentiated "assessed" would undo the separation this project exists to
+   * make. Absent means the screen-reader layer, which is the default assessor here.
+   *
+   * It is also what EARL wants: `earl:assertedBy` names an assertor per assertion, so a report with two
+   * assessors is already expressible and was being flattened to one.
+   */
+  assessor?: string;
+  /**
    * Why this outcome, in one sentence. Required for EVERY outcome including `passed`, because "passed"
    * without saying what was checked is the same unearned reassurance as a bare "0 findings".
    */
@@ -97,8 +110,41 @@ const SWEEPS_FEEDING: Record<string, readonly string[]> = {
   "4.1.3": ["postSubmit"],
 };
 
+/**
+ * What a rule engine concluded about one criterion.
+ *
+ * These are axe's OWN buckets rather than a confidence we invented, which matters: axe already separates
+ * what it is sure of (`violations`) from what it wants a human to look at (`incomplete`), so the dividing
+ * line between "assert" and "refer" is the engine's own judgement and not ours.
+ */
+export type RuleLayerVerdict = "violated" | "needsReview" | "clean";
+
+/**
+ * Criterion -> what the rule layer found. ONLY criteria it actually ran a rule for appear.
+ *
+ * Absence is the whole point and it is load-bearing twice over. A criterion missing from this map was
+ * never examined by the rule layer, which is a different fact from one it examined and found clean — the
+ * distinction this repo has paid for a dozen times, arriving at the report boundary. And it is genuinely
+ * unknowable on one supported path: an imported `--axe-results` file frequently carries `violations` and
+ * nothing else, so a criterion with no violation in such a file may have been checked and passed, or never
+ * checked at all. On that path only violated criteria are recorded, and the rest stay untested — which is
+ * the honest answer rather than the flattering one.
+ */
+export type RuleLayerCoverage = Readonly<Record<string, RuleLayerVerdict>>;
+
 export interface OutcomeInput {
   capture: CaptureEvidence;
+  /**
+   * The SECOND assessor. Criteria the rule layer (axe-core) examined, and what it concluded.
+   *
+   * Without this the report told a provable untruth: `criterionOutcomes` built its covered-set from
+   * `assessedCriteria()`, which is pinned to the trained model plus our own deterministic rules — the
+   * screen-reader layer only — so every criterion outside it printed "No assessor in this tool covers
+   * this criterion" even in a run where axe had just checked it. The CLI runs axe BY DEFAULT and prints
+   * "rule-based axe-core + real screen reader" as it starts, so the tool was contradicting itself within
+   * one run. A missing capability is a gap; a false claim about our own coverage is worse.
+   */
+  ruleLayer?: RuleLayerCoverage;
   /**
    * Per-type sweep completeness from `oracleCounts`, the SECOND way a sweep can be short.
    *
@@ -274,11 +320,55 @@ export function criterionOutcomes(input: OutcomeInput): CriterionOutcome[] {
   const covered = new Set(assessedCriteria());
   return WCAG_22_AA.map(({ num }) => covered.has(num)
     ? outcomeFor(num, input)
-    : {
-      criterion: num, outcome: "untested" as const,
-      reason: "No assessor in this tool covers this criterion. It is unchecked, not clean.",
-    });
+    : ruleLayerOutcome(num, input.ruleLayer?.[num]));
 }
+
+/**
+ * The outcome for a criterion the screen-reader layer does not cover.
+ *
+ * A CLEAN rule result is deliberately `cantTell` and never `passed`, and that is the one judgement in
+ * this function worth defending. Reporting `passed` because a rule engine found no violation is the
+ * "false assurance" the accessibility literature names directly — *Inclusive Design for Accessibility*
+ * puts it as an automated tool confirming that alt text is PRESENT while saying nothing about whether it
+ * is meaningful. The numbers say the same: Deque's study across 13,000+ pages measures automated coverage
+ * at 57% of ISSUES, and separately notes that only 16 of the 50 WCAG 2.1 AA criteria are machine-evaluable
+ * at all. So "axe found nothing" supports "not shown to fail", never "satisfied".
+ *
+ * That is not a downgrade from what this reported before. `untested` said the tool had not looked; the
+ * tool HAD looked. `cantTell` with the reason attached says what was actually done, which is strictly
+ * more information and — unlike the sentence it replaces — true.
+ */
+function ruleLayerOutcome(criterion: string, verdict: RuleLayerVerdict | undefined): CriterionOutcome {
+  if (verdict === "violated") {
+    return {
+      criterion, outcome: "failed", assessor: RULE_LAYER,
+      reason: "The rule layer (axe-core) reported a violation of this criterion. It is a DOM-level rule "
+        + "result, not a screen-reader observation.",
+    };
+  }
+  if (verdict === "needsReview") {
+    return {
+      criterion, outcome: "cantTell", assessor: RULE_LAYER,
+      reason: "The rule layer (axe-core) could not decide this criterion and flagged it for review, "
+        + "which is axe's own signal that a human should look.",
+    };
+  }
+  if (verdict === "clean") {
+    return {
+      criterion, outcome: "cantTell", assessor: RULE_LAYER,
+      reason: "The rule layer (axe-core) ran its rules for this criterion and found no violation. "
+        + "Automated rules cover only part of any criterion, so this is not shown to fail — which is not "
+        + "the same as satisfied.",
+    };
+  }
+  return {
+    criterion, outcome: "untested",
+    reason: "No assessor in this tool covers this criterion. It is unchecked, not clean.",
+  };
+}
+
+/** Named once. It appears in three outcomes and in the EARL assertor, and a retyped string drifts. */
+const RULE_LAYER = "axe-core";
 
 /** How many criteria landed on each outcome, for a one-line summary. */
 export function outcomeTally(outcomes: readonly CriterionOutcome[]): Record<ActOutcome, number> {

@@ -1156,7 +1156,7 @@ the ones the line was drawn against.
 
 ---
 
-## 26. The report says "untested" for criteria axe answered in the same run — OPEN
+## 26. ~~The report says "untested" for criteria axe answered in the same run~~ — DONE 2026-09-02
 
 Found 2026-09-02 while checking what the shipped product can actually reach, which is also how §25 turned
 up. This one is a REPORTING defect rather than a coverage defect, and the distinction is the whole entry:
@@ -1195,3 +1195,35 @@ them silently would undo the distinction this project exists to make.
 **What would tell you it is fixed:** a default CLI scan of a page with `<html>` and no `lang` reports 3.1.1
 as failed, naming axe as the assessor; and a scan with `--no-axe` reports it `untested` again, for the
 right reason.
+
+**CLOSED 2026-09-02.** `criterionOutcomes` takes a second assessor. `AxeResult` now carries a
+`coverage` map — criterion to `violated | needsReview | clean` — folded from all four of axe's result
+buckets, where before this module kept `violations` and threw the other three away.
+
+**The judgement that took the research, and it went the conservative way.** A CLEAN rule result reports
+`cantTell`, never `passed`. Reporting `passed` because a rule engine found no violation is the *false
+assurance* the literature names directly — *Inclusive Design for Accessibility* puts it as a tool
+confirming alt text is PRESENT while saying nothing about whether it is meaningful. Deque's own study
+across 13,000+ pages measures automated coverage at **57% of issues**, and separately notes only **16 of
+the 50** WCAG 2.1 AA criteria are machine-evaluable at all. So "axe found nothing" supports *not shown to
+fail*, never *satisfied*. That is still strictly more than before: `untested` said we had not looked, and
+we had.
+
+**Three things fell out that are worth more than the fix.**
+
+- **The assert/refer line is axe's OWN.** `violations` become `failed`, `incomplete` becomes `cantTell` —
+  axe already separates what it is sure of from what it wants a human to see, so the confidence boundary
+  is the engine's judgement rather than one invented here.
+- **An imported `--axe-results` file supports LESS, and now says so.** Many reporters emit `violations`
+  and nothing else, so on that path a criterion with no violation may have been checked and passed or
+  never checked at all. Only violated criteria are recorded from such a file; the rest stay `untested`.
+  The same absence-versus-evidence distinction this repo has paid for a dozen times, at the report edge.
+- **An inapplicable RULE does not make the CRITERION inapplicable.** axe means "this rule found no
+  elements"; the criterion may have aspects no axe rule covers.
+
+`assessor` is now on `CriterionOutcome` and rendered in the tag — `[failed · axe-core]` — because ADR 0021
+turns on which layer may claim what, and a consumer should not have to regex a sentence to find out.
+
+Mutation-checked by making a clean result report `passed` and confirming the test fires. **Note the trap
+inside that check:** cross-package imports resolve to `dist`, so the first mutation run passed having
+changed nothing. `npm test` has a `pretest` build and is safe; `npx tsx --test` run directly is not.

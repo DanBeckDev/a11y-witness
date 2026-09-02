@@ -131,8 +131,14 @@ function outcomesSection(outcomes: CriterionOutcome[] | undefined): string[] {
       + `inapplicable ${tally.inapplicable}   untested ${tally.untested}`,
     "  (cantTell = we could not determine it. untested = no assessor of ours covers it. Neither is clean.)",
   ];
+  // The ASSESSOR is in the tag, not left to be read out of the prose. ADR 0021 turns on which layer is
+  // entitled to claim what, so a reader deciding how much weight to give a `failed` needs to know whether
+  // it came from a DOM rule or from driving a real screen reader — and a consumer parsing these lines
+  // should not have to regex a sentence to find out. Absent means the screen-reader layer, which is the
+  // default assessor and does not earn a tag on every line.
   for (const outcome of outcomes.filter((o) => o.outcome === "failed" || o.outcome === "cantTell")) {
-    lines.push(`    [${outcome.outcome}] ${outcome.criterion} — ${outcome.reason}`);
+    const by = outcome.assessor ? ` · ${outcome.assessor}` : "";
+    lines.push(`    [${outcome.outcome}${by}] ${outcome.criterion} — ${outcome.reason}`);
   }
   return lines;
 }
