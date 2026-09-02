@@ -35,6 +35,7 @@ you which arguments have already been tried.
 | [0021](./0021-the-layer-that-decides-must-be-the-layer-allowed-to-claim.md) | The layer that decides a subtype must be the layer allowed to claim it | accepted 2026-08-24 |
 | [0022](./0022-zero-false-positives-on-our-own-corpus-is-not-a-promise.md) | Zero false positives on our own corpus is not a promise | accepted 2026-08-24 |
 | [0023](./0023-a-consent-banner-is-part-of-the-page.md) | A consent banner is part of the page, and the capture must say so | accepted 2026-08-29 |
+| [0024](./0024-a-form-is-configured-with-states-not-values.md) | A form is configured with STATES, not values | accepted 2026-09-02 |
 
 ## If you read only one
 

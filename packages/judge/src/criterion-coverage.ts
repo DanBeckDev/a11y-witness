@@ -424,7 +424,24 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
       + "Report Language ON would put it in the transcript at the cost of describing a non-default user.",
   },
   "2.5.3": { status: "reachable", needs: ["dom", "accessibility-tree"], channels: ["controls", "structureCensus"], note: "Label in Name — visible text must be contained in the accessible name. Highly automatable and axe-core covers it well; worth deciding whether to duplicate or defer." },
-  "2.1.4": { status: "reachable", needs: ["dom"], channels: ["focusOrder", "transcript"], note: "Character Key Shortcuts: single-character key handlers with no way to disable or remap them." },
+  // WHY THE SCREEN READER CANNOT ANSWER THIS ONE, recorded because it looks like an oversight and is not.
+  // In browse mode single letters ARE NVDA's quick-nav commands -- h heading, k link, f form field, g
+  // graphic, l list, and most of the rest of the alphabet -- so NVDA CONSUMES them and the page never
+  // receives the keystroke. Focus mode passes keys through, but it engages when focus is on an editable,
+  // so the character goes INTO that field rather than to a global shortcut handler. Either way the key
+  // never arrives where 2.1.4 lives.
+  //
+  // The irony is worth keeping: 2.1.4 exists BECAUSE single-key shortcuts collide with screen-reader and
+  // speech-input users. It protects exactly the user this tool simulates, and simulating them is what
+  // makes it unobservable here.
+  //
+  // `needs: ["dom"]` is therefore right but understates it. A listener census (CDP
+  // `DOMDebugger.getEventListeners`) plus synthetic key dispatch gets you "a handler exists" -- and the
+  // criterion is not "are there shortcuts", it is "if there are, can they be turned off, remapped, or
+  // scoped to focus". Detecting the ABSENCE of a turn-off mechanism means finding a settings UI and
+  // judging it, which is why axe ships no rule for it either. Nobody has failed to build this; the
+  // negative is a semantic judgement.
+  "2.1.4": { status: "reachable", needs: ["dom"], channels: ["focusOrder", "transcript"], note: "Character Key Shortcuts: single-character key handlers with no way to disable or remap them. NVDA consumes single letters as quick-nav commands in browse mode, so the screen-reader channel is structurally blind to this -- see the comment above." },
 
   // ---- out of scope: the evidence does not exist in this tool ----------------------------------
   "1.4.3": { status: "out-of-scope", needs: ["visual"], note: "Contrast is a property of rendered pixels. No assistive-technology signal exists; this is a rule/visual scanner's job." },
