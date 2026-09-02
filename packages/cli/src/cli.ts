@@ -36,7 +36,7 @@ import { earlReport } from "@a11y-witness/evidence/earl";
 import { criterionOutcomes, type CriterionOutcome } from "@a11y-witness/judge/outcomes";
 import { readFile } from "node:fs/promises";
 import { parseFormsConfig, refuseIfWrongOrigin, FormsConfigError } from "./forms/config.js";
-import { submissionPlan } from "./forms/coverage.js";
+import { submissionPlan, formCoverage } from "./forms/coverage.js";
 import { draftFormsConfig } from "./forms/draft.js";
 
 interface Args {
@@ -237,6 +237,40 @@ async function planOnly(args: Args): Promise<boolean> {
   return true;
 }
 
+/**
+ * The states this run will drive, in the order it will drive them.
+ *
+ * ERROR STATES FIRST, then file order. A success submission may navigate away, and the less destructive
+ * state should have been observed before the one that completes the form — so a run that dies midway has
+ * done the safer thing. `submissionPlan` sorts identically, which matters: a `--plan` that listed a
+ * different order from the run would be a dry run describing something else.
+ */
+async function configuredStates(args: Args): Promise<FormStateRequest[]> {
+  if (!args.formsConfig) return [];
+  const config = parseFormsConfig(await readFile(args.formsConfig, "utf8"), args.formsConfig);
+  refuseIfWrongOrigin(config, args.url);
+  return config.forms.flatMap((form) => {
+    for (const line of coverageLines(formCoverage(form))) process.stderr.write(`${line}\n`);
+    return [...form.states]
+      .sort((a, b) => Number(a.state === "success") - Number(b.state === "success"))
+      .map((state) => ({ state: state.state, submit: form.submit, fields: state.fields }));
+  });
+}
+
+/**
+ * What this configuration can and cannot answer, said BEFORE the run rather than inferred after it.
+ *
+ * A criterion nobody supplied a state for is not a finding and not a pass; it is unconfigured, and the
+ * reader needs to know which of the three they are looking at. Printing it up front also means a
+ * misconfigured file is visible before any form is submitted.
+ */
+function coverageLines(coverage: ReturnType<typeof formCoverage>): string[] {
+  return [
+    `Form "${coverage.form}" — states configured: ${coverage.states.join(", ") || "none"}`,
+    ...coverage.criteria.map((entry) => `  ${entry.criterion} ${entry.readiness}: ${entry.why}`),
+  ];
+}
+
 async function main(): Promise<void> {
   const args = parseArgs();
   if (await planOnly(args)) return;
@@ -245,13 +279,26 @@ async function main(): Promise<void> {
   // judge rejected the capture. Leaking a running Windows guest is the failure mode this
   // whole module exists to prevent.
   try {
-    await runWitness({ ...args, worker: lease.worker });
+    const states = await configuredStates(args);
+    if (states.length === 0) {
+      await runWitness({ ...args, worker: lease.worker });
+    } else {
+      // ONE RUN PER STATE, through the ordinary pipeline. Reusing `runWitness` rather than building a
+      // second reporting path is deliberate: a configured run and an unconfigured one must produce
+      // evidence and a report of the same shape, or every consumer downstream needs to know which it is
+      // holding — which is the fact-stated-twice defect with a report attached.
+      for (const [index, formState] of states.entries()) {
+        process.stderr.write(`\n=== form state ${index + 1}/${states.length}: `
+          + `"${formState.state}" via "${formState.submit}" ===\n`);
+        await runWitness({ ...args, worker: lease.worker, formState });
+      }
+    }
   } finally {
     await lease.release();
   }
 }
 
-type RunOptions = Omit<Args, "worker"> & { worker: string };
+type RunOptions = Omit<Args, "worker"> & { worker: string; formState?: FormStateRequest };
 
 interface ShadowReport {
   mode?: string;
@@ -331,7 +378,7 @@ async function recaptureUntilItReadsThePage(
   first: CaptureResponse,
   title: string,
   options: { url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean;
-    probeNavigation: boolean; probeFocusContext: boolean },
+    probeNavigation: boolean; probeFocusContext: boolean; formState?: FormStateRequest },
 ): Promise<CaptureResponse> {
   let cap = first;
   const { url, ...captureOptions } = options;
@@ -350,9 +397,11 @@ async function recaptureUntilItReadsThePage(
  * network- and worker-bound; the other is pure) and fail for unrelated reasons, which is the seam.
  */
 async function captureAndScan(
-  { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, wantAxe, axeResults }: {
+  { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, wantAxe, axeResults,
+    formState }: {
     url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean;
     probeNavigation: boolean; probeFocusContext: boolean; wantAxe: boolean; axeResults: string | null;
+    formState?: FormStateRequest;
   },
 ): Promise<{ cap: CaptureResponse; axe: Awaited<ReturnType<typeof pageContext>> }> {
   const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults });
@@ -361,7 +410,7 @@ async function captureAndScan(
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
   const [firstCap, axe] = await Promise.all([
-    captureViaWorker(url, { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext }),
+    captureViaWorker(url, { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, formState }),
     pageContext(url, ruleLayer, axeResults),
   ]);
   // `null` when the rule layer did not run, so "unchecked" can never be mistaken for "clean". Both
@@ -376,7 +425,7 @@ async function captureAndScan(
   // Verify-and-retry (the Root-1 fix, brought to the product). Browser focus on
   // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
   const cap = await recaptureUntilItReadsThePage(firstCap, axe.title,
-    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext });
+    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, formState });
   return { cap, axe };
 }
 
@@ -407,10 +456,11 @@ function reportOnTheCapture(cap: CaptureResponse, debug: boolean): void {
 
 async function runWitness(
   { url, task, worker, json, debug, probeForms, probeFocus, probeNavigation, probeFocusContext,
-    emitFormConfig, axe: wantAxe, axeResults }: RunOptions,
+    emitFormConfig, formState, axe: wantAxe, axeResults }: RunOptions,
 ): Promise<void> {
   const { cap, axe } = await captureAndScan(
-    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, wantAxe, axeResults });
+    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, wantAxe, axeResults,
+      formState });
   const ruleFindings = axe.findings;
   // A draft needs the ANNOUNCEMENTS and nothing downstream of them, so it returns before the judge runs.
   // Scoring a page in order to print a config skeleton would spend a model pass on an answer nobody asked
@@ -638,6 +688,21 @@ interface CaptureRequest {
   probeFocus: boolean;
   probeNavigation: boolean;
   probeFocusContext: boolean;
+  /**
+   * ONE declared state (ADR 0024), or none.
+   *
+   * One per capture and never several, because an error submission leaves a dirty form and an error
+   * banner, and a success submission may navigate away — so a second state cannot start from the first.
+   * The host issues a capture per state for that reason, rather than the worker looping.
+   */
+  formState?: FormStateRequest;
+}
+
+/** The resolved state as it goes over the wire: names and values, with the schema already checked. */
+interface FormStateRequest {
+  state: string;
+  submit: string;
+  fields: { field: string; within?: string; nth?: number; value?: string; choose?: string; check?: boolean }[];
 }
 
 /**
@@ -662,13 +727,16 @@ interface CaptureRequest {
 
 async function captureViaWorker(
   url: string,
-  { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext }: CaptureRequest,
+  { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, formState }: CaptureRequest,
 ): Promise<CaptureResponse> {
   let res: { status: number; ok: boolean; text: string; json: unknown };
   try {
     res = await requestJson(`${worker}/capture`, {
       method: "POST",
-      body: { url, task, probeForms, probeFocus, probeNavigation, probeFocusContext },
+      body: { url, task, probeForms, probeFocus, probeNavigation, probeFocusContext,
+        // Omitted rather than sent as null when absent: an older worker reads known fields only, so an
+        // absent key is the same "no configured form" it has always understood. Additive, like `fault`.
+        ...(formState ? { formState } : {}) },
       timeoutMs: CAPTURE_CLIENT_TIMEOUT_MS,
     });
   } catch (error) {
