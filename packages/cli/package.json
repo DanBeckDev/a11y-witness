@@ -22,8 +22,9 @@
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
     "@a11y-witness/judge": "0.1.0",
+    "@a11y-witness/scorer": "0.1.0",
     "@a11y-witness/worker-fleet": "0.1.0",
-    "@a11y-witness/scorer": "0.1.0"
+    "yaml": "^2.9.0"
   },
   "optionalDependencies": {
     "@axe-core/playwright": "^4.12.1",
