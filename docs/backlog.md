@@ -54,7 +54,27 @@ three separate items all touch the capture path and each one costs a recapture i
 
 **3 — ONE capture-path change, ONE protocol bump, ONE recapture.**
 
-> **A SCHEMA MIGRATION IS NOW OPEN AND THIS STAGE CLOSES IT.** `FEATURE_SCHEMA_VERSION` moved v17 -> v18
+> **DONE 2026-09-03 — and the stage cost minutes, not the ~8 hours budgeted.** The candidate pipeline
+> ran all seven stages in **21.7 minutes**: 1,594 cases discriminate (0 blind, 0 contaminated), RULES
+> 17/17, every rule-only criterion fired, 86/86 conformant real pages clean, candidate promoted, and the
+> v18 weights are committed. The schema migration is closed.
+>
+> **The recapture never happened, because it was never needed.** This stage was written as "ONE
+> capture-path change, ONE protocol bump, ONE recapture" and `CAPTURE_PROTOCOL_VERSION` never moved:
+> every change was ADDITIVE to the capture — an optional request field, a new channel — or outside it
+> entirely. So all 1,462 cases were **cache hits and 0 captures were taken**. What actually needed
+> redoing was the export and the train, because `FEATURE_SCHEMA_VERSION` moved when the grammar learned
+> to see a check box. **The bundling argument was still right and the cost estimate was wrong**, and the
+> reason is worth keeping: a protocol bump forces a recapture, and nothing here bumped it. Ask which of
+> the two versions moved before budgeting a day of fleet time.
+>
+> **Two defects on the way, both in the LAB rather than the corpus.** `packages/cli` declared `yaml` and
+> the lockfile was never refreshed, so it resolved locally (something else had pulled it in) and failed
+> on the lab. Then the fix landed and failed identically, because **the lab pulls and rebuilds and never
+> installed** — the sibling of a defect recorded beside that very step. Both are now guarded: an extended
+> `lockfile-in-sync` test fails in seconds on a laptop, and `run-job.yml` runs `npm ci` before building.
+>
+> **Superseded, kept for the record:** `FEATURE_SCHEMA_VERSION` moved v17 -> v18
 > on 2026-09-02 because the announcement grammar can now see a `check box` and a `menu button` — it could
 > see NEITHER, returning no objects at all, so every feature reading `objects` was blind to them. Found by
 > pointing `--emit-form-config` at a W3C tutorial page, where a correctly-labelled
