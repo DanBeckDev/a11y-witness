@@ -340,17 +340,28 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "3.2.1": {
     status: "assessed",
     channels: ["focusContext"],
+    realPageEvidence: {
+      available: false,
+      because: "the rule RUNS on real pages and finds nothing, which is the correct answer on a "
+        + "conformant one. `probeFocusContext` was turned on for real-page captures on 2026-09-02 — it "
+        + "presses Tab, which `probeFocus` already pressed on every one of them, so it observes something "
+        + "this tool was doing anyway rather than doing anything new to a stranger's site. The coverage "
+        + "audit confirms the channel is present across those captures and the rule stayed silent on all "
+        + "of them: none of the 39 renames itself when a control is focused. What is missing is a real "
+        + "page that EXHIBITS the failure, not the evidence or the opportunity — the same position 1.4.2 "
+        + "is in, where 8 media elements across 89 captures and none autoplaying. Its sibling 3.2.2 is "
+        + "exempt for the OPPOSITE reason and the two must not be read as the same claim: that one cannot "
+        + "run at all, because typing into a stranger's field is not a review",
+    },
     note:
-      "ASSESSED since 2026-09-02, decided by a RULE. This entry read `reachable` for months with the "
-      + "reason already worked out — 'a probe this tool has the machinery for but does not drive' — and "
-      + "that was accurate: `probeRouteChange` already read the page title for 2.4.2, and what was "
-      + "missing was a probe reading it either side of focusing a control. A change of context is what the criterion "
-      + "is about, and the title is the part of it a screen reader can observe. Rules-owned because the "
-      + "comparison is READ rather than judged — the title either changed or it did not, with no wording "
-      + "to interpret and no threshold to calibrate. 3.2.2 is the same failure on input, and ONE helper decides both because the "
-      + "evidence differs only in channel. Cost a CAPTURE_PROTOCOL_VERSION bump (13 -> 14) and one full "
-      + "recapture, taken as a bundle for both criteria — protocol 11 records why a bump should carry "
-      + "more than one addition.",
+      "On Focus, ASSESSED since 2026-09-02 and decided by a RULE. `probeFocusContext` walks up to eight "
+      + "tab stops reading the page title either side of each — walking rather than pressing Tab once, "
+      + "because the first focusable thing on a page is almost never the control you mean, and one press "
+      + "landed on the skip link on all 28 corpus cases. Rules-owned because the comparison is READ "
+      + "rather than judged: two titles are equal or they are not. It runs FIRST among the focus probes, "
+      + "since `probeFocusOrder` walks the whole tab order and a page that renames itself on focus has "
+      + "already done so by the time that finishes. Cost a CAPTURE_PROTOCOL_VERSION bump (13 -> 14) and "
+      + "one full recapture, bundled with 3.2.2.",
   },
   "3.2.2": {
     status: "assessed",
