@@ -150,3 +150,53 @@ page. Explicitness is also the safer default for an operation that writes to som
 **Submitting empty as the error case.** The proxy this ADR exists to remove. It stays as the behaviour
 when no config is supplied, because it is the only thing available then — but it is no longer what the
 tool claims to be testing when a config exists.
+
+---
+
+## Implementation decisions, settled 2026-09-02
+
+Recorded because each one would otherwise stop whoever picks this up, and "go and ask" is how a
+ready-looking backlog item turns out not to be one. None of these is a question; they are answers.
+
+**YAML, and `yaml` becomes a dependency of `packages/cli`.** This repo has NO YAML parser today —
+`fleet-discover.mjs` says so outright, *"it appends TEXT rather than round-tripping through a YAML
+library"* — so this is a new dependency and it is a deliberate one. JSON was rejected because
+**comments are load-bearing here**: the generated draft carries `# TODO` on every value and a comment
+block naming each field it could not address, and that block is the accessibility finding. A format
+that cannot hold it loses the half that makes the draft worth generating. Use `yaml` (eemeli), which has
+zero runtime dependencies of its own — this ships to users, so the supply-chain surface is the cost being
+weighed.
+
+**The worker NEVER sees the config file.** The CLI parses, validates and resolves exactly one state,
+then sends it flat:
+
+```jsonc
+{ "formState": { "state": "error", "submit": "Confirm booking",
+                 "fields": [ { "name": "Email address", "value": "" } ] } }
+```
+
+Two reasons, and the second is the one that matters: YAML stays off the Windows worker, which runs plain
+node with no build step — and the wire format stays inspectable, so a capture's request can be read
+without a parser. It also keeps the resolution rules in ONE place rather than in both.
+
+**`packages/cli/src/forms/` owns the schema, the validator and the draft emitter.** All three are pure
+functions of text and of `structure.formFields`, so they are unit-testable with no worker and no fleet.
+That is why they are built first: the whole of the config layer can be proven before any Windows machine
+is involved.
+
+**Action input is `forms-config:`, a path, default empty.** Explicit, matching the no-auto-discovery
+decision above.
+
+**`--forms` composes with `--probe-forms`; neither implies the other.** A form named in the config runs
+its declared states. A form on the page that the config does NOT name falls back to `--probe-forms` if
+that flag was given, and is otherwise left alone and reported as unconfigured. Making `--forms` imply
+`--probe-forms` would silently submit forms the user did not describe, which is the exact act this
+design exists to make deliberate.
+
+**Error states run before success states**, then file order within each. A success submission may
+navigate away (`navigatedOnSubmit`), and the less destructive state should have been observed before the
+one that completes the form — if the run dies midway, it dies having done the safer thing.
+
+**`state:` is `error` or `success` in v1, and nothing else.** A fixed vocabulary is what makes the
+criterion mapping in the table above computable; free-text state names would make "properly tested" a
+judgement again. Custom states are v2, alongside multi-step flows.
