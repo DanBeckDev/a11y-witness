@@ -355,17 +355,24 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "3.2.2": {
     status: "assessed",
     channels: ["typedFeedback"],
+    realPageEvidence: {
+      available: false,
+      because: "the evidence comes from `probeTyping`, which enters characters into a field — and that is "
+        + "`probeForms`'s problem in another costume: typing into a stranger's form is not a review, so it "
+        + "is off for every real-page capture. Its sibling 3.2.1 IS demonstrated on real pages, because "
+        + "`probeFocusContext` only presses Tab and `probeFocus` already does that on every one of them. "
+        + "The two criteria are the same shape and land on opposite sides of the consent line, which is "
+        + "why this is declared here and not there",
+    },
     note:
-      "ASSESSED since 2026-09-02, decided by a RULE. This entry read `reachable` for months with the "
-      + "reason already worked out — 'a probe this tool has the machinery for but does not drive' — and "
-      + "that was accurate: `probeRouteChange` already read the page title for 2.4.2, and what was "
-      + "missing was a probe reading it either side of typing into a control. A change of context is what the criterion "
-      + "is about, and the title is the part of it a screen reader can observe. Rules-owned because the "
-      + "comparison is READ rather than judged — the title either changed or it did not, with no wording "
-      + "to interpret and no threshold to calibrate. 3.2.1 is the same failure on focus, and ONE helper decides both because the "
-      + "evidence differs only in channel. Cost a CAPTURE_PROTOCOL_VERSION bump (13 -> 14) and one full "
-      + "recapture, taken as a bundle for both criteria — protocol 11 records why a bump should carry "
-      + "more than one addition.",
+      "On Input, ASSESSED since 2026-09-02 and decided by a RULE. The pair differs only in whether typing "
+      + "rewrites the page title, so both variants announce identically and nothing here is a 3.3.x "
+      + "finding in disguise. Rules-owned because the comparison is READ rather than judged: two titles "
+      + "are equal or they are not, with no wording to interpret and no threshold to calibrate. One helper "
+      + "decides this and 3.2.1, because the evidence differs only in which probe produced it — 3.2.2 is "
+      + "3.2.1 'on change rather than focus', which is how this table described the pair years before "
+      + "either was built. Cost a CAPTURE_PROTOCOL_VERSION bump (13 -> 14) and one full recapture, taken "
+      + "as a bundle with 3.2.1.",
   },
   "1.3.5": { status: "reachable", needs: ["dom"], channels: ["formFields"], note: "Identify Input Purpose is the `autocomplete` attribute against a fixed token list — deterministic, and squarely a rule. Needs the DOM, like 1.4.2." },
   "3.1.1": { status: "reachable", needs: ["dom"], channels: ["transcript"], note: "Language of Page: `<html lang>`. NVDA switching synthesiser language is an indirect and unreliable proxy; the attribute is the fact." },
