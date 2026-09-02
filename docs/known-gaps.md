@@ -1312,6 +1312,31 @@ so `moveToNextFormField` from the end lands on the first field and reads the pag
 changed at once and the result got worse, which made neither attributable — the re-anchoring was the fix
 that had been diagnosed and the direction was a guess riding along with it.
 
-**Still open:** the captures run and `formFill` carries the evidence, but no criterion is yet DECIDED from
-it — `criterionOutcomes` does not read `formFill`. That is what closes 3.3.1, 3.3.3, 4.1.3 and 3.2.2 on a
-real page, and it is on the backlog.
+### The criteria ARE decided, and this section said otherwise for an hour
+
+The paragraph here claimed the captures ran but no criterion was decided from them, because
+`criterionOutcomes` does not read `formFill`. **It does not need to.** `probeConfiguredForm` submits
+through `activateAndCaptureDelta`, deliberately, so a configured submission produces evidence of exactly
+the same SHAPE as an opportunistic one — and `formChanges` is the channel 3.3.1 already reads. Measured on
+the same page:
+
+| | 3.3.1 | 3.3.3 | 4.1.3 |
+|---|---|---|---|
+| without a config | inapplicable | inapplicable | inapplicable |
+| with a configured error state | **passed** | inapplicable | **passed** |
+
+`inapplicable` there means *"the page exposed nothing of the kind this criterion is about"* — which was
+true only because nothing had submitted the form. So a config moves two criteria from unexamined to
+examined on a page we do not own, which is the whole of what ADR 0024 was for.
+
+**Recorded because the wrong claim is instructive.** It was written from reading the code — `formFill` is
+a new channel, nothing reads it, therefore nothing is decided — and it was refuted by running the rules
+over a real capture in one command. The evidence never needed a new channel; it needed to land in an
+existing one, which is what reusing `activateAndCaptureDelta` bought. *A cheap pre-check is for deciding
+whether to bother running the real one, never for concluding what the real one will say.*
+
+**3.3.3 stays `inapplicable` correctly:** the W3C search form accepted an empty query, so there was no
+error message to carry a remedy. 3.2.2 needs `probeTyping`, which that raw request did not ask for.
+
+**What is genuinely still open** is real-page GROUNDING for 4.1.3 — a conformant and a failing page, both
+configured — which is [known-gaps §21](./known-gaps.md) and now unblocked rather than blocked.
