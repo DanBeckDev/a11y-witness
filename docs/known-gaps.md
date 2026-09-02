@@ -309,7 +309,7 @@ in either direction. Adding it to the "always run" list would have been the easy
 which is a `CAPTURE_PROTOCOL_VERSION` bump and a full recapture. 3.3.3 was the one of the three reachable
 screen-reader criteria that cost no capture change, which is why it was taken first.
 
-## 23. `3.2.1` and `3.2.2` are unbuilt, and the blocker is a PROTOCOL BUMP nobody has decided to pay for
+## 23. CLOSED 2026-09-02 — `3.2.1` and `3.2.2` ship. The bump was paid and the fleet took ~8 h
 
 The last two screen-reader-reachable criteria this tool does not assess. Recorded properly rather than
 carried as a verbal caveat, because "we could do it" and "here is what it costs" are different statements
@@ -355,6 +355,27 @@ Building 3.2.1's probe and leaving it dark would contradict that within a day.
 **What would tell you it is fixed:** `criterion-coverage.ts` reads `assessed` for both — which
 `criterion-coverage.test.ts` permits only once the judge can actually return those findings — and
 `everything` completes with them scored.
+
+**CLOSED.** Both criteria are `assessed`, decided by RULES, and score `28/28 rules: EXACT` with zero
+false positives. The corpus reads `1594 discriminating, 0 blind, 0 contaminated, 0 uncaptured, 0 stale`,
+and `everything` completed all nine stages with FITNESS: PASS. The tool now has **17 criteria able to
+produce a finding**, up from 15.
+
+The bump cost what this entry said it would once the estimate was corrected: ~8 h across five boxes, and
+a stalled worker added three and a half more (§24, and `fleet:recover` came out of it).
+
+What the gates extracted on the way, none of it optional: four separate wiring bugs in the focus probe —
+Tab landing on the skip link, the flag dropped from `observed`, the probe running AFTER the tab walk that
+destroyed its own precondition, and the result never reaching `interaction`; a veto classification that
+would otherwise have put uncompletable corpus work on a list; three parallel field lists that would have
+compared an OBJECT by count; and an overclaim where declaring both criteria undemonstrable on real pages
+was the easy edit and false about 3.2.1.
+
+That last one is the part worth keeping. The two are the same shape and land on OPPOSITE sides of the
+consent line: `probeFocusContext` presses Tab, which `probeFocus` already pressed on every real-page
+capture, so 3.2.1 is now exercised on 39 pages it did not write and stays silent on all of them —
+correct, on conformant pages. `probeTyping` enters characters into a stranger's field, so 3.2.2 genuinely
+cannot be asked there. Each declares its own reason.
 
 **PROVED ON A REAL CAPTURE, 2026-09-02, so the decision rests on evidence and not an estimate.**
 `probeTypedFeedback` now reads the page title either side of the keystrokes, and one pair captured through
