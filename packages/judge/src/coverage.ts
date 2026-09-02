@@ -36,7 +36,11 @@
  */
 export const SCORED_CRITERIA = [
   "1.1.1", "1.3.1", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3",
-  "2.4.4", "2.4.6", "3.3.1", "3.3.2", "4.1.2", "4.1.3",
+  // 3.3.3 has a head from 2026-09-02 and the RULE decides it. Both are true and the list means the first:
+  // its records stay in the model (they are `decidedBy: "rules"`, not `unavailable`), so the trainer fits
+  // a head, and `RULE_SUBSTITUTED_SUBTYPES` makes that head non-blocking because the rule is exact.
+  // Listing it answers "is there a head" honestly; `RULE_CRITERIA` below answers who decides.
+  "2.4.4", "2.4.6", "3.3.1", "3.3.2", "3.3.3", "4.1.2", "4.1.3",
 ] as const;
 
 /**
