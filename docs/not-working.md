@@ -1278,6 +1278,30 @@ back what this section assumes, and whether NVDA with it ON actually speaks a la
 Both are one capture on a free fleet, and neither should be assumed — this section has already had to
 correct the claim it was built on once.
 
+**MEASURED 2026-09-02, and it removes one of the two options this entry offers.**
+
+The entry proposes recording whether Report Language is on, per capture, via
+`getSetting('documentFormatting.reportLanguage')` — *"which is what makes the difference between evidence
+and a guess about the guest's configuration."* Read off a live worker, `screenReaderSettings` carries these
+sections and no others:
+
+```
+addonStore  braille  development  general  math  remote  schemaVersion
+screenCurtain  speech  speechViewer  update  uwpOcr  virtualBuffers  vision
+```
+
+**`documentFormatting` is not among them.** NVDA materialises only what has been WRITTEN, so a setting at
+its default has no key to read — which is the same fact this entry already found from the other side (*"396
+characters, no sections at all"*), now confirmed through the API rather than the file.
+
+So the recording route does not work as the entry assumes: **you cannot read whether Report Language is on
+without having turned it on.** The absence is indistinguishable from off, and it is the ordinary state of
+every guest. That does not change the product decision — it removes the reassurance that the decision could
+be made safe by recording it afterwards.
+
+The second measurement the entry asks for — whether NVDA with the option ON actually speaks a language
+change — is untouched, because taking it means turning the option on, which is the decision itself.
+
 ## 20. CLOSED 2026-09-01 — the capture was transient; what was broken is that NOTHING REFUSED IT
 
 The pathological capture was never a page defect. A fresh `--no-cache` capture of the same page was clean
