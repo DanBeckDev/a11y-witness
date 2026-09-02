@@ -303,7 +303,19 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "2.1.1": { status: "partial", needs: ["screen-reader"], channels: ["focusOrder", "formFields"], note: "PARTIAL since 2026-08-22. Assesses one mode: a control the page ANNOUNCES as operable that Tab never reaches — a `div role=button` with a click handler and no `tabindex`, which a screen-reader user meets as 'I can hear it and I cannot press it'. Deliberately NOT the roleless `<div onclick>` of the custom-control family: that is invisible to the screen reader (its 4.1.2 finding) and a capture cannot tell it from a page with no button. POSITIONAL, because the focus probe truncates at 12 stops on every corpus page — absence from `focusOrder` alone would fire almost everywhere, so a control counts as unreachable only when something LATER in reading order was reached. Keyboard operation of a control that is NOT announced, and operation by keys other than Tab, remain outside this." },
   "3.3.3": {
     status: "assessed",
-    channels: ["postSubmitFields", "formChanges"],
+    channels: ["formChanges", "postSubmitFields"],
+    realPageEvidence: {
+      available: false,
+      because: "the rule's FIRST precondition is a SUBMIT activation, and `probeForms` is off for every "
+        + "real-page capture because submitting a form on a site we do not own is not a review "
+        + "(SECURITY.md). So no real capture carries a submit-kind `formChanges` entry and the rule "
+        + "returns on its first line there — measured 0 of 26 real captures reachable locally, and the "
+        + "probe setting in `capture-real-pages.mjs` is what makes it 0 everywhere rather than an "
+        + "accident of which pages were chosen. Note the coverage audit reads this as EXERCISED because "
+        + "`postSubmitFields` appears on some real capture, which is true and not sufficient: that channel "
+        + "is a supplement the rule consults AFTER a submit it never sees. 3.3.1 and 4.1.3 are exempt for "
+        + "the same probe and the same reason",
+    },
     note:
       "Error Suggestion, ASSESSED since 2026-09-02 and decided by a RULE rather than a head. The pair is "
       + "single-criterion by construction: both variants announce the error correctly (aria-invalid, "
@@ -314,9 +326,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
       + "(known-gaps.md §22). One clause inside a long announcement is diluted by an average and was not "
       + "rescued by a max. It does not need a head: whether the announced error carries an INSTRUCTION is "
       + "read directly, which is this project's own test for what a rule may assert, and the same basis "
-      + "as 1.1.1:filename-alt. Like 3.3.1 and 4.1.3 it reads probe-gated channels, so it cannot fire on "
-      + "a page we do not own -- probeForms is off there because submitting somebody else's form is not "
-      + "a review.",
+      + "as 1.1.1:filename-alt. Measured on 2,170 captures: fires on every positive, 0 false positives.",
   },
   "3.2.1": { status: "reachable", needs: ["screen-reader"], channels: ["focusOrder", "stateChanges"], note: "On Focus. Requires focusing each control and detecting a context change — a probe this tool has the machinery for but does not drive." },
   "3.2.2": { status: "reachable", needs: ["screen-reader"], channels: ["formChanges", "stateChanges"], note: "On Input. Same shape as 3.2.1, on change rather than focus." },
