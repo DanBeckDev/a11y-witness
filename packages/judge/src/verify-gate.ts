@@ -76,7 +76,7 @@ const OBJECT_REPLACEMENT = /￼/g; // ￼ — strip the empty-name marker for cl
  * them equal where both are visible.
  */
 export const ABSENCE_CRITERIA = new Set([
-  "1.1.1", "1.3.1", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "3.3.2", "4.1.2",
+  "1.1.1", "1.3.1", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "3.3.2", "3.3.3", "4.1.2",
 ]);
 
 /** Per-criterion violation hypotheses; entailment of any one means a real failure. */

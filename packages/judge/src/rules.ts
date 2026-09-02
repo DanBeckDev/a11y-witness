@@ -53,6 +53,19 @@ export interface RuleInput {
     controls?: string[];
     stateChanges?: { control: string; after: string }[];
     /**
+     * What each activated control announced. `kind` distinguishes a SUBMIT from a disclosure, and it has
+     * travelled with the evidence since protocol 8 for exactly the reason 3.3.3 needs it: without it,
+     * opening a disclosure counts as submitting a form, and apache.org's search toggle was once reported
+     * as a form submitted with invalid input and no error announced.
+     *
+     * Absent unless `probeForms` was asked for, which is OFF for real-page captures by design — pressing
+     * submit on a site we do not own is not a review. So a rule reading this cannot fire on a real page,
+     * and must never read absence as a finding.
+     */
+    formChanges?: { control?: string; after?: string | null; kind?: string }[];
+    /** The deliberate re-read of durable field state after a submit. Same probe, same absence rule. */
+    postSubmitFields?: string[];
+    /**
      * What each Tab press announced, in order. Absent means the focus probe did not run — which was true
      * of EVERY capture until this rule existed, because `probeFocus` was reachable from no CLI flag and no
      * Action input. Absent must therefore make no claim.
@@ -398,6 +411,53 @@ function addSilentStateChanges(
       "Control announced the same state after activation, so its state change is not exposed",
       `${change.control} -> ${change.after}`, "conformance");
   }
+}
+
+/**
+ * 3.3.3 Error Suggestion — the error IS announced, and names only the problem.
+ *
+ * A RULE rather than a head, and the reason is measured. A head was trained for this subtype and had
+ * **recall 0.0 on its own training data** under both poolings, with false positives on conformant
+ * records — see `known-gaps.md` §22. The distinction is one clause inside a long announcement, which a
+ * document average dilutes and an instance max did not rescue.
+ *
+ * It does not need a head. This project's doctrine is that rules ASSERT what can be READ directly and the
+ * scorer TRIAGES judgements, and "does the announced error contain an instruction?" is read directly —
+ * the same basis on which `1.1.1:filename-alt` is rules-owned. The signal discriminated 44 captured pairs
+ * with no errors while the head could not fit 15.
+ *
+ * THREE PRECONDITIONS, and each exists because its absence is a different criterion's finding:
+ *
+ *   - a submit must have HAPPENED. No activation means the probe never ran, and reading that as "no
+ *     remedy" would make every capture without a form a 3.3.3 failure.
+ *   - an error must have been ANNOUNCED. Silence is 3.3.1's finding, not this one, and asserting both
+ *     from one page is how `errorVariant`'s first fixture taught the 3.3.2 head about validation
+ *     messages.
+ *   - the remedy is matched as an INSTRUCTION, never a sentiment. A vocabulary of "good words" is
+ *     `vague_link_present` in a new costume; removing that feature took 2.4.4 from 27 false positives to
+ *     0 precisely because it answered a different question with a wordlist.
+ *
+ * NO PUNCTUATION in the pattern. NVDA speaks "e.g." as "e dot g." and "DD/MM/YYYY" as "DD slash MM slash
+ * YYYY", so an alternative leaning on a symbol can never match an announcement — it looks like coverage
+ * and matches nothing. Measured; it cost a chain run.
+ */
+const ANNOUNCED_ERROR_TEXT = /invalid|\berror\b/i;
+const REMEDY_INSTRUCTION =
+  /\b(?:enter|use|choose|select|pick|include|must (?:be|start|contain)|for example|such as|format|as dd|at least|between \d)/i;
+
+function addErrorWithoutRemedy(input: RuleInput, add: AddFinding): void {
+  const changes = input.interaction?.formChanges ?? [];
+  const submitted = changes.filter((change) => change.kind === "submit");
+  if (!submitted.length) return;
+  const spoken = [
+    ...submitted.map((change) => String(change.after ?? "")),
+    ...(input.interaction?.postSubmitFields ?? []).map((value) => String(value)),
+  ].filter((text) => ANNOUNCED_ERROR_TEXT.test(text));
+  if (!spoken.length) return;                                    // 3.3.1's finding, not this one
+  if (spoken.some((text) => REMEDY_INSTRUCTION.test(text))) return;
+  add("3.3.3 Error Suggestion",
+    "A validation error was announced but names only the problem, never how to correct it",
+    spoken.join(" | "), "conformance");
 }
 
 /** Is this a control whose activation is Enter? Read through the shared grammar, never a role regex. */
@@ -1775,6 +1835,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addBrokenFocusOrder(input, add);
   addInertSkipLink(input, add);
   addKeyboardUnreachableControl(input, add);
+  addErrorWithoutRemedy(input, add);
 
   return findings;
 }

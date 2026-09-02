@@ -366,4 +366,43 @@ export const ACT_RULES: ActRuleDescription[] = [
     accessibilitySupport: NVDA_EDGE + " Tab is pressed through the screen reader, so what is recorded is "
       + "the reachability a screen-reader user experiences.",
   },
+  {
+    id: "a11y-witness:error-announced-without-remedy",
+    version: "2026-09-02",
+    name: "A validation error is announced but names only the problem",
+    description: "A form submit is rejected and the screen reader announces an error — \"Visit date, edit, "
+      + "invalid entry, Invalid entry.\" — that asserts something is wrong and never says what to do about "
+      + "it. The conformant page announces the same rejection with an instruction: \"Enter the visit date "
+      + "as DD slash MM slash YYYY.\" Both are announced, so this is not about silence.",
+    ruleType: "atomic",
+    accessibilityRequirements: [
+      // ASSERTED. Whether the announced text carries an instruction is READ directly from the
+      // announcement, which is this project's test for what a rule may state rather than refer. It is
+      // rules-owned for a measured reason, not a stylistic one: a trained head for this subtype had
+      // recall 0.0 on its own training data under both poolings (known-gaps.md §22).
+      { criterion: "3.3.3", mapping: "conformance" },
+    ],
+    inputAspects: ["interaction.formChanges", "interaction.postSubmitFields"],
+    applicability: "Every capture in which a control of kind `submit` was activated AND an error was "
+      + "subsequently announced. A capture where nothing was submitted, or where nothing was announced, "
+      + "is out of scope — the second of those is 3.3.1's finding.",
+    expectation: "The announced error text contains an instruction the user can act on: a format, an "
+      + "example, a range, or a required action.",
+    assumptions: [
+      "An error that is not announced at all fails 3.3.1 and is deliberately NOT reported here. Asserting "
+        + "both from one page would make every silent-validation case a 3.3.3 case too, which is the "
+        + "mistake that once taught the 3.3.2 head about validation messages.",
+      "A remedy is matched as an INSTRUCTION, never as a sentiment or a vocabulary of helpful-sounding "
+        + "words. A wordlist here would be `vague_link_present` again — a feature answering a different "
+        + "criterion's question, whose removal took 2.4.4 from 27 false positives to 0.",
+      "No pattern depends on punctuation. NVDA speaks \"e.g.\" as \"e dot g.\" and \"DD/MM/YYYY\" as "
+        + "\"DD slash MM slash YYYY\", so an alternative leaning on a symbol matches nothing while looking "
+        + "like coverage. Measured; it cost a chain run.",
+      "Cannot fire on a page we do not own. It reads probe-gated channels and `probeForms` is off for "
+        + "real-page captures, because submitting a form on somebody else's site is not a review — so "
+        + "`rules:real-pages` can only ever report zero findings for it, which is not validation.",
+    ],
+    accessibilitySupport: NVDA_EDGE + " The error text is taken from what the screen reader announced "
+      + "after the submit, not from the DOM, so what is judged is what a screen-reader user actually hears.",
+  },
 ];

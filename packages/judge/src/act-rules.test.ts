@@ -81,14 +81,28 @@ test("the declared mappings match what the rules actually produce", () => {
   }
 });
 
-test("only the two announcement-reading rules claim conformance", () => {
+test("only the announcement-reading rules claim conformance", () => {
   // Pinned as a list, so promoting an inference rule to an assertion is a visible edit here as well as in
-  // the code. These two read the failure directly; everything else infers it.
+  // the code. These read the failure DIRECTLY; everything else infers it.
+  //
+  // `error-announced-without-remedy` joined them on 2026-09-02 and the test title lost its "two", which is
+  // the edit this guard exists to force. It qualifies on the same test as the others: whether the
+  // announced error text carries an instruction is READ from the announcement, not inferred from
+  // something adjacent to it. Both variants of its pair announce the error, so it is not an argument
+  // about silence — the good page says "Enter the visit date as DD slash MM slash YYYY" and the bad one
+  // says "Invalid entry", and the rule reads exactly that difference.
+  //
+  // It is rules-owned for a measured reason rather than a stylistic one: a trained head for the subtype
+  // had recall 0.0 on its own training data under both poolings (known-gaps.md §22).
   const asserting = ACT_RULES
     .filter((r) => r.accessibilityRequirements.some((a) => a.mapping === "conformance"))
     .map((r) => r.id)
     .sort();
-  assert.deepEqual(asserting, ["a11y-witness:unlabelled-image", "a11y-witness:unnamed-control"]);
+  assert.deepEqual(asserting, [
+    "a11y-witness:error-announced-without-remedy",
+    "a11y-witness:unlabelled-image",
+    "a11y-witness:unnamed-control",
+  ]);
 });
 
 test("the rule that has been wrong before says so in its assumptions", () => {
