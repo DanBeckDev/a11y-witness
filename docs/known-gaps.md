@@ -1227,3 +1227,50 @@ turns on which layer may claim what, and a consumer should not have to regex a s
 Mutation-checked by making a clean result report `passed` and confirming the test fires. **Note the trap
 inside that check:** cross-package imports resolve to `dist`, so the first mutation run passed having
 changed nothing. `npm test` has a `pretest` build and is safe; `npx tsx --test` run directly is not.
+
+---
+
+## 27. ~~Readiness could not see a foreground holder, and its dialog sample was from BOOT~~ — DONE 2026-09-02
+
+Backlog stage 2. Two defects, and the second was found while fixing the first and is the worse one.
+
+**A modal blocks INPUT; a toast blocks FOCUS. Only the first was checked.** On a11y-worker-6, 2026-09-02,
+a `ShellExperienceHost` notification toast held the foreground for three and a half hours. Edge could
+never take focus, so every capture wedged — and because a toast is not a dialog, `listBlockingDialogs`
+returned nothing, `noBlockingDialog` stayed `true`, and the worker advertised itself `ready` throughout.
+From the run's side that is indistinguishable from a slow page, so it waited, and a corpus recapture made
+no progress at all.
+
+`foregroundBlocker` is now a pure predicate over the foreground sample, gated in `readiness()`, and
+`/health` names the owner and title rather than the check — the distinction `blockingDialogs` already
+made for modals.
+
+**The tempting predicate was wrong and would have taken the fleet offline.** "The foreground does not
+belong to Edge" is TRUE ON EVERY IDLE GUEST: an idle desktop's foreground belongs to explorer, and a
+capture launches Edge into the foreground from there perfectly well. What breaks a capture is a window
+that refuses the transition, and only some windows do. So it is an explicit list with the incident
+attached to the entry that earned it, and the other two marked as inferred from sharing the mechanism
+rather than observed. My own backlog row had specified the wrong predicate; writing the test is what
+caught it.
+
+### The one that had been running the whole time
+
+`sampleDesktopDialogs` carries a comment stating its own design: *"the sample that matters is the one at
+the START OF A CAPTURE, where a dialog actually blocks work."* **There was no such sample.** The only
+call is at boot. At capture start the cache was refreshed ONLY when a dialog had been dismissed — so a
+guest that never had one served its boot-time answer for as long as it stayed up. Workers up six days
+were reporting `dialogsCheckedMsAgo` around 8,640 minutes, which is `/health` saying *"no dialogs, as of
+last week"* while the field beside it was built precisely to stop that reading as current.
+
+`dismissBlockingDialogs` has already enumerated at that point, so the current state was available for
+free and was being thrown away. **"Dismissed none" and "never looked" were the same state** — this
+repo's oldest defect, wearing a cache.
+
+**Neither bumps `CAPTURE_PROTOCOL_VERSION`.** A readiness check and a `foregroundBlocked` diagnostic mark
+change nothing about what the evidence MEANS, so this is additive exactly as `fault` was. It does change
+`codeVersion()`, so the fleet reads stale until deployed — which is `assertFleetRunsThisCheckout` working.
+
+**Boy-scout, in passing:** `runCapture` crossed the 90-line physical budget, so the desktop preparation is
+now `prepareDesktop` — extracted because it does one thing at one level of abstraction, not merely to
+shorten its caller. `function-size.test.ts` caught it; ESLint could not, because `skipComments: true`
+lets a comment-dense function run to twice its budget.
