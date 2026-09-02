@@ -97,15 +97,15 @@ test("several buttons are all listed, because guessing which one submits is not 
 });
 
 test("a phrase the GRAMMAR cannot read is not reported as a page defect", () => {
-  // The important one. Measured 2026-09-02: `parseAnnouncement` returns NO objects for any checkbox,
-  // because CONTROL_ROLES carries "checkbox" and NVDA says "check box" — 22 occurrences of NVDA's
-  // spelling in the local corpus and 0 of the grammar's. So a correctly-labelled
-  // "Subscribe to newsletter, check box" on a real W3C tutorial page was reported as an UNNAMED FIELD:
-  // a false 4.1.2 against a conformant control, in a generated artefact.
+  // The important one, and it is why `unparsed` exists as a category. A claim about OUR PARSER must never
+  // be rendered as a claim about the PAGE: the first version put unreadable phrases under "UNNAMED FIELD"
+  // and so stated a false 4.1.2 in a generated artefact.
   //
-  // Until the grammar is fixed (it moves the model input, so it rides with a re-export), the emitter must
-  // say the limitation is OURS. An author cannot fix our parser and must not be sent looking.
-  const announced = "complementary landmark, form, Subscribe to newsletter, check box, not checked";
+  // The specimen that found it — "Subscribe to newsletter, check box" — no longer belongs here, because
+  // the grammar was fixed to read it (CONTROL_ROLES carried "checkbox" and NVDA says "check box"). That
+  // is the right outcome and this test moved rather than being deleted: the CATEGORY must keep working
+  // for the next role nobody has added yet, which is exactly what the old specimen proved is possible.
+  const announced = "Time:, grouping, Show colour picker, colour well, empty";
   const draft = draftFormsConfig(["Email, edit", announced], { origin: ORIGIN });
 
   assert.deepEqual(draft.unnamed, [], "a phrase we could not parse must NOT be reported as unnamed");
@@ -113,6 +113,29 @@ test("a phrase the GRAMMAR cannot read is not reported as a page defect", () => 
   assert.match(draft.yaml, /NOT UNDERSTOOD by a11y-witness/);
   assert.match(draft.yaml, /gap in THIS TOOL's announcement grammar, not a finding about your page/);
   assert.doesNotMatch(draft.yaml, /UNNAMED FIELD, 2 /);
+});
+
+test("each control gets the VERB its role takes, not `value:` for everything", () => {
+  // Two live bugs, the same shape, found one after the other by running against real pages: a button
+  // drafted as typeable, then a checkbox drafted the same way the moment the grammar could see one.
+  // Offering `value: ""` on a checkbox tells the author to type into it — the confusion the three-verb
+  // schema exists to prevent, arriving through the generator.
+  const draft = draftFormsConfig([
+    "Email address, edit",
+    "Room type, combo box",
+    "complementary landmark, form, Subscribe to newsletter, check box, not checked",
+  ], { origin: ORIGIN });
+
+  assert.deepEqual(draft.addressable.map((f) => [f.name, f.verb]), [
+    ["Email address", "value"],
+    ["Room type", "choose"],
+    ["Subscribe to newsletter", "check"],
+  ]);
+  assert.match(draft.yaml, /field: "Room type"\n\s+choose: ""/);
+  // `check` drafts FALSE rather than an empty string: a checkbox has no empty value, and `check: ""`
+  // would not survive the schema's own verb validation.
+  assert.match(draft.yaml, /field: "Subscribe to newsletter"\n\s+check: false/);
+  assert.deepEqual(draft.unparsed, [], "the grammar now reads a check box");
 });
 
 test("an unnamed FILLABLE control is still a real 4.1.2 finding", () => {

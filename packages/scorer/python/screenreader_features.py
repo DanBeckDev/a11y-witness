@@ -80,7 +80,20 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # without an error. capture-core added the field after apache.org's search toggle was reported exactly
 # that way. A MEANING change: the same evidence now produces different feature values, and 3.3.1 is one of
 # only three subtypes the model decides alone, so this one reaches a report.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v17"
+# v18, 2026-09-02: the announcement grammar can see a CHECK BOX and a MENU BUTTON. `CONTROL_ROLES` carried
+# `"checkbox"` and NVDA says `"check box"`, so `parseAnnouncement` returned NO objects at all for either --
+# name included -- and every feature reading `objects` was blind to them.
+#
+# MEASURED BEFORE BUMPING, and the number argues both ways, so both are stated. **0 of 1,868 records in the
+# current export change**: the affected announcements live only in `runs/real-page-corpus`, and no synthetic
+# case produces a checkbox. So this bump invalidates weights that would have scored this corpus identically.
+#
+# It is still right, because the version guards a risk this corpus cannot express. The shipped model is
+# scored on somebody's live page, and a page with a checkbox now yields a different feature vector from the
+# one the weights were fitted under -- which is exactly "a v17 model scored with v18 features, and the
+# difference read as model behaviour". A corpus that cannot exercise a change is not evidence the change is
+# inert; it is the reason the real-page tier exists.
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v18"
 
 FEATURE_NAMES = (
     "transcript_present",

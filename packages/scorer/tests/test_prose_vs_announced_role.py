@@ -80,6 +80,20 @@ def test_the_role_vocabulary_covers_what_the_featurizer_itself_knows_about():
 
 
 def test_the_schema_version_moved_with_the_meaning():
+    # v18: the announcement grammar can see a CHECK BOX and a MENU BUTTON. `CONTROL_ROLES` carried the
+    # spelling "checkbox", which NVDA never produces, and was missing "check box", which it does -- so
+    # `parseAnnouncement` returned NO objects at all for either control, the NAME included, and every
+    # feature reading `objects` was blind to them. Found by pointing `--emit-form-config` at a W3C tutorial
+    # page, where a correctly-labelled "Subscribe to newsletter, check box" came back as an UNNAMED control:
+    # a false 4.1.2 against conformant markup.
+    #
+    # Measured before bumping, and the number argues both ways so both are recorded: 0 of 1,868 exported
+    # records change, because the affected announcements live only in `runs/real-page-corpus` and no
+    # synthetic case produces a checkbox. The bump is still right, for the reason the real-page tier exists:
+    # the shipped model is scored on somebody's live page, and a page with a checkbox now yields a feature
+    # vector the weights were never fitted under. A corpus that cannot exercise a change is not evidence
+    # that the change is inert.
+    #
     # v17: `validation_error_missing` requires the silent activation to be a SUBMIT. `kind` has travelled
     # on every `formChanges` entry since CAPTURE_PROTOCOL_VERSION 8 and NOTHING read it -- not this
     # featurizer and not `rules.ts`, which contains the string zero times -- so a disclosure that announced
@@ -95,7 +109,7 @@ def test_the_schema_version_moved_with_the_meaning():
     # v15: `vague_link_present` is no longer a model input at all. It answers 2.4.9 (text alone, AAA, not
     # reported here) and the 2.4.4 head used it because it was the cheapest separator -- firing on 22 of the
     # 44 conformant pages that carry "Details" inside a peer index.
-    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v17"
+    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v18"
 
 
 def test_no_landmark_feature_survives_in_the_vector():
