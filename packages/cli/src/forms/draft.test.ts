@@ -75,3 +75,51 @@ test("a page with NO form fields still drafts something that loads", () => {
   // No fields means the parser refuses it, and that refusal is CORRECT -- there is nothing to configure.
   assert.throws(() => parseFormsConfig(draft.yaml), /lists no fields:/);
 });
+
+// --- Found by running this against a real W3C page, which no unit test above would have caught. ---
+
+test("a BUTTON is a submit candidate, never something to type into", () => {
+  // First run against a real page drafted `"Submit Search", button` with `value: ""`. Typing into a button
+  // is not a thing — the wrong verb for the control, which is the exact confusion the three-verb schema
+  // exists to prevent, arriving through the generator instead of through the config.
+  // `structure.formFields` is NVDA's FORM-FIELD quick-nav and it visits buttons; the census comment says so.
+  const draft = draftFormsConfig(["Email address, edit", "Sign up, button"], { origin: ORIGIN });
+  assert.deepEqual(draft.addressable.map((f) => f.name), ["Email address"]);
+  assert.deepEqual(draft.submitCandidates, ["Sign up"]);
+  // And it is USED, not merely collected: the author should not have to look up what they just saw.
+  assert.match(draft.yaml, /submit: "Sign up"/);
+});
+
+test("several buttons are all listed, because guessing which one submits is not ours to do", () => {
+  const draft = draftFormsConfig(
+    ["Email, edit", "Search, button", "Sign up, button"], { origin: ORIGIN });
+  assert.match(draft.yaml, /buttons found: "Search", "Sign up"/);
+});
+
+test("a phrase the GRAMMAR cannot read is not reported as a page defect", () => {
+  // The important one. Measured 2026-09-02: `parseAnnouncement` returns NO objects for any checkbox,
+  // because CONTROL_ROLES carries "checkbox" and NVDA says "check box" — 22 occurrences of NVDA's
+  // spelling in the local corpus and 0 of the grammar's. So a correctly-labelled
+  // "Subscribe to newsletter, check box" on a real W3C tutorial page was reported as an UNNAMED FIELD:
+  // a false 4.1.2 against a conformant control, in a generated artefact.
+  //
+  // Until the grammar is fixed (it moves the model input, so it rides with a re-export), the emitter must
+  // say the limitation is OURS. An author cannot fix our parser and must not be sent looking.
+  const announced = "complementary landmark, form, Subscribe to newsletter, check box, not checked";
+  const draft = draftFormsConfig(["Email, edit", announced], { origin: ORIGIN });
+
+  assert.deepEqual(draft.unnamed, [], "a phrase we could not parse must NOT be reported as unnamed");
+  assert.deepEqual(draft.unparsed, [{ position: 2, announced }]);
+  assert.match(draft.yaml, /NOT UNDERSTOOD by a11y-witness/);
+  assert.match(draft.yaml, /gap in THIS TOOL's announcement grammar, not a finding about your page/);
+  assert.doesNotMatch(draft.yaml, /UNNAMED FIELD, 2 /);
+});
+
+test("an unnamed FILLABLE control is still a real 4.1.2 finding", () => {
+  // The other half. Separating parse failures from unnamed controls must not silence the finding that
+  // matters — a control the grammar DID read, with no accessible name, is exactly 4.1.2.
+  const draft = draftFormsConfig(["Email, edit", "edit"], { origin: ORIGIN });
+  assert.deepEqual(draft.unparsed, []);
+  assert.deepEqual(draft.unnamed, [{ position: 2, announced: "edit" }]);
+  assert.match(draft.yaml, /UNNAMED FIELD, 2 in reading order/);
+});

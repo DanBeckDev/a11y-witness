@@ -21,7 +21,7 @@ import { parseAnnouncement } from "@a11y-witness/evidence";
 export interface FormsDraft {
   /** The YAML text. */
   yaml: string;
-  /** Fields that can be addressed: announced with a name. */
+  /** Fields that can be addressed AND filled: announced with a name and a role that takes a value. */
   addressable: { name: string; within?: string; nth?: number }[];
   /**
    * Fields NVDA announced with NO name, by position in reading order.
@@ -30,16 +30,50 @@ export interface FormsDraft {
    * this form, because it is a fact about the page rather than about the config.
    */
   unnamed: { position: number; announced: string }[];
+  /**
+   * Buttons, offered as `submit:` candidates rather than as things to type into.
+   *
+   * `structure.formFields` is NVDA's FORM-FIELD quick-nav, and it visits buttons — the census comment says
+   * so outright: *"the census counts the roles NVDA's form-field quick-nav actually visits — buttons
+   * included."* Found by running the emitter against a real page, where `"Submit Search", button` was
+   * drafted with `value: ""`. Typing into a button is not a thing, so the verb was wrong for the control,
+   * which is the exact confusion the three-verb schema exists to prevent — arriving through the generator
+   * instead of through the config.
+   */
+  submitCandidates: string[];
+  /**
+   * Announcements the grammar could not resolve into an object at all.
+   *
+   * SEPARATE from `unnamed`, and keeping them apart is the whole point. `unnamed` is a claim about the
+   * PAGE — a control with no accessible name, which is 4.1.2. This is a claim about our own parser, and
+   * conflating them puts a false accessibility finding into a generated artefact.
+   *
+   * It is not hypothetical: measured 2026-09-02, `parseAnnouncement` returns NO objects for every
+   * checkbox, because `CONTROL_ROLES` carries `"checkbox"` and NVDA says `"check box"`. The local corpus
+   * copy holds 22 announcements with NVDA's spelling and 0 with the grammar's. So a real W3C tutorial page
+   * with a correctly-labelled `"Subscribe to newsletter, check box"` was reported as an unnamed field —
+   * a false 4.1.2 against a conformant control. See the backlog.
+   */
+  unparsed: { position: number; announced: string }[];
 }
 
-/** One field's name and the group announced around it, from the capture's own grammar. */
-function describe(announced: string): { name: string; group: string | undefined } {
+/** Roles that take a typed or chosen value. A button is not one, and neither is static prose. */
+const FILLABLE = Object.freeze(["edit", "edit text", "combo box", "list box", "spin button", "slider"]);
+
+/**
+ * One field's name, role and enclosing group, from the capture's OWN grammar.
+ *
+ * `role` is carried rather than discarded because the control's type decides which verb applies, and
+ * running this against a real page proved the point: without it, a button was drafted as something to
+ * type into.
+ */
+function describe(announced: string): { name: string; role: string; group: string | undefined } {
   const parsed = parseAnnouncement(announced, "sweep");
   const object = parsed.objects.find((o) => o.name !== "" || o.role !== "");
   // The INNERMOST container is the useful one for disambiguation: "Billing address" tells the two
   // "Address line 1" fields apart, where the page-wrapping landmark they share tells you nothing.
   const group = parsed.containers.length ? parsed.containers[parsed.containers.length - 1].name : undefined;
-  return { name: object?.name ?? "", group: group || undefined };
+  return { name: object?.name ?? "", role: object?.role ?? "", group: group || undefined };
 }
 
 const quote = (value: string): string => JSON.stringify(value);
@@ -84,6 +118,23 @@ function unnamedLines(unnamed: FormsDraft["unnamed"]): string[] {
 }
 
 /**
+ * Phrases this tool could not read, said as such.
+ *
+ * Deliberately worded as a limitation of the tool rather than of the page. The author cannot fix our
+ * parser and must not be sent looking for a defect that is ours — which is what putting these under
+ * "UNNAMED FIELD" did.
+ */
+function unparsedLines(unparsed: FormsDraft["unparsed"]): string[] {
+  return unparsed.flatMap((field) => [
+    "",
+    `      # NOT UNDERSTOOD by a11y-witness, ${field.position} in reading order:`,
+    `      #   ${field.announced}`,
+    "      # This is a gap in THIS TOOL's announcement grammar, not a finding about your page.",
+    "      # Add the field by hand if you need it configured.",
+  ]);
+}
+
+/**
  * @param formFields the capture's `structure.formFields` — NVDA's announcements, in reading order
  * @param options `origin` is required in the output, so it is required here rather than left as a TODO:
  *   a config that is missing it is refused at parse time, and emitting a file that cannot load is worse
@@ -94,11 +145,26 @@ export function draftFormsConfig(
   options: { origin: string; formName?: string; submitName?: string },
 ): FormsDraft {
   const described = formFields.map((announced, index) => ({ announced, index, ...describe(announced) }));
-  const named = described.filter((field) => field.name !== "");
-  const unnamed = described
-    .filter((field) => field.name === "")
-    .map((field) => ({ position: field.index + 1, announced: field.announced }));
-  const entries = addressable(named.map((f) => ({ name: f.name, group: f.group })));
+  const at = (field: { index: number; announced: string }) =>
+    ({ position: field.index + 1, announced: field.announced });
+
+  // FOUR outcomes, and collapsing any two of them is how this goes wrong.
+  //
+  // A button is a submit candidate, not something to type into. A named fillable control is what the
+  // config is for. A control announced with no name is a 4.1.2 finding about the PAGE. And a phrase the
+  // grammar could not resolve at all is a fact about OUR PARSER, which must never be reported as the
+  // third — that is a false accessibility finding, and it is what this emitter did on its first run
+  // against a real page.
+  const unparsed = described.filter((field) => field.role === "" && field.name === "").map(at);
+  const resolved = described.filter((field) => field.role !== "" || field.name !== "");
+  const submitCandidates = [...new Set(
+    resolved.filter((field) => field.role === "button" && field.name !== "").map((field) => field.name),
+  )];
+  const fillable = resolved.filter((field) => FILLABLE.includes(field.role));
+  const unnamed = fillable.filter((field) => field.name === "").map(at);
+  const entries = addressable(
+    fillable.filter((field) => field.name !== "").map((f) => ({ name: f.name, group: f.group })),
+  );
 
   const yaml = [
     "# Drafted by a11y-witness from what NVDA announced. Fill in the values; the names are already right.",
@@ -109,15 +175,22 @@ export function draftFormsConfig(
     `origin: ${quote(options.origin)}`,
     "forms:",
     `  - form: ${quote(options.formName ?? "TODO the form's accessible name")}`,
-    `    submit: ${quote(options.submitName ?? "TODO the control that submits it")}`,
+    // DRAFTED from the buttons actually announced, rather than left as a TODO the author has to go and
+    // look up. Where several were found the rest are listed beside it, because guessing which one submits
+    // is not something this tool can do and pretending otherwise would put the wrong control in the file.
+    `    submit: ${quote(options.submitName ?? submitCandidates[0] ?? "TODO the control that submits it")}`
+      + (submitCandidates.length > 1
+        ? `   # buttons found: ${submitCandidates.map((c) => JSON.stringify(c)).join(", ")}`
+        : ""),
     "    states:",
     "      - state: error",
     '        because: ""             # TODO what does this form reject?',
     "        fields:",
     ...fieldLines(entries),
     ...unnamedLines(unnamed),
+    ...unparsedLines(unparsed),
     "",
   ].join("\n");
 
-  return { yaml, addressable: entries, unnamed };
+  return { yaml, addressable: entries, unnamed, submitCandidates, unparsed };
 }
