@@ -45,9 +45,12 @@ three separate items all touch the capture path and each one costs a recapture i
 
 **2 — Before anything capture-heavy.**
 
-- **Readiness ignores a non-modal foreground window.** This is not urgency, it is sequence: everything in
-  stage 3 needs a great many captures, and this is the fault that lets a worker report `ready` while
-  taking none. Fixing it after a long capture run is fixing it too late.
+- ~~Readiness ignores a non-modal foreground window.~~ **DONE 2026-09-02** —
+  [known-gaps §27](./known-gaps.md), which also closes a second defect found while fixing it: the dialog
+  sample was taken at BOOT, so `/health` had been answering "no dialogs" from up to six days earlier.
+  The sequencing argument held: it went before stage 3 because everything there needs a great many
+  captures, and this was the fault that let a worker report `ready` while taking none.
+  **Needs `npm run fleet:deploy` before stage 3 captures**, since it changes `codeVersion()`.
 
 **3 — ONE capture-path change, ONE protocol bump, ONE recapture.**
 
@@ -97,7 +100,6 @@ recapture is not needed; if CHANGED, it is genuine and this is the moment to pay
 | | what would tell you it is fixed | detail |
 |---|---|---|
 | **A capture stalled for 3.5 hours and neither timeout fired** — the worker's 520 s hard bound and the host's 600 s `waitForWorker` both exist and neither ended it. The wedge itself is understood (a notification toast held the foreground, so Edge could never take focus); why two independent bounds failed is not. | A capture that exceeds its bound is abandoned and the run says so — reproduced deliberately, not waited for. | no record entry; found 2026-09-02 on `a11y-worker-6` |
-| **Readiness treats a non-modal foreground window as harmless** — `noBlockingDialog` looks for modals, so a toast leaves the worker reporting `ready: true` while nothing can take focus. Detection is manual and took 3.5 hours. | `/health` reports not-ready when a foreground window belongs to another process; `fleet:recover` stops being the thing a human has to think of. | no record entry |
 | **Ten of the 28 model features read a `0` that means "nobody asked"** — every structured feature is `float(bool(channel))` and `any([])` is `False`, so "the page has none" and "nothing looked" are one number. **Both known routes are closed**: masking was REFUTED ([§15](./not-working.md), it cost a real finding), and feeding `observed` to the featurizer was DECIDED AGAINST ([§14](./not-working.md), it trades one shortcut for a feature correlated with capture conditions — ADR 0015's whole subject). So this needs a design, not an implementation. | **Next action, and it needs no decision:** run `npm run lab:job -- -e job=observation-ambiguity` on the authoritative corpus. §14 names exactly that evidence as what would separate a decision from a guess — how many of these zeros are capture artefacts rather than page facts. Measure first; the design follows the number. | [not-working §11](./not-working.md), with [§14](./not-working.md) and [§15](./not-working.md) for the two closed routes |
 | **ONE PAGE CAPTURES PATHOLOGICALLY, and `grants-audit` is what caught it** | The page captures like its peers, or is removed with the reason recorded. | [not-working §20](./not-working.md) |
 
