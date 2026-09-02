@@ -1059,24 +1059,6 @@ INSTANCE_POOLED_SUBTYPES = frozenset({
     "4.1.2:state-change-silent",
     "3.3.2:unnamed-form-field",
     "1.3.1:fake-heading",
-    # ## 3.3.3:error-remedy-missing, added 2026-09-02 — a LOCAL finding left on the default by mistake
-    #
-    # This block's own rule is that pooling is a property of the SIGNAL: local findings pool by max over
-    # instances, contextual findings keep the whole capture. 3.3.3 is as local as a finding gets — the
-    # evidence is one CLAUSE inside one announcement ("Enter the visit date as DD slash MM slash YYYY"
-    # against "Invalid entry") — and it shipped on document-mean, where the average dilutes that clause
-    # across every unit on the page.
-    #
-    # Measured on the first head trained for it: recall 0.0 on TRAIN with 15 positives, 0.0 on test with
-    # 16, and 3 false positives on conformant records. Not a thin-corpus symptom — a head that cannot fit
-    # even the data it was shown, which is what dilution looks like. Its held-out cases all scored 0.76 to
-    # 0.89 against a 0.967 cut, so the signal was reaching the head and arriving too weak to separate.
-    #
-    # Contrast with 3.3.1 on the same pooling, which works: the error is announced or it is not, so the
-    # difference moves BOTH `formChanges` and `postSubmitFields` and survives an average. 3.3.3's pair is
-    # identical everywhere except the message text, by construction, because anything else would make
-    # every 3.3.3 positive a hidden 3.3.1 positive.
-    "3.3.3:error-remedy-missing",
 })
 
 
