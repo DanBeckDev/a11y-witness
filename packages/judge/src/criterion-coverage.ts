@@ -426,11 +426,13 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
     // a config value.
     status: "reachable", needs: ["screen-reader", "dom"], channels: ["transcript"],
     note: "Language of Parts: `lang` on elements whose text differs from the page language. At NVDA's "
-      + "DEFAULTS this is announced as a change of VOICE with no text, which is why it was recorded as "
-      + "out of scope. `documentFormatting.reportLanguage` is ON as of 2026-09-03 (a product decision, "
-      + "keyed in `screenReaderSettings`), so NVDA now speaks the language into the transcript. NOT yet "
-      + "assessed: no rule reads it, and no corpus case carries a language change for one to fire on. "
-      + "Also reachable from the DOM, which is axe-core's territory.",
+      + "DEFAULTS this is announced as a change of VOICE with no text, which is why it was recorded as out "
+      + "of scope. `[speech] reportLanguage` is ON as of 2026-09-03 (a product decision, keyed in "
+      + "`screenReaderSettings`), and 29 corpus cases now prove NVDA speaks the language into the "
+      + "transcript — check-signals discriminates all of them. THE SCREEN READER STILL CANNOT DECIDE IT "
+      + "ALONE, and the asymmetry is the point: an announcement CONFIRMS a passage was marked, but silence "
+      + "is equally what a correct monolingual page produces, so an unmarked passage is undetectable from "
+      + "speech. Deciding needs the text, which is the DOM and axe-core's territory.",
   },
   "2.5.3": { status: "reachable", needs: ["dom", "accessibility-tree"], channels: ["controls", "structureCensus"], note: "Label in Name — visible text must be contained in the accessible name. Highly automatable and axe-core covers it well; worth deciding whether to duplicate or defer." },
   // WHY THE SCREEN READER CANNOT ANSWER THIS ONE, recorded because it looks like an oversight and is not.

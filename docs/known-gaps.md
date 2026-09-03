@@ -1469,3 +1469,46 @@ to the tool.
 The mechanism inside NVDA. Six captures per condition shows a direction, not a queue policy. All of it is
 one page shape, on one NVDA and one guidepup — both pinned in the cache key, so the number travels with
 the evidence it was measured on rather than being a claim about screen readers in general.
+
+
+---
+
+## 32. 3.1.2's corpus is built and proven, and a SPEECH-ONLY RULE STILL CANNOT DECIDE IT
+
+The case came first, exactly as §17 prescribes, and building it surfaced a limit worth stating plainly
+rather than discovering later in a rule that quietly never fires.
+
+**What was built and measured.** Five languages, 29 cases, captured on real NVDA 2026-09-03.
+`check-signals` reports **1,623 discriminating, 0 blind, 0 contaminated, 0 uncaptured** — so the signal
+fires on the unmarked passage and stays silent on the marked one, on the fleet rather than in a fixture.
+Both variants carry the SAME passage; strip the `lang` attribute and the two pages are byte-identical.
+
+**The limit, and it is structural.** With `reportLanguage` on, NVDA announces the language when the
+document language CHANGES. So:
+
+| what the capture shows | what it means |
+|---|---|
+| the language is announced | a passage WAS marked — confirmed |
+| nothing is announced | either an unmarked foreign passage, **or a correct monolingual page** |
+
+**Silence is the conformant answer for almost every page on the web.** A rule firing on it would accuse
+every English page of hiding a French one. The corpus signal escapes this only because the CASE declares
+which language to expect — a luxury no real page offers.
+
+So **the screen-reader layer can confirm a marking and cannot detect its absence.** Deciding 3.1.2 needs
+the text itself, which is the DOM, which is axe-core's. `needs: ["screen-reader", "dom"]` was already
+right and now says why.
+
+### What the corpus case is worth, given that
+
+Not a rule — three other things, and they are the reason it was still correct to build:
+
+1. **It proved the setting works**, end to end on real NVDA, which nothing else had.
+2. **It is paired training data differing by exactly the property under test** — the discipline
+   `corpus:starvation` exists to enforce, and the model may separate what a rule cannot.
+3. **It is the ground truth a DOM-joined rule will need.** When 3.1.2 is decided by joining axe's view of
+   `lang` to the capture's view of what was announced, these 29 pairs are what verifies it.
+
+**Recorded before writing the rule rather than after.** A rule built on the assumption that silence means
+failure would have passed `rules:gate` on this corpus — where the case declares the language — and fired
+on every conformant monolingual page in the real-page set. That is `2.4.3` going deaf, run in reverse.
