@@ -147,7 +147,6 @@ recapture is not needed; if CHANGED, it is genuine and this is the moment to pay
 | | what would tell you it is fixed | detail |
 |---|---|---|
 | **The arrow-key gap is real** — 2.1.1 abstains via `SHARES_ONE_TAB_STOP` because a capture cannot tell *reachable by arrows* from *unreachable*. The entry also argues the ORDER: corpus before probe. | 2.1.1 stops abstaining on roving-tabindex widgets, with the corpus work done first. | [not-working §17](./not-working.md) |
-| **3.1.2 Language of Parts is reachable, but not at NVDA's defaults** — the route exists (`reportTextFormatting` includes language), and it needs NVDA's *Report Language* option, which is OFF by default. §19 is explicit that choosing to turn it on **is a product decision, not an engineering one**: it would make every capture describe a user who changed a setting most users have not. | **This is the one row that still needs YOU**, and the measurement that could have avoided that is done: `documentFormatting` is not a section in `getSettings()` at all, so whether the option is on cannot be recorded without first turning it on. Two honest answers — capture 3.1.2 under a declared non-default profile and say so in the evidence, or record it as out of reach at defaults in `criterion-coverage.ts`. | [not-working §19](./not-working.md) |
 
 ## Decided — not defects
 
