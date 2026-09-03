@@ -80,6 +80,13 @@ def test_the_role_vocabulary_covers_what_the_featurizer_itself_knows_about():
 
 
 def test_the_schema_version_moved_with_the_meaning():
+    # v19: the observation FEATURE CROSS. `float(bool(channel))` cannot separate "the page has none" from
+    # "nothing looked", and 61.7% / 56.1% / 65.3% of those zeros are the second -- so a head can take a
+    # free negative weight on a capture CONDITION. Masking was refuted (§15) and giving the model
+    # `observed` outright was declined (§14); this crosses the existing fact with whether it was measured,
+    # so "was this asked" is never separable and "not asked" is the all-zeros row. Four new columns, so it
+    # is a WIDTH change as well as a meaning one.
+    #
     # v18: the announcement grammar can see a CHECK BOX and a MENU BUTTON. `CONTROL_ROLES` carried the
     # spelling "checkbox", which NVDA never produces, and was missing "check box", which it does -- so
     # `parseAnnouncement` returned NO objects at all for either control, the NAME included, and every
@@ -109,7 +116,7 @@ def test_the_schema_version_moved_with_the_meaning():
     # v15: `vague_link_present` is no longer a model input at all. It answers 2.4.9 (text alone, AAA, not
     # reported here) and the 2.4.4 head used it because it was the cheapest separator -- firing on 22 of the
     # 44 conformant pages that carry "Details" inside a peer index.
-    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v18"
+    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v19"
 
 
 def test_no_landmark_feature_survives_in_the_vector():

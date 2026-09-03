@@ -2,8 +2,8 @@
  * The committed weights and the committed trainer must agree on the feature schema.
  *
  * `score-screenreader-model.py` refuses to load weights whose `representation` metadata does not match the
- * trainer's `FEATURE_SCHEMA_VERSION` — a correct guard, because a mismatch means the 413 inputs the heads
- * were fitted on are not the 413 inputs being computed. But it can only refuse at RUNTIME, on a machine
+ * trainer's `FEATURE_SCHEMA_VERSION` — a correct guard, because a mismatch means the inputs the heads
+ * were fitted on are not the inputs being computed. But it can only refuse at RUNTIME, on a machine
  * with Python, an encoder and a capture to score. Nothing checked the committed artifacts against each
  * other, and they had drifted:
  *
