@@ -31,95 +31,63 @@ The consequence was that open work could not be found mechanically. Section numb
 
 ## The order these should be done in
 
-The convention is [`known-gaps.md`](./known-gaps.md)'s and it is not restated lightly: **not by size, and
-not by what is closest to finished — by what CONSUMES what.** Applied here it reorders the page, because
-three separate items all touch the capture path and each one costs a recapture if it lands alone.
+Rewritten 2026-09-03, because the previous ordering had been overtaken: stages 1 and 2 are closed, forms
+v1 shipped, and the settings audit added work that did not exist when it was written. The convention is
+[`known-gaps.md`](./known-gaps.md)'s and it does not change — **not by size, and not by what is closest to
+finished, but by what CONSUMES what.**
 
-**1 — Now. Consumes nothing, and one of them is a falsehood.**
+### A — First, because it could change the capture settings everything else is then captured under
 
-- ~~The axe reporting gap.~~ **DONE 2026-09-02** — [known-gaps §26](./known-gaps.md). Left here for one
-  more read because it justifies the stage: it went first as the only item where the tool made a FALSE
-  STATEMENT about its own coverage, and a wrong claim outranks a missing capability.
-- **`not-working` §21 is stale.** Minutes, and a stale entry has already sent me chasing a fixed problem
-  twice this week.
+- **The live-region experiment** — vary speech rate, run through `training:repeat` so the answer is a rate
+  and not one capture.
 
-**2 — Before anything capture-heavy.**
+  It goes first for a sequencing reason rather than an importance one. Speech rate is an NVDA setting, and
+  as of 2026-09-03 **NVDA settings are a cache-key input** — so if the experiment says rate matters, every
+  capture taken before it is invalid. Running it after a corpus recapture means paying for that recapture
+  twice. It needs no corpus change and no fleet time beyond one page repeated.
 
-- ~~Readiness ignores a non-modal foreground window.~~ **DONE 2026-09-02** —
-  [known-gaps §27](./known-gaps.md), which also closes a second defect found while fixing it: the dialog
-  sample was taken at BOOT, so `/health` had been answering "no dialogs" from up to six days earlier.
-  The sequencing argument held: it went before stage 3 because everything there needs a great many
-  captures, and this was the fault that let a worker report `ready` while taking none.
-  **Needs `npm run fleet:deploy` before stage 3 captures**, since it changes `codeVersion()`.
+### B — Then ONE corpus change, and the batching argument is the same one stage 3 made
 
-**3 — ONE capture-path change, ONE protocol bump, ONE recapture.**
+**Four separate items all have the same first step: a corpus case that does not exist.** Each is §17's
+rule — *"a probe built now would produce evidence nothing could validate"* — and each, taken alone, costs
+its own capture round. Taken together they are one corpus change and one capture of the new cases.
 
-> **DONE 2026-09-03 — and the stage cost minutes, not the ~8 hours budgeted.** The candidate pipeline
-> ran all seven stages in **21.7 minutes**: 1,594 cases discriminate (0 blind, 0 contaminated), RULES
-> 17/17, every rule-only criterion fired, 86/86 conformant real pages clean, candidate promoted, and the
-> v18 weights are committed. The schema migration is closed.
->
-> **The recapture never happened, because it was never needed.** This stage was written as "ONE
-> capture-path change, ONE protocol bump, ONE recapture" and `CAPTURE_PROTOCOL_VERSION` never moved:
-> every change was ADDITIVE to the capture — an optional request field, a new channel — or outside it
-> entirely. So all 1,462 cases were **cache hits and 0 captures were taken**. What actually needed
-> redoing was the export and the train, because `FEATURE_SCHEMA_VERSION` moved when the grammar learned
-> to see a check box. **The bundling argument was still right and the cost estimate was wrong**, and the
-> reason is worth keeping: a protocol bump forces a recapture, and nothing here bumped it. Ask which of
-> the two versions moved before budgeting a day of fleet time.
->
-> **Two defects on the way, both in the LAB rather than the corpus.** `packages/cli` declared `yaml` and
-> the lockfile was never refreshed, so it resolved locally (something else had pulled it in) and failed
-> on the lab. Then the fix landed and failed identically, because **the lab pulls and rebuilds and never
-> installed** — the sibling of a defect recorded beside that very step. Both are now guarded: an extended
-> `lockfile-in-sync` test fails in seconds on a laptop, and `run-job.yml` runs `npm ci` before building.
->
-> **Superseded, kept for the record:** `FEATURE_SCHEMA_VERSION` moved v17 -> v18
-> on 2026-09-02 because the announcement grammar can now see a `check box` and a `menu button` — it could
-> see NEITHER, returning no objects at all, so every feature reading `objects` was blind to them. Found by
-> pointing `--emit-form-config` at a W3C tutorial page, where a correctly-labelled
-> `"Subscribe to newsletter, check box"` was reported as an unnamed control: a false 4.1.2 against
-> conformant markup. `release:gate` refuses everything while the migration is open, which is the correct
-> state — it closes when this stage's retrain promotes weights stamped v18.
+| what | the case that has to exist first |
+|---|---|
+| **3.1.2** — the setting is ON and nothing reads it | a page with a passage in another language, marked in one variant and not the other |
+| **1.3.1 via `reportEmphasis`** | a page conveying emphasis semantically in one variant and with CSS only in the other |
+| **The arrow-key probe** ([§17](./not-working.md)) | a radio group or roving-tabindex widget — measured: **0** in 4,926 synthetic captures |
+| **Typing feedback** ([§17](./not-working.md)) | a page that validates on `input` — measured: `oninput` on **0 of 3,948** generated pages |
 
-> **This is the reordering that matters, and the reason the order section exists.** A
-> `CAPTURE_PROTOCOL_VERSION` bump invalidates every cached capture — **measured at ~8 h across the five
-> bare-metal boxes**, not the ~4.5 h an older document claimed. Three items below each change what a
-> capture records. Landed separately that is up to three recaptures and a day of fleet time; landed
-> together it is one. `CLAUDE.md` already states the rule for a single change — *"the cheap moment to pay
-> it is bundled with any other pending bump"* — and nothing was applying it across a work queue.
+Then, per case: the rule, and only then the setting it needs. **Setting last is the order `reportLanguage`
+got wrong** — it is on, nothing reads it, and it is now a backlog row of its own.
 
-- **[ADR 0024](./adr/0024-a-form-is-configured-with-states-not-values.md) — forms v1.** The largest item
-  and the one that consumes the most: it adds `captureOptions`, changes what a capture may do to a page,
-  and unblocks four criteria. Everything else in this stage is smaller and should ride with it.
-- **The arrow-key probe** ([not-working §17](./not-working.md)) — note §17's own finding that the CORPUS
-  work comes before the probe, so that ordering is internal to this item.
-- **The 3.1.2 route** ([not-working §19](./not-working.md)) — a new observation, so a new protocol.
+### C — After that corpus is captured, because they read it
 
-Run `npm run evidence:check` before bumping. If it reports SAME the change is evidence-neutral and the
-recapture is not needed; if CHANGED, it is genuine and this is the moment to pay it once.
+- **Ten features read a `0` that means "nobody asked"** ([§11](./not-working.md)) — measured at 61.7% /
+  56.1% / 65.3%, so the size is known and the design is not. Any fix is a featurizer change needing a
+  retrain, and a retrain consumes the corpus.
+- **The pathological page** ([§20](./not-working.md)) — a corpus question, answered against the corpus
+  that exists after B.
+- **4.1.3's real-page grounding** — a per-page forms config in `real-page-corpus.mjs`, so
+  `capture-real-pages` drives configured pages and `build-realism` stops reporting `4.1.3: 0 of 37`. The
+  capability is proven; this is the corpus half.
 
-**4 — After the recapture, because they consume the corpus.**
+### D — Independent of all of the above, and can be done whenever
 
-- **Ten features read a `0` that means "nobody asked"** ([not-working §11](./not-working.md)). It sits
-  here for two reasons. Any eventual fix is a featurizer change needing a retrain, and a retrain consumes
-  the corpus — so doing it before stage 3 means doing it twice. And its first step is a MEASUREMENT
-  (`job=observation-ambiguity`) against the corpus, which should be the recaptured one.
-- **The pathological page** ([not-working §20](./not-working.md)) — a corpus question, answered against
-  the recaptured corpus.
-- ~~**4.1.3's real-page grounding**~~ — **DEMONSTRATED 2026-09-03**, [known-gaps §29](./known-gaps.md).
-  It consumed forms v1 exactly as this ordering predicted, and became possible the moment stage 3 landed.
-  What remains is corpus work rather than capability: a per-page forms config in `real-page-corpus.mjs`.
+- **The split pair** — `parkPointer` fails REPRODUCIBLY on `icon-button-unnamed.good`. Recapturing does
+  not fix it, which is the useful half: the remedy is to find what defeats the park on that page.
+- **`unlabeled` → `unlabelled`** — a vendor changed a role string, so every cached capture of an unnamed
+  graphic is stale against it. Found while triaging `evidence:check`; nothing to do with our changes.
 
-**Cannot be scheduled, and should not be given a rank.**
+### Cannot be scheduled, and should not be given a rank
 
-- **The 3.5-hour stall.** It needs a recurrence to diagnose and the instrumentation is now in place
-  (`workerLogTail`, verified on the fleet). Listing it as "next" would be pretending it is actionable;
-  the honest state is *armed and waiting*.
+- **The 3.5-hour stall.** It needs a recurrence to diagnose, and the instrumentation is now in place.
+  Listing it as "next" would pretend it is actionable; the honest state is *armed and waiting*.
 
-**Last, for the reason known-gaps already gives.**
+### Last, for the reason known-gaps already gives
 
-- **npm publish.** *"A changeset describes weights, so it should describe the final ones."* Stage 4
+- **npm publish.** *"A changeset describes weights, so it should describe the final ones."* Stage C
   produces new weights, so publishing before it means publishing a description that stops being true.
 
 ---
@@ -131,9 +99,11 @@ recapture is not needed; if CHANGED, it is genuine and this is the moment to pay
 | **A capture stalled for 3.5 hours and neither timeout fired** — the worker's 520 s hard bound and the host's 600 s `waitForWorker` both exist and neither ended it. The wedge itself is understood (a notification toast held the foreground, so Edge could never take focus); why two independent bounds failed is not. | A capture that exceeds its bound is abandoned and the run says so — reproduced deliberately, not waited for. | no record entry; found 2026-09-02 on `a11y-worker-6` |
 | **Ten of the 28 model features read a `0` that means "nobody asked"** — every structured feature is `float(bool(channel))` and `any([])` is `False`, so "the page has none" and "nothing looked" are one number. **Both known routes are closed**: masking was REFUTED ([§15](./not-working.md), it cost a real finding), and feeding `observed` to the featurizer was DECIDED AGAINST ([§14](./not-working.md), it trades one shortcut for a feature correlated with capture conditions — ADR 0015's whole subject). So this needs a design, not an implementation. | **MEASURED 2026-09-03.** 61.7% of empty `formChanges`, 56.1% of empty `postSubmitFields` and 65.3% of the `formControl` sweep are *never asked* rather than *the page has none* — so the problem is real and sized. What remains is a DESIGN that does not trade this shortcut for a worse one (a feature correlated with capture conditions is ADR 0015's subject), which is why §14's decision stands until one exists. The plan file's conjunction encoding — two computed columns where neither fires when the probe did not run — is the candidate. | [not-working §11](./not-working.md), with [§14](./not-working.md) and [§15](./not-working.md) for the two closed routes |
 | **3.1.2 is now OBSERVABLE and still not assessed** — `reportLanguage` is on across the fleet, so NVDA speaks a language change into the transcript. Nothing reads it: there is no rule, and essentially no corpus case carries a `lang` change for one to fire on. This is §17's pattern exactly — the capability arriving before anything for it to observe, which is why the coverage entry says `reachable` rather than `assessed`. | A corpus case with a passage in another language, in both variants (marked and unmarked), then a rule. The case comes FIRST: a rule built now would have nothing to score. | [settings audit](./screenreader-settings-audit.md), [not-working §19](./not-working.md) |
-| **Nobody has read NVDA's `configSpec.py` defaults** — `reportLanguage` defaulted OFF and hid WCAG 3.1.2 until 2026-09-03, and nothing rules out a sibling. `documentFormatting` alone carries `reportTables`, `reportLinks`, `reportHeadings`, `reportLists`, `reportLandmarks`; most default ON, which is why the sweeps work — but that is assumed, not read. | One read of `configSpec.py` on a guest, listing every `documentFormatting` and `speech` default. **The cheapest item on this page**, and it would have caught `reportLanguage` years earlier. | [settings audit §4](./screenreader-settings-audit.md) |
 | **The live-region intermittency is unexplained** — a region reaches the capture **2 times in 6** on an unchanged page. Two mechanisms have been asserted and BOTH refuted by measurement (the "polite means idle" reading, and the settle-window race). It costs gaps 3 and 6, keeps two corpus cases withdrawn, and is the largest hole in 4.1.3. | An experiment varying speech rate, run through `training:repeat` so the answer is a RATE — §18 is emphatic that every wrong turn there came from concluding off ONE capture. A hypothesis, not a plan. | [not-working §18](./not-working.md), [settings audit §1](./screenreader-settings-audit.md) |
 | **One corpus pair was split by the INSTRUMENT** — `icon-button-unnamed.good` failed to park the pointer while its mate did, so the two halves were measured differently. CLAUDE.md calls a pair differing for a reason unrelated to accessibility "the one defect this project cannot tolerate", and Ctrl over an image is Edge's MAGNIFIER overlay — so a split on an `image-*` case is where the remedy mattered most. Found by `job=observation-ambiguity` 2026-09-03; 4 of 6,975 captures failed to park, 1 split a pair. | **RECAPTURING DOES NOT FIX IT — tried 2026-09-03.** Both halves were recaptured with `--no-cache` on the SAME worker, 0 failed, and the audit re-run against the fresh captures reports the identical split. So the park fails REPRODUCIBLY on that page rather than flaking, which is the more useful answer: the remedy is to find what defeats `parkPointer` there, not to capture it again. The page is an icon button, and Ctrl over an image is Edge's magnifier overlay — the exact condition the park exists for. Fixed when both halves of the pair carry `pointerParked`. | [not-working §11](./not-working.md) |
+| **`reportEmphasis` and `includeLayoutTables` are OFF, and both bear on 1.3.1** — read from NVDA's `configSpec.py` 2026-09-03. `reportEmphasis` distinguishes SEMANTIC emphasis (`<em>`, `<strong>`) from text that merely looks bold, which is exactly 1.3.1's question and a distinction no other channel here can make. `includeLayoutTables` is the reason NVDA SKIPS layout tables entirely, so the table sweep cannot see them. | **In this order: a corpus case, then a rule, then the setting.** Setting-last is the order `reportLanguage` got wrong — it is on, nothing reads it, and that is its own row above. A setting with no rule and no case is noise added to 2,488 records. | [settings audit §4](./screenreader-settings-audit.md) |
+| **A page that validates on `input` does not exist in the corpus** — `oninput` appears on **0 of 3,948** generated pages, so the typing-feedback gap cannot be closed by building a probe: it would have nothing to observe. `speakTypedCharacters` exists as a guidepup command and has never been called, and it is NOT the blocker. | A corpus case that validates live while typing, in both variants. Batches with the other three case-first items — see the order above. | [not-working §17](./not-working.md) |
+| **A vendor changed a role string: `unlabeled graphic` → `unlabelled graphic`** — found while triaging `evidence:check` on 2026-09-03, 2 of 48 sampled captures. Nothing to do with our changes: an upstream update altered what NVDA or Edge says for an unnamed graphic, so **every cached capture of one is stale against it**. | Decide whether it needs a recapture of the affected cases, or whether the `screenReaderVersion` / `browserVersion` keys already cover it — they should, and nobody has checked that they did. | no record entry; see `runs/screenreader-dataset/evidence-check/report.json` |
 | **ONE PAGE CAPTURES PATHOLOGICALLY, and `grants-audit` is what caught it** | The page captures like its peers, or is removed with the reason recorded. | [not-working §20](./not-working.md) |
 
 ## Accepted designs, not yet built

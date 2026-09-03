@@ -138,8 +138,9 @@ on.
 
 ## What should actually happen next, in order
 
-1. **Read NVDA's `configSpec.py` on a guest** and list every `documentFormatting` and `speech` default.
-   Cheapest item here, settles §4 entirely, and would have caught `reportLanguage` years earlier.
+1. ~~**Read NVDA's `configSpec.py` on a guest.**~~ **DONE 2026-09-03** — §4 above carries the result, and
+   it immediately found that `reportLanguage` had been written to the wrong section and was inert. It was
+   NOT the cheapest item: NVDA ships built, so it needed a zip reader.
 2. **One experiment on the live-region intermittency**, varying speech rate, using `training:repeat` so
    the answer is a rate and not one capture. §18 is emphatic that *"every wrong turn today came from
    concluding off ONE capture."*
