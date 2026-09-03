@@ -1512,3 +1512,44 @@ Not a rule — three other things, and they are the reason it was still correct 
 **Recorded before writing the rule rather than after.** A rule built on the assumption that silence means
 failure would have passed `rules:gate` on this corpus — where the case declares the language — and fired
 on every conformant monolingual page in the real-page set. That is `2.4.3` going deaf, run in reverse.
+
+
+---
+
+## 33. `reportEmphasis` cannot work in this pipeline — NVDA implements it only for MSHTML
+
+**REFUTED 2026-09-03, by building the case rather than by reasoning about it**, which is the only reason
+it was refuted at all.
+
+The settings audit named `documentFormatting.reportEmphasis` its strongest candidate: it distinguishes
+SEMANTIC emphasis (`<em>`, `<strong>`) from text that merely looks bold, which is exactly 1.3.1's question
+and a distinction no other channel here can make. To the sweep, to the DOM census and to a sighted
+reviewer, `<strong>Do not</strong>` and a CSS-bold span are identical.
+
+**Built, deployed, captured — and `check-signals` reported the case CONTAMINATED.** The signal fired on
+BOTH variants, because NVDA said "emphasised" on neither.
+
+**The cause is a rendering-engine limit, not a setting or a page.** NVDA's emphasis reporting reads format
+flags that only the **MSHTML** support module supplies — Internet Explorer, or Edge running in IE mode.
+This project captures in Chromium Edge, where NVDA does not announce `<em>` or `<strong>` at all. Sources:
+[nvaccess/nvda#17216](https://github.com/nvaccess/nvda/issues/17216),
+[TPGi, *Screen Readers support for text level HTML semantics*](https://www.tpgi.com/screen-readers-support-for-text-level-html-semantics/).
+
+**Withdrawn entirely — setting, case, family, predicate and fixture.** An inert entry in `CAPTURE_SETTINGS`
+would be worse than an absent one: `screenReaderSettings` is a cache-key input, so keeping it "in case"
+would invalidate every capture in exchange for nothing. Dead code is worse than absent code.
+
+### Why this is a good outcome rather than a wasted afternoon
+
+**The case is what refuted the setting.** Had `reportEmphasis` been turned on without one — which is what
+happened to `reportLanguage`, and is now its own row — it would have moved the cache key, forced a
+recapture, and produced no evidence, with every check green because nothing was reading it. §17's rule
+earns its keep here in the direction nobody expected: the case did not merely give the probe something to
+observe, it proved there was nothing to observe.
+
+**And it corrects the settings audit's own headline.** That document called `reportEmphasis` the strongest
+of four candidates on a reading of what the setting is FOR. What it could not know without testing is
+whether the browser this project uses supports it. The audit now says so.
+
+**1.3.1 keeps its existing coverage.** Nothing was lost: this was an attempt to ADD a signal, and the
+criterion is unaffected by its failure.
