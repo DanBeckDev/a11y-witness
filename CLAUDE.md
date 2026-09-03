@@ -799,17 +799,28 @@ Consequences, all of which are now enforced:
   > indistinguishable from "never asked" — measured 2026-09-02. You cannot record the setting without
   > first setting it, which removes "we will just note what it was" as an option.
 
-  > **SPEECH RATE IS NOT A FREE OPTIMISATION, and this is the case that proves the rule is about evidence
-  > rather than about defaults.** It looks like pure wall-clock tuning — faster speech, faster captures.
-  > It is not: `not-working.md` §18 measured that a `role=status aria-live=polite` region **never
-  > announces** in a capture, because *"polite means speak when idle, and neither moment is idle"* — NVDA
-  > is still speaking the control's own state or the character echo. That costs **4.1.3 entirely and the
-  > live half of 3.3.1**.
+  > **SPEECH RATE IS NOT A FREE OPTIMISATION**, and the reason is weaker than the first version of this
+  > paragraph claimed — which is itself the lesson.
   >
-  > So raising the rate changes when NVDA falls idle, which changes WHICH LIVE REGIONS ARE HEARD. That is
-  > an evidence change in the plainest sense, and it may be a valuable one — it is a candidate fix for a
-  > capability gap, not merely a speed-up. It needs the measurement §18 names and nobody has taken:
-  > does a polite region ever announce, at any rate?
+  > It said §18 had measured that a polite live region NEVER announces, *"because polite means speak when
+  > idle and neither moment is idle"*. **That is §18's FIRST headline and it was refuted twice.**
+  > `not-working.md` carries FOUR sections numbered 18; the current one opens *"THIS SECTION HAS BEEN
+  > WRONG TWICE, AND THE CORRECTION IS THE POINT"* and records that a diagnostic pair — one `polite`
+  > region and one `assertive`, same checkbox — saw **both announce**. The settle-window explanation was
+  > refuted too: the fix was built, deployed and re-measured, and the rate did not move.
+  >
+  > **What is actually true is a RATE: a live region reaches the delta 2 times in 6**, on an unchanged
+  > page, with the count never moving and only the content changing. **The intermittency is unexplained**,
+  > and §18 says so outright — it is the one thing nobody has accounted for.
+  >
+  > So speech rate remains a plausible variable in an UNEXPLAINED intermittency, not a known mechanism.
+  > That is enough to make it worth testing and not enough to make it a fix. The reason it belongs under
+  > this rule at all is unchanged: whatever it does, it acts on WHAT IS HEARD rather than only on how long
+  > a capture takes, so it is keyed evidence rather than a tuning knob.
+  >
+  > **And note how this went wrong**, because the shape recurs: four sections share a number, the earliest
+  > reads as current, and its reasoning is sound enough to quote. Read to the LAST section with a given
+  > number before citing it.
 
 Upgrading guidepup is an evidence change: run `npm run evidence:check` and expect a recapture.
 
