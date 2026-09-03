@@ -1384,3 +1384,39 @@ property under test rather than by anything about the instrument.
 **What remains to CLOSE §21** is the corpus work rather than the capability: `real-page-corpus.mjs` needs a
 per-page forms config so `capture-real-pages` can drive configured pages, and `build-realism` then stops
 reporting `4.1.3: 0 of 37`. That is bounded, and it is no longer blocked on a decision.
+
+
+---
+
+## 30. `reportLanguage` shipped INERT twice, and the audit that found it was asked for as forward work
+
+Recorded because the shape is this repo's most expensive one and it arrived in a new place: **a remedy
+that is present, reported, and does nothing.**
+
+The setting was turned on by a product decision on 2026-09-03. It was written to
+`[documentFormatting]`. **NVDA reads it from `[speech]`.**
+
+**Every check said it was applied.** `getSettings()` returned `documentFormatting.reportLanguage: True`,
+read back off a live guest rather than assumed. `/health.environment.screenReaderSettings` carried the
+digest. The cache key moved. `fleet-consistency` agreed across all five workers. What none of them could
+see is that NVDA does not read that section — so **verifying a setting was WRITTEN is not verifying it is
+IN EFFECT**, and from outside the two are identical. That is `refreshBrowseBuffer` guarding on a flag
+nobody ever set, one layer out.
+
+**Then the fix was inert too.** Correcting the section did not take, because `withIniSetting` searched for
+`key = ...` ANYWHERE in the file: on a guest already carrying the stale
+`[documentFormatting] reportLanguage = True`, asking for `[speech]` found the wrong one, rewrote it in
+place, and reported success. A key name means nothing without its section.
+
+**It invalidated a measurement, and the measurement looked good.** A real page captured before and after
+came back byte-identical across every channel and all 89 transcript phrases, and that was reported as
+*"reportLanguage is evidence-neutral on monolingual content"*. The simpler explanation was that nothing
+had changed at all. Re-taken with the setting genuinely in effect, the result is the same — but it is now
+earned rather than an artefact of an inert change.
+
+**What caught it was reading NVDA's own `configSpec.py`**, which had been billed as the cheapest item on
+the backlog and turned out to need a zip reader. The audit was asked for as forward-looking work — *which
+settings could buy us evidence* — and its first finding was a bug in the change that prompted it.
+
+Both are pinned: `capture-settings.test.ts` asserts the section by name, and a test built from the exact
+failing state — the stale key in the wrong section beside the right one — covers the patcher.
