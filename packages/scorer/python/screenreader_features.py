@@ -125,9 +125,6 @@ FEATURE_NAMES = (
     "table_header_associated",
     "table_position_only",
     "state_change_present",
-    # The crossed pair — see `observation_of`. "Never asked" is both at zero.
-    "state_change_observed_present",
-    "state_change_observed_absent",
     "state_changed",
     "state_unchanged",
     "form_change_present",
@@ -137,6 +134,8 @@ FEATURE_NAMES = (
     "form_change_empty",
     "status_update_announced",
     "post_submit_present",
+    "post_submit_observed_present",
+    "post_submit_observed_absent",
     "validation_error_announced",
     "validation_error_missing",
     "generic_heading_present",
@@ -813,18 +812,20 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # this feature genuinely differs from its v17 self and the next promotion carries it, which is the
     # normal path rather than a special case.
     values["state_change_present"] = float(bool(measured_state_changes(state_changes)))
-    # THE FEATURE CROSS (known-gaps §35). `state_changes` being empty means BOTH "the control announced
-    # nothing" and "nothing was ever activated" — measured at 61.7% of empty `formChanges` being the
-    # second — and `float(bool(...))` cannot tell them apart, so a head can take a free negative weight on
-    # a capture condition. ADR 0015 is entirely about that.
+    # `stateChanges` IS NOT CROSSED, and the reason is worth more than the cross would have been.
     #
-    # Crossed rather than added. `observed` is NOT given to the model as a column: §14 declined that, and
-    # the reason stands. What the head sees is the existing fact ANDed with whether it was measured, so
-    # "was this asked" is never separable. `not asked` is the all-zeros row — representable, and carrying
-    # no weight of its own.
-    asked_state = observation_of(record, "stateChanges")
-    values["state_change_observed_present"] = float(asked_state and bool(measured_state_changes(state_changes)))
-    values["state_change_observed_absent"] = float(asked_state and not measured_state_changes(state_changes))
+    # It has no `observed` entry, and it needs none: `probeKindFor` returns "disclosure" BEFORE the
+    # `probeForms` gate, so the disclosure probe runs on every capture that meets a control announced
+    # `collapsed`. An empty `stateChanges` therefore means one thing -- no control offered itself --
+    # because a probe that ran and threw pushes an entry carrying `error` rather than leaving the channel
+    # empty, which `probeDisclosure`'s catch exists for and which cost 1 in 20 captures before it did.
+    #
+    # So this channel already separates "nothing to hear" from "we did not measure", and crossing it added
+    # two columns that were CONSTANT ZERO on every record. A dead column is worse than a missing one: it
+    # looks like coverage, and `corpus:distribution` is the only thing that would have caught it -- after
+    # a full retrain. Found by asking what actually WRITES the channel, having crossed it on the
+    # assumption that every empty channel shares one ambiguity. They do not, and `observed`'s own
+    # membership was the record saying so: the capture declines to claim a question it never had to ask.
     state_pairs = [
         (state_word(change.get("control") or ""), state_word(change.get("after") or ""))
         for change in state_changes
@@ -858,6 +859,14 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
         any(STATUS_UPDATE.match(change.get("after", "").strip()) for change in form_changes)
     )
     values["post_submit_present"] = float(bool(post_submit_fields))
+    # The second crossed pair, and it is a stronger case than `formChanges`. `observed.postSubmitFields`
+    # reads `asked: true` only when `probeForms` ran AND something was actually activated -- the capture
+    # says so in its own words, "probeForms ran and activated nothing, so there was no submit to re-read
+    # after" -- and 56.1% of the empty ones are that. So a `0` here is more often a fact about the probe
+    # than about the page, and this is the channel 3.3.1 and 4.1.3 are decided from.
+    asked_post = observation_of(record, "postSubmitFields")
+    values["post_submit_observed_present"] = float(asked_post and bool(post_submit_fields))
+    values["post_submit_observed_absent"] = float(asked_post and not post_submit_fields)
     values["validation_error_announced"] = float(
         any(ERROR_WORD.search(value) for value in post_submit_fields)
         or any(ERROR_WORD.search(change.get("after", "")) for change in form_changes)
