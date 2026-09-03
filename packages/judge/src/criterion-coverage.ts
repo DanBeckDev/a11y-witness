@@ -409,19 +409,28 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   // cannot carry the evidence is a claim, and this file's own header says `status` means "we have evidence
   // and a decider", never "this answer is exact".
   "3.1.2": {
-    // `out-of-scope` under this file's own definition, which the test states precisely: "out-of-scope
-    // criteria name NO channel, because none could carry them. Not 'unknown' -- genuinely none." At NVDA's
-    // defaults that is exactly the case, in both directions.
+    // THIS ENTRY'S PREMISE CHANGED ON 2026-09-03, and the entry is corrected rather than left standing.
     //
-    // `needs: ["dom"]` names what WOULD decide it, the same way 1.4.3 names `visual`. The difference is
-    // that this tool HAS a DOM census -- and declining to use it here is a scope decision rather than a
-    // capability one, which is why the note says so out loud.
-    status: "out-of-scope", needs: ["dom"],
-    note: "Language of Parts: `lang` on elements whose text differs from the page language. NOT reachable "
-      + "from the speech stream at NVDA's defaults -- automatic language switching changes the VOICE and "
-      + "emits no text, measured on the fleet (config 396 chars, no overrides). Reachable from the DOM, "
-      + "which needs no screen reader and is axe-core's territory; deferred there rather than duplicated. "
-      + "Report Language ON would put it in the transcript at the cost of describing a non-default user.",
+    // It read `out-of-scope` because "at NVDA's defaults" a language change is announced as a change of
+    // VOICE and no text — true, and the last clause of the old note named the fix while ruling it out:
+    // "Report Language ON would put it in the transcript at the cost of describing a non-default user."
+    // That cost was accepted as a product decision. The setting is on across the fleet, verified by
+    // reading it back from NVDA, and `screenReaderSettings` carries it into the cache key so evidence
+    // taken under it can never blend with evidence taken without it.
+    //
+    // SO IT IS NO LONGER out-of-scope BY THAT ARGUMENT — but it is NOT assessed either, and saying so is
+    // the honest state. `reachable` under this file's definition: a channel could now carry it, and
+    // nothing yet does. There is no rule, and — measured — essentially no corpus case has a `lang` change
+    // for one to fire on, which is §17's lesson exactly: the capability arriving before anything for it
+    // to observe. Marking it `assessed` on the strength of a setting would be a coverage claim resting on
+    // a config value.
+    status: "reachable", needs: ["screen-reader", "dom"], channels: ["transcript"],
+    note: "Language of Parts: `lang` on elements whose text differs from the page language. At NVDA's "
+      + "DEFAULTS this is announced as a change of VOICE with no text, which is why it was recorded as "
+      + "out of scope. `documentFormatting.reportLanguage` is ON as of 2026-09-03 (a product decision, "
+      + "keyed in `screenReaderSettings`), so NVDA now speaks the language into the transcript. NOT yet "
+      + "assessed: no rule reads it, and no corpus case carries a language change for one to fire on. "
+      + "Also reachable from the DOM, which is axe-core's territory.",
   },
   "2.5.3": { status: "reachable", needs: ["dom", "accessibility-tree"], channels: ["controls", "structureCensus"], note: "Label in Name — visible text must be contained in the accessible name. Highly automatable and axe-core covers it well; worth deciding whether to duplicate or defer." },
   // WHY THE SCREEN READER CANNOT ANSWER THIS ONE, recorded because it looks like an oversight and is not.
