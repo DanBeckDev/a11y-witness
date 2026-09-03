@@ -1,0 +1,121 @@
+# What NVDA settings could buy us
+
+**Asked 2026-09-03, after `reportLanguage` turned out to unlock a criterion this project had recorded as
+out of reach.** If one default was hiding evidence, others might be.
+
+## How this audit is framed, and why not the other way
+
+**Demand-side.** The tempting version is to enumerate NVDA's settings and ask what each might do. That
+produces a vendor's feature list with our questions bolted on, and this repo has already paid for scope
+taken that way — `CONTROL_ROLES` gained two spellings on 2026-09-02 and deliberately NOT the six other
+real NVDA roles that occur zero times in the corpus, because *"over-inclusion is silent"*.
+
+So this starts from **what this tool cannot currently hear** — the seven gaps in *"What It Cannot Hear"*,
+each measured rather than assumed — and asks which settings bear on each.
+
+**Every row says whether it is VERIFIED or a HYPOTHESIS, and no row asserts a mechanism.** The immediate
+cause of this audit was me citing a mechanism that had been refuted twice.
+
+## What was verified, and how
+
+`guidepup` exposes **160 NVDA commands**. Read off the package, not from memory:
+
+| command | in the worker? |
+|---|---|
+| `moveToNextFrame`, `moveToPreviousFrame` | **used** — iframes are covered |
+| `reportTextFormatting` | used — this is 3.1.2's route |
+| `speakTypedCharacters`, `speakTypedWords` | **never called** |
+| `reportDynamicContentChanges` | **never called** |
+| `punctuationLevel` | **never called** |
+
+---
+
+## The audit
+
+### 1. Live regions — the biggest prize, and no setting is known to fix it
+
+**The gap:** a live region reaches the capture **2 times in 6** on an unchanged page. It costs items 3
+and 6, keeps two corpus cases withdrawn, and is the largest single hole in 4.1.3.
+
+**What is NOT the answer, both refuted by measurement rather than argument:**
+
+- *"Polite means speak when idle, and NVDA is never idle"* — refuted by a diagnostic pair where a `polite`
+  and an `assertive` region on the same checkbox **both announced**.
+- *"The settle window loses a race"* — the fix was built, deployed and re-measured. The rate did not move.
+
+**Candidate settings, all HYPOTHESES:**
+
+| setting | why it might bear on it | why it might not |
+|---|---|---|
+| **speech rate** | the intermittency is unexplained, and rate changes the timing of everything NVDA does | the settle-window fix already tested a timing explanation and failed |
+| `reportDynamicContentChanges` | never called by this worker | almost certainly already ON — regions *do* announce 2 times in 6, which they could not if this were off |
+
+> **The honest state: the intermittency is unexplained, and `not-working.md` §18 says so.** A setting that
+> changes the rate would be evidence *that rate matters*, which nobody has. Worth one experiment, not a
+> plan.
+
+### 2. Typing feedback — `speakTypedCharacters` is real and never called
+
+**The gap:** item 6. Live validation while typing.
+
+`speakTypedCharacters` and `speakTypedWords` are guidepup commands this worker has never called, and both
+have `nvda.ini` equivalents under `[keyboard]`.
+
+**But the measured blocker is the corpus, not the setting.** `oninput` appears on **0 of 3,948 generated
+pages** — live validation while typing does not exist in this corpus at all. A probe built now would have
+nothing to observe, which is why §17 says the first step is a case rather than a probe.
+
+**So: not a setting fix.** Recorded because "there is a command for it" is exactly the reasoning that
+would send someone to build the probe first.
+
+### 3. Punctuation and symbol level — the one that could QUIETLY change everything
+
+`punctuationLevel` is never called, and NVDA's default is `some`.
+
+**This one deserves attention precisely because it is not a gap.** It changes how NVDA speaks symbols in
+every announcement — and this project has already been bitten twice by characters in announcements:
+U+FFFC from Edge's autofill, and U+E604 from an icon font, each of which made a name fail to match
+itself.
+
+A different punctuation level would change announcement text corpus-wide. That makes it a **risk to
+understand rather than an optimisation to take**: nobody should change it without `evidence:check`, and
+now that `screenReaderSettings` is in the cache key, changing it can no longer blend two corpora silently.
+
+### 4. Verbosity and reporting toggles — probably already right, and worth confirming once
+
+NVDA's `documentFormatting` section carries `reportTables`, `reportLinks`, `reportHeadings`,
+`reportLists`, `reportLandmarks` and others. Most default ON, which is why the sweeps work.
+
+**The reason to check rather than assume:** `reportLanguage` was the one that defaulted OFF, and nobody
+knew until a criterion turned out to be unreachable. One read of NVDA's `configSpec.py` on a guest would
+list every `documentFormatting` default and settle the whole family — and **that read has not been done**,
+which is the cheapest open item in this audit.
+
+### 5. Speed as speed — untested, and not free
+
+Faster speech plausibly shortens captures. It is **not** a free optimisation, for the reason above: it
+acts on what is heard, so it is keyed evidence.
+
+There is also a specific reason to be careful. guidepup's `SPEAK_DEBOUNCE_TIMEOUT` and
+`CANCEL_NOT_FIRE_TIMEOUT` are both **1000 ms**, and CLAUDE.md already records that *"a vCPU descheduled
+past one second loses the phrase"*. Changing speech timing near a fixed 1-second bound is exactly where a
+lost phrase becomes indistinguishable from a silent page — the fault this project has spent the most time
+on.
+
+---
+
+## What should actually happen next, in order
+
+1. **Read NVDA's `configSpec.py` on a guest** and list every `documentFormatting` and `speech` default.
+   Cheapest item here, settles §4 entirely, and would have caught `reportLanguage` years earlier.
+2. **One experiment on the live-region intermittency**, varying speech rate, using `training:repeat` so
+   the answer is a rate and not one capture. §18 is emphatic that *"every wrong turn today came from
+   concluding off ONE capture."*
+3. **Leave `punctuationLevel` alone** until 1 and 2 are done.
+
+## What this audit deliberately does not do
+
+- **Enumerate NVDA's settings.** That is a vendor list, and the corpus cannot exercise most of it.
+- **Assert a mechanism for the live-region intermittency.** Three have been asserted and two refuted.
+- **Treat "a command exists" as "a gap is closable".** `speakTypedCharacters` exists and the blocker is a
+  corpus with no `oninput` on any of 3,948 pages.
