@@ -774,8 +774,42 @@ Consequences, all of which are now enforced:
 - **0.30+ writes a SESSION config** (`sessionUserConfig/nvda.ini`) beside the base one. Anything that
   assumes a single `nvda.ini` is wrong.
 - **0.30 added a settings API** — `start({settings})`, `getSettings()`, `getSetting('section.key')`.
-  `/diagnostics` reports the effective settings. **Record them; do not tune them.** NVDA's defaults are
-  what a real user experiences, so configuring away from them makes the evidence less representative.
+  `/diagnostics` reports the effective settings.
+
+  > **THIS LINE USED TO READ "record them; do not tune them — NVDA's defaults are what a real user
+  > experiences". That is WRONG, and it was overturned on 2026-09-03.** Screen reader users are heavy
+  > configurers: speech rate, verbosity, punctuation and symbol level are all routinely far from default,
+  > and an experienced NVDA user runs speech far faster than the shipped setting. A tool that only ever
+  > describes an unconfigured user is not describing a real one — "default" was standing in for "typical"
+  > and they are not the same thing.
+  >
+  > **The rule that replaces it: a setting that changes what NVDA SAYS is a CACHE-KEY INPUT.** Not
+  > forbidden — keyed, so evidence taken under one setting can never blend with evidence taken under
+  > another. `environment.screenReaderSettings` carries the digest, `environmentKey` keys on it, and
+  > `fleet-consistency` treats it as MUST_MATCH, exactly as `guidepupVersion` is treated and for the
+  > identical reason. `CAPTURE_SETTINGS` in `nvda-logging.mjs` is the list, and every entry states why.
+  >
+  > What the old rule was RIGHT about is the danger, and the danger is not non-defaultness — it is
+  > evidence blending silently. The first entry is `documentFormatting.reportLanguage`: at NVDA's default
+  > a WCAG 3.1.2 failure is announced as a change of VOICE and no text at all, so a pipeline that captures
+  > speech as text is structurally blind to it. With the setting on, NVDA speaks the language.
+  >
+  > **And turning it on is what made it recordable.** `getSettings()` returns only sections NVDA has
+  > actually WRITTEN, so at defaults there is no `documentFormatting` section at all and "off" is
+  > indistinguishable from "never asked" — measured 2026-09-02. You cannot record the setting without
+  > first setting it, which removes "we will just note what it was" as an option.
+
+  > **SPEECH RATE IS NOT A FREE OPTIMISATION, and this is the case that proves the rule is about evidence
+  > rather than about defaults.** It looks like pure wall-clock tuning — faster speech, faster captures.
+  > It is not: `not-working.md` §18 measured that a `role=status aria-live=polite` region **never
+  > announces** in a capture, because *"polite means speak when idle, and neither moment is idle"* — NVDA
+  > is still speaking the control's own state or the character echo. That costs **4.1.3 entirely and the
+  > live half of 3.3.1**.
+  >
+  > So raising the rate changes when NVDA falls idle, which changes WHICH LIVE REGIONS ARE HEARD. That is
+  > an evidence change in the plainest sense, and it may be a valuable one — it is a candidate fix for a
+  > capability gap, not merely a speed-up. It needs the measurement §18 names and nobody has taken:
+  > does a polite region ever announce, at any rate?
 
 Upgrading guidepup is an evidence change: run `npm run evidence:check` and expect a recapture.
 
