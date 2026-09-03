@@ -205,6 +205,65 @@ message nobody hears is only reachable by submitting. **The CLI still defaults i
 workflow tests your own application while `witness <url>` can be aimed at anyone's — see ADR 0002 and
 `probe-choice.test.ts`, which asserts both defaults.
 
+## A form that will not submit on a guess — the `forms` input
+
+`probe-forms` submits with no valid input. That is exactly right for a form which validates everything,
+and useless for one that will not submit until three fields are plausible — and those are the forms whose
+error handling most needs reviewing. On such a page 3.3.1, 3.3.3 and 4.1.3 are not clean, they are
+**structurally unreachable**: the evidence for them only exists after a control is operated.
+
+`forms` names a config that says how to operate it (ADR 0024):
+
+```yaml
+- uses: DanBeckDev/a11y-witness@main
+  with:
+    url: https://staging.example.com/signup
+    task: "Create an account"
+    forms: .github/a11y-forms.yml
+```
+
+```yaml
+# .github/a11y-forms.yml
+url: https://staging.example.com/signup
+states:
+  - state: error            # 3.3.1 and 3.3.3: was the rejection announced, and did it say how to fix it?
+    submit: "Create account"
+    fields:
+      - field: "Email address"      # the ACCESSIBLE NAME, which is what NVDA announces
+        value: "ada@example.test"
+      - field: "Confirm email"
+        value: "different@example.test"
+  - state: success          # 4.1.3: was the confirmation announced?
+    submit: "Create account"
+    fields:
+      - field: "Email address"
+        value: "ada@example.test"
+      - field: "Confirm email"
+        value: "ada@example.test"
+```
+
+Each state is captured and reported **separately** — they are different pages as far as a screen reader
+user is concerned, and averaging them would hide the one that fails.
+
+**You do not have to write it by hand.** `--emit-form-config` drafts one from what NVDA announced on the
+page, so the field names in it are the names the screen reader actually uses rather than the ones in your
+markup:
+
+```bash
+npx tsx packages/cli/src/cli.ts https://staging.example.com/signup --task "Create an account" \
+  --emit-form-config > .github/a11y-forms.yml
+```
+
+**A field the config names that cannot be addressed by its accessible name is a FINDING, not a
+configuration error.** That is ADR 0024's central claim and it has a control group: the same config
+against W3C's inaccessible survey demo filled ZERO fields and reported every one unbound, because its
+controls have no accessible names — which is the 4.1.2 failure. A control a script cannot address by name
+is one a screen reader user cannot address either.
+
+Nothing is submitted that the config does not name. `probe-forms` and `forms` can both be set: where a
+config applies it REPLACES the opportunistic probe for that capture rather than running beside it, because
+pressing submit part-way through filling would attribute the evidence to a state that never existed.
+
 ## Outputs
 
 | Output | Use |
