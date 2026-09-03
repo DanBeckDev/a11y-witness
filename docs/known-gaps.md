@@ -1420,3 +1420,52 @@ settings could buy us evidence* — and its first finding was a bug in the chang
 
 Both are pinned: `capture-settings.test.ts` asserts the section by name, and a test built from the exact
 failing state — the stale key in the wrong section beside the right one — covers the patcher.
+
+
+---
+
+## 31. A status message fired by a self-announcing control reaches an NVDA user ROUGHLY ONE TIME IN THREE
+
+**A product finding, not a defect**, and [not-working §18](./not-working.md) says outright that it
+*"belongs in `docs/known-gaps.md`"*. It was not here until 2026-09-03. Recorded now because it bounds what
+4.1.3 can claim, and because it is the most useful thing this project has learned that nobody else can
+measure.
+
+Six repeats per condition, one page shape, `training:repeat`:
+
+| trigger | what NVDA says of its own | region | heard |
+|---|---|---|---|
+| **button**, synchronous update | nothing | `polite` | **6 of 6** |
+| **checkbox**, synchronous update | `"checked"` | `polite` | **2 of 6** |
+| **checkbox**, synchronous update | `"checked"` | `alert` / `assertive` | **5 of 6** |
+| **checkbox**, update deferred 400 ms | `"checked"` | `polite` | **0 of 6** |
+| **typing**, six characters | six echoes | `polite` | **0 of N** |
+
+**The behaviour, and every row is consistent with it.** When NVDA has nothing of its own to say, the live
+region is the only thing in the queue and it is announced every time. When NVDA is already speaking, a
+`polite` region — which by definition waits for idle — is usually dropped, while an `assertive` one
+interrupts and mostly survives. Deferring the update past the control's own announcement makes it worse,
+not better.
+
+**No static analyser can see this.** The markup is correct, the region is correct, `aria-live` is correct,
+and the message is genuinely there. It is exactly the class of failure ADR 0019 says the corpus cannot
+express and only a real screen reader can reach.
+
+### What it bounds
+
+**4.1.3 cannot claim a status message was "not announced" from one capture** where the trigger announces
+its own state. At 2 of 6, a single silent capture is the expected case rather than evidence. Any 4.1.3
+finding on such a control needs repeats or it is reporting a coin toss.
+
+### The advice it lets this project give, with a number attached
+
+**`aria-live="polite"` on a message triggered by a checkbox or a radio reaches about a third of NVDA
+users.** Use `assertive` where the message matters — while noting that even that is 5 of 6, and that
+choosing a role because it captures better rather than because the content warrants it is fitting the page
+to the tool.
+
+### What is NOT established
+
+The mechanism inside NVDA. Six captures per condition shows a direction, not a queue policy. All of it is
+one page shape, on one NVDA and one guidepup — both pinned in the cache key, so the number travels with
+the evidence it was measured on rather than being a claim about screen readers in general.
