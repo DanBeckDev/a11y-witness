@@ -185,6 +185,17 @@ What remains is corpus work, not capability: a per-page forms config in `real-pa
 
 ## The next action, and it is sequencing rather than work
 
+> **NO LAB JOB CAN RUN AT ALL WHILE `retrain` IS RUNNING, so there is no way to get any of this early.**
+> Verified 2026-09-03 by trying: `lab:job -e job=observation-ambiguity` refused with
+> *"would run at 6805ec2f7732, NOT the requested main — another job is running ... Nothing has run."*
+> That is `run-job.yml`'s guard, and it is right: a job that quietly runs four commits behind reports
+> success for code you did not ask for. It clears itself when the run ends.
+>
+> Worth knowing because two of the rows below LOOK reachable early. `icon-button-unnamed` is case 16 of
+> 1,623, so the split pair's fresh evidence has existed on the lab's disk since the first minutes of this
+> run — and it cannot be read until the run finishes. The answer being on disk and the answer being
+> readable are different things.
+
 **The in-flight `retrain` job will produce a candidate whose crossed columns are CONSTANT ZERO, and that
 is not a refutation.** `lab:retrain` chains generate → capture → check-signals → export → build-realism →
 train, and `run-job.yml` pins the whole chain to the commit it was DISPATCHED at. The exporter learned to
