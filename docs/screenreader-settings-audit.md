@@ -81,15 +81,47 @@ A different punctuation level would change announcement text corpus-wide. That m
 understand rather than an optimisation to take**: nobody should change it without `evidence:check`, and
 now that `screenReaderSettings` is in the cache key, changing it can no longer blend two corpora silently.
 
-### 4. Verbosity and reporting toggles — probably already right, and worth confirming once
+### 4. NVDA's real defaults — READ, 2026-09-03
 
-NVDA's `documentFormatting` section carries `reportTables`, `reportLinks`, `reportHeadings`,
-`reportLists`, `reportLandmarks` and others. Most default ON, which is why the sweeps work.
+`/diagnostics.screenReaderDefaults` reads `configSpec.py` out of NVDA's `library.zip` on the guest. Not
+from memory, and not from the vendor's docs: from the build the fleet is running.
 
-**The reason to check rather than assume:** `reportLanguage` was the one that defaulted OFF, and nobody
-knew until a criterion turned out to be unreachable. One read of NVDA's `configSpec.py` on a guest would
-list every `documentFormatting` default and settle the whole family — and **that read has not been done**,
-which is the cheapest open item in this audit.
+`documentFormatting` — **18 default ON, 15 default OFF.** The ON list is why the sweeps work at all, and
+until this was read it was assumed:
+
+```
+ON   reportBlockQuotes  reportBookmarks  reportClickable  reportComments  reportFigures
+     reportFrames  reportGraphics  reportGroupings  reportHeadings  reportHighlight
+     reportLandmarks  reportLinkType  reportLinks  reportLists  reportPage
+     reportRevisions  reportTableCellCoords  reportTables
+
+OFF  detectFormatAfterCursor  ignoreBlankLinesForRLI  includeLayoutTables  reportAlignment
+     reportArticles  reportColor  reportEmphasis  reportFontName  reportFontSize
+     reportLineNumber  reportLineSpacing  reportParagraphIndentation  reportStyle
+     reportSuperscriptsAndSubscripts  reportTransparentColor
+```
+
+**Of the fifteen OFF, four bear on a criterion this tool owns.** The rest are typographic detail with no
+WCAG question behind them, and listing them as candidates would be the vendor-catalogue mistake this
+audit was framed to avoid.
+
+| setting | the criterion | what it would carry |
+|---|---|---|
+| `reportEmphasis` | **1.3.1** | the strongest candidate. It distinguishes SEMANTIC emphasis (`<em>`, `<strong>`) from text that merely looks bold — which is exactly 1.3.1's question, and a distinction no other channel here can make |
+| `includeLayoutTables` | **1.3.1** | NVDA SKIPS layout tables by default, so the table sweep cannot see them at all. Relevant to the existing 1.3.1 table work, which has already cost a protocol bump |
+| `reportSuperscriptsAndSubscripts` | 1.3.1 | superscript carries meaning — footnotes, ordinals, notation |
+| `reportColor` | 1.4.1 | weaker than it looks. 1.4.1 asks whether colour is the ONLY cue, and hearing a colour does not answer that. It is also the visual layer's territory |
+
+> **NONE OF THESE SHOULD BE TURNED ON YET, and the reason is §17's rule pointed at settings.** Each adds
+> text to every announcement that carries the property, corpus-wide. A setting turned on with no rule
+> reading it and no case exercising it is noise in 2,488 records — the capability arriving before anything
+> to observe with it, which is exactly what happened with `reportLanguage` and is now its own backlog row.
+>
+> The order is: a corpus case, then a rule, then the setting.
+
+**And `speech` answered a question nobody had asked.** `autoLanguageSwitching` is **ON** by default —
+which is what makes NVDA change VOICE on a language change — while `reportLanguage` is **OFF**. That pair
+is the whole of why 3.1.2 was silent: NVDA was switching languages all along and saying nothing about it.
 
 ### 5. Speed as speed — untested, and not free
 
