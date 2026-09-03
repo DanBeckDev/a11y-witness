@@ -1587,10 +1587,13 @@ which vendor to read.
 
 ---
 
-## 35. §11's design has a name, and it is a FEATURE CROSS
+## 35. §11's design has a name, and it is a FEATURE CROSS — BUILT 2026-09-03, verdict PENDING
 
-Not built — designed, and recorded so the next person does not re-derive it or reach for the masking that
-was already refuted.
+**Built and committed; whether it SHIPS is not yet decided.** The encoding is in
+`screenreader_features.py`, the exporter emits `observation` as a sibling of `input`, and
+`schema-migration.json` declares v18 → v19 open. What has NOT happened is the retrain that would let the
+four gates below say whether it helped — the corpus recapture it must land between was still running when
+it was written. Until those gates run, this is an implemented hypothesis and nothing more.
 
 **The problem, now sized.** Ten of the 28 structured features are `float(bool(channel))`, and `any([])` is
 `False`, so `0` means both *the page has none* and *nothing looked*. Measured 2026-09-03 on the
@@ -1636,6 +1639,30 @@ was. That is a real possible outcome and this entry is not written to avoid it.
 
 **Sequencing:** it moves `FEATURE_SCHEMA_VERSION`, so it lands between a corpus recapture and the retrain
 that follows, never after — otherwise the retrain is paid twice.
+
+### What building it settled, and what it did not
+
+**Two pairs, not ten.** `state_change_*` and `form_change_*` are the ones whose starvation is measured, so
+they are the ones crossed. The other six ambiguous features follow only if these gates hold — shipping all
+ten on an untested encoding would make a refutation cost ten reverts instead of two.
+
+**IT DOES NOT CLOSE THE FIVE `UNREACHABLE_WITHOUT_PERTURBING` ENTRIES, and expecting it to was the error
+worth recording.** The cross fixes a CONFLATION. A subtype that never runs the form probe has no
+conflation to fix: both crossed columns read 0, correctly, because that is the "never asked" row and the
+case genuinely carries no evidence either way. Starvation and ambiguity are two defects and this was only
+ever a remedy for the second. The crossed columns are therefore classified in `FORM_PROBE_ONLY` beside
+the channels they read — reading them as newly closable would put those five subtypes back on a work list
+nobody can complete, which is what that table exists to prevent.
+
+**The first mutation check was not sufficient, and the gap is instructive.** Reverting
+`..._observed_present` to the old `float(bool(channel))` left every assertion passing, because no case
+exercised the row where `observed` and the channel DISAGREE — `asked: false` beside a channel that has
+content. That row is reachable rather than theoretical: `stateChanges` is written by more than one probe,
+the disclosure probe running unconditionally while `probeForms` is gated, so a channel can gain content
+from a path `observed` did not record. It now has its own case, and the answer is that BOTH columns stay
+at zero: a capture whose two records of one probe contradict each other cannot be read as either verdict,
+and the all-zeros row already means "this capture cannot say". *A guard must be shown to fail before it is
+trusted* — and the first thing this one failed to fail on was its own central conjunction.
 
 
 ---
