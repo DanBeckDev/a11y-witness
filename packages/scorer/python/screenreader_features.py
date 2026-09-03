@@ -93,7 +93,23 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # one the weights were fitted under -- which is exactly "a v17 model scored with v18 features, and the
 # difference read as model behaviour". A corpus that cannot exercise a change is not evidence the change is
 # inert; it is the reason the real-page tier exists.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v18"
+# v19, 2026-09-03: the observation FEATURE CROSS. Ten structured features are `float(bool(channel))` and
+# `any([])` is `False`, so a `0` means both "the page has none" and "nothing looked". Measured on the
+# authoritative corpus: 61.7% of empty `formChanges`, 56.1% of empty `postSubmitFields` and 65.3% of the
+# `formControl` sweep are the second. A head can therefore take a free negative weight on a capture
+# CONDITION, which is ADR 0015's entire subject.
+#
+# Two routes were closed before this one. Masking was REFUTED (not-working §15, it cost a real finding),
+# and giving the model `observed` as its own column was DECIDED AGAINST (§14, for the shortcut risk). This
+# is neither: the existing fact is CROSSED with whether it was measured, so "was this asked" is never a
+# separable signal. `not asked` is the all-zeros row. CLAUDE.md's 2.4.4 post-mortem states the constraint
+# — "'A and not B' must be computed, never handed over as two features" — and *Low-Code AI* names the
+# construction a feature cross.
+#
+# A MEANING change and a WIDTH change: four new columns, and every weight file fitted before them was
+# fitted to a different input space. Starts with the two pairs whose starvation is measured; the rest
+# follow if the gates hold. Those gates are in known-gaps §35, and a REFUTED outcome reverts this.
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v19"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -109,9 +125,14 @@ FEATURE_NAMES = (
     "table_header_associated",
     "table_position_only",
     "state_change_present",
+    # The crossed pair — see `observation_of`. "Never asked" is both at zero.
+    "state_change_observed_present",
+    "state_change_observed_absent",
     "state_changed",
     "state_unchanged",
     "form_change_present",
+    "form_change_observed_present",
+    "form_change_observed_absent",
     "form_change_nonempty",
     "form_change_empty",
     "status_update_announced",
@@ -670,6 +691,17 @@ def vague_link_lacks_context(record: dict[str, Any]) -> bool:
     return False
 
 
+def observation_of(record: dict[str, Any], channel: str) -> bool:
+    """Did this capture ASK about a channel?
+
+    Reads `record["observation"]`, the exporter's sibling of `input` — never `input` itself, which is an
+    allowlist the model boundary guards. Absent means False, and that is the conservative direction: a
+    record exported before this field existed has both crossed columns at zero, which is the "not asked"
+    row. Old records therefore contribute no signal here rather than a wrong one.
+    """
+    return bool((record.get("observation") or {}).get(channel))
+
+
 def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     """Extract only relations and presence facts observable in screen-reader output."""
     values = {name: 0.0 for name in FEATURE_NAMES}
@@ -781,6 +813,18 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # this feature genuinely differs from its v17 self and the next promotion carries it, which is the
     # normal path rather than a special case.
     values["state_change_present"] = float(bool(measured_state_changes(state_changes)))
+    # THE FEATURE CROSS (known-gaps §35). `state_changes` being empty means BOTH "the control announced
+    # nothing" and "nothing was ever activated" — measured at 61.7% of empty `formChanges` being the
+    # second — and `float(bool(...))` cannot tell them apart, so a head can take a free negative weight on
+    # a capture condition. ADR 0015 is entirely about that.
+    #
+    # Crossed rather than added. `observed` is NOT given to the model as a column: §14 declined that, and
+    # the reason stands. What the head sees is the existing fact ANDed with whether it was measured, so
+    # "was this asked" is never separable. `not asked` is the all-zeros row — representable, and carrying
+    # no weight of its own.
+    asked_state = observation_of(record, "stateChanges")
+    values["state_change_observed_present"] = float(asked_state and bool(measured_state_changes(state_changes)))
+    values["state_change_observed_absent"] = float(asked_state and not measured_state_changes(state_changes))
     state_pairs = [
         (state_word(change.get("control") or ""), state_word(change.get("after") or ""))
         for change in state_changes
@@ -802,6 +846,9 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     ))
 
     values["form_change_present"] = float(bool(form_changes))
+    asked_form = observation_of(record, "formChanges")
+    values["form_change_observed_present"] = float(asked_form and bool(form_changes))
+    values["form_change_observed_absent"] = float(asked_form and not form_changes)
     values["form_change_nonempty"] = float(any(change.get("after", "").strip() for change in form_changes))
     # SILENCE claims consult `baselineQuiet`; presence claims do not. See `soundly_measured`.
     values["form_change_empty"] = float(
@@ -1244,8 +1291,9 @@ def encode_records(records: list[dict[str, Any]], encoder_root: Path, max_length
     # cross-channel facts and several are genuinely not computable from a single announcement --
     # `validation_error_announced` ORs postSubmitFields with formChanges, and
     # `plain_heading_candidate_present` needs adjacent transcript pairs. Repeating them keeps every
-    # instance able to see them, keeps FEATURE_NAMES untouched, and keeps the head 413 wide, so the
-    # head shape and the width assertion in score.py are unchanged. Only how OFTEN the head runs moved.
+    # instance able to see them, keeps FEATURE_NAMES untouched, and keeps the head its existing width
+    # (384 + len(FEATURE_NAMES)), so the head shape and score.py's check are unchanged. Only how OFTEN
+    # the head runs moved.
     bags = [unit_texts(record) for record in records]
     flat = [text for bag in bags for text in bag]
     text_features = _onnx_encode(flat, encoder_root, max_length)
@@ -1264,5 +1312,7 @@ def encode_records(records: list[dict[str, Any]], encoder_root: Path, max_length
     structural[:, candidate_column] = flags * ENGINEERED_FEATURE_SCALE
     # 384 is MiniLM-L6-v2's hidden size, stated rather than read from a loaded torch model — reading it
     # from `encoder.config` was the last thing forcing the torch model to be constructed at inference.
-    # `score.py` asserts the head is 413 wide, so a wrong value here fails loudly rather than silently.
+    # `score.py` compares the stamped structured-feature LIST against FEATURE_NAMES, so a wrong value
+    # here fails loudly rather than silently -- and it compares the list rather than a width, so adding
+    # a feature cannot slip past by coincidence of arithmetic.
     return np.concatenate([text_features, structural], axis=1), text_features.shape[1], len(FEATURE_NAMES)

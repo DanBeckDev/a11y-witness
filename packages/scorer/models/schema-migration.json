@@ -1,0 +1,13 @@
+{
+  "shippedSchema": "screenreader-structured-v18",
+  "pendingSchema": "screenreader-structured-v19",
+  "why": "The observation FEATURE CROSS. Ten structured features are float(bool(channel)) and any([]) is False, so a 0 means both 'the page has none' and 'nothing looked'. Measured on the authoritative corpus: 61.7% of empty formChanges, 56.1% of empty postSubmitFields and 65.3% of the formControl sweep are the second, so a head can take a free negative weight on a CAPTURE CONDITION rather than a page fact -- ADR 0015's subject. Masking was refuted (not-working: it cost a real finding) and giving the model `observed` as its own column was declined (the shortcut risk), so this crosses the existing fact with whether it was measured: 'asked and present' and 'asked and absent' are two computed columns, and 'never asked' is the all-zeros row carrying no weight of its own. A ZERO CANNOT VETO, so the conjunction is computed rather than handed over as two features. Opened 2026-09-03; closes when the retrain following the in-flight recapture stamps v19 into the weights. It is REVERTED, not merged, if any of four gates fails: scorer:shortcuts (closable vetoes must FALL and no head may gain one on a new column), rules:real-pages (zero new findings on the 86 conformant pages), held-out acceptance (must not regress), corpus:distribution (the new columns must not be constant).",
+  "openedAt": "2026-09-03",
+  "closesWith": "the retrain after the in-flight corpus recapture",
+  "revertIf": [
+    "scorer:shortcuts — closable vetoes do not fall, or a head gains a veto on a new column",
+    "rules:real-pages — any new finding against the 86 conformant real pages",
+    "held-out acceptance regresses",
+    "corpus:distribution — a new column is constant across every record"
+  ]
+}
