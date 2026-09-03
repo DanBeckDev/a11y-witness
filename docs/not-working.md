@@ -928,8 +928,18 @@ open on the grounds that the size was unknown.
   — `icon-button-unnamed.good` — was measured differently from its mate. CLAUDE.md is unambiguous that a
   pair differing for a reason unrelated to accessibility is *"the one defect this project cannot
   tolerate"*, and the report notes the sharpest part: Ctrl over an image is Edge's MAGNIFIER overlay, so a
-  split on an `image-*` case is precisely where the remedy mattered most. **That one capture should be
-  retaken**, and it is a single case rather than a corpus problem.
+  split on an `image-*` case is precisely where the remedy mattered most.
+
+  **Retaking it does NOT fix it.** Tried 2026-09-03: both halves recaptured with `--no-cache` on the same
+  worker, 0 failed, and the audit re-run against the fresh captures reports the identical split. So the
+  park fails REPRODUCIBLY on that page rather than flaking — the more useful answer, because the remedy is
+  to find what defeats `parkPointer` there rather than to capture it again.
+
+  **And the near-miss is worth more than the finding.** The first re-run of the audit appeared to confirm
+  the split, and the log it was read from was stamped four minutes BEFORE the recapture — a stale artefact
+  read as current, which is the mistake this repo has recorded six times. It was caught by comparing that
+  log's timestamp against the recapture's, not by noticing anything wrong with the numbers, which looked
+  exactly right.
 
 ## 15. CLOSED 2026-09-01 — the capture can now ask whether a dialog can be LEFT, and the answer moved a rule
 
