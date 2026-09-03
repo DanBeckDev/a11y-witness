@@ -1389,7 +1389,17 @@ still accept. Mutation-checked.
 
 ### The original entry
 
-## 20. ONE PAGE CAPTURES PATHOLOGICALLY, and `grants-audit` is what caught it — OPEN
+DEMOTED to a subsection 2026-09-03, and the demotion is the point. It was left as a sibling `##` heading
+still ending `— OPEN`, so this file asserted both OPEN and CLOSED about §20 for two days and the backlog
+carried a row for work that was finished. "The original entry" above it did not demote it — a `###` line
+does not make the `##` that follows a child.
+
+That is the same defect this file's own header names ("closed" spelled fourteen ways) arriving one level
+in: a closure recorded as a NEW section beside the old one rather than over it. `backlog.test.ts` now
+refuses a record that carries an OPEN and a CLOSED heading under one number, because a marker a human has
+to remember to change is a marker that does not get changed.
+
+#### 20. ONE PAGE CAPTURES PATHOLOGICALLY, and `grants-audit` is what caught it
 
 The protocol-13 corpus run captured **1,481 of 1,481 cases with 0 failures** and then STOPPED at
 `grants-audit`, which is the pipeline working: *"a label for a defect nothing captured teaches the head to
