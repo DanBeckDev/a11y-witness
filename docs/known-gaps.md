@@ -1553,3 +1553,33 @@ whether the browser this project uses supports it. The audit now says so.
 
 **1.3.1 keeps its existing coverage.** Nothing was lost: this was an attempt to ADD a signal, and the
 criterion is unaffected by its failure.
+
+
+---
+
+## 34. The browser is in the cache key, and 2026-09-03 is the first time that was CHECKED
+
+`evidence:check` reported `"unlabeled graphic"` becoming `"unlabelled graphic"` on two sampled captures.
+The obvious reading is that NVDA changed a role string, and the backlog asked the right question: does a
+version key already cover it, or do those captures need recapturing?
+
+**Measured on the two captures:**
+
+| | NVDA | Edge | says |
+|---|---|---|---|
+| cached, 2026-08-07 | 2026.1.1 | `151.0.4129.59` | `unlabeled graphic` |
+| live, 2026-09-03 | **2026.1.1** | `151.0.4129.107` | `unlabelled graphic` |
+
+**Same NVDA. Different Edge.** So the string is **Edge's**, not NVDA's — it is Chromium's
+image-description prompt — and `browserVersion` is in `environmentKey`, so those captures were already
+invalid and nothing needs doing.
+
+**Which is the point worth keeping.** `capture-cache.mjs` says the browser is in the key because *"a fleet
+can have more than one image"*, and CLAUDE.md argues at length that **the browser is EVIDENCE, not
+configuration** — that Edge's preset must stay byte-identical because 2,122 cached captures depend on it.
+That was reasoning. This is the first time a browser update has been caught changing announcement text and
+the key has been checked against it, and it held.
+
+**And it says where to look next time.** A string that changes with `browserVersion` is Chromium's; one
+that changes with `screenReaderVersion` is NVDA's. Both are keyed, and the pair of versions tells you
+which vendor to read.
