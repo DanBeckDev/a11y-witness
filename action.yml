@@ -88,6 +88,27 @@ inputs:
       — so "show only bags" presses *Bags* and never *Delete account*.
     required: false
     default: "true"
+  forms:
+    description: >-
+      Path to a forms config (YAML or JSON) describing the states this page's form can be put into —
+      see ADR 0024 and `--emit-form-config`, which drafts one from what NVDA announced on the page.
+
+      THIS IS THE INPUT THAT MAKES 3.3.1, 3.3.3 AND 4.1.3 REACHABLE ON A PAGE THAT REJECTS GUESSES.
+      `probe-forms` submits with no valid input, which is enough for a form that validates everything and
+      useless for one that will not submit until three fields are plausible. A config names the fields by
+      their ACCESSIBLE NAME, gives the values, and names the control to press — so the failing state is
+      the one your form actually produces rather than the one an empty submit happens to reach.
+
+      Two states are worth declaring: an `error` state (what 3.3.1 and 3.3.3 are decided from — was the
+      rejection announced, and did it say how to fix it) and a `success` state (4.1.3 — was the
+      confirmation announced). Each is captured separately and reported separately.
+
+      Unset by default. Nothing is submitted that the config does not name, and a field the config names
+      that cannot be addressed by its accessible name is reported as a FINDING about the page (4.1.2)
+      rather than a configuration error — a control a script cannot address by name is one a screen
+      reader user cannot address either.
+    required: false
+    default: ""
   probe-focus:
     description: >-
       Tab through the page and report what receives focus, which is how 2.1.2 No Keyboard Trap is
@@ -346,6 +367,15 @@ runs:
         out="$RUNNER_TEMP/a11y-witness-result.json"
         args=("${{ inputs.url }}" --task "${{ inputs.task }}" --json)
         [ "${{ inputs.probe-forms }}" = "true" ] && args+=(--probe-forms)
+        # A DECLARED config, and it is separate from `probe-forms` rather than replacing it. The
+        # configured pass fills every field the config names and then presses the control it names, and
+        # `capture-core` makes it REPLACE the opportunistic probe for that capture rather than run beside
+        # it — pressing submit part-way through filling would attribute the evidence to a state that never
+        # existed. So both inputs can be set and the config wins where it applies.
+        #
+        # `-n` rather than a `!= ""` comparison: the default is the empty string, and an unset input and
+        # an empty one must behave the same way.
+        [ -n "${{ inputs.forms }}" ] && args+=(--forms "${{ inputs.forms }}")
         # Inverted, because the CLI defaults this ON: only an explicit false turns it off. Tab activates
         # nothing, so unlike probe-forms there is no reason to make a consumer opt in to it.
         [ "${{ inputs.probe-focus }}" = "false" ] && args+=(--no-probe-focus)
