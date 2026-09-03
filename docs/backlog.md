@@ -207,11 +207,27 @@ So, in this order, once `lab:status -e job=retrain` shows `SubState` has left `r
    invalidated. `assertFleetRunsThisCheckout` REFUSES the next capture-bearing job until this runs.
 2. **`npm run lab:job -- -e job=retrain -e ref=main`** — re-dispatch. `generate` and `capture` are cache
    hits; only export, build-realism and train do real work.
-3. **Then, and only then, the four gates decide v19.** `scorer:shortcuts` (closable vetoes must FALL, no
-   head may gain one on a new column), `rules:real-pages` (zero new findings on the 86 conformant pages),
-   held-out acceptance (no regression), `corpus:distribution` (the new columns must not be constant). A
-   failure means REVERT and record it as REFUTED — `schema-migration.json` names all four so the decision
-   cannot be quietly softened into an adjustment.
+3. **Then ONE command decides v19 and 4.1.3's grounding together:**
+
+   ```bash
+   npm run lab:pipeline -- --pipeline=migration-verdict --ref=main
+   ```
+
+   Added 2026-09-03, because the alternative was five stages assembled by hand in an order that lived in
+   somebody's head — the defect `lab:pipeline` exists to close, still present for the one decision that
+   gates a release. It captures both real-page roles, re-exports, trains, and runs every gate:
+   `scorer:shortcuts` (closable vetoes must FALL, no head may gain one on a new column, **and its
+   constant-column report** — the check that replaced `corpus:distribution`, which could not see a
+   constant feature), held-out `acceptance`, `rules-real-pages` (zero new findings on the 86 conformant
+   pages), and `rules-coverage` last, which is what says whether `4.1.3: 0 of 37` moved.
+
+   **It does not promote, deliberately.** It answers a question; acting on the answer is `candidate`.
+   A failure means REVERT and record it as REFUTED — `schema-migration.json` names every gate so the
+   decision cannot be quietly softened into an adjustment.
+
+   The real-page captures come FIRST and that is pinned by a test: `retrain` ends with `build-realism`,
+   which reads the captures on disk, so the other order would score a dataset that does not contain the
+   change being tested and report success about the wrong corpus.
 
 ## How an item leaves this page
 
