@@ -123,6 +123,18 @@ def raw_capture_record(capture: dict[str, Any], source_id: str) -> dict[str, Any
     }
     return {
         "input": input_data,
+        # A SIBLING of `input`, and it must be built here for the same reason `parsed` had to be carried
+        # through above: this file SELECTS keys, so anything the record contract gains and this does not
+        # learn is silently absent on the product path. The featurizer crosses `formChanges` and
+        # `postSubmitFields` with whether they were asked, and absent reads as "never asked" -- so omitting
+        # it would feed every LIVE capture a row the head never saw in training, while every corpus record
+        # carried signal. The comment above records the identical miss for `parsed`, which broke the
+        # abstention sweep; this is the same contract in a sixth place and it is now derived rather than
+        # re-listed.
+        "observation": {
+            channel: bool((entry or {}).get("asked"))
+            for channel, entry in (capture.get("observed") or {}).items()
+        },
         "target": {"label": "clean", "criteria": [], "subtypes": []},
         "provenance": {
             "caseId": source_id,

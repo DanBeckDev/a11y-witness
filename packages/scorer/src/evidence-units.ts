@@ -196,6 +196,31 @@ export const producerFeedsModel = (producer: string): boolean =>
  */
 export const MODEL_INPUT_VERSION = 2;
 
+/**
+ * WHAT THE CAPTURE ASKED, as a record SIBLING of `input` — never a member of it.
+ *
+ * `input` is the model's allowlist and `FORBIDDEN_INPUT_KEYS` guards it, so this deliberately does not go
+ * inside: the featurizer reads `record["observation"]` and `assertModelBoundary` never sees it, which
+ * keeps `dom`, `html`, `css` and `axe` forbidden exactly as they were. It is not evidence about the page;
+ * it is the capture's record of which questions it put.
+ *
+ * IT LIVES HERE FOR THE REASON THE COMMENT ABOVE GIVES. `modelInput` was moved into this file because two
+ * builders had drifted "the moment the contract gained a field", and training died on a real-page record.
+ * The contract gained a field again on 2026-09-03, and the first version of it was written inline in
+ * `export-screenreader-dataset.mjs` — so `build-realism-tier.mjs` would have emitted every real-page
+ * record with no `observation` at all, and both crossed columns would have read "never asked" across the
+ * whole realism tier. Silently: absent and false are the same row by design, which is the one property
+ * that made this invisible. The fix is not to remember the second site but to have one.
+ *
+ * Absent `observed` yields `{}`, and that is the conservative direction — a capture predating the field
+ * contributes no signal rather than a wrong one.
+ */
+export function observationOf(capture: unknown): Record<string, boolean> {
+  const observed = (capture as { observed?: Record<string, { asked?: unknown }> })?.observed ?? {};
+  return Object.fromEntries(
+    Object.entries(observed).map(([channel, entry]) => [channel, Boolean(entry?.asked)]));
+}
+
 export function modelInput(capture: ScorableCapture): Record<string, unknown> {
   const annotated = annotateCapture(capture as unknown as Record<string, unknown>);
   return {
