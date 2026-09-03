@@ -1636,3 +1636,43 @@ was. That is a real possible outcome and this entry is not written to avoid it.
 
 **Sequencing:** it moves `FEATURE_SCHEMA_VERSION`, so it lands between a corpus recapture and the retrain
 that follows, never after — otherwise the retrain is paid twice.
+
+
+---
+
+## 36. The language census does NOT complete 3.1.2, and it enables a different finding worth having
+
+[§32](./known-gaps.md) said the screen reader cannot decide 3.1.2 alone and that deciding needs the DOM.
+The DOM census now carries `documentLang`, `partLangs` and `partLangCount`. **It still does not decide
+3.1.2**, and stating why is more useful than a rule that quietly never fires.
+
+**What the failure requires.** 3.1.2 fails when a passage is in another language and carries no `lang`.
+Detecting that needs the LANGUAGE OF THE TEXT — the census can see which elements are marked, and nothing
+in this pipeline can see that an unmarked paragraph is French. That is language detection: a dependency or
+a heuristic, and a capability decision rather than a rule.
+
+So the corpus cases remain what they were built to be — ground truth for a future join and paired training
+data — and none of the three layers can yet accuse an unmarked passage.
+
+### What the census DOES enable, and it is a real screen-reader finding
+
+**A passage that IS marked and is NOT announced.** The DOM says this text is French; the speech says no
+language was announced. The markup is correct and the lived experience is not — which is precisely the
+class ADR 0019 says only a real screen reader can reach, and it is decidable today:
+
+```
+partLangCount > 0        the page marks at least one passage
+AND no language spoken   NVDA announced no language change anywhere
+```
+
+Causes it would catch: a `lang` the synthesiser has no voice for, a malformed or unrecognised tag, a
+marking inside a subtree NVDA never reached.
+
+**It is NOT built, and the reason is §17's rule rather than effort.** The corpus cases cannot exercise it:
+the GOOD page is marked and announced, the BAD page is unmarked, and neither is *marked and silent*. A rule
+shipped now would be scored against a corpus with no positive for it — *"a probe built now would produce
+evidence nothing could validate"*, arriving at a rule instead of a probe.
+
+**So it needs its own case first**: a passage carrying a `lang` NVDA cannot voice. That is one more entry
+in the language family and it is on the backlog rather than done here, because the fleet is mid-recapture
+and a case is only worth adding when it can be captured.
