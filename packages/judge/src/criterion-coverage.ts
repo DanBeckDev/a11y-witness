@@ -244,7 +244,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "2.1.2": { status: "partial", needs: ["screen-reader"], channels: ["focusOrder"], note: "Keyboard trap, from `focusOrder`. TWO failure modes: focus STALLING (Tab pressed, the same control announced each time) and focus CONFINED to a cycling ring that offers NO ACTIONABLE CONTROL. `decidedBy: \"rules\"`; the one 2.1.2 in the real-page baseline (scotcourts) is the first. The second took four attempts and the first three were withdrawn the same day: ring vs swept form fields (7 false positives on 86 conformant real pages), ring vs rendered tab stops (9), and an Escape probe that was inert because `anchorToTop` presses Escape before the walk. All three asked how MUCH of the page the ring covers, and SIZE is what a consent banner also differs by. What separates them is what the ring OFFERS — tfl reads link, link, button, button, button ('Accept all cookies'), the corpus trap reads edit, edit, edit. A ROLE test via `parseAnnouncement`, never the words, so it is not the 2.4.4 wordlist shortcut. Deliberately conservative: any actionable role anywhere in the ring silences it, including a Submit button in a genuinely trapped form — 2.1.2 is non-interference, so a wrong accusation says the page is unusable outright. Validated by `rules-real-pages`: 0 new findings on 86 conformant pages." },
   "2.4.4": { status: "assessed", channels: ["links", "transcript"], note: "Vague link text. Rules cover a six-phrase subset (19 of 100 corpus records, a declared overlap); the head owns the rest." },
   "2.4.6": { status: "assessed", channels: ["headings", "transcript"], note: "Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the page, so this head is document-pooled." },
-  "3.3.1": { status: "assessed", realPageEvidence: { available: false, because: "the form probe is OFF for real-page captures — pressing submit on a site we do not own is not a review — so `formChanges` is absent from all 77 real captures" }, channels: ["formChanges", "postSubmitFields"], note: "A validation error that is displayed but never announced. Needs the form probe, which is on by default in the Action and off in the CLI -- and therefore OFF for every real-page capture, because submitting a form on a site we do not own is not a review. Measured: 0 of 77 real captures carry `formChanges`, so on a real page this criterion cannot fire in either direction." },
+  "3.3.1": { status: "assessed", realPageEvidence: { available: false, because: "`formChanges` is absent from all 77 real captures as exported — **NOT structural any more, and the distinction is the point.** ADR 0024 put a DECLARED `formState` in the corpus beside the URL: the page owner's own example, with the values recorded, so submitting is something the corpus says to do rather than something the probe decides. `probeForms` stays off and SECURITY.md's rule is untouched. Measured live 2026-09-03 on W3C's `after/survey.html` — three fields filled, submitted, NVDA announced 'Submission Failed' — and `probeConfiguredForm` records a `kind: 'submit'` entry, which is this rule's first precondition. What is missing is a real-page CAPTURE RUN that exports it, not a capability. 'Structurally unreachable' and 'not yet captured' need opposite work, and this entry said the first for as long as it was the second." }, channels: ["formChanges", "postSubmitFields"], note: "A validation error that is displayed but never announced. Needs the form probe, which is on by default in the Action and off in the CLI -- and therefore OFF for every real-page capture, because submitting a form on a site we do not own is not a review. Measured: 0 of 77 real captures carry `formChanges`, so on a real page this criterion cannot fire in either direction." },
   "3.3.2": {
     status: "partial",
     needs: ["dom"],
@@ -264,7 +264,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
       + "\"Example value\" and 0 of the 34 without it. Declared `unavailable` in rule-ownership.json. "
       + "See ADR 0018.",
   },
-  "4.1.3": { status: "assessed", realPageEvidence: { available: false, because: "same probe dependency as 3.3.1: `postSubmitFields` is absent from all 77 real captures, because the form probe is deliberately off for pages we do not own" }, channels: ["postSubmitFields", "formChanges"], note: "A status message after form activation that the screen reader never speaks. Same probe dependency as 3.3.1 and the same consequence, which was recorded there and not here: it reads `postSubmitFields`, and 0 of 77 real captures carry any, so it cannot fire on a real page." },
+  "4.1.3": { status: "assessed", realPageEvidence: { available: false, because: "`postSubmitFields` is absent from all 77 real captures as exported, and the same declared-formState route now reaches it — see 3.3.1 — **NOT structural any more, and the distinction is the point.** ADR 0024 put a DECLARED `formState` in the corpus beside the URL: the page owner's own example, with the values recorded, so submitting is something the corpus says to do rather than something the probe decides. `probeForms` stays off and SECURITY.md's rule is untouched. Measured live 2026-09-03 on W3C's `after/survey.html` — three fields filled, submitted, NVDA announced 'Submission Failed' — and `probeConfiguredForm` records a `kind: 'submit'` entry, which is this rule's first precondition. What is missing is a real-page CAPTURE RUN that exports it, not a capability. 'Structurally unreachable' and 'not yet captured' need opposite work, and this entry said the first for as long as it was the second." }, channels: ["postSubmitFields", "formChanges"], note: "A status message after form activation that the screen reader never speaks. Same probe dependency as 3.3.1 and the same consequence, which was recorded there and not here: it reads `postSubmitFields`, and 0 of 77 real captures carry any, so it cannot fire on a real page." },
 
   "4.1.2": {
     status: "partial",
@@ -315,15 +315,20 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
     channels: ["formChanges", "postSubmitFields"],
     realPageEvidence: {
       available: false,
-      because: "the rule's FIRST precondition is a SUBMIT activation, and `probeForms` is off for every "
-        + "real-page capture because submitting a form on a site we do not own is not a review "
-        + "(SECURITY.md). So no real capture carries a submit-kind `formChanges` entry and the rule "
-        + "returns on its first line there — measured 0 of 26 real captures reachable locally, and the "
-        + "probe setting in `capture-real-pages.mjs` is what makes it 0 everywhere rather than an "
-        + "accident of which pages were chosen. Note the coverage audit reads this as EXERCISED because "
+      because: "the rule's FIRST precondition is a SUBMIT activation, and no real capture AS EXPORTED "
+        + "carries a submit-kind `formChanges` entry — measured 0 of 26 reachable locally, so the rule "
+        + "returns on its first line there. Note the coverage audit reads this as EXERCISED because "
         + "`postSubmitFields` appears on some real capture, which is true and not sufficient: that channel "
         + "is a supplement the rule consults AFTER a submit it never sees. 3.3.1 and 4.1.3 are exempt for "
-        + "the same probe and the same reason",
+        + "the same reason. "
+        + "THIS USED TO SAY THE PROBE SETTING MADE IT 0 EVERYWHERE RATHER THAN BY ACCIDENT, WHICH READ AS "
+        + "A PERMANENT LIMIT. It is not one. ADR 0024 put a DECLARED `formState` in the corpus beside the "
+        + "URL — the page owner's own example, values recorded — so submitting is something the corpus "
+        + "says to do rather than something the probe decides, and `probeForms` stays off with "
+        + "SECURITY.md's rule untouched. Measured live 2026-09-03 on W3C's `after/survey.html`: three "
+        + "fields filled, submitted, NVDA announced 'Submission Failed'. What is missing is a real-page "
+        + "CAPTURE RUN that exports it, not a capability — and 'structurally unreachable' and 'not yet "
+        + "captured' need opposite work",
     },
     note:
       "Error Suggestion, ASSESSED since 2026-09-02 and decided by a RULE rather than a head. The pair is "
