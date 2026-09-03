@@ -1583,3 +1583,56 @@ the key has been checked against it, and it held.
 **And it says where to look next time.** A string that changes with `browserVersion` is Chromium's; one
 that changes with `screenReaderVersion` is NVDA's. Both are keyed, and the pair of versions tells you
 which vendor to read.
+
+
+---
+
+## 35. §11's design has a name, and it is a FEATURE CROSS
+
+Not built — designed, and recorded so the next person does not re-derive it or reach for the masking that
+was already refuted.
+
+**The problem, now sized.** Ten of the 28 structured features are `float(bool(channel))`, and `any([])` is
+`False`, so `0` means both *the page has none* and *nothing looked*. Measured 2026-09-03 on the
+authoritative corpus: **61.7%** of empty `formChanges`, **56.1%** of empty `postSubmitFields` and **65.3%**
+of the `formControl` sweep are "never asked". So the majority of those zeros are artefacts.
+
+**Two routes are closed.** Masking was REFUTED — [§15](./not-working.md), it cost a real finding. Feeding
+`observed` to the featurizer as its own column was DECIDED AGAINST — [§14](./not-working.md), because a
+feature correlated with capture conditions is ADR 0015's entire subject.
+
+### The design
+
+CLAUDE.md already states the constraint, from the 2.4.4 post-mortem: *"A ZERO CANNOT VETO, so 'A and not
+B' must be computed, never handed over as two features. Handing it A and B separately works only if the
+model can multiply, and this one cannot."* The heads are `torch.nn.Linear(n, 1)`.
+
+**That construction has a name.** *Low-Code AI* calls it a **feature cross** — *"a synthetic feature
+formed by concatenating two or more features … you are considering the value of both variables at the
+same time, rather than separately"* — and the three-state encoding it produces is ordinary one-hot for a
+categorical whose levels are `present`, `absent` and `not asked`:
+
+| | `..._observed_present` | `..._observed_absent` |
+|---|---|---|
+| asked, and the page has it | 1 | 0 |
+| asked, and the page has none | 0 | 1 |
+| **never asked** | **0** | **0** |
+
+**"Never asked" is the all-zeros row, and that is the whole point.** It is representable, and no column
+carries a negative weight for a reason that is an artefact of the encoding — which is what §14 was
+protecting against. It is not `observed` handed to the model as a feature; it is the existing feature
+CROSSED with whether it was measured, so the model never sees "was this asked" as a separable signal.
+
+### What would have to be true to ship it
+
+- `scorer:shortcuts` — closable vetoes must FALL, and no head may gain one on a new column.
+- `rules:real-pages` — zero new findings against the 86 conformant pages.
+- Held-out acceptance must not regress.
+- `corpus:distribution` — the new columns must not be constant across every record. A constant-1 column
+  is invisible to the veto audit, which only flags constancy at zero.
+
+**If it fails, it is recorded as REFUTED here and reverted**, the way `skip-link-target-not-focusable`
+was. That is a real possible outcome and this entry is not written to avoid it.
+
+**Sequencing:** it moves `FEATURE_SCHEMA_VERSION`, so it lands between a corpus recapture and the retrain
+that follows, never after — otherwise the retrain is paid twice.
