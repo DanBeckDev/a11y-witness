@@ -68,7 +68,7 @@ its own capture round. Taken together they are one corpus change and one capture
 | what | the case that has to exist first |
 |---|---|
 | ~~**3.1.2**~~ — **CASE DONE 2026-09-03**, 29 captured, gate PASS at 1,623 discriminating. The RULE is what remains | ~~a page with a passage in another language~~ |
-| **1.3.1 via `reportEmphasis`** | a page conveying emphasis semantically in one variant and with CSS only in the other |
+| ~~**1.3.1 via `reportEmphasis`**~~ | **REFUTED 2026-09-03** — NVDA implements emphasis reporting only for MSHTML, and we capture in Chromium Edge. Built, captured, CONTAMINATED, withdrawn. [known-gaps §33](./known-gaps.md) |
 | **The arrow-key probe** ([§17](./not-working.md)) | a radio group or roving-tabindex widget — measured: **0** in 4,926 synthetic captures |
 | **Typing feedback** ([§17](./not-working.md)) | a page that validates on `input` — measured: `oninput` on **0 of 3,948** generated pages |
 

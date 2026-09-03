@@ -107,7 +107,7 @@ audit was framed to avoid.
 
 | setting | the criterion | what it would carry |
 |---|---|---|
-| `reportEmphasis` | **1.3.1** | the strongest candidate. It distinguishes SEMANTIC emphasis (`<em>`, `<strong>`) from text that merely looks bold — which is exactly 1.3.1's question, and a distinction no other channel here can make |
+| ~~`reportEmphasis`~~ | ~~1.3.1~~ | **REFUTED 2026-09-03 — [known-gaps §33](./known-gaps.md).** It was this table's strongest candidate, and it cannot work here: NVDA implements emphasis reporting only for the **MSHTML** engine (IE, or Edge in IE mode), and this project captures in Chromium Edge. Built, deployed and captured; `check-signals` reported the case CONTAMINATED because NVDA said "emphasised" on neither variant. **The audit could not have known this without testing** — it rated the candidate on what the setting is FOR, not on whether our browser supports it |
 | `includeLayoutTables` | **1.3.1** | NVDA SKIPS layout tables by default, so the table sweep cannot see them at all. Relevant to the existing 1.3.1 table work, which has already cost a protocol bump |
 | `reportSuperscriptsAndSubscripts` | 1.3.1 | superscript carries meaning — footnotes, ordinals, notation |
 | `reportColor` | 1.4.1 | weaker than it looks. 1.4.1 asks whether colour is the ONLY cue, and hearing a colour does not answer that. It is also the visual layer's territory |
