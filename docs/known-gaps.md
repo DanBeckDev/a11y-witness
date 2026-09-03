@@ -1631,8 +1631,13 @@ CROSSED with whether it was measured, so the model never sees "was this asked" a
 - `scorer:shortcuts` — closable vetoes must FALL, and no head may gain one on a new column.
 - `rules:real-pages` — zero new findings against the 86 conformant pages.
 - Held-out acceptance must not regress.
-- `corpus:distribution` — the new columns must not be constant across every record. A constant-1 column
-  is invisible to the veto audit, which only flags constancy at zero.
+- **The CONSTANT-COLUMN report in `scorer:shortcuts`** — neither new column may read one value across
+  the whole corpus. **This gate was named `corpus:distribution` and that was wrong**: it checks whether an
+  ARRAY FIELD is empty on every record, and a computed feature is neither a field nor present in the
+  export, so it is structurally blind to exactly this. Nothing else could see it either — `starvation`
+  asks about a subtype's positives, and the veto audit reads trained weights and, in its own recorded
+  words, cannot see constancy at ONE. Built 2026-09-03 where every feature is already computed over every
+  record; it is what the dead `state_change_observed_*` pair would have tripped.
 
 **If it fails, it is recorded as REFUTED here and reverted**, the way `skip-link-target-not-focusable`
 was. That is a real possible outcome and this entry is not written to avoid it.
