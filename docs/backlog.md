@@ -107,8 +107,9 @@ recapture is not needed; if CHANGED, it is genuine and this is the moment to pay
   (`job=observation-ambiguity`) against the corpus, which should be the recaptured one.
 - **The pathological page** ([not-working §20](./not-working.md)) — a corpus question, answered against
   the recaptured corpus.
-- **4.1.3's real-page grounding** ([known-gaps §21](./known-gaps.md)) — consumes forms v1 by definition;
-  it cannot start before stage 3 finishes.
+- ~~**4.1.3's real-page grounding**~~ — **DEMONSTRATED 2026-09-03**, [known-gaps §29](./known-gaps.md).
+  It consumed forms v1 exactly as this ordering predicted, and became possible the moment stage 3 landed.
+  What remains is corpus work rather than capability: a per-page forms config in `real-page-corpus.mjs`.
 
 **Cannot be scheduled, and should not be given a rank.**
 
@@ -179,10 +180,16 @@ remains is mechanical, in this order:
 The only judgement left is *when*, and the order section above answers it: after stage 4, because a
 changeset describes weights and should describe the final ones. [not-working §8](./not-working.md)
 
-**4.1.3's real-page grounding.** No longer a consent decision —
-[ADR 0024](./adr/0024-a-form-is-configured-with-states-not-values.md) settles the mechanism, so this is
-stage-4 work: build forms v1, point it at a real site with a configured error state, and 4.1.3 has
-grounding. [known-gaps §21](./known-gaps.md)
+**4.1.3's real-page grounding — DONE as a demonstration, and it needs nothing from you.** Driven against
+W3C's own survey demo in BOTH versions with the same config: the conformant page filled three fields,
+submitted, and NVDA announced *"Submission Failed"*, so 3.3.1 and 4.1.3 both read `passed` from real
+evidence on a real site. The inaccessible twin filled ZERO and reported all three `unbound` — because its
+controls have no accessible names, which is the 4.1.2 finding rather than a tool limitation, and is ADR
+0024's central claim happening with its own control group.
+
+What remains is corpus work, not capability: a per-page forms config in `real-page-corpus.mjs` so
+`capture-real-pages` can drive configured pages, after which `build-realism` stops reporting
+`4.1.3: 0 of 37`. Bounded, and no longer a decision. [known-gaps §29](./known-gaps.md)
 
 ---
 

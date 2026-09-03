@@ -452,7 +452,7 @@ reported the file's SIZE, which answers 'is it growing' and not 'what does it sa
 question is the one you have when something did not happen."* I read the size field first, concluded the
 fleet had no logs at all, and was wrong. The right field was already there and already argued for.
 
-## 21. `4.1.3` has NO real-page grounding, and closing it is a CONSENT decision rather than a code one
+## 21. `4.1.3` real-page grounding — UNBLOCKED 2026-09-03, and demonstrated on a real pair
 
 **Not a defect. Measured, understood, and deliberately open** — recorded here rather than left on a
 to-do list, because the thing standing in the way is a decision about other people's websites, not work.
@@ -1340,3 +1340,47 @@ error message to carry a remedy. 3.2.2 needs `probeTyping`, which that raw reque
 
 **What is genuinely still open** is real-page GROUNDING for 4.1.3 — a conformant and a failing page, both
 configured — which is [known-gaps §21](./known-gaps.md) and now unblocked rather than blocked.
+
+
+---
+
+## 29. `4.1.3` grounding is reachable, and the pair that proves it also proves ADR 0024's central claim
+
+[§21](#) said closing 4.1.3's real-page gap was *"a CONSENT decision rather than a code one"*: the heads
+read `formChanges` / `postSubmitFields`, and `probeForms` is off for every real-page capture because
+submitting a form on a site we do not own is not a review.
+
+**[ADR 0024](./adr/0024-a-form-is-configured-with-states-not-values.md) made that decision.** Consent comes
+from the site's owner supplying the values. Measured 2026-09-03 against W3C's own accessibility demos —
+the same survey page in its fixed and broken versions, driven with the SAME config:
+
+| | fields filled | unbound | submitted | what NVDA said after |
+|---|---|---|---|---|
+| `after/survey.html` (conformant) | **3** | 0 | yes | `"Citylights Survey - Submission Failed …"` |
+| `before/survey.html` (inaccessible) | **0** | **all 3** | no | — |
+
+`3.3.1` and `4.1.3` both read **`passed`** on the conformant page, from real evidence on a real site. That
+is the gap §21 describes, closed by configuration rather than by relaxing the consent line.
+
+### The inaccessible half is the more interesting result
+
+Not one field could be filled — and that is not a limitation of the tool, it is the finding. What NVDA
+announced on each:
+
+```
+conformant     "Explore Site by Topic:, combo box"      "Central Park, radio button, not checked"
+inaccessible   "combo box, collapsed, QUICKMENU ---- greater"   "radio button, not checked"   "edit"
+```
+
+The broken page's controls have **no accessible names**. The config cannot address them, and neither can a
+screen reader user — which is exactly what ADR 0024 claims when it chooses accessible names over selectors:
+
+> A field that cannot be addressed by its accessible name is a FINDING, not a configuration error.
+
+That was written as an argument. This is it happening, on somebody else's real pages, with the conformant
+twin as the control. **`unbound` is a 4.1.2 report**, and the two halves of the pair differ by exactly the
+property under test rather than by anything about the instrument.
+
+**What remains to CLOSE §21** is the corpus work rather than the capability: `real-page-corpus.mjs` needs a
+per-page forms config so `capture-real-pages` can drive configured pages, and `build-realism` then stops
+reporting `4.1.3: 0 of 37`. That is bounded, and it is no longer blocked on a decision.
