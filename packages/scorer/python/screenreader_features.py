@@ -690,6 +690,30 @@ def vague_link_lacks_context(record: dict[str, Any]) -> bool:
     return False
 
 
+def cross_with_observation(
+    values: dict[str, float], record: dict[str, Any], feature: str, channel: str, present: bool,
+) -> None:
+    """Write the two crossed columns for one channel, and never let their rule vary between channels.
+
+    | | `<feature>_observed_present` | `<feature>_observed_absent` |
+    |---|---|---|
+    | asked, page has it | 1 | 0 |
+    | asked, page has none | 0 | 1 |
+    | **never asked** | **0** | **0** |
+
+    The conjunction is the whole of it. Handing a head `asked` and `present` as separate columns would be
+    the 2.4.4 defect again -- *"A ZERO CANNOT VETO, so 'A and not B' must be computed, never handed over as
+    two features"* -- and a linear head only adds, so the all-zeros row is what makes "never asked" cost
+    nothing rather than count against the finding.
+
+    Written once because it was written twice first, and each copy needed its own mutation check to prove
+    the conjunction was load-bearing. A third channel would have been a third copy.
+    """
+    asked = observation_of(record, channel)
+    values[f"{feature}_observed_present"] = float(asked and present)
+    values[f"{feature}_observed_absent"] = float(asked and not present)
+
+
 def observation_of(record: dict[str, Any], channel: str) -> bool:
     """Did this capture ASK about a channel?
 
@@ -847,9 +871,7 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     ))
 
     values["form_change_present"] = float(bool(form_changes))
-    asked_form = observation_of(record, "formChanges")
-    values["form_change_observed_present"] = float(asked_form and bool(form_changes))
-    values["form_change_observed_absent"] = float(asked_form and not form_changes)
+    cross_with_observation(values, record, "form_change", "formChanges", bool(form_changes))
     values["form_change_nonempty"] = float(any(change.get("after", "").strip() for change in form_changes))
     # SILENCE claims consult `baselineQuiet`; presence claims do not. See `soundly_measured`.
     values["form_change_empty"] = float(
@@ -864,9 +886,7 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # says so in its own words, "probeForms ran and activated nothing, so there was no submit to re-read
     # after" -- and 56.1% of the empty ones are that. So a `0` here is more often a fact about the probe
     # than about the page, and this is the channel 3.3.1 and 4.1.3 are decided from.
-    asked_post = observation_of(record, "postSubmitFields")
-    values["post_submit_observed_present"] = float(asked_post and bool(post_submit_fields))
-    values["post_submit_observed_absent"] = float(asked_post and not post_submit_fields)
+    cross_with_observation(values, record, "post_submit", "postSubmitFields", bool(post_submit_fields))
     values["validation_error_announced"] = float(
         any(ERROR_WORD.search(value) for value in post_submit_fields)
         or any(ERROR_WORD.search(change.get("after", "")) for change in form_changes)
