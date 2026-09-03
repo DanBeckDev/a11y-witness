@@ -1715,9 +1715,51 @@ the GOOD page is marked and announced, the BAD page is unmarked, and neither is 
 shipped now would be scored against a corpus with no positive for it — *"a probe built now would produce
 evidence nothing could validate"*, arriving at a rule instead of a probe.
 
-**So it needs its own case first**: a passage carrying a `lang` NVDA cannot voice. That is one more entry
-in the language family and it is on the backlog rather than done here, because the fleet is mid-recapture
-and a case is only worth adding when it can be captured.
+### THAT CASE WOULD HAVE BEEN A DUD, and finding out cost one search rather than a capture
+
+The design above was *"a passage carrying a `lang` NVDA cannot voice"*, on the assumption that an
+unvoiceable marking is a SILENT one. **It is not.** From NVDA's own `configSpec.py`, on the release we
+run and on master:
+
+```
+[speech]
+autoLanguageSwitching     = boolean(default=true)
+autoDialectSwitching      = boolean(default=false)
+reportLanguage            = boolean(default=false)     <- we turn this ON; see CAPTURE_SETTINGS
+reportNotSupportedLanguage = option("speech", "beep", "off", default="speech")
+```
+
+`reportNotSupportedLanguage` defaults to **`"speech"`** — so when NVDA switches to a language the
+synthesiser cannot voice, it SAYS SO. The bad page would have announced, the pair would not have
+discriminated, and `check-signals` would have reported it CONTAMINATED after a capture run. That is the
+`reportEmphasis` shape exactly: a case built on an assumed screen-reader behaviour, refuted by reading
+the vendor rather than by paying for evidence.
+
+**Three consequences, and two of them are better news than the case would have been.**
+
+- **The finding §36 wants is reachable from SPEECH ALONE, and needs no census.** If NVDA announces the
+  unsupported switch, then "the page marks a passage and the user gets nothing useful from it" is a
+  phrase in the transcript, not a join between the DOM and silence. That is a cheaper rule and a sounder
+  one — it reads what the screen reader SAID rather than inferring from what it did not.
+- **The census-based rule I declined to write would have been WRONG on a very common real pattern.**
+  `autoDialectSwitching` is `false` by default, so `lang="en-GB"` inside an `en` document produces NO
+  announcement at all — and `partLangCount > 0` with nothing announced is precisely the condition that
+  rule would have fired on. A conformant page, accused. Three times in this project a rule was nearly
+  shipped that would pass the corpus gate and fail on real pages; this is the fourth, caught before the
+  first line.
+- **`reportNotSupportedLanguage` IS A CACHE-KEY INPUT and is not pinned.** It changes what NVDA says, so
+  by the rule in CLAUDE.md it belongs in `CAPTURE_SETTINGS` beside `reportLanguage`. It is at its default
+  on every box today, so the corpus is consistent — but nothing would SEE it drift, because
+  `fleet-consistency` only compares the digest of settings we pin. **Deliberately not added now**: the
+  digest is a cache key and the fleet is 31% through a recapture, so adding it would throw ~9 hours away.
+  It belongs in the next deliberate key change. So does `autoLanguageSwitching`, which is the precondition
+  for `reportLanguage` doing anything at all — with it off, the setting we DO pin is inert, which is the
+  same shape as `reportLanguage` shipping into the wrong ini section.
+
+**What the case should be instead** is not yet decided, and deciding needs one capture: does NVDA's
+unsupported-language announcement carry the language, a generic phrase, or a beep? Until that is measured
+the pair's bad variant has no known signature, and a case whose signal is guessed is the one thing §17
+refuses.
 
 
 ---
