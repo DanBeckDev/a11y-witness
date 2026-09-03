@@ -30,6 +30,37 @@ activated unconditionally, because expanding something is side-effect-free.
 
 **If you enable `probeForms` against a page you do not own, you are operating someone else's application.**
 
+#### A forms config TYPES VALUES, which `probeForms` never does — 2026-09-03
+
+`--forms <file>` (CLI) and `forms:` (Action) take a config that names fields by their **accessible name**,
+gives each a **value**, and names the control to press (ADR 0024). So it does two things `probeForms` does
+not:
+
+- **It enters text into fields.** `probeForms` only activates controls; a config types the values you
+  wrote into the fields you named. Whatever you put in a config is what gets typed.
+- **It presses a control you NAMED, not one a heuristic chose.** The `chooseProbe` word-match guard above
+  does not apply, because it exists to decide what is safe to press when nobody said — and here somebody
+  did.
+
+**That is a deliberate widening of what this tool will do, and the consent moves with it.** `probeForms`'s
+split is about who owns the page; a config is an explicit instruction naming exact fields, exact values
+and an exact control, so it is honoured wherever it is supplied — CLI included, and with `probeForms`
+still off. Where a config applies it REPLACES the opportunistic probe for that capture rather than running
+beside it.
+
+Three things follow, and the third is the one to read before pointing this at anything real:
+
+- **Nothing is submitted that the config does not name.** A field it does not name is not filled; a
+  control it does not name is not pressed.
+- **A field the config names that cannot be addressed by its accessible name is reported as a FINDING
+  about the page (4.1.2), never as a configuration error.** A control a script cannot address by name is
+  one a screen reader user cannot address either.
+- **DO NOT PUT REAL CREDENTIALS OR REAL PERSONAL DATA IN A FORMS CONFIG.** It is a file in your
+  repository, it is read verbatim, and the values are typed into a live page and can appear in the
+  capture transcript — because NVDA announces what a field contains, and that transcript is the evidence
+  this tool reports on and stores. Use test values against a staging environment. The corpus's own
+  configured page uses `ada@example.test`.
+
 #### What else may be operated, and the line that decides it — 2026-09-01
 
 4.1.3 asks whether a status message is announced. Buttons were the only control that could fire one here,

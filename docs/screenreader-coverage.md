@@ -25,10 +25,25 @@ is real.
 | Tab through the page | `Tab` + report focus (on by default) | `interaction.focusOrder` | 2.1.2, **2.1.1**, **2.4.1**, **2.4.3** |
 | (measure only) whether focus was CONFINED to a ring | none — computed from the walk | `focusConfinement` diagnostic | — |
 | Follow a link and re-read the title | activate a navigation control, ask NVDA for the title before and after (**opt-in**) | `interaction.routeChange` | **2.4.2**, 2.4.1 |
+| **Fill a form the way its owner says it works, then submit** | walk to each field by ACCESSIBLE NAME, type the declared value, press the named control (**needs a config**) | `interaction.formChanges` (`kind: "submit"`), `postSubmitFields`, `interaction.formFill` | **3.3.1**, **3.3.3**, **4.1.3** |
 
-The first nine are on by default and cost ~15–17 s per capture. The last three are opt-in per
-capture — `"probeFocus": true` (adds ~8 s), `"probeNavigation": true`, and `"probeTables": true` (see the
-caveat below).
+The first nine are on by default and cost ~15–17 s per capture. The last four are opt-in per
+capture — `"probeFocus": true` (adds ~8 s), `"probeNavigation": true`, `"probeTables": true` (see the
+caveat below), and `"formState"`.
+
+**The last row is the only one driven by a DECLARATION rather than by a flag**, and that is what makes it
+different in kind. Every other probe decides for itself what to operate, from a heuristic this project
+wrote; a `formState` names the fields, the values and the control, so the tool operates what the page's
+owner said rather than what it guessed. ADR 0024, and `SECURITY.md` records what widens as a result — it
+TYPES VALUES, which nothing else here does.
+
+It is what makes 3.3.1, 3.3.3 and 4.1.3 reachable on a form that will not submit on a guess. `probeForms`
+submits with no valid input, which is enough for a form that validates everything and useless for one
+that wants three plausible fields first — and on such a page those criteria are not clean, they are
+**structurally unreachable**, because their evidence only exists after a control is operated. Note also
+what a config CANNOT do: a field it names that has no accessible name is reported as a 4.1.2 FINDING
+rather than a configuration error, because a control a script cannot address by name is one a screen
+reader user cannot address either.
 
 ### Added 2026-08-22: four criteria a static analyser structurally cannot reach
 
