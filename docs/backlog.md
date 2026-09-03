@@ -67,7 +67,7 @@ its own capture round. Taken together they are one corpus change and one capture
 
 | what | the case that has to exist first |
 |---|---|
-| ~~**3.1.2**~~ — **CASE DONE 2026-09-03**, 29 captured, gate PASS at 1,623 discriminating. The RULE is what remains | ~~a page with a passage in another language~~ |
+| ~~**3.1.2**~~ — **CLOSED 2026-09-03. The case is done (29 captured, gate PASS) and THE RULE CANNOT BE WRITTEN**, so this line asserted work nobody can do. An announcement CONFIRMS a passage was marked; silence is equally what a correct monolingual page produces — so accusing an UNMARKED passage needs the language of the TEXT, which is language detection and the DOM's territory. `criterion-coverage.ts` already says so (`status: "reachable"`, not `assessed`) and [known-gaps §36](./known-gaps.md) sets it out. The residual — a MARKED passage that is not announced — is a row of its own below, and needs one capture before it can be built. | ~~a page with a passage in another language~~ |
 | ~~**1.3.1 via `reportEmphasis`**~~ | **REFUTED 2026-09-03** — NVDA implements emphasis reporting only for MSHTML, and we capture in Chromium Edge. Built, captured, CONTAMINATED, withdrawn. [known-gaps §33](./known-gaps.md) |
 | ~~**The arrow-key probe**~~ | **ALREADY EXISTS** — `RADIO_GROUP_PAGE`, 15 cases under `control-unreachable-by-keyboard`, criterion 2.1.1, `probeArrows` on. §17's *"0 in 4,926 captures"* predates it. |
 | ~~**Typing feedback**~~ | **BLOCKED BY A MEASURED LIMIT, not missing work.** The case was built and WITHDRAWN: §18 measures typing + a polite region at **0 of N** — six character echoes leave NVDA no idle moment, so the region is never announced. A new case would be BLIND, which `check-signals` refuses. |
@@ -81,9 +81,15 @@ got wrong** — it is on, nothing reads it, and it is now a backlog row of its o
   56.1% / 65.3%. **BUILT 2026-09-03, verdict pending.** The encoding is committed and the schema migration
   is declared open; what is left is the retrain that lets its four gates say whether it helped, and that
   needs the corpus B produces. Two pairs are crossed, not all ten — a refutation should cost two reverts.
-- **4.1.3's real-page grounding** — a per-page forms config in `real-page-corpus.mjs`, so
-  `capture-real-pages` drives configured pages and `build-realism` stops reporting `4.1.3: 0 of 37`. The
-  capability is proven; this is the corpus half.
+- **4.1.3's real-page grounding** — **the corpus half is DONE** (2026-09-03): W3C's `after/survey.html`
+  carries an `error` `formState`, `capture-real-pages` forwards it, and `real-page-form-consent.test.ts`
+  guards whose page may carry one. What remains is a **real-page capture run**, which needs a free worker.
+  **Know the ceiling before running it: ONE page, error path only.** The consent guard admits only origins
+  whose publisher put the form there to be submitted (`w3.org/WAI/demos/`), only the half its publisher
+  calls conformant, and **never a `success` state** — that one completes a form on somebody else's site on
+  every corpus run, for ever. So `4.1.3: 0 of 37` becomes 1 of 37, from the error announcement, and that
+  is the honest ceiling rather than a shortfall. Widening it is a SECURITY.md decision argued on its own,
+  never a way to make a criterion easier to reach.
 
 ### D — Independent of all of the above, and can be done whenever
 
