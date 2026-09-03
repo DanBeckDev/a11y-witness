@@ -1676,3 +1676,57 @@ evidence nothing could validate"*, arriving at a rule instead of a probe.
 **So it needs its own case first**: a passage carrying a `lang` NVDA cannot voice. That is one more entry
 in the language family and it is on the backlog rather than done here, because the fleet is mid-recapture
 and a case is only worth adding when it can be captured.
+
+
+---
+
+## 37. THE 3.5-HOUR STALL, DIAGNOSED — desktop preparation sat outside every guard
+
+Open since 2026-09-02 and marked *"cannot be scheduled — it needs a recurrence."* It did not: the cause is
+readable in `runCapture`, and reading it was cheaper than waiting for it to happen again.
+
+**The symptom.** a11y-worker-6 held one capture for three and a half hours. `/health` answered throughout,
+every readiness check green, `busy: true`, `current` still naming the case. From the run's side that is a
+slow page, so it waited — and a corpus recapture made no progress at all.
+
+**The cause, and it is one line's position.**
+
+```
+await prepareDesktop(marks);     <-- outside
+try {
+  const result = await captureWithLocalRecovery(...);   <-- the hard timeout is INSIDE this
+} finally {
+  busy = false;                  <-- and the release is inside the try
+}
+```
+
+`busy` is released in the `finally`. The 520 s hard timeout wraps `captureWithNvda`, one level further
+in. **Desktop preparation was outside both**, and it spawns PowerShell three times — dialog enumeration,
+dismissal, and (since 2026-09-03) the foreground probe. This repo already records PowerShell taking 8 s
+and then 25 s on a loaded guest. One that never returns leaves `busy` set for ever with no capture running
+and nothing able to time it out.
+
+It has been that way for as long as the function has existed — verified at `9c5973e`, where
+`dismissBlockingDialogs` is line 20 and the `try` is line 28.
+
+**Why it presents as a healthy worker.** Nothing is wrong. NVDA is fine, Edge is fine, the checks are
+green, the HTTP server answers. The only visible symptom is a number that does not move, which is why
+`fleet:status` showing the case and its elapsed time is what found it and why the readiness work of
+2026-09-02 could not have.
+
+### The fix, and why its bound is its own
+
+`prepareDesktop` moves inside the `try` and gets a **60 s** bound of its own rather than the capture's
+520 s. That number is sized for reading a page; preparation is three PowerShell calls that are
+pathological past a few seconds, and a remedy taking eight minutes to give up still loses the run.
+
+**A timeout there is RECORDED AND CONTINUED, never rethrown.** A desktop we could not tidy is not a reason
+to refuse the capture: the dialogs it clears are usually absent, and the capture's own failure modes are
+better diagnosed than a refusal here. `desktopPrepareTimedOut` separates *preparation was skipped* from
+*preparation found nothing* — this repo's oldest distinction, and the reason the mark exists rather than a
+silent `catch`.
+
+**What this does not claim.** That a hung PowerShell call was the specific cause on the day. Nobody
+captured the process state, and the worker was recovered before anyone could. What is established is that
+the window existed, that it is unbounded, and that everything else in that function is guarded — so the
+next occurrence is now bounded at 60 s and leaves a mark saying so.

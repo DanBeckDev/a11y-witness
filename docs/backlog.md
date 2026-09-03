@@ -95,8 +95,10 @@ got wrong** — it is on, nothing reads it, and it is now a backlog row of its o
 
 ### Cannot be scheduled, and should not be given a rank
 
-- **The 3.5-hour stall.** It needs a recurrence to diagnose, and the instrumentation is now in place.
-  Listing it as "next" would pretend it is actionable; the honest state is *armed and waiting*.
+- ~~**The 3.5-hour stall.**~~ **FIXED 2026-09-03** — [known-gaps §37](./known-gaps.md). This entry said
+  it *"needs a recurrence to diagnose"* and that listing it as next *"would pretend it is actionable"*.
+  That was wrong: the cause is one line's position in `runCapture`, readable without any recurrence at
+  all. **"Cannot be scheduled" is a claim like any other and this one went unchecked for a day.**
 
 ### Last, for the reason known-gaps already gives
 
@@ -109,7 +111,7 @@ got wrong** — it is on, nothing reads it, and it is now a backlog row of its o
 
 | | what would tell you it is fixed | detail |
 |---|---|---|
-| **A capture stalled for 3.5 hours and neither timeout fired** — the worker's 520 s hard bound and the host's 600 s `waitForWorker` both exist and neither ended it. The wedge itself is understood (a notification toast held the foreground, so Edge could never take focus); why two independent bounds failed is not. | A capture that exceeds its bound is abandoned and the run says so — reproduced deliberately, not waited for. | no record entry; found 2026-09-02 on `a11y-worker-6` |
+| ~~**A capture stalled for 3.5 hours and neither timeout fired**~~ — **DIAGNOSED AND FIXED 2026-09-03**, without waiting for a recurrence. `prepareDesktop` was awaited OUTSIDE the `try`, so it sat outside both the `finally` that releases `busy` and the 520 s hard timeout, which wraps the capture one level further in. It spawns PowerShell three times, and this repo already records PowerShell taking 25 s on a loaded guest. Bounded at 60 s of its own, moved inside the `try`, and a timeout is recorded and continued rather than rethrown. **The backlog said this "cannot be scheduled — it needs a recurrence"; it needed reading the function.** | [known-gaps §37](./known-gaps.md) |
 | **Ten of the 28 model features read a `0` that means "nobody asked"** — sized 2026-09-03 at **61.7% / 56.1% / 65.3%** artefacts, so the problem is real. Both obvious routes are closed: masking was REFUTED ([§15](./not-working.md)) and giving the model `observed` was DECIDED AGAINST ([§14](./not-working.md)). | **The design now exists and has a name: a FEATURE CROSS** — the existing feature crossed with whether it was measured, giving two columns where "never asked" is the all-zeros row, so no column carries a free negative weight. Four gates it must clear are listed. **Sequencing: it moves `FEATURE_SCHEMA_VERSION`, so it lands between the recapture and the retrain, never after.** | [known-gaps §35](./known-gaps.md) |
 | **3.1.2 cannot be decided by any layer here, and the census does not change that** — the DOM census now carries `documentLang` / `partLangs` / `partLangCount` (shipped, not deployed — the fleet is mid-recapture). It still cannot decide the failure: accusing an UNMARKED passage needs the language of the TEXT, which is language detection — a dependency or a heuristic, and a capability decision rather than a rule. | **A different finding IS decidable and is worth more**: `partLangCount > 0` AND no language announced — the page marks a passage and a screen reader user never hears it. Markup correct, lived experience not, which is exactly ADR 0019's class. It needs its own corpus case first (a `lang` NVDA cannot voice), because neither existing variant is *marked and silent*. | [known-gaps §36](./known-gaps.md) |
 | ~~**The live-region intermittency is unexplained**~~ — **IT IS NOT, and never was after 2026-09-01.** `not-working` §18's current section measures every cell: polite heard 6 of 6 from a button, 2 of 6 from a checkbox, 5 of 6 assertive, 0 of 6 deferred. The mechanism is NVDA's politeness semantics working as specified, and it is provably not our timing. The corpus cases stay withdrawn deliberately — 2-of-6 evidence teaches the model noise, and an `alert` variant is explicitly NOT the fix. | **DONE 2026-09-03** — the one outstanding action was recording the product finding, now [known-gaps §31](./known-gaps.md). | [not-working §18](./not-working.md) |
