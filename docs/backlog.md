@@ -176,6 +176,36 @@ What remains is corpus work, not capability: a per-page forms config in `real-pa
 
 ---
 
+## The next action, and it is sequencing rather than work
+
+**The in-flight `retrain` job will produce a candidate whose crossed columns are CONSTANT ZERO, and that
+is not a refutation.** `lab:retrain` chains generate → capture → check-signals → export → build-realism →
+train, and `run-job.yml` pins the whole chain to the commit it was DISPATCHED at. The exporter learned to
+emit `observation` after that dispatch, so the export stage will run the old code, every record will lack
+the field, and both `formChanges` and `postSubmitFields` crosses will read "never asked" on the entire
+corpus. `corpus:distribution` would then refuse them — correctly, and for a reason that says nothing about
+whether the cross helps.
+
+known-gaps §35 states the rule this walked into: *"it lands between a corpus recapture and the retrain
+that follows, never after — otherwise the retrain is paid twice."* It landed DURING. The cost is one
+export and one train, not a recapture, because nothing in those commits touches a page or a worker file —
+so every capture stays cache-valid.
+
+So, in this order, once `lab:status -e job=retrain` shows `SubState` has left `running`:
+
+1. **`npm run fleet:deploy`** — all five boxes read STALE against this checkout. Two worker changes are
+   committed and undeployed: `browser-session.mjs`'s language census (`documentLang`, `partLangs`) and
+   `server.mjs`'s 60 s bound on `prepareDesktop`, which is the 3.5-hour stall. Neither moves
+   `CAPTURE_PROTOCOL_VERSION` — the census is additive and nothing reads it yet — so no capture is
+   invalidated. `assertFleetRunsThisCheckout` REFUSES the next capture-bearing job until this runs.
+2. **`npm run lab:job -- -e job=retrain -e ref=main`** — re-dispatch. `generate` and `capture` are cache
+   hits; only export, build-realism and train do real work.
+3. **Then, and only then, the four gates decide v19.** `scorer:shortcuts` (closable vetoes must FALL, no
+   head may gain one on a new column), `rules:real-pages` (zero new findings on the 86 conformant pages),
+   held-out acceptance (no regression), `corpus:distribution` (the new columns must not be constant). A
+   failure means REVERT and record it as REFUTED — `schema-migration.json` names all four so the decision
+   cannot be quietly softened into an adjustment.
+
 ## How an item leaves this page
 
 Delete the row, and put the *lesson* in the record — `known-gaps.md` for something the project did not
