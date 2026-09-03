@@ -818,9 +818,16 @@ Consequences, all of which are now enforced:
   > this rule at all is unchanged: whatever it does, it acts on WHAT IS HEARD rather than only on how long
   > a capture takes, so it is keyed evidence rather than a tuning knob.
   >
-  > **And note how this went wrong**, because the shape recurs: four sections share a number, the earliest
-  > reads as current, and its reasoning is sound enough to quote. Read to the LAST section with a given
-  > number before citing it.
+  > **And note how this went wrong**, because the shape recurs and the first attempt to write it down was
+  > ALSO wrong. Four sections share the number 18, any one reads as current, and each one's reasoning is
+  > sound enough to quote. This paragraph originally said *"read to the LAST section with a given number"*
+  > — **backwards.** Settled by asking git rather than by reading the layout: the four were committed at
+  > 04:41, 18:19, 19:29 and 19:46 on 2026-09-01, and the file carries them NEWEST FIRST. The last one in
+  > the file is the oldest claim, and it is the refuted one.
+  >
+  > **So: `git log -S "<the headline>" -- <file>` decides which of several same-numbered sections is
+  > current.** A position in a file is a convention nobody wrote down; a commit time is a fact. This cost
+  > two wrong citations in two days, and the second was written into this file as guidance.
 
 Upgrading guidepup is an evidence change: run `npm run evidence:check` and expect a recapture.
 
