@@ -2330,6 +2330,18 @@ Verification is layered; pick the layers your change touches:
   firing, because the mutation was in source and the test was reading `dist`. That reads as "my test is
   weak" and is really "my test is old" — the same stale-`dist` shape as `rules:gate` scoring a rule the
   compiled bundle did not contain, arriving through the test runner instead of through a gate.
+- **The same defect exists in PYTHON, and it decided a mutation check wrongly on 2026-09-03.**
+  `importlib.util.spec_from_file_location` honours `__pycache__`, so pytest and a bare `python -c` both
+  executed a STALE COMPILE of `audit-scorer-shortcuts.py`. The visible symptoms were a comprehension
+  raising `StopIteration` on empty input while the identical shape in isolation returned `[]`, and a
+  mutation that "survived" — on the strength of which a working guard was deleted as dead code. That is
+  the stale-`dist` lesson exactly: *"my test is weak" and "my test is old" read the same.* `test:python`
+  now runs `PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider`, because mutation checking is the
+  technique this project relies on most and a stale compile can decide one either way.
+  > **And a mutation result is a fact about the code AT THAT INSTANT, not a licence to delete.** The
+  > guard removed above was genuinely dead against the value expression standing at the time, and stopped
+  > being dead the moment that expression changed. "Nothing fails when I break it" answers a narrower
+  > question than "this is unnecessary".
 - `npm test` — unit tests (`src/**/*.test.ts`) covering the deterministic rules, the judge layers,
   eval fitness, the capture cache, the run's accept/reject/retry decisions, and the WCAG criteria
   list. Fast and runs anywhere, so there is no reason to skip it.
