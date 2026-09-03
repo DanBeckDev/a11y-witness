@@ -1642,9 +1642,24 @@ that follows, never after — otherwise the retrain is paid twice.
 
 ### What building it settled, and what it did not
 
-**Two pairs, not ten.** `state_change_*` and `form_change_*` are the ones whose starvation is measured, so
-they are the ones crossed. The other six ambiguous features follow only if these gates hold — shipping all
-ten on an untested encoding would make a refutation cost ten reverts instead of two.
+**Two pairs, not ten, and NOT the two first chosen.** The other six ambiguous features follow only if
+these gates hold — shipping all ten on an untested encoding would make a refutation cost ten reverts
+instead of two.
+
+**The first attempt crossed `stateChanges`, and no capture carries `observed["stateChanges"]`.** Both
+columns would have read 0 on every record: a dead column, which is worse than a missing one because it
+looks like coverage, and only `corpus:distribution` would have caught it — after a full retrain. The
+channel is absent from `observed` by DECISION rather than oversight: `probeKindFor` returns `"disclosure"`
+BEFORE the `probeForms` gate, so the disclosure probe runs on every capture that meets a control announced
+`collapsed`; an empty `stateChanges` therefore means one thing, and a probe that ran and threw pushes an
+entry carrying `error` rather than leaving the channel empty.
+
+**So: not every empty channel shares one ambiguity.** That assumption is what produced the dead pair, and
+reading `observed`'s own membership would have refuted it before a line was written — the capture declines
+to record a question it never had to ask. Crossed instead are `formChanges` (61.7%) and `postSubmitFields`
+(56.1%), the two the measurement actually named; the second is the stronger case, since it reads
+`asked: true` only when `probeForms` ran AND something was activated, and it is the channel 3.3.1 and
+4.1.3 are decided from.
 
 **IT DOES NOT CLOSE THE FIVE `UNREACHABLE_WITHOUT_PERTURBING` ENTRIES, and expecting it to was the error
 worth recording.** The cross fixes a CONFLATION. A subtype that never runs the form probe has no
