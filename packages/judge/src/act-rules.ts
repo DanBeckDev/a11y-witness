@@ -136,6 +136,16 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "oracle, and the rule makes no claim.",
     expectation: "No image in the tree is both exposed to assistive technology and nameless.",
     assumptions: [
+      "FIVE OF THE CRITERION'S SIX EXCEPTIONS ARE NOT CHECKED HERE, and the one that can bite is "
+      + "CONTROLS, INPUT: 'If non-text content is a control or accepts user input, then it has a NAME that "
+      + "describes its purpose.' An `<img>` inside a named button satisfies 1.1.1 through the BUTTON's "
+      + "name — `name` is defined as 'text by which software can identify a component within web content "
+      + "to the user', which the image itself need not carry. This rule counts tree images without a name "
+      + "and would accuse one. It does not today: `rules:real-pages` is clean across 86 conformant pages. "
+      + "Stated because an unstated assumption is where every wrong finding in this project has come from, "
+      + "and because DECORATION is handled by construction while this one is handled by luck. (Time-Based "
+      + "Media, Test, Sensory and CAPTCHA relax the requirement to 'descriptive identification' rather "
+      + "than removing it, so a nameless one still fails.)",
       "An image node the browser exposes with no name is content a user meets. This rule has already been "
         + "WRONG once on exactly that assumption: Chromium exposes a CSS `list-style-image` bullet as an "
         + "unnamed image, and two bullets were reported as missing text alternatives on a page W3C "
