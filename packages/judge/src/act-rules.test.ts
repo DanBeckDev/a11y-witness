@@ -85,22 +85,31 @@ test("only the announcement-reading rules claim conformance", () => {
   // Pinned as a list, so promoting an inference rule to an assertion is a visible edit here as well as in
   // the code. These read the failure DIRECTLY; everything else infers it.
   //
-  // `error-announced-without-remedy` joined them on 2026-09-02 and the test title lost its "two", which is
-  // the edit this guard exists to force. It qualifies on the same test as the others: whether the
-  // announced error text carries an instruction is READ from the announcement, not inferred from
-  // something adjacent to it. Both variants of its pair announce the error, so it is not an argument
-  // about silence — the good page says "Enter the visit date as DD slash MM slash YYYY" and the bad one
-  // says "Invalid entry", and the rule reads exactly that difference.
+  // TWO LEFT THE LIST ON 2026-09-04, and the guard forced the edit exactly as intended. The criterion
+  // audit read both against their success criteria and found each reading a true thing and ASSERTING a
+  // different one:
   //
-  // It is rules-owned for a measured reason rather than a stylistic one: a trained head for the subtype
-  // had recall 0.0 on its own training data under both poolings (known-gaps.md §22).
+  //   `error-announced-without-remedy` (3.3.3) READS "the announced error carries no instruction".
+  //   3.3.3 forbids withholding a suggestion that is KNOWN, and only where doing so would not
+  //   "jeopardize the security or purpose of the content". So "Incorrect password" — required
+  //   behaviour — was asserted as a failure, and so was "That username is taken", where no correction
+  //   exists to be owed. Its entry had joined this list on 2026-09-02 on the argument that the
+  //   instruction "is READ from the announcement": true of the instruction, false of the FAILURE.
+  //
+  //   `context-change-without-action` (3.2.1, 3.2.2) READS "two titles differ". A CHANGE OF CONTEXT is
+  //   inferred from that, and the criterion says the inference does not hold: "A change of content is
+  //   not always a change of context ... unless they also change one of the above." A page appending a
+  //   result count conforms and was asserted against.
+  //
+  // Neither rule changed what it FIRES on and neither stopped being rules-owned; both now report
+  // `cantTell` instead of a conformance failure. The test that decides membership is CLAUDE.md's and is
+  // unchanged: seven of the eleven rules-owned subtypes "map as `secondary` and report `cantTell`,
+  // deliberately, BECAUSE THEY INFER THE FAILURE WHERE THE FOUR READ IT DIRECTLY."
   const asserting = ACT_RULES
     .filter((r) => r.accessibilityRequirements.some((a) => a.mapping === "conformance"))
     .map((r) => r.id)
     .sort();
   assert.deepEqual(asserting, [
-    "a11y-witness:context-change-without-action",
-    "a11y-witness:error-announced-without-remedy",
     "a11y-witness:unlabelled-image",
     "a11y-witness:unnamed-control",
   ]);
