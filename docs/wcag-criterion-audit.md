@@ -244,6 +244,57 @@ mean it can assert against a conforming page.
 
 ---
 
+## 2.1.2 No Keyboard Trap — CLEAN
+
+> "If keyboard focus can be moved to a component of the page using a keyboard interface, then focus can be
+> moved away from that component using only a keyboard interface" — and if a non-standard method is
+> needed, "the user is advised of the method for moving focus away."
+> — [Understanding 2.1.2](https://www.w3.org/WAI/WCAG22/Understanding/no-keyboard-trap)
+
+Two traps here, and the rule avoids both. The criterion allows exit by **unmodified arrow keys** as well
+as Tab, and our probe presses Tab only; and it PASSES a trap that advises its own escape route. The rule's
+third assumption states both, quoting the criterion: "2.1.2 allows focus to be moved away by 'unmodified
+arrow or tab keys or other standard exit method', and permits a non-standard method if the user is advised
+of it. We press Tab only, and we cannot see an on-page advisory, so a repeat is strong evidence and not
+proof." Mapped `secondary` accordingly — and both its branches check `escapeReleasedFocus`, which is the
+standard exit method the criterion names.
+
+## 3.3.2 Labels or Instructions — CLEAN BOUND, one untested half
+
+> "Labels or instructions are provided when content requires user input."
+> — [Understanding 3.3.2](https://www.w3.org/WAI/WCAG22/Understanding/labels-or-instructions)
+
+**The bound is right, and W3C frames it the same way we do.** Their page: "It is possible for controls and
+inputs to have an appropriate accessible name or description (e.g. using `aria-label="..."`) and therefore
+pass Success Criterion 4.1.2, but to still fail this success criterion (if the labels or instructions
+aren't presented to all users)." Our rule's own comment: "A control can pass 4.1.2 with an `aria-label`
+and still fail 3.3.2 when no label is visible to sighted users, and a screen-reader transcript cannot see
+that case." That is why 3.3.2 is `partial`, and it is correct.
+
+**The untested half is the word "or".** The criterion is "Labels OR INSTRUCTIONS", and our rule reads the
+control's NAME only. A nameless field preceded by a visible instruction — F82's phone-number case is the
+inverse — is asserted as a failure on evidence that only covers labels. Weak in practice: a
+screen-reader user meeting a bare "edit" has no label whichever way the instruction is presented. Stated
+rather than fixed.
+
+## 4.1.2 Name, Role, Value — ONE FINDING
+
+> "For all user interface components ... **the name and role can be programmatically determined**; **states,
+> properties, and values that can be set by the user can be programmatically set**; and **notification of
+> changes** to these items is available to user agents, including assistive technologies."
+> — [Understanding 4.1.2](https://www.w3.org/WAI/WCAG22/Understanding/name-role-value)
+
+The criterion has THREE clauses. We cover the first (unnamed control, rules, exact on 147 records) and the
+third (state change never announced). `criterion-coverage.ts` says "two of three failure modes are
+covered", and its third is "a role-less `<div onclick>`" — which is a mode of the FIRST clause, not a
+third clause.
+
+**FINDING — the settability clause is absent from our enumeration.** "States, properties, and values that
+can be set by the user can be **programmatically set**" is about assistive technology being able to WRITE,
+not only read. Nothing here tests it, and the three-mode framing does not say so, so the entry reads as
+covering more of the criterion than it does. Our `unnamed-control` maps to F68 exactly; the settability
+clause has no rule and no acknowledgement.
+
 ## What the ten ASSESSED criteria came to
 
 | criterion | verdict |
@@ -280,7 +331,7 @@ criterion says.
 | status | criteria |
 |---|---|
 | `assessed` | **ALL 10 DONE** — 1.1.1, 1.3.1, 1.4.2, 2.4.4, 2.4.6, 3.2.1, 3.2.2, 3.3.1, 3.3.3, 4.1.3 |
-| `partial` (7) | 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3, 3.3.2, 4.1.2 |
+| `partial` (4 left) | 2.1.1, 2.4.1, 2.4.2, 2.4.3 — all map `secondary`, so a misread produces a `cantTell` rather than a wrong accusation |
 | `reachable` (4) | 1.3.5, 2.1.4, 2.5.3, 3.1.1 |
 | `out-of-scope` (33) | their REASONS are claims too; lowest priority |
 
