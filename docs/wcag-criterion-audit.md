@@ -43,7 +43,15 @@ and `name` is defined as "text by which software can identify a component within
 `<button><img alt="Submit Search"></button>` speaks as "Submit Search, graphic, button" and was once
 parsed as a named graphic PLUS an unnamed button.
 
-**UPDATE — an instance arrived, and inspecting it REFUTED my reading of it.** `rules-real-pages` refused
+**RESOLVED 2026-09-04: the prediction was right, my first "refutation" of it was wrong, and only the
+CAPTURE could say so.** `graphicUnnamedDetail` reports both nameless images on cqc.org.uk with
+`ancestorRole: "link"`, `ancestorName: "The Care Quality Commission"` — the site logo, inside a named
+link, conforming through that link's name exactly as the Controls/Input exception provides. The exception
+is now enforced, not merely documented.
+
+What follows is the wrong turn, kept because it is the more useful half.
+
+**The first attempt — an instance arrived, and inspecting the LIVE PAGE refuted my reading of it.** `rules-real-pages` refused
 the verdict pipeline at stage 12 of 13 with one new finding: `1.1.1` on
 `cqc.org.uk/search/all?query=hospital`, `graphicUnnamed=2`. I called it the Controls/Input exception
 firing, on the strength of the opening announcements containing "menu button, sub Menu, Search". **That
