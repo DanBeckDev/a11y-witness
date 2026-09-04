@@ -147,13 +147,75 @@ than trusting a sweep, plus a `MIN_CONTENT_LINES` floor so a short page is not a
 Worth noting for later mapping work: **F111 "Control with visible label but no accessible name" is listed
 under 1.3.1**, not only 4.1.2. Our unnamed-control findings could legitimately report against both.
 
+## 4.1.3 Status Messages — ONE FINDING, and one thing that is right for a non-obvious reason
+
+> "In content implemented using markup languages, status messages can be programmatically determined
+> through role or properties such that they can be presented to the user by assistive technologies
+> **without receiving focus**." — [Understanding 4.1.3](https://www.w3.org/WAI/WCAG22/Understanding/status-messages)
+
+`status message` is defined as "Change in content that is not a change of context, and that provides
+information to the user on **the success or results of an action**, on **the waiting state** of an
+application, on **the progress of a process**, or on **the existence of errors**."
+
+**RIGHT, AND FOR A REASON WORTH STATING.** "Without receiving focus" is the whole mechanism, and it makes
+the CHANNEL the evidence comes from decisive. `status_update_announced` and `form_change_empty` both read
+`formChanges[].after`, which `activateAndCaptureDelta` captures immediately after the activation and
+BEFORE any navigation — so it is speech the page produced on its own. That is exactly what the criterion
+asks about.
+
+The channel that could not answer it is `postSubmitFields`: a re-read of the fields, reached by
+navigating to them. Text found that way proves only that the text exists somewhere reachable, never that
+it was presented without focus — a page with no live region at all announces its error on re-read. The
+feature `post_submit_present` reads that channel and is available to the head, so it is corroboration
+rather than evidence for this criterion, and the coverage note now says so.
+
+**FINDING — one of the criterion's four categories.** The corpus has a single subtype,
+`4.1.3:form-activation-silent`. That covers "the success or results of an action", and overlaps "the
+existence of errors" with 3.3.1. **Waiting state** and **progress of a process** are not covered at all —
+a live region announcing "Loading…" or "3 of 10 complete" is as audible as any other, so this is a corpus
+gap rather than a layer one. On the backlog.
+
+## 3.3.3 Error Suggestion — THE MOST SERIOUS FINDING IN THIS AUDIT
+
+> "If an input error is automatically detected **and suggestions for correction are known**, then the
+> suggestions are provided to the user, **unless it would jeopardize the security or purpose of the
+> content**." — [Understanding 3.3.3](https://www.w3.org/WAI/WCAG22/Understanding/error-suggestion)
+
+`a11y-witness:error-remedy-missing` maps **`conformance`** — it ASSERTS — and fires whenever an announced
+error carries no instruction. The criterion has two normative conditions on that, and the rule guards
+neither and stated neither.
+
+**The security exception.** *"Incorrect password"* withholding the reason is the canonical case, and it is
+REQUIRED behaviour rather than a failure. This rule would assert 3.3.3 against every login form it was
+pointed at.
+
+**"Suggestions for correction are known".** "That username is taken", "This code has expired" — no
+correction exists to suggest, and the criterion does not ask for one. An error with no instruction can
+conform.
+
+**How close this is to shipping wrongly.** It cannot fire on a real page today: `probeForms` is off in the
+CLI and for real-page captures, so `rules:real-pages` reports zero by construction — which is why 86
+conformant pages being clean says nothing about this rule. But **the GitHub Action defaults `probe-forms`
+ON**, deliberately, because "a workflow in your own repository is testing your own application, where
+submitting a form is the intended act". A login form is exactly that. The first consumer to point the
+Action at one gets an asserted conformance failure for behaviour the criterion requires.
+
+Both conditions are now in the rule's `assumptions`, and the remedy is on the backlog: the security case
+is cheap and readable (NVDA announces a password field distinctly, so `postSubmitFields` can gate it);
+the "suggestions known" case is not readable from an announcement at all, which is an argument that this
+mapping should be `secondary`. **Changing what the product asserts is a decision, not a tidy-up**, so it
+is recorded rather than taken.
+
+This also refutes the prediction made after the first four criteria — that the remaining work would be
+documentation correction rather than rule correction. It is not.
+
 ---
 
 ## Still to audit
 
 | status | criteria |
 |---|---|
-| `assessed` (4 left) | 4.1.3, 3.3.3, 3.2.1, 3.2.2 |
+| `assessed` (2 left) | 3.2.1, 3.2.2 |
 | `partial` (7) | 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3, 3.3.2, 4.1.2 |
 | `reachable` (4) | 1.3.5, 2.1.4, 2.5.3, 3.1.1 |
 | `out-of-scope` (33) | their REASONS are claims too; lowest priority |

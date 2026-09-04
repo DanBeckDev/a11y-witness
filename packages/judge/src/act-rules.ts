@@ -399,6 +399,21 @@ export const ACT_RULES: ActRuleDescription[] = [
     expectation: "The announced error text contains an instruction the user can act on: a format, an "
       + "example, a range, or a required action.",
     assumptions: [
+      "TWO NORMATIVE CONDITIONS IN THE CRITERION ARE NOT GUARDED HERE, found by the criterion audit on "
+        + "2026-09-04. The criterion is 'If an input error is automatically detected AND SUGGESTIONS FOR "
+        + "CORRECTION ARE KNOWN, then the suggestions are provided to the user, UNLESS IT WOULD JEOPARDIZE "
+        + "THE SECURITY OR PURPOSE OF THE CONTENT.' This rule asserts on neither clause.",
+      "SUGGESTIONS KNOWN. 'That username is taken' and 'This code has expired' have no correction to "
+        + "suggest, and the criterion does not ask for one — so an error with no instruction can CONFORM. "
+        + "Whether a suggestion is knowable is not readable from an announcement, which is an argument "
+        + "that this mapping should be `secondary` rather than `conformance`. Recorded rather than acted "
+        + "on: changing what the product ASSERTS is a decision, not a tidy-up.",
+      "SECURITY OR PURPOSE. 'Incorrect password' withholding the reason is the canonical case, and it is "
+        + "REQUIRED behaviour rather than a failure. This rule would assert 3.3.3 against every login "
+        + "form it was pointed at. It cannot today -- `probeForms` is off in the CLI and real-page "
+        + "captures -- but the GitHub Action defaults it ON, against the consumer's own application, "
+        + "which is exactly where a login form is. The proposed guard is on the backlog: do not assert "
+        + "where the re-read announces a password or protected field.",
       "An error that is not announced at all fails 3.3.1 and is deliberately NOT reported here. Asserting "
         + "both from one page would make every silent-validation case a 3.3.3 case too, which is the "
         + "mistake that once taught the 3.3.2 head about validation messages.",
