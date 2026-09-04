@@ -209,13 +209,77 @@ is recorded rather than taken.
 This also refutes the prediction made after the first four criteria — that the remaining work would be
 documentation correction rather than rule correction. It is not.
 
+## 3.2.1 On Focus and 3.2.2 On Input — SAME RULE, SAME SHAPE AS 3.3.3
+
+> "When any user interface component receives focus, it does not initiate a change of context."
+> — [Understanding 3.2.1](https://www.w3.org/WAI/WCAG22/Understanding/on-focus)
+
+`change of context` is defined as a change of **user agent**, **viewport**, **focus**, or **"content that
+changes the meaning of the web page"**. And the criterion carries a note that decides this entry:
+
+> *"A change of content is not always a change of context. Changes in content, such as an expanding
+> outline, dynamic menu, or a tab control do not necessarily change the context, unless they also change
+> one of the above (e.g., focus)."*
+
+`a11y-witness:context-change-without-action` maps **`conformance` on both criteria** — it asserts — and
+fires on any difference between the title read before the interaction and the title read after.
+
+**FINDING 1 — a title change is not by itself a change of context.** A page appending a result count, or
+an SPA putting the active filter in its title, changes CONTENT and conforms. The rule asserts a failure.
+Its own example — "Archive search" becoming "Results for 123456" — does change meaning, which is why a
+bare difference looked sufficient.
+
+**FINDING 2 — attribution is assumed, not established.** The probe focuses, then reads the title. A title
+that moved for an unrelated asynchronous reason is credited to the focus. This repo guards exactly that
+elsewhere — `baselineQuiet` before reading a delta, `probes.sameState` between channels — and this rule
+has neither.
+
+**FINDING 3 — F55 is missed, and it is a named failure of this criterion.** "Using script to remove focus
+when focus is received": FOCUS is itself one of the four things a change of context can be, so a control
+that throws focus elsewhere fails 3.2.1 with the title untouched. `focusOrder` could witness it.
+
+What the rule states well is the under-coverage it already knew about — "a context change that leaves the
+title alone ... is not witnessed here". The three above are the ones it did not know, and two of them
+mean it can assert against a conforming page.
+
 ---
+
+## What the ten ASSESSED criteria came to
+
+| criterion | verdict |
+|---|---|
+| 1.1.1 Non-text Content | five of six exceptions unstated; Controls/Input can bite |
+| 1.3.1 Info and Relationships | **clean** |
+| 1.4.2 Audio Control | **clean** |
+| 2.4.4 Link Purpose (In Context) | **clean** |
+| 2.4.6 Headings and Labels | covers headings, criterion says "headings AND labels" |
+| 3.2.1 On Focus | **asserts** on a title change; three findings |
+| 3.2.2 On Input | same rule, same three |
+| 3.3.1 Error Identification | note described a page that may conform; entry self-contradicted |
+| 3.3.3 Error Suggestion | **asserts** against two normative exceptions |
+| 4.1.3 Status Messages | one of four categories; channel choice right for a subtle reason |
+
+**Three clean, seven with findings, and the pattern is not what I predicted.** After the first four I
+wrote that the rest would be documentation correction rather than rule correction. Wrong: **two rules
+ASSERT conformance failures against pages the criterion says conform** — 3.3.3 on "Incorrect password",
+and 3.2.1/3.2.2 on any title change.
+
+**Why none of this was caught by the existing gates.** Both asserting rules read probe-gated channels,
+and `probeForms`/`probeFocusContext` are off for real-page captures — so `rules:real-pages` reports zero
+findings for them **by construction**. The 86 conformant pages that clear every run say nothing about the
+two rules most able to accuse wrongly. That is the "a gate that does not exercise what ships" shape, and
+it is the reason this audit had to be reading rather than measurement.
+
+**The one thing that recurred in every clean criterion**: the rule's `assumptions` quote the part of the
+criterion it cannot reach, and the mapping is `secondary` because of it. Every finding is the absence of
+that — an exception unquoted, a condition unguarded, a note describing something other than what the
+criterion says.
 
 ## Still to audit
 
 | status | criteria |
 |---|---|
-| `assessed` (2 left) | 3.2.1, 3.2.2 |
+| `assessed` | **ALL 10 DONE** — 1.1.1, 1.3.1, 1.4.2, 2.4.4, 2.4.6, 3.2.1, 3.2.2, 3.3.1, 3.3.3, 4.1.3 |
 | `partial` (7) | 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3, 3.3.2, 4.1.2 |
 | `reachable` (4) | 1.3.5, 2.1.4, 2.5.3, 3.1.1 |
 | `out-of-scope` (33) | their REASONS are claims too; lowest priority |
