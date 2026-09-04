@@ -452,10 +452,26 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "A capture where neither happened is out of scope.",
     expectation: "The page reports the same title after the interaction as before it.",
     assumptions: [
+      "A TITLE CHANGE IS NOT BY ITSELF A CHANGE OF CONTEXT, and this rule asserts as though it were. "
+        + "The criterion's own note says so: 'A change of content is not always a change of context. "
+        + "Changes in content, such as an expanding outline, dynamic menu, or a tab control do not "
+        + "necessarily change the context, unless they also change one of the above' — user agent, "
+        + "viewport, focus, or 'content that changes the MEANING of the web page'. So a page appending a "
+        + "result count, or an SPA putting the active filter in its title, changes CONTENT and conforms; "
+        + "this rule would assert a failure. Found by the criterion audit 2026-09-04 and on the backlog. "
+        + "The rule's own example, \"Archive search\" becoming \"Results for 123456\", does change "
+        + "meaning — which is why it looked sufficient.",
+      "ATTRIBUTION IS ASSUMED, NOT ESTABLISHED. The probe focuses, then reads the title; a title that "
+        + "moved for an unrelated asynchronous reason — a timer, a late-loading widget — is credited to "
+        + "the focus. This repo guards exactly that elsewhere (`baselineQuiet` before a delta, "
+        + "`probes.sameState` between channels) and this rule has no such guard.",
       "The TITLE is the part of 'change of context' a screen reader can observe. A context change that "
         + "leaves the title alone — a new window with the same name, a focus jump within one page — is "
         + "not witnessed here, so this covers one failure mode of several and `criterion-coverage.ts` "
-        + "says which.",
+        + "says which. Note the named one it misses: F55 is 'using script to remove focus when focus is "
+        + "received', and FOCUS is itself one of the four things a change of context can be — so a "
+        + "control that throws focus elsewhere fails 3.2.1 with the title untouched. `focusOrder` could "
+        + "witness that and does not.",
       "A `null` title means the probe found nothing to focus or type into. Comparing two nulls would make "
         + "every such page conformant on a question nobody asked, so both reads must be strings before "
         + "anything is claimed.",
