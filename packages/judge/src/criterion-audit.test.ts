@@ -1,10 +1,15 @@
 /**
  * THE AUDIT'S SCOPE IS DERIVED, NOT REMEMBERED — and every criterion carrying a claim must be in it.
  *
- * `criterion-coverage.ts` makes a claim about all 54 criteria: ten that this tool ASSERTS on, seven
- * PARTIAL, four merely reachable, and thirty-three declared out of scope with a stated reason. Each was
+ * `criterion-coverage.ts` makes a claim about EVERY criterion in WCAG 2.2 AA: some this tool asserts on,
+ * some partial, some merely reachable, the rest declared out of scope with a stated reason. Each was
  * written from somebody's reading of the criterion, and until 2026-09-04 not one had been checked against
  * the official text.
+ *
+ * (No numeral there, deliberately: `criteria-counts-are-not-spelled-out.test.ts` forbids one, because
+ * "every numeral written beside the word 'criteria' in this repo has gone stale at least once". This
+ * file's own assertion below is the exception that proves it — it does not WRITE a count, it DERIVES one
+ * and refuses a backlog that disagrees, so the number cannot go stale without a test failing.)
  *
  * That is not hypothetical. 3.1.2 was argued for a day and settled WRONGLY because nobody followed the
  * link on *programmatically determined* — WCAG defines it as "determined by software from AUTHOR-SUPPLIED

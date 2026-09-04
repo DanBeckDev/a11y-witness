@@ -43,8 +43,7 @@ and `name` is defined as "text by which software can identify a component within
 `<button><img alt="Submit Search"></button>` speaks as "Submit Search, graphic, button" and was once
 parsed as a named graphic PLUS an unnamed button.
 
-Not currently firing wrongly — `rules:real-pages` is clean across 86 conformant pages — so this is an
-UNSTATED ASSUMPTION rather than a live defect. That is exactly what `act-rules.ts` exists to hold: "Every
+**UPDATE, hours later: it fired.** `rules-real-pages` refused the verdict pipeline at stage 12 of 13 with one new finding — `1.1.1` on `cqc.org.uk/search/all?query=hospital`, `graphicUnnamed=2`, a page whose opening announcements include `menu button, sub Menu, Search`. That is the shape of an image inside a named control, which is this exception exactly. Unconfirmed: the rule names three possible causes and only one of them takes `--update`. It REFERS rather than asserts, so no page is accused. The prediction was made from reading the criterion and the instance arrived from a capture run — which is the argument for the audit in one line. That is exactly what `act-rules.ts` exists to hold: "Every
 wrong finding this project has shipped traces to an assumption nobody had written down."
 
 ## 1.4.2 Audio Control — CLEAN
@@ -295,6 +294,24 @@ not only read. Nothing here tests it, and the three-mode framing does not say so
 covering more of the criterion than it does. Our `unnamed-control` maps to F68 exactly; the settability
 clause has no rule and no acknowledgement.
 
+## The four `secondary` PARTIAL criteria — 2.1.1, 2.4.1, 2.4.2, 2.4.3 — ALL CLEAN
+
+Audited together because they came out the same way, and the way is the finding. Each rule's last
+assumption names the gap between what it observes and what the criterion asks, and maps `secondary`
+because of it:
+
+| | the criterion | what the rule says |
+|---|---|---|
+| **2.1.1** | "operable through a **keyboard interface**" | "SECONDARY because 2.1.1 covers operation by any keyboard interface, and only Tab is pressed here. A control reachable by arrow keys [conforms]" |
+| **2.4.1** | a mechanism to bypass blocks — H69 and ARIA11 are sufficient | "A skip link is NOT required by 2.4.1 — headings alone satisfy it (H69) and landmarks alone satisfy it (ARIA11) — so this rule never fires on its absence" |
+| **2.4.2** | titles that "describe topic or purpose" | "SECONDARY because ... whether a given title does so is human judgement. This rule proves only that the title no longer describes the content on screen, which is a sufficient failure and not the whole criterion" |
+| **2.4.3** | an order that "preserves **meaning and operability**" — W3C: "Focus order does not necessarily need to follow the visual presentation" | "SECONDARY because 2.4.3 asks whether an order preserves MEANING, which is human judgement" |
+
+2.4.1's is the sharpest, because it is the one that would have produced a false accusation on nearly every
+page: detecting a MISSING skip link. W3C's Sufficient Techniques list H69 and ARIA11 as alternatives, and
+the rule fires only on a skip link that is present and inert — "which is the part no markup inspection can
+reach: a checker sees a link and a plausible fragment href and passes the page."
+
 ## What the ten ASSESSED criteria came to
 
 | criterion | verdict |
@@ -326,14 +343,39 @@ criterion it cannot reach, and the mapping is `secondary` because of it. Every f
 that — an exception unquoted, a condition unguarded, a note describing something other than what the
 criterion says.
 
+## The result: 17 of 17 criteria that carry a claim
+
+**9 clean, 8 with findings.** Every rule that can ASSERT has been read against its criterion.
+
+| | |
+|---|---|
+| **clean** | 1.3.1, 1.4.2, 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3, 2.4.4 — and 3.3.2's bound |
+| **findings, referring** (`secondary`, so a misread yields `cantTell`) | 1.1.1, 2.4.6, 3.3.1, 4.1.2, 4.1.3 |
+| **findings, ASSERTING** (`conformance`, so a misread accuses) | **3.3.3**, **3.2.1 / 3.2.2** |
+
+**The single pattern.** Every clean criterion is clean the same way: the rule's last assumption quotes the
+part of the criterion it cannot reach, and the mapping is `secondary` because of it. Every finding is the
+absence of that — an exception unquoted, a condition unguarded, a note describing something other than
+what the criterion says. Nothing here was a rule computing the wrong thing; it was rules claiming more
+than they had read.
+
+**Why no existing gate could have found any of it.** The two asserting rules read probe-gated channels,
+and those probes are off for real-page captures — so `rules:real-pages` reports zero for them BY
+CONSTRUCTION. The 86 conformant pages that clear every run say nothing about the two rules most able to
+accuse wrongly. `rules:gate` scores the corpus, and the corpus was built from the same readings being
+audited, so it cannot disagree with them either. This had to be reading.
+
+**What is left is two decisions, not more reading**: whether 3.3.3 and 3.2.1/3.2.2 keep `conformance`
+when the criterion's exceptions are not guarded. Both are on the backlog under Open defects.
+
 ## Still to audit
 
 | status | criteria |
 |---|---|
 | `assessed` | **ALL 10 DONE** — 1.1.1, 1.3.1, 1.4.2, 2.4.4, 2.4.6, 3.2.1, 3.2.2, 3.3.1, 3.3.3, 4.1.3 |
-| `partial` (4 left) | 2.1.1, 2.4.1, 2.4.2, 2.4.3 — all map `secondary`, so a misread produces a `cantTell` rather than a wrong accusation |
+| `partial` | **ALL 7 DONE** — 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3, 3.3.2, 4.1.2 |
 | `reachable` (4) | 1.3.5, 2.1.4, 2.5.3, 3.1.1 |
-| `out-of-scope` (33) | their REASONS are claims too; lowest priority |
+| `out-of-scope` (33) | their REASONS are claims too. Lowest priority: a misread there produces a finding we never make, not one we make wrongly. |
 
 **What the first four suggest about the rest.** Three of four were clean, and the clean ones were clean
 for the same reason: the rule's `assumptions` quote the part of the criterion the rule cannot reach, and
