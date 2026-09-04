@@ -434,10 +434,19 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
       + "DEFAULTS this is announced as a change of VOICE with no text, which is why it was recorded as out "
       + "of scope. `[speech] reportLanguage` is ON as of 2026-09-03 (a product decision, keyed in "
       + "`screenReaderSettings`), and 29 corpus cases now prove NVDA speaks the language into the "
-      + "transcript — check-signals discriminates all of them. THE SCREEN READER STILL CANNOT DECIDE IT "
-      + "ALONE, and the asymmetry is the point: an announcement CONFIRMS a passage was marked, but silence "
-      + "is equally what a correct monolingual page produces, so an unmarked passage is undetectable from "
-      + "speech. Deciding needs the text, which is the DOM and axe-core's territory.",
+      + "transcript — check-signals discriminates all of them. THE SCREEN READER CANNOT DECIDE IT ALONE, "
+      + "and W3C says so directly: auditors 'cannot solely rely on the spoken output from assistive "
+      + "technologies, but must verify whether or not changes in natural language have been identified "
+      + "correctly in the underlying code or markup'. But 'not alone' is not 'not at all', and reading it "
+      + "as the second was an error corrected on 2026-09-04. WCAG defines PROGRAMMATICALLY DETERMINED as "
+      + "'determined by software from AUTHOR-SUPPLIED DATA ... assistive technologies can extract and "
+      + "present', so the question is whether the author supplied it — and NVDA announcing the language IS "
+      + "that extraction, in the modality the definition names. Four cases, not one: marked-and-announced "
+      + "is SATISFIED and only this tool can demonstrate it; MARKED-AND-SILENT is a failure only this tool "
+      + "can witness; an invalid `lang` is axe's `valid-lang`; and only an UNMARKED foreign passage needs "
+      + "language detection. The corpus pair is that last one, which is why this read as undecidable. The "
+      + "DOM census (`documentLang`, `partLangs`, `partLangCount`, deployed 2026-09-04) supplies the "
+      + "markup half W3C asks for; the marked-and-silent rule is on the backlog.",
   },
   "2.5.3": { status: "reachable", needs: ["dom", "accessibility-tree"], channels: ["controls", "structureCensus"], note: "Label in Name — visible text must be contained in the accessible name. Highly automatable and axe-core covers it well; worth deciding whether to duplicate or defer." },
   // WHY THE SCREEN READER CANNOT ANSWER THIS ONE, recorded because it looks like an oversight and is not.

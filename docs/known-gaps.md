@@ -1720,7 +1720,36 @@ the GOOD page is marked and announced, the BAD page is unmarked, and neither is 
 shipped now would be scored against a corpus with no positive for it — *"a probe built now would produce
 evidence nothing could validate"*, arriving at a rule instead of a probe.
 
-### SETTLED 2026-09-04 BY THE HELD-OUT SET: no layer here can decide 3.1.2, the model included
+### CORRECTED 2026-09-04 — "NO LAYER CAN DECIDE 3.1.2" WAS AN OVER-GENERALISATION FROM ONE CASE
+
+**Read the success criterion, which I had not done carefully enough.** 3.1.2 requires the language of each
+passage to be **programmatically determined**, and WCAG defines that as *"determined by software from
+AUTHOR-SUPPLIED DATA provided in a way that different user agents, including assistive technologies, can
+extract and present this information to users in different modalities."*
+
+So the question is not *"what language is this text?"* — which is what I kept answering, and which does
+need language detection. It is *"did the author supply data the AT can extract and present?"* The
+sufficient technique is **H58, `lang` attributes**. And NVDA announcing the language IS that extraction
+happening, in exactly the modality the definition names — which makes the screen reader a WITNESS to this
+criterion rather than a layer blind to it.
+
+There are four cases, and this entry collapsed them into one:
+
+| | who can decide it |
+|---|---|
+| marked, and NVDA announces it | **satisfied, demonstrated in the AT modality** — axe cannot show this |
+| **marked, and NVDA announces nothing** | **only this tool** — author supplied data the AT cannot present |
+| `lang` present but invalid | axe's `valid-lang`; silence here corroborates |
+| unmarked foreign passage | needs language detection — neither this tool nor axe |
+
+**Only the last is undecidable, and the corpus pair happens to be exactly that one** — which is how the
+over-generalisation happened. W3C is explicit that speech alone is not enough: *"Auditors cannot solely
+rely on the spoken output from assistive technologies, but must verify whether or not changes in natural
+language have been identified correctly in the underlying code or markup."* The DOM census carries
+`documentLang`, `partLangs` and `partLangCount` and was deployed on 2026-09-04, so this tool now has both
+halves of what that sentence asks for.
+
+### The head still does not work, and that is a SEPARATE fact
 
 §36 established that neither the screen reader nor a rule can accuse an UNMARKED passage. The remaining
 possibility was a trained head, and the 29 corpus cases were built to feed one. **It does not work, and
