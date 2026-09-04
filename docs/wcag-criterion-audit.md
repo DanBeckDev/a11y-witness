@@ -105,13 +105,55 @@ capture, because submitting a form on a site we do not own is not a review", whi
 makes submitting something the corpus authorises, and it has been measured live on W3C's survey. One
 entry, two halves, opposite claims. The `note` is the stale half.
 
+## 2.4.6 Headings and Labels — ONE FINDING
+
+> "Headings and labels describe topic or purpose." — [Understanding 2.4.6](https://www.w3.org/WAI/WCAG22/Understanding/headings-and-labels)
+
+`label` is defined as "Text or other component with a text alternative that is presented to a user to
+identify a component within web content".
+
+**What is right, and it is the trap this criterion sets.** W3C states outright that it "does not require
+headings or labels" to exist, and points at 3.3.2 for whether a label is present. A rule detecting ABSENCE
+would fire on conformant pages — the shape 2.4.1 was nearly shipped with. Ours detects VAGUE headings, not
+missing ones.
+
+**FINDING — we cover headings, the criterion says "headings AND labels".** One corpus subtype,
+`2.4.6:regex`, built from `headings-vague-*` cases and keyed on `generic_heading_present`. Nothing looks
+at labels. The label half is REACHABLE and simply not built: NVDA announces a field's label, so "Field 1"
+or "Text box" is as audible as a vague heading. A corpus gap, not a layer one — on the backlog.
+
+**And a correction of my own, made and reverted within the hour.** I changed the status to `partial`,
+then read this file's own header: *"`status: "assessed"` means 'we have evidence and a decider', never
+'this answer is exact'."* We have both, for headings. Changing it was acting on a paraphrase of `partial`
+instead of the definition twelve lines above the entry — the exact failure this audit exists to catch,
+committed inside the audit. The NOTE correction stands; the status went back.
+
+## 1.3.1 Info and Relationships — CLEAN
+
+> "Information, structure, and relationships conveyed through presentation can be programmatically
+> determined or are available in text." — [Understanding 1.3.1](https://www.w3.org/WAI/WCAG22/Understanding/info-and-relationships)
+
+Eleven failure techniques (F2, F33, F34, F42, F43, F46, F48, F90, F91, F92, F111); we address three modes
+— fake headings, unassociated table headers, and no headings at all — and the note says which, including
+that heading HIERARCHY is not checked.
+
+**The alternative in the criterion text is the thing to get right, and the rule already does.** Structure
+must be programmatically determined **or available in text**, and a page conveying no heading structure
+at all passes trivially. `a11y-witness`'s no-headings rule states exactly that: "a page with genuinely no
+headings conveys no heading structure to lose. Having none is strong evidence that styled text stands in
+for headings; proof needs the visual layer" — and it requires the tree to CONFIRM zero headings rather
+than trusting a sweep, plus a `MIN_CONTENT_LINES` floor so a short page is not accused.
+
+Worth noting for later mapping work: **F111 "Control with visible label but no accessible name" is listed
+under 1.3.1**, not only 4.1.2. Our unnamed-control findings could legitimately report against both.
+
 ---
 
 ## Still to audit
 
 | status | criteria |
 |---|---|
-| `assessed` (6 left) | 1.3.1, 2.4.6, 4.1.3, 3.3.3, 3.2.1, 3.2.2 |
+| `assessed` (4 left) | 4.1.3, 3.3.3, 3.2.1, 3.2.2 |
 | `partial` (7) | 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3, 3.3.2, 4.1.2 |
 | `reachable` (4) | 1.3.5, 2.1.4, 2.5.3, 3.1.1 |
 | `out-of-scope` (33) | their REASONS are claims too; lowest priority |
