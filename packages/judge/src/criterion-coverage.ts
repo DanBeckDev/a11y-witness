@@ -243,7 +243,35 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   // that a green 2.1.2 cannot silently mean "not one record could have tripped it".
   "2.1.2": { status: "partial", needs: ["screen-reader"], channels: ["focusOrder"], note: "Keyboard trap, from `focusOrder`. TWO failure modes: focus STALLING (Tab pressed, the same control announced each time) and focus CONFINED to a cycling ring that offers NO ACTIONABLE CONTROL. `decidedBy: \"rules\"`; the one 2.1.2 in the real-page baseline (scotcourts) is the first. The second took four attempts and the first three were withdrawn the same day: ring vs swept form fields (7 false positives on 86 conformant real pages), ring vs rendered tab stops (9), and an Escape probe that was inert because `anchorToTop` presses Escape before the walk. All three asked how MUCH of the page the ring covers, and SIZE is what a consent banner also differs by. What separates them is what the ring OFFERS — tfl reads link, link, button, button, button ('Accept all cookies'), the corpus trap reads edit, edit, edit. A ROLE test via `parseAnnouncement`, never the words, so it is not the 2.4.4 wordlist shortcut. Deliberately conservative: any actionable role anywhere in the ring silences it, including a Submit button in a genuinely trapped form — 2.1.2 is non-interference, so a wrong accusation says the page is unusable outright. Validated by `rules-real-pages`: 0 new findings on 86 conformant pages." },
   "2.4.4": { status: "assessed", channels: ["links", "transcript"], note: "Vague link text. Rules cover a six-phrase subset (19 of 100 corpus records, a declared overlap); the head owns the rest." },
-  "2.4.6": { status: "assessed", channels: ["headings", "transcript"], note: "Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the page, so this head is document-pooled." },
+  "2.4.6": {
+    // THE HEADINGS HALF ONLY — and the status stays `assessed`, which is a correction of a correction.
+    //
+    // I changed this to `partial` on 2026-09-04 and put it back the same hour: this file's own header
+    // defines the term — "`status: "assessed"` means 'we have evidence and a decider', never 'this answer
+    // is exact'" — and we do have both for headings. Changing it was acting on a paraphrase of `partial`
+    // instead of the definition twelve lines up, which is the exact failure the criterion audit exists to
+    // catch, committed inside the audit.
+    //
+    // What IS wrong and stays corrected is the note. The criterion is "Headings AND LABELS
+    // describe topic or purpose", and `label` is defined as "Text or other component with a text
+    // alternative that is presented to a user to identify a component within web content". We cover the
+    // HEADINGS half only: the corpus has one subtype, `2.4.6:regex`, built from `headings-vague-*` cases,
+    // and the engineered feature is `generic_heading_present`. Nothing looks at labels.
+    //
+    // The label half is REACHABLE and simply not built — NVDA announces a field's label, so a vague one
+    // ("Field 1", "Input", "Text box") is as audible as a vague heading. That makes this a gap in the
+    // corpus rather than in the layer, which is why it is `partial` and on the backlog rather than
+    // out-of-scope.
+    //
+    // WHAT THE CRITERION DOES NOT ASK, and a rule here must not: it "does not require headings or
+    // labels" to exist at all — W3C is explicit, and points at 3.3.2 for whether a label is present.
+    // A rule detecting ABSENCE would fire on conformant pages, which is the shape 2.4.1 was nearly
+    // shipped with.
+    status: "assessed", channels: ["headings", "transcript"],
+    note: "Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the "
+      + "page, so this head is document-pooled. ONE of the criterion's two halves: it reads 'Headings and "
+      + "LABELS describe topic or purpose' and nothing here looks at labels, though NVDA announces them "
+      + "and a vague one is as audible as a vague heading." },
   "3.3.1": { status: "assessed", realPageEvidence: { available: false, because: "`formChanges` is absent from all 77 real captures as exported — **NOT structural any more, and the distinction is the point.** ADR 0024 put a DECLARED `formState` in the corpus beside the URL: the page owner's own example, with the values recorded, so submitting is something the corpus says to do rather than something the probe decides. `probeForms` stays off and SECURITY.md's rule is untouched. Measured live 2026-09-03 on W3C's `after/survey.html` — three fields filled, submitted, NVDA announced 'Submission Failed' — and `probeConfiguredForm` records a `kind: 'submit'` entry, which is this rule's first precondition. What is missing is a real-page CAPTURE RUN that exports it, not a capability. 'Structurally unreachable' and 'not yet captured' need opposite work, and this entry said the first for as long as it was the second." }, channels: ["formChanges", "postSubmitFields"], note: "WHAT THE CRITERION ASKS, quoted, because this note used to describe a page that may CONFORM: 'If an input error is automatically detected, the item that is in error is identified and the error is described to the user IN TEXT.' It does not require the error to be ANNOUNCED, so 'displayed but never announced' — which is what this entry claimed we find — is not by itself a failure of 3.3.1. THE REAL ARGUMENT is narrower and stronger: the probe re-reads the field AFTER the submit, and silence there is evidence the error text is not programmatically ASSOCIATED with the field. An error a screen reader cannot reach is not one where 'the item that is in error is identified' for that user, and `input error` is defined as 'Information provided by the user that is not accepted'. It REFERS rather than asserts — `3.3.1:validation-error-silent` is absent from `rule-ownership.json`, so it is model-decided, sets no `mapping` and reports `cantTell`. That is the LAYER's doing rather than the reasoning's, and if the subtype ever moves to the rules the argument above is what it must assert on. Needs the form probe, on by default in the Action and off in the CLI — but NOT therefore unreachable on a real page: see `realPageEvidence` above, which this note contradicted until 2026-09-04." },
   "3.3.2": {
     status: "partial",
