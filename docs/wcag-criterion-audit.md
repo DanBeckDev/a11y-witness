@@ -389,8 +389,20 @@ CONSTRUCTION. The 86 conformant pages that clear every run say nothing about the
 accuse wrongly. `rules:gate` scores the corpus, and the corpus was built from the same readings being
 audited, so it cannot disagree with them either. This had to be reading.
 
-**What is left is two decisions, not more reading**: whether 3.3.3 and 3.2.1/3.2.2 keep `conformance`
-when the criterion's exceptions are not guarded. Both are on the backlog under Open defects.
+**BOTH WERE FIXED 2026-09-04, and they were not decisions.** I recorded them as product decisions — "changing
+what the product ASSERTS is a decision, not a tidy-up" — and that was wrong twice over. CLAUDE.md already
+states the test, and it is mechanical: the seven `secondary` subtypes are so *"deliberately, BECAUSE THEY
+INFER THE FAILURE WHERE THE FOUR READ IT DIRECTLY."*
+
+Apply it. `error-announced-without-remedy` READS "no instruction in the announcement" and ASSERTS "a known
+suggestion was withheld". `context-change-without-action` READS "two titles differ" and ASSERTS "the
+context changed", which the criterion's own note says does not follow. Both infer. Both are now
+`secondary`.
+
+Nothing else moved: each fires on the same evidence, stays rules-owned, and still reaches the report — as
+`cantTell`, a moment worth a human's attention, rather than as a conformance failure the criterion may not
+agree with. `act-rules.test.ts` pins the asserting list precisely so this is a visible edit, and it forced
+one.
 
 ## Still to audit
 

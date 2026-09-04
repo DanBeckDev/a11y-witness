@@ -386,11 +386,27 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "as DD slash MM slash YYYY.\" Both are announced, so this is not about silence.",
     ruleType: "atomic",
     accessibilityRequirements: [
-      // ASSERTED. Whether the announced text carries an instruction is READ directly from the
-      // announcement, which is this project's test for what a rule may state rather than refer. It is
-      // rules-owned for a measured reason, not a stylistic one: a trained head for this subtype had
-      // recall 0.0 on its own training data under both poolings (known-gaps.md §22).
-      { criterion: "3.3.3", mapping: "conformance" },
+      // SECONDARY since 2026-09-04, downgraded from `conformance` by the criterion audit — and the repo's
+      // own test decides it rather than taste. CLAUDE.md: seven of the eleven rules-owned subtypes "map as
+      // `secondary` and report `cantTell`, deliberately, BECAUSE THEY INFER THE FAILURE WHERE THE FOUR
+      // READ IT DIRECTLY."
+      //
+      // This one infers. What it READS is "the announced error carries no instruction". What 3.3.3
+      // FORBIDS is withholding a suggestion that is KNOWN, and only where doing so would not "jeopardize
+      // the security or purpose of the content". Neither condition is in the announcement:
+      //
+      //   "Incorrect password"      — the security exception, and REQUIRED behaviour, not a failure
+      //   "That username is taken"  — no correction exists to suggest, so none is owed
+      //
+      // The old comment said the instruction "is READ directly from the announcement, which is this
+      // project's test for what a rule may state rather than refer". True of the instruction and false of
+      // the FAILURE, and that conflation is what let it assert.
+      //
+      // Nothing else changes: it is still rules-owned for the measured reason (a head had recall 0.0 on
+      // its own training data under both poolings, known-gaps.md §22), it still fires on the same
+      // evidence, and the finding still reaches the report. It reaches it as `cantTell` — a moment worth
+      // a human's attention — rather than as a conformance failure the criterion may not agree with.
+      { criterion: "3.3.3", mapping: "secondary" },
     ],
     inputAspects: ["interaction.formChanges", "interaction.postSubmitFields"],
     applicability: "Every capture in which a control of kind `submit` was activated AND an error was "
@@ -440,11 +456,22 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "themselves somewhere else, with no action they would recognise as navigation.",
     ruleType: "atomic",
     accessibilityRequirements: [
-      // ASSERTED, both. The comparison is READ, not judged: two titles are equal or they are not. This is
-      // the same basis as 3.3.3 and 1.1.1:filename-alt, and unlike every `secondary` mapping here, which
-      // INFERS a failure from something adjacent to it.
-      { criterion: "3.2.1", mapping: "conformance" },
-      { criterion: "3.2.2", mapping: "conformance" },
+      // SECONDARY since 2026-09-04, downgraded from `conformance` by the criterion audit. The old comment
+      // said the comparison "is READ, not judged: two titles are equal or they are not" — true, and it is
+      // the wrong thing to have read. Two titles differing is READ; a CHANGE OF CONTEXT is inferred from
+      // it, and the criterion says that inference does not hold:
+      //
+      //   "A change of content is not always a change of context. Changes in content, such as an
+      //    expanding outline, dynamic menu, or a tab control do not necessarily change the context,
+      //    unless they also change one of the above" — user agent, viewport, focus, or content that
+      //    changes the MEANING of the web page.
+      //
+      // So a page appending a result count, or an SPA putting its active filter in the title, changes
+      // CONTENT and conforms. This rule asserted a failure against it. The old comment even names the
+      // distinction it fell on — "unlike every `secondary` mapping here, which INFERS a failure from
+      // something adjacent to it" — which is exactly what a title difference is.
+      { criterion: "3.2.1", mapping: "secondary" },
+      { criterion: "3.2.2", mapping: "secondary" },
     ],
     inputAspects: ["interaction.focusContext", "interaction.typedFeedback"],
     applicability: "Every capture where the focus-context probe focused a control, or the typing probe "
