@@ -43,7 +43,31 @@ and `name` is defined as "text by which software can identify a component within
 `<button><img alt="Submit Search"></button>` speaks as "Submit Search, graphic, button" and was once
 parsed as a named graphic PLUS an unnamed button.
 
-**UPDATE, hours later: it fired.** `rules-real-pages` refused the verdict pipeline at stage 12 of 13 with one new finding — `1.1.1` on `cqc.org.uk/search/all?query=hospital`, `graphicUnnamed=2`, a page whose opening announcements include `menu button, sub Menu, Search`. That is the shape of an image inside a named control, which is this exception exactly. Unconfirmed: the rule names three possible causes and only one of them takes `--update`. It REFERS rather than asserts, so no page is accused. The prediction was made from reading the criterion and the instance arrived from a capture run — which is the argument for the audit in one line. That is exactly what `act-rules.ts` exists to hold: "Every
+**UPDATE — an instance arrived, and inspecting it REFUTED my reading of it.** `rules-real-pages` refused
+the verdict pipeline at stage 12 of 13 with one new finding: `1.1.1` on
+`cqc.org.uk/search/all?query=hospital`, `graphicUnnamed=2`. I called it the Controls/Input exception
+firing, on the strength of the opening announcements containing "menu button, sub Menu, Search". **That
+was a guess dressed as a diagnosis.**
+
+Loading the page and enumerating its image-like elements says otherwise:
+
+- 30 image-like elements, 24 nameless and not `aria-hidden`.
+- **Every `<img>` carries `alt=""`** — decorative, which Chromium marks ignored, so the census never sees
+  them. Not one `<img>` lacks an alt.
+- So the two the census counted can only be bare **`<svg>` with no `role` and no label**.
+- Of those, SOME are inside named links ("The Care Quality Commission") — the exception — and **several
+  are inside no control at all**.
+
+A bare unlabelled `<svg>` outside any control that Chromium exposes as an image is plausibly a REAL 1.1.1
+finding: if it is decorative it should carry `aria-hidden="true"`. So this may be the third of the rule's
+three causes — "the finding is right and the publisher's claim is not", which has happened twice — and not
+the first.
+
+**Unresolved, and it needs the capture's own evidence rather than the live page**, because these are live
+sites their publishers keep editing and the page I loaded is not the page that was captured. Recorded this
+way because the alternative was to let a prediction validate itself: I read the criterion, predicted a
+class, saw a finding of roughly the right shape, and called it confirmed. The evidence did not support
+that, and the rule's own output had already said to read the evidence first. That is exactly what `act-rules.ts` exists to hold: "Every
 wrong finding this project has shipped traces to an assumption nobody had written down."
 
 ## 1.4.2 Audio Control — CLEAN
