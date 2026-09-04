@@ -1720,6 +1720,32 @@ the GOOD page is marked and announced, the BAD page is unmarked, and neither is 
 shipped now would be scored against a corpus with no positive for it — *"a probe built now would produce
 evidence nothing could validate"*, arriving at a rule instead of a probe.
 
+### SETTLED 2026-09-04 BY THE HELD-OUT SET: no layer here can decide 3.1.2, the model included
+
+§36 established that neither the screen reader nor a rule can accuse an UNMARKED passage. The remaining
+possibility was a trained head, and the 29 corpus cases were built to feed one. **It does not work, and
+the held-out set is what established that rather than an argument.**
+
+The head fitted the corpus and then scored FOUR HELD-OUT LANGUAGES at 0.506, 0.513, 0.536 and 0.604
+against a 0.979 cut — eight false negatives, every one a page whose only novelty is being Dutch,
+Portuguese, Polish or Norwegian rather than French, German, Italian or Spanish. So what it learned was
+the corpus's four language NAMES.
+
+**The asymmetry is the finding, and it is `3.3.2:placeholder-only`'s exactly.** The corpus can express the
+property because it KNOWS what it wrote; the screen reader cannot hear it. On the failing page NVDA reads
+French with an English voice and says nothing about it — the evidence of the failure is an ABSENCE, and a
+head detects a positive pattern in an announcement. There is no announcement to detect.
+
+**Choosing different languages for the held-out set is what made it visible.** Reusing the corpus's four
+would have measured memorisation, reported it as generalisation, and passed. That is the whole purpose of
+a held-out set doing its job, and it is worth noting it only worked because the acceptance matrix was
+being written from scratch — `acceptance-covers-the-corpus.test.ts` now pins that it exists at all.
+
+`3.1.2:language-unmarked` is therefore `decidedBy: "unavailable"` and in `MODEL_EXCLUDED_SUBTYPES`, which
+keeps "nobody decides this" VISIBLE rather than letting the criterion read as covered. **The 29 corpus
+cases stay**: they are ground truth for a future join against a DOM language census, and they are what
+proved `[speech] reportLanguage` puts the language into the transcript at all.
+
 ### THAT CASE WOULD HAVE BEEN A DUD, and finding out cost one search rather than a capture
 
 The design above was *"a passage carrying a `lang` NVDA cannot voice"*, on the assumption that an
