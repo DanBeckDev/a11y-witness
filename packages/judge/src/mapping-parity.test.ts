@@ -24,6 +24,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { stripComments } from "@a11y-witness/evidence/source-text";
 
 import { ACT_RULES } from "./act-rules.js";
 
@@ -34,8 +35,10 @@ function criteriaAssertedInCode(): Set<string> {
   // Comments are stripped first. Every one of these call sites now sits under a paragraph explaining why
   // it is `secondary`, and those paragraphs contain the word "conformance" — so matching the raw source
   // matches the prose and reports call sites that do not exist. That is not hypothetical: it is the exact
-  // way a guard written earlier today passed with the code it guarded deleted.
-  const code = SOURCE.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  // way a guard written earlier today passed with the code it guarded deleted. `stripComments` is shared
+  // across every guard with this shape rather than a fourth hand-rolled regex — see its own comment for
+  // what it does and does not handle.
+  const code = stripComments(SOURCE);
   const calls = [...code.matchAll(/\badd\(\s*"(\d+\.\d+\.\d+)[^"]*"[\s\S]*?\)\s*;/g)];
   assert.ok(calls.length >= 8,
     `only ${calls.length} add("<criterion> ...") call(s) found in rules.ts -- the call shape changed and `

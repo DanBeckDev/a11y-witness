@@ -13,6 +13,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { stripComments } from "@a11y-witness/evidence/source-text";
 
 import { applyArg, parseArgs, conformanceFor, type CaptureResponse } from "./cli.js";
 
@@ -109,9 +110,9 @@ test("A FAILED AXE SCAN IS NOT '0 violations' — pageContext decides nullness",
   // longer decided by a caller who cannot know, and that the catch returns null.
   // COMMENTS STRIPPED FIRST. The fix's own comment QUOTES the old ternary to explain what it replaced,
   // so a raw match flagged the very documentation of the fix — the "expectations derived from source TEXT"
-  // trap, hit twice already today and fixed the same way both times.
-  const source = readFileSync(new URL("./cli.ts", import.meta.url), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  // trap, hit twice already today and fixed the same way both times. `stripComments` is shared across
+  // every guard with this shape rather than a further hand-rolled regex.
+  const source = stripComments(readFileSync(new URL("./cli.ts", import.meta.url), "utf8"));
   assert.doesNotMatch(source, /ruleLayer === "none" \? null : axe\.findings/,
     "nullness must be decided by pageContext, which knows whether results were produced");
   const context = source.slice(source.indexOf("async function pageContext"));
