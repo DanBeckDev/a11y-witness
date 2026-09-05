@@ -6,10 +6,18 @@ parts have a single owner, and whether the verification machinery can see the fa
 not re-audit the accessibility evidence itself; `not-working.md`, `known-gaps.md` and the ADRs already do
 that better than an outsider could.
 
+**Updated 2026-09-05 against `55cb006` (main).** [§14](#14-follow-up-review-2026-09-05) adds four missed
+contract failures, reproduces the judge-composition hazard, and corrects the release-versioning prediction.
+It also distinguishes closed findings from a new schema migration. Sections 1–13 retain the original
+snapshot's measurements and recommendations, with dated corrections at the affected findings; §14 takes
+precedence where they differ. This is a documentation review, not a release-readiness verdict.
+
 **How to read the confidence marks.** Every finding cites `file:line`. Findings marked **verified** were
 re-checked in this session by running a command or reading the cited lines a second time. Findings marked
 **read** come from one reading pass with citations. Findings marked **predicted** were derived from reading
-a dependency's source and were not observed happening. Line numbers are as of `dba4278` and will drift.
+a dependency's source and were not observed happening. Original line numbers are as of `dba4278` and will
+drift; §14's citations are at `55cb006`. In §14, **reproduced** specifically means an executable probe,
+not merely a second reading of the source.
 
 ---
 
@@ -17,13 +25,14 @@ a dependency's source and were not observed happening. Line numbers are as of `d
 
 The repo is in better structural health than its size and velocity would predict. The package split of ADR
 0004 holds where it was designed to: the declared graph is a DAG, `evidence` is genuinely pure, `control`
-genuinely has no dependencies and a test proves it transitively, and the fault-code and idempotent-capture
-contracts are exactly the right shape. Its strongest asset is not any module but a **testing pattern**: about
-thirty meta-tests that discover a population (every npm script, every argv reader, every module that POSTs
+has no npm dependencies and a test checks its import closure (not its runtime data dependencies; §3.2),
+and the fault-code and client-assigned capture-ID contracts are useful foundations. The latter is bounded
+result recall, not duplicate-execution prevention; see §14.4. Its strongest asset is not any module but a
+**testing pattern**: about thirty meta-tests that discover a population (every npm script, every argv reader, every module that POSTs
 `/capture`, every evidence field on disk), require each member to be classified or exempted with a reason,
 and open with a vacuity guard. That pattern is why a repo of 103,535 source lines with one author and
-50–98 commits a day has 0 lint errors, 1,868 passing tests, and a corpus that was never silently corrupted
-by a shape change.
+50–98 commits a day had 0 lint errors and 1,868 passing tests at the original snapshot. Those checks provide
+meaningful protection against shape drift; they do not establish that silent corruption has never occurred.
 
 The problems are of three kinds, and they share a cause.
 
@@ -55,8 +64,8 @@ layer's asserting findings can be suppressed by a referring one from the model.
 | # | finding | confidence | section |
 |---|---|---|---|
 | 1 | The live path feeds the encoder a unit type (`landmark-navigation`) that no training record carries: Python `evidence_units` and TS `evidenceUnits` disagree | verified | §4.1 |
-| 2 | The default judge backend cannot score anything at HEAD (weights `v17`, runtime `v18`); three consecutive `action-smoke` runs are red. Deliberate, but the coupling has no compatibility window | verified | §4.2 |
-| 3 | `withRuleFindings` dedupes by criterion, so a model `cantTell` on 1.1.1 or 1.3.1 drops a rule `failed` on the same criterion. Untested | verified (read) | §4.3 |
+| 2 | Runtime and weights are coupled without a compatibility window. The original `v17` → `v18` migration closed; a new `v18` → `v19` mismatch is open at the follow-up snapshot | verified; updated 2026-09-05 | §4.2 |
+| 3 | `withRuleFindings` dedupes by criterion, so an unmapped model referral can drop a rule assertion on that criterion. Reproduced on 1.1.1; no persistent composition regression test yet | reproduced 2026-09-05 | §4.3 |
 | 4 | The GitHub Action's axe layer never runs: `chromium.launch()` with no channel on a runner that skipped the browser download; the smoke never reads `ruleBased` | verified | §7.1 |
 | 5 | `@a11y-witness/worker-fleet/cli-flags` exports `src/cli-flags.mjs`, which the tarball does not ship; 42 importers, all in the private `lab`, which the isolation gate skips | verified | §3.1 |
 | 6 | The capture wire contract has no owner: a stale published `CaptureRequest`, six parallel result shapes, an untyped second contract in diagnostic mark names, protocol version regex-scraped in four places, fault codes copied as literals, four to six `POST /capture` body builders, and the product CLI sending no `captureId` | verified | §5 |
@@ -64,6 +73,10 @@ layer's asserting findings can be suppressed by a referring one from the model.
 | 8 | The deprecated UTM path is still the CLI's default lease order, still exported and shipped with two bins, still `doctor`'s only capacity check, and still the newcomer route in `docs/README.md` | read | §8 |
 | 9 | Nothing installs the git hooks; the 30 pytest files run under no automated gate; every release-integrity gate is dispatch-only | verified | §7.2 |
 | 10 | `capture-core.mjs`, `server.mjs`, `rules.ts`, `case-matrix.mjs`: four god-modules whose seams are already measured and clean | read | §6 |
+
+**Current-status caveat:** #2 is now a different migration (`v18` → `v19`); #3 has a runtime reproduction;
+the new findings and corrected priorities are in §14. File size alone is not a defect: §6's proposed splits
+are justified by separate responsibilities and mutable state, not a line-count threshold.
 
 ---
 
@@ -226,6 +239,10 @@ moves is a decision to record; the corpus does not need recapturing.
 
 ### 4.2 The default backend cannot score at HEAD — verified
 
+**2026-09-05:** the specific `v17` → `v18` incident below closed in `68e3ada`. A new, explicitly tracked
+`v18` → `v19` migration is open at `55cb006`; the shipped safetensors metadata still says `v18`. The
+coupling remains, but this is not the original migration left unfinished. See §14.1.
+
 `model.safetensors` metadata reads `representation: screenreader-structured-v17`; `training-report.json`
 agrees; `screenreader_features.py:96` sets `FEATURE_SCHEMA_VERSION = "screenreader-structured-v18"`;
 `packages/scorer/models/schema-migration.json` records the migration as opened 2026-09-02. `verify_artifact`
@@ -238,7 +255,10 @@ The architectural point is that the runtime constant and the shipped weights are
 compatibility window**: a grammar fix that changes what the featurizer sees makes the product inoperable for
 everyone until a retrain lands, and the retrain is gated behind a fleet recapture measured at ~8 hours. A
 runtime that can score a `v17` artefact with `v17` features (or refuse only the criteria the change touches)
-would let the grammar fix ship without taking the product down.
+would let the grammar fix ship without taking the product down. **Follow-up qualification:** a compatibility
+path needs the exact old featurizer, feature order and weights together; selectively suppressing criteria
+is not by itself proof of compatibility. The simpler alternative is to promote runtime and weights
+atomically, keeping experimental schema changes off the consumer release path until their gates pass.
 
 ### 4.3 A referral from the model can suppress an assertion from the rules — verified by reading
 
@@ -255,6 +275,13 @@ where the rules had it `failed`, which inverts the ADR 0021 division of labour. 
 function still describes the ADR 0002 world ("the absence-of-name criteria the model judges poorly").
 Nothing tests `withRuleFindings`; `judge.test.ts` covers `validateJudgment` only.
 
+**2026-09-05, reproduced:** the real `judge()` composition, with a loopback model stub and transcript
+`["graphic, image", "Unlabelled graphic"]`, turns the rules-only `1.1.1: failed` into `cantTell` when
+the stub supplies an unmapped 1.1.1 referral. This proves the merge defect without loading model weights.
+Use the explicit **Unlabelled** announcement for this reproduction: the bare empty-name graphic and the
+current 1.3.1 rules are secondary-mapped, so they are not equivalent assertion fixtures. It does not
+measure how often the local model emits the colliding referral.
+
 ### 4.4 The tables that decide which channel feeds which criterion disagree — read
 
 Four tables answer the same question: `EVIDENCE_CHANNEL` (`local-judge.ts:178`), `SWEEPS_FEEDING`
@@ -265,6 +292,10 @@ answers: `formFields || controls`; `["formField"]`; `["controls","formFields","s
 The asserted-versus-referred mapping is likewise stated twice, as the fourth argument of `add()` in
 `rules.ts` and again in `ACT_RULES` (`act-rules.ts`), and `act-rules.test.ts:57-80` pins only the rules one
 fixture happens to fire; `ACT_RULES` has no runtime consumer.
+
+**2026-09-05:** `mapping-parity.test.ts` now compares the criteria asserted by source call sites with the
+ACT declarations, and `8c0d171` corrected the 3.3.3/3.2.x runtime mappings. That closes the claim that
+nothing compares the mappings; it does not unify the channel tables or check every branch's semantics.
 
 ### 4.5 Dead and unverified code on the published judge surface — read
 
@@ -419,6 +450,11 @@ the Action, and an assertion on `ruleBased` in the smoke. Related: the Action ha
 `--plan` or `--emit-form-config`, so ADR 0024 is unreachable from the one surface where `probe-forms` is
 already on and the page owner is present.
 
+**2026-09-05:** the `--forms` omission is fixed: `action.yml:91` declares `forms`, and `:378` passes it
+to the CLI (`5d5a482`). `--plan` and `--emit-form-config` remain separate CLI capabilities. The browser
+launch/importability distinction above remains: `scan/axe.ts:179` still calls `chromium.launch()` without
+a channel, and the Action still skips browser download. The old Actions run cited here was not rerun.
+
 ### 7.2 Gates that exist and run nowhere automated — verified
 
 | gate | where it runs | where it does not |
@@ -430,16 +466,14 @@ already on and the page owner is present.
 | any Ansible check | nowhere | no `ansible-lint`, no `--syntax-check`, no `--check` dry run, `check-modules.py` invoked by nothing; six custom modules (811 lines of PowerShell) have no test |
 | the published `dist/cli.js` bin | nowhere | `action.yml:354` and the root `witness` script both run `packages/cli/src/cli.ts` through `tsx`; the isolation smoke only checks the file exists |
 
-### 7.3 Release mechanics that do not do what their comments say — predicted from dependency source
+### 7.3 Release mechanics — corrected by experiment on 2026-09-05
 
-- All sibling pins are exact `"0.1.0"`. Read from `@changesets/assemble-release-plan` (`dist/index.mjs:95`),
-  a dependent is bumped whenever the new version fails `semverSatisfies` against its declared range, and an
-  exact pin never satisfies a new version. So the pending scorer **major** fans out as a patch to `judge`,
-  `worker-fleet` and `cli`, contrary to the changeset README's "publishes nvda-worker and nothing else".
-  ADR 0007 actually wants the cascade, so this is design-by-pin rather than by config. Worse, private
-  packages are skipped as `type = "none"`, so `lab`'s exact `0.1.0` pins are never rewritten; after
-  `changeset version`, npm workspaces would stop linking them and `release:version`'s `npm install
-  --package-lock-only` should fail. A scratch-copy `npx changeset version` would confirm it.
+- **Private-pin failure prediction disproved.** The original audit inferred that `type = "none"` meant
+  a private package's dependencies would not be rewritten. It does not: an actual `changeset version`
+  in a disposable worktree updated lab's pins while leaving its own version unchanged, and the offline
+  lockfile refresh succeeded. The pending scorer major bumps `judge` and `cli`, **not `worker-fleet`**.
+  Exact pins still cause dependent releases; ADR 0007 wants that cascade. Record the actual plan when
+  changing release policy rather than treating all packages as dependents of the scorer. See §14.1.
 - `release.yml:14-17` calls `access: "restricted"` in `.changeset/config.json` a lock that makes a real
   publish fail. Every public package sets `publishConfig.access: "public"`, and changesets prefers that
   (`getPublishPlan.mjs:618`). Only the shell check at `release.yml:178-184` blocks it.
@@ -622,8 +656,9 @@ ADRs.
   §5 and §7, not a new one.
 - **`evidence` is pure**: no `node:` import, no `fs`, no `process` in any non-test file. **`control` has no
   dependencies**, enforced transitively. **`capture-pure.mjs` is pure** and injects `sleep`.
-- **The protocol contracts are the right shape**: `CAPTURE_PROTOCOL_VERSION` independent of semver; the
-  client-minted `captureId` with 404/202 distinguished; fault codes as an additive wire field; `ready`
+- **Useful protocol foundations**: `CAPTURE_PROTOCOL_VERSION` independent of semver; the
+  client-minted `captureId` with unavailable/running distinguished (404 does not prove non-execution;
+  §14.4); fault codes as an additive wire field; `ready`
   distinct from `ok`; the browser preset in the cache key.
 - **Mechanical quality holds**: 0 lint errors, no function over 49 code lines in the largest module, 164
   `catch` sites with zero empty, 122 of 124 `.mjs` type-checked, exact guidepup pin.
@@ -738,6 +773,165 @@ consumes the contracts), then the documentation that describes the result.
   session against the cited lines or by running a command. §7.3 is derived from reading `@changesets`
   source and is marked predicted. The `action-smoke` log evidence in §7.1 was read from GitHub Actions run
   33682348144.
-- Not done: a runtime test of the §4.3 hazard against a page that fires both a learned head and a rule on
-  one criterion; a scratch `changeset version` for §7.3; any capture. Both of the first two are cheap and
-  are the right next step before acting on those two items.
+- Not done in the original review: a runtime test of the §4.3 hazard against a page that fires both a
+  learned head and a rule on one criterion; a scratch `changeset version` for §7.3; any capture. The
+  follow-up in §14 adds a stubbed-model composition test and the versioning experiment; a real learned-head
+  collision and live capture remain outside this review.
+
+---
+
+## 14. Follow-up review, 2026-09-05
+
+Reviewed **`55cb006`**, fetched from `origin/main`, in a dedicated `codex/architecture-audit-followup`
+worktree. A second disposable worktree held the release-versioning experiment. No shared checkout,
+worker, capture corpus, model artefact or live job was modified. New findings below cite this revision.
+
+### 14.1 Revalidation and corrections
+
+| original finding | status at `55cb006` | evidence / qualification |
+|---|---|---|
+| §3.1 missing published `cli-flags` target | **Open; reproduced** | After a full build, `npm pack --dry-run --ignore-scripts --json --workspace=@a11y-witness/worker-fleet` lists `dist/cli-flags.mjs` but not the exported `src/cli-flags.mjs`. |
+| §3.5 undeclared cross-package `yaml` imports | **Open; adjacent lockfile defect fixed** | `9607ada` locked CLI's already-declared dependency; it did not declare the test consumers' dependencies. For example, `packages/lab/src/packaging/trainer-callers.test.ts:29` still imports `yaml` without a lab declaration. Do not mistake lockfile synchronisation for dependency ownership. |
+| §4.1 live/training evidence-unit divergence | **Open; read** | `packages/scorer/python/score.py:86` still appends landmarks; `packages/scorer/src/evidence-units.ts:98` deliberately omits them. No cross-language parity run was made here. |
+| §4.2 schema mismatch | **Old migration closed; new one open** | Safetensors header: `screenreader-structured-v18`; `screenreader_features.py:112`: `v19`; `models/schema-migration.json` explicitly records that new migration. `score.py:251` still requires equality. Do not weaken this refusal. |
+| §4.3 model referral suppresses rule assertion | **Open; reproduced through `judge()`** | An explicit unlabelled graphic fails 1.1.1 with rules alone; adding a model referral changes the composed outcome to `cantTell`. This was a stubbed model-output test, not a trained-model evaluation. |
+| §4.4 unguarded ACT/runtime mapping duplication | **Partly closed** | `packages/judge/src/mapping-parity.test.ts:38` discovers asserting calls; both parity tests pass. The independent channel/applicability tables remain. |
+| §7.1 Action cannot take a forms config | **Closed** | `action.yml:91,378`; other Action and browser-launch findings are not thereby closed. |
+| §7.2 Python coverage in CI | **Open; read** | `lint.yml` has no Python setup; the root `test:python` still skips without `.venv/bin/pytest`. The follow-up did not run Python tests. |
+| §7.3 private dependency pins will break versioning | **Disproved** | Changesets 3.0.1 versions scorer to 1.0.0 and judge/CLI to 0.1.1; lab stays 0.1.0 but its scorer/judge pins update. `npm install --package-lock-only --ignore-scripts --offline --no-audit --no-fund` then exits 0. Worker-fleet stays 0.1.0. |
+
+This is targeted revalidation, not a fresh measurement of every count or every claim in §§1–13. In
+particular, it did not re-run GitHub Actions or any fleet-dependent gate. The repository's current
+operating model is the bare-metal fleet; the historical UTM material is not an instruction to operate it.
+
+### 14.2 P1 — an external model can assign itself assertion authority — reproduced
+
+**Boundary:** `packages/judge/src/judge.ts:304-319,549-565`; consumer:
+`packages/judge/src/outcomes.ts:246-260`.
+
+`validateJudgment` validates the required finding fields but returns the original object as `Finding`.
+An extra `mapping: "conformance"` field survives. `judgeOnce` filters invented criterion numbers but
+does not remove that field. `criterionOutcomes` consequently treats the model's finding as an assertion
+that the criterion failed. This contradicts the rule/model authority separation in ADR 0021.
+
+**Probe:** pass an otherwise valid 2.4.4 model judgment with evidence `"click here, link"` and
+`mapping: "conformance"` through the built `validateJudgment`, then `criterionOutcomes`. The observed
+outcome is **`failed`**, not `cantTell`. No rule evidence is needed to acquire that authority. The runtime
+boundary cannot rely on a provider honouring the prompt/schema: Codex, Anthropic and unconstrained
+OpenAI-compatible responses also reach it.
+
+**Scope:** this affects the supported **opt-in generative backends**, not the default local scorer,
+whose findings are constructed internally. It does not demonstrate a current local-model false positive.
+
+**Remedy:** reconstruct an allowlisted model finding and force its mapping to `secondary` (or omit it).
+Keep trusted rule findings on a distinct construction path; validating that `conformance` is an enum
+member would not fix the authority problem. Add a malicious/extra-field model-response test through the
+validator and final criterion outcome. This comes before expanding or refactoring the backend surface.
+
+### 14.3 P1 — losing the async acceptance loses the recovery path — reproduced
+
+**Boundary:** `packages/lab/src/capture/capture-client.mjs:122-142,163-170`; worker:
+`packages/nvda-worker/src/server.mjs:1056-1080`; dataset caller:
+`packages/lab/src/training/capture-screenreader-dataset.mjs:413-418`.
+
+The default async path awaits the initial POST **outside** any transport-recovery block. Only after
+receiving 202 does it poll the client-minted ID. If the worker accepts the request but the 202 is lost,
+the client throws, even though it already knows the ID needed to recover the result. That ID is local
+to the failed call, not returned to its caller. The dataset caller's catch handles `CAPTURE_LOST`, not
+this transport exception; the special sync recovery path does not help the default path.
+
+**Loopback probe:** a fake worker reads `POST /capture`, destroys that response socket, and would return
+200 with a completed transcript on `GET /capture/<id>`. The actual async client throws `ECONNRESET` and
+the request log contains **one POST, zero GETs**. No Windows worker or real capture was used. Existing
+`capture-async.test.ts` tests dropped *polls*, but not this lost acknowledgement.
+
+**Remedy:** reconcile a transient acceptance failure by querying the **same ID** within the operation's
+remaining budget; distinguish running, completed and unknown. Do not immediately mint another ID and
+re-execute. Add an accepted-but-acknowledgement-lost test and a never-accepted test; the two need different
+handling. Unknown does not prove that execution never occurred, as the next finding explains.
+
+### 14.4 P2 — result recall is not an idempotency contract — reproduced / read
+
+**Boundary:** `packages/nvda-worker/src/capture-results.mjs:50,71,118-161` and
+`packages/nvda-worker/src/server.mjs:1030-1084`.
+
+The store remembers results, but `begin(id)` deletes any previous result for that ID and replaces it
+with `running`. The POST handler invokes it without checking for a retained request/result or matching
+the request payload. While busy, the worker rejects concurrent captures; **after completion**, another
+POST with the same ID can execute again. There is no same-ID/different-payload conflict check.
+
+**Store probes:** `begin("x") → finish("x") → begin("x")` turns `done` back into `running`. With a
+one-entry store, completing `x` and beginning `y` evicts `x`; its GET response becomes 404 even though
+it definitely ran. The default is eight entries and a restart loses the entire in-memory store.
+The actual POST execution path was read, not run against NVDA.
+
+Therefore 404 means **not retained here**, not "never started" and not necessarily "worker restarted".
+Both explanations are currently overclaimed in comments/errors. Routine callers mint fresh UUIDs, so
+this is not evidence that they currently reuse IDs accidentally; it is a limit on the guarantee the
+audit and recovery advice may make. Recapture costs time and can repeat form activation, so it is not
+universally side-effect-free (see `SECURITY.md`).
+
+**Remedy:** either name and document this as bounded result recall, including retention and restart
+semantics, or implement duplicate suppression: atomically admit an ID plus request fingerprint, return
+the existing state/result for an exact replay, and reject a changed payload. State the retention window
+and worker-generation boundary. Persistence is a separate decision; do not promise exactly-once
+execution across restart merely because an ID exists. Add replay, payload-conflict and eviction tests
+at the HTTP boundary, not only the Map API.
+
+### 14.5 P2 — the timeout ladder does not bound the whole operation — reproduced / read
+
+**Boundary:** `packages/lab/src/capture/capture-client.mjs:164-176,215-238`;
+`packages/nvda-worker/src/server.mjs:607-649,1123,1231-1240`;
+`packages/worker-fleet/src/worker-http.mjs:68`.
+
+There are two related omissions:
+
+1. The client starts its `timeoutMs` deadline **after** an independently budgeted 30-second acceptance.
+   Each loop checks the clock before a two-second sleep, optional ten-second progress read, and
+   thirty-second result read. None is clipped to remaining time, and a late completed result is returned
+   without another deadline check. A loopback probe with `timeoutMs: 20`, immediate 202 and an immediate
+   completed first poll returned **200 after 2,012 ms**. This is a deadline-contract test, not a claim
+   that captures should finish in 20 ms.
+2. The worker now permits up to **60 seconds of preparation before** the 520-second capture timeout.
+   That permits 580 seconds before considering transport or local recovery, against the shared client's
+   560-second budget. A locally recoverable failure also gets a fresh per-attempt timeout. The ladder
+   tests compare the client budget with one capture attempt, not the complete handler. The permitted
+   worst-case mismatch is verified from source; no 580-second worker run was attempted.
+
+**Remedy:** define which budget is an attempt budget and which is an end-to-end deadline. Carry remaining
+time through dispatch, preparation, recovery, polling and result collection; bound optional diagnostics
+within that same budget. Make the lifecycle guard check the complete operation. Also define what happens
+to accepted work when its caller stops waiting—an elapsed client timer is not worker cancellation.
+Use an injected clock for deadline tests instead of adding multi-minute sleeps to CI.
+
+### 14.6 Revised action order and verification limits
+
+Keep the existing correctness priorities: input parity (§4.1), assertion-preserving composition (§4.3),
+and a compatible runtime/artefact release (§4.2). Add the model-authority boundary (§14.2) to that first
+group. Then repair async acknowledgement recovery and specify replay/deadline semantics (§§14.3–14.5)
+before consolidating the capture client or rearranging its modules. Public export/Action smoke fixes
+remain valuable. Do **not** spend time fixing the disproved private-pin prediction.
+
+The central lesson is narrower than "more tests": test the actual consumer and each failure boundary.
+A Map test does not prove HTTP idempotency; a dropped-poll test does not prove dispatch recovery; a
+well-formed finding is not an authorised assertion; ordered individual timeouts do not bound a workflow.
+This applies the Clean Code review skill's boundary/learning-test and concurrency principles, not a
+prescription to split files mechanically. Book evidence: **BookCtx — _Software Engineering at Google_,
+Titus Winters, Tom Manshreck and Hyrum Wright, “Connecting to a Service” (chunk 49)**, on client-assigned
+operation IDs, retrying the same operation, and checking that repeated requests carry matching parameters.
+
+**Checks actually run in the isolated worktrees:**
+
+- `npm ci --ignore-scripts --offline --no-audit --no-fund`, then `npm run build`: passed. An initial
+  omit-optional install could not build the CLI's Playwright imports; the full locked install resolved it.
+- Seven focused suites: `judge.test.ts`, `mapping-parity.test.ts`, `capture-async.test.ts`,
+  `capture-client.test.ts`, `capture-results.test.ts`, `budget-ladder.test.ts`, `model-input.test.ts`:
+  **49 passed, 0 failed, 0 skipped**. They pre-exist this review; no application or test code was changed.
+- Independent Node probes against the built judge, pure result store, and loopback HTTP stubs reproduced
+  §§4.3 and 14.2–14.5. Those passing suites do not cover the newly identified conditions.
+- Safetensors header inspection, worker-fleet tarball dry run, and actual `changeset version` plus offline
+  lockfile refresh in a separate disposable worktree.
+- Not run: full lint/typecheck/test matrix, Python/model evaluation, real capture, fleet deployment,
+  release gates or GitHub Actions. No claims about current production incidence or model quality are
+  derived from the mock-server tests. This section is an audit record; `docs/backlog.md` remains the work
+  tracker, not a second checklist to maintain here.
