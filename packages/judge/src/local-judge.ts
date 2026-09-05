@@ -221,8 +221,37 @@ const EVIDENCE_CHANNEL: Record<string, (c: CaptureEvidence) => boolean> = {
   // tree and never in speech is the canonical example in WCAG's own understanding document.
   "4.1.3": (c) => nonEmpty(c.interaction?.formChanges) || nonEmpty(c.interaction?.stateChanges)
     || statusShownButNotAnnounced(c),
-  "4.1.2": (c) => nonEmpty(c.structure?.formFields) || nonEmpty(c.interaction?.controls),
+  // FOUR independent channels, any one of which is sufficient — measured 2026-09-06 against every
+  // capture on disk where the deterministic rule actually reports 4.1.2 (`packages/judge` audit
+  // §4.4). Of 221 captures across the synthetic corpus and the real-page corpus where a 4.1.2 finding
+  // fired, EVERY one was reproduced by isolating exactly one of `formFields` (148), `controls` (148,
+  // heavily redundant with `formFields` — the same control usually appears in both the form-field
+  // sweep and the interaction probe), `stateChanges` (69 — `state-change-silent`, which needs no form
+  // field or control announcement at all), or `frames` (1 — an unnamed iframe, which the frame sweep
+  // is the ONLY channel for). `transcript` alone was never independently sufficient in that sample
+  // (0/221) but the rule genuinely reads it (`addUnnamedControls(input.transcript, "transcript", add)`
+  // in rules.ts) and a future capture could reach it with none of the other four populated, so it
+  // stays as a fifth disjunct rather than being dropped on the strength of an absence.
+  //
+  // This used to read `formFields || controls` only, which `criterion-coverage.ts`'s
+  // `criteriaAssessableFrom` also disagreed with in a THIRD way (an ALL-of-four-channels AND,
+  // including `structureCensus` — never once load-bearing, measured by ablation) — see that file's
+  // 4.1.2 entry for the fuller account and `channel-tables-4.1.2.test.ts` for the parity this pins.
+  "4.1.2": (c) => nonEmpty(c.structure?.formFields) || nonEmpty(c.interaction?.controls)
+    || nonEmpty(c.interaction?.stateChanges) || nonEmpty(c.structure?.frames)
+    || (c.transcript ?? []).length > 0,
 };
+
+/**
+ * Exported so `criterion-coverage.ts`'s per-criterion channel declarations can be pinned against this
+ * table rather than trusted to stay equal by memory — see `channel-tables-4.1.2.test.ts`. This table
+ * answers "is there evidence of the right KIND", content-sensitive where the criterion needs it
+ * (1.1.1's transcript regex, 3.3.1's submit/navigation/error checks); `CRITERION_COVERAGE[c].channels`
+ * answers the coarser "does the capture carry the FIELD at all" and cannot express a content check, so
+ * exact parity is only expected — and only pinned — for criteria whose applicability is a pure
+ * presence-of-channel disjunction. 4.1.2 is one; see the pin test for which others are.
+ */
+export const EVIDENCE_CHANNEL_CRITERIA: readonly string[] = Object.keys(EVIDENCE_CHANNEL);
 
 export function hasEvidenceFor(criterion: string, capture: CaptureEvidence): boolean {
   // BLIND is not the same as EMPTY, and conflating them suppressed a correct finding.
