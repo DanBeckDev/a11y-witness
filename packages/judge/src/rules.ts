@@ -73,6 +73,14 @@ export interface RuleInput {
     focusContext?: { control?: string; titleBefore?: string | null; titleAfter?: string | null; error?: string };
     typedFeedback?: { titleBefore?: string | null; titleAfter?: string | null; error?: string };
     /**
+     * The DISMISSABLE bullet's verdict for 1.4.13, computed by `focusRevealVerdict` (capture-pure.mjs)
+     * from three censuses and two focus reads. `revealed: null` means the census could not answer or
+     * nothing was focusable; `dismissed: null` means the census after Escape could not answer. Both are
+     * "cannot say", never "no" — read only `revealed === true` together with a real boolean `dismissed`.
+     */
+    focusReveal?: { revealed?: boolean | null; focusHeld?: boolean; dismissed?: boolean | null;
+      revealedBy?: [string, number][] };
+    /**
      * What each Tab press announced, in order. Absent means the focus probe did not run — which was true
      * of EVERY capture until this rule existed, because `probeFocus` was reachable from no CLI flag and no
      * Action input. Absent must therefore make no claim.
@@ -509,6 +517,43 @@ function addContextChanges(input: RuleInput, add: AddFinding): void {
       "Typing into a control changed the page's title, so the user's context moved on input alone",
       `${typed?.titleBefore} -> ${typed?.titleAfter}`, "secondary");
   }
+}
+
+/**
+ * 1.4.13 Content on Hover or Focus — the DISMISSABLE bullet only, from `focusRevealVerdict`'s three
+ * censuses and two focus reads. Content appeared on focus, focus never moved, and Escape (pressed twice —
+ * NVDA eats the first) did not make it go away.
+ *
+ * DELIBERATELY DUPLICATED rather than imported from `case-matrix.mjs`'s `focusPanelUndismissable`, on the
+ * same basis `contextChanged` above already is for 3.2.1/3.2.2's signal predicate: this package does not
+ * depend on `packages/lab`, and the condition is two field reads — cheaper to state twice, in the two
+ * languages the packages are, than to cross that boundary for.
+ *
+ * `revealed`/`dismissed` are tri-state (`true` / `false` / `null`), and only `revealed === true` with a
+ * REAL boolean `dismissed` says anything: `null` on either means a census could not answer, which is
+ * "cannot say", never "no". That is `focusRevealVerdict`'s own contract, restated rather than re-derived.
+ */
+function focusRevealUndismissable(
+  reveal: { revealed?: boolean | null; focusHeld?: boolean; dismissed?: boolean | null } | undefined,
+): boolean {
+  if (!reveal || reveal.revealed !== true) return false;
+  return reveal.focusHeld === true && reveal.dismissed === false;
+}
+
+function addFocusRevealFindings(input: RuleInput, add: AddFinding): void {
+  const reveal = input.interaction?.focusReveal;
+  if (!focusRevealUndismissable(reveal)) return;
+  // `secondary`, not `conformance` — argued, not defaulted. Two of Dismissable's own exceptions are
+  // unruled-out by this evidence: it does not fire "unless the additional content communicates an input
+  // error or does not obscure or replace other content" (WCAG's own text, both clauses). Whether the
+  // revealed content IS an input-error message, and whether it obscures anything, are questions this
+  // census cannot answer — the second is pixels, the same reason PERSISTENT can never be asserted here.
+  // So a positive here is strong evidence of the MECHANISM'S absence and weak evidence that the criterion
+  // is unsatisfied, which is exactly what `secondary` is for.
+  add("1.4.13 Content on Hover or Focus",
+    "Content appeared on focus and was not dismissed by Escape, with focus held throughout — no "
+      + "mechanism to dismiss it without moving focus was observed",
+    `revealedBy ${JSON.stringify(reveal?.revealedBy ?? [])}`, "secondary");
 }
 
 /** Is this a control whose activation is Enter? Read through the shared grammar, never a role regex. */
@@ -1942,6 +1987,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addKeyboardUnreachableControl(input, add);
   addErrorWithoutRemedy(input, add);
   addContextChanges(input, add);
+  addFocusRevealFindings(input, add);
 
   return findings;
 }

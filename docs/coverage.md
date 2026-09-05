@@ -8,12 +8,12 @@ the WCAG list and what actually ships — so this page cannot drift from the cod
 
 | state | count | meaning |
 |---|---|---|
-| **assessed** | 10 | a finding can be produced today |
+| **assessed** | 11 | a finding can be produced today |
 | **partial** | 7 | assessed, but a named failure mode of it is not covered |
-| **reachable** | 8 | not built, and the evidence to build it exists or could be captured |
+| **reachable** | 7 | not built, and the evidence to build it exists or could be captured |
 | **out of scope** | 30 | not answerable by this tool at all |
 
-**17 of 55 produce findings.** That is not a small number
+**18 of 55 produce findings.** That is not a small number
 for screen-reader evidence, and it is not a substitute for a rule scanner: the 30
 out-of-scope criteria are mostly **visual**, which is exactly what axe-core is good at. Run both.
 
@@ -35,6 +35,7 @@ one of its training examples. See [ADR 0015](./adr/0015-one-defect-per-page-taug
 | **1.1.1** | Non-text Content | A | `filename-alt` rules; `missing-alt` rules; rest: trained scorer | Rules own missing and filename alt text exactly; the head owns generic alt ('image', 'photo'). |
 | **1.3.1** | Info and Relationships | A | `no-headings` rules; rest: trained scorer | Pages with NO headings at all (confirmed by the accessibility tree, not merely unseen by the sweep), fake headings, and tables whose headers are not associated. Heading HIERARCHY (h2 -> h4) is not checked — see 'reachable' note on 2.4.10-style structure below; `moveToNextHeadingLevel` would supply it. |
 | **1.4.2** | Audio Control | A | deterministic rules | Rule-only, and the exception that proves the boundary: `autoplay` and `muted` are attributes with no accessibility-tree equivalent, so a deterministic rule reads the DOM and no head is trained on it. TWO OF THE CRITERION'S CLAUSES ARE OUT OF REACH and the rule is `secondary` because of them, not from timidity. It fails only when audio plays automatically FOR MORE THAN 3 SECONDS -- duration is a property of the media file, not an attribute, so a two-second chime conforms and the rule cannot tell it from a soundtrack. And it offers TWO alternatives: a pause/stop mechanism (the `controls` attribute, which the rule does check and skip) OR a mechanism to control volume independently of the system -- a custom slider conforms and nothing here can recognise one. Both make the rule over-eager, which is exactly what reporting `cantTell` is for. |
+| **1.4.13** | Content on Hover or Focus | AA | `focus-panel-undismissable` rules | THE CRITERION EXPLICITLY COVERS KEYBOARD FOCUS, AND WE DRIVE KEYBOARD FOCUS. Verbatim: "Where receiving and then removing pointer hover OR KEYBOARD FOCUS triggers additional content to become visible and then hidden". The previous reason ruled the criterion out on the hover trigger alone, which is the reasoning error `out-of-scope` cannot afford: that status means no amount of work inside this tool's evidence model decides it, and one of the three bullets is decidable. HOVERABLE is genuinely out of reach and stays so -- it is conditioned on `if pointer hover can trigger` and we never use a pointer. DISMISSABLE is reached: `probeFocusReveal` focuses a control, takes a census, presses Escape twice (NVDA eats the first), takes another, and `focusRevealVerdict` decides whether the content that appeared on focus survived the dismissal attempt. A RULE now reads that verdict directly (`focus-panel-undismissable`, `rule-ownership.json`), moved from the trained scorer on 2026-09-05 on ADR 0021's own precedent: the retrain could not calibrate a head from 12 positives, and twenty more would have made it permitted rather than good, where the evidence was already a direct read. `secondary`, not `conformance` -- Dismissable's own text carves out two exceptions this evidence cannot rule out: "unless the additional content communicates an input error or does not obscure or replace other content." Whether the revealed content IS an input-error message, and whether it obscures anything, are questions a census count cannot answer -- the second is pixels, the identical reason PERSISTENT can never be asserted here. PERSISTENT stays undecided: "remains visible" is pixels, so we can never confirm it, though content vanishing from the accessibility tree while the trigger still holds focus is SUFFICIENT evidence of failure without being necessary -- recorded by `focusRevealVerdict` as `vanished`, read by no rule yet. HOVERABLE remains out of reach entirely. |
 | **2.4.4** | Link Purpose (In Context) | A | `regex` overlap; rest: trained scorer | Vague link text. Rules cover a six-phrase subset (19 of 100 corpus records, a declared overlap); the head owns the rest. |
 | **2.4.6** | Headings and Labels | AA | trained scorer | Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the page, so this head is document-pooled. ONE of the criterion's two halves: it reads 'Headings and LABELS describe topic or purpose' and nothing here looks at labels, though NVDA announces them and a vague one is as audible as a vague heading. |
 | **3.2.1** | On Focus | A | `focus-context-change` rules; rest: trained scorer | On Focus, ASSESSED since 2026-09-02 and decided by a RULE. `probeFocusContext` walks up to eight tab stops reading the page title either side of each — walking rather than pressing Tab once, because the first focusable thing on a page is almost never the control you mean, and one press landed on the skip link on all 28 corpus cases. Rules-owned because the comparison is READ rather than judged: two titles are equal or they are not. It runs FIRST among the focus probes, since `probeFocusOrder` walks the whole tab order and a page that renames itself on focus has already done so by the time that finishes. Cost a CAPTURE_PROTOCOL_VERSION bump (13 -> 14) and one full recapture, bundled with 3.2.2. |
@@ -65,7 +66,6 @@ The evidence exists, or could be captured with a probe. Nothing here is a resear
 | # | criterion | level | would need |
 |---|---|---|---|
 | 1.3.5 | Identify Input Purpose | AA | dom |
-| 1.4.13 | Content on Hover or Focus | AA | screen-reader + accessibility-tree |
 | 2.1.4 | Character Key Shortcuts | A | dom |
 | 2.4.7 | Focus Visible | AA | screen-reader + visual |
 | 2.5.3 | Label in Name | A | dom + accessibility-tree |

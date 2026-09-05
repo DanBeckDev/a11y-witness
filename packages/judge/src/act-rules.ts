@@ -528,4 +528,55 @@ export const ACT_RULES: ActRuleDescription[] = [
     accessibilitySupport: NVDA_EDGE + " The title is what NVDA reports on demand, so what is compared is "
       + "what a screen-reader user would hear if they asked where they were.",
   },
+  {
+    id: "a11y-witness:focus-reveal-not-dismissable",
+    version: "2026-09-05",
+    name: "Content revealed on focus is not dismissed by Escape",
+    description: "Focusing a control makes additional content appear — a tooltip, a panel, a menu — and "
+      + "pressing Escape afterwards does not make it go away, with focus never leaving the triggering "
+      + "control. A screen-reader user who did not want the content has no way offered here to remove it "
+      + "without moving away from the control that revealed it.",
+    ruleType: "atomic",
+    accessibilityRequirements: [
+      // SECONDARY, argued rather than defaulted — this rule's evidence is a direct read of
+      // `focusRevealVerdict`'s own verdict (three censuses and two focus reads), the same shape ADR 0021
+      // moved `4.1.2:state-change-silent` to the rules for. It is NOT `conformance` because Dismissable's
+      // own text carves out two exceptions this evidence cannot rule out — see `assumptions` below.
+      { criterion: "1.4.13", mapping: "secondary" },
+    ],
+    inputAspects: ["interaction.focusReveal"],
+    applicability: "Every capture where focusing a control was observed to grow the accessibility-tree "
+      + "census (a formControl, link, graphic, heading or landmark that was not there before) AND the "
+      + "focused control still held focus after Escape was pressed twice AND the census afterwards had "
+      + "not shrunk back. A capture where the census could not be read, nothing was focusable, or nothing "
+      + "appeared on focus is out of scope.",
+    expectation: "Escape dismisses the content that appeared on focus, without moving focus away from the "
+      + "control that revealed it.",
+    assumptions: [
+      "DISMISSABLE'S OWN TWO EXCEPTIONS ARE UNRULED-OUT BY THIS EVIDENCE. Verbatim: 'A mechanism is "
+        + "available to dismiss the additional content ... unless the additional content communicates an "
+        + "input error or does not obscure or replace other content.' Whether the revealed content is an "
+        + "input-error message, and whether it obscures anything at all, are questions a census count "
+        + "cannot answer — the second is pixels, which this evidence structurally cannot supply.",
+      "PERSISTENT IS A DIFFERENT BULLET AND IS NOT DECIDED HERE. 'The additional content remains visible "
+        + "until the hover or focus trigger is removed, the user dismisses it, or its information is no "
+        + "longer valid' is a separate claim from Dismissable, and `focusRevealVerdict`'s own docstring "
+        + "records that 'remains visible' is pixels and can never be confirmed from this evidence.",
+      "HOVERABLE IS OUT OF SCOPE ENTIRELY. It is conditioned on 'if pointer hover can trigger the "
+        + "additional content', and this tool never uses a pointer.",
+      "THE PROBE WALKS AT MOST EIGHT TAB STOPS. A reveal on the ninth or later control is never observed, "
+        + "so absence of a finding says nothing about a page beyond that budget — the same limit "
+        + "`focusOrder`-based rules elsewhere in this file already carry.",
+      "FOCUS MUST GENUINELY HOLD. If Escape moved focus rather than dismissing the content, the page never "
+        + "demonstrated the mechanism the criterion asks about, and this rule makes no claim — reported "
+        + "separately as `focusHeld: false`, never folded into the same verdict as a working dismissal.",
+      "A CENSUS THAT COULD NOT BE READ IS 'CANNOT SAY', NEVER 'CONFORMS'. `structuralCensus` returns "
+        + "`{ error }` rather than `null` on a dropped CDP socket, and `focusRevealVerdict` already refuses "
+        + "to read that as a growth of zero — the same absence rule this file states for every other "
+        + "rule reading a census or a probe result.",
+    ],
+    accessibilitySupport: NVDA_EDGE + " The census is the accessibility tree over the DevTools protocol, "
+      + "not the screen reader, so what is counted is what an assistive-technology API would expose "
+      + "regardless of which screen reader is listening.",
+  },
 ];

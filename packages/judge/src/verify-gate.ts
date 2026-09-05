@@ -82,8 +82,13 @@ const OBJECT_REPLACEMENT = /￼/g; // ￼ — strip the empty-name marker for cl
 // failures. Its records are now `4.1.2:unnamed-control`, which is already here. The only surviving 3.3.2
 // subtype is `placeholder-only`, declared `unavailable`: nobody decides it, so suppressing the model on it
 // would leave the criterion decided by NEITHER layer — exactly what the paragraph above forbids.
+// `1.4.13` JOINED ON 2026-09-05, moved from the trained scorer to the rules (`focus-panel-undismissable`).
+// No model head has ever shipped for it -- it was never in `SCORED_CRITERIA` -- so there is nothing here
+// for this to suppress today. It belongs anyway: membership is derived from `rule-ownership.json`'s
+// `decidedBy`/`reportsAs`, not from whether a head currently exists, and a future head trained on this
+// subtype (RULE_SUBSTITUTED_SUBTYPES keeps its records in the export) must be suppressed the same way.
 export const ABSENCE_CRITERIA = new Set([
-  "1.1.1", "1.3.1", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "3.2.1", "3.2.2",
+  "1.1.1", "1.3.1", "1.4.13", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "3.2.1", "3.2.2",
   "3.3.3", "4.1.2",
 ]);
 
