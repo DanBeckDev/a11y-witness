@@ -284,3 +284,30 @@ test("and the loop still terminates on its own, without leaning on the backstop"
   assert.deepEqual(parsed.objects, []);
   assert.ok(parsed.trailing.length > 0, "unconsumed tokens are reported as trailing, not dropped");
 });
+
+test("an unnamed <form> announced as `section` is a CONTAINER, not part of the name", () => {
+  // MEASURED as a clean before/after on one unchanged corpus page, same NVDA and guidepup, only Edge moved:
+  //
+  //   151.0.4129.59   "form, name at example dot com, edit"
+  //   152.0.4191.66   "section, name at example dot com, edit"
+  //
+  // `w3c/html-aria#423` made the `form` role conditional on an accessible name, as `<section>` already was,
+  // and Edge 152 implemented it: a form nobody named is not a landmark. Without `section` in
+  // CONTAINER_ROLES the whole prefix becomes the control's NAME, which took 18 corpus cases BLIND and
+  // stopped a 4.9-hour pipeline at check-signals.
+  const parsed = parseAnnouncement("section, name at example dot com, edit", "sweep");
+  assert.deepEqual(parsed.objects.map((o) => ({ name: o.name, role: o.role })),
+    [{ name: "name at example dot com", role: "edit" }],
+    "the container prefix leaked into the control's name");
+  assert.equal(parsed.containers[0]?.role, "section");
+
+  // The OLD announcement must still parse identically, because 3,246 captures on disk carry it and a
+  // grammar that only understands the current browser cannot read its own corpus.
+  const before = parseAnnouncement("form, name at example dot com, edit", "sweep");
+  assert.deepEqual(before.objects.map((o) => o.name), ["name at example dot com"]);
+
+  // And a NAMED section keeps its name, which is what stops this being a blanket prefix strip: NVDA
+  // announces a named region the same way, and its name is context rather than noise.
+  const named = parseAnnouncement("Booking details, section, Full name, edit", "sweep");
+  assert.equal(named.containers[0]?.name, "Booking details");
+});

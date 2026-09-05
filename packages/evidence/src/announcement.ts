@@ -101,6 +101,24 @@ export const CONTAINER_ROLES = Object.freeze([
   // the control's NAME and 2.1.1 reported "Search the site property page form Search site…" as a
   // keyboard-unreachable control.
   "property page",
+  // "section" — NVDA's role for an UNNAMED `<form>` as of Edge 152, and the reason is a spec change rather
+  // than a browser bug. `w3c/html-aria#423` made the `form` role conditional on an accessible name, the way
+  // `<section>` already was: a form nobody named is not a landmark, so it maps to generic and NVDA says
+  // "section".
+  //
+  // MEASURED as a clean before/after on one unchanged corpus page, same NVDA (2026.1.1), same guidepup:
+  //
+  //     Edge 151.0.4129.59   "form, name at example dot com, edit"      "out of form, heading, level 1, …"
+  //     Edge 152.0.4191.66   "section, name at example dot com, edit"   "out of section, heading, level 1, …"
+  //
+  // Without it here the whole prefix is absorbed into the control's NAME — the exact failure recorded above
+  // for "property page" — and `check-signals` reported 39 blind and 5 contaminated cases, stopping a
+  // 4.9-hour pipeline at its gate. That is the gate working: `browserVersion` is a capture cache key for
+  // precisely this, and a browser upgrade changed what a page says without anyone touching the page.
+  //
+  // It is a container by NVDA's own account rather than by our classification: it announces entry
+  // ("section, …") and exit ("out of section"), which is what every other member of this list does.
+  "section",
   "list", "table", "form", "article", "banner", "navigation", "main", "blockquote",
 ]);
 
