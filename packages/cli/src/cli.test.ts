@@ -13,9 +13,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createServer, type Server, type ServerResponse } from "node:http";
+import { AddressInfo } from "node:net";
 import { stripComments } from "@a11y-witness/evidence/source-text";
 
-import { applyArg, parseArgs, conformanceFor, type CaptureResponse } from "./cli.js";
+import {
+  applyArg, parseArgs, conformanceFor, captureViaWorker, type CaptureResponse, type CaptureRequest,
+} from "./cli.js";
 
 const CAPTURES = resolve(process.cwd(), "runs/screenreader-dataset/captures");
 
@@ -121,4 +125,79 @@ test("A FAILED AXE SCAN IS NOT '0 violations' — pageContext decides nullness",
     "a failed scan must return null findings, never an empty array");
   assert.match(body, /catch[\s\S]*?findings: null/,
     "the catch for a failed scan must produce null");
+});
+
+/**
+ * THE PRODUCT CLI GAINS THE SOCKET-LOSS RECOVERY EVERY LAB CLIENT ALREADY HAD —
+ * architecture-audit.md §5, item 6.
+ *
+ * `captureViaWorker` used to POST synchronously with no `captureId`, so a response lost in transit meant
+ * the page was reported as never examined even when the worker had already finished it. It now goes
+ * through `captureTolerantly` (`@a11y-witness/worker-fleet/capture-client`), the same client every lab
+ * capture already uses, which mints its own id and reconciles a lost acknowledgement or poll by asking
+ * about that SAME id before ever giving up. Reproduced against a loopback worker exactly like
+ * `capture-async.test.ts` does, at the real function this package calls rather than at a lower-level
+ * helper: before this fix, this test's own worker (which destroys the response and finishes the capture
+ * regardless) made `captureViaWorker` throw with zero recovery attempts.
+ */
+async function loopbackWorker(handler: (url: string, res: ServerResponse, body: string) => void) {
+  const s: Server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => { body += c; });
+    req.on("end", () => handler(req.url ?? "", res, body));
+  });
+  await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
+  return { url: `http://127.0.0.1:${(s.address() as AddressInfo).port}`,
+    close: () => new Promise<void>((r) => s.close(() => r())) };
+}
+
+const CAPTURE_REQUEST: Omit<CaptureRequest, "worker"> = {
+  task: "find the opening hours", probeForms: false, probeFocus: false,
+  probeNavigation: false, probeFocusContext: false,
+};
+
+test("a capture that finished is RECOVERED, not reported as never examined", async () => {
+  const recorded = new Map<string, { state: "running" } | { state: "done"; status: number; body: unknown }>();
+  let posts = 0;
+  const w = await loopbackWorker((url, res, raw) => {
+    if (url === "/capture") {
+      posts += 1;
+      const id = (JSON.parse(raw) as { captureId?: string }).captureId as string;
+      recorded.set(id, { state: "running" });
+      // The worker DID accept and finish the capture -- only the acknowledgement dies here.
+      setTimeout(() => recorded.set(id,
+        { state: "done", status: 200, body: { transcript: ["heading, level 1, Opening hours"] } }), 20);
+      return res.destroy();
+    }
+    const id = url.split("/").pop() ?? "";
+    const entry = recorded.get(id);
+    if (!entry) { res.writeHead(404); return res.end(JSON.stringify({ error: "no such capture" })); }
+    if (entry.state === "running") { res.writeHead(202); return res.end(JSON.stringify({ state: "running" })); }
+    res.writeHead(entry.status);
+    res.end(JSON.stringify(entry.body));
+  });
+  try {
+    const result = await captureViaWorker("https://example.com/", { ...CAPTURE_REQUEST, worker: w.url });
+    assert.deepEqual((result as unknown as { transcript: string[] }).transcript,
+      ["heading, level 1, Opening hours"]);
+    assert.equal(posts, 1, "recovering a lost acknowledgement must not pay for a second capture");
+  } finally { await w.close(); }
+});
+
+test("captureViaWorker sends a captureId, without which nothing above it can recover anything", async () => {
+  let sentId: unknown;
+  const w = await loopbackWorker((url, res, raw) => {
+    if (url === "/capture") {
+      sentId = (JSON.parse(raw) as { captureId?: unknown }).captureId;
+      res.writeHead(202);
+      return res.end(JSON.stringify({ captureId: sentId, state: "running" }));
+    }
+    res.writeHead(200);
+    res.end(JSON.stringify({ transcript: [] }));
+  });
+  try {
+    await captureViaWorker("https://example.com/", { ...CAPTURE_REQUEST, worker: w.url });
+    assert.equal(typeof sentId, "string", "no captureId reached the worker -- recovery has nothing to ask about");
+    assert.ok((sentId as string).length > 0);
+  } finally { await w.close(); }
 });
