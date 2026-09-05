@@ -111,6 +111,18 @@ export type EvidenceChannel =
    */
   | "focusContext"
   /**
+   * Three censuses and two focus reads around FOCUSING a control, capture-protocol 14, for 1.4.13
+   * Content on Hover or Focus — the DISMISSABLE bullet. `focusRevealVerdict` decides what they mean.
+   *
+   * FOUND UNCLASSIFIED the same way `postSubmitNames` was: built and shipped (`probeFocusReveal`,
+   * 2026-09-05) with nothing telling `channelsPresent` it exists. `focusContext`, its sibling for
+   * 3.2.1, got added to this union the same day its rule shipped; this one did not, because the probe
+   * was built AFTER this file's 1.4.13 entry was written and nobody returned to it. The entry's
+   * `channels` named `dialogEscape` instead — a real channel, for an unrelated criterion (2.1.2), that
+   * 1.4.13 never reads.
+   */
+  | "focusReveal"
+  /**
    * The form re-read after a submit, as accessible NAMES rather than field values.
    *
    * FOUND UNCLASSIFIED 2026-09-01 by the corpus test below, which is the whole reason it exists — this one
@@ -514,8 +526,18 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "1.4.13": {
     status: "reachable",
     needs: ["screen-reader", "accessibility-tree"],
-    channels: ["dialogEscape", "focusOrder", "structureCensus"],
-    note: "THE CRITERION EXPLICITLY COVERS KEYBOARD FOCUS, AND WE DRIVE KEYBOARD FOCUS. Verbatim: \"Where receiving and then removing pointer hover OR KEYBOARD FOCUS triggers additional content to become visible and then hidden\". The previous reason ruled the criterion out on the hover trigger alone, which is the reasoning error `out-of-scope` cannot afford: that status means no amount of work inside this tool's evidence model decides it, and one of the three bullets is decidable. HOVERABLE is genuinely out of reach and stays so -- it is conditioned on `if pointer hover can trigger` and we never use a pointer. DISMISSABLE is reachable: it asks for a mechanism to dismiss the additional content WITHOUT MOVING FOCUS, and `dialogEscape` is already exactly that observation -- focus before, what was announced, focus after, Escape pressed twice because NVDA eats the first. Focus a trigger, hear content appear, press Escape, ask whether it is gone. PERSISTENT is asymmetric: \"remains visible\" is pixels, so we can never confirm it, but content vanishing from the accessibility tree while the trigger still holds focus is SUFFICIENT evidence of failure without being necessary -- the same shape as every other absence this tool reasons about. What is missing is a probe, not evidence: nothing today diffs the census across a focus change, which is why this is `reachable` and not `partial`. Do not build it before there is a corpus case, per the rule that a probe built now produces evidence nothing can validate.",
+    channels: ["focusReveal", "focusOrder", "structureCensus"],
+    // THE PREMISE CHANGED HOURS AFTER THIS NOTE WAS WRITTEN, and the note went on describing the old one.
+    // It said "what is missing is a probe... do not build it before there is a corpus case" — true at
+    // 01:31 that day. By 11:41 `probeFocusReveal` existed, `focusRevealVerdict`/`censusGrowth` diffed the
+    // census across a focus change exactly as described, and `focus-panel-undismissable-*` was a real
+    // corpus case family with its own signal predicate. The `channels` array still named `dialogEscape`
+    // — a real channel, for 2.1.2, that 1.4.13 never reads — because the evidence-source guess written
+    // before the probe existed was never checked against what the probe actually populated
+    // (`interaction.focusReveal`). Status stays `reachable`: evidence and a corpus case now exist, but
+    // nothing decides them — no rule owns 1.4.13 and no head is trained on `focusPanelUndismissable`,
+    // so "assessed" (evidence AND a decider, per this file's own definition) is still not true.
+    note: "THE CRITERION EXPLICITLY COVERS KEYBOARD FOCUS, AND WE DRIVE KEYBOARD FOCUS. Verbatim: \"Where receiving and then removing pointer hover OR KEYBOARD FOCUS triggers additional content to become visible and then hidden\". The previous reason ruled the criterion out on the hover trigger alone, which is the reasoning error `out-of-scope` cannot afford: that status means no amount of work inside this tool's evidence model decides it, and one of the three bullets is decidable. HOVERABLE is genuinely out of reach and stays so -- it is conditioned on `if pointer hover can trigger` and we never use a pointer. DISMISSABLE is reachable, and IS reached: `probeFocusReveal` focuses a control, takes a census, presses Escape twice (NVDA eats the first), takes another, and `focusRevealVerdict` decides whether the content that appeared on focus survived the dismissal attempt -- exactly the `focusReveal` channel, not `dialogEscape`, which belongs to 2.1.2's focus-trap check and is unrelated. PERSISTENT is asymmetric: \"remains visible\" is pixels, so we can never confirm it, but content vanishing from the accessibility tree while the trigger still holds focus is SUFFICIENT evidence of failure without being necessary -- the same shape as every other absence this tool reasons about. What is still missing is a DECIDER, not evidence: the probe runs, the census diffs, and `focus-panel-undismissable-*` is a real corpus case family (case-matrix.mjs) with its own signal predicate -- but no rule owns 1.4.13 and no head is trained on it, which is why this is `reachable` and not `assessed`.",
   },
   "1.3.4": { status: "out-of-scope", needs: ["dom", "visual"], note: "THE `needs` WAS WRONG AND THE CONCLUSION HOLDS. This read \"needs the page rendered in two orientations\", and `needs` is defined in this file as a claim about which EVIDENCE SOURCE could decide a criterion -- not about what we intend to do. F97, locking the view to portrait or landscape, is a CSS media query or transform: STATIC, and decidable by code review without rendering anything, which is why axe-shaped tooling can reach it. So `visual` alone understated what could decide it. F100 -- a message asking the user to reorient -- is the other half and is TEXT a screen reader would read aloud, but only once the page is in the orientation it objects to, and the capture is a desktop window in landscape. Out of scope for THIS tool either way: neither half produces an assistive-technology signal in the session we drive. Recorded because a wrong `needs` misroutes the next person building coverage.", },
   "1.3.2": { status: "out-of-scope", needs: ["human", "visual"], note: "THE CONCLUSION IS RIGHT AND THE REASON WAS NOT. This read \"compares reading order to VISUAL order ... cannot say whether it matches what a sighted user sees\", and the criterion does not ask that. Verbatim: \"When the sequence in which content is presented affects its meaning, a correct reading sequence can be programmatically determined\" -- and the Understanding page states outright that the two orders MAY differ without failing (\"the visual presentation of the sections does not match the programmatically determined order, but the meaning of the page does not depend on the order\"). So a mismatch is not the failure, and a tool built on the old reason would have looked for the wrong thing. What actually puts it out of reach is two judgements no capture supplies: whether sequence AFFECTS MEANING here at all, and whether a given linearisation is a CORRECT one. The listed failures are F32/F33/F34 (whitespace used for layout in plain text), F49 (a layout table that does not make sense linearised) and F1 (CSS positioning changing meaning) -- F49 is the one a screen reader comes closest to, and \"does not make sense\" is exactly the judgement it cannot make. A WRONG REASON FOR A RIGHT CONCLUSION IS STILL A DEFECT: it is what the next person reads before deciding what to build.", },
@@ -599,6 +621,7 @@ export const CHANNEL_LOCATION: Record<EvidenceChannel, "structure" | "interactio
   arrowNavigation: "interaction",
   typedFeedback: "interaction",
   focusContext: "interaction",
+  focusReveal: "interaction",
   postSubmitNames: "interaction",
   frames: "structure",
   // Read from somewhere other than `structure`/`interaction`: `media` sits at the top level, `title`
