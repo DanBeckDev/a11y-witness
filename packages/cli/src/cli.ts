@@ -23,7 +23,8 @@ import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "@a11y-witness/judge/layers";
 import { reportLines, type Report } from "./report.js";
 import { leaseWorker, isAfterRun, type AfterRun } from "@a11y-witness/worker-fleet";
-import { requestJson, CAPTURE_CLIENT_TIMEOUT_MS } from "@a11y-witness/worker-fleet/worker-http";
+import { CAPTURE_CLIENT_TIMEOUT_MS } from "@a11y-witness/worker-fleet/worker-http";
+import { captureTolerantly } from "@a11y-witness/worker-fleet/capture-client";
 import type { CaptureStructure } from "@a11y-witness/evidence";
 import type { RuleLayerCoverage } from "@a11y-witness/judge/outcomes";
 import { captureDoubt, captureMentionsTitle, oracleCounts, type CaptureDoubt } from "@a11y-witness/evidence/verify";
@@ -706,7 +707,7 @@ Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCover
   });
 }
 
-interface CaptureRequest {
+export interface CaptureRequest {
   task: string;
   worker: string;
   probeForms: boolean;
@@ -754,14 +755,24 @@ interface FormStateRequest {
 // the story above: the worker's true worst case also includes desktop preparation, not just the hard
 // timeout. Importing rather than recomputing is what makes that a one-file change.
 
-async function captureViaWorker(
+/**
+ * THROUGH `captureTolerantly` NOW, not a bare `requestJson` POST — architecture-audit.md §5, item 6.
+ *
+ * This was the one caller of ten that sent no `captureId`, so the async-dispatch, poll and lost-response
+ * recovery every lab client already had (see `@a11y-witness/worker-fleet/capture-client`) was unavailable
+ * to the one caller that is a real user: a dropped response here used to mean the page was silently never
+ * examined, on a capture that may already have completed. `captureTolerantly` mints its own id, so this
+ * function's only job is the request BODY and turning a transport failure into a message about the page,
+ * not about a Map or a protocol.
+ */
+export async function captureViaWorker(
   url: string,
   { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, formState }: CaptureRequest,
 ): Promise<CaptureResponse> {
   let res: { status: number; ok: boolean; text: string; json: unknown };
   try {
-    res = await requestJson(`${worker}/capture`, {
-      method: "POST",
+    res = await captureTolerantly({
+      worker,
       body: { url, task, probeForms, probeFocus, probeNavigation, probeFocusContext,
         // Omitted rather than sent as null when absent: an older worker reads known fields only, so an
         // absent key is the same "no configured form" it has always understood. Additive, like `fault`.
