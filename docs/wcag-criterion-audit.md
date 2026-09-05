@@ -473,25 +473,89 @@ satisfy 3.1.1 but never accuse.
 | **3.2.6** Consistent Help | *"repeated on multiple web pages within a set"*. Cannot be evaluated from one page, and the capture is single-page by construction |
 | **1.3.5**, **2.1.4**, **2.5.3** | All three sound. 2.1.4's is the sharpest in the file: NVDA consumes single letters as quick-nav commands in browse mode, so the screen-reader channel is *structurally* blind to single-character shortcuts |
 
-### Still to check — 26 of the 33
+### The complete result — all 37 read, 12 findings
 
-Grouped by the family their reason belongs to, because a family shares a failure mode:
-**visual/geometry** 1.4.3, 1.4.11, 1.4.1, 1.4.4, 1.4.5, 1.4.10, 1.4.12, 1.3.4, 2.3.1, 2.4.7, 2.4.11 ·
-**pointer** 2.5.1, 2.5.4, 2.5.7 · **media adequacy** 1.2.1, 1.2.2, 1.2.3, 1.2.4, 1.2.5 ·
-**time-based** 2.2.2 · **multi-page** 2.4.5, 3.2.3, 3.2.4, 3.3.4, 3.3.7, 3.3.8.
+**Every one of the 33 `out-of-scope` reasons and all 4 `reachable` ones was read against its criterion on
+w3.org.** Not by family, not by analogy: the two most instructive defects (2.2.2 and 2.4.7) were in
+criteria whose family looked settled, and would have survived a representative-sample method.
 
-**The hit rate so far argues for finishing rather than stopping**: 3 defects in 11 reads, and the two that
-mattered were both in criteria whose reason made a claim about THIS TOOL rather than about physics. That
-is the pattern to check first in the remainder.
+Two defects changed a STATUS, because `out-of-scope` is defined in `criterion-coverage.ts` as *"no amount
+of work inside this tool's evidence model decides it"* and that was false for both:
 
-## Still to audit
+| | was | now | why |
+|---|---|---|---|
+| **1.4.13** Content on Hover or Focus | out-of-scope | **reachable** | The criterion covers *"pointer hover **or keyboard focus**"* and we drive keyboard focus. `dialogEscape` is already the Dismissable observation |
+| **2.4.7** Focus Visible | out-of-scope | **reachable** | F55, *"script removes focus when focus is received"*, is not a pixel question — and 3.2.1's rule already named F55 as a gap `focusOrder` could witness. **One probe serves both, and neither entry mentioned the other** |
 
-| status | criteria |
+**Three reasons said "needs a whole flow" or "spans pages", and all three were wrong.** The tell is exact:
+every criterion whose text says *"set of web pages"* — 2.4.5, 3.2.3, 3.2.4, 3.2.6 — is correctly
+classified, and all three errors are criteria that say **"process"**. The word was read as "pages".
+
+- **3.3.7** Redundant Entry — governs re-entry *"in the same process"*, and W3C puts a process inside one
+  page explicitly: an email field, then "confirm your email", no auto-population. Entirely one document.
+- **3.3.8** Accessible Authentication — *"failures can often be identified from the login page itself"*;
+  blocked paste is F109 and an `onpaste` handler is static DOM. Never needed a flow or an account.
+- **3.3.4** Error Prevention — an order-review page shows the Confirmed bullet on its own.
+
+Each keeps its conclusion on the barrier that actually applies — for 3.3.7 the security/essential
+exceptions that a confirm-password field satisfies, and for the other two a judgement plus **SECURITY.md**,
+since satisfying them means submitting a stranger's form.
+
+**Three more were two-part criteria summarised by one part** — the same shape as 1.4.13, and worth naming
+because it is the commonest defect in the file:
+
+- **2.2.2** Pause, Stop, Hide — the second part is AUTO-UPDATING content, with no five-second condition and
+  nothing to do with movement. A live region on a timer is the one half a screen reader can hear.
+- **2.5.4** Motion Actuation — *"and responding to the motion **can be disabled**"* is testable without any
+  device motion; F106 is inability to deactivate.
+- **1.3.4** Orientation — wrong `needs`, not a wrong conclusion. F97 is a CSS media query or transform,
+  static and decidable without rendering, so `visual` alone understated what could decide it.
+
+**And three where the conclusion was right and the stated reason had rotted:**
+
+- **1.3.2** Meaningful Sequence — it does NOT compare reading order to visual order; the Understanding page
+  says outright the two may differ without failing. **A tool built on the old reason would have looked for
+  the wrong thing.**
+- **3.1.1** Language of Page — called NVDA's language signal *"an indirect and unreliable proxy"*, which
+  described NVDA at defaults. `speech.reportLanguage` has been ON since 2026-09-03, so NVDA speaks the
+  language as text. Still not decidable, because absence is the failure and silence is what both a missing
+  `lang` and a page matching NVDA's own default produce.
+- **1.4.3 / 1.4.11** Contrast — *"a property of rendered pixels"* is loose in a way that misdirects: W3C
+  says to use *"the underlying markup and stylesheets, rather than the text as presented on screen"*,
+  explicitly because anti-aliasing makes the screen read lower than the authored colours. Computed, not
+  sampled — which is how axe-core does it.
+- **1.2.5** Audio Description — not *"exactly as 1.2.3"*. 1.2.3 lets an author choose description OR a text
+  alternative; 1.2.5 mandates description. One acceptable artefact makes presence MORE mechanically
+  detectable, not less. *"Exactly as X"* is how a distinction stops being visible.
+
+### The 22 confirmed correct, each read against its criterion
+
+1.4.1, 1.4.4, 1.4.5, 1.4.10, 1.4.12, 2.3.1, 2.4.11, 2.5.8 (24x24 **CSS pixels**, with a spacing exception
+computed from intersecting circles) · 2.5.1, 2.5.2, 2.5.7 (all scoped to pointer input; W3C adds that
+2.5.1 *"does not apply to actions required to operate the user agent or assistive technology"*) · 1.2.1,
+1.2.2, 1.2.3, 1.2.4 · 1.3.3, 2.2.1 · 2.4.5, 3.2.3, 3.2.4, 3.2.6 · 1.3.5, 2.1.4, 2.5.3.
+
+**2.1.4's is the sharpest reason in the file and W3C confirms its premise**: the criterion targets shortcuts
+implemented *in content*, and NVDA's own single-letter quick-nav is outside its scope — so in browse mode
+we consume exactly the keys the criterion is about, and the screen-reader channel is *structurally* blind.
+
+### What this says about reasons in general
+
+**A wrong reason for a right conclusion is still a defect**, and this audit is the argument for it: it is
+what the next person reads before deciding what to build. Twelve of 37 needed correction, and only two
+changed a status — so the coverage CLAIMS were nearly all sound while the *explanations* were not.
+
+The generalisable check, and it found ten of the twelve: **read the criterion for a second part, a second
+listed failure, or a word like "process" that was paraphrased.** Every defect here was one of those three.
+
+## Still to audit — NOTHING. All 55 criteria carry a reason that has been read.
+
+| | |
 |---|---|
 | `assessed` | **ALL 10 DONE** — 1.1.1, 1.3.1, 1.4.2, 2.4.4, 2.4.6, 3.2.1, 3.2.2, 3.3.1, 3.3.3, 4.1.3 |
 | `partial` | **ALL 7 DONE** — 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3, 3.3.2, 4.1.2 |
-| `reachable` (4) | 1.3.5, 2.1.4, 2.5.3, 3.1.1 |
-| `out-of-scope` (33) | their REASONS are claims too. Lowest priority: a misread there produces a finding we never make, not one we make wrongly. |
+| `reachable` | **ALL 6 DONE** — 1.3.5, 2.1.4, 2.5.3, 3.1.1, and the two this audit MOVED here, 1.4.13 and 2.4.7 |
+| `out-of-scope` | **ALL 33 DONE** — 2026-09-05, each read on w3.org rather than by family |
 
 **What the first four suggest about the rest.** Three of four were clean, and the clean ones were clean
 for the same reason: the rule's `assumptions` quote the part of the criterion the rule cannot reach, and

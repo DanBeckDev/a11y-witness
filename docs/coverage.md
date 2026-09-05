@@ -102,7 +102,7 @@ competing with it.
 | 2.4.11 | Focus Not Obscured (Minimum) | AA | visual |
 | 2.5.1 | Pointer Gestures | A | dom + human |
 | 2.5.2 | Pointer Cancellation | A | dom |
-| 2.5.4 | Motion Actuation | A | dom |
+| 2.5.4 | Motion Actuation | A | dom + human |
 | 2.5.7 | Dragging Movements | AA | dom |
 | 2.5.8 | Target Size (Minimum) | AA | visual |
 | 3.2.3 | Consistent Navigation | AA | multi-page |
