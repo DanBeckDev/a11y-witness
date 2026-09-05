@@ -14,6 +14,27 @@ you find them disagreeing again, the plan's per-item status is the one derived f
 and when. Where a claim rests on my local `runs/` rather than the lab's corpus, it says so — that
 distinction has been wrong twice in one afternoon and is the first thing to check.
 
+## How the numbers on this page stay findable
+
+This file used to carry the same number more than once — four entries all titled `## 18.`, two each titled
+`## 15.` and `## 20.` — because a number was assigned by whoever wrote the entry, from memory of what the
+highest number so far was, with nothing checking it. CLAUDE.md records what that cost: two wrong citations
+in two days, because a later, wrong reader guess ("read to the LAST section with a given number") was
+itself written down as the fix.
+
+**The rule now: a bare number always means the CURRENT entry, and a duplicate gets a letter appended in the
+order it was committed** — `18a` is the oldest superseded attempt, `18c` the newest superseded attempt, and
+the bare `18` is current, whatever position it happens to sit in. This is checked by
+`packages/lab/src/packaging/not-working-numbering.test.ts`, which refuses a second bare use of any number —
+so this can only happen again if someone edits past a passing test. Position in the file proves nothing
+either way, which is why every current-vs-superseded note also names the commit and the wall-clock time
+that decided it, per `git log -S "<the headline>" -- docs/not-working.md`, rather than trusting where the
+heading sits.
+
+A duplicate is not always a supersession: `§15`/`§15a` are two unrelated findings that happened to claim the
+same number, not one correcting the other. Both stay fully written, refutations and all — this scheme is
+about which number to type when you mean "the current one", never about deleting or resolving the history.
+
 ---
 
 ## 1. CLOSED 2026-08-29 — the shipped weights now state where they came from
@@ -680,6 +701,12 @@ not: it is the layer split working exactly as ADR 0021 designed it.
 
 ## 15. REFUTED 2026-09-01 — masking free vetoes closes every one and costs a real finding
 
+**CURRENT §15 — committed 2026-09-01 22:16 (`9181776`), the later of two UNRELATED findings that both
+claimed this number** (a plain numbering collision, not one superseding the other — the two are on
+different topics). The other is §15a, further below in the file, committed 01:16 the same day: "the
+capture can now ask whether a dialog can be LEFT". Neither is wrong; they simply cannot both answer to
+"§15" for a reader with no other clue which one is meant.
+
 Built, measured over three gated chains, and reverted. Recorded here in full because every number in it
 is one somebody proposing this again would otherwise have to buy back at ~6 minutes of lab time each.
 
@@ -1033,7 +1060,7 @@ open on the grounds that the size was unknown.
   log's timestamp against the recapture's, not by noticing anything wrong with the numbers, which looked
   exactly right.
 
-## 15. CLOSED 2026-09-01 — the capture can now ask whether a dialog can be LEFT, and the answer moved a rule
+## 15a. CLOSED 2026-09-01 01:16 (`dffb47c`) — shares a number with §15 above (an unrelated finding, not a supersession). The capture can now ask whether a dialog can be LEFT, and the answer moved a rule
 
 Capture-protocol 11 bundles three additions: `structure.frames`, `interaction.dialogEscape` and
 `formChanges[].baselineWaitedMs`. Bundling is the point rather than an economy on it — each is individually
@@ -1151,6 +1178,12 @@ two. Same shape as the landmark-name defect this repo fixed three commits ago: *
 
 ## 18. MEASURED IN FULL — every cell is a rate, and "politeness is irrelevant" was wrong
 
+**CURRENT §18 — committed 2026-09-01 19:46 (`f0fb925`), the newest of four entries that all claimed this
+number.** Superseded, physically below in REVERSE chronological order (18c 19:29, then 18b 18:19, then
+18a 04:41 last) — the file's insertion order, not a reading order, which is exactly why the letter is what
+to trust. Each keeps its reasoning and refutation intact. See "How the numbers on this page stay findable"
+near the top of this file for why the bare number always means the current entry.
+
 Six repeats per condition, one page shape, `training:repeat`:
 
 | trigger | what NVDA says of its own | region | heard |
@@ -1228,7 +1261,7 @@ a queue policy. All of it is one page shape on one NVDA and one guidepup, both p
 
 ### The earlier entries, kept because each reasoning was sound and each premise was not
 
-## 18. CHARACTERISED 2026-09-01 — NVDA drops a live region when it is already speaking, and the more it has to say the more reliably
+## 18c. CHARACTERISED 2026-09-01 19:29 (`98e2e99`) — SUPERSEDED by §18 above. NVDA drops a live region when it is already speaking, and the more it has to say the more reliably
 
 Four measurements, and one explanation fits all of them:
 
@@ -1282,7 +1315,7 @@ key.
 
 ### The earlier entries, kept because the reasoning was sound and the premise was not
 
-## 18. A LIVE REGION REACHES THE DELTA 2 TIMES IN 6 — measured, and both earlier headlines were wrong
+## 18b. A LIVE REGION REACHES THE DELTA 2 TIMES IN 6 — measured 2026-09-01 18:19 (`39954a0`), SUPERSEDED by §18 above — and both earlier headlines were wrong
 
 > **THIS SECTION HAS BEEN WRONG TWICE, AND THE CORRECTION IS THE POINT.** It first said a polite live
 > region does not announce while NVDA is speaking. A diagnostic pair refuted that outright: same checkbox,
@@ -1326,7 +1359,7 @@ key.
 
 ### The original entry, kept because the reasoning was sound and the premise was not
 
-## 18. A POLITE LIVE REGION DOES NOT ANNOUNCE WHILE NVDA IS SPEAKING — found by two cases that should have worked
+## 18a. A POLITE LIVE REGION DOES NOT ANNOUNCE WHILE NVDA IS SPEAKING — found 2026-09-01 04:41 (`12ca1a7`), SUPERSEDED by §18 above — found by two cases that should have worked
 
 Measured 2026-09-01, twice, by two unrelated mechanisms:
 
@@ -1437,6 +1470,10 @@ change — is untouched, because taking it means turning the option on, which is
 
 ## 20. CLOSED 2026-09-01 — the capture was transient; what was broken is that NOTHING REFUSED IT
 
+**CURRENT §20 — committed 2026-09-01 18:53 (`bba5fd1`).** §20a below (13:25 the same day, nested under
+"The original entry") is the pre-closure investigation this entry closed — kept for the reasoning, not as
+a competing answer.
+
 The pathological capture was never a page defect. A fresh `--no-cache` capture of the same page was clean
 in 22 s with `graphics 1/1` and `observed.graphics.complete: true`; the "reproduction" that sent three
 hypotheses down the wrong road was `capture-only` serving the CACHE, now fixed.
@@ -1491,7 +1528,11 @@ in: a closure recorded as a NEW section beside the old one rather than over it. 
 refuses a record that carries an OPEN and a CLOSED heading under one number, because a marker a human has
 to remember to change is a marker that does not get changed.
 
-#### 20. ONE PAGE CAPTURES PATHOLOGICALLY, and `grants-audit` is what caught it
+#### 20a. ONE PAGE CAPTURES PATHOLOGICALLY, and `grants-audit` is what caught it
+
+Committed 2026-09-01 13:25 (`9f4f71d`), before §20 above closed it — the same numeral was reused here even
+after the demotion this section's own header describes, which is the residual instance of that defect this
+audit found rather than the one it already knew about.
 
 The protocol-13 corpus run captured **1,481 of 1,481 cases with 0 failures** and then STOPPED at
 `grants-audit`, which is the pipeline working: *"a label for a defect nothing captured teaches the head to
