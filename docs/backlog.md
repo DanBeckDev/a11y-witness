@@ -201,6 +201,31 @@ moved underneath it.
 
 ---
 
+## The architecture audit — `docs/architecture-audit.md`, commissioned 2026-09-05
+
+An outside-in audit by an external architect, with a follow-up review. **It is a record, not a second
+tracker** — its own closing line says so — so its open findings live here. Every row below was
+**re-verified at HEAD by this session before being assigned**, because several had already moved.
+
+| finding | verified here | who |
+|---|---|---|
+| **A model finding can assign itself ASSERTION AUTHORITY.** `validateJudgment` returns the original object, so an extra `mapping: "conformance"` survives and `criterionOutcomes` treats a model finding as a hard conformance failure. Contradicts ADR 0021's whole division — rules are the only layer that may assert — and the runtime cannot rely on a provider honouring the schema. | **REPRODUCED.** The same 2.4.4 model finding: `failed` with the field, `cantTell` without. | agent |
+| **A model REFERRAL can suppress a rule ASSERTION, and it reaches the DEFAULT backend.** `withRuleFindings` builds `seen` from the MODEL's criteria and drops rule findings on those criteria. Its comment argues it "cannot add false positives" — true, and beside the point: it REMOVES true positives. **The audit scoped this to the generative path and it is broader**: `judge.ts:622` applies it to `local`, whose findings are all `cantTell` by construction, so our own scorer can silence a rule that asserts. | Mechanism confirmed by reading. A fixture where the 1.1.1 rule actually fires is the first task, and skipping it would be *a canary that cannot express the fault*. | agent |
+| **The live path and the training path build different model inputs.** `score.py:86` appends `landmark-navigation`; `evidence-units.ts:98` deliberately omits it. Every live page feeds the encoder a unit type in no training record — and it is the exact field the TS side removed after measuring it swing a conformant page's 3.3.2 score **0.004 → 0.39 across a 0.35 threshold**, clean once and failing once on two acceptance cases. `model-input.test.ts` checks two JS suspects and structurally cannot see `score.py`. | **CONFIRMED at HEAD**, both sides read. | agent |
+| ~~**A published export the tarball cannot satisfy**~~ — `worker-fleet` mapped `./cli-flags` at `./src/cli-flags.mjs` while `files` ships only `dist` and two `src` subdirectories. 42 import sites. `isolation-gate.mjs` names this exact failure in its header and answers it with each package's SMOKE TEST, which only exercises subpaths it imports — and `isolation-smoke.mjs` never imports this one. | **FIXED `5374691`.** Repointed at `dist`; `exports-are-shipped.test.ts` now checks every export of every public package against `files` AND existence, mutation-checked. | done |
+| **The Action's axe layer is structurally dead.** `chromium.launch()` with no channel, `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"`, and `assert-action-report.mjs` never reads `ruleBased` — so every Action consumer gets `ruleBased: null` while the header announces "rule-based axe-core + real screen reader". `axeAvailable` proves the module IMPORTS, not that a browser LAUNCHES. | **All three legs confirmed at HEAD.** | agent |
+| **Losing the async acceptance loses the recovery path.** The client awaits the initial POST outside any transport-recovery block and throws on a lost 202, despite already holding the ID needed to recover. `capture-async.test.ts` covers dropped POLLS, not a lost acknowledgement. | audit-reproduced on a loopback; not re-run here | open |
+| **Result recall is not an idempotency contract.** `begin(id)` deletes a previous result and replaces it with `running`; after completion another POST with the same ID executes again, with no payload-conflict check. So **404 means "not retained here"**, not "never started" — and the comments overclaim it in both directions. | audit-reproduced against the store; the POST path was read, not run | open |
+| **The timeout ladder does not bound the whole operation.** The client's deadline starts after an independently budgeted 30 s acceptance, and no inner read is clipped to remaining time; the worker permits 60 s preparation plus a 520 s capture against a 560 s client budget. | audit-reproduced on a loopback | open |
+| **`control` ↔ `worker-fleet` is a real cycle.** The published `worker-fleet` reads the private `control`'s `inventory.yml` from four modules, with a hand-rolled YAML reader to avoid a dependency. | read | open |
+| **Nothing installs the git hooks; the Python tests run under no automated gate.** Every release-integrity gate is dispatch-only. | read | open |
+
+**What the audit says is STRONG, recorded because a register of defects is not a picture of the system:**
+the ADR 0004 package split holds, the declared graph is a DAG, `evidence` is genuinely pure, and the
+repo's strongest asset is *a testing pattern* — about thirty meta-tests that discover a population,
+require each member to be classified or exempted with a reason, and open with a vacuity guard. Three of
+today's fixes are that pattern applied where it was missing.
+
 ## Open defects
 
 | | what would tell you it is fixed | detail |
