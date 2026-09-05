@@ -35,8 +35,23 @@ criterion — "the criterion asks whether the alternative serves an equivalent P
 looks like a file name could legitimately be the right description". Correct, and correctly a referral.
 
 **FINDING — five of six exceptions are unstated.** `a11y-witness:unnamed-graphic-count` states its
-assumptions about ignored and generated nodes, and says nothing about the other five. The one that can
-bite is **Controls, Input**: *"If non-text content is a control or accepts user input, then it has a NAME
+assumptions about ignored and generated nodes, and says nothing about the other five.
+
+> **CLOSED 2026-09-05: only ONE of the five could ever have bitten, and it is the one that did.** Read
+> against the criterion rather than counted, four of the five cannot produce a false positive here, and
+> the reason is structural rather than lucky. **Time-Based Media, Test and Sensory** each say text
+> alternatives *"at least provide DESCRIPTIVE IDENTIFICATION of the non-text content"*, and **CAPTCHA**
+> requires *"text alternatives that identify and describe the purpose"*. Every one of them still demands
+> a text alternative — they relax WHAT it must say, not WHETHER it exists. **This rule tests presence and
+> never adequacy**, so an image exempted by any of the four still fails it exactly when it should. Only
+> **Decoration** permits no alternative at all, and that one is handled by construction.
+>
+> So "five unstated" read as five outstanding risks and was really one, now fixed. The general form is
+> worth keeping, because an exception list is exactly where the tells above go looking: **an exception
+> that narrows a requirement is not an exception that removes it**, and only the removing kind can make
+> a presence-check accuse a conformant page.
+
+The one that can bite is **Controls, Input**: *"If non-text content is a control or accepts user input, then it has a NAME
 that describes its purpose."* An `<img>` inside a named button satisfies 1.1.1 through the BUTTON's name,
 and `name` is defined as "text by which software can identify a component within web content to the user"
 — which the image itself need not carry. CLAUDE.md already records the announcement shape that produces:
