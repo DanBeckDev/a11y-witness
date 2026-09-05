@@ -592,6 +592,18 @@ blocked. A green that arrives without anyone reading which weights it scored wou
 **No hands are needed to make it happen**: it triggers on push, so the next push after v19 lands or
 reverts exercises it. What needs a human is reading the result and naming the sha and the schema.
 
+**AND EVERY ONE OF THOSE 85 RED RUNS THREW AWAY ITS OWN REPORT — fixed 2026-09-05.** The
+`if: failure()` step that exists to keep the evidence read `path: ${{ steps.witness.outputs.result-json }}`,
+an output that step sets on its LAST line. So on a failure it was never set, the expression rendered
+empty, and the upload died with *"Input required and not supplied: path"* — a failure handler that fails
+precisely when it is needed, and `if-no-files-found: ignore` kept it quiet. It now names
+`$RUNNER_TEMP/a11y-witness-result.json` directly, a constant assigned before the CLI is invoked, and
+warns rather than ignores when it collects nothing. This does not change the verdict above — the runs
+were red for the migration lock, which is correct — but it means the diagnosis above was reconstructed
+from LOG TEXT when an artefact should have been sitting there, and any future red run for a DIFFERENT
+reason would have been equally bare. Fourth instance in one evening of a diagnostic that cannot report
+itself.
+
 
 The only judgement left is *when*, and the order section above answers it: after stage 4, because a
 changeset describes weights and should describe the final ones. [not-working §8](./not-working.md)
