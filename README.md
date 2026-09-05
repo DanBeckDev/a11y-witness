@@ -28,7 +28,7 @@ spots** on the criteria it rather than the rules decides. See
 [Known limitations](./RELEASE.md#known-limitations-stated-plainly) and
 [ADR 0021](./docs/adr/0021-the-layer-that-decides-must-be-the-layer-allowed-to-claim.md).
 
-It is three things: a testing pipeline, the reproducible screen-reader infrastructure that makes it runnable by anyone, and an accessibility model of our own being trained on the evidence the first two produce. The first two are what ships and works; the third is real, measured, and not yet carrying real pages.
+It is three things: a testing pipeline, the reproducible screen-reader infrastructure that makes it runnable by anyone, and an accessibility model of our own being trained on the evidence the first two produce. All three ship: the model is trained, shipped in the repo, and is the default judge — see [Part 3](#part-3-the-accessibility-model-we-are-building) for what it does and does not yet cover.
 
 It is not a rule scanner, and it is not a wrapper around one. Rule engines automate the mechanical layer well — Deque reports [axe-core](https://github.com/dequelabs/axe-core) finds about 57% of WCAG issues automatically and flags the rest for human review. That remainder is largely the **lived experience**: whether what a screen reader announces, as someone reads and operates the page, adds up to something a person can use.
 
@@ -93,7 +93,7 @@ The project is three pieces of work, each useful on its own:
 |---|---|---|
 | **1. The testing pipeline** | Drive a real screen reader through real navigation, judge the transcript, report WCAG-cited findings. Optionally alongside axe-core, for the visual criteria a screen reader cannot perceive. | **Working end to end** |
 | **2. Reproducible screen-reader infrastructure** | Screen readers are OS-bound desktop apps that cannot be containerised. Getting NVDA running, unattended and repeatably, is a genuine engineering problem — so it is solved as a first-class part rather than a prerequisite chore. | **Working**: scripted VM build, one-command Windows bootstrap, CI path |
-| **3. An accessibility model of our own** | A model that judges screen-reader evidence against WCAG criteria, trained on paired captures the other two parts produce. | **In development** — dataset being collected, nothing trained yet |
+| **3. An accessibility model of our own** | A model that judges screen-reader evidence against WCAG criteria, trained on paired captures the other two parts produce. | **Trained and shipped** — the default judge (`JUDGE_BACKEND=local`). Held-out acceptance is 80 true positives, 0 false positives, 0 false negatives across the 6 of 16 criteria it currently reaches the report for; see [Part 3](#part-3-the-accessibility-model-we-are-building) for why the other 10 do not yet |
 
 They compound. Part 2 makes part 1 reproducible by anyone; parts 1 and 2 together generate the labelled evidence that part 3 needs, which no public dataset provides — because the training signal here is *what a screen reader announced*, not HTML.
 
@@ -253,6 +253,13 @@ This is not a footnote to the interesting work — it *is* some of the work. Scr
 
 Because a Windows guest is never genuinely idle, the pipeline manages it **on demand**: with a local VM and no `A11Y_WORKER` set, a run starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15 s. Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`worker-ctl.sh`](./packages/worker-fleet/src/local-worker/worker-ctl.sh) does `up | pause | stop | status | idle-pause`.
 
+**This project's own corpus is no longer captured this way.** Everything below in this section — the
+cloned VM pool, the scaling measurements — is the DEPRECATED default for a contributor with no
+bare-metal fleet, kept working because it is still the right path for that case. Our own training data
+comes from ten bare-metal Windows boxes managed by Ansible (`packages/control/`, private — see
+[ADR 0012](./docs/adr/0012-control-plane-split.md)), which is not something
+this repository can hand you; the VM route below is what a contributor without one actually gets.
+
 **Scaling past one worker.** Because captures serialise per machine, throughput comes from
 more machines. On a Mac that is one command, and the lifecycle is handled for you:
 
@@ -316,7 +323,8 @@ packages/
   scorer/         the trained heads, the feature contract, and the Python scoring program
   evidence/       wire types, verification predicates, the WCAG 2.2 AA list. Zero deps, no I/O
   nvda-worker/    the Windows capture worker. Plain `.mjs`, no build step — it runs on the guest
-  nvda-speech/    the speech-channel client
+  nvda-speech/    PRIVATE. NVDA's announcement composition, ported to run without Windows -- a pure
+                  function, no I/O (GPL, derived from NVDA; see its own README before importing)
   worker-fleet/   host-side lease, health and capacity; provisioning; the Ansible fleet definition
   lab/            PRIVATE. The corpus, the training pipeline, the gates. Ships nothing
 
@@ -464,7 +472,7 @@ you are trying to do. The four you are most likely to want:
 | [`docs/getting-started.md`](./docs/getting-started.md) | **start here**: install, set up a worker by whichever route fits, run your first report, and what to do when it fails |
 | [`docs/adr/README.md`](./docs/adr/README.md) | 24 architecture decision records, indexed — the *why*, including the alternatives that were rejected |
 | [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) | how the numbers were produced, the biases we are exposed to, and why the eval figures must not be quoted as a headline |
-| [`docs/coverage.md`](./docs/coverage.md) | **every WCAG 2.2 A/AA criterion and whether we detect it** — 18 of 55 produce findings, and each partial one names the gap. Generated from the code, so this number cannot drift from it |
+| [`docs/coverage.md`](./docs/coverage.md) | **every WCAG 2.2 A/AA criterion and whether we detect it** — read that page for the current count rather than this one, and each partial one names the gap. Generated from the code and pinned by a test that regenerates and diffs it, but this sentence is a hand-typed copy and drifted from it once already |
 | [`docs/screenreader-coverage.md`](./docs/screenreader-coverage.md) | every behaviour we drive — and **what we do not drive yet**, which bounds what this tool can claim |
 
 For contributors: [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`SECURITY.md`](./SECURITY.md). Read the second

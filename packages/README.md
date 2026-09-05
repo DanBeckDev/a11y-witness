@@ -12,6 +12,15 @@ enforcement was in place before the code could drift against it.
 | `worker-fleet` (M6) | AGPL-3.0-or-later | host-side lease/health/capacity, the `a11y-doctor` and `a11y-worker-*` bins, and the UTM provisioning scripts. Touches no NVDA |
 | `a11y-witness` (M7) | AGPL-3.0-or-later | the CLI, unscoped so `npx a11y-witness` needs no wrapper. Exports `reportLines` only; the root package was renamed to `a11y-witness-monorepo` to free the name |
 
+**Three more exist and are deliberately absent from the migration table above** — that table is M1–M8's
+*published* split; these are `"private": true` and never reach the registry:
+
+| package | licence | contents |
+|---|---|---|
+| `control` | AGPL-3.0-or-later | the control plane: holds the fleet SSH key, dispatches work to the fleet and to `lab`. Dependency-free by design — [ADR 0012](../docs/adr/0012-control-plane-split.md) |
+| `lab` | AGPL-3.0-or-later | the eval harness, the training corpus pipeline, the release gates and the analysis programs. Ships nothing |
+| `nvda-speech` | GPL-3.0-or-later | NVDA's announcement composition, ported to run without Windows — GPL because it is derived from NVDA, so `evidence` (Apache-2.0) must never import it |
+
 The order is deliberate. M0 tested the assumption that could invalidate the whole design — that a consumer
 can install and run one package in isolation — and its findings are in `docs/isolation-spike.md`. M1 adds
 the machinery. Only then do M2–M8 move files, each with a gate that compares a result to the previous one
