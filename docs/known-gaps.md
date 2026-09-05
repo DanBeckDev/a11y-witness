@@ -1715,10 +1715,29 @@ AND no language spoken   NVDA announced no language change anywhere
 Causes it would catch: a `lang` the synthesiser has no voice for, a malformed or unrecognised tag, a
 marking inside a subtree NVDA never reached.
 
-**It is NOT built, and the reason is §17's rule rather than effort.** The corpus cases cannot exercise it:
-the GOOD page is marked and announced, the BAD page is unmarked, and neither is *marked and silent*. A rule
-shipped now would be scored against a corpus with no positive for it — *"a probe built now would produce
-evidence nothing could validate"*, arriving at a rule instead of a probe.
+**It WAS not built, and the reason was §17's rule rather than effort.** The corpus cases could not exercise
+it: the GOOD page is marked and announced, the BAD page is unmarked, and neither is *marked and silent*. A
+rule shipped then would have been scored against a corpus with no positive for it — *"a probe built now
+would produce evidence nothing could validate"*, arriving at a rule instead of a probe.
+
+> **THE CASE NOW EXISTS — `language-marked-silent-*`, built 2026-09-05, awaiting capture.** Both variants
+> end with `lang="fr"` on the same element carrying the same passage, and differ only in WHEN it was
+> applied: statically in the markup, or by script after load. The census reads `[lang]` over CDP after the
+> page settles, so `partLangCount` is 1 on BOTH; NVDA builds its browse-mode buffer at load, so only the
+> static one should be announced. Two pages with an IDENTICAL FINAL DOM that a screen reader tells apart —
+> and a static analyser passes both, correctly, because both really are marked.
+>
+> **It is an experiment, not a closed gap.** If `refreshBrowseBuffer` picks the change up, the signal fires
+> on both variants, `check-signals` reports CONTAMINATED, and the case is withdrawn with the measurement
+> recorded — as `reportEmphasis` was ([§33](./known-gaps.md)).
+>
+> **AND THE FIRST ATTEMPT WAS VOID, FOR A REASON THIS SECTION ALREADY GAVE.** It used `xml:lang`, which has
+> no effect in `text/html` — sound as a conformance question, and useless here: the rule counts `[lang]`
+> ELEMENTS, and that page has none, so its bad variant was indistinguishable from an unmarked one and
+> landed straight back in the undecidable fourth case. The paragraph above says the bad page must be
+> *marked and silent*, in those words. **Reading it first would have saved building the wrong case**, which
+> is this file's own "check the premise before the expensive thing" applied to a document rather than a
+> capture.
 
 ### CORRECTED 2026-09-04 — "NO LAYER CAN DECIDE 3.1.2" WAS AN OVER-GENERALISATION FROM ONE CASE
 
