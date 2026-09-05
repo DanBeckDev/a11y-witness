@@ -393,7 +393,8 @@ async function recaptureUntilItReadsThePage(
   first: CaptureResponse,
   title: string,
   options: { url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean;
-    probeNavigation: boolean; probeFocusContext: boolean; formState?: FormStateRequest },
+    probeNavigation: boolean; probeFocusContext: boolean; probeFocusReveal: boolean;
+    formState?: FormStateRequest },
 ): Promise<CaptureResponse> {
   let cap = first;
   const { url, ...captureOptions } = options;
@@ -412,11 +413,11 @@ async function recaptureUntilItReadsThePage(
  * network- and worker-bound; the other is pure) and fail for unrelated reasons, which is the seam.
  */
 async function captureAndScan(
-  { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, wantAxe, axeResults,
-    formState }: {
+  { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
+    wantAxe, axeResults, formState }: {
     url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean;
-    probeNavigation: boolean; probeFocusContext: boolean; wantAxe: boolean; axeResults: string | null;
-    formState?: FormStateRequest;
+    probeNavigation: boolean; probeFocusContext: boolean; probeFocusReveal: boolean; wantAxe: boolean;
+    axeResults: string | null; formState?: FormStateRequest;
   },
 ): Promise<{ cap: CaptureResponse; axe: Awaited<ReturnType<typeof pageContext>> }> {
   const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults });
@@ -425,7 +426,8 @@ async function captureAndScan(
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
   const [firstCap, axe] = await Promise.all([
-    captureViaWorker(url, { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, formState }),
+    captureViaWorker(url,
+      { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState }),
     pageContext(url, ruleLayer, axeResults),
   ]);
   // `null` when the rule layer did not run, so "unchecked" can never be mistaken for "clean". Both
@@ -440,7 +442,7 @@ async function captureAndScan(
   // Verify-and-retry (the Root-1 fix, brought to the product). Browser focus on
   // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
   const cap = await recaptureUntilItReadsThePage(firstCap, axe.title,
-    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, formState });
+    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState });
   return { cap, axe };
 }
 
@@ -471,11 +473,11 @@ function reportOnTheCapture(cap: CaptureResponse, debug: boolean): void {
 
 async function runWitness(
   { url, task, worker, json, debug, probeForms, probeFocus, probeNavigation, probeFocusContext,
-    emitFormConfig, formState, axe: wantAxe, axeResults }: RunOptions,
+    probeFocusReveal, emitFormConfig, formState, axe: wantAxe, axeResults }: RunOptions,
 ): Promise<void> {
   const { cap, axe } = await captureAndScan(
-    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, wantAxe, axeResults,
-      formState });
+    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
+      wantAxe, axeResults, formState });
   const ruleFindings = axe.findings;
   // A draft needs the ANNOUNCEMENTS and nothing downstream of them, so it returns before the judge runs.
   // Scoring a page in order to print a config skeleton would spend a model pass on an answer nobody asked
@@ -714,6 +716,7 @@ export interface CaptureRequest {
   probeFocus: boolean;
   probeNavigation: boolean;
   probeFocusContext: boolean;
+  probeFocusReveal: boolean;
   /**
    * ONE declared state (ADR 0024), or none.
    *
@@ -767,13 +770,14 @@ interface FormStateRequest {
  */
 export async function captureViaWorker(
   url: string,
-  { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, formState }: CaptureRequest,
+  { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
+    formState }: CaptureRequest,
 ): Promise<CaptureResponse> {
   let res: { status: number; ok: boolean; text: string; json: unknown };
   try {
     res = await captureTolerantly({
       worker,
-      body: { url, task, probeForms, probeFocus, probeNavigation, probeFocusContext,
+      body: { url, task, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
         // Omitted rather than sent as null when absent: an older worker reads known fields only, so an
         // absent key is the same "no configured form" it has always understood. Additive, like `fault`.
         ...(formState ? { formState } : {}) },
