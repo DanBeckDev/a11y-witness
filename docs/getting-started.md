@@ -71,6 +71,10 @@ Pick the route that matches what you have.
 
 ### Route A — a Mac, and no Windows machine
 
+For a single machine, this remains the right route. **If you have or are setting up more than
+one worker, prefer a declared fleet instead** — see [`control-plane-proxmox.md`](./control-plane-proxmox.md);
+the CLI already reads that ahead of any local VM, so nothing below is used once a fleet exists.
+
 Builds a Windows 11 ARM64 VM locally, unattended. One-off host prerequisites:
 
 ```bash

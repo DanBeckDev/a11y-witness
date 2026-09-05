@@ -1,5 +1,21 @@
 # A local NVDA worker on your own machine
 
+> **If you have, or are setting up, more than one worker, prefer a declared fleet
+> (`inventory.yml`, see [`control-plane-proxmox.md`](./control-plane-proxmox.md)) over adding
+> more local VMs.** This project's own capture now runs on bare-metal boxes for exactly that
+> reason — CLAUDE.md records it in the first person: *"a deprecated path that is still the
+> first one documented is not deprecated,"* after an agent took a capture-path change to a
+> laptop VM while five bare-metal workers sat ready. The CLI already reflects this: `leaseWorker`
+> reads `inventory.yml` before it ever looks for a local VM, so a checkout with a fleet declared
+> uses it automatically, and this page's material is not consulted.
+>
+> **Nothing below is wrong, and nothing here is being deleted.** If you are a single contributor
+> with a Mac and no other hardware — the case this document was written for — this remains the
+> right and only path, and the measurements below (native ARM64, the AppleScript `create`
+> workaround, the memory/scaling figures) are the record of why it works the way it does. Read
+> them as documentation of a supported route, not as the recommended one for anyone who has, or
+> could have, more than one machine.
+
 Capture needs a real Windows desktop, so the worker has always lived on a separate
 box. That is a bad debugging loop: a broken capture means a round trip to a machine
 you may not have with you, and validating through CI costs ~10 minutes per attempt.

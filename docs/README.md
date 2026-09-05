@@ -9,8 +9,8 @@ human or agent, *working on* the repo rather than using it.
 | doc | read it when |
 |---|---|
 | [getting-started.md](./getting-started.md) | you have no capture worker and need one (~1.5–2 h, mostly downloading Windows) |
-| [local-worker-vm.md](./local-worker-vm.md) | you are on a Mac and want the scripted UTM worker |
-| [control-plane-proxmox.md](./control-plane-proxmox.md) | you are running the bare-metal fleet rather than local VMs |
+| [local-worker-vm.md](./local-worker-vm.md) | you are a single contributor on a Mac with no other hardware and want the scripted UTM worker. **Superseded by a declared fleet for anyone with more than one machine** — `leaseWorker` already prefers `inventory.yml` over a local VM |
+| [control-plane-proxmox.md](./control-plane-proxmox.md) | you have (or are setting up) more than one worker — the bare-metal fleet, and the recommended path over local VMs |
 | [github-action.md](./github-action.md) | you want it in CI against your own app |
 
 ## What is not done yet
