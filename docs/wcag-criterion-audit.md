@@ -488,6 +488,23 @@ satisfy 3.1.1 but never accuse.
 | **3.2.6** Consistent Help | *"repeated on multiple web pages within a set"*. Cannot be evaluated from one page, and the capture is single-page by construction |
 | **1.3.5**, **2.1.4**, **2.5.3** | All three sound. 2.1.4's is the sharpest in the file: NVDA consumes single letters as quick-nav commands in browse mode, so the screen-reader channel is *structurally* blind to single-character shortcuts |
 
+### RE-CHECKING the 17 CLAIM-BEARING criteria with the tells — 2026-09-05
+
+The tells were derived from the 37; the 17 that actually make claims were audited a day earlier, without
+them. Re-reading those against the three tells specifically found two more things, one of which closed
+work rather than opening it.
+
+| | outcome |
+|---|---|
+| **1.1.1** — "five of six exceptions unstated" | **CLOSED, and it was one risk not five.** Time-Based Media, Test and Sensory each require alternatives that *"at least provide descriptive identification"*; CAPTCHA requires ones that *"identify and describe the purpose"*. All four still DEMAND an alternative — they narrow what it says, not whether it exists — and this rule tests presence, never adequacy. Only Decoration removes the requirement, and only Controls/Input moves it onto another element. **Sort exceptions into NARROWING and REMOVING; only the removing kind can make a presence-check accuse a conformant page.** |
+| **2.1.1** — the timing clause | **FINDING, stated.** The note enumerated two exclusions (unannounced controls, keys other than Tab) and omitted a third that is in the criterion's own sentence: operable *"WITHOUT REQUIRING SPECIFIC TIMINGS FOR INDIVIDUAL KEYSTROKES"* — W3C's gloss is keystrokes repeated *"within a short period of time"* or a key *"held down for an extended period"*. A distinct failure from unreachability, and structurally invisible here: the probe presses Tab once per stop and measures nothing temporal, so a control needing three keystrokes in 500 ms is reached, announced, and looks conformant. **An enumeration that omits one member is worse than no enumeration**, because it reads as exhaustive. |
+| **2.1.2** — the "advised of the method" half | **CLEAN, and it is the model for the others.** The criterion has two requirements and `act-rules.ts` states the second in its `assumptions` verbatim — *"permits a non-standard method if the user is advised of it. We press Tab only, and we cannot see an on-page advisory, so a repeat is strong evidence and not proof"* — with `mapping: "secondary"` following from it. The second part is why it does not assert. |
+
+**What this says about the tells: they work backwards as well as forwards.** Applied to already-audited
+criteria they found a closed question (1.1.1) as readily as an open one (2.1.1), and confirmed a clean
+verdict for a reason the first pass had not tested. Re-running a cheap check after learning what to look
+for is worth more than it costs.
+
 ### The complete result — all 37 read, 12 findings
 
 **Every one of the 33 `out-of-scope` reasons and all 4 `reachable` ones was read against its criterion on
