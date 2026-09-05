@@ -181,7 +181,13 @@ export function draftFormsConfig(
     resolved.filter((field) => field.role === "button" && field.name !== "").map((field) => field.name),
   )];
   const fillable = resolved.filter((field) => VERB_FOR_ROLE[field.role] !== undefined);
-  const unnamed = fillable.filter((field) => field.name === "").map(at);
+  // EVERY resolved-but-unnamed control, not only the fillable ones -- an unnamed BUTTON is exactly as
+  // much a 4.1.2 finding as an unnamed edit field, and deriving this from `fillable` silently dropped it:
+  // a button is excluded from `fillable` (it takes no verb) and from `submitCandidates` (no name to
+  // offer), so it vanished from the draft entirely. Measured: `[", button"]` produced `unnamed: []`,
+  // contradicting this file's own header -- "an author who never fills the file in has still learned
+  // something" promises no silent omission, and this was one.
+  const unnamed = resolved.filter((field) => field.name === "").map(at);
   const entries = addressable(fillable
     .filter((field) => field.name !== "")
     .map((f) => ({ name: f.name, verb: VERB_FOR_ROLE[f.role], group: f.group })));

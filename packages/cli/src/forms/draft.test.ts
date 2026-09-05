@@ -90,6 +90,18 @@ test("a BUTTON is a submit candidate, never something to type into", () => {
   assert.match(draft.yaml, /submit: "Sign up"/);
 });
 
+test("an UNNAMED button is still reported — it is not fillable, and it is not a NAMED candidate either", () => {
+  // `unnamed` used to be derived from `fillable`, which a button never is (it takes no verb) -- so an
+  // icon-only submit button with no accessible name fell out of BOTH `unnamed` (not fillable) and
+  // `submitCandidates` (no name to offer) and vanished from the draft with no trace at all. Measured
+  // before the fix: `draftFormsConfig(["Email, edit", ", button"], ...).unnamed` was `[]`. A button
+  // announced with no name is exactly as much a 4.1.2 finding as an unnamed edit field.
+  const draft = draftFormsConfig(["Email, edit", ", button"], { origin: ORIGIN });
+  assert.deepEqual(draft.unnamed, [{ position: 2, announced: ", button" }]);
+  assert.deepEqual(draft.submitCandidates, [], "an unnamed button cannot be offered as a submit candidate");
+  assert.match(draft.yaml, /UNNAMED FIELD, 2 in reading order/);
+});
+
 test("several buttons are all listed, because guessing which one submits is not ours to do", () => {
   const draft = draftFormsConfig(
     ["Email, edit", "Search, button", "Sign up, button"], { origin: ORIGIN });
