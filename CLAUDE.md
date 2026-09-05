@@ -53,8 +53,9 @@ We follow the applicable subset of *Clean Code* (Martin). It has two halves, enf
 
 ## Working on a Mac (the usual case)
 
-> **THE LOCAL UTM WORKER VMs ARE DEPRECATED. Capture on the bare-metal fleet.** Five boxes
-> (`a11y-worker-2` … `-6`, in `inventory.yml`) serve `/health` without a laptop in the path, and
+> **THE LOCAL UTM WORKER VMs ARE DEPRECATED. Capture on the bare-metal fleet.** TEN boxes
+> (`a11y-worker-2` … `-11`, in `inventory.yml`; `-1` is retired and its number is never reused) serve
+> `/health` without a laptop in the path, and
 > `npm run fleet:status` is the one command that says so. Deploy with **`npm run fleet:deploy`**, never
 > `worker:deploy` — that one is `utmctl file push` to a VM UUID and cannot reach a physical box.
 >
@@ -494,9 +495,15 @@ phrase is indistinguishable from a dead channel. Inferred from the source, not p
 
 The consequence for throughput is smaller than it looks: two workers at a 35 s median beat one worker
 at 23 s only slightly, and they fail far more. If a run must be reliable, prefer one.
-- **Your own tooling is on the same host.** `npm test`, a build, or a browser competes with the
-  guests: in one 18-capture run the spikes tracked host activity, not worker age. Measure worker
-  performance when you are not also doing something else, or you will diagnose the wrong machine.
+- ~~**Your own tooling is on the same host.**~~ **NOT ANY MORE, AND THIS LINE OUTLIVED ITS REASON.**
+  It was true when the workers were UTM guests on this Mac: `npm test`, a build or a browser competed
+  with them, and in one 18-capture run the spikes tracked host activity rather than worker age. The
+  fleet is ten bare-metal boxes on the network now, so a local build competes with nothing that
+  matters. **Kept struck through rather than deleted, because the MEASUREMENT is still the reason the
+  section above it exists** — and because this line was propagated into six agent briefs on 2026-09-05
+  as "hold `npm test`, a capture is live", which was ceremony with no basis. A rule whose premise has
+  moved reads exactly like a rule that still applies; this section's own header is the deprecation
+  lesson one paragraph up.
 
 For long runs, do not poll:
 
