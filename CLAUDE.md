@@ -132,6 +132,18 @@ four revisions, *"purely because each first-booted at a different commit during 
 > and serial ALSO fired the `run_once` Node-version lookup once per box, defeating the guarantee its own
 > comment describes, because `run_once` means once per BATCH.
 
+**`fleet:deploy` and `fleet:provision` REFUSE a worker that is capturing.** Added 2026-09-05, after a
+deploy went out three minutes into a capture run and killed 12 in-flight captures — *"worker forgot
+capture &lt;id&gt; after accepting it — it restarted mid-capture, so the work is gone"*. `sleep.yml` had had
+that refusal for weeks and `provision-role.yml` had copied it; the one play whose own header explains at
+length that it REBOOTS every guest it touches checked nothing. A HARD fail rather than a skip, because a
+half-deployed fleet runs two `codeVersion`s and `assertFleetRunsThisCheckout` then refuses every capture
+run — so skipping the busy box leaves you a stale fleet AND a destroyed run. `-e a11y_force_deploy=true`
+overrides, and the refusal names it. **`recover.yml` and `restart.yml` are exempt in the OTHER
+direction** — both exist to act on a worker that is busy AND wedged, so the check would refuse their only
+case. `busy-worker-guard.test.ts` DISCOVERS every playbook targeting `a11y_workers` and fails until a new
+one is classified; a test naming `provision-role.yml` by hand could never have seen `deploy.yml`.
+
 `fleet:status` is the "which box is the problem" answer: per worker, its state, its `/health.code`, and —
 for a busy one — the case it is on, how long it has been there and the phase it is IN, read from
 `/progress`, which every worker has served since forever and nothing consumed. It surfaces a **degraded**
@@ -265,8 +277,13 @@ of them looked like an error, which is why each cost a run or more.
 | "the rule does not fire on its fixture" | the fixture page demonstrated a DIFFERENT criterion, declared as such thirty lines away |
 | "4 blockers, expect 1" | quoted from a run that predated three fixes |
 | coverage counts mid-recapture | the corpus was being rewritten underneath the count |
+| `capture-progress.json` said `running: false, 49 of 49` | the FINISHED run's file. A second run had started one minute earlier and not yet written its own — so I deployed into it and killed 12 captures. `lab:status` was printing `SubState=running` in the same output |
+| the PLAY RECAP above a deploy's refusal | the PREVIOUS deploy's, seven minutes old. `followUnit` ran `journalctl -u <unit>` with no bound, so a correct refusal (`failed=1`, `changed=0`) read as a successful deploy. **The fourth instance of the journal-window defect**, in the one place that had no window at all |
+| "which of my peers started that job?" | **me.** A backgrounded chain of mine was still running. I asked two other sessions before running `tail` on my own task output |
 
-**The rule that covers all six: ask the authoritative source, and let it tell you what it is bounded to.**
+**The rule that covers all nine: ask the authoritative source, and let it tell you what it is bounded to.**
+The last three are the same rule pointed at three different sources, and the third is the sharpest — **your own backgrounded work is a source you have to ask too.** A chain you started an hour ago is
+indistinguishable, from inside, from somebody else's job.
 
 ```bash
 npm run lab:status -- -e job=<name>     # ONE run: systemd's view, the journal bounded by
