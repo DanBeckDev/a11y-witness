@@ -34,9 +34,9 @@ inputs:
     description: >-
       local | anthropic | openai. Defaults to `local`: this project's own trained scorer, which ships in
       the repo (27 KB of heads over an 87 MB encoder fetched at setup). No key, no account, no data
-      leaving the runner. Seventeen criteria can produce a finding, and the number that matters more on a
-      REAL page is still ELEVEN: the deterministic rules cover 1.1.1, 1.3.1, 1.4.2, 2.1.1, 2.1.2, 2.4.1,
-      2.4.2, 2.4.3, 2.4.4, 3.2.1, 3.2.2, 3.3.2, 3.3.3 and 4.1.2 and always run — except 3.3.3, 3.2.1 and
+      leaving the runner. Eighteen criteria can produce a finding, and the number that matters more on a
+      REAL page is still ELEVEN: the deterministic rules cover 1.1.1, 1.3.1, 1.4.2, 1.4.13, 2.1.1, 2.1.2,
+      2.4.1, 2.4.2, 2.4.3, 2.4.4, 3.2.1, 3.2.2, 3.3.2, 3.3.3 and 4.1.2 and always run — except 3.3.3, 3.2.1 and
       3.2.2, which read OPT-IN probes that press or type, so on a page you do not own they cannot fire in
       either direction. Six of those eleven (2.1.1, 2.4.1, 2.4.2, 2.4.3,
       3.3.2, 4.1.2) cover one failure mode of several — `criterion-coverage.ts` records which mode and

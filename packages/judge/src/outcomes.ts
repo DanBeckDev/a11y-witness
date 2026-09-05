@@ -78,7 +78,9 @@ export interface CriterionOutcome {
 // "nothing needs this" and "somebody forgot" must stay different states: an omission reads as the second.
 // 3.2.1 and 3.2.2 joined on 2026-09-02. Both read a probe's own before/after title pair, not a quick-nav
 // sweep, so no sweep can truncate them and there is no completeness caveat to raise.
-export const NOT_SWEEP_DERIVED: readonly string[] = ["1.4.2", "3.2.1", "3.2.2", "3.3.3"];
+// 1.4.13 joined on 2026-09-05. Its evidence is `focusRevealVerdict`'s own verdict -- three censuses and
+// two focus reads the worker already computed -- not a quick-nav sweep, so the same reasoning applies.
+export const NOT_SWEEP_DERIVED: readonly string[] = ["1.4.2", "3.2.1", "3.2.2", "3.3.3", "1.4.13"];
 
 const SWEEPS_FEEDING: Record<string, readonly string[]> = {
   "1.1.1": ["graphic"],
