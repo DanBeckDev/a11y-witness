@@ -1,0 +1,82 @@
+# Static checks over the fleet's Ansible layer — architecture-audit.md §7.2: "no ansible-lint, no
+# --syntax-check, no --check dry run, check-modules.py invoked by nothing; six custom modules (811 lines
+# of PowerShell) have no test."
+#
+# `--check` (a dry run against a real host) needs live inventory and credentials this runner does not
+# have, so it stays out of reach here — the same reasoning `release:gate:ci` already gives for the seven
+# `release:gate` stages that need the Python venv or the corpus. `ansible-lint` was considered and left
+# out: it is a much heavier, noisier tool that would need real tuning time to be more signal than noise,
+# and this file exists to close the CHEAP gap first.
+#
+# `--syntax-check` and `check-modules.py` both close cheaply, MEASURED rather than assumed (the same
+# discipline `lint.yml`'s Python step used to add pytest to CI): neither needs an inventory to be
+# reachable, a credential, or a live fleet — `--syntax-check` parses YAML and resolves module names
+# against the collections on disk, and `check-modules.py` reads each module's own documented options via
+# `ansible-doc -j`. The three third-party collections this repo's playbooks need
+# (packages/control/ansible/requirements.yml) total ~35 MB installed, and 16 playbooks / 230 module
+# invocations both check in well under a minute on this runner's own hardware class.
+#
+# Path-filtered: nothing else in this repo depends on the fleet's Ansible layer, so a change anywhere else
+# should not spend runner minutes proving these playbooks still parse.
+name: ansible-check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/control/ansible/**"
+      - ".github/workflows/ansible-check.yml"
+  pull_request:
+    paths:
+      - "packages/control/ansible/**"
+      - ".github/workflows/ansible-check.yml"
+
+jobs:
+  ansible-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # `ansible-core`, not the full `ansible` metapackage: the metapackage bundles hundreds of
+      # collections this fleet does not use, which is exactly the "second spelling nobody asked for"
+      # shape this repo keeps naming. `pyyaml` is check-modules.py's only import beyond the standard
+      # library (see its own header).
+      - run: pip install ansible-core pyyaml
+
+      # THE THREE THIRD-PARTY COLLECTIONS, never the repo-vendored `a11y.worker` — that one already lives
+      # in git under packages/control/ansible/collections/, ahead of this path in ansible.cfg's own
+      # collections_path, precisely so a checkout is self-contained. Installing here is the same command
+      # requirements.yml's own header documents for a human operator, run against a runner instead of a
+      # laptop.
+      - name: Install the collections these playbooks import
+        run: ansible-galaxy collection install -r packages/control/ansible/requirements.yml
+
+      # ANSIBLE_CONFIG, exactly as every ansible: npm script already sets it (package.json) — without it,
+      # ansible.cfg's collections_path and ssh_args are simply not read, which is the CLAUDE.md lesson
+      # this repo has already paid for once ("without which the collections path and host-key settings
+      # differ"). Run from the repo root, matching those same scripts, so a relative path in a playbook
+      # means what it means for every other caller.
+      - name: Every playbook still parses
+        env:
+          ANSIBLE_CONFIG: packages/control/ansible/ansible.cfg
+        run: |
+          status=0
+          for playbook in packages/control/ansible/*.yml; do
+            # roles/, tasks/, group_vars/ and inventory.yml itself are not playbooks (no top-level `hosts:`)
+            # and --syntax-check on one of those fails for a reason that has nothing to do with this check.
+            grep -q "^- hosts:\|^  hosts:" "$playbook" || continue
+            echo "--- $playbook ---"
+            ansible-playbook -i packages/control/ansible/inventory.yml --syntax-check "$playbook" || status=1
+          done
+          exit $status
+
+      # check-modules.py globs `**/*.yml` from ITS OWN CWD (see its header) — repo-root-relative would
+      # sweep in every workflow file and every other package's YAML, which is not what its own docstring
+      # says it checks and would report on files it was never validated against.
+      - name: Every module invocation matches what the module actually documents
+        working-directory: packages/control/ansible
+        run: python3 check-modules.py
