@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 
 import { formCoverage, submissionPlan, CRITERION_STATES } from "./coverage.js";
 import { parseFormsConfig } from "./config.js";
+import { CRITERION_COVERAGE } from "@a11y-witness/judge/internal";
 
 const config = (states: string) => parseFormsConfig(`
 version: 1
@@ -85,8 +86,39 @@ test("the plan runs the ERROR state first", () => {
   assert.match(order[1], /"success"/);
 });
 
-test("the criterion table covers exactly the probe-gated criteria", () => {
-  // These four are the ones unreachable on a page we do not own, which is what ADR 0024 exists to fix.
-  // A fifth appearing here without a decision would be a coverage claim nobody made.
-  assert.deepEqual(Object.keys(CRITERION_STATES).sort(), ["3.2.2", "3.3.1", "3.3.3", "4.1.3"]);
+/**
+ * The three CHANNELS the forms probe (`probeForms`/`probeTyping`) populates. Not exported from
+ * `criterion-coverage.ts` as a named group -- there is exactly one place that needs the grouping, here.
+ */
+const FORMS_PROBE_CHANNELS = new Set(["formChanges", "postSubmitFields", "typedFeedback"]);
+
+/**
+ * Every ASSESSED criterion whose evidence, per `CRITERION_COVERAGE`, comes (at least partly) from the
+ * forms probe -- the set `CRITERION_STATES` exists to report readiness for.
+ */
+function formsProbeBackedAssessedCriteria(): string[] {
+  return Object.entries(CRITERION_COVERAGE)
+    .filter(([, coverage]) =>
+      coverage.status === "assessed" && (coverage.channels ?? []).some((ch) => FORMS_PROBE_CHANNELS.has(ch)))
+    .map(([criterion]) => criterion)
+    .sort();
+}
+
+test("CRITERION_STATES covers exactly the assessed, forms-probe-backed criteria -- DERIVED from CRITERION_COVERAGE, not hand-listed", () => {
+  // architecture-audit.md §6.5: CRITERION_STATES is "a second table of criterion knowledge beside
+  // criterion-coverage.ts", and this test used to assert against its OWN literal list -- a hand-written
+  // copy of the very fact it claimed to guard, the same shape as the 4.1.2 channel-table disagreement
+  // that reported a criterion BLOCKED where a rule had just asserted a conformance failure for it.
+  //
+  // The per-criterion VALUES (`needs`, `mode`) are NOT derived, and cannot be: 3.3.1 and 4.1.3 share the
+  // identical channel set (`formChanges`, `postSubmitFields`) and need different states in different
+  // modes (`all` vs `partial`) -- `channels` alone under-determines which form STATES complete a
+  // criterion, because that depends on which half of the criterion's own definition each state answers.
+  // What CAN be derived, and is the one thing worth pinning, is the SET of criteria this table must
+  // cover -- a criterion present here that is not assessed-and-forms-probe-backed over there overclaims
+  // precision the tool does not have; one assessed-and-forms-probe-backed criterion missing here is a
+  // form config that can never fully answer it, silently.
+  assert.deepEqual(Object.keys(CRITERION_STATES).sort(), formsProbeBackedAssessedCriteria(),
+    "CRITERION_STATES and CRITERION_COVERAGE disagree about which criteria the forms probe answers -- "
+    + "see the comment above this test for the two ways that can happen and why each matters.");
 });
