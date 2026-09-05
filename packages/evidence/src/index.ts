@@ -72,6 +72,39 @@ export interface CaptureInteraction {
    * when it is missing.
    */
   focusOrder?: string[];
+  /**
+   * What the screen reader said the page was called, and what its first heading was, before and after
+   * activating a navigation control (`probeNavigation`) — 2.4.1's inert-skip-link and 2.4.2's
+   * route-changed-but-title-did-not failures. Absent unless the probe was asked for; absence must make no
+   * claim, because a page nobody probed and a page that navigated silently are different facts.
+   *
+   * Added 2026-09-05 (architecture-audit.md §5, item 2): this evidence has existed on the wire since
+   * `probeNavigation` shipped, and this type described a capture as though it did not.
+   */
+  routeChange?: {
+    control?: string | null;
+    titleBefore?: string | null;
+    titleAfter?: string | null;
+    headingBefore?: string | null;
+    headingAfter?: string | null;
+    navigated?: boolean;
+    /** What one Tab landed on immediately after the activation, before anything rewound the caret. */
+    nextFocusAfter?: string | null;
+    error?: string;
+  };
+  /**
+   * Present only when submitting NAVIGATED the browser — `probeForms`'s own oracle for the difference
+   * between "the form failed silently" and "the form worked and moved on", which look identical to a probe
+   * that only asks whether anything was announced afterwards. Absent means submitting did not navigate,
+   * which for a 3.3.1/4.1.3 rule reading `postSubmitFields`/`formChanges` is the ordinary, examinable case.
+   */
+  navigatedOnSubmit?: { from: string; to: string };
+  /**
+   * What the page's accessibility tree shows AFTER a form submit, by name only, never counts — a
+   * diagnostic-grade oracle for 3.3.1/4.1.3, not model-visible evidence (`docs/local-model.md` bars the
+   * accessibility tree as a model feature). Present only alongside `postSubmitFields`, from the same probe.
+   */
+  postSubmitNames?: string[];
 }
 
 /** What a screen reader announced, plus capture metadata. `task` is request
@@ -93,6 +126,53 @@ export interface CaptureResult {
   diagnostics?: unknown[];
   /** Backend metadata: tool/SR versions, strategy used, timings, etc. */
   meta?: Record<string, unknown>;
+  /**
+   * Media elements the PAGE declares, from the DOM rather than the accessibility tree — `autoplay` and
+   * `muted` are attributes, not accessibility properties, so no screen reader can report them. `null`
+   * means the probe did not run, which is NOT the same as an empty array (the page declares no media);
+   * a rule reading this makes no claim on `null`.
+   *
+   * Added 2026-09-05 (architecture-audit.md §5, item 2): on the wire since 1.4.2's rule shipped, and this
+   * type described a capture as though the field did not exist.
+   */
+  media?: { tag: string; autoplay: boolean; muted: boolean; controls: boolean; loop: boolean }[] | null;
+  /**
+   * What this capture ASKED about each optional channel, beside what it heard — "the probe is opt-in and
+   * this case did not request it" and "the page had no control to activate" are different facts, and a
+   * consumer that only sees an empty array cannot tell them apart. Keyed by channel name.
+   */
+  observed?: Record<string, {
+    asked: boolean;
+    complete?: boolean;
+    why?: string;
+    activated?: number;
+    stop?: { prev: string; next: string };
+  }>;
+  /**
+   * The worker's own runtime, reported alongside every result — screen reader and browser versions, the
+   * settings digest, OS/architecture, the deployed code and protocol versions, and the provisioning
+   * revision. Every field here is a capture-cache-key input; two captures whose `environment`s differ must
+   * never be treated as interchangeable evidence.
+   *
+   * Added 2026-09-05 (architecture-audit.md §5, item 1/2): server.mjs has appended this to every response
+   * since the fleet existed, and cli.ts cast around its absence from this type rather than the type
+   * describing what actually arrives.
+   */
+  environment?: {
+    measuredAt: string;
+    screenReader: string;
+    screenReaderVersion: string;
+    browser: string;
+    browserVersion: string;
+    guidepupVersion: string;
+    screenReaderSettings: string;
+    nodeVersion: string;
+    windowsVersion: string;
+    architecture: string;
+    workerCode: string;
+    captureProtocol: number;
+    provisionRevision: string;
+  };
 }
 
 /**
