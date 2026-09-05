@@ -236,6 +236,35 @@ moved underneath it.
 | **BOTH stage-12/13 blockers are CLEARED, and ONE new finding replaced them** — measured 2026-09-05 by re-capturing and re-running the gate rather than by reasoning. `1.1.1` on `cqc.org.uk` is gone: today's capture reads `graphicUnnamed: 0` and `graphicUnnamedDetail: []` where the failing run read 2, so the 1.1.1 Controls/Input exception fix did what it was written to do — the nameless images were inside a named link. `3.2.1` on `service-manual.nhs.uk` is gone too, and its evidence says why: `focusContext` reads `titleBefore === titleAfter`, so that rule was silent and the finding had come from elsewhere. **`rules:real-pages` now reports `FAIL — 1 problem` against 2, with 5 findings GONE** (two of them the `3.3.2` pair, expected — that subtype was deleted). The survivor is **`2.4.3` on `ico.org.uk/action-weve-taken/enforcement/`**, and it is NOT yet read. Two leads, opposite conclusions: the baseline ALREADY accepts `2.4.3` on the sibling page `ico.org.uk/for-the-public/` and ICO's `claimExcludes` does not cover 2.4.3, which argues it is the same real order difference somebody has reviewed once; against that, transcript line 1 is `button, collapsed, Cookie options` while tab stop 1 is `Skip to main content`, and line 14 carries `section, grouping` — the Edge 152 container — so a consent overlay and a grammar change are both in the frame. | **Read the evidence, then decide which of the three causes it is.** Do NOT `--update` to clear the gate: that is how a baseline absorbs a defect, and the sibling-page precedent is a reason to look, not a reason to accept. **THE SURVIVOR IS READ AND ACCEPTED, and this row said it was not for six hours after it was.** `7f3dd59` accepted `2.4.3` on `ico.org.uk/action-weve-taken/enforcement/` into the baseline the same morning, and the row went on naming it as the open blocker — which is this register's own defect, a fact stated twice with the copies drifted. **Re-read independently 2026-09-05 rather than taken on the commit's word**, by fetching the capture and running `ruleFindings` against it: one finding, `mapping: "secondary"` so it REFERS rather than asserts, and its evidence names exactly one control out of position — *"Cookie options"* is transcript line 1 of 70 and tab stop 82 of 82, with every other control in identical order in both channels. So it is cause 3, the finding is right, and none of the three suspects in the original row is what produced it: the `section, grouping` line from Edge 152 is present at line 14 and is not what the rule fired on, and the sibling-page precedent turns out to be the SAME site-wide widget rather than a coincidence — `for-the-public` reads the identical shape, reading order 0 of 99 against tab order 71 of 75. ICO's `claimExcludes` is `["1.1.1","1.3.1","4.1.2"]` and does not cover 2.4.3. **`rules:real-pages` is at zero problems.** | [audit](./wcag-criterion-audit.md) |
 | ~~**REOPENED 2026-09-06 — the test still holds, the count did not**~~ — **CLOSED 2026-09-05: both vetoes are unclosable by definition, not open corpus work.** `form_change_observed_absent` (`asked AND NOT bool(formChanges)`) reads "the probe ran and found no control to press", not "the page was silent" — traced from `cross_with_observation` and the activation function that pushes a `formChanges` entry on every completed press, silent ones included. 3.3.1 and 4.1.3 are the two subtypes whose whole point is a submission getting rejected or ignored, so a control to press is guaranteed by construction: 143/143 positives of 3.3.1 and 149/150 of 4.1.3 carry `probeForms: true` (the one exception, `filter-status-silent-link`, activates via `probeNavigation` and lands in the all-zeros "never asked" row instead). Measured on the captures (no export needed — `interaction.formChanges` predates the schema): 0 of 500 asked-and-found-nothing. Now declared `IMPOSSIBLE_BY_DEFINITION` in `corpus:unclosable-map`. | **DONE** — classification added to `audit-corpus-starvation.mjs`, `not-working.md` §2 updated with the resolution and why it differs from "a veto silently accepted". Whether these two subtypes should move to rules instead (ADR 0021) is a separate, still-open decision, not made here. | [not-working §2](./not-working.md) |
 
+## The corpus, measured on the lab 2026-09-05 — and 1.4.13 went from BLIND to full real-page coverage
+
+Read from `retrain`'s own transcript rather than from a stage banner, which is the difference between a
+number and a claim about a number.
+
+```
+capture          1,645 cases, ALL cached, 0 failed          — the cache is warm and valid
+check-signals    1,645 discriminating, 0 blind, 0 contaminated, 0 uncaptured, 0 stale   PASS
+export           2,796 records
+build-realism    37 realism records from 39 real pages (2 rejected as truncated)
+```
+
+**`1.4.13: 37 of 37`** — full real-page coverage, from zero. That is what `probeFocusReveal` bought, and
+it is the criterion that started the day at 18 blind cases. `2.1.1`, `2.1.2`, `2.4.1`, `2.4.2`, `2.4.3`,
+`3.2.1`, `3.2.2` and `3.3.3` are also 37 of 37.
+
+**`4.1.3: 0 of 37`, and that is CORRECT rather than a shortfall** — see the 4.1.3 row for both mechanisms.
+The number was independently claimed as `1 of 37` during this session and refuted from two directions: the
+run's own transcript, and the filter at `build-realism-tier.mjs:318`, which is
+`realPageFor(url)?.role === "training"` while the only page carrying a `formState` is `calibration`. The
+docstring twelve lines above that filter says *"the 7 CALIBRATION pages are excluded"* and the corpus now
+has **49** of them — a stale prose count over a correct filter, which is exactly the shape that produced
+the wrong claim. **Read line 318, not the paragraph above it.**
+
+**`check-signals` PASSES on the lab and REFUSES locally**, and both are right: every local copy of the
+manifest predates the case definitions, so the local one correctly says *"this is a STALE BUILD, not a
+broken signal"* and stops. A gate that refuses a corpus it cannot attribute is doing its job; the
+authoritative answer is `lab:job -e job=check-signals`.
+
 ## Fixed today, and each one is a guard rather than a correction
 
 | what broke | the guard now in place |
