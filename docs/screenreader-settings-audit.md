@@ -47,12 +47,15 @@ and 6, keeps two corpus cases withdrawn, and is the largest single hole in 4.1.3
 
 | setting | why it might bear on it | why it might not |
 |---|---|---|
-| **speech rate** | the intermittency is unexplained, and rate changes the timing of everything NVDA does | the settle-window fix already tested a timing explanation and failed |
+| **speech rate** | rate changes the timing of everything NVDA does, and could still explain a residual | the settle-window fix already tested a timing explanation and failed |
 | `reportDynamicContentChanges` | never called by this worker | almost certainly already ON — regions *do* announce 2 times in 6, which they could not if this were off |
 
-> **The honest state: the intermittency is unexplained, and `not-working.md` §18 says so.** A setting that
-> changes the rate would be evidence *that rate matters*, which nobody has. Worth one experiment, not a
-> plan.
+> **STALE UNTIL 2026-09-06: this said "the intermittency is unexplained, and `not-working.md` §18 says
+> so."** That described an earlier §18; the CURRENT §18 (`not-working.md`, "MEASURED IN FULL — every cell
+> is a rate") characterises the mechanism directly — it is NVDA's politeness semantics working as specified,
+> not an unexplained residual, and a full rate table is given per trigger and per politeness level. Speech
+> rate remains untested and worth the one experiment, but not because the intermittency has no explanation
+> any more; it is a plausible variable in a mechanism that IS now characterised.
 
 ### 2. Typing feedback — `speakTypedCharacters` is real and never called
 
