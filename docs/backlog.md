@@ -81,18 +81,14 @@ got wrong** — it is on, nothing reads it, and it is now a backlog row of its o
   56.1% / 65.3%. **BUILT 2026-09-03, verdict pending.** The encoding is committed and the schema migration
   is declared open; what is left is the retrain that lets its four gates say whether it helped, and that
   needs the corpus B produces. Two pairs are crossed, not all ten — a refutation should cost two reverts.
-- **4.1.3's real-page grounding** — **the corpus half is DONE** (2026-09-03): W3C's `after/survey.html`
-  carries an `error` `formState`, `capture-real-pages` forwards it, and `real-page-form-consent.test.ts`
-  guards whose page may carry one. What remains is a **real-page capture run**, which needs a free worker — and it must be
-  `-e role=calibration`. **Measured 2026-09-05: this is NOT what the morning's run did.** That run was
-  `--role=training`, 39/39 captured, clean — and the survey page is one of the 50 `calibration` pages, so
-  none of this row was touched by it. "A capture ran" and "this page was captured" are different claims.
-  **Know the ceiling before running it: ONE page, error path only.** The consent guard admits only origins
-  whose publisher put the form there to be submitted (`w3.org/WAI/demos/`), only the half its publisher
-  calls conformant, and **never a `success` state** — that one completes a form on somebody else's site on
-  every corpus run, for ever. So `4.1.3: 0 of 37` becomes 1 of 37, from the error announcement, and that
-  is the honest ceiling rather than a shortfall. Widening it is a SECURITY.md decision argued on its own,
-  never a way to make a criterion easier to reach.
+- ~~**4.1.3's real-page grounding**~~ — **CLOSED 2026-09-05, and THIS ROW'S OWN PREDICTION WAS WRONG.** The
+  real-page capture run this row asked for HAS RUN (`-e role=calibration`, 49/49, zero failures), and it
+  did NOT turn `4.1.3: 0 of 37` into `1 of 37` as predicted here — it stayed at `0 of 37`, which is CORRECT
+  rather than a shortfall, for two independent reasons stated in full under "Accepted designs, not yet
+  built" below (the survey page is a `calibration` page and `build-realism` excludes calibration pages by
+  design; separately `routeChange.announced` is deliberately masked because the probed link is almost
+  always a skip link). This row asked for a capture that could never move the number it named — see the
+  "Needs your hands" section's own 4.1.3 paragraph for the confirmed, current state.
 
 ### D — Independent of all of the above, and can be done whenever
 
@@ -129,9 +125,9 @@ The measurement first, because it changes what the fix should be:
 
 | file | lines | of which | now |
 |---|---|---|---|
-| `case-matrix.mjs` | 5,699 | almost entirely DATA — 1,645 case definitions | **4,074** — two cuts, `signal-predicates.mjs` 904, `page-templates.mjs` 479, `page-furniture.mjs` 298 |
-| `capture-core.mjs` | 4,969 | **3,020 comment, 201 blank, 1,748 code** | **4,856** — one post-mortem moved; the rest was checked and is load-bearing |
-| `rules.ts` | 1,993 | | in flight |
+| `case-matrix.mjs` | 5,699 | almost entirely DATA — 1,645 case definitions | **4,074** — checked `wc -l` 2026-09-06, matches the two-cuts figure below exactly |
+| `capture-core.mjs` | 4,969 | **3,020 comment, 201 blank, 1,748 code** | **DONE, and superseded by the three-way split below: `capture-core.mjs` 334, `capture-setup.mjs` 1,575, `capture-probes.mjs` 3,082 (checked `wc -l` 2026-09-06). This row's own "4,856" was the state ONE post-mortem-move ago; the recapture-validated split further down this page (`capture-core.mjs 4,885 -> 362`) then ran, and `capture-core.mjs` has since drifted 362 -> 334 from unrelated later edits — the split, not the exact count, is what to trust.** |
+| `rules.ts` | 1,993 | | **DONE 2026-09-06** — `9b13696` split cross-channel evidence into `channel-comparison.ts`. Checked `wc -l`: `rules.ts` 1,381, `channel-comparison.ts` 729. |
 
 **Two cuts on `case-matrix.mjs`, and the seam was not the one this row proposed.** Splitting by CRITERION
 would have MOVED cases; the boundary that was already there runs the other way — everything from
@@ -178,13 +174,13 @@ because `skipComments: true` lets a comment-dense function run to twice its lint
   optional:** `CASES.length` 1,645 and `sha256(JSON.stringify(CASES)).slice(0,16)` = `104ba6685264d1bd`,
   identical either side, plus a byte-identical export surface. Furniture is dealt by index WITHIN a
   subtype, so a case that MOVED would re-bucket its neighbours and recapture pages nobody meant to touch,
-  and a diff this size cannot be read for that by eye. A second cut (the HTML page templates; the furniture
-  machinery — `SCALE_BUCKETS`/`fnv1a`/`bucketFor`/`withRealisticScale`/`filler`) is in flight under the
-  same test.
-- **`capture-core.mjs`'s 1,748 code lines are ~30 probes sharing one shape.** The probes are a real seam;
-  the orchestration around them is not. `probeFocusReveal`, `probeFocusContext`, `probeDialogEscape` and
-  `probeArrowNavigation` are siblings that already reference each other's lessons — move them together or
-  not at all, or the cross-reference that has saved this project four times stops working.
+  and a diff this size cannot be read for that by eye. **SECOND CUT DONE — checked `wc -l` 2026-09-06:**
+  `page-templates.mjs` 479, `page-furniture.mjs` 298, `case-matrix.mjs` down to 4,074, all under the same
+  corpus-hash test. Not "in flight" any more; the FILE SIZE table above was stale on this point.
+- ~~**`capture-core.mjs`'s 1,748 code lines are ~30 probes sharing one shape.**~~ **DONE** — this is the
+  three-way split lower on this page (`capture-core.mjs` -> `capture-core.mjs`/`capture-setup.mjs`/
+  `capture-probes.mjs`), validated by `capture:check` twice against a real worker before merging. See that
+  section for why three files rather than two, and the FILE SIZE table above for current counts.
 - **Some of the comment bulk belongs in `docs/`.** A capture-path incident is worth recording; recording
   it inline at forty lines is how a 1,748-line file wears 3,020 lines of prose. The test is whether the
   next person reading THAT FUNCTION needs it: NVDA quirks and ordering constraints yes, post-mortems no.
@@ -408,13 +404,13 @@ tracker** — its own closing line says so — so its open findings live here. E
 | ~~**The live path and the training path build different model inputs.**~~ **FIXED, and MEASURED first.** Both implementations run over all 23 real-page captures carrying landmarks: Python emitted an extra unit for every one — **mean 11.6 extra units per page against a ~150-unit total (7.6%), worst case 25 (16.1%)**. Not marginal. *"Stop having its own implementation"* is NOT reachable — `score.py --capture-json` is a documented standalone entry point for a consumer with no TypeScript upstream — so the append was deleted and a parity test now spawns the real `score.py` and compares unit lists. `MODEL_INPUT_VERSION` does not move, recorded in `score.py` itself: it versions record SHAPE, and training records were always built the TS way. Original: `score.py:86` appends `landmark-navigation`; `evidence-units.ts:98` deliberately omits it. Every live page feeds the encoder a unit type in no training record — and it is the exact field the TS side removed after measuring it swing a conformant page's 3.3.2 score **0.004 → 0.39 across a 0.35 threshold**, clean once and failing once on two acceptance cases. `model-input.test.ts` checks two JS suspects and structurally cannot see `score.py`. | **CONFIRMED at HEAD**, both sides read. | agent |
 | ~~**A published export the tarball cannot satisfy**~~ — `worker-fleet` mapped `./cli-flags` at `./src/cli-flags.mjs` while `files` ships only `dist` and two `src` subdirectories. 42 import sites. `isolation-gate.mjs` names this exact failure in its header and answers it with each package's SMOKE TEST, which only exercises subpaths it imports — and `isolation-smoke.mjs` never imports this one. | **FIXED `5374691`.** Repointed at `dist`; `exports-are-shipped.test.ts` now checks every export of every public package against `files` AND existence, mutation-checked. | done |
 | ~~**The Action's axe layer is structurally dead.**~~ **FIXED.** `launchBrowser` tries the bundled Chromium and falls back to `channel: "msedge"` only on failure — never a hard-coded channel, so a developer with no Edge is unaffected — and reports WHICH answered, as evidence rather than an implementation detail. `axeAvailable` now launches and closes a browser instead of proving an import, so it answers the question its name asks. `assert-action-report.mjs` gains `--require-rule-layer`, refusing `ruleBased === null` while explicitly permitting `[]` — a scan that ran and found nothing must never be rejected. Mutation-checked by reverting the launch AND by disabling the smoke wiring, which reproduced the original bug exactly (exit 0 on a null rule layer). Original: `chromium.launch()` with no channel, `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"`, and `assert-action-report.mjs` never reads `ruleBased` — so every Action consumer gets `ruleBased: null` while the header announces "rule-based axe-core + real screen reader". `axeAvailable` proves the module IMPORTS, not that a browser LAUNCHES. | **All three legs confirmed at HEAD.** | agent |
-| **Losing the async acceptance loses the recovery path.** The client awaits the initial POST outside any transport-recovery block and throws on a lost 202, despite already holding the ID needed to recover. `capture-async.test.ts` covers dropped POLLS, not a lost acknowledgement. | audit-reproduced on a loopback; not re-run here | open |
-| **Result recall is not an idempotency contract.** `begin(id)` deletes a previous result and replaces it with `running`; after completion another POST with the same ID executes again, with no payload-conflict check. So **404 means "not retained here"**, not "never started" — and the comments overclaim it in both directions. | audit-reproduced against the store; the POST path was read, not run | open |
-| **The timeout ladder does not bound the whole operation.** The client's deadline starts after an independently budgeted 30 s acceptance, and no inner read is clipped to remaining time; the worker permits 60 s preparation plus a 520 s capture against a 560 s client budget. | audit-reproduced on a loopback | open |
-| **`control` ↔ `worker-fleet` is a real cycle.** The published `worker-fleet` reads the private `control`'s `inventory.yml` from four modules, with a hand-rolled YAML reader to avoid a dependency. | read | open |
-| **Nothing installs the git hooks; the Python tests run under no automated gate.** Every release-integrity gate is dispatch-only. | read | open |
+| ~~**Losing the async acceptance loses the recovery path.**~~ **CLOSED — verified 2026-09-06 by RUNNING `capture-async.test.ts`, not by reading it.** `pollForResult` (`capture-client.mjs`) now wraps the initial `POST {async:true}` in a try/catch that calls `reconcileLostAcceptance` on a transient failure, asking the worker by the client-minted `captureId` rather than throwing it away. Test `"A LOST 202 IS RECONCILED BY THE SAME ID, not thrown away"` reproduces the exact loopback scenario the audit describes (accept, then destroy the response socket before the client reads it) and passes: `posts: 1`, recovered result returned. 12/12 in the file pass. | ran `npx tsx --test packages/worker-fleet/src/capture-async.test.ts` — 12/12 pass | closed |
+| **Result recall is not an idempotency contract.** `begin(id)` deletes a previous result and replaces it with `running`; after completion another POST with the same ID executes again, with no payload-conflict check. So **404 means "not retained here"**, not "never started" — and the comments overclaim it in both directions. | **STILL ACCURATE at HEAD, checked 2026-09-06** by reading `capture-results.mjs`'s current `begin`/`recall` — the described behaviour is unchanged and is now the module's own documented, deliberate design ("404 IS BOUNDED RESULT RECALL, NOT PROOF THE CAPTURE NEVER RAN", with the reasons for not closing it with payload-fingerprint suppression stated in the same file). Reads as an accepted limitation rather than a live TODO; left under "open" rather than moved to "Decided — not defects" because that reclassification is a judgement call outside this pass's scope. | open |
+| ~~**The timeout ladder does not bound the whole operation.**~~ **CLOSED by `4d640f5` (2026-09-05), "the timeout ladder now covers the complete server-side handler" — architecture-audit.md §14.5, both items.** Item 1 (no inner read clipped to remaining time): `remaining(deadline)` is now threaded through every wait in `awaitCompletion` and `reconcileLostAcceptance`. Item 2 (the 560 s/580 s mismatch): `CAPTURE_CLIENT_TIMEOUT_MS` raised to `620_000`, keeping the same 40 s margin above the worker's true worst case (`DESKTOP_PREPARE_TIMEOUT_MS` 60 s + `CAPTURE_HARD_TIMEOUT_DEFAULT_MS` 520 s = 580 s). **Verified 2026-09-06 by running the test, not by reading the commit**: `budget-ladder.test.ts`, 12/12 pass, including `"the shared client ceiling covers desktop preparation PLUS the hard timeout, not the hard timeout alone"` and `"no capture client declares its own ceiling below the worker's TRUE worst case"`. | ran `npx tsx --test packages/nvda-worker/src/budget-ladder.test.ts` — 12/12 pass | closed |
+| ~~**`control` ↔ `worker-fleet` is a real cycle.**~~ **CLOSED — this is the SAME finding as the row above ("Audit findings closed since the recapture started"), duplicated here with a stale `open` tag left on it.** See that row: split by measurement rather than one uniform remedy, guarded by `worker-fleet-does-not-read-control.test.ts`. Verified 2026-09-06 that file exists and its tests pass as part of the full suite. This duplicate row is left here (rather than deleted) only long enough to record that the duplication — not the finding — was the defect: two tables in one backlog disagreeing about one row is exactly the shape this file exists to prevent. | duplicate of the CLOSED row above | closed |
+| ~~**Nothing installs the git hooks; the Python tests run under no automated gate.**~~ **CLOSED — the SAME duplicate shape as the row above.** See "195 Python tests ran nowhere automated..." in the CLOSED table above: `scripts/install-git-hooks.mjs` + `"prepare"` in `package.json` (verified 2026-09-06, both present), `requirements-ci.txt` + `actions/setup-python@v5` + `pytest` in `.github/workflows/lint.yml` (verified present, lines naming `195 pytest files ran NOWHERE AUTOMATED until 2026-09-05`). | duplicate of the CLOSED row above | closed |
 | ~~**Provisioning duplication with no owner.**~~ **MEASURED AND DECIDED.** `provision-nvda-worker.ps1` and `roles/worker/` were said to coexist "until parity is demonstrated", with no test, no checklist, and no backlog entry. Built the missing checklist (every concern a worker's environment needs, both paths read, matched concern-by-concern) and it settles the question: the role is more correct on every divergence with real consequences (the Edge pin and its enforcement, the blank-password guard's severity, a Wake-on-LAN-preserving NIC fallback the script's own fallback can silently break), and the script's real remaining audience was never "a fleet box with no Ansible" — `bootstrap-windows-worker.ps1` and PXE `autounattend.xml` both leave a box Ansible-reachable before the role would need to run — it is the solo local-worker workflow in `docs/getting-started.md`. Parity is no longer the goal for the FLEET path; retiring `provision.yml` from fleet use is quantified (one recapture, already measured at 3h46m) and not executed this pass, per the unit's own resource ban on a recapture running concurrently. | [`docs/provisioning-parity.md`](./provisioning-parity.md) | done |
-| **`provisionRevision` cannot see 5 of 6 `a11y.worker` modules or any of the 10 role task files.** Found auditing the row above: the stamp was extended once already for exactly this shape (`a11y_speech_viewer.ps1` added 2026-09-05, "a remedy that reached one path and not the other... would leave the stamp unmoved"), and the identical argument applies to `a11y_nvda.ps1`, `a11y_power_timeouts.ps1`, `a11y_nic_power.ps1`, `a11y_defender.ps1` and `a11y_onedrive.ps1` — each reconciles real environment state the way the Speech Viewer module does. Task files are excluded by a separate, argued, and still-sound decision (a refactor of HOW a setting is applied should not move the cache key); modules are not the same shape as task files and were never re-argued. | not fixed — fixing it moves the stamp (a recapture), so it needs its own deliberate unit, not a side effect of measuring it | open |
+| ~~**`provisionRevision` cannot see 5 of 6 `a11y.worker` modules or any of the 10 role task files.**~~ **DECIDED, NOT A GAP — this row's premise was examined and REFUTED in `provision-stamp-inputs.test.ts`, checked in the same commit range as this row (`9435105`) but never reflected here.** That file's own EXEMPT table gives each of the five modules a SPECIFIC, DIFFERENT reason it does not belong in the stamp — not "the identical argument" this row claimed: `a11y_defender`/`a11y_nic_power`/`a11y_power_timeouts` "affect reachability, never capture content"; `a11y_onedrive`'s risk is an intermittent one-off event `gate:stability`'s content comparison already catches, not a persistent per-guest state; `a11y_nvda.ps1`'s installed build is ALREADY a separate, live-measured cache-key field (`screenReaderVersion`/`guidepupVersion`), so stamping the installer too would be redundant rather than closing a gap. The file's own header states the conclusion directly: **"ONE FILE IS A GENUINE GAP: `a11y_speech_viewer.ps1`"** (singular) — already fixed, per that same stamp. Verified 2026-09-06 by running the test: `npx tsx --test packages/worker-fleet/src/provision-stamp-inputs.test.ts`, 5/5 pass, including `"the speech-viewer setting is HASHED — the one gap this audit found is closed, not reworded"`. | ran the test; read its EXEMPT reasons, not just their presence | closed |
 
 **What the audit says is STRONG, recorded because a register of defects is not a picture of the system:**
 the ADR 0004 package split holds, the declared graph is a DAG, `evidence` is genuinely pure, and the
@@ -498,40 +494,29 @@ not return them.
 | **The deploy's own output showed the WRONG RUN.** `followUnit` ran `journalctl -u <unit>` with no bound, which returns every run since boot oldest-first — so the guard's first correct refusal was read as a successful deploy, because the PLAY RECAP above it was seven minutes old. **The fourth instance of the journal-window defect**, in the one place that had no window at all. | Bounded on `_SYSTEMD_INVOCATION_ID`, which survives here where it does not for `lab:job` (the unit is `--remain-after-exit` and is stopped and `reset-failed` before each run). An empty id falls back to the whole journal and SAYS SO. `journalScope` is pure and exported, the id is validated as 32 hex characters rather than interpolated into a remote shell on the box holding the fleet key, and relaxing that to a truthiness test fails exactly the injection case. |
 | **`capture:explain` said nothing about the interaction probes.** `whatItAsked` reads `observed`, which covers the SWEEP channels only — so `focusReveal`, `focusEvents`, `focusContext`, `routeChange` and the rest had verdicts sitting in diagnostic marks that nothing displayed. Reading `cap.focusReveal` (it lives under `interaction`) returned `undefined` and produced the conclusion "the 1.4.13 probe never ran", which was wrong and would have cost a recapture round. | A `WHICH INTERACTION PROBES RAN?` section, in three states — never ran / ran and could not ask / ran and found nothing — printing whatever fields the mark carries rather than a per-probe list of which ones matter. **The both-directions test found two real errors on its first run:** `formFill` was named while 1,182 captures carry `formProbe`, one probe with two names across a protocol version, so keying on either alone reports NOT ASKED for half the corpus; and `dialogEscape`, `typingLanding` and `arrowNavLanding` were on disk and named nowhere, leaving 2.1.2's dialog question, 3.2.2 and the arrow probe unaccounted for. |
 
-## OPEN — the census fix does not reach the focus-event path, found by adversarial review
+## ~~OPEN — the census fix does not reach the focus-event path~~ — CLOSED 2026-09-06
 
-**Found 2026-09-05 by a peer reading today's merges against this repo's OWN defect catalogue rather than
-for general quality, and confirmed independently before being acted on.** It is the gap between two
-commits rather than a fault inside either, which is why both passed their own reviews.
+**Verified by running the test this section's own remedy names, not by reading the fix.** `capture-pure.mjs`
+carries a dated comment, `"THE SEAM THIS CLOSED, 2026-09-06"`, at exactly `focusEventVerdict`: it now takes
+`{ events, error, targetMatch, candidates }`, calls `focusTargetIsSuspect({ targetMatch, candidates })`
+first, and returns the same `checked: false` "cannot say" shape the no-log branch already used when the
+target is suspect — precisely the remedy this section specified. `focusTargetIsSuspect` is the WORKER-SIDE
+TWIN this section predicted (`.mjs`, not importing the TypeScript `censusTargetIsSuspect`), pinned equal by
+`focus-target-suspect-parity.test.ts` exactly as recommended. Ran it: `npx tsx --test
+packages/nvda-worker/src/focus-target-suspect-parity.test.ts` — 1/1 pass, `"focusTargetIsSuspect and
+censusTargetIsSuspect agree on every case"`.
 
-`f95c95d` made a suspect census read as `null`, and its commit records checking every
-`census.heading === 0` consumer. That was the right check for the CENSUS and the wrong SCOPE for the
-uncertainty underneath it: `choosePageTarget` taking the wrong CDP target — the bathingwaters/lbhf
-Cookiebot-iframe shape the whole fix exists for — also reaches the F55 focus-event detector, through the
-same `pageTarget()`/`evaluateOnPageTarget()` machinery, and nothing there is protected. Verified at HEAD:
+Original finding, kept for the record rather than deleted, because the shape it names — a remedy applied at
+one call site when the behaviour reaches several — is this repo's most expensive recurring defect and worth
+the two paragraphs:
 
-```
-evaluateOnPageTarget   returns { value, targetMatch, targetUrl, expectedUrl }  — NO candidates
-collectFocusEventLog   passes targetMatch through
-focusEventVerdict({ events, error })   does not destructure targetMatch at all — silently dropped
-```
-
-So a mistargeted capture now correctly suppresses a census finding and still produces an F55 finding
-computed from focus events on **the wrong document**, which `addFocusEventFindings` reports as 2.4.7.
-**"A remedy applied at ONE call site when the behaviour reaches several"** — this file's most expensive
-recurring shape, and the fifth recorded instance.
-
-**Bounded, and the bound is real:** `mapping: "secondary"` so it refers rather than asserts, and F55 only
-runs during `probeFocusOrder`. A wrong referral is still wrong.
-
-**The design decision is where the predicate LIVES, and it is the interesting half.** The check belongs in
-`focusEventVerdict`, not in `rules.ts` — the argument `f95c95d` made for the census applies unchanged:
-handing `targetMatch` to the rule layer leaks capture-mechanism knowledge into every rule reading the
-channel and repeats one judgement at each site. `pageCensus`/`domCensus` were the census's shared seam;
-`focusEventVerdict` is this one's. That forces the predicate to exist worker-side in `.mjs` while
-`censusTargetIsSuspect` lives in TypeScript, so the copies can be neither deleted nor derived across the
-boundary — **pin them equal with a test**, CLAUDE.md's third remedy and the one `name-normalisation.test.ts`
-already uses for the same language boundary.
+`f95c95d` made a suspect census read as `null`, checking every `census.heading === 0` consumer — the right
+check for the CENSUS and the wrong SCOPE for the uncertainty underneath it, since `choosePageTarget` taking
+the wrong CDP target also reaches the F55 focus-event detector through the same `pageTarget()` machinery,
+unprotected at the time. **"A remedy applied at ONE call site when the behaviour reaches several"** — the
+fifth recorded instance. Bounded even before the fix: `mapping: "secondary"` so it refers rather than
+asserts, and F55 only runs during `probeFocusOrder` — a wrong referral is still wrong, which is why it was
+closed rather than left as an accepted bound.
 
 | | |
 |---|---|
