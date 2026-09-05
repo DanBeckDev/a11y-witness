@@ -380,7 +380,9 @@ conformant pages cannot be handed to anyone.** 2.4.3 currently fires on 71% of c
 
 1. **B7 — publishing (ours, cheap).** ADR 0007 chose Changesets and independent per-package semver and it
    was never built, so nobody can `npx a11y-witness`. Half the documented product is unreachable.
-2. **B1 — the first outside user (yours).** Partly blocked by B7.
+   **CLOSED 2026-08-31** — see the blockers section below; kept present-tense here as the record of the
+   sequencing decision at the time it was made.
+2. **B1 — the first outside user (yours).** Was partly blocked by B7; no longer is.
 3. **B5 — the name, and the first publish (yours).**
 
 ### What this sequence deliberately does not do
@@ -403,16 +405,19 @@ CLI at all.
 > *2026-08-09: B2, B3 and B4 are closed by measurement. B1 and B5 are yours — neither can be done from
 > inside the project. Everything technical that a release was waiting on has a number against it now.*
 
-**The current list is B1, B5, B7 and B8.** B1 and B5 remain yours. B7 and B8 are ours, and B7 partly
-blocks B1 — a stranger can use the Action from `@main`, but cannot `npx a11y-witness`, so half the
-documented product is unreachable from outside this checkout.
+**UPDATE 2026-09-06: B7 and B8 are closed. This table was written 2026-08-22 and never updated as each
+closed — see the dated notes under each heading below for the evidence.** `docs/not-working.md` §8
+(closed 2026-08-31) and §2 (closed 2026-09-05, after a same-day reopen and reclose — see its own history)
+are the authoritative, current record; this table lagged them by one to two weeks. **The current list is
+just B1 and B5, both yours.** B1 is no longer blocked by B7: the CLI can now be installed via the
+machinery §8 proved out, even though nothing has been published under a final name yet (B5).
 
 | | blocker | whose | state |
 |---|---|---|---|
-| **B1** | someone outside the project runs it on an app they own | yours | open; partly blocked by B7 |
+| **B1** | someone outside the project runs it on an app they own | yours | open |
 | **B5** | the name, and the first publish | yours | open |
-| **B7** | **the release machinery decided in ADR 0007 does not exist** | ours | open, and cheap |
-| **B8** | **the scorer's 225 free vetoes** | ours | fix in flight |
+| **B7** | ~~the release machinery decided in ADR 0007 does not exist~~ | ours | **CLOSED 2026-08-31** — see `not-working.md` §8 |
+| **B8** | ~~the scorer's 225 free vetoes~~ | ours | **CLOSED 2026-09-05** — see `not-working.md` §2 |
 
 ### B7. Nothing can be installed, and the mechanism to change that was decided and never built
 
@@ -446,6 +451,15 @@ becomes permanent.
 **Note it is genuinely cheap** — one dependency, one config file, one workflow — which is precisely why it
 went unnoticed. Nothing was hard enough to become a visible task.
 
+> **CLOSED 2026-08-31.** `docs/not-working.md` §8: three dry-run attempts against the real workflow, two
+> genuine defects found and fixed (`release:gate` cannot run on a bare CI runner — split into
+> `release:gate:ci`; `changeset status` was being read after `release:version` had already consumed the
+> changesets), then a clean pass exercising all five locks (dispatch-only, `dry-run` defaulting true, the
+> `confirm` string, `access: restricted`, `action-smoke` for the exact commit). The machinery this row
+> said "does not exist" now exists and has been proven to work. **Still not published**, deliberately:
+> `access: "restricted"` stays set because B5 (the name) is unresolved and is the user's call — that is a
+> B5 gate, not a B7 one, and B7 itself is done.
+
 ### B8. The trained scorer penalises features it was never shown, and 225 of them
 
 **Why it blocks.** Not because the product is wrong today — the layer split contains most of it, and the
@@ -460,6 +474,17 @@ was load-bearing" from "spliced input is incoherent". Real pages are the experim
 
 **State.** Corpus rebuilt (furniture plus 60 two-defect pages), recapture in flight 2026-08-22. Starved
 feature/subtype pairs 263 → 178 by construction, with the rest awaiting the retrain.
+
+> **CLOSED 2026-09-05.** `docs/not-working.md` §2, after its own reopen-and-reclose the same day: the
+> retrain (protocol v17) took the count of free vetoes that can reach a report from 225 down to a
+> residual **two** (`form_change_observed_absent` on `3.3.1:validation-error-silent` and
+> `4.1.3:form-activation-silent`), and both are classified `IMPOSSIBLE_BY_DEFINITION` in
+> `corpus:unclosable-map` — a positive of either subtype is guaranteed by its case definition to have a
+> control to press, so the feature cannot read anything else on them. **This closes what B8 asked for**:
+> zero free vetoes remain that ADR 0015's remedy (add corpus pages) could do anything about. Held-out
+> acceptance did not regress. Whether these two heads should instead move to rules (as
+> `4.1.2:state-change-silent` and 1.4.13 did) is a separate, still-open ADR 0021 question — not decided by
+> this closure and not required to close B8.
 
 ### B1. Someone other than the author runs it on an app they own
 
