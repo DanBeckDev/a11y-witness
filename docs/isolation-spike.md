@@ -65,7 +65,7 @@ files (`export-screenreader-dataset.mjs`, `check-signals.mjs`, `acceptance-matri
 pipeline). The exporter computes the same features, so committing the trainer alone would very likely
 produce a different inconsistency rather than fix this one.
 
-`src/spike/scorer-artifact.test.ts` now asserts the committed weights and committed trainer agree, so this
+`packages/scorer/src/scorer-artifact.test.ts` now asserts the committed weights and committed trainer agree, so this
 cannot drift again unnoticed. It **passes in a tree holding the `v4` trainer and fails on a clean clone**,
 which is the honest state of the repository until that pipeline work is committed by whoever owns it.
 

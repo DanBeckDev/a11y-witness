@@ -135,10 +135,10 @@ feature, it is a claim this project cannot yet make.
 
 No single model handles every WCAG criterion well, so a generative pass drafts findings from the transcript and two layers refine them:
 
-- **Deterministic rules** (always on, [`src/spike/rules.ts`](./packages/judge/src/rules.ts)) own the *absence-of-name* criteria — an image announced with no alternative text (1.1.1), a control announced as a bare role with no accessible name (4.1.2). These are facts, not judgement calls, so a rule catches them exactly, for free, with no false positives.
-- **A discriminative gate** (opt-in, [`src/spike/verify-gate.ts`](./packages/judge/src/verify-gate.ts)) re-scores the *semantic* findings — vague link text (2.4.4), non-descriptive headings (2.4.6) — with a small encoder (DeBERTa-v3 NLI, ONNX) via [transformers.js](https://github.com/huggingface/transformers.js). A discriminative model *scores* a candidate rather than *generating* one, so it cannot invent a finding, which removes the over-flagging small generative models show on clean pages.
+- **Deterministic rules** (always on, [`packages/judge/src/rules.ts`](./packages/judge/src/rules.ts)) own the *absence-of-name* criteria — an image announced with no alternative text (1.1.1), a control announced as a bare role with no accessible name (4.1.2). These are facts, not judgement calls, so a rule catches them exactly, for free, with no false positives.
+- **A discriminative gate** (opt-in, [`packages/judge/src/verify-gate.ts`](./packages/judge/src/verify-gate.ts)) re-scores the *semantic* findings — vague link text (2.4.4), non-descriptive headings (2.4.6) — with a small encoder (DeBERTa-v3 NLI, ONNX) via [transformers.js](https://github.com/huggingface/transformers.js). A discriminative model *scores* a candidate rather than *generating* one, so it cannot invent a finding, which removes the over-flagging small generative models show on clean pages.
 
-The model call itself is one seam (`ask()` in [`src/spike/judge.ts`](./packages/judge/src/judge.ts)):
+The model call itself is one seam (`ask()` in [`packages/judge/src/judge.ts`](./packages/judge/src/judge.ts)):
 
 | `JUDGE_BACKEND` | needs | notes |
 |---|---|---|
