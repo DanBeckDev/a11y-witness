@@ -112,3 +112,30 @@ def test_no_activation_at_all_is_said_plainly(capsys):
     # "nothing was activated" and "activated, and the page said nothing" are the distinction §11 is about.
     ef.report([record([SUB], [])], SUB, "form_change_nonempty", 3)
     assert "no entries at all" in capsys.readouterr().out
+
+
+def test_a_channel_no_feature_reads_still_prints(capsys):
+    # `describe` used to walk a hand-written tuple of "the" interaction channels, and that tuple was a
+    # second, silent copy of the four `structured_feature_values` actually reads -- so a channel this file
+    # does not featurize (focus/keyboard evidence, read only by the TS rule layer) was invisible here even
+    # though the RECORD carries it. Printing whatever the record has, rather than a maintained list, is
+    # what makes this survive a channel nobody remembered to add.
+    rec = record([SUB], SILENT, case="carries-focus-order")
+    rec["input"]["interaction"]["focusOrder"] = ["Search, edit", "Submit, button"]
+    ef.report([rec], SUB, "form_change_nonempty", 3)
+    assert "focusOrder" in capsys.readouterr().out
+
+
+def test_a_channel_the_feature_reads_but_the_record_lacks_is_named_absent(capsys):
+    # Reproduced against the FIRST version of the union fix: printing only what the record carries made a
+    # channel the featurizer consults but this record never captured (no key at all, not even `[]`) vanish
+    # silently -- "this record has no formChanges" and "we did not print formChanges" becoming the same
+    # silence, which is precisely the failure this repo's evidence rules exist to prevent. `describe` must
+    # name it as absent rather than omit it.
+    rec = record([SUB], SILENT, case="sparse")
+    del rec["input"]["interaction"]["formChanges"]
+    assert "formChanges" not in rec["input"]["interaction"], "the record must genuinely lack the key"
+    ef.report([rec], SUB, "form_change_nonempty", 3)
+    out = capsys.readouterr().out
+    assert "formChanges" in out, "a channel the feature reads must be mentioned even when the record lacks it"
+    assert "ABSENT" in out, "an absent channel must be distinguishable from one present but empty"
