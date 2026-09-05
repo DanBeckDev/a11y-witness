@@ -229,6 +229,24 @@ export interface CriterionCoverage {
    */
   channels?: EvidenceChannel[];
   /**
+   * How `criteriaAssessableFrom` combines `channels` — default `"all"`, which is correct for a
+   * criterion whose evidence is genuinely ONE shape read from several fields at once (3.3.1 needs
+   * `formChanges` AND `postSubmitFields` together, or it is deciding on half the evidence).
+   *
+   * `"any"` is for a criterion that bundles more than one independently-sufficient rule subtype under
+   * one WCAG number, where requiring every channel together is not stricter, it is WRONG: measured on
+   * 4.1.2 (2026-09-06, `packages/judge` audit §4.4), the default `"all"` — over `["controls",
+   * "formFields", "stateChanges", "structureCensus"]` — reported 4.1.2 BLOCKED on 146 of 218 real
+   * captures where the deterministic rule had ALREADY asserted a conformance failure for it, because
+   * `4.1.2:state-change-silent` needs only `stateChanges` and `4.1.2:unnamed-control` needs only
+   * `formFields`/`controls`/`transcript`/`frames` — no capture needs all four, and `structureCensus`
+   * was never load-bearing at all (ablating it changed 0 of 218 outcomes). The identical shape recurs
+   * at 1.3.1 (`addMissingHeadings` fires because `headings` is EMPTY, so requiring it present is the
+   * "a check must never reject evidence whose absence is the finding" rule turned into a false
+   * BLOCKED) — noted for whoever owns that criterion next; out of scope for this fix.
+   */
+  channelMode?: "all" | "any";
+  /**
    * Why this criterion cannot fire on a REAL-PAGE capture, when that is structurally true.
    *
    * Machine-readable on purpose. `audit-rule-coverage.ts` blocks a criterion this project CLAIMS to assess
@@ -334,7 +352,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "4.1.2": {
     status: "partial",
     needs: ["dom"],
-    channels: ["controls", "formFields", "stateChanges", "structureCensus"], note: "THE CRITERION HAS THREE CLAUSES AND THIS ENTRY USED TO ENUMERATE TWO OF THEM AS THREE. Verbatim: \"the name and role can be programmatically determined; states, properties, and values that can be set by the user can be programmatically set; and notification of changes to these items is available\". CLAUSE 1 (name/role) is covered for the NAME half -- a control announced with a role and no name, rules-owned and exact on 147 records. Its other half, a role-less `<div onclick>` styled as a button, is NOT covered and cannot be from screen-reader evidence: the screen reader cannot perceive it, which IS the failure, so a page with a fake button and a page with no button are identical to NVDA. Declared `unavailable` in rule-ownership.json; `hasEvidenceFor('4.1.2')` also suppresses any finding on such a page, since it requires controls to exist. CLAUSE 3 (notification of changes) is covered by `state-change-silent`, RULES-owned since ADR 0021 and measured 69/0/0 across 144 captures carrying state evidence. CLAUSE 2 (settability) IS NOT COVERED AND IS NOT REACHABLE HERE, which is the part this note previously did not say at all. It asks whether an assistive technology can programmatically SET a value the user can set -- a question about the UIA/IA2 surface (a ValuePattern, a TogglePattern), not about anything NVDA says. Our capture drives NVDA, which operates controls by EMULATING THE KEYBOARD, so `probeArrows` and `probeTyping` witness operability rather than settability; a control the AT cannot set presents as one that does not respond, which is 2.1.1's failure and indistinguishable from it in speech. So the gap is structural rather than a corpus gap, and no new case closes it. THE TWO COVERED HALVES ARE BOTH RULE-DECIDED and therefore exact -- this note used to call `state-change-silent` \"head-decided\" carrying 18 free vetoes, which ADR 0021 stopped being true on 2026-08-24. The head's own score on an unnamed control is poor (the identical announcement scores 0.9240 on a page without a table and 0.4525 on one with), but neither mode reaches a report through the head, because the rules own both. See ADR 0015 and ADR 0021.",
+    channels: ["controls", "formFields", "stateChanges", "frames", "transcript"], channelMode: "any", note: "CHANNELS CORRECTED FROM AN ALL-OF-FOUR AND TO AN ANY-OF-FIVE ON 2026-09-06, MEASURED AGAINST THE REAL CORPUS -- audit §4.4 found three tables (this one, `local-judge.ts`'s `EVIDENCE_CHANNEL`, `outcomes.ts`'s `SWEEPS_FEEDING`) disagreeing about 4.1.2's evidence, and the CEO's condition was to measure before pinning. Over every capture on disk where the deterministic rule layer actually reports a 4.1.2 finding (218 of 2,178 synthetic, 3 of 28 real-page), isolating exactly one candidate channel and re-running the rule reproduced the SAME finding from `formFields` alone (148), `controls` alone (148 -- heavily redundant with `formFields`, since the same control usually appears in both the sweep and the interaction probe), `stateChanges` alone (69 -- `state-change-silent` needs no form-field or control announcement at all), or `frames` alone (1 -- an unnamed iframe, which only the frame sweep carries). No capture needed more than one. The old `channels` list (`controls`, `formFields`, `stateChanges`, `structureCensus`) combined with `criteriaAssessableFrom`'s default ALL-of semantic reported 4.1.2 BLOCKED on 146 of those 218 captures -- including CONFORMANCE-mapped, asserted findings -- because most pages exercise only one of the two rule-owned subtypes, never both, and `structureCensus` was NEVER load-bearing at all (ablating it changed 0 of 218 outcomes; `assertableSweep`'s own design already treats unknown completeness as assertable, so census absence never withheld an assertion). `transcript` was never independently sufficient in the sample (0/221) but `addUnnamedControls(input.transcript, \"transcript\", add)` genuinely reads it, so it stays a fifth disjunct rather than being dropped on an absence. `EVIDENCE_CHANNEL[\"4.1.2\"]` was corrected the same way and the two are pinned equal by `channel-tables-4.1.2.test.ts`. `SWEEPS_FEEDING[\"4.1.2\"] = [\"formField\"]` is UNCHANGED and deliberately narrower: it answers a different question (which SWEEP-typed channel can TRUNCATE, for the cantTell-on-truncation guard), and `stateChanges`/`controls`/`frames` have no comparable step-cap truncation concept to guard. THE CRITERION HAS THREE CLAUSES AND THIS ENTRY USED TO ENUMERATE TWO OF THEM AS THREE. Verbatim: \"the name and role can be programmatically determined; states, properties, and values that can be set by the user can be programmatically set; and notification of changes to these items is available\". CLAUSE 1 (name/role) is covered for the NAME half -- a control announced with a role and no name, rules-owned and exact on 147 records. Its other half, a role-less `<div onclick>` styled as a button, is NOT covered and cannot be from screen-reader evidence: the screen reader cannot perceive it, which IS the failure, so a page with a fake button and a page with no button are identical to NVDA. Declared `unavailable` in rule-ownership.json; `hasEvidenceFor('4.1.2')` also suppresses any finding on such a page, since it requires controls to exist. CLAUSE 3 (notification of changes) is covered by `state-change-silent`, RULES-owned since ADR 0021 and measured 69/0/0 across 144 captures carrying state evidence. CLAUSE 2 (settability) IS NOT COVERED AND IS NOT REACHABLE HERE, which is the part this note previously did not say at all. It asks whether an assistive technology can programmatically SET a value the user can set -- a question about the UIA/IA2 surface (a ValuePattern, a TogglePattern), not about anything NVDA says. Our capture drives NVDA, which operates controls by EMULATING THE KEYBOARD, so `probeArrows` and `probeTyping` witness operability rather than settability; a control the AT cannot set presents as one that does not respond, which is 2.1.1's failure and indistinguishable from it in speech. So the gap is structural rather than a corpus gap, and no new case closes it. THE TWO COVERED HALVES ARE BOTH RULE-DECIDED and therefore exact -- this note used to call `state-change-silent` \"head-decided\" carrying 18 free vetoes, which ADR 0021 stopped being true on 2026-08-24. The head's own score on an unnamed control is poor (the identical announcement scores 0.9240 on a page without a table and 0.4525 on one with), but neither mode reaches a report through the head, because the rules own both. See ADR 0015 and ADR 0021.",
   },
 
   // ---- reachable from evidence we already have, or could capture -------------------------------
@@ -717,9 +735,10 @@ export interface BlockedCriterion { criterion: string; missing: EvidenceChannel[
  * an afternoon of walking 4,899 captures over SSH to find that `focusOrder` is absent from every one of them,
  * because `probeFocus` is opt-in and the dataset runner never sets it. This turns that into a call.
  *
- * A criterion needs ALL of its channels, not any: 3.3.1 reads `formChanges` and `postSubmitFields` and a rule
- * with only one of them would be deciding on half the evidence. Where that is too strict for a specific
- * criterion the fix is to correct that criterion's channel list, not to weaken this.
+ * A criterion needs ALL of its channels by default (`channelMode: "all"`, or unset): 3.3.1 reads
+ * `formChanges` and `postSubmitFields` together and a rule with only one of them would be deciding on
+ * half the evidence. Where that is too strict for a specific criterion the fix is `channelMode: "any"`
+ * on that criterion's own entry — see its doc comment — never to weaken this for every criterion.
  *
  * `out-of-scope` criteria are absent from both lists rather than reported as blocked — nothing is missing,
  * they are simply not this tool's business, and listing them as blocked would imply a probe could fix it.
@@ -732,7 +751,8 @@ export function criteriaAssessableFrom(capture: ChannelBearingCapture):
   for (const [criterion, entry] of Object.entries(CRITERION_COVERAGE)) {
     if (entry.status === "out-of-scope" || !entry.channels?.length) continue;
     const missing = entry.channels.filter((channel) => !present.has(channel));
-    if (missing.length) blocked.push({ criterion, missing });
+    const isBlocked = entry.channelMode === "any" ? missing.length === entry.channels.length : missing.length > 0;
+    if (isBlocked) blocked.push({ criterion, missing });
     else assessable.push(criterion);
   }
   return { assessable, blocked };
