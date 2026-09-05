@@ -209,7 +209,7 @@ key already planted, and the worker serves. `roles/worker/` is provisioning port
 runs alongside `provision-nvda-worker.ps1` until parity is proven — see that README before deleting
 either, because `provisionRevision` is a **capture cache key** and retiring the script moves it.
 
-It pushes **every hashed file** (23 now, defined once in `packages/nvda-worker/src/worker-files.mjs` — the
+It pushes **every hashed file** (24 now, defined once in `packages/nvda-worker/src/worker-files.mjs` — the
 list used to be duplicated in `server.mjs` and `check-worker-code.mjs` with a third derived by regex in the
 deploy script), reboots each guest — mandatory, because
 `utmctl exec` cannot be trusted to restart the worker — and verifies `/health.code` over HTTP, which
