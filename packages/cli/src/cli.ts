@@ -30,7 +30,12 @@ import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11y-
 import { CAPTURE_CLIENT_TIMEOUT_MS, requestJson } from "@a11y-witness/worker-fleet/worker-http";
 import { captureTolerantly } from "@a11y-witness/worker-fleet/capture-client";
 import { workerIsUsable } from "@a11y-witness/worker-fleet/health";
-import { annotateCapture, type CaptureStructure } from "@a11y-witness/evidence";
+// `annotateCapture` is a VALUE (the shadow scorer calls it); the rest are types. Split rather than
+// combined into one `import {...}` so `import type` stays type-only and cannot pull evidence into a
+// runtime graph that does not need it.
+import { annotateCapture } from "@a11y-witness/evidence";
+import type { CaptureStructure, CaptureInteraction, CaptureRequest as WireCaptureRequest,
+  CaptureFormState } from "@a11y-witness/evidence";
 import type { RuleLayerCoverage } from "@a11y-witness/judge/outcomes";
 import { captureDoubt, captureMentionsTitle, oracleCounts, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
@@ -215,12 +220,16 @@ export interface CaptureResponse {
   transcript: string[];
   /** A subset of the wire type, derived — known-gaps §15. `Pick` keeps the omission meaningful. */
   structure?: Pick<CaptureStructure, "headings" | "landmarks" | "formFields">;
-  interaction?: {
-    controls: string[];
-    stateChanges: { control: string; after: string }[];
-    formChanges?: { control: string; after: string }[];
-    postSubmitFields?: string[];
-  };
+  /**
+   * Also a subset of the wire type, derived the same way `structure` is above. `formChanges` and
+   * `postSubmitFields` stay optional here even though the wire type requires them, because both are
+   * `probeForms`-gated and this CLI does not always ask for that probe — an older response this type also
+   * has to describe predates the fields outright. Was hand-typed independently of `CaptureInteraction`
+   * until architecture-audit.md §5 (wire-contract unit, 2026-09-06): same field names, same shapes, no
+   * import relationship, so a future field added there would not appear here without anyone noticing.
+   */
+  interaction?: Pick<CaptureInteraction, "controls" | "stateChanges">
+    & Partial<Pick<CaptureInteraction, "formChanges" | "postSubmitFields">>;
   environment?: Record<string, string>;
   diagnostics?: unknown[];
 }
@@ -803,30 +812,37 @@ Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCover
   });
 }
 
-export interface CaptureRequest {
-  task: string;
-  worker: string;
-  probeForms: boolean;
-  probeFocus: boolean;
-  probeNavigation: boolean;
-  probeFocusContext: boolean;
-  probeFocusReveal: boolean;
-  /**
-   * ONE declared state (ADR 0024), or none.
-   *
-   * One per capture and never several, because an error submission leaves a dirty form and an error
-   * banner, and a success submission may navigate away — so a second state cannot start from the first.
-   * The host issues a capture per state for that reason, rather than the worker looping.
-   */
-  formState?: FormStateRequest;
-}
+/**
+ * This CLI's own outbound request, kept as a SEPARATE type from the wire's `CaptureRequest` rather than
+ * used directly: this is the fixed set of fields THIS caller sends (`url`, `steps`, `probeTables` and the
+ * rest of the wire type's fields are other callers' business), and unlike the wire type it makes each
+ * field required — every construction site below names all of them explicitly, so a field silently
+ * defaulting away is a mistake this type is written to catch. `Required<Pick<...>>` derives the field
+ * SHAPES from `@a11y-witness/evidence` so a renamed or retyped field fails here at compile time, rather
+ * than the independent hand-typed copy that stood here until the wire-contract unit (2026-09-06,
+ * architecture-audit.md §5) — same names, same types, no import, so a drift would have compiled clean.
+ */
+export type CaptureRequest =
+  Required<Pick<WireCaptureRequest, "task" | "probeForms" | "probeFocus" | "probeNavigation"
+    | "probeFocusContext" | "probeFocusReveal">>
+  & {
+    worker: string;
+    /**
+     * ONE declared state (ADR 0024), or none.
+     *
+     * One per capture and never several, because an error submission leaves a dirty form and an error
+     * banner, and a success submission may navigate away — so a second state cannot start from the first.
+     * The host issues a capture per state for that reason, rather than the worker looping.
+     */
+    formState?: FormStateRequest;
+  };
 
-/** The resolved state as it goes over the wire: names and values, with the schema already checked. */
-interface FormStateRequest {
-  state: string;
-  submit: string;
-  fields: { field: string; within?: string; nth?: number; value?: string; choose?: string; check?: boolean }[];
-}
+/**
+ * The resolved state as it goes over the wire: names and values, with the schema already checked.
+ * `state` is REQUIRED here though the wire type leaves it optional (a backend with none declared) — ADR
+ * 0024 means this CLI always names one before it submits.
+ */
+type FormStateRequest = Omit<CaptureFormState, "state"> & { state: string };
 
 /**
  * How long to wait for a capture, measured against the WORKER's own bound rather than guessed.
