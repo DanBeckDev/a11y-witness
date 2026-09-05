@@ -16,12 +16,13 @@ import { resolve } from "node:path";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { AddressInfo } from "node:net";
 import { stripComments } from "@a11y-witness/evidence/source-text";
+import { datasetRoot, captureRoot } from "@a11y-witness/lab/src/dataset-paths.mjs";
 
 import {
   applyArg, parseArgs, conformanceFor, captureViaWorker, type CaptureResponse, type CaptureRequest,
 } from "./cli.js";
 
-const CAPTURES = resolve(process.cwd(), "runs/screenreader-dataset/captures");
+const CAPTURES = captureRoot(datasetRoot());
 
 /** A handful of real captures, chosen by name so a failure names a case rather than an index. */
 function realCaptures(limit = 6): { name: string; capture: CaptureResponse }[] {
