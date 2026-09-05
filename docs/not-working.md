@@ -51,7 +51,57 @@ Until then the gate is correctly red, which is the honest state rather than a de
 
 </details>
 
-## 2. REOPENED 2026-09-06 — the test still holds, the count did not — OPEN
+## 2. CLOSED 2026-09-05 — the two remaining vetoes are unclosable by definition, not open work
+
+> **The count in the REOPENED entry below is correct and the reading of it was incomplete.** Two vetoes on
+> model-decided subtypes do reach a report — `form_change_observed_absent` on both
+> `3.3.1:validation-error-silent` and `4.1.3:form-activation-silent` — and the entry below asks the right
+> question: is this ADR 0015 corpus work, a stale classification, or the wrong-shaped cross? It is neither
+> of the first two. Both are `IMPOSSIBLE_BY_DEFINITION`, now declared as such in `corpus:unclosable-map`
+> (`audit-corpus-starvation.mjs`), and the headline test — zero free vetoes reaching a report **that ADR
+> 0015's remedy can do anything about** — is true again, for a reason the count alone cannot distinguish
+> from "somebody accepted a veto they should not have". It is not that; it is a classification that was
+> simply never audited for this feature.
+>
+> **The mechanism, read from the featurizer rather than assumed.** `cross_with_observation`
+> (`screenreader_features.py`) computes `form_change_observed_absent` as `asked AND NOT bool(formChanges)`
+> — the probe ran and found NO CONTROL TO PRESS, never "the probe ran and the page said nothing". The
+> activation function in `capture-core.mjs` pushes a `formChanges` entry on every completed press, silent
+> ones included (`after: ""` is still an entry); the array stays empty only when nothing was found to
+> activate, or the press threw before recording. So `form_change_empty` — a different, already-unclosable
+> feature two rows above — is what these subtypes' silence should read 1 on, and does. This feature reads
+> something else: whether the probe found nothing to press at all.
+>
+> **3.3.1 and 4.1.3 are the two subtypes whose whole point is a submission that gets rejected or ignored,**
+> so a control to press is guaranteed by the case definition rather than incidental to it. Census against
+> `case-matrix.mjs`'s `CASES` (no capture needed): 143/143 positives of 3.3.1 carry `probeForms: true`;
+> 149/150 of 4.1.3, the one exception being `filter-status-silent-link`, which activates through
+> `probeNavigation` instead — its own comment says why, "probeForms deliberately never activates a link."
+> That case's `observed.formChanges.asked` is false, so it lands in the all-zeros "never asked" row rather
+> than "asked-and-absent" — a different mechanism landing on the same value.
+>
+> **Measured on the captures, not an export, and this is why no fresh export was needed to close it.**
+> `interaction.formChanges` is a capture field that predates the schema, so a stale export missing
+> `observed` cannot touch it:
+>
+> ```
+> captures of 3.3.1 + 4.1.3                                   : 502
+> observed.formChanges.asked === false                        :   2   (both filter-status-silent-link)
+> formChanges EMPTY while asked (the veto's constant-1 shape)  :   0
+> ```
+>
+> Zero of 500 asked-and-found-nothing. The feature cannot be 1 on either subtype for a reason about what a
+> positive of the subtype IS — the `IMPOSSIBLE_BY_DEFINITION` test — and it is a different fact from the
+> five focus/context subtypes already declared under `UNREACHABLE_WITHOUT_PERTURBING`, which never run the
+> probe at all. Both land on the value 0; only one of them is a corpus question.
+>
+> **What this is NOT closing.** Whether these two heads should move to rules instead, the way
+> `4.1.2:state-change-silent` and 1.4.13 did, remains open and is not decided by this — it is an ADR 0021
+> decision about which layer owns the subtype, and deciding it to make a veto go away would be the wrong
+> reason. And nothing here touched `scorer-shortcuts.baseline.json`: a classification fix changes what a
+> veto MEANS, not the tracked baseline's acceptance of it, and no baseline write happened for this reason.
+
+### REOPENED 2026-09-06 — the test still holds, the count did not
 
 > **The CLOSED claim below is stale, and the test it was built on is still the right one.** Computed
 > today from `packages/lab/scripts/scorer-shortcuts.baseline.json` at `3ffd775` (HEAD for that file),
