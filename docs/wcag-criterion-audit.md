@@ -479,8 +479,13 @@ satisfy 3.1.1 but never accuse.
 w3.org.** Not by family, not by analogy: the two most instructive defects (2.2.2 and 2.4.7) were in
 criteria whose family looked settled, and would have survived a representative-sample method.
 
-Two defects changed a STATUS, because `out-of-scope` is defined in `criterion-coverage.ts` as *"no amount
-of work inside this tool's evidence model decides it"* and that was false for both:
+**Three** defects changed a STATUS, because `out-of-scope` is defined in `criterion-coverage.ts` as *"no
+amount of work inside this tool's evidence model decides it"* and that was false for each. Two are below;
+the third, **3.3.7**, is the most instructive and came LAST — the first correction to it fixed the wrong
+reason ("spans pages") and then kept it out of scope on its exceptions, *assuming* they were judgements
+broad enough to make any rule unsafe. Reading them refuted that: the security exception explicitly covers
+password confirmation, and "essential" is narrow enough that verifying accuracy does not qualify. **The
+same defect this audit is about, committed inside the fix for it.**
 
 | | was | now | why |
 |---|---|---|---|
@@ -554,8 +559,8 @@ listed failure, or a word like "process" that was paraphrased.** Every defect he
 |---|---|
 | `assessed` | **ALL 10 DONE** — 1.1.1, 1.3.1, 1.4.2, 2.4.4, 2.4.6, 3.2.1, 3.2.2, 3.3.1, 3.3.3, 4.1.3 |
 | `partial` | **ALL 7 DONE** — 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3, 3.3.2, 4.1.2 |
-| `reachable` | **ALL 6 DONE** — 1.3.5, 2.1.4, 2.5.3, 3.1.1, and the two this audit MOVED here, 1.4.13 and 2.4.7 |
-| `out-of-scope` | **ALL 33 DONE** — 2026-09-05, each read on w3.org rather than by family |
+| `reachable` | **ALL 8 DONE** — 1.3.5, 2.1.4, 2.5.3, 3.1.1 and 3.1.2, plus the three this audit MOVED here: 1.4.13, 2.4.7 and 3.3.7. *(This row said 6 for an hour, having been written before 3.3.7 moved and having forgotten 3.1.2 was already here. Caught by counting the artefact rather than re-reading the prose — which is the whole method of the audit above, applied to the audit.)* |
+| `out-of-scope` | **ALL 33 READ** — 2026-09-05, each on w3.org rather than by family. **30 remain** out-of-scope; three moved to `reachable` |
 
 **What the first four suggest about the rest.** Three of four were clean, and the clean ones were clean
 for the same reason: the rule's `assumptions` quote the part of the criterion the rule cannot reach, and
