@@ -8,9 +8,14 @@
  * "trivial, the data is already on disk" (2.4.2 Page Titled) look identical. For anyone deciding what to
  * build next, that is the only distinction that matters.
  *
- * It also records PARTIAL coverage, which nothing else could express. 4.1.2 is assessed, and one of its
- * three failure modes -- a role-less `<div onclick>` -- is not assessable at all from screen-reader
- * evidence. Reported at criterion granularity that page reads as fine; it is not.
+ * It also records PARTIAL coverage, which nothing else could express. 4.1.2 is assessed, and a role-less
+ * `<div onclick>` is not assessable at all from screen-reader evidence. Reported at criterion granularity
+ * that page reads as fine; it is not.
+ *
+ * That sentence used to say "one of its three failure modes", and 4.1.2's own entry said the same. Both
+ * were wrong in the same way, which is why this is stated in one place now: the criterion has three
+ * CLAUSES, and the role-less div is a second failure mode of the FIRST one (no role), not a third clause.
+ * Counting it as the third made the entry read as covering the whole criterion bar one gap. See 4.1.2.
  *
  * Pinned by `criterion-coverage.test.ts` against `WCAG_22_AA` and `assessedCriteria()`, so it cannot
  * drift from what ships in either direction: a criterion that starts being assessed and is still recorded
@@ -297,7 +302,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "4.1.2": {
     status: "partial",
     needs: ["dom"],
-    channels: ["controls", "formFields", "stateChanges", "structureCensus"], note: "Two of three failure modes are covered: a control announced with a role and no name (rules, exact on 147 records) and a state change that is never announced (head, calibrated). The third — a role-less `<div onclick>` styled as a button — is NOT, and cannot be from screen-reader evidence: the screen reader cannot perceive it, which IS the failure, so a page with a fake button and a page with no button are identical to NVDA. Declared `unavailable` in rule-ownership.json. Note `hasEvidenceFor('4.1.2')` also suppresses any finding on such a page, since it requires controls to exist. THE TWO COVERED MODES ARE NOT EQUALLY RELIABLE, measured 2026-08-22: the unnamed-control mode is rule-decided and therefore exact, while `state-change-silent` is head-decided and carries 18 free vetoes — a page presenting one of those features can go silent on a state change it genuinely fails to announce. The head's own score on an unnamed control is worse still (the identical announcement scores 0.9240 on a page without a table and 0.4525 on one with), but that mode never reaches a report because the rule owns it. See ADR 0015.",
+    channels: ["controls", "formFields", "stateChanges", "structureCensus"], note: "THE CRITERION HAS THREE CLAUSES AND THIS ENTRY USED TO ENUMERATE TWO OF THEM AS THREE. Verbatim: \"the name and role can be programmatically determined; states, properties, and values that can be set by the user can be programmatically set; and notification of changes to these items is available\". CLAUSE 1 (name/role) is covered for the NAME half -- a control announced with a role and no name, rules-owned and exact on 147 records. Its other half, a role-less `<div onclick>` styled as a button, is NOT covered and cannot be from screen-reader evidence: the screen reader cannot perceive it, which IS the failure, so a page with a fake button and a page with no button are identical to NVDA. Declared `unavailable` in rule-ownership.json; `hasEvidenceFor('4.1.2')` also suppresses any finding on such a page, since it requires controls to exist. CLAUSE 3 (notification of changes) is covered by `state-change-silent`, RULES-owned since ADR 0021 and measured 69/0/0 across 144 captures carrying state evidence. CLAUSE 2 (settability) IS NOT COVERED AND IS NOT REACHABLE HERE, which is the part this note previously did not say at all. It asks whether an assistive technology can programmatically SET a value the user can set -- a question about the UIA/IA2 surface (a ValuePattern, a TogglePattern), not about anything NVDA says. Our capture drives NVDA, which operates controls by EMULATING THE KEYBOARD, so `probeArrows` and `probeTyping` witness operability rather than settability; a control the AT cannot set presents as one that does not respond, which is 2.1.1's failure and indistinguishable from it in speech. So the gap is structural rather than a corpus gap, and no new case closes it. THE TWO COVERED HALVES ARE BOTH RULE-DECIDED and therefore exact -- this note used to call `state-change-silent` \"head-decided\" carrying 18 free vetoes, which ADR 0021 stopped being true on 2026-08-24. The head's own score on an unnamed control is poor (the identical announcement scores 0.9240 on a page without a table and 0.4525 on one with), but neither mode reaches a report through the head, because the rules own both. See ADR 0015 and ADR 0021.",
   },
 
   // ---- reachable from evidence we already have, or could capture -------------------------------

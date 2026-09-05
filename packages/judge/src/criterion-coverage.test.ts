@@ -48,6 +48,29 @@ test("4.1.2 is recorded as PARTIAL, because one of its failure modes is unassess
   assert.match(CRITERION_COVERAGE["4.1.2"].note, /role-less|div onclick/i);
 });
 
+test("4.1.2's note accounts for all THREE clauses, including the settable one", () => {
+  // Found by the 2026-09-04 criterion audit and closed 2026-09-05. The note read "two of three failure
+  // modes are covered", counting the role-less div as the third -- but that is a second failure mode of
+  // the FIRST clause (no role), so the criterion's actual second clause was not enumerated anywhere and
+  // the entry read as covering more than it did. The criterion, verbatim: "the name and role can be
+  // programmatically determined; STATES, PROPERTIES, AND VALUES THAT CAN BE SET BY THE USER CAN BE
+  // PROGRAMMATICALLY SET; and notification of changes to these items is available".
+  //
+  // This is the file whose entire purpose is honesty about coverage, so an unstated clause is the one
+  // defect it cannot tolerate. Pinned rather than trusted to prose.
+  const note = CRITERION_COVERAGE["4.1.2"].note;
+  assert.match(note, /programmatically set|settab/i,
+    "4.1.2's note no longer states the SETTABILITY clause, so the entry reads as covering the whole "
+    + "criterion bar one gap. It covers the name half of clause 1 and clause 3.");
+  assert.match(note, /clause/i, "the note no longer distinguishes the criterion's clauses from failure modes");
+
+  // The stale claim that came back once already: ADR 0021 moved state-change-silent to the RULES on
+  // 2026-08-24, and this note went on calling it head-decided with 18 free vetoes for eleven days.
+  assert.doesNotMatch(note, /`?state-change-silent`? is head-decided/i,
+    "the note claims state-change-silent is head-decided. ADR 0021 moved it to the rules; "
+    + "rule-ownership.json is the authority and says `decidedBy: rules`.");
+});
+
 test("every criterion that could be assessed names the CHANNELS it reads", () => {
   // The `needs` axis says which SOURCE could decide a criterion; it cannot answer "can this capture decide
   // it?". Without channels that question cost an afternoon of walking 4,899 captures over SSH.
