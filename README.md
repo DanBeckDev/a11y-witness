@@ -287,8 +287,8 @@ When a worker breaks, the error messages lie — `"NVDA not installed"` usually 
 ## How we know it works
 
 Verification is layered, and each layer tests something the others cannot. There are unit tests
-(`npm test`, 22 of them) for the pure functions — the deterministic rules, the judge layers, eval
-fitness — and CI gates on them; everything below exists because most of this system cannot be
+(`npm test`, ~1,900 of them across ~250 files) for the pure functions — the deterministic rules, the judge
+layers, eval fitness — and CI gates on them; everything below exists because most of this system cannot be
 unit-tested, since a real screen reader on a real desktop is the thing under test.
 
 | command | what it checks |
@@ -296,7 +296,7 @@ unit-tested, since a real screen reader on a real desktop is the thing under tes
 | `npm run lint` / `npm run typecheck` | mechanical; both gate CI |
 | `npm run eval` | judge quality against **34 labelled fixtures** — W3C tutorial pages and paired good/bad cases. Runs against our own scorer by default; needs the Python venv, so it cannot run in CI |
 | `npm run rules-check` | the deterministic rules in isolation. Exits non-zero on **any** false positive against a conformant page — precision is the entire point of a rule |
-| `node packages/nvda-worker/src/capture-check.mjs` | the capture half, on the worker itself. Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
+| `npm run capture:check -- --worker=<url>` | the capture half, against a live worker (`packages/lab/src/harnesses/capture-check.mjs`). Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
 | `capture-regression.yml` | real NVDA on a GitHub-hosted Windows runner |
 
 **On the numbers.** The suite currently reports full recall on the observable failure cases with a small number of false positives, concentrated in the subjective link-purpose (2.4.4) and descriptive-heading (2.4.6) criteria. Treat that as *promising, not validated*, and read [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) before quoting it anywhere: the guards were iteratively tuned against these cases, scoring is single-run with no test-retest interval, and **there is no expert human-agreement baseline yet**. That document sets the bar for "trustworthy enough" *before* measuring against it, and lists what is still missing — deliberately, so the goalposts cannot move.
@@ -311,6 +311,7 @@ A monorepo: everything a consumer installs is under `packages/`, one directory p
 ```
 packages/
   cli/            the `witness` pipeline — capture -> axe -> judge -> report. Published as `a11y-witness`
+  control/        PRIVATE. Ansible job control for the lab and the bare-metal fleet (ADR 0012)
   judge/          the deterministic WCAG rules, criterion coverage, and experience-layer ordering
   scorer/         the trained heads, the feature contract, and the Python scoring program
   evidence/       wire types, verification predicates, the WCAG 2.2 AA list. Zero deps, no I/O
@@ -350,7 +351,9 @@ declining is the right answer for them.
 *The blind spot is the one it does not.* Measured 2026-08-22, the scorer's heads have learned to penalise
 features that were 0 on every one of their training examples — a penalty that costs nothing to learn and
 that no accuracy metric we compute can see, because every held-out split shares the corpus's structure.
-`npm run scorer:shortcuts` counts **225** of them across all 13 heads.
+`npm run scorer:shortcuts` counted **225** of them across the 13 heads that existed then — the shipped
+model now has 16 (`training-report.json`), and that count has not been re-measured since; the mechanism is
+current even though the number is not.
 
 **How much of that reaches you depends on which layer answers.** Where a deterministic rule owns a subtype,
 the rule answers and the scorer is suppressed — so 1.1.1's missing and filename alternatives, 4.1.2's
@@ -371,7 +374,7 @@ Deliberately **not** a general-purpose language model. The project already produ
 
 That model can *score* a candidate finding but cannot invent one, which is the property that matters: a generator that hallucinates a violation destroys the trust the whole project depends on. The division of labour stays as it is — deterministic rules keep the exact absence cases, the scorer takes the judgment calls, and the explanation is rendered from captured evidence and a fixed WCAG template.
 
-It runs through the `applyGate` seam in [`packages/judge/src/verify-gate.ts`](./packages/judge/src/verify-gate.ts). **This is no longer future tense — it shipped and is the default**, and it cleared the pre-registered bar to get there: a criterion's findings are the scorer's only once it meets the holdout bar for that criterion with **zero false positives on the clean paired pages**. Held-out acceptance is currently 58 true positives, 0 false positives, 0 false negatives across all 8 scored criteria.
+It runs through the `applyGate` seam in [`packages/judge/src/verify-gate.ts`](./packages/judge/src/verify-gate.ts). **This is no longer future tense — it shipped and is the default**, and it cleared the pre-registered bar to get there: a criterion's findings are the scorer's only once it meets the holdout bar for that criterion with **zero false positives on the clean paired pages**. Held-out acceptance is currently 80 true positives, 0 false positives, 0 false negatives across the 6 criteria the shipped model scores today, out of 16 it has a head for (`packages/scorer/models/screenreader-scorer/acceptance-report.json`).
 
 Where a deterministic rule already decides a subtype, the rule wins and the scorer is suppressed for it — so the exact cases stay exact and the model only carries the judgment calls.
 
@@ -379,7 +382,13 @@ There is a concrete reason this needs its own dataset. Link purpose (2.4.4) is a
 
 ### Building the training set
 
-`packages/lab/src/training/` collects screen-reader-only evidence from a source matrix of **1,126 controlled page pairs**, of which 1,061 are captured today, each a known-good page and a mutated one that breaks a single criterion, so a label comes from the contrast rather than from anyone's opinion. Model input is deliberately limited to what a screen reader produced — **no HTML, DOM, CSS, URL or axe findings** — so a model trained on it cannot learn to cheat by reading the markup. The pages are instruments for producing captures and labels; they are not training input.
+`packages/lab/src/training/` collects screen-reader-only evidence from a source matrix of controlled page
+pairs — **1,645 defined today** (`CASES.length` in `case-matrix.mjs`, up from the 1,126 this section long
+quoted; how many of those are currently captured needs the lab to answer and was not checked here), each a
+known-good page and a mutated one that breaks a single criterion, so a label comes from the contrast rather
+than from anyone's opinion. Model input is deliberately limited to what a screen reader produced — **no
+HTML, DOM, CSS, URL or axe findings** — so a model trained on it cannot learn to cheat by reading the
+markup. The pages are instruments for producing captures and labels; they are not training input.
 
 ```bash
 npm run training:generate      # write the page pairs + manifest
@@ -407,9 +416,21 @@ updates go cold past one capture timeout it exits 3. Exit codes are the contract
 
 `training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. A stale run reports `running: false`, `stale: true`, and no misleading ETA. `--resume` picks up only captures whose page identity and provenance still match. See [`packages/lab/src/training/README.md`](./packages/lab/src/training/README.md).
 
-The source matrix contains **1,126 controlled page pairs** — the original 836 plus targeted calibration pairs for image alternatives, fake headings, placeholder-only fields, unnamed icon buttons, validation errors, live status updates, missing-role controls, silent state changes, and the keyboard and navigation cases added for 2.1.1, 2.1.2, 2.4.1, 2.4.2 and 2.4.3, plus 60 pages that fail **two** criteria at once — added because one-defect-per-page is what taught the scorer its 4.1.2 blind spot ([ADR 0015](./docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md)). 58 observable missing-landmark pairs are retained for the structural/signal layer but excluded from the scorer, because that absence is not reliably inferable from screen-reader output alone.
+**The breakdown below is what grew the matrix from its original 836 to the 1,645 pairs defined today, and
+the shape of it — calibration pairs for individual failure modes, two-defect pages, excluded structural
+pairs — has not been re-counted since the corpus passed 1,100.** The original 836 was extended with targeted
+calibration pairs for image alternatives, fake headings, placeholder-only fields, unnamed icon buttons,
+validation errors, live status updates, missing-role controls, silent state changes, and the keyboard and
+navigation cases added for 2.1.1, 2.1.2, 2.4.1, 2.4.2 and 2.4.3, plus pages that fail **two** criteria at
+once — added because one-defect-per-page is what taught the scorer its 4.1.2 blind spot ([ADR
+0015](./docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md)). Some observable missing-landmark
+pairs are retained for the structural/signal layer but excluded from the scorer, because that absence is
+not reliably inferable from screen-reader output alone.
 
-The scorer combines channel-tagged screen-reader evidence with 29 screen-reader-derived structural features, including field-name/role and table-header relationships, then uses one head per violation subtype and max-pools those subtype scores into a criterion score. Thresholds are selected from grouped out-of-fold development predictions rather than in-sample scores, and splits are grouped by page family, template and source so a good and bad version of the same template never straddle train and test — repeated captures of one page do not count as independent examples.
+The scorer combines channel-tagged screen-reader evidence with 28 screen-reader-derived structural features
+(`representation.structuredFeatureSize` in the shipped `training-report.json`; the working codebase computes
+more, pending the schema migration in progress), including field-name/role and table-header relationships,
+then uses one head per violation subtype and max-pools those subtype scores into a criterion score. Thresholds are selected from grouped out-of-fold development predictions rather than in-sample scores, and splits are grouped by page family, template and source so a good and bad version of the same template never straddle train and test — repeated captures of one page do not count as independent examples.
 
 `docs/local-model.md` sets out the planning bands honestly: roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by [`packages/lab/scripts/verify-safetensors.mjs`](./packages/lab/scripts/verify-safetensors.mjs).
 
@@ -443,7 +464,7 @@ you are trying to do. The four you are most likely to want:
 | [`docs/getting-started.md`](./docs/getting-started.md) | **start here**: install, set up a worker by whichever route fits, run your first report, and what to do when it fails |
 | [`docs/adr/README.md`](./docs/adr/README.md) | 24 architecture decision records, indexed — the *why*, including the alternatives that were rejected |
 | [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) | how the numbers were produced, the biases we are exposed to, and why the eval figures must not be quoted as a headline |
-| [`docs/coverage.md`](./docs/coverage.md) | **every WCAG 2.2 A/AA criterion and whether we detect it** — 14 of 55 produce findings, and each partial one names the gap. Generated from the code |
+| [`docs/coverage.md`](./docs/coverage.md) | **every WCAG 2.2 A/AA criterion and whether we detect it** — 18 of 55 produce findings, and each partial one names the gap. Generated from the code, so this number cannot drift from it |
 | [`docs/screenreader-coverage.md`](./docs/screenreader-coverage.md) | every behaviour we drive — and **what we do not drive yet**, which bounds what this tool can claim |
 
 For contributors: [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`SECURITY.md`](./SECURITY.md). Read the second
