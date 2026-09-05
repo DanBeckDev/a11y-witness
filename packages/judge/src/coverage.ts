@@ -57,6 +57,12 @@ export const SCORED_CRITERIA = [
  * covered by a rule alone is still covered, and reporting it as untested would be the mirror of the
  * over-claim this file exists to prevent.
  *
+ * 1.4.13 joined 1.4.2 here on 2026-09-05, and deliberately not `SCORED_CRITERIA`: the corpus's single
+ * subtype (`focus-panel-undismissable`) is a direct read off `focusRevealVerdict`, not an inference, so it
+ * moved to the rules on ADR 0021's own precedent rather than waiting on a head that 12 positives could
+ * never calibrate. No shipped `training-report.json` has a "1.4.13" key yet; adding it here would fail
+ * `coverage.test.ts`'s parity check for a head that has never shipped.
+ *
  * **3.3.2 was missing from this list until 2026-08-24**, while `addUnnamedFormFields` was firing on 265
  * corpus captures and 6 real ones. Nothing caught it because the only consumer was `assessedCriteria()`,
  * which UNIONS this with `SCORED_CRITERIA` — and 3.3.2 is in that — so the union stayed correct and the
@@ -64,8 +70,8 @@ export const SCORED_CRITERIA = [
  * "which of these has never fired?", because a criterion absent from the list is one the audit never asks
  * about. `add()` in `rules.ts` now throws on an unlisted criterion, so this cannot go stale silently again.
  */
-export const RULE_CRITERIA = ["1.1.1", "1.3.1", "1.4.2", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3",
-  "2.4.4", "3.2.1", "3.2.2", "3.3.2", "3.3.3", "4.1.2"] as const;
+export const RULE_CRITERIA = ["1.1.1", "1.3.1", "1.4.2", "1.4.13", "2.1.1", "2.1.2", "2.4.1", "2.4.2",
+  "2.4.3", "2.4.4", "3.2.1", "3.2.2", "3.3.2", "3.3.3", "4.1.2"] as const;
 
 /** Everything the shipped judge can return a finding for, deduplicated and sorted. */
 export function assessedCriteria(): string[] {

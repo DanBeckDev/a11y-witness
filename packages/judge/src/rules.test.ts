@@ -598,3 +598,34 @@ test("the 2.4.3 suppression counts a `section` container, which is what Edge 152
   // A page with no such container must not suppress anything.
   assert.equal(repeatedStructureContainers(["heading, level 1, Contact us", "edit"]), 0);
 });
+
+test("1.4.13's Dismissable finding fires only on revealed+held+not-dismissed, and always as secondary", () => {
+  // `focus-panel-undismissable`, moved from the trained scorer to the rules on 2026-09-05: the evidence is
+  // a direct read of `focusRevealVerdict`'s own verdict, not an inference, but Dismissable itself carries
+  // two exceptions this evidence cannot rule out ("unless the additional content communicates an input
+  // error or does not obscure or replace other content") — so it reports `secondary`, never `conformance`.
+  const capture = (focusReveal: unknown) => ({
+    transcript: [], structure: {}, interaction: { focusReveal },
+  } as never);
+
+  const found = ruleFindings(capture({ revealed: true, focusHeld: true, dismissed: false,
+    revealedBy: [["link", 1]] }));
+  assert.equal(found.length, 1, "the genuine positive must fire exactly once");
+  assert.equal(found[0].wcag, "1.4.13 Content on Hover or Focus");
+  assert.equal(found[0].mapping, "secondary",
+    "Dismissable's own exceptions (input error; does not obscure) are unruled-out by this evidence");
+
+  // Every tri-state combination that is NOT the genuine positive must stay silent.
+  const silent = [
+    undefined,
+    { revealed: false },                                              // nothing appeared on focus
+    { revealed: null },                                                // census unavailable, or nothing focusable
+    { revealed: true, focusHeld: true, dismissed: true },              // actually dismissed
+    { revealed: true, focusHeld: false, dismissed: false },            // Escape navigated, did not dismiss
+    { revealed: true, focusHeld: true, dismissed: null },              // census after Escape unavailable
+  ];
+  for (const focusReveal of silent) {
+    assert.equal(ruleFindings(capture(focusReveal)).filter((f) => f.wcag.startsWith("1.4.13")).length, 0,
+      `must make no claim on ${JSON.stringify(focusReveal)}`);
+  }
+});

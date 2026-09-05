@@ -31,9 +31,17 @@ const repoFile = (name: string) =>
   readFileSync(fileURLToPath(new URL(`../../../${name}`, import.meta.url)), "utf8")
     .replace(/\s+/g, " ");
 
-/** Every WCAG criterion number mentioned in a stretch of prose, deduplicated and sorted. */
+/**
+ * Every WCAG criterion number mentioned in a stretch of prose, deduplicated and sorted.
+ *
+ * `\d` per segment, not `\d+`, until 2026-09-05 — every RULE_CRITERIA member up to then had one digit in
+ * every segment, so "1.4.13" (the first with a two-digit final segment) silently matched nothing at all:
+ * `\b` after the middle `\d` requires a word boundary, and "13" has none between its own digits. A prose
+ * mention of 1.4.13 in either surface would have been invisible to this check, reporting a mismatch that
+ * blamed the DOCS for omitting a number the regex itself could never see.
+ */
 const criteriaIn = (text: string) =>
-  [...new Set(text.match(/\b\d\.\d\.\d\b/g) ?? [])].sort();
+  [...new Set(text.match(/\b\d+\.\d+\.\d+\b/g) ?? [])].sort();
 
 test("the stranger-facing docs name exactly the criteria the rules can emit", () => {
   const expected = [...RULE_CRITERIA].sort();
