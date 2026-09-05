@@ -63,6 +63,11 @@ export const SCORED_CRITERIA = [
  * never calibrate. No shipped `training-report.json` has a "1.4.13" key yet; adding it here would fail
  * `coverage.test.ts`'s parity check for a head that has never shipped.
  *
+ * 2.4.7 joined 2026-09-06, rules-owned but `secondary`/`cantTell`, never `SCORED_CRITERIA` — no corpus case
+ * exists to train a head on and `focusEventVerdict`'s pair-timing observation (`rules.ts`'s
+ * `addFocusEventFindings`) is an INFERENCE about a visible indicator, not a read of one, which is exactly
+ * the shape `mapping` exists to mark as correlated-but-not-proving.
+ *
  * **3.3.2 was missing from this list until 2026-08-24**, while `addUnnamedFormFields` was firing on 265
  * corpus captures and 6 real ones. Nothing caught it because the only consumer was `assessedCriteria()`,
  * which UNIONS this with `SCORED_CRITERIA` — and 3.3.2 is in that — so the union stayed correct and the
@@ -71,7 +76,7 @@ export const SCORED_CRITERIA = [
  * about. `add()` in `rules.ts` now throws on an unlisted criterion, so this cannot go stale silently again.
  */
 export const RULE_CRITERIA = ["1.1.1", "1.3.1", "1.4.2", "1.4.13", "2.1.1", "2.1.2", "2.4.1", "2.4.2",
-  "2.4.3", "2.4.4", "3.2.1", "3.2.2", "3.3.2", "3.3.3", "4.1.2"] as const;
+  "2.4.3", "2.4.4", "2.4.7", "3.2.1", "3.2.2", "3.3.2", "3.3.3", "4.1.2"] as const;
 
 /** Everything the shipped judge can return a finding for, deduplicated and sorted. */
 export function assessedCriteria(): string[] {

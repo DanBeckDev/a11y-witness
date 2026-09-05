@@ -579,4 +579,53 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "not the screen reader, so what is counted is what an assistive-technology API would expose "
       + "regardless of which screen reader is listening.",
   },
+  {
+    id: "a11y-witness:focus-removed-by-script",
+    version: "2026-09-06",
+    name: "Script removes focus immediately after a control receives it",
+    description: "A control receives focus and script strips it again within a window too short for a "
+      + "human or a real focus round trip — Failure F55, 'using script to remove focus when focus is "
+      + "received'. Nothing holds focus long enough for a visible focus indicator to have been shown, so "
+      + "this fails the criterion by a chain of reasoning rather than by observing pixels.",
+    ruleType: "atomic",
+    accessibilityRequirements: [
+      // SECONDARY, argued rather than defaulted, and the argument is in `rules.ts`'s own comment above
+      // `addFocusEventFindings` and in `coverage.ts` at `RULE_CRITERIA`'s definition: a `focusin`/`focusout`
+      // timing pair is evidence the MECHANISM is absent, never a read of whether an indicator was drawn.
+      { criterion: "2.4.7", mapping: "secondary" },
+    ],
+    inputAspects: ["interaction.focusEvents"],
+    applicability: "Every capture where `probeFocusOrder` installed the `focusin`/`focusout` log over CDP "
+      + "and it ran to completion (`focusEvents.checked === true`). A capture where the oracle could not "
+      + "run — no `focusin` listener installed, a dropped CDP socket, or the probe not requested — is out "
+      + "of scope, reported as `checked: false` with a `why`, never read as zero findings.",
+    expectation: "No control's `focusin` is followed by a same-id `focusout` inside "
+      + "`FOCUS_SCRIPT_BLUR_WINDOW_MS` (50 ms) — the gap between a script's own `blur()` call and the "
+      + "keystroke that gave it focus.",
+    assumptions: [
+      "THE LOWER BOUND IS UNCONFIRMED, AND SAYS SO AT THE THRESHOLD'S OWN DEFINITION. "
+        + "`FOCUS_SCRIPT_BLUR_WINDOW_MS` in `capture-pure.mjs` carries two independent real-page "
+        + "measurements of the NEGATIVE side — ordinary Tab transitions land at 1,944 ms/stop (a 38.9x "
+        + "margin, an upper bound from a probe-wide mean) and, more directly, the smallest of 24 real "
+        + "same-id `focusin`→`focusout` gaps measured 633 ms (a 12.6x margin). Neither touches the other "
+        + "side: no capture has yet recorded a real script `blur()` to confirm one lands under 50 ms "
+        + "rather than merely under 633. Until one does, this rule can correctly report a real F55 case "
+        + "it is shown, but has not been proven to catch a borderline one.",
+      "MATCHED BY ELEMENT ID, NEVER BY NAME OR POSITION. Two controls sharing a name must never be read "
+        + "as one control losing focus it just received — `focusEventVerdict` pairs strictly on the CDP "
+        + "element id the browser assigned, which is also what tells this failure apart from 2.1.1's: a "
+        + "control that never received focus at all (no event) differs from one that received it and had "
+        + "it stripped (a same-id pair), and only the event log — not the resulting tab-stop list — can "
+        + "tell them apart.",
+      "F78 IS A DIFFERENT FAILURE AND IS NOT DECIDED HERE. Styling a focus indicator away is a pixel "
+        + "question this rule says nothing about either way; a clean report is silent on F78, never a "
+        + "pass for 2.4.7 as a whole. See `criterion-coverage.ts`, which is `partial` for exactly this.",
+      "AN EMPTY `scriptRemovedFocus` ON A `checked: true` LOG IS A REAL ZERO, NOT AN ABSENCE. The oracle "
+        + "ran and found no script stripping focus, which is a different fact from never having asked — "
+        + "`focusEventVerdict`'s own contract, and this rule reads `checked` before ever reading the array.",
+    ],
+    accessibilitySupport: NVDA_EDGE + " The event log is `focusin`/`focusout` over the DevTools protocol, "
+      + "not the screen reader, so what is measured is when focus actually moved in the DOM rather than "
+      + "when NVDA got around to announcing it.",
+  },
 ];
