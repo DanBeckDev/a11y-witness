@@ -412,6 +412,78 @@ Nothing else moved: each fires on the same evidence, stays rules-owned, and stil
 agree with. `act-rules.test.ts` pins the asserting list precisely so this is a visible edit, and it forced
 one.
 
+## The `reachable` and `out-of-scope` REASONS — audit begun 2026-09-05
+
+These are claims too, and the audit ranked them last on the grounds that *"a misread there produces a
+finding we never make, not one we make wrongly"*. That is still true, and it turned out to understate
+them: **a wrong reason is what the next person reads before deciding what to build.** Three of the first
+eleven examined were wrong, one of them materially.
+
+Each row below was settled by reading the criterion on w3.org, not by reasoning from the entry.
+
+### 1.4.13 Content on Hover or Focus — WRONG, and the status changed
+
+The note read *"needs pointer hover and geometry; the screen-reader path never hovers"*. The criterion,
+verbatim: *"Where receiving and then removing pointer hover **or keyboard focus** triggers additional
+content to become visible and then hidden"*. **We drive keyboard focus.** The reason ruled the whole
+criterion out on the hover trigger alone.
+
+`out-of-scope` is defined in this file as *"no amount of work inside this tool's evidence model decides
+it"*, and that is false here, bullet by bullet:
+
+| bullet | reachable? |
+|---|---|
+| **Hoverable** | No, and permanently — it is conditioned on *"if pointer hover can trigger"* and we never use a pointer |
+| **Dismissable** | **Yes.** It asks for a mechanism to dismiss *"without moving pointer hover or keyboard focus"*, and `dialogEscape` is already that observation — focus before, what was announced, focus after, Escape pressed twice because NVDA eats the first |
+| **Persistent** | Asymmetric. *"Remains visible"* is pixels, so it can never be CONFIRMED; content vanishing from the accessibility tree while the trigger still holds focus is sufficient evidence of FAILURE without being necessary |
+
+Moved to `reachable`, not `partial`: what is missing is a probe (nothing diffs the census across a focus
+change), not evidence. **Do not build it before there is a corpus case** — §17's rule.
+
+### 1.3.2 Meaningful Sequence — RIGHT CONCLUSION, WRONG REASON
+
+The note said the criterion *"compares reading order to VISUAL order"*. It does not. Verbatim: *"When the
+sequence in which content is presented affects its meaning, a correct reading sequence can be
+programmatically determined"* — and the Understanding page states outright that the two orders may differ
+without failing: *"the visual presentation of the sections does not match the programmatically determined
+order, but the meaning of the page does not depend on the order."*
+
+So a mismatch is not the failure, and **a tool built on the old reason would have looked for the wrong
+thing.** What actually puts it out of reach is two judgements no capture supplies: whether sequence
+affects meaning here at all, and whether a given linearisation is a correct one. F49 — a layout table that
+does not make sense linearised — is the failure a screen reader comes closest to, and *"does not make
+sense"* is exactly the judgement it cannot make.
+
+### 3.1.1 Language of Page — RIGHT CONCLUSION, MECHANISM WENT STALE
+
+The note called NVDA's language signal *"an indirect and unreliable proxy"* — a description of NVDA at its
+defaults. `speech.reportLanguage` has been ON since 2026-09-03, so NVDA speaks the language as text. The
+signal is direct now; the criterion is still not decidable from it, because absence is the failure and
+silence is what both a missing `lang` and a page matching NVDA's own default produce. The transcript can
+satisfy 3.1.1 but never accuse.
+
+### Confirmed correct, each read against its criterion
+
+| | why the reason holds |
+|---|---|
+| **1.3.3** Sensory Characteristics | The instructions are text we hear, but the failure is relying *solely* on a sensory characteristic — F14/F26 — which needs the rendering to rule out an alternative |
+| **2.2.1** Timing Adjustable | No minimum limit exists in the criterion, so a short one is in scope; but seeing it fire would still not say whether Turn off / Adjust / Extend exist |
+| **2.5.2** Pointer Cancellation | Scoped *"for functionality that can be operated using a single pointer"*. A keyboard-driven session cannot demonstrate it |
+| **2.5.8** Target Size | 24x24 **CSS pixels**, with a spacing exception computed from intersecting circles. Layout geometry, not the accessibility tree |
+| **3.2.6** Consistent Help | *"repeated on multiple web pages within a set"*. Cannot be evaluated from one page, and the capture is single-page by construction |
+| **1.3.5**, **2.1.4**, **2.5.3** | All three sound. 2.1.4's is the sharpest in the file: NVDA consumes single letters as quick-nav commands in browse mode, so the screen-reader channel is *structurally* blind to single-character shortcuts |
+
+### Still to check — 26 of the 33
+
+Grouped by the family their reason belongs to, because a family shares a failure mode:
+**visual/geometry** 1.4.3, 1.4.11, 1.4.1, 1.4.4, 1.4.5, 1.4.10, 1.4.12, 1.3.4, 2.3.1, 2.4.7, 2.4.11 ·
+**pointer** 2.5.1, 2.5.4, 2.5.7 · **media adequacy** 1.2.1, 1.2.2, 1.2.3, 1.2.4, 1.2.5 ·
+**time-based** 2.2.2 · **multi-page** 2.4.5, 3.2.3, 3.2.4, 3.3.4, 3.3.7, 3.3.8.
+
+**The hit rate so far argues for finishing rather than stopping**: 3 defects in 11 reads, and the two that
+mattered were both in criteria whose reason made a claim about THIS TOOL rather than about physics. That
+is the pattern to check first in the remainder.
+
 ## Still to audit
 
 | status | criteria |
