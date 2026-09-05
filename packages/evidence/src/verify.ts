@@ -453,9 +453,17 @@ export type Completeness = "exact" | "truncated" | "phantom" | "unknown";
  * capture cannot say, and saying it can is the exact defect this field was added to remove. So the caller
  * falls back to its inference rather than to an assumption.
  *
+ * EXPORTED so a second reader — `observation-ambiguity.mjs`'s interaction-channel tally — can ask the
+ * capture directly instead of restating the protocol-9 rule against a diagnostic MARK, which is the
+ * house order on a duplicated definition: delete the copy, do not pin two definitions equal. That audit
+ * used to read `formProbe`'s presence as "asked", which conflates "the probe ran" with "the probe
+ * activated something" — a formState configured but matching no field, or an opportunistic probe finding
+ * no submit-like control, marks `formProbe` and asked nothing. This is the one place that already tells
+ * the two apart.
+ *
  * @returns the recorded observation, or `undefined` when this capture predates the field
  */
-function observationOf(capture: CapturedAnnouncements, channel: string):
+export function observationOf(capture: CapturedAnnouncements, channel: string):
   { asked?: unknown; complete?: unknown } | undefined {
   const observed = (capture as { observed?: unknown }).observed;
   if (typeof observed !== "object" || observed === null) return undefined;
