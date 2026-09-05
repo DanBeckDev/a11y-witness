@@ -58,9 +58,10 @@ const OBJECT_REPLACEMENT = /￼/g; // ￼ — strip the empty-name marker for cl
  * subtype AND reports it under that subtype's OWN criterion. `score.py` states the same test for the
  * scorer's `ruleOwned` and says why the second half matters: a subtype the rules decide but report under
  * a DIFFERENT criterion must not be suppressed, or the model's finding is silenced while nothing supplies
- * one, leaving a criterion decided by neither layer. (Its example — `3.3.2:unnamed-form-field` reporting
- * as 4.1.2 — is stale; that subtype reports as 3.3.2 in both `rule-ownership.json` and the shipped
- * training report. The rule it states is still right and is the one applied here.)
+ * one, leaving a criterion decided by neither layer. (Its example was `3.3.2:unnamed-form-field`, and that
+ * subtype no longer exists at all — its records were re-declared `4.1.2:unnamed-control` on 2026-09-05
+ * because their pages do not fail 3.3.2. The RULE the example illustrates is still right and is the one
+ * applied here; only the illustration has gone.)
  *
  * `2.4.4` is therefore ABSENT and must stay absent: its ownership is `overlap`, so the rules cover a
  * deliberate subset and the head owns the rest. Suppressing the model's 2.4.4 would discard the half
@@ -75,8 +76,14 @@ const OBJECT_REPLACEMENT = /￼/g; // ￼ — strip the empty-name marker for cl
  * any difference. Same remedy as `name-normalisation.test.ts`: when neither copy can be deleted, pin
  * them equal where both are visible.
  */
+// `3.3.2` LEFT THIS SET ON 2026-09-05, with the subtype that put it here. `3.3.2:unnamed-form-field` was
+// rules-owned and reported as itself; it is gone, because W3C does not require a label to be ASSOCIATED
+// for 3.3.2 (that is 1.3.1) and all 133 of its bad pages carried visible label text — zero genuine
+// failures. Its records are now `4.1.2:unnamed-control`, which is already here. The only surviving 3.3.2
+// subtype is `placeholder-only`, declared `unavailable`: nobody decides it, so suppressing the model on it
+// would leave the criterion decided by NEITHER layer — exactly what the paragraph above forbids.
 export const ABSENCE_CRITERIA = new Set([
-  "1.1.1", "1.3.1", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "3.2.1", "3.2.2", "3.3.2",
+  "1.1.1", "1.3.1", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "3.2.1", "3.2.2",
   "3.3.3", "4.1.2",
 ]);
 
