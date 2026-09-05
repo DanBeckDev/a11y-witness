@@ -935,3 +935,162 @@ operation IDs, retrying the same operation, and checking that repeated requests 
   release gates or GitHub Actions. No claims about current production incidence or model quality are
   derived from the mock-server tests. This section is an audit record; `docs/backlog.md` remains the work
   tracker, not a second checklist to maintain here.
+
+---
+
+## 15. Follow-up review, 2026-09-06 — findings never triaged into the backlog
+
+Two peer sessions independently found stale `docs/backlog.md` rows the same night, which raised the
+question this section answers: does every finding in this document have a triage disposition anywhere?
+`docs/backlog.md`'s own "architecture audit" section (added 2026-09-05) transcribed roughly twenty of the
+findings above. The rest — most of §§3.3–3.5, 4.4–4.5, part of §5, §6.5, most of §7.2–7.5, every §8
+sub-finding, and §§10.1, 10.2, 10.5 — were never transcribed anywhere: not fixed, not refuted, not
+recorded open. A finding in neither state is invisible, which is the same defect this document's own §7
+catalogues one layer further out. Checked at HEAD (current `main`), reading the cited code rather than
+commit messages, no fleet/lab/worker command run.
+
+**§3.3 `lab` bypasses `worker-fleet`'s exports — still open.** `host-address.mjs`, `fleet-env.mjs`,
+`fleet-consistency.mjs` and `worker-code-check.mjs` are still reached from `lab` by relative import, none
+in `worker-fleet/package.json`'s `exports` map. `generate-coverage-doc.ts:18,20` still imports
+`../../judge/src/*.js` directly, bypassing `judge`'s `./coverage` export.
+
+**§3.4 a published package's tests need a private one — still open.** `test_unclosable_map_is_current.py`
+and `test_grants_map_is_current.py` still reference `packages/lab` paths directly from `scorer`'s suite.
+
+**§3.5 smaller boundary facts:**
+- `doctor.mjs` → `../../scorer/models/screenreader-scorer/` by relative path — **still open**.
+- `check-worker-code.mjs`, `deploy-worker.mjs`, `worker-code-check.mjs` hard-coding
+  `packages/nvda-worker/src` — **partly fixed**: `deploy-worker.mjs` now resolves it through a
+  `workerSourceDir()` helper; `check-worker-code.mjs` still hard-codes the path, which is inherent to how
+  it reads `git show HEAD:<path>` rather than a straightforward oversight.
+- `yaml` undeclared as a dependency of its lab/control/worker-fleet importers — **still open**; still
+  relying on root hoisting (`packages/lab/src/packaging/trainer-callers.test.ts` among them).
+- `axe-core` and `@huggingface/transformers` undeclared in any manifest — **still open**, confirmed by
+  grepping every `package.json`.
+- `data/accessibility-sources.json` has no importer — **still open**, file still present.
+- Root `src/` (only `.DS_Store`) and `models/` (empty, `.gitignore`-protected) — **fixed**: both deleted.
+
+**§4.4 four channel tables disagree — still open.** For 4.1.2: `EVIDENCE_CHANNEL` gives
+`formFields‖controls` (`local-judge.ts:224`), `SWEEPS_FEEDING` gives `["formField"]` (`outcomes.ts:111`),
+`CRITERION_COVERAGE.channels` gives `["controls","formFields","stateChanges","structureCensus"]`
+(`criterion-coverage.ts:334`), and `applicability.py` uses a fourth, different predicate.
+`mapping-parity.test.ts` (2026-09-05) closed the *assertion/ACT-mapping* half of §4.4 only; the channel
+tables it does not touch still disagree exactly as described.
+
+**§4.5 dead/unverified code on the published judge surface — still open**, all four sub-claims: the rented-LLM
+backends remain untested; `verify-gate.ts` still reads four undeclared env vars against an undeclared
+`@huggingface/transformers`; the CLI's shadow scorer still defaults to a `.venv/bin/python` that does not
+exist; `cli.ts`'s header comment still says the judge "uses the local Codex login" against a `local`
+default since 2026-08-04.
+
+**§5 wire-contract ownership (Stage-1 items 8–10) — mixed, and meaningfully progressed since the audit:**
+- Item 9 (protocol-version/fault-code subpaths) — **fixed**. `nvda-worker/package.json` now exports
+  `./protocol-version` and `./capture-faults`; `check-worker-code.mjs` and `deploy-worker.mjs` import the
+  constant directly for the in-tree value (their remaining regex read is a *different*, legitimate
+  comparison against committed HEAD text, not the old scrape); `capture-real-pages.mjs` now imports `FAULT`
+  from the new subpath instead of copying literals, with a comment citing this document by name.
+  `control/src/fleet-playbook.mjs` still regex-scrapes, but that is ADR 0012's dependency-free design, not
+  a gap.
+- The product CLI sending no `captureId` — **fixed**. `cli.ts:766`'s own comment: "This was the one caller
+  of ten that sent no `captureId`" (past tense).
+- Item 8 (one consolidated wire module) and item 10 (one capture client replacing six body-builders) —
+  **still open**. `wire-types-describe-the-wire.test.ts` and a newer `wire-request-describes-the-wire.test.ts`
+  pin some shapes to code, but there is no single `CaptureRequest`/`CaptureResult`/health/`DiagnosticMark`
+  module, and `capture-screenreader-dataset.mjs` (at least) still builds its own POST body.
+
+**§6.5 `cli.ts`'s `CRITERION_STATES` vs `criterion-coverage.ts` — still open.** `coverage.test.ts:91` only
+pins `CRITERION_STATES`'s own key list; nothing cross-checks it against `CRITERION_COVERAGE`.
+
+**§7.2 no Ansible check anywhere — still open.** `check-modules.py` exists and is invoked by nothing;
+`lint.yml` has no `ansible-lint`, `--syntax-check` or `--check` step.
+
+**§7.3 `release.yml:161` unbound-variable bug — still open.** The in-flight branch still reads `$status`
+under `set -euo pipefail` while only `smoke_status`/`smoke_conclusion` are set (the rename comment is two
+lines above it) — will throw "unbound variable" the first time that branch executes.
+
+**§7.4 six smaller verification gaps:**
+- `pure-graph.test.ts`'s `MUST_BE_PURE` still names the retired `edge-args.test.ts`, not
+  `browser-args.test.ts`; the `existsSync` skip means the entry is silently never checked — **still open**.
+- `tsconfig.mjs.json` and its stale rationale in `typecheck-coverage.test.ts` — **still open**, unchanged
+  (not re-measured for file-count overlap this pass).
+- `.c8rc.json:88` still excludes `scripts/coverage.mjs`, which still does not exist — **still open**.
+- `packages/cli/README.md`'s "exits 2" claim — **still open**, and the code confirms the audit's original
+  reading precisely: `cli.ts` only warns on an unverified capture; the actual `process.exit(2)` lives in
+  `packages/cli/src/action/run.ts`, the Action runner only.
+- `backlog.test.ts`'s narrow `— OPEN` coverage — **not widened**, but currently vacuous rather than
+  dangerous: `known-gaps.md` and `not-working.md` carry zero `— OPEN` headings right now (down from the
+  audit's one), so nothing is silently uncovered at this instant. Stage 3 item 19's recommendation to widen
+  it to every unclosed heading still stands as a hardening, not an active gap.
+- `scripts/build-packages.mjs`'s hand-kept `references` list — **fixed**. It now derives buildable packages
+  from `tsconfig.json` presence and lets `tsc --build` resolve `references` itself;
+  `project-references.test.ts` pins `package.json` dependencies against `tsconfig` references.
+
+**§7.5 Action/docs drift — three of four still open, one likely resolved:**
+- The CLI's lack of a fail-on threshold — not independently re-confirmed here.
+- `report.ts` reading `JUDGE_BACKEND` at render time — grepping current `report.ts` found no such read,
+  which suggests this specific sub-claim may already be **fixed or refuted**; flagged rather than
+  classified, since it wasn't chased to a specific commit.
+- `examples/workflow.yml` vs `action.yml` defaulting `probe-forms` oppositely — **still open**, direct
+  contradiction confirmed at both files' current text.
+- `action.yml`'s unpinned `pip install` and constant pip-cache key — **still open**, confirmed at current
+  line numbers.
+- The criteria-count and hand-listed-coverage drift, and the `task-completable` doc mismatch — not
+  independently re-verified this pass; treat as open by default.
+
+**§8 the deprecated UTM path is still the default path — the audit's own top-10 finding #8, and the one
+that most needed this review: it had no backlog row at all, of any kind.**
+- `leaseWorker` never consulting `inventory.yml` before a local VM — **fixed**, commit `dd6299b`
+  ("leaseWorker never read inventory.yml — audit §8"): the order is now explicit `--worker` → `inventory.yml`
+  fleet → `A11Y_LOCAL_VM=0` opt-out → local UTM VM → default.
+- `doctor`'s capacity/consistency/degradation checks living only in the UTM branch — **fixed**, commit
+  `126f56c` ("it could not see the bare-metal fleet, and said READY mid-run"): `checkConfiguredFleet` and
+  the degradation/consistency checks now run for a bare-metal fleet too.
+- ~2,460 lines of UTM-only code still exported from `index.ts` and shipped with two bins — **still open**,
+  unchanged.
+- The deprecation banner missing from five docs — **partly fixed**: the same `dd6299b` added
+  deprecation-aware language to `docs/local-worker-vm.md` and `docs/README.md`'s routing table. Root
+  `README.md`, `docs/control-plane-proxmox.md` and `packages/worker-fleet/README.md` still have zero
+  occurrences of "deprecat", and `README.md` still presents the scripted local VM as the plain Mac path.
+
+**§9 duplication-table rows not already tracked (excludes `readCapture`, the worker port, provisioning,
+`provisionRevision` and vocabularies, which all already have backlog rows) — all still open:**
+`runs/`-layout duplication (`DATASET_ROOT` still appears in 22+ files); the gate exit-code contract
+(`verdict.mjs` still has a small minority of adopters); argv parsing (validated by `refuseUnknownFlags`
+everywhere, still hand-rolled per-CLI); 95-variable environment-configuration duplication; raw `fetch`
+surviving at all four originally-cited call sites despite `requestJson` growing to 29 importers; Windows
+trimming still duplicated across `windows-trim.mjs`, `provision-nvda-worker.ps1` and
+`build-lean-worker-image.ps1` with no consolidation.
+
+**§10.1 eleven architectural decisions with no ADR — still open.** `docs/adr/` still tops out at
+`0024-a-form-is-configured-with-states-not-values.md`; none of the eleven has been written up.
+
+**§10.2 trackers disagreeing about what is open — still open, reproduced narrowly.** `PLAN.md` still calls
+B7 "open, and cheap" and B1 "open; partly blocked by B7" while other records treat related items as closed
+— the self-contradiction inside `PLAN.md` alone confirms the finding stands, independent of whether every
+other cross-document disagreement the audit listed still holds verbatim.
+
+**§10.4 `screenreader-coverage.md` unpinned — already closed, correcting my own initial triage.** This one
+did in fact reach the backlog, under different wording ("Five of ten probes were missing from
+`docs/screenreader-coverage.md`"), and is fixed: `screenreader-coverage-doc.test.ts` now pins it (commit
+`f69b32e`). Recorded here only so the count below is accurate about what was actually never transcribed.
+
+**§10.5 discoverability gaps — still open, all four sub-claims confirmed live:** `packages/README.md`
+still tables six packages against nine that exist; `packages/control/` has no README; root `README.md`
+still describes `nvda-speech` as "the speech-channel client" rather than the GPL-3 NVDA-announcement port
+it is; and it still says "nothing trained yet" despite shipped weights.
+
+**Count.** At the granularity of one row/bullet/table-cell per claim, this document carries roughly 70
+distinct findings. About 20 had a triage disposition somewhere on `docs/backlog.md` before this review
+(mixed fixed/open). Of the remaining ~50 that had none: **8 are already fixed** (§3.5's root
+`src`/`models` deletion; §5's protocol-version/capture-faults subpaths, `captureId`, and FAULT-code import;
+§7.4's `build-packages.mjs` derivation; §8's `leaseWorker` inventory-first order and `doctor`'s fleet-aware
+checks — two of §8's four sub-findings); **1 was already closed under different wording** (§10.4, corrected
+above, not counted as newly open); **~3 are unconfirmed/ambiguous** and flagged rather than classified
+(§7.5's `report.ts` purity claim, and two smaller ones noted inline above); **the remaining ~38 are
+confirmed still open** at HEAD and are now on `docs/backlog.md` in the section this review added, so they
+cannot go untracked again.
+
+Cheap, genuinely open items worth a small dedicated unit rather than folding into a bigger one: the
+`pure-graph.test.ts` stale filename, the `.c8rc.json` phantom exclude, the `release.yml:161` unbound
+variable, `cli.ts`'s stale "local Codex login" header comment, and adding a one-line deprecation note to
+the three UTM docs still missing one.

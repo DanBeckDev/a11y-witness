@@ -494,6 +494,65 @@ not return them.
 | **The deploy's own output showed the WRONG RUN.** `followUnit` ran `journalctl -u <unit>` with no bound, which returns every run since boot oldest-first — so the guard's first correct refusal was read as a successful deploy, because the PLAY RECAP above it was seven minutes old. **The fourth instance of the journal-window defect**, in the one place that had no window at all. | Bounded on `_SYSTEMD_INVOCATION_ID`, which survives here where it does not for `lab:job` (the unit is `--remain-after-exit` and is stopped and `reset-failed` before each run). An empty id falls back to the whole journal and SAYS SO. `journalScope` is pure and exported, the id is validated as 32 hex characters rather than interpolated into a remote shell on the box holding the fleet key, and relaxing that to a truthiness test fails exactly the injection case. |
 | **`capture:explain` said nothing about the interaction probes.** `whatItAsked` reads `observed`, which covers the SWEEP channels only — so `focusReveal`, `focusEvents`, `focusContext`, `routeChange` and the rest had verdicts sitting in diagnostic marks that nothing displayed. Reading `cap.focusReveal` (it lives under `interaction`) returned `undefined` and produced the conclusion "the 1.4.13 probe never ran", which was wrong and would have cost a recapture round. | A `WHICH INTERACTION PROBES RAN?` section, in three states — never ran / ran and could not ask / ran and found nothing — printing whatever fields the mark carries rather than a per-probe list of which ones matter. **The both-directions test found two real errors on its first run:** `formFill` was named while 1,182 captures carry `formProbe`, one probe with two names across a protocol version, so keying on either alone reports NOT ASKED for half the corpus; and `dialogEscape`, `typingLanding` and `arrowNavLanding` were on disk and named nowhere, leaving 2.1.2's dialog question, 3.2.2 and the arrow probe unaccounted for. |
 
+## OPEN — ~38 architecture-audit findings that never reached this page at all
+
+**Found 2026-09-06 by an AUDIT → BACKLOG → HEAD pass**, prompted by two peer sessions independently
+finding stale rows on this page the same night — see [`architecture-audit.md`
+§15](./architecture-audit.md#15-follow-up-review-2026-09-06--findings-never-triaged-into-the-backlog) for
+the full per-finding detail and evidence. This page's own "architecture audit" section (below) triaged
+roughly twenty of that document's findings; the rest — most of its §§3.3–3.5, 4.4–4.5, part of §5, §6.5,
+most of §7.2–7.5, every §8 sub-finding, and its §§10.1, 10.2, 10.5 — had no disposition anywhere: not
+fixed, not refuted, not recorded open. A finding in neither state is invisible, which is this project's
+own "a check that examines nothing" shape applied to its own tracker.
+
+Checked at HEAD, reading code rather than commit messages. Of ~50 findings with no prior disposition, 8
+are already fixed and 1 was already closed under different wording (§10.4 — corrected in §15, not listed
+below). The rest are genuinely open:
+
+- **Package boundaries (§3.3–3.5):** `lab` still bypasses `worker-fleet`'s exports at `host-address.mjs`,
+  `fleet-env.mjs`, `fleet-consistency.mjs`, `worker-code-check.mjs`, and `generate-coverage-doc.ts` still
+  bypasses `judge`'s `./coverage` export. `scorer`'s pytest suite still reaches into `lab` by path in at
+  least two files. `doctor.mjs` still reads `../../scorer/models/...` by relative path.
+  `yaml`/`axe-core`/`@huggingface/transformers` are still undeclared dependencies of their importers.
+  `data/accessibility-sources.json` still has no importer.
+- **Judge-path ownership (§4.4, §4.5):** the four evidence-channel tables (`EVIDENCE_CHANNEL`,
+  `SWEEPS_FEEDING`, `CRITERION_COVERAGE.channels`, `applicability.py`) still disagree for 4.1.2 —
+  `mapping-parity.test.ts` closed the assertion/ACT-mapping half only, not this one. The rented-LLM
+  backends are still untested; `verify-gate.ts` still needs undeclared env vars and a dependency; the
+  CLI's shadow scorer is still a dead duplicate pointing at a `.venv` that does not exist; `cli.ts`'s
+  header still claims "the local Codex login" against a `local` default.
+- **Wire contract (§5, partial):** no single consolidated `CaptureRequest`/`CaptureResult`/health/
+  `DiagnosticMark` module exists yet, and `capture-screenreader-dataset.mjs` still builds its own POST
+  body. (Two of §5's three items — the protocol-version/fault-code subpaths and the CLI's `captureId` —
+  are already fixed; see §15.)
+- **`cli.ts` duplication (§6.5):** `CRITERION_STATES` (`forms/coverage.ts`) still has no test comparing it
+  against `criterion-coverage.ts`'s `CRITERION_COVERAGE`.
+- **CI/verification gaps (§7.2–7.5):** no Ansible check runs anywhere (`check-modules.py` is invoked by
+  nothing). `release.yml:161` still reads `$status` under `set -u` after the variable was renamed
+  `smoke_status` — an unbound-variable crash waiting for its branch to execute. `pure-graph.test.ts` still
+  names the retired `edge-args.test.ts` instead of `browser-args.test.ts`, silently unchecked via its own
+  `existsSync` skip. `.c8rc.json:88` excludes a script that does not exist. `packages/cli/README.md`
+  still documents the Action runner's exit-2 behaviour as the CLI's own. `examples/workflow.yml` and
+  `action.yml` still default `probe-forms` oppositely. `action.yml` still pip-installs unpinned versions
+  behind a pip-cache key that is a constant string.
+- **The UTM path (§8), the sharpest gap of the lot — this was a top-10 audit finding with no backlog row
+  of any kind:** ~2,460 lines of UTM-only code are still exported/shipped with two bins, and three of the
+  five docs the audit named (root `README.md`, `docs/control-plane-proxmox.md`,
+  `packages/worker-fleet/README.md`) still say nothing about deprecation. (`leaseWorker`'s inventory-first
+  order and `doctor`'s fleet-aware checks are already fixed — commits `dd6299b` and `126f56c`; see §15.)
+- **Duplication with no owner (§9, excluding rows already tracked elsewhere on this page):** the `runs/`
+  layout, the gate exit-code contract, argv parsing, 95-variable environment configuration, raw `fetch`
+  surviving at four call sites, and Windows-trimming logic in three separate files.
+- **Documentation architecture (§10.1, 10.2, 10.5):** eleven architectural decisions still live only in
+  CLAUDE.md with no ADR. `PLAN.md` still self-contradicts on B1/B7's open/closed status.
+  `packages/README.md` still tables six packages against nine that exist, `packages/control/` still has no
+  README, and root `README.md` still misdescribes `nvda-speech` and still says "nothing trained yet".
+
+**Cheap and genuinely open, if anyone wants a small unit rather than folding these into a bigger one:**
+the `pure-graph.test.ts` stale filename, the `.c8rc.json` phantom exclude, the `release.yml:161` unbound
+variable, `cli.ts`'s stale "local Codex login" header line, and a one-line deprecation note on the three
+UTM docs still missing one — none of these touches a worker file or a cache key.
+
 ## ~~OPEN — the census fix does not reach the focus-event path~~ — CLOSED 2026-09-06
 
 **Verified by running the test this section's own remedy names, not by reading the fix.** `capture-pure.mjs`
