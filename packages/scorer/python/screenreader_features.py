@@ -221,7 +221,13 @@ HEADING_ANNOUNCEMENT = re.compile(r"^heading\s*,\s*level\s+\d+\b", re.IGNORECASE
 # inner prefix on "main landmark, navigation landmark, ...".
 CONTAINER_PREFIX = re.compile(
     r"^(?:\w[\w\s'-]*[,\s]\s*)?"
-    r"(?:" + "|".join(sorted(LANDMARK_ROLES | {"landmark", "content info", "form", "article"})) + r")"
+    # "section" — Edge 152's announcement for an UNNAMED <form>, after `w3c/html-aria#423` made the `form`
+    # role conditional on an accessible name. Every corpus form is unnamed, so all of them moved at once and
+    # this strip stopped reaching them. Measured on one unchanged page: 151 said "form, name at example dot
+    # com, edit", 152 says "section, ...". The comment above already records these copies drifting; there
+    # are FOUR of them, not two — announcement.ts, capture-pure.mjs, rules.ts and here — and one browser
+    # change moved every one.
+    r"(?:" + "|".join(sorted(LANDMARK_ROLES | {"landmark", "content info", "form", "section", "article"})) + r")"
     r"(?:\s+landmark)?\s*,\s*",
     re.IGNORECASE,
 )
