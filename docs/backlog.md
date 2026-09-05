@@ -266,6 +266,40 @@ that the cheap moment to pay a recapture is alongside any other pending bump rat
 **The deploy guard worked and is worth recording as such**: `fleet:deploy` refused, named
 `--allow-protocol-change`, and the flag was then passed deliberately rather than discovered.
 
+## `/progress` described the last capture FOR EVER, and the symptom was already in the repo
+
+**`inFlight` was set at every capture's start and never reset** — not on success, not on failure. So after
+a worker's first capture ever, `/progress` reported that capture's url and a forever-growing `elapsedMs`,
+on an idle worker correctly reporting `busy: false`. `respondWithProgress` already had the right
+`!inFlight` branch; it was simply unreachable.
+
+**THE MEASUREMENT WAS ALREADY WRITTEN DOWN, IN THIS REPO, AS A THING TO WORK AROUND.** `fleet-status.mjs`
+carries it verbatim:
+
+> Measured on a11y-worker-2: `{busy: false, capturing: ".../table-unassociated-hilltown/bad.html",
+> elapsedMs: 2526239}` — 42 minutes after that capture finished, **and still climbing.**
+
+That comment exists to explain why `activityOf` reads `progress.busy` rather than `health.busy`. The
+consumer defended itself, correctly, and the SOURCE went on handing stale state to anything else that
+asked — while "still climbing" is precisely the tell that a value is never reset. **A diagnostic that was
+recorded, correct, and read as a quirk to route around rather than a bug to fix**: the same shape as
+`pointerParkFailed`'s `ms` field discriminating timeouts for weeks unread, the 604 silent `sweepLog`
+crashes, and `/progress` itself having been served since forever and consumed by nothing.
+
+**The inventory is the durable half, and it is now a table in `server.mjs` rather than in a message.** All
+16 module-level mutable touchpoints, each answered against one question: *is this genuinely per-PROCESS, or
+per-CAPTURE masquerading as per-process?* The second kind is where the next `dialogCache` lives. Fifteen
+are per-process by design and the reasons are recorded — `results` (bounded history across captures, which
+IS the feature), `worked` and `consecutiveRecoveries` (a circuit breaker's memory must span captures), the
+boot caches (facts fixed until restart), the warm-up lifecycle (explicitly meant to survive). `inFlight`
+was the one the shape could hide, and it was the only one.
+
+**No split proposed, and that is the right answer.** The state groups cleanly by the concern that already
+owns it elsewhere — `capture-results.mjs`, `desktop-prepare.mjs`, `diagnostics.mjs` — and what remains in
+`server.mjs` is irreducibly the HTTP-request and process-lifecycle policy tying those to five routes. The
+audit called it "a nine-line router beside 700 lines of policy"; the router being thin is not the defect,
+and the policy turns out to be cohesive.
+
 ## Audit findings closed since the recapture started
 
 | finding | what it turned out to be |
