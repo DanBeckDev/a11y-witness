@@ -253,6 +253,9 @@ export function domCensus(capture: CapturedAnnouncements):
     if (typeof mark !== "object" || mark === null) continue;
     const record = mark as Record<string, unknown>;
     if (record.event !== "domCensus" || record.error) continue;
+    // See `censusTargetIsSuspect` above `pageCensus`: a census whose CDP target was never confirmed reads
+    // as absent, never as its own (possibly alien) numbers.
+    if (censusTargetIsSuspect(record)) return null;
     const num = (value: unknown) => (typeof value === "number" ? value : undefined);
     return {
       heading: num(record.heading), link: num(record.link), graphic: num(record.graphic),
@@ -786,6 +789,40 @@ export function consentBanner(capture: CapturedAnnouncements): ConsentBanner {
   };
 }
 
+/**
+ * Was the CDP target a census mark came from ever confirmed to be the page this capture navigated to?
+ *
+ * `docs/backlog.md`'s furniture-census row is the reason this exists: `bathingwaters.sepa.org.uk` and
+ * `lbhf.gov.uk/council-tax` returned a byte-identical census because `choosePageTarget` took a Cookiebot
+ * widget's own CDP target, and nothing downstream could tell — a wrong-document census is not ABSENT
+ * evidence, the way a genuinely headless page's `heading: 0` is; it is evidence of a DIFFERENT page wearing
+ * this one's name, which every consumer of `census`/`dom` was trusting unconditionally.
+ *
+ * `targetMatch: "matched"` is the only outcome that PROVES the target: `choosePageTarget` confirmed its
+ * path and query against the URL this capture navigated to. Both other outcomes need `candidates` to be
+ * read at all — `targetMatch` alone conflates two situations that need opposite verdicts:
+ *
+ *   candidates <= 1   nothing else this fallback COULD have picked; the only target is the right one
+ *   candidates  > 1   a real second page-type target existed and neither one was confirmed -- the exact
+ *                     shape of the bathingwaters/lbhf contamination
+ *
+ * `candidates` absent while `targetMatch` is present is a capture taken in the gap between the two
+ * shipping — this function cannot vouch for it, so it reads the SAME as `> 1`: suspect. `targetMatch`
+ * absent entirely means this capture predates `choosePageTarget`'s fix altogether, and is read as before
+ * this existed -- not suspect -- because there is nothing here to doubt it WITH; every historical capture
+ * was already being trusted, and this field cannot retroactively accuse one it was never computed for.
+ *
+ * EXPORTED so `check-real-page-findings.ts`'s human-facing report can ask the identical question of the
+ * RAW mark -- the one place that must see a suspect census even though `pageCensus`/`domCensus` correctly
+ * hide its numbers. One rule, not two: a second copy here is exactly the "fact stated twice" shape this
+ * repo keeps paying for.
+ */
+export function censusTargetIsSuspect(record: { targetMatch?: unknown; candidates?: unknown }): boolean {
+  if (record.targetMatch === undefined) return false;
+  if (record.targetMatch === "matched") return false;
+  return typeof record.candidates !== "number" || record.candidates > 1;
+}
+
 export function pageCensus(capture: CapturedAnnouncements):
   { heading?: number; link?: number; graphic?: number; graphicUnnamed?: number } | null {
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
@@ -793,9 +830,15 @@ export function pageCensus(capture: CapturedAnnouncements):
     if (typeof mark !== "object" || mark === null) continue;
     const record = mark as {
       event?: unknown; heading?: unknown; link?: unknown; graphic?: unknown;
-      graphicUnnamed?: unknown; error?: unknown;
+      graphicUnnamed?: unknown; error?: unknown; targetMatch?: unknown; candidates?: unknown;
     };
     if (record.event !== "structureCensus" || record.error) continue;
+    // A SUSPECT CENSUS READS AS ABSENT, never as its own wrong numbers. `null` is what every existing
+    // reader already treats as "cannot say" -- `addMissingHeadings`, `crossCheckStructure`, this file's
+    // own `domCensus` pairing -- so this reuses machinery already proven conservative rather than adding a
+    // third state nothing downstream knows how to interpret. The raw counts stay on the diagnostic mark
+    // itself for a human to read; only the RULE-FACING reader refuses to vouch for them.
+    if (censusTargetIsSuspect(record)) return null;
     return {
       heading: typeof record.heading === "number" ? record.heading : undefined,
       link: typeof record.link === "number" ? record.link : undefined,
