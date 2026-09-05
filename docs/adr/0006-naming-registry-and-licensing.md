@@ -1,6 +1,6 @@
 # ADR 0006: Naming scheme, public npm as the registry, and a licence split
 
-- Status: Proposed
+**Status:** accepted
 - Date: 2026-08-05
 
 ## Context

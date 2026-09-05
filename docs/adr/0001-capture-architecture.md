@@ -1,6 +1,6 @@
 # ADR 0001: Capture workers as network services, Windows/NVDA first
 
-- Status: Proposed
+**Status:** accepted
 - Date: 2026-06-25
 
 ## Context

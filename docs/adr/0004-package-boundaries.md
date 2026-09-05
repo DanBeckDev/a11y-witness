@@ -1,6 +1,6 @@
 # ADR 0004: Package boundaries and per-package public API
 
-- Status: Proposed
+**Status:** accepted
 - Date: 2026-08-05
 
 ## Context

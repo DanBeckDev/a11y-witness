@@ -1,6 +1,6 @@
 # ADR 0005: npm workspaces, per-package tsc build, and semver-range linking
 
-- Status: Proposed
+**Status:** accepted
 - Date: 2026-08-05
 
 ## Context
