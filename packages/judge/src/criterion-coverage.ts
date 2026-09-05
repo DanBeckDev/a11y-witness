@@ -282,8 +282,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
     status: "partial",
     needs: ["dom"],
     channels: ["formFields", "transcript"],
-    note: "ONE of two failure modes. A field with no label at all is covered and exact: the screen reader "
-      + "announces a bare role, the rules decide it 115/115, and that is a fact rather than a judgement. "
+    note: "THE CRITERION IS \"LABELS OR INSTRUCTIONS\" AND THIS ENTRY ONLY EVER CONSIDERED LABELS — found 2026-09-05 by re-reading the 17 claim-bearing criteria against the audit's own tells. W3C: 3.3.2 does NOT require labels or instructions to be marked up, identified, or ASSOCIATED with their controls (that is 1.3.1), and a field can PASS 3.3.2 while FAILING 1.3.1. So a bare role does not prove the criterion failed: it proves the accessible NAME is absent, which is 4.1.2 and 1.3.1. **The rule's 3.3.2 mapping was DOWNGRADED to `secondary` as a result** — the third rule found asserting where the criterion permits, after 3.3.3 and 3.2.1/3.2.2 the day before, and the only one of the three whose counter-example is in our OWN corpus: `form-unlabelled.bad` is `<span>Recipient name</span><input>`, text presented to the user that identifies the control, which is WCAG's definition of a label. Instructions widen it further and may sit anywhere on the page. A field with no label at all IS still the failure, and the rules see the announcement exactly; what they cannot see is whether anything else on the page supplied it. "
       + "A field labelled ONLY by its placeholder is NOT covered, and cannot be from screen-reader "
       + "evidence — when a field has no label the browser uses the placeholder as its accessible name, so "
       + "NVDA speaks it exactly as it speaks a real label. `<input placeholder=\"Email address\">` and "

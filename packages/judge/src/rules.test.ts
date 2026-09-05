@@ -183,14 +183,33 @@ test("the UW inaccessible page produces the findings a rule scanner cannot", () 
 test("only the rules whose evidence IS the failure assert non-conformance", () => {
   // NVDA saying "Unlabeled graphic" and a control announced as a bare role are the two cases where the
   // announcement is not a proxy for the criterion — it states it.
+  //
+  // THE SET IS NAMED RATHER THAN "EVERY FINDING FROM THIS FIXTURE", and that is the correction of
+  // 2026-09-05. This asserted `conformance` for every finding the fixture produced, so 3.3.2 rode along as
+  // a third asserting rule while the comment above named only two — and nothing said so until 3.3.2 was
+  // downgraded and the failure read as a regression rather than as the fix it was. A test that says "all
+  // of these" cannot notice one joining.
+  //
+  // 3.3.2 is NOT here on purpose: the criterion is satisfied by a label OR an instruction, W3C is explicit
+  // that neither need be associated with the control, and a bare role proves only that the accessible NAME
+  // is absent. 4.1.2 keeps the assertion because that clause IS about the name.
+  const ASSERTING = new Set(["1.1.1", "4.1.2"]);
   const asserted = ruleFindings({
     transcript: ["Unlabeled graphic"],
     structure: { formFields: ["combo box, collapsed"] },
   } as never);
   assert.ok(asserted.length >= 2, "the fixture must produce both asserting rules");
+  const seen = new Set<string>();
   for (const finding of asserted) {
-    assert.equal(finding.mapping, "conformance",
-      `${finding.wcag} — ${finding.issue}: this rule reads the failure directly and should assert it`);
+    const criterion = String(finding.wcag).split(" ")[0];
+    seen.add(criterion);
+    const expected = ASSERTING.has(criterion) ? "conformance" : "secondary";
+    assert.equal(finding.mapping ?? "secondary", expected,
+      `${finding.wcag} — ${finding.issue}: expected ${expected}`);
+  }
+  for (const criterion of ASSERTING) {
+    assert.ok(seen.has(criterion),
+      `${criterion} asserts and this fixture no longer produces it, so the check examines less than it claims`);
   }
 });
 
