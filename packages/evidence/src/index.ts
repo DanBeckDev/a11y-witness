@@ -15,11 +15,81 @@ export type NavigationStrategy =
   | "by-landmark" // jump region to region
   | "forms"; // move through form fields and controls
 
+/**
+ * ONE declared form state to submit during the capture (ADR 0024), with the schema already checked by the
+ * caller. One per capture and never several: an error submission leaves a dirty form and an error banner,
+ * and a success submission may navigate away, so a second state cannot start from the first — the host
+ * issues a capture per state rather than the worker looping.
+ */
+export interface CaptureFormState {
+  state?: string;
+  submit: string;
+  fields: { field: string; within?: string; nth?: number; value?: string; choose?: string; check?: boolean }[];
+}
+
 export interface CaptureRequest {
   url: string;
   /** The task the user was attempting, in their own words. */
   task: string;
   strategy?: NavigationStrategy;
+
+  /**
+   * The fields below are the NVDA worker's own `POST /capture` wire body, not a cross-backend abstraction
+   * — this package has exactly one real backend today, and `CaptureResult`'s `environment` already
+   * documents that backend's specifics the same way. Declared here because nothing else does: until
+   * 2026-09-05 (architecture-audit.md §5, item 1) this interface named `url, task, strategy?` while the
+   * worker accepted 20 fields, so a consumer typing against `@a11y-witness/evidence` could not have known
+   * a single probe flag, `formState`, `captureId` or `async` existed.
+   *
+   * A future VoiceOver or Orca backend is free to ignore every field below; they are all optional for
+   * exactly that reason, the same way `strategy` already was.
+   */
+
+  /** The read-through's step budget; unset means the worker's own default. */
+  steps?: number;
+  /**
+   * A navigation-instrumentation detail, NOT the `strategy` hint above — `"object"` or `"line"`, read by
+   * `capture-core.mjs` alone. Named separately because the two are unrelated despite the similar name:
+   * `strategy` is an abstract cross-backend hint this package declared and nothing on the wire implements,
+   * while `nav` is a real, narrow NVDA-worker option.
+   */
+  nav?: "object" | "line";
+
+  /** Ten opt-in probes, each paying for evidence only when asked — `PROBE_FLAGS` in
+   *  `@a11y-witness/nvda-worker/capture-pure` is the worker's own copy of this exact list. */
+  probeForms?: boolean;
+  probeFocus?: boolean;
+  probeTables?: boolean;
+  probeNavigation?: boolean;
+  probeElementsList?: boolean;
+  probeArrows?: boolean;
+  probeTyping?: boolean;
+  probeFocusContext?: boolean;
+  probeDialog?: boolean;
+  probeFocusReveal?: boolean;
+
+  formState?: CaptureFormState;
+
+  /**
+   * Which order the two position-dependent probes run in — a NAME, never a caller-supplied list. Absent
+   * means the order that has always run, so no cached capture is affected by adding this field.
+   */
+  probeOrder?: "focus-first";
+
+  /** Edge stays alive between captures unless overridden per request (see `A11Y_REUSE_BROWSER`). */
+  reuseBrowser?: boolean;
+  /** Per-request browser choice, e.g. `"chrome"` — evidence, not configuration (CLAUDE.md). */
+  browser?: string;
+  /** Per-request override of the fleet's NVDA-reuse default. */
+  reuseScreenReader?: boolean;
+
+  /**
+   * Client-minted, so it can be asked about again after a lost response — the id has to come from the
+   * caller, since a worker-minted one would be returned in the very response that went missing.
+   */
+  captureId?: string;
+  /** `true` returns 202 `{captureId}` at once and delivers the result to the store; requires `captureId`. */
+  async?: boolean;
 }
 
 /** Screen-reader-derived structural quick-navigation results. These are
