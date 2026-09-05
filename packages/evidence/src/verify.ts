@@ -224,6 +224,29 @@ export function domCensus(capture: CapturedAnnouncements):
      * and never as "none".
      */
     unnamedGraphics?: string[]; unnamedGraphicCount?: number;
+    /**
+     * The document's declared language, and the languages of any PARTS that override it.
+     *
+     * COMPUTED SINCE THE LANGUAGE CENSUS LANDED AND DROPPED HERE UNTIL 2026-09-05, which is the same
+     * defect this repo has already paid for once. `addMissingHeadings` needs `census.heading === 0`, the
+     * worker recorded it on every capture, and `domCensus` did not carry it — so the rule read `undefined`
+     * and `rules:coverage` said "NEVER FIRED ANYWHERE — the claim rests on nothing" for as long as it had
+     * existed. Same shape, different fields: a real capture read `documentLang: "en", partLangs: ["fr"],
+     * partLangCount: 1` while every rule saw nothing.
+     *
+     * It matters now because 3.1.2's marked-but-silent rule is specified as `partLangCount > 0 AND no
+     * language announced` (known-gaps §36). Building that rule against a census the layer cannot see would
+     * have produced a rule that never fires, which is indistinguishable from a conformant corpus.
+     *
+     * PRIMARY SUBTAGS are the comparison the rule must make, and the reason is a default: NVDA's
+     * `autoDialectSwitching` is false, so `lang="en-GB"` inside an `en` page announces NOTHING and a rule
+     * comparing full tags would accuse it. The raw values are carried here and the narrowing belongs to
+     * the rule, so this stays a reading rather than an interpretation.
+     *
+     * Absent on every capture taken before the census learned to read them, which reads as "cannot say"
+     * and never as "no language declared".
+     */
+    documentLang?: string; partLangs?: string[]; partLangCount?: number;
   } | null {
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
   for (const mark of marks) {
@@ -238,6 +261,11 @@ export function domCensus(capture: CapturedAnnouncements):
         ? record.unnamedGraphics.filter((n): n is string => typeof n === "string")
         : undefined,
       unnamedGraphicCount: num(record.unnamedGraphicCount),
+      documentLang: typeof record.documentLang === "string" ? record.documentLang : undefined,
+      partLangs: Array.isArray(record.partLangs)
+        ? record.partLangs.filter((n): n is string => typeof n === "string")
+        : undefined,
+      partLangCount: num(record.partLangCount),
     };
   }
   return null;
