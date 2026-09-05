@@ -833,14 +833,25 @@ Consequences, all of which are now enforced:
   > identical reason. `CAPTURE_SETTINGS` in `nvda-logging.mjs` is the list, and every entry states why.
   >
   > What the old rule was RIGHT about is the danger, and the danger is not non-defaultness — it is
-  > evidence blending silently. The first entry is `documentFormatting.reportLanguage`: at NVDA's default
-  > a WCAG 3.1.2 failure is announced as a change of VOICE and no text at all, so a pipeline that captures
-  > speech as text is structurally blind to it. With the setting on, NVDA speaks the language.
+  > evidence blending silently. The first entry is **`speech.reportLanguage`**: at NVDA's default a WCAG
+  > 3.1.2 failure is announced as a change of VOICE and no text at all, so a pipeline that captures speech
+  > as text is structurally blind to it. With the setting on, NVDA speaks the language — measured
+  > 2026-09-05 on a real capture, `"Spanish (not supported), La ciudad duerme…"` followed by `"English"` on
+  > the way out.
+  >
+  > **THIS LINE SAID `documentFormatting.reportLanguage` UNTIL 2026-09-05, AND THAT IS THE WRONG SECTION.**
+  > `CAPTURE_SETTINGS` was fixed long before this paragraph was, and its comment records the whole episode:
+  > written to `documentFormatting` the setting LOOKED applied — `getSettings()` read it back — and NVDA
+  > reads it from `[speech]`, so it was inert. *"Verifying that a setting was WRITTEN is not verifying it
+  > is IN EFFECT."* The doc kept the refuted spelling in the one paragraph telling you the value is a
+  > cache-key input, so anyone following it would have written to the dead section again. Found while
+  > chasing an unrelated blind case, not by review.
   >
   > **And turning it on is what made it recordable.** `getSettings()` returns only sections NVDA has
-  > actually WRITTEN, so at defaults there is no `documentFormatting` section at all and "off" is
+  > actually WRITTEN, so at defaults there is no `[speech]` entry for it at all and "off" is
   > indistinguishable from "never asked" — measured 2026-09-02. You cannot record the setting without
-  > first setting it, which removes "we will just note what it was" as an option.
+  > first setting it, which removes "we will just note what it was" as an option. `/health` carries the
+  > digest instead: `screenReaderSettings: 'speech.reportLanguage=True'`, which is what to read.
 
   > **SPEECH RATE IS NOT A FREE OPTIMISATION**, and the reason is weaker than the first version of this
   > paragraph claimed — which is itself the lesson.
