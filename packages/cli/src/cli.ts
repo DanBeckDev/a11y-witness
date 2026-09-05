@@ -17,7 +17,7 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { judge } from "@a11y-witness/judge";
-import { scanWithAxe, axeAvailable, type AxeFinding } from "./scan/axe.js";
+import { scanWithAxe, axeAvailable, type AxeFinding, type AxeBrowserChannel } from "./scan/axe.js";
 import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "@a11y-witness/judge/layers";
@@ -678,20 +678,31 @@ async function chooseRuleLayer({ wantAxe, axeResults }: { wantAxe: boolean; axeR
  * Decided here now, by the function that knows. There is no second place to get it wrong.
  */
 async function pageContext(url: string, layer: RuleLayer, axeResults: string | null):
-Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCoverage }> {
+Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCoverage;
+  browserChannel: AxeBrowserChannel | null }> {
   if (layer === "import" && axeResults) {
     const imported = await loadAxeResults(axeResults);
     warnOnUrlMismatch(imported.scannedUrl, url);
     process.stderr.write(`Using ${imported.findings.length} imported axe violation(s) from ${axeResults}\n`);
-    return { findings: imported.findings, title: await fetchPageTitle(url), coverage: imported.coverage };
+    return { findings: imported.findings, title: await fetchPageTitle(url), coverage: imported.coverage,
+      browserChannel: null };
   }
-  if (layer === "none") return { findings: null, title: await fetchPageTitle(url), coverage: {} };
-  return scanWithAxe(url).catch(async (e: Error) => {
+  if (layer === "none") {
+    return { findings: null, title: await fetchPageTitle(url), coverage: {}, browserChannel: null };
+  }
+  return scanWithAxe(url).then((result) => {
+    // WHICH BROWSER ANSWERED, reported rather than assumed — see `launchBrowser`. The Action skips the
+    // bundled download deliberately, so seeing "msedge" there is the fallback working as designed, not a
+    // warning; seeing it locally on a machine with no Edge would be the warning.
+    process.stderr.write(`axe-core: ran via ${result.browserChannel === "chromium"
+      ? "the bundled Chromium" : "the system Edge (channel: msedge)"}\n`);
+    return result;
+  }).catch(async (e: Error) => {
     process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
     // NULL, not []. The visual criteria are unchecked, and saying "0 violations" here would be the one
     // thing this tool must never do. `coverage: {}` is the same statement per criterion: a scan that
     // THREW examined nothing, so nothing may be reported as examined-and-clean.
-    return { findings: null, title: await fetchPageTitle(url), coverage: {} };
+    return { findings: null, title: await fetchPageTitle(url), coverage: {}, browserChannel: null };
   });
 }
 

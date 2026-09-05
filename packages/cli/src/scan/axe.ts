@@ -106,6 +106,8 @@ export interface AxeResult {
   /** The page's document.title — used to verify the screen-reader worker
    * actually captured THIS page and not browser chrome (see cli.ts). */
   title: string;
+  /** Which browser actually ran the scan — see `launchBrowser`. Evidence, not incidental. */
+  browserChannel: AxeBrowserChannel;
 }
 
 /** One violation as axe-core reports it, in the shape both our own run and an imported
@@ -163,28 +165,95 @@ async function loadAxe() {
   }
 }
 
-/** True when the rule-based layer can run here. Cheap: resolves the modules, launches nothing. */
-export async function axeAvailable(): Promise<boolean> {
+/** Which browser actually answered — evidence, the way `browserVersion` is on the capture side. */
+export type AxeBrowserChannel = "chromium" | "msedge";
+
+/** Thrown when NEITHER the bundled browser nor the system channel could be launched. */
+export class AxeLaunchError extends Error {
+  constructor(bundledError: unknown, channelError: unknown) {
+    super(
+      "the axe layer's browser could not be launched: no bundled Chromium " +
+        "(npx playwright install chromium) and no system Edge either",
+      { cause: { bundledError, channelError } }
+    );
+    this.name = "AxeLaunchError";
+  }
+}
+
+/** The minimal shape `launchBrowser` needs, so a test can inject a fake one without real Playwright. */
+export interface LaunchableChromium {
+  launch(options?: { channel?: string }): Promise<{ close(): Promise<void>; newContext(): Promise<unknown> }>;
+}
+
+/**
+ * Launch a browser for axe to drive — the bundled Chromium first, a system channel as the fallback.
+ *
+ * FOUND 2026-09-06: `chromium.launch()` with no options needs the bundled browser, and the Action
+ * deliberately skips downloading it (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` — half a gigabyte the Windows
+ * runner does not need, since the capture already drives Edge). So on the Action the bundled browser is
+ * ABSENT BY DESIGN, `launch()` threw, the throw was caught in `cli.ts` and reported as `ruleBased: null`
+ * — while the progress line printed "rule-based axe-core + real screen reader" and the smoke test never
+ * read `ruleBased` at all. Every Action consumer got the rule layer silently skipped.
+ *
+ * A hard-coded `channel: "msedge"` is not the fix: the CLI runs on Macs and Linux too, and a developer
+ * with no Edge installed would lose the layer entirely. So: try the bundled browser first (what a local
+ * `npx playwright install chromium` gives you), and only on failure fall back to the system channel —
+ * which the Windows runner has, and which happens to be the SAME engine the capture itself drives, so
+ * the two layers observe one rendering engine rather than two. Which one actually answered is returned
+ * rather than assumed, because it is evidence: a finding depends on the renderer that produced it.
+ */
+export async function launchBrowser(chromium: LaunchableChromium):
+Promise<{ browser: Awaited<ReturnType<LaunchableChromium["launch"]>>; channel: AxeBrowserChannel }> {
   try {
-    await loadAxe();
+    return { browser: await chromium.launch(), channel: "chromium" };
+  } catch (bundledError) {
+    try {
+      return { browser: await chromium.launch({ channel: "msedge" }), channel: "msedge" };
+    } catch (channelError) {
+      throw new AxeLaunchError(bundledError, channelError);
+    }
+  }
+}
+
+/**
+ * True when the rule-based layer can run here.
+ *
+ * USED TO BE cheap and wrong: it resolved the modules and stopped, which proves an IMPORT, not a LAUNCH —
+ * exactly the gap that let the Action announce the layer and then silently produce nothing for it. This
+ * now launches for real (bundled Chromium, then the system channel) and closes immediately, so the
+ * answer means what its name says. The cost is the same one `scanWithAxe` already pays once per run.
+ *
+ * `deps.loadAxe` is the injection seam for a test: neither of `loadAxe`'s own two failure modes (modules
+ * missing, no browser launchable) can be produced from inside this repo's CI without either uninstalling
+ * a dependency or faking the launch — so a test supplies a fake `loadAxe` whose `chromium.launch` always
+ * throws, and asserts this still answers `false` rather than the `true` an import-only check would give.
+ */
+export async function axeAvailable(
+  deps: { loadAxe?: () => Promise<{ chromium: LaunchableChromium }> } = {},
+): Promise<boolean> {
+  const resolve = deps.loadAxe ?? loadAxe;
+  try {
+    const { chromium } = await resolve();
+    const { browser } = await launchBrowser(chromium);
+    await browser.close();
     return true;
   } catch (e) {
-    if (e instanceof AxeUnavailableError) return false;
+    if (e instanceof AxeUnavailableError || e instanceof AxeLaunchError) return false;
     throw e;
   }
 }
 
 export async function scanWithAxe(url: string): Promise<AxeResult> {
   const { chromium, AxeBuilder } = await loadAxe();
-  const browser = await chromium.launch();
+  const { browser, channel } = await launchBrowser(chromium);
   try {
     // @axe-core/playwright requires a page from an explicit context.
-    const context = await browser.newContext();
+    const context = await (browser as { newContext(): ReturnType<import("playwright").Browser["newContext"]> }).newContext();
     const page = await context.newPage();
     await page.goto(url, { waitUntil: "load" });
     const title = await page.title();
     const results = await new AxeBuilder({ page }).withTags(WCAG_AA_TAGS).analyze();
-    return { findings: toFindings(results.violations), title, coverage: coverageFrom(results) };
+    return { findings: toFindings(results.violations), title, coverage: coverageFrom(results), browserChannel: channel };
   } finally {
     await browser.close();
   }
