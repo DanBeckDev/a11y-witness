@@ -239,7 +239,19 @@ so every capture stays cache-valid.
 
 So, in this order, once `lab:status -e job=retrain` shows `SubState` has left `running`:
 
-1. **`npm run fleet:deploy`** — all five boxes read STALE against this checkout. Two worker changes are
+> **STEPS 1 AND 2 WERE DONE ON 2026-09-05 and the fleet is now TEN boxes, not five.** All ten run this
+> checkout (`worker:code` 10/10 match), all on Edge `152.0.4191.66`, one `provisionRevision`
+> (`ba7f4174f90053f8`), `fleet CONSISTENT`. Step 3 was dispatched and is running.
+>
+> **The recapture that step 3 is paying for was NOT caused by any of that**, and it is worth saying
+> because the reasoning looks alarming from outside: `provisionRevision` moved twice today and it is a
+> capture cache key, so the obvious conclusion is that converging the fleet threw the corpus away. It did
+> not. `defaults/main.yml` predicted this and a capture file confirms it — synthetic corpus provenance
+> reads `browserVersion: ABSENT`, so its key already resolved to `.../unknown` and already matched no
+> live guest. **The corpus was cache-invalid before today's changes and is no more invalid after them.**
+> Check the cache cost rather than assuming it, in both directions.
+
+1. **`npm run fleet:deploy`** — ~~all five boxes read STALE against this checkout.~~ **Done.** Two worker changes are
    committed and undeployed: `browser-session.mjs`'s language census (`documentLang`, `partLangs`) and
    `server.mjs`'s 60 s bound on `prepareDesktop`, which is the 3.5-hour stall. Neither moves
    `CAPTURE_PROTOCOL_VERSION` — the census is additive and nothing reads it yet — so no capture is
