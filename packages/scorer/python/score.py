@@ -78,12 +78,44 @@ def append_changes(units: list[dict[str, str]], channel: str, changes: Any) -> N
 
 
 def evidence_units(capture: dict[str, Any]) -> list[dict[str, str]]:
+    """The LIVE path's copy of `evidenceUnits` (`packages/scorer/src/evidence-units.ts`).
+
+    A second implementation was always going to exist here: this package ships with ZERO npm/Node
+    dependencies (see that file's own header) and its README documents `score.py --capture-json <file>` as
+    a standalone entry point a consumer runs directly on a raw capture, with no TypeScript upstream of it —
+    so "stop having its own implementation" is not reachable without breaking that public contract. What IS
+    reachable, and was missing until 2026-09-06, is making the two implementations compute the SAME units.
+
+    `landmark-navigation` was appended here and NOT in the TypeScript `evidenceUnits`, whose own comment
+    records why at length: the landmark sweep is nondeterministic (`[]` on one capture of an unchanged page,
+    `["Cycling guide"]` on the next), and it measurably swung a conformant page's 3.3.2 score across the
+    0.35 threshold. So the TRAINING data — built exclusively through the TypeScript function, via
+    `export-screenreader-dataset.mjs` and `build-realism-tier.mjs` — never carried a `landmark-navigation`
+    unit. Every LIVE capture and every real-page calibration, scored through `raw_capture_record` below,
+    carried 12 of them on average and up to 25 on a single real page (measured across the 23 real-page-corpus
+    captures that have any landmarks at all) — a unit type the encoder's weights were never fitted against.
+
+    Deleting the append line, rather than teaching the TypeScript side to compute landmarks the same way, is
+    the only direction available: the weights are already fitted to the TypeScript units, so making this
+    file match them is a bug fix, and doing the reverse would re-introduce the nondeterminism that comment
+    exists to keep out of the encoder.
+
+    `MODEL_INPUT_VERSION` does NOT move for this. It versions the SHAPE of a dataset record (whether `parsed`
+    exists, for instance) — see `assert_input_contract` above — and every training record was already built
+    the TypeScript way, so this fix makes the live path match the contract it was always supposed to,
+    rather than changing what the contract is. Recorded here rather than left to be inferred, because a
+    version decision nobody wrote down is how the v18/v19 coupling became a release blocker (see the
+    architecture audit, §4.2).
+
+    `evidence-units-parity.test.ts` (`packages/scorer/src/`) is what keeps this from drifting from the
+    TypeScript copy again: it spawns this file's own `evidence_units` over a shared table of captures and
+    asserts the unit list is IDENTICAL to `evidenceUnits`'s, mutation-checked by re-adding this exact line.
+    """
     structure = capture.get("structure") or {}
     interaction = capture.get("interaction") or {}
     units: list[dict[str, str]] = []
     append_units(units, "transcript", capture.get("transcript"))
     append_units(units, "heading-navigation", structure.get("headings"))
-    append_units(units, "landmark-navigation", structure.get("landmarks"))
     append_units(units, "form-navigation", structure.get("formFields"))
     append_units(units, "table-cell-navigation", structure.get("tableCells"))
     append_units(units, "control-navigation", interaction.get("controls"))
