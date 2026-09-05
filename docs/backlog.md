@@ -201,6 +201,37 @@ moved underneath it.
 
 ---
 
+## The recapture at protocol 15 is RUNNING, and it is also the validation run for today's worker work
+
+Dispatched 2026-09-05 after `capture:check` passed **twice** against a real worker — once on the merged
+capture path at protocol 15, and again after the `capture-core.mjs` split landed. **39 PASS, 0 FAIL both
+times.** That is the only check that exercises real NVDA on a real page, and it is what makes the split
+safe to have merged: nothing offline can validate a 4,800-line move through a capture pipeline.
+
+```
+capture-core.mjs   4,885 -> 362      captureWithNvda + runCapturePhases, and nothing else
+capture-setup.mjs           1,575    browser + NVDA lifecycle and the shared primitives
+capture-probes.mjs          3,082    the structural sweep and the ~30 probes
+```
+
+**The split is three files rather than two because the dependency graph said so, not because of a line
+count.** A two-way cut makes `withTimeout`, `anchorToTop`, `waitForSpeechQuiet`, `refreshBrowseBuffer`,
+`reportedTitle`, `waitForPageToSettle`, `readWithRetry` and `ensureSpeechChannel` cross both ways — a
+cycle. The primitives live in the leaf; `capture-core.mjs` depends on both and nothing depends back on it.
+**The sibling constraint held**: `probeFocusContext`, `probeTypedFeedback`, `probeArrowNavigation`,
+`probeDialogEscape` and `probeFocusReveal` cite each other's specific lessons in their own comments and
+moved as one contiguous block.
+
+**Six source-scanning tests failed LOUD on the move**, each naming the function that had moved, and were
+repointed only after verifying the pattern exists at the new location — "the test is green now" is not the
+same check. A seventh caught CLAUDE.md's hashed-file count going 24 → 26.
+
+**What this run is deciding:** the v19 feature-schema migration, and whether `2.4.7` fires on the nine F55
+cases now that their evidence will actually be collected. If it still reads `NEVER FIRED ANYWHERE`, the
+threshold's unverified lower bound is the next suspect and `FOCUS_SCRIPT_BLUR_WINDOW_MS = 50` is where to
+look — **not before**, because a threshold tuned to make a test pass is a canary that cannot express the
+fault.
+
 ## CAPTURE_PROTOCOL_VERSION 14 -> 15, and the reason is the sharpest thing found today
 
 **`rules:coverage` reported `2.4.7 partial 0 0 NEVER FIRED ANYWHERE — the claim rests on nothing`**, on a
