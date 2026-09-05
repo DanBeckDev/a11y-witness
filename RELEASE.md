@@ -132,7 +132,7 @@ findings.
 
 ## Known limitations, stated plainly
 
-- **On a real page, ten criteria are actually assessed — five of them partially.** Eighteen in total can
+- **On a real page, eleven criteria are actually assessed — six of them partially.** Nineteen in total can
   produce a finding, but four (2.4.6, 3.3.1, 3.3.2, 4.1.3) come only from the trained scorer, which abstains
   on pages unlike its training data — which today is still many real pages. A fifth, 3.3.3, is decided by a
   rule and still cannot fire on a page you do not own: it reads the form probe, which is deliberately off
@@ -148,11 +148,13 @@ findings.
   - **Rule-decided but not yet turned on for real pages: 1.4.13** — content revealed on focus that Escape
     does not dismiss. Rule-decided and reads no probe a consent boundary would gate; it simply has not been
     enabled for real-page captures, which is an open gap rather than a decision, unlike the three above.
-  - **Partially: 2.1.1, 2.4.1, 2.4.2, 2.4.3, 3.3.2, 4.1.2** — each covers one failure mode of several, and
+  - **Partially: 2.1.1, 2.4.1, 2.4.2, 2.4.3, 2.4.7, 3.3.2, 4.1.2** — each covers one failure mode of several, and
     `criterion-coverage.ts` records which mode and why the others are out. Three of them (2.4.1, 2.4.2,
     2.4.3, added 2026-08-22) are failures a static analyser structurally cannot reach: a skip link that is
     present and inert, a route that changes without the title changing, and a tab order that contradicts the
-    reading order.
+    reading order. A fourth, 2.4.7 (added 2026-09-06), covers only F55 — script removing focus the instant it
+    is received — from the same `focusOrder` event log the three above already read; the pixel-based F78
+    failure (a styled-away outline) stays entirely out of reach.
 
   Everything else comes back `cantTell` or `untested`, and the report says which. Measured on the eval
   fixtures: `abstained 5 of 16 failure cases`, recall 78%, 0 false positives.

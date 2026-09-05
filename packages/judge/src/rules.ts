@@ -122,6 +122,19 @@ export interface RuleInput {
      */
     focusOrder?: string[];
     /**
+     * F55 — "using script to remove focus when focus is received" (2.1.1, 2.4.7, 2.4.13, 3.2.1 together,
+     * per W3C's own Failure listing) — decided by `focusEventVerdict` (`capture-pure.mjs`) from the
+     * `focusin`/`focusout` log `probeFocusOrder` installs. `checked: false` means the oracle could not run
+     * (`why` says why) and `scriptRemovedFocus: null` follows it — "cannot say", never "no findings".
+     * `checked: true` with an EMPTY array is a real reading of zero: the log ran and found no script
+     * stripping focus, which is not the same absence as never having asked.
+     *
+     * Matched by `id`, not by name or position, in `focusEventVerdict` — two controls sharing a name must
+     * never be read as one control losing the focus it just received.
+     */
+    focusEvents?: { asked?: boolean; checked: boolean; why?: string; events?: number;
+      scriptRemovedFocus: { id: number; name: string; heldMs: number }[] | null };
+    /**
      * What the screen reader said the page was called, and what its first heading was, before and after
      * activating a navigation control. Absent unless `probeNavigation` was asked for — and absence must
      * make no claim, because a page nobody probed and a page that navigated silently are different facts.
@@ -588,6 +601,34 @@ function addFocusRevealFindings(input: RuleInput, add: AddFinding): void {
     "Content appeared on focus and was not dismissed by Escape, with focus held throughout — no "
       + "mechanism to dismiss it without moving focus was observed",
     `revealedBy ${JSON.stringify(reveal?.revealedBy ?? [])}`, "secondary");
+}
+
+/**
+ * 2.4.7 Focus Visible — Failure F55, "using script to remove focus when focus is received", from
+ * `focusEventVerdict`'s (`capture-pure.mjs`) `focusin`→`focusout` pairing on the same element id.
+ *
+ * `secondary`, not `conformance` — argued in `coverage.ts`, at `RULE_CRITERIA`'s definition, rather than
+ * defaulted here. The observation is a TIMING pair over CDP, not a read of whether a focus indicator was
+ * ever drawn; F55 is the reasoned conclusion from that pair (nothing can hold a visible indicator if
+ * nothing holds focus), and that inference is exactly the gap `secondary` exists to mark. Also unruled-out:
+ * the other listed failure, F78 (styling an indicator away), which this evidence says nothing about either
+ * way — a clean report here is silent on F78, never a pass for 2.4.7 as a whole.
+ *
+ * `checked: false` means the oracle could not run — reported nowhere, per `focusEvents`' own contract
+ * (`rules.ts`'s field doc): "cannot say", never "no findings". Only a real `checked: true` reading is
+ * examined, and even then only a NON-EMPTY `scriptRemovedFocus` is a finding — an empty array is a real
+ * zero, not an absence.
+ */
+function addFocusEventFindings(input: RuleInput, add: AddFinding): void {
+  const focusEvents = input.interaction?.focusEvents;
+  if (!focusEvents?.checked) return;
+  for (const removed of focusEvents.scriptRemovedFocus ?? []) {
+    add("2.4.7 Focus Visible",
+      "A control received focus and had it removed by script before a visible focus indicator could "
+        + "have been shown to the user",
+      `${removed.name || "unnamed control"} (id ${removed.id}): focus held ${removed.heldMs}ms`,
+      "secondary");
+  }
 }
 
 /** Is this a control whose activation is Enter? Read through the shared grammar, never a role regex. */
@@ -1314,6 +1355,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addErrorWithoutRemedy(input, add);
   addContextChanges(input, add);
   addFocusRevealFindings(input, add);
+  addFocusEventFindings(input, add);
 
   return findings;
 }
