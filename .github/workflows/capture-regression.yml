@@ -44,6 +44,7 @@ on:
       - "packages/worker-fleet/src/transient-fault.mjs"
       - "packages/worker-fleet/src/worker-http.mjs"
       - "packages/worker-fleet/src/host-address.mjs"
+      - "packages/worker-fleet/src/cli-flags.mjs"
       - "packages/lab/src/eval/pages/tutorials/**"
       - ".github/workflows/capture-regression.yml"
   pull_request:
@@ -74,6 +75,7 @@ on:
       - "packages/worker-fleet/src/transient-fault.mjs"
       - "packages/worker-fleet/src/worker-http.mjs"
       - "packages/worker-fleet/src/host-address.mjs"
+      - "packages/worker-fleet/src/cli-flags.mjs"
       - "packages/lab/src/eval/pages/tutorials/**"
       - ".github/workflows/capture-regression.yml"
 

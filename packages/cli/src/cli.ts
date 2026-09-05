@@ -660,10 +660,18 @@ type RuleLayer = "none" | "run" | "import";
 
 // Imported results win over running our own. Someone who supplies a file has already run
 // axe; scanning again would give them two differently-versioned opinions on one page.
-async function chooseRuleLayer({ wantAxe, axeResults }: { wantAxe: boolean; axeResults: string | null }): Promise<RuleLayer> {
+//
+// EXPORTED, and `isAvailable` is INJECTABLE, for the same reason `axeAvailable` itself takes a `deps`
+// parameter: a test must drive the REAL decision, not a copy of it. This is the one place that decides
+// whether an unavailable rule layer gets REPORTED (a stderr line naming the exact fix, and `findings:
+// null` -- never `[]` -- flowing through to "not run. Visual criteria are unchecked, not clean." in the
+// printed report) or is silently absorbed. `chooseRuleLayer.test.ts` reproduces the chain end to end
+// rather than asserting on this function's shape.
+export async function chooseRuleLayer({ wantAxe, axeResults }: { wantAxe: boolean; axeResults: string | null },
+  isAvailable: () => Promise<boolean> = axeAvailable): Promise<RuleLayer> {
   if (axeResults) return "import";
   if (!wantAxe) return "none";
-  if (await axeAvailable()) return "run";
+  if (await isAvailable()) return "run";
   process.stderr.write(
     "axe-core layer skipped: its optional dependencies are not installed " +
       "(npm install playwright @axe-core/playwright && npx playwright install chromium), " +
