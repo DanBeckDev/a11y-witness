@@ -23,7 +23,8 @@ It therefore defaults **on in the GitHub Action and off in the CLI**, and the sp
 - a workflow runs against your own application, where submitting is intended
 - the CLI can be aimed at any URL, and **pressing *Book* on a stranger's site is not a review**
 
-`chooseProbe` decides what may be pressed and is unit-tested for exactly that. A control is activated only
+`probeKindFor` decides what may be pressed, `chooseProbe` only dispatches on its answer, and the decision is
+unit-tested (`probe-choice.test.ts`). A control is activated only
 if it is a button whose name shares a meaningful word with the task you gave, or is submit-like — so
 "show only bags" presses *Bags* and never *Delete account*. Disclosures are the one exception and are
 activated unconditionally, because expanding something is side-effect-free.
@@ -127,7 +128,7 @@ The consequence for you:
 
 ### Some environment variables are executable
 
-`A11Y_PYTHON` is read at four call sites and becomes the interpreter that is executed. Passing it is
+`A11Y_PYTHON` is read at five call sites and becomes the interpreter that is executed. Passing it is
 equivalent to running arbitrary code as the invoking user. The Ansible job interface never forwards
 environment from its caller for this reason — its env is a fixed dictionary in the role, and jobs are named
 from a fixed catalogue rather than passed as commands.

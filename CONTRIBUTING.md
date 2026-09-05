@@ -17,7 +17,7 @@ on what you want to change. Read the section that matches.
 
 ```bash
 npm install
-npm test          # ~850 unit tests, no worker, no network
+npm test          # ~1,900 unit tests, no worker, no network
 npm run lint
 npm run typecheck
 ```
