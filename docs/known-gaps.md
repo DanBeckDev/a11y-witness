@@ -595,12 +595,21 @@ Every one of these was a guard that could not report itself, and none was a prod
 
 ### The one real limitation, and it is structural rather than a defect
 
-`scorer:shortcuts` reports free vetoes on the three focus subtypes, all on the same feature:
+**STALE — verified against the tracked baseline 2026-09-05, and the table below is superseded.**
+`packages/lab/scripts/scorer-shortcuts.baseline.json` (committed at `3ffd775`) no longer lists
+`form_field_unnamed` as a veto on ANY of the three focus subtypes — the FOCUS_SAFE remedy described two
+paragraphs below this table did close it, which answers the question this section's own "what is NOT
+established" paragraph left open. Positives also moved with the corpus (8/8/7 → 24/19/10). Current state,
+read from the same baseline: all three subtypes carry zero closable vetoes, and every veto that remains is
+classified `perturbs-measurement` (`validation_error_announced`, `status_update_announced`,
+`validation_error_missing`, `form_change_observed_absent`, `state_changed`, and the `form_change_*` /
+`post_submit_present` family) — structural, not a free veto ADR 0015 names. The table below is kept as the
+historical measurement that motivated the FOCUS_SAFE fix, not as a description of HEAD.
 
 ```
-2.1.1:control-unreachable-by-keyboard   8 positives  10 vetoes  form_field_unnamed (-4.60)
-2.1.2:focus-trapped                     8            10         form_field_unnamed (-6.59)
-2.4.3:focus-order-scrambled             7            10         form_field_unnamed (-6.59)
+2.1.1:control-unreachable-by-keyboard   8 positives  10 vetoes  form_field_unnamed (-4.60)   <- HISTORICAL, see above
+2.1.2:focus-trapped                     8            10         form_field_unnamed (-6.59)   <- HISTORICAL, see above
+2.4.3:focus-order-scrambled             7            10         form_field_unnamed (-6.59)   <- HISTORICAL, see above
 1.3.1:no-headings                      29             5         heading_present   (-2.93)
 ```
 
@@ -628,16 +637,17 @@ multi-defect pairing, since the choice is `(rotation + round) % ROTATIONS.length
 `controlUnreachableByKeyboard` and `focusOrderIsScrambled` compare `structure.formFields` against
 `interaction.focusOrder` and neither reads `structure.links`, so an inert anchor enters neither channel.
 
-**What is NOT established is whether it WORKED**, and that cannot be answered from a laptop:
-`npm run scorer:shortcuts` refuses here — *"1868 of 1868 record(s) carry no `parsed` block … this copy of
-runs/ predates the parse"* — which is the guard behaving correctly rather than a failure. The
-authoritative answer is `npm run lab:job -- -e job=shortcuts`, and the question it settles is whether
-`form_field_unnamed` is still a free veto on the three focus heads.
+**~~What is NOT established is whether it WORKED~~ — ESTABLISHED, 2026-09-05: it worked.** This paragraph
+described a laptop that could not run `scorer:shortcuts` and therefore could not tell. The question does
+not need re-running the audit, only reading its committed OUTPUT: `scorer-shortcuts.baseline.json`
+(`3ffd775`) is the record of exactly the `lab:job -e job=shortcuts` run this paragraph asked for, and
+`form_field_unnamed` is absent from all three focus subtypes in it — see the corrected table above. Kept
+rather than deleted because a laptop's own refusal (`"1868 of 1868 record(s) carry no parsed block"`) is
+itself a real, re-occurring shape worth the reader recognising on sight.
 
 Recorded in the shortcuts baseline rather than left refusing, because that baseline exists to detect
-REGRESSIONS after a deliberate corpus change and these were diagnosed rather than assumed — but the
-limitation above is the honest characteristic, and it belongs in this document rather than only in a
-JSON file.
+REGRESSIONS after a deliberate corpus change and these were diagnosed rather than assumed — and the
+baseline itself is now the answer, not just the record of having asked.
 
 ## 10. Publishing — MOVED to [`not-working.md` §8](./not-working.md)
 
@@ -869,6 +879,19 @@ rules owned exactly those two.
 2.4.1, 2.4.2, 2.4.3, 3.3.2 and 4.1.2. Deliberately listed rather than counted — `criteria-counts-are-not-
 spelled-out.test.ts` refuses a numeral beside the word, and it caught this entry's first draft.
 
+> **STALE, verified 2026-09-05 — this list is illustrative history, and the MECHANISM it describes is what
+> actually stays correct.** `ABSENCE_CRITERIA` in `verify-gate.ts` today reads 1.1.1, 1.3.1, **1.4.13**,
+> 2.1.1, 2.1.2, 2.4.1, 2.4.2, 2.4.3, **3.2.1, 3.2.2, 3.3.3**, 4.1.2 — twelve criteria, not nine, and
+> **`3.3.2` is no longer among them at all**: `3.3.2:unnamed-form-field` was reclassified to
+> `4.1.2:unnamed-control` on 2026-09-05 (its evidence was always 4.1.2's, per `docs/backlog.md`'s own
+> "ALL 133 `3.3.2:unnamed-form-field` records were labelled for a criterion their page SATISFIES" entry),
+> so a set frozen at this paragraph's nine would now be both incomplete AND wrong about one member. This
+> is not a live defect, because — as the paragraph below already argues — the constant is **derived and
+> tested equal to `rule-ownership.json`** by `rules-owned-criteria.test.ts`, which is exactly the guard
+> that makes an illustrative list in prose safe to go stale: the code cannot. Left as a correction rather
+> than a rewrite, because the next criterion added will make this note stale too, and the paragraph below
+> already says why enumerating here was never going to be the durable part.
+
 So a generative model's 1.3.1 or 3.3.2 finding survives the gate — and then SUPPRESSES the rule's, because
 `withRuleFindings` adds only rule findings "whose criterion the model did not already flag". The model's
 weaker finding wins over the rule's exact one, which inverts the ownership design.
@@ -955,6 +978,11 @@ boundary.
 report: the shipped v15 weights cannot be scored by a v16 runtime. It closes when a v16 candidate is
 trained and promoted — no recapture and no re-export, because the features are computed at train time from
 an unchanged `record.input`.
+
+**CLOSED — confirmed 2026-09-05.** `screenreader_features.py` no longer computes either feature (the
+removal is commented in place, citing this section by name), and the shipped schema has since advanced
+past v16 to v18, with v19 pending (see §35). The migration this paragraph opened necessarily passed through
+v16 to get there.
 
 ## 18. ~~`dedupeKey` strips ONE container prefix, so a nested landmark is recorded twice~~ — DONE, protocol 8
 
@@ -1997,3 +2025,69 @@ silent `catch`.
 captured the process state, and the worker was recovered before anyone could. What is established is that
 the window existed, that it is unbounded, and that everything else in that function is guarded — so the
 next occurrence is now bounded at 60 s and leaves a mark saying so.
+
+
+---
+
+## 38. 4.1.2's SETTABILITY clause cannot be assessed by this tool, structurally, and this is the first time it is stated
+
+**Added 2026-09-05, auditing this file rather than fixing new code.** 4.1.2 Name, Role, Value has three
+clauses. Two are covered and were already known to be: the name/role clause (rules-owned, exact on 147
+records) and the state-change-notification clause (`state-change-silent`, rules-owned since ADR 0021,
+measured 69/0/0 across 144 captures). The SECOND clause — *"states, properties, and values that can be
+set by the user can be programmatically set"* — is covered by neither layer, and this file never said so
+even though `docs/coverage.md` and `packages/judge/src/criterion-coverage.ts`'s own note for 4.1.2 have
+said it plainly since a fix on 2026-09-05 (`criterion-coverage.test.ts`'s "4.1.2's note accounts for all
+THREE clauses, including the settable one").
+
+**Why it cannot be reached from here, and it is structural rather than a corpus gap.** Settability asks
+whether an assistive technology can programmatically SET a value the user can set — a question about the
+UIA/IA2 automation surface (a `ValuePattern`, a `TogglePattern`), not about anything NVDA says. This
+project's capture drives NVDA, which operates controls by EMULATING THE KEYBOARD (`probeArrows`,
+`probeTyping`), so it witnesses OPERABILITY, not SETTABILITY. A control the AT cannot set presents, in
+speech, as one that does not respond to a keystroke — which is 2.1.1's failure and is indistinguishable
+from it. No new corpus case closes this; the two failure modes produce identical evidence in the one
+channel this tool has.
+
+**What would tell you it is fixed:** nothing this tool can run — closing it needs a second capture
+mechanism that drives the UIA/IA2 tree directly rather than emulating a keyboard, which is a different
+instrument, not a corpus addition. Declared `unavailable` in the sense CLAUDE.md's own top table uses for
+`3.1.2:language-unmarked` and `2.1.4`: a capability bound, recorded so a reader does not assume screen-reader
+evidence answers a question it structurally cannot.
+
+**Why this belongs here and not only in `coverage.md`/the code comment.** This file's whole premise is that
+"all gates pass" and "everything is validated" are different claims, and a settability finding is exactly
+the shape that never fails a gate — no rule, no head, no test claims to decide it, so nothing here was ever
+red about it. A reader checking known-gaps.md for what this tool cannot do would not have found this one.
+
+## 39. 2.4.7's F55 lower bound is unverified, because no capture has ever recorded a real script `blur()`
+
+**Added 2026-09-05.** `2.4.7` Focus Visible ships as a rule (see the acceptance-audit work of early
+September), and its detection of F55 — "using script to remove focus when focus is received" — rests on
+`FOCUS_SCRIPT_BLUR_WINDOW_MS = 50`, a threshold separating a scripted blur from an ordinary Tab
+transition. The MARGIN on the negative side is well measured: 24 real focusin→focusout pairs on real
+pages, minimum gap 633 ms against the 50 ms cutoff — a 12.6× margin at least, 38.9× on one page. **No
+capture anywhere in this corpus has ever recorded a genuine script `blur()`.** So the threshold's positive
+side — does a real F55 case land comfortably under 50 ms, or does it sit near the boundary — has never
+been measured, only assumed.
+
+**Why this is not yet closed, and what would close it.** `case-matrix.mjs` carries nine
+`focus-removed-on-receipt-*` cases built specifically to exercise F55, and as of `CAPTURE_PROTOCOL_VERSION`
+14 their evidence had never actually been collected — the cases were captured before the `focusEventLog`
+probe existed, and `workerCode` being outside the cache key meant the pre-probe captures were served
+unchanged. `CAPTURE_PROTOCOL_VERSION` was bumped 14 → 15 specifically to force their recapture (see
+`docs/backlog.md`'s "CAPTURE_PROTOCOL_VERSION 14 -> 15" entry), and **a full recapture at protocol 15 was
+running on the fleet as this section was written** — this entry cannot say whether it has finished or what
+`rules:coverage` reports for `2.4.7` once it has, and does not claim to; that is a live question for
+whoever reads this after the recapture completes, not answered here.
+
+**The explicit warning against the tempting shortcut, preserved because it is easy to reach for.**
+`docs/backlog.md`'s own words: *"the threshold's unverified lower bound is the next suspect... not
+before [checking whether the recapture makes the rule fire], because a threshold tuned to make a test
+pass is a canary that cannot express the fault."* If `2.4.7` still reads `NEVER FIRED ANYWHERE` after the
+protocol-15 recapture, the fix is not to lower 50 ms until a test passes — it is to capture a real script
+`blur()` and measure where it actually lands.
+
+**What would tell you it is fixed:** `rules:coverage` reports `2.4.7` as fired with real captured evidence
+(not `NEVER FIRED ANYWHERE`), and a specific measured `blur()` latency is recorded beside
+`FOCUS_SCRIPT_BLUR_WINDOW_MS` in the same way the negative-side margin already is.
