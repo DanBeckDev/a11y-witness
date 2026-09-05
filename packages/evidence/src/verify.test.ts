@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   captureDoubt, captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle,
-  captureRanRequestedProbes, probeStates, sweepCompleteness, captureReachedThePage,
+  captureRanRequestedProbes, probeStates, sweepCompleteness, captureReachedThePage, domCensus,
 } from "./verify.js";
 import type { CapturedAnnouncements } from "./verify.js";
 
@@ -611,4 +611,30 @@ test("protocol 9: absent `observed` falls back to inference rather than assuming
   assert.equal(sweepCompleteness(capture).heading, "truncated",
     "with no `observed` the census comparison still decides — deleting that would make every pre-9 "
     + "capture unreadable to answer a question they can answer");
+});
+
+test("the LANGUAGE census reaches the rule layer, and an absent one is not 'no language'", () => {
+  // THE DEFECT THIS REPO HAS ALREADY PAID FOR ONCE, in different fields. `addMissingHeadings` needs
+  // `census.heading === 0`; the worker recorded it on every capture and `domCensus` did not carry it, so
+  // the rule read `undefined` and `rules:coverage` reported "NEVER FIRED ANYWHERE — the claim rests on
+  // nothing" for as long as that rule had existed.
+  //
+  // Same shape here until 2026-09-05: a real capture read `documentLang: "en", partLangs: ["fr"],
+  // partLangCount: 1` and every rule saw nothing, because these three were computed by the worker and
+  // dropped at this hop. 3.1.2's marked-but-silent rule is specified as `partLangCount > 0 AND no language
+  // announced`, so building it first would have produced a rule that never fires — indistinguishable, from
+  // the outside, from a corpus with nothing to find.
+  const withLang = domCensus({
+    diagnostics: [{ event: "domCensus", heading: 2, documentLang: "en", partLangs: ["fr"], partLangCount: 1 }],
+  } as never);
+  assert.equal(withLang?.documentLang, "en");
+  assert.deepEqual(withLang?.partLangs, ["fr"]);
+  assert.equal(withLang?.partLangCount, 1);
+
+  // ABSENT IS NOT ZERO. Every capture taken before the census learned to read these carries no such field,
+  // and `partLangCount === 0` would mean "this page marks no passage" — a claim about the page. `undefined`
+  // means "we did not look", and a rule keyed on the first would accuse every old capture.
+  const older = domCensus({ diagnostics: [{ event: "domCensus", heading: 2 }] } as never);
+  assert.equal(older?.partLangCount, undefined, "a capture predating the census must read 'cannot say'");
+  assert.equal(older?.documentLang, undefined);
 });
