@@ -452,7 +452,17 @@ reported the file's SIZE, which answers 'is it growing' and not 'what does it sa
 question is the one you have when something did not happen."* I read the size field first, concluded the
 fleet had no logs at all, and was wrong. The right field was already there and already argued for.
 
-## 21. `4.1.3` real-page grounding — UNBLOCKED 2026-09-03, and demonstrated on a real pair
+## 21. `4.1.3` real-page grounding — UNBLOCKED 2026-09-03, and demonstrated on a real pair — STILL OPEN, and this is CORRECTED from an earlier version of this audit
+
+**CORRECTED 2026-09-05.** An earlier pass of this same audit cross-linked this section to [§29](./known-gaps.md)
+on the claim that `N > 0`, the "done when" line this section states below. That was wrong: `4.1.3: 0 of 37`
+is confirmed as the number after the capture §29 describes, for two reasons that have nothing to do with
+whether a capture ran — the one configured page is `role: "calibration"` and `build-realism-tier.mjs`
+excludes calibration pages from the count by construction, and the count's other masking (`routeChange.announced`
+on the first-link-is-usually-a-skip-link problem, described below) is untouched regardless. §29 has the
+full correction. **This section's own closing condition does NOT hold**, and this row was wrong to say it
+did. What §29's capture DID prove — real 4.1.3/3.3.1 grounding as a CALIBRATION measurement, outside the
+realism-tier count entirely — is a genuine, separate result, described there.
 
 **Not a defect. Measured, understood, and deliberately open** — recorded here rather than left on a
 to-do list, because the thing standing in the way is a decision about other people's websites, not work.
@@ -1344,7 +1354,42 @@ configured — which is [known-gaps §21](./known-gaps.md) and now unblocked rat
 
 ---
 
-## 29. `4.1.3` grounding is reachable, and the pair that proves it also proves ADR 0024's central claim
+## 29. `4.1.3` grounding is reachable, and the pair that proves it also proves ADR 0024's central claim — CLOSED 2026-09-05: the capture RAN, and `4.1.3: 0 of 37` is still the honest number
+
+**CORRECTED 2026-09-05, hours after the entry below was first written, and the correction matters more
+than the mistake: I inferred `4.1.3: 1 of 37` from a count instead of reading the code that produces the
+number, and it was wrong.** What I actually checked was that `real-page-corpus.mjs` carries exactly one
+`formState` entry, and I reasoned from that straight to the realism-tier count without reading
+`build-realism-tier.mjs` itself. Two independent things make `1 of 37` unreachable, and both are in that
+file, not in anything that needed a capture to discover:
+
+1. **The one page carrying a `formState` — `w3.org/WAI/demos/bad/after/survey.html` — is `role:
+   "calibration"`, and `build-realism-tier.mjs`'s filter is `realPageFor(url)?.role === "training"`.**
+   Calibration pages are excluded from the realism tier by construction — *"they are the measurement, and
+   training on them would destroy the only independent read we have."* The page that grounds 4.1.3 can
+   never enter the count this section was asking about, no matter how many times it is captured.
+2. **`build-realism-tier.mjs` already argues, at length, that `0 of 37` is the honest number for the
+   OTHER masked channel.** `routeChange.announced` is deliberately excluded because `probeNavigation`
+   follows the FIRST link, which on essentially every real page IS the skip link — labelling that silence
+   4.1.3 would teach the head that silence after any link is a failure, on 37 pages at once. That
+   reasoning does not depend on whether the survey page exists at all.
+
+**The lab confirmed it directly: `4.1.3: 0 of 37` after the capture, exactly as both mechanisms predict** —
+not a run I performed, but the number the `everything` chain printed, which is the authoritative one.
+
+**What the capture actually proved, and it is real.** `w3.org/WAI/demos/bad/after/survey.html` came back
+with `interaction.formChanges` holding 2 entries and `postSubmitFields` holding 15, sweep log `submit
+"submit, button" -> "Citylights Survey - Submission Failed Accessible Survey Page, document"` — the
+configured form was genuinely filled and genuinely submitted on a real site. **4.1.3 is now grounded on a
+real page as a CALIBRATION measurement**, which is what a calibration page is for: the abstention sweep and
+the false-positive count can see it, even though the realism tier structurally cannot.
+
+**What would actually move the realism number** is stated in `build-realism-tier.mjs` and is corpus work,
+not capture work: a real TRAINING-role page where the pressed link is known to be a FILTER rather than a
+skip link — a fact about the page, belonging in `real-page-corpus.mjs` beside `claimExcludes`.
+
+Everything below is the reasoning that established the capability was there before the capture proved it,
+kept for the same reason superseded sections elsewhere in this file are kept.
 
 [§21](#) said closing 4.1.3's real-page gap was *"a CONSENT decision rather than a code one"*: the heads
 read `formChanges` / `postSubmitFields`, and `probeForms` is off for every real-page capture because
@@ -1589,6 +1634,19 @@ which vendor to read.
 
 ## 35. §11's design has a name, and it is a FEATURE CROSS — BUILT 2026-09-03, verdict PENDING
 
+**Audited 2026-09-05: still accurate.** `packages/scorer/models/schema-migration.json` at HEAD still reads
+`shippedSchema: v18`, `pendingSchema: v19` — the retrain this section is waiting on has not landed.
+
+**One dependency for gate 1 is now current, and wasn't as of this section's last edit.** `form_change_
+observed_absent` reached the tracked baseline as two apparent free vetoes on `3.3.1:validation-error-silent`
+and `4.1.3:form-activation-silent` (`not-working.md` §2) — read against `provenance.subtype` and the
+featurizer, both are `IMPOSSIBLE_BY_DEFINITION`: the probe that would leave the column 0 cannot fail to find
+a control on either subtype by construction, verified at 0 of 500 captures. Classified in
+`corpus:unclosable-map` (`e51afa3`). So gate 1 — *"closable vetoes must FALL, and no head may gain one on a
+new column"* — will correctly read these two as unclosable rather than as a new column gaining a veto, once
+the retrain runs; before this classification landed, the same result would have looked like exactly the
+failure gate 1 exists to catch.
+
 **Built and committed; whether it SHIPS is not yet decided.** The encoding is in
 `screenreader_features.py`, the exporter emits `observation` as a sibling of `input`, and
 `schema-migration.json` declares v18 → v19 open. What has NOT happened is the retrain that would let the
@@ -1687,7 +1745,45 @@ trusted* — and the first thing this one failed to fail on was its own central 
 
 ---
 
-## 36. The language census does NOT complete 3.1.2, and it enables a different finding worth having
+## 36. The language census does NOT complete 3.1.2, and it enables a different finding worth having — RESOLVED 2026-09-05: the marked-but-silent case was built, measured, and REFUTED
+
+**Audited 2026-09-05 against `case-matrix.mjs` and the backlog row this section is cited from — both already
+carried the answer this section did not.** The experiment two paragraphs below (`language-marked-silent-*`,
+"built 2026-09-05, awaiting capture") has since run and lost: NVDA hears a `lang` applied by script.
+
+**Measured on `language-marked-silent-poem.bad`, transcript line 3:**
+
+```
+"Spanish (not supported), La ciudad duerme bajo una luna clara y el rio sigue su camino."
+"list, with 6 items, English, bullet, same page, link, Opening times…"
+```
+
+The bet was that NVDA builds its browse-mode buffer at load and would therefore stay silent on a `lang`
+applied AFTER load by script — the shape needed for a page to be *marked and silent* rather than merely
+*unmarked*. It is not: `refreshBrowseBuffer` rebuilds the buffer once a reused window is re-pointed, picks
+the script-applied change up exactly as the original comment allowed for, and the two variants become
+indistinguishable in speech — English out, the same language name in, on both. **It surfaced as BLIND**
+(the signal fired on NEITHER variant, because `language-unmarked`'s signal keys on the language name being
+ABSENT) **rather than the CONTAMINATED the original comment predicted** — the right refutation, the wrong
+verdict label, worth keeping as a reminder that a gate's verdicts are not interchangeable.
+
+**Withdrawn on `reportEmphasis`'s precedent ([§33](./known-gaps.md)):** all three `language-marked-silent-*` cases are gone from `case-matrix.mjs`. The residual 3.1.2 question — a
+MARKED passage NVDA does not announce — now has **no known trigger left**, since the one mechanism that
+looked able to produce it does not. The lead-naming rule these cases taught along the way outlives them and
+is guarded in both `acceptance-matrix.test.ts` and `case-matrix.test.ts`.
+
+**This also answers the section's own closing question**, asked below under "What the case should be
+instead" — does NVDA's unsupported-language announcement carry the language, a generic phrase, or a beep?
+The transcript line above answers it directly: the language name, followed by `"(not supported)"`, then the
+text — confirming `reportNotSupportedLanguage`'s `configSpec.py` default (`"speech"`) exactly as predicted,
+and closing the one thing that section left for "one capture" to decide.
+
+**What this does NOT change**, because it is a different question from the one just answered: §32's
+underlying limit — an UNMARKED passage needs language detection, and the screen reader alone cannot
+decide 3.1.2 — still holds, unaffected by the withdrawal of an experiment aimed at the marked-and-silent
+case. `3.1.2:language-unmarked` remains `decidedBy: "unavailable"`. Everything below this point is the
+record of the experiment that led here, kept for the same reason §2's superseded text is kept: the
+reasoning was sound, the premise it tested came out false, and that is worth more than a deletion.
 
 [§32](./known-gaps.md) said the screen reader cannot decide 3.1.2 alone and that deciding needs the DOM.
 The DOM census now carries `documentLang`, `partLangs` and `partLangCount`. **It still does not decide
@@ -1843,7 +1939,15 @@ refuses.
 
 ---
 
-## 37. THE 3.5-HOUR STALL, DIAGNOSED — desktop preparation sat outside every guard
+## 37. THE 3.5-HOUR STALL, DIAGNOSED — desktop preparation sat outside every guard — VERIFIED CURRENT 2026-09-05
+
+**Confirmed against the artefact, not the prose.** `server.mjs` at HEAD has `prepareDesktopBounded(marks)`
+called inside `runCapture`'s `try` block, ahead of `busy = false` in its `finally`; `DESKTOP_PREPARE_TIMEOUT_MS
+= 60_000`; and its `.catch` logs, pushes a `desktopPrepareTimedOut` mark, and aborts the desktop-prepare
+signal without rethrowing — every detail this section's own "The fix" describes, matching exactly. This
+section was already correct and needed no rewrite; recorded here only because CLAUDE.md's rule about
+proving a capture-path fix by its diagnostic mark rather than by a green result and a matching prose
+description applies to auditing a doc the same way it applies to auditing code.
 
 Open since 2026-09-02 and marked *"cannot be scheduled — it needs a recurrence."* It did not: the cause is
 readable in `runCapture`, and reading it was cheaper than waiting for it to happen again.
