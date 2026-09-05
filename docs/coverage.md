@@ -10,11 +10,11 @@ the WCAG list and what actually ships — so this page cannot drift from the cod
 |---|---|---|
 | **assessed** | 10 | a finding can be produced today |
 | **partial** | 7 | assessed, but a named failure mode of it is not covered |
-| **reachable** | 5 | not built, and the evidence to build it exists or could be captured |
-| **out of scope** | 33 | not answerable by this tool at all |
+| **reachable** | 6 | not built, and the evidence to build it exists or could be captured |
+| **out of scope** | 32 | not answerable by this tool at all |
 
 **17 of 55 produce findings.** That is not a small number
-for screen-reader evidence, and it is not a substitute for a rule scanner: the 33
+for screen-reader evidence, and it is not a substitute for a rule scanner: the 32
 out-of-scope criteria are mostly **visual**, which is exactly what axe-core is good at. Run both.
 
 ## Two things to read this table with
@@ -65,6 +65,7 @@ The evidence exists, or could be captured with a probe. Nothing here is a resear
 | # | criterion | level | would need |
 |---|---|---|---|
 | 1.3.5 | Identify Input Purpose | AA | dom |
+| 1.4.13 | Content on Hover or Focus | AA | screen-reader + accessibility-tree |
 | 2.1.4 | Character Key Shortcuts | A | dom |
 | 2.5.3 | Label in Name | A | dom + accessibility-tree |
 | 3.1.1 | Language of Page | A | dom |
@@ -83,7 +84,7 @@ competing with it.
 | 1.2.3 | Audio Description or Media Alternative (Prerecorded) | A | human |
 | 1.2.4 | Captions (Live) | AA | human |
 | 1.2.5 | Audio Description (Prerecorded) | AA | human |
-| 1.3.2 | Meaningful Sequence | A | visual |
+| 1.3.2 | Meaningful Sequence | A | human + visual |
 | 1.3.3 | Sensory Characteristics | A | visual + human |
 | 1.3.4 | Orientation | AA | visual |
 | 1.4.1 | Use of Color | A | visual |
@@ -93,7 +94,6 @@ competing with it.
 | 1.4.10 | Reflow | AA | visual |
 | 1.4.11 | Non-text Contrast | AA | visual |
 | 1.4.12 | Text Spacing | AA | visual |
-| 1.4.13 | Content on Hover or Focus | AA | visual |
 | 2.2.1 | Timing Adjustable | A | dom + human |
 | 2.2.2 | Pause, Stop, Hide | A | visual + dom |
 | 2.3.1 | Three Flashes or Below Threshold | A | visual |
