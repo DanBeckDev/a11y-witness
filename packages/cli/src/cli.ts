@@ -4,7 +4,10 @@
  *
  * Runs the whole pipeline in one command: ask a capture worker to drive a real
  * screen reader through the page, then judge the announcement transcript here
- * (the judge uses the local Codex login, so no metered API cost).
+ * (the judge is our OWN trained scorer by default -- `JUDGE_BACKEND` has defaulted to `local` since
+ * 2026-08-04, so there is no metered API cost and no rented model in the path. This line said "the
+ * local Codex login", which was true of the previous default and had outlived it; `codex`,
+ * `anthropic` and `openai` remain available for comparison and are never the default.)
  *
  * Usage:
  *   npm run witness -- <url> --task "..." [--worker http://host:port] [--json]

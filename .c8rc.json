@@ -84,8 +84,7 @@
     "packages/scorer/bin/fetch-encoder.mjs",
     "packages/cli/src/scan/axe.ts",
     "packages/cli/src/scan/run-axe.ts",
-    "scripts/build-packages.mjs",
-    "scripts/coverage.mjs"
+    "scripts/build-packages.mjs"
   ],
   "reporter": [
     "text-summary",
