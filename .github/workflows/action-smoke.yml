@@ -57,9 +57,11 @@ jobs:
           # --expect-activation because `probe-forms` DEFAULTS on here: a default run that operates nothing
           # means the default silently regressed and every 3.3.1/4.1.3 finding is unreachable while this
           # job stays green. --forbid-wcag because W3C publishes this page as conformant, so any 1.1.1
-          # finding is a false accusation by their own claim.
+          # finding is a false accusation by their own claim. --require-rule-layer because `axe` DEFAULTS
+          # on too, and `ruleBased: null` on a run that never opted out is the axe layer silently failing
+          # to launch — exactly what happened on every Action run before this assertion existed.
           node packages/lab/src/harnesses/assert-action-report.mjs "$path" \
-            --expect-activation --forbid-wcag=1.1.1
+            --expect-activation --forbid-wcag=1.1.1 --require-rule-layer
 
       # Run 2 — the mirror, and the reason run 1 cannot stand alone. A guard that silences real findings
       # would pass run 1 perfectly. This is W3C's published INACCESSIBLE demo, whose home page exposes 33
@@ -78,7 +80,7 @@ jobs:
         run: |
           path="${{ steps.inaccessible.outputs.result-json }}"
           test -s "$path" || { echo "::error::the inaccessible run produced no result-json" >&2; exit 1; }
-          node packages/lab/src/harnesses/assert-action-report.mjs "$path" --require-wcag=1.1.1
+          node packages/lab/src/harnesses/assert-action-report.mjs "$path" --require-wcag=1.1.1 --require-rule-layer
 
       - name: Keep the report when this fails
         if: failure()

@@ -195,8 +195,16 @@ runs:
     # Installed into the ACTION's own checkout, not the caller's workspace: `github.action_path` is where
     # this action's package.json lives, and the caller's repository has nothing to do with it.
     #
-    # Playwright's browser download is skipped because the capture drives Edge, which Windows runners
-    # already have; axe-core needs Playwright's API but not its bundled Chromium.
+    # Playwright's browser download is skipped to save the half a gigabyte a Windows runner does not need.
+    #
+    # THIS COMMENT USED TO SAY axe-core needs Playwright's API but not its bundled Chromium, AND THAT WAS
+    # WRONG. `chromium.launch()` with no options needs the bundled browser specifically, so skipping the
+    # download made every Action run's axe scan throw, silently, on every run -- caught by `cli.ts` and
+    # reported as `ruleBased: null` while the progress line still announced the layer as running. See
+    # `launchBrowser` (`packages/cli/src/scan/axe.ts`): the scan now tries the bundled browser first and
+    # falls back to `channel: "msedge"`, which Windows runners DO have, and which is the same engine the
+    # capture itself drives. Skipping the download is what puts every Action run on that fallback path
+    # rather than an occasional one.
     - name: Install a11y-witness
       shell: bash
       working-directory: ${{ github.action_path }}
