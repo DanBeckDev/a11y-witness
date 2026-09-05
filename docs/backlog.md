@@ -309,74 +309,70 @@ What remains is corpus work, not capability: a per-page forms config in `real-pa
 
 ---
 
-## The next action, and it is sequencing rather than work
+## The next action — and as of 2026-09-05 17:30 it is RUNNING, so the action is to read its verdict
 
-> **NO LAB JOB CAN RUN AT ALL WHILE `retrain` IS RUNNING, so there is no way to get any of this early.**
-> Verified 2026-09-03 by trying: `lab:job -e job=observation-ambiguity` refused with
-> *"would run at 6805ec2f7732, NOT the requested main — another job is running ... Nothing has run."*
-> That is `run-job.yml`'s guard, and it is right: a job that quietly runs four commits behind reports
-> success for code you did not ask for. It clears itself when the run ends.
->
-> Worth knowing because two of the rows below LOOK reachable early. `icon-button-unnamed` is case 16 of
-> 1,623, so the split pair's fresh evidence has existed on the lab's disk since the first minutes of this
-> run — and it cannot be read until the run finishes. The answer being on disk and the answer being
-> readable are different things.
+**`npm run lab:job -- -e job=everything -e ref=main` was dispatched at 17:29 on `ea03f8e`.** Everything
+below is what it is doing and what to read when it stops; nothing here needs starting.
 
-**The in-flight `retrain` job will produce a candidate whose crossed columns are CONSTANT ZERO, and that
-is not a refutation.** `lab:retrain` chains generate → capture → check-signals → export → build-realism →
-train, and `run-job.yml` pins the whole chain to the commit it was DISPATCHED at. The exporter learned to
-emit `observation` after that dispatch, so the export stage will run the old code, every record will lack
-the field, and both `formChanges` and `postSubmitFields` crosses will read "never asked" on the entire
-corpus. `corpus:distribution` would then refuse them — correctly, and for a reason that says nothing about
-whether the cross helps.
+**Why `everything` rather than `--pipeline=migration-verdict`, which the previous version of this section
+recommended.** They sequence the same work; the difference is where the sequencing LIVES. `lab:pipeline`
+runs the ordering in a local node process, so each stage is a supervised unit and the thing deciding what
+comes next is a laptop — measured 2026-08-26, five local watchers were killed during one capture and each
+time the unit survived exactly as designed while the orchestration did not, so nothing after it started.
+As a job the whole chain is ONE unit that outlives the ssh connection, the playbook and the laptop.
+`lab:pipeline` is still right for a SHORT chain you want to watch.
 
-known-gaps §35 states the rule this walked into: *"it lands between a corpus recapture and the retrain
-that follows, never after — otherwise the retrain is paid twice."* It landed DURING. The cost is one
-export and one train, not a recapture, because nothing in those commits touches a page or a worker file —
-so every capture stays cache-valid.
+**The prerequisite that route does NOT perform for you, and it was done:** `fleet:deploy` at the same ref.
+Only the control plane holds both credentials (ADR 0012), so the lab cannot deploy the boxes it is about
+to capture on, and `assertFleetRunsThisCheckout` refuses the run 30 seconds in otherwise.
 
-So, in this order, once `lab:status -e job=retrain` shows `SubState` has left `running`:
+**The real-page captures are already on disk and are fresh**, which is why the chain can start at
+`retrain`. Both roles ran today against the current fleet: calibration 49/49 and training 39/39, zero
+failures, and the calibration half carries what this whole sequence was waiting for — verified on
+`w3.org/WAI/demos/bad/after/survey.html`: `interaction.focusReveal` present (1.4.13's probe, `asked: true`),
+`focusEvents` with 116 entries (2.4.7's), `formChanges: 2` and `postSubmitFields: 15` (4.1.3's grounding,
+the configured-form path actually submitting). `build-realism` reads those from disk, which is why
+`retrain` ending with it is pinned by a test — the other order scores a dataset that does not contain the
+change being tested.
 
-> **STEPS 1 AND 2 WERE DONE ON 2026-09-05 and the fleet is now TEN boxes, not five.** All ten run this
-> checkout (`worker:code` 10/10 match), all on Edge `152.0.4191.66`, one `provisionRevision`
-> (`ba7f4174f90053f8`), `fleet CONSISTENT`. Step 3 was dispatched and is running.
->
-> **The recapture that step 3 is paying for was NOT caused by any of that**, and it is worth saying
-> because the reasoning looks alarming from outside: `provisionRevision` moved twice today and it is a
-> capture cache key, so the obvious conclusion is that converging the fleet threw the corpus away. It did
-> not. `defaults/main.yml` predicted this and a capture file confirms it — synthetic corpus provenance
-> reads `browserVersion: ABSENT`, so its key already resolved to `.../unknown` and already matched no
-> live guest. **The corpus was cache-invalid before today's changes and is no more invalid after them.**
-> Check the cache cost rather than assuming it, in both directions.
+### The nine stages, and which of them is a gate
 
-1. **`npm run fleet:deploy`** — ~~all five boxes read STALE against this checkout.~~ **Done.** Two worker changes are
-   committed and undeployed: `browser-session.mjs`'s language census (`documentLang`, `partLangs`) and
-   `server.mjs`'s 60 s bound on `prepareDesktop`, which is the 3.5-hour stall. Neither moves
-   `CAPTURE_PROTOCOL_VERSION` — the census is additive and nothing reads it yet — so no capture is
-   invalidated. `assertFleetRunsThisCheckout` REFUSES the next capture-bearing job until this runs.
-2. **`npm run lab:job -- -e job=retrain -e ref=main`** — re-dispatch. `generate` and `capture` are cache
-   hits; only export, build-realism and train do real work.
-3. **Then ONE command decides v19 and 4.1.3's grounding together:**
+`retrain` (generate → capture → check-signals → export → build-realism), `export-acceptance`,
+`grants-audit`\*, `applicability-audit`\*, `train`, `shortcuts`\*, `acceptance`\*, `promote`\*,
+`release-gate`\*. Starred stages are gates and the chain STOPS at the first one that fails, naming what
+did not run.
 
-   ```bash
-   npm run lab:pipeline -- --pipeline=migration-verdict --ref=main
-   ```
+### What to read when it stops, in this order
 
-   Added 2026-09-03, because the alternative was five stages assembled by hand in an order that lived in
-   somebody's head — the defect `lab:pipeline` exists to close, still present for the one decision that
-   gates a release. It captures both real-page roles, re-exports, trains, and runs every gate:
-   `scorer:shortcuts` (closable vetoes must FALL, no head may gain one on a new column, **and its
-   constant-column report** — the check that replaced `corpus:distribution`, which could not see a
-   constant feature), held-out `acceptance`, `rules-real-pages` (zero new findings on the 86 conformant
-   pages), and `rules-coverage` last, which is what says whether `4.1.3: 0 of 37` moved.
+```bash
+npm run lab:status -- -e job=everything     # systemd's view, the journal BOUNDED to this run, progress
+npm run lab:log -- -e job=everything        # the job's own output, unwrapped
+npm run lab:fetch -- -e artifact=everything-transcript   # every stage's FULL output
+```
 
-   **It does not promote, deliberately.** It answers a question; acting on the answer is `candidate`.
-   A failure means REVERT and record it as REFUTED — `schema-migration.json` names every gate so the
-   decision cannot be quietly softened into an adjustment.
+Do not hand-roll `journalctl`. Every one of this register's journal misreads came from improvising around
+`lab:status`, which has a task called *"Whether that journal is ONE run or the unit's whole history"*.
 
-   The real-page captures come FIRST and that is pinned by a test: `retrain` ends with `build-realism`,
-   which reads the captures on disk, so the other order would score a dataset that does not contain the
-   change being tested and report success about the wrong corpus.
+- **`shortcuts` is the stage to read first even if it passes.** It compares against a baseline that
+  already ABSORBED two model-decided free vetoes (`not-working.md` §2), so a pass there is "no worse",
+  never "clean". The audit now prints what a baseline write accepts, but this run does not write one.
+- **`release-gate` passing is not the same as being ready to publish.** Steps 2, 3 and 5 of the publish
+  procedure need a human's hands and none of them is reached by any chain.
+- **A FAILURE AT `train` OR LATER MAY MEAN REVERT, NOT ADJUST.** `schema-migration.json` names every gate
+  v19 must clear precisely so the decision cannot be softened into a tweak.
+
+### The two rows that unblock the moment it finishes
+
+Both need the lab, and `run-job.yml` refuses any job while another runs — verified by trying, and it is
+right: *"a job that quietly runs four commits behind reports success for code you did not ask for."*
+
+- **`rules:gate` / `check-signals` on a CURRENT export.** Every local copy is stale — the pre-push hook
+  says so honestly and skips — so three rule-owned subtypes cannot be attributed here at all. The chain
+  produces the export that answers them.
+- **The split pair.** `icon-button-unnamed` is captured early in every run, so its fresh evidence exists on
+  the lab's disk within minutes and cannot be read until the run ends. The answer being on disk and the
+  answer being readable are different things. `timedOut` is now on the mark, so the next occurrence states
+  which failure it was instead of inviting arithmetic on `ms`.
 
 ## How an item leaves this page
 
