@@ -771,9 +771,9 @@ GET  /capture/<captureId>                  # 404 unknown | 202 running | the ori
 
 - **The id comes from the CLIENT, and it has to.** A worker-minted id would be returned in the response —
   the very thing being lost. This is the idempotency-key shape, for the reason payment APIs use it.
-- **404 and 202 are different answers and must stay that way.** "Never heard of it" means re-issue the
-  case; "still running" means wait. Producing one where the other is true is this repo's most expensive
-  recurring shape.
+- **404 and 202 are different answers and must stay that way.** 202 ("still running") means wait, do not
+  start a second capture. Producing one where the other is true is this repo's most expensive recurring
+  shape.
 - **A failed capture is stored exactly like a successful one**, with its original status, so a replay is
   indistinguishable from the original response and the worker's `fault` code survives. Losing that
   response replaces a diagnosis with "no answer" — which this project has repeatedly misread as a dead
@@ -783,6 +783,17 @@ GET  /capture/<captureId>                  # 404 unknown | 202 running | the ori
 - **In memory, bounded at 8, never persisted.** Eviction skips anything still running — dropping a live
   capture would recreate the bug at the moment the store exists to prevent it. Persisting would mean
   serving results captured under a different `codeVersion` after a restart.
+- **404 IS BOUNDED RESULT RECALL, NOT "NEVER STARTED" — architecture-audit.md §14.4, corrected 2026-09-05.**
+  This used to say "never heard of it" means the capture never started and to re-issue the case. That is
+  the common cause and re-issuing is still the right recovery, but it is not the only cause: the bound
+  directly above means a capture that finished and was EVICTED reads exactly the same 404, and a worker
+  RESTART loses the whole store the same way. So 404 means "not retained here", not "never ran" — a claim
+  this in-memory, 8-entry, non-persisted store was never positioned to make. Deliberately not closed with
+  payload-fingerprint duplicate suppression instead: that would still fall short of exactly-once across a
+  restart, so naming the bound honestly is more useful than a mechanism that promises more than it can
+  keep. Reusing an id after its result is retained (whether the SAME request or a different one) silently
+  executes again with no conflict check — a caller must mint a fresh id per logical capture, which every
+  real call site already does via `randomUUID()`.
 
 This adds a route and an optional request field, so it does **not** bump `CAPTURE_PROTOCOL_VERSION` —
 nothing about what the evidence *means* changed, and a bump would invalidate 2,122 captures for a
