@@ -26,7 +26,21 @@ on:
       - "packages/lab/src/training/**"
       - "!packages/lab/src/training/**/*.md"
       # The harness this job runs, and the fixture pages it drives.
+      # AND EVERYTHING THE HARNESS IMPORTS, which this filter did not cover until 2026-09-05.
+      #
+      # `capture-check.mjs` reaches six files and three were outside every pattern here:
+      # `capture-client.mjs` (how the harness talks to a worker at all), `worker-http.mjs` (the HTTP client
+      # every capture goes through) and `host-address.mjs`. So a change to the code that DISPATCHES a
+      # capture never triggered the job that tests capturing. Not hypothetical: `capture-client.mjs` was
+      # changed the same day -- deadline clipping and lost-acknowledgement recovery -- and this filter would
+      # not have fired on any of it.
+      #
+      # `capture-regression-covers-its-imports.test.ts` DERIVES the closure and fails until each file is
+      # matched, so the next import cannot slip through the same way.
       - "packages/lab/src/harnesses/capture-check.mjs"
+      - "packages/lab/src/capture/capture-client.mjs"
+      - "packages/worker-fleet/src/worker-http.mjs"
+      - "packages/worker-fleet/src/host-address.mjs"
       - "packages/lab/src/eval/pages/tutorials/**"
       - ".github/workflows/capture-regression.yml"
   pull_request:
@@ -39,6 +53,21 @@ on:
       # 44 cases in a live run. A filter that cannot fire on the file that broke it protects nothing.
       - "packages/lab/src/training/**"
       - "!packages/lab/src/training/**/*.md"
+      # AND EVERYTHING THE HARNESS IMPORTS, which this filter did not cover until 2026-09-05.
+      #
+      # `capture-check.mjs` reaches six files and three were outside every pattern here:
+      # `capture-client.mjs` (how the harness talks to a worker at all), `worker-http.mjs` (the HTTP client
+      # every capture goes through) and `host-address.mjs`. So a change to the code that DISPATCHES a
+      # capture never triggered the job that tests capturing. Not hypothetical: `capture-client.mjs` was
+      # changed the same day -- deadline clipping and lost-acknowledgement recovery -- and this filter would
+      # not have fired on any of it.
+      #
+      # `capture-regression-covers-its-imports.test.ts` DERIVES the closure and fails until each file is
+      # matched, so the next import cannot slip through the same way.
+      - "packages/lab/src/harnesses/capture-check.mjs"
+      - "packages/lab/src/capture/capture-client.mjs"
+      - "packages/worker-fleet/src/worker-http.mjs"
+      - "packages/worker-fleet/src/host-address.mjs"
       - "packages/lab/src/eval/pages/tutorials/**"
       - ".github/workflows/capture-regression.yml"
 
