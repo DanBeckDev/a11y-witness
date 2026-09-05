@@ -90,6 +90,21 @@ The layers are: **screen reader** (this tool), **DOM / rules** (axe-core, which 
 and not instead of), **visual**, **human judgement**, **multi-page**. A criterion is `partial` when some
 cases are ours and some are not — which is the common answer, and is why `partial` exists.
 
+### 4b. THE THREE TELLS — check these first, they found 10 of 12 defects
+
+Added 2026-09-05 after auditing all 55 criteria. Twelve reasons were wrong, and almost all of them were
+one of three shapes. Look for these before anything else; each is a one-minute check.
+
+| tell | what it looks like | found |
+|---|---|---|
+| **A second PART, summarised away** | The criterion has two requirements joined by "and", or a second lettered bullet, and the claim addresses one | 1.4.13 ("pointer hover **or keyboard focus**" — ruled out on hover alone), 2.2.2 (a whole AUTO-UPDATING half with no five-second condition), 2.5.4 ("**and** responding to the motion can be disabled") |
+| **A second listed FAILURE, of a different kind** | The F-numbers are not all the same species — one is markup where the others are pixels | 2.4.7 (F78 is a styled-away outline; **F55 is script removing focus**, not a pixel question), 1.3.4 (F97 is a static CSS lock; F100 needs the rendering) |
+| **A word PARAPHRASED into a stronger one** | The claim uses a word the criterion does not | "process" read as "pages" — **three times**: 3.3.7, 3.3.8, 3.3.4. Every criterion whose text really says *"set of web pages"* was classified correctly |
+
+**The generalisation: a claim about OUR TOOL is riskier than a claim about physics.** "Contrast is pixels"
+was right every time. "Needs a whole authentication flow", "the screen-reader path never hovers", "spans
+steps of a process" were wrong every time. Sort the criteria that way and check the tool-claims first.
+
 ### 5. Compare against what this repo claims
 
 Read all four, because they drift independently and each is a separate copy of the claim:
@@ -118,5 +133,23 @@ says Y" — quoted, not paraphrased, because a paraphrase is what caused this.
   cannot contribute" is what removed three decidable cases from 3.1.2.
 - **Check the premise before the expensive thing.** If a corpus run, a recapture or a retrain is about to
   be spent on a criterion, do this first. It costs one fetch; they cost hours.
+- **Audit the `out-of-scope` REASONS too, and never by family.** They were ranked last on the grounds that
+  a misread there produces a finding we never make. True, and it understates them: **a wrong reason is
+  what the next person reads before deciding what to build.** 1.3.2's said the criterion compares reading
+  order to visual order — it does not, and a tool built on that reason would have looked for the wrong
+  thing. Read each one individually: the two most instructive defects (2.2.2, 2.4.7) were in families that
+  looked settled and would have survived a representative sample.
+- **A wrong reason for a right conclusion is still a defect.** Twelve of 37 needed correction and only
+  three changed a status — so the coverage CLAIMS were nearly all sound while the EXPLANATIONS were not.
+- **A reason can go STALE without anyone touching it.** 3.1.1 called NVDA's language signal "an indirect
+  and unreliable proxy", which described NVDA before `speech.reportLanguage` was turned on. When a
+  capture setting or a probe changes, grep the coverage notes for what they assumed.
+- **DO NOT decide reachability silently inside a reason fix — and DO NOT assume the exceptions without
+  reading them either. 3.3.7 got both wrong in one day.** The first correction fixed its wrong barrier and
+  then kept it out of scope by *assuming* its exceptions were broad judgements; reading them showed the
+  security exception explicitly names password confirmation and "essential" is narrow enough that
+  verifying accuracy does not qualify. So: leave the *decision* to its own backlog row (the
+  `postSubmitNames` lesson — classifying silently blocked a criterion on every capture ever taken), but
+  make that decision by READING the exceptions, not by estimating them.
 - **Record the reading where the claim lives**, so the next reader inherits it rather than repeating it —
   and quote the source URL.
