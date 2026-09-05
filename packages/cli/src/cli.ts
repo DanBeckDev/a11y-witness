@@ -57,6 +57,11 @@ interface Args {
   probeNavigation: boolean;
   /** Focus the first few controls and report the title either side. Covers 3.2.1 On Focus. */
   probeFocusContext: boolean;
+  /**
+   * Walk a few tab stops and press Escape, reporting what appeared on focus and whether Escape removed
+   * it. Covers 1.4.13 Content on Hover or Focus — the Dismissable bullet.
+   */
+  probeFocusReveal: boolean;
   /** Run the optional axe-core layer. Off with --no-axe or A11Y_AXE=0. */
   axe: boolean;
   /**
@@ -122,6 +127,15 @@ function defaultArgs(): Args {
     // the whole time, and nothing in the product read it back to the user.
     probeNavigation: true,
     probeFocusContext: true,
+    // ON as of 2026-09-05, and the FIRST probe here that presses ESCAPE on a page the user does not own.
+    // The Tab half is free — `probeFocus` already walks the whole ring. Escape is the new keystroke and
+    // it sits with Tab rather than with typing: it enters nothing into a field, submits nothing, and
+    // writes to nobody's system; the most it can do is dismiss a dialog, which is a thing a visitor does.
+    //
+    // SET HERE AND IN `capture-real-pages.mjs` IN THE SAME COMMIT, because `probe-consent.test.ts`
+    // requires it and its own header says what happens otherwise: those two copies drifted for nine days
+    // and three criteria were validated on real pages through a path the product does not take.
+    probeFocusReveal: true,
     formsConfig: null,
     emitFormConfig: false,
     plan: false,
