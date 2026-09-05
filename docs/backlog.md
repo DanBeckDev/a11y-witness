@@ -127,11 +127,36 @@ publish row on purpose: it is a condition of going to production, not a tidy-up 
 
 The measurement first, because it changes what the fix should be:
 
-| file | lines | of which |
-|---|---|---|
-| `case-matrix.mjs` | 5,699 | almost entirely DATA — 1,645 case definitions |
-| `capture-core.mjs` | 4,969 | **3,020 comment, 201 blank, 1,748 code** |
-| `rules.ts` | 1,993 | |
+| file | lines | of which | now |
+|---|---|---|---|
+| `case-matrix.mjs` | 5,699 | almost entirely DATA — 1,645 case definitions | **4,074** — two cuts, `signal-predicates.mjs` 904, `page-templates.mjs` 479, `page-furniture.mjs` 298 |
+| `capture-core.mjs` | 4,969 | **3,020 comment, 201 blank, 1,748 code** | **4,856** — one post-mortem moved; the rest was checked and is load-bearing |
+| `rules.ts` | 1,993 | | in flight |
+
+**Two cuts on `case-matrix.mjs`, and the seam was not the one this row proposed.** Splitting by CRITERION
+would have MOVED cases; the boundary that was already there runs the other way — everything from
+`structuralTextParts` to the end of `signalMatches` READS A CAPTURE and answers "did this signal fire",
+everything above it BUILDS PAGES, and neither half calls the other in either direction. Then the HTML page
+templates and the furniture machinery, both interleaved across ~2,000 lines rather than contiguous, cut by
+parsing the file with the TypeScript compiler API for exact statement boundaries instead of by line range —
+which also surfaced a leading comment that no longer described the function under it, orphaned when
+`LINK_STATUS_PAGE` was inserted between the two on 2026-09-01.
+
+**The check is the corpus hash and it is not optional.** `CASES.length` 1,645 and
+`sha256(JSON.stringify(CASES)).slice(0,16)` = `104ba6685264d1bd`, identical across all three states, plus a
+byte-identical export surface. Furniture is dealt by index WITHIN a subtype, so a case that MOVED would
+re-bucket its neighbours and recapture pages nobody meant to touch, and a diff of this size cannot be read
+for that by eye.
+
+**`capture-core.mjs` came down by 161 lines and that is the honest answer.** A 176-line changelog of every
+`CAPTURE_PROTOCOL_VERSION` bump moved to `docs/capture-protocol-version-history.md` — a record, not intent
+the next reader needs. The ten next-largest comment blocks were then sampled and every one was call-site
+adjacent, NVDA-specific or WCAG rationale: the file's remaining 2,961 comment lines are the thing CLAUDE.md
+protects, not padding. **The acceptance test needed correcting mid-unit and the correction is worth
+keeping:** `stripComments` leaves an empty line where a comment was, so byte-identical stripped output is
+unachievable at the same time as shrinking the file. What proves the point instead — and proves it more
+directly — is that all 1,767 non-blank stripped lines are identical AND in the same order, checked
+programmatically, with an independent classification pass agreeing on 1,767 code lines either side.
 
 **A flat 300-line cap is the wrong instrument here and the reason is this repo's own record.** Its most
 expensive recurring defect is a remedy applied at ONE call site when the behaviour reaches several — four
