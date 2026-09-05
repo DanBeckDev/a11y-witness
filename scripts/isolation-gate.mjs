@@ -37,8 +37,9 @@ export const SMOKE = "isolation-smoke.mjs";
 /** Somewhere that is definitively not inside the repo, so nothing can resolve by accident. */
 const consumerDir = () => mkdtempSync(join(tmpdir(), "a11y-isolation-"));
 
-function run(command, args, cwd) {
-  return execFileSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+function run(command, args, cwd, env) {
+  return execFileSync(command, args,
+    { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: env ? { ...process.env, ...env } : undefined });
 }
 
 /**
@@ -109,7 +110,14 @@ export function checkIsolation(packageDir) {
     // must declare it as a dependency, and this gate exists to catch exactly that mistake.
     run("npm", ["install", "--silent", "--no-workspaces", "--omit=optional", ...tarballs], consumer);
     copyFileSync(smoke, join(consumer, SMOKE));
-    const output = run("node", [SMOKE], consumer);
+    // `A11Y_ISOLATION_CONSUMER_DIR` carries the RAW `consumer` path — never realpath'd — because both
+    // `execFileSync`'s `cwd` option and `require.resolve()` resolve symlinks, so a smoke test cannot
+    // reconstruct the un-resolved path a real `npx`/global-install invocation would actually use once it
+    // is already running with `consumer` as its (OS-canonicalised) working directory. A smoke test that
+    // needs to reproduce a symlink-sensitive bug — the published bin silently doing nothing under
+    // `os.tmpdir()`, which is `/var/folders/...` on macOS and itself a symlink to `/private/var/...` —
+    // needs this to build the bin path the same way a real caller would.
+    const output = run("node", [SMOKE], consumer, { A11Y_ISOLATION_CONSUMER_DIR: consumer });
     return { ok: true, stage: "smoke", name, detail: output.trim().split("\n").slice(-1)[0] ?? "" };
   } catch (error) {
     const stderr = String(error.stderr ?? error.stdout ?? error.message);

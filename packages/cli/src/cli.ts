@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * a11y-witness CLI (control plane).
  *
@@ -35,6 +36,7 @@ import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics
 import { assessedCriteria } from "@a11y-witness/judge/coverage";
 import { earlReport } from "@a11y-witness/evidence/earl";
 import { criterionOutcomes, type CriterionOutcome } from "@a11y-witness/judge/outcomes";
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { parseFormsConfig, refuseIfWrongOrigin, FormsConfigError } from "./forms/config.js";
 import { submissionPlan, formCoverage } from "./forms/coverage.js";
@@ -838,9 +840,20 @@ function printReport(report: Report): void {
  * exited 1 before a single assertion. That is the structural reason this file had no tests — not that its
  * logic is hard to test. `entry-points.test.ts` asserts this property for scripts reached through
  * `package.json`; the CLI is reached through a bin and slipped past it.
+ *
+ * `process.argv[1]` is REALPATH'D before comparison, and this is not optional. `import.meta.url` is
+ * canonicalised by Node's ESM loader (it resolves symlinks), while `process.argv[1]` is the raw invocation
+ * path — so on any path that passes through a symlink they disagree and this guard silently reads FALSE.
+ * `/var` and `/tmp` are themselves symlinks to `/private/var` and `/private/tmp` on every macOS install,
+ * and `os.tmpdir()` returns a `/var/folders/...` path — which is where `npx` stages a package before running
+ * it. So the installed bin ran, loaded, and did NOTHING: no output, exit 0, because `main()` was never
+ * called and nothing downstream knew a check had even been skipped. Reproduced with a three-line script
+ * invoked through `/tmp/...` instead of its `/private/tmp/...` realpath before this was believed; the
+ * isolation smoke test only ever checked the bin FILE EXISTS, never that running it does anything, which is
+ * exactly how this survived every `gate:isolation` run there has ever been.
  */
 const isProgram = process.argv[1] !== undefined
-  && import.meta.url === pathToFileURL(process.argv[1]).href;
+  && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
 
 if (isProgram) main().catch((err: unknown) => {
   // `console.error(err)` printed a Node stack trace as the entire user-facing output on the first real
