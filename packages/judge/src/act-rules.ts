@@ -56,16 +56,32 @@ export const ACT_RULES: ActRuleDescription[] = [
     ruleType: "atomic",
     accessibilityRequirements: [
       { criterion: "4.1.2", mapping: "conformance" },
-      // 3.3.2 as well, but only for an INPUT. W3C describes this failure as a screen reader announcing
-      // "edit text" with no indication of the field's purpose, which fails 1.3.1, 3.3.2 and 4.1.2 together:
-      // the user is asked to enter something and has not been told what. An unnamed BUTTON is 4.1.2 alone —
-      // there is no label to be missing, only a name.
+      // 3.3.2 DOWNGRADED TO `secondary` ON 2026-09-05, and this is the THIRD rule found asserting where the
+      // criterion permits — after 3.3.3 and 3.2.1/3.2.2, both corrected the day before.
       //
-      // The claim is bounded on purpose. A control can pass 4.1.2 with an `aria-label` and still fail 3.3.2
-      // when no label is visible to sighted users, and a screen-reader transcript cannot see that case: the
-      // name is announced either way. So this rule witnesses "no name at all" and says nothing about the
-      // partial case, which is why `criterion-coverage.ts` records 3.3.2 as PARTIAL rather than assessed.
-      { criterion: "3.3.2", mapping: "conformance" },
+      // This read "W3C describes this failure as a screen reader announcing 'edit text' with no indication
+      // of the field's purpose, which fails 1.3.1, 3.3.2 and 4.1.2 together". The Understanding page says
+      // the opposite about association: 3.3.2 does NOT require labels or instructions to be marked up,
+      // identified, or associated with their controls — that is 1.3.1's subject — and it states that a
+      // field can PASS 3.3.2 while FAILING 1.3.1.
+      //
+      // So "no accessible name" is not "no label". It is two cases we cannot separate:
+      //
+      //   no visible label and no instructions either -> 3.3.2 really fails
+      //   a visible label that is not associated      -> 3.3.2 is SATISFIED; 1.3.1 and 4.1.2 fail
+      //
+      // AND OUR OWN CORPUS IS THE SECOND CASE. `form-unlabelled.bad` is
+      // `<span>Recipient name</span><input name="recipient">` — text presented to the user that identifies
+      // the control, which is exactly WCAG's definition of a label. 115 records assert a criterion their
+      // page satisfies.
+      //
+      // The criterion also says "labels OR INSTRUCTIONS", and instructions may sit anywhere on the page.
+      // A screen reader hears that text — it is in the transcript — but deciding that a given paragraph is
+      // an instruction FOR a given field is the judgement, not the perception.
+      //
+      // 4.1.2 keeps `conformance` and is untouched: that clause is about the accessible NAME, which is
+      // precisely what a bare role proves absent. The finding is not weaker, it is correctly attributed.
+      { criterion: "3.3.2", mapping: "secondary" },
     ],
     inputAspects: ["structure.formFields", "interaction.controls", "transcript"],
     applicability: "Every control announced in the structural form-field sweep, and every transcript line "

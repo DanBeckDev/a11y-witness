@@ -627,14 +627,26 @@ function reportIfUnnamed({ object, entry, channel, ambiguous }: UnnamedCheck, ad
       : "Control announced with a role but no accessible name",
     entry, ambiguous ? "secondary" : "conformance");
 
-  // AND 3.3.2, for an input specifically. An input the screen reader announces as a bare role has no label
-  // at all — W3C's own description of the failure is a screen reader announcing "edit text" with no
-  // indication of the field's purpose, which fails 1.3.1, 3.3.2 and 4.1.2 together.
+  // AND 3.3.2 for an input — as a REFERRAL, never an assertion, corrected 2026-09-05.
   //
-  // The limit, stated because it bounds the claim: a control CAN pass 4.1.2 with an `aria-label` and still
-  // fail 3.3.2 when no label is visible to sighted users. A screen-reader transcript cannot see that case —
-  // the name is announced either way — so this rule claims 3.3.2 only for "no name at all", which is the
-  // mode it can actually witness. `criterion-coverage.ts` records 3.3.2 as PARTIAL for it.
+  // This said "an input the screen reader announces as a bare role has no label AT ALL", and asserted on
+  // it. The Understanding page says 3.3.2 does NOT require labels or instructions to be marked up,
+  // identified, or associated with their controls — that is 1.3.1's subject — and that a field can PASS
+  // 3.3.2 while FAILING 1.3.1. So "no accessible name" is not "no label"; it is two cases this evidence
+  // cannot separate:
+  //
+  //   no visible label and no instructions -> 3.3.2 really fails
+  //   a visible label, not associated      -> 3.3.2 SATISFIED, 1.3.1 and 4.1.2 fail
+  //
+  // The corpus is the second case. `form-unlabelled.bad` is `<span>Recipient name</span><input>`, which is
+  // text presented to the user identifying the control — WCAG's own definition of a label.
+  //
+  // Note the criterion is "labels OR INSTRUCTIONS" and instructions may sit anywhere on the page. A screen
+  // reader HEARS that text; deciding a given paragraph is an instruction FOR a given field is the
+  // judgement, and judgement is what `secondary` is for.
+  //
+  // 4.1.2 above keeps `conformance`. That clause is about the accessible NAME, which a bare role proves
+  // absent — the finding is not weaker, it is correctly attributed.
   //
   // Why this matters beyond correctness: `3.3.2:unnamed-form-field` was declared rule-decided while the
   // rules reported ONLY 4.1.2, so nothing emitted a 3.3.2 finding and the trained head had to stay —
@@ -643,9 +655,10 @@ function reportIfUnnamed({ object, entry, channel, ambiguous }: UnnamedCheck, ad
   // lets the head go.
   if (isInput(entry)) {
     add("3.3.2 Labels or Instructions",
-      ambiguous ? "Input announced with no label, but unplaced text in the announcement leaves it open"
-        : "Input announced with a role but no label",
-      entry, ambiguous ? "secondary" : "conformance");
+      "Input announced with a role but no accessible name. Whether a visible label or an instruction is "
+        + "present elsewhere on the page cannot be decided from what the screen reader announces, and "
+        + "3.3.2 is satisfied by either. Needs a human, or the DOM.",
+      entry, "secondary");
   }
 }
 
