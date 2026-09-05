@@ -15,11 +15,31 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { assertableSweep, unverifiedSweeps, namesExcluded, comparableNamesForTest,
   ruleFindings, type RuleInput } from "./rules.js";
+
+/**
+ * EVERY file that can construct a finding from a sweep — not just `rules.ts`.
+ *
+ * This was `rules.ts` alone, and the judge split of 2026-09-05 moved the shared channel machinery into
+ * `channel-comparison.ts`, silently narrowing what this gate covers. Nothing is exposed today (that file
+ * imports no `AddFinding` and reads no `structure?.X`), but this test's own header promises that a new rule
+ * reading a sweep FAILS until classified, and after the split that promise rested on convention rather
+ * than on this assertion. Found by an adversarial review of the split, not by reading it back.
+ *
+ * DISCOVERED rather than listed, so the next extraction cannot narrow it again the same way — the
+ * discovery is what makes the promise true, and a hand-written pair of filenames would be the same defect
+ * with one more entry.
+ */
+const RULE_SOURCES = readdirSync(import.meta.dirname)
+  .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !f.endsWith(".d.ts"))
+  .map((f) => resolve(import.meta.dirname, f))
+  // Only files that can actually produce a finding. A module that never constructs one has nothing this
+  // gate could classify, and including it would make the vacuity guard below meaningless.
+  .filter((path) => /AddFinding|add\(/.test(readFileSync(path, "utf8")));
 
 const SOURCE = resolve(import.meta.dirname, "rules.ts");
 
@@ -217,4 +237,26 @@ test("2.4.3 CANNOT be fooled by a truncated name, and the reason is structural",
     .filter((f) => f.wcag.startsWith("2.4.3")).map((f) => f.evidence).join(" ");
   assert.equal(evidence(["Pho, edit"]), evidence(undefined),
     "marking a name truncated must not change 2.4.3's verdict — it was never in the compared set");
+});
+
+test("EVERY file that can construct a finding is covered, not just rules.ts", () => {
+  // The gate above discovers functions inside `rules.ts`. After the 2026-09-05 judge split, a function
+  // that constructs a finding could live in a sibling and be invisible to it — the "remedy applied at one
+  // call site" shape aimed at a TEST rather than at code. This asserts the population is discovered, so
+  // an extraction that moves finding-construction elsewhere is caught rather than quietly uncovered.
+  assert.ok(RULE_SOURCES.length >= 1,
+    "no source in packages/judge/src constructs a finding — the discovery is broken, not the code");
+  assert.ok(RULE_SOURCES.some((p) => p.endsWith("rules.ts")),
+    "rules.ts must still be discovered; if it no longer constructs findings this whole gate has moved");
+  for (const path of RULE_SOURCES) {
+    const source = readFileSync(path, "utf8");
+    // The property the file-level gate protects: a finding built from a sweep must consult completeness.
+    // Stated per FILE so a second finding-constructing module cannot arrive unexamined.
+    const readsASweep = /structure\?\.[a-zA-Z]+/.test(source);
+    const consultsCompleteness = /assertableSweep|unverifiedSweeps|oracleCounts|completeness/i.test(source);
+    assert.ok(!readsASweep || consultsCompleteness,
+      `${path.split("/").pop()} constructs findings AND reads a sweep, and never consults sweep `
+      + "completeness. A sweep that gave up looks identical to a page with nothing on it — classify it "
+      + "in SAFE_WITHOUT_A_GATE with a reason, or gate it.");
+  }
 });
