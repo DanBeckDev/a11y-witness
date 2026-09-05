@@ -45,9 +45,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { networkInterfaces } from "node:os";
 
-import { requestJson } from "./worker-http.mjs";
-import { WORKER_GROUP, groupPerLine } from "./fleet-env.mjs";
-import { refuseUnknownFlags } from "./cli-flags.mjs";
+// MOVED here from packages/worker-fleet/src 2026-09-06 (architecture audit §3.2) -- see fleet-status.mjs's
+// header for why. These imports cross back to worker-fleet the SANCTIONED way, by relative path.
+import { requestJson } from "../../worker-fleet/src/worker-http.mjs";
+import { WORKER_GROUP, groupPerLine } from "../../worker-fleet/src/fleet-env.mjs";
+import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 
 /**
  * `--enroll` WRITES to inventory.yml; mistyped, it scans and quietly enrols nothing.
@@ -454,7 +456,7 @@ async function main() {
   }
   const port = Number(arg("port") || DEFAULT_PORT);
 
-  const inventoryPath = fileURLToPath(new URL("../../control/ansible/inventory.yml", import.meta.url));
+  const inventoryPath = fileURLToPath(new URL("../ansible/inventory.yml", import.meta.url));
   const declared = inventoryHosts(readFileSync(inventoryPath, "utf8"));
 
   process.stderr.write(`scanning ${subnet}.1-${LAST_HOST_IN_SUBNET} on :${port} ...\n`);
