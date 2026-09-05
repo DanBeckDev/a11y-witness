@@ -35,7 +35,7 @@ short of its own population reports INCONCLUSIVE rather than a false PASS — th
 |---|---|
 | `packages/lab/scripts/check-dataset-distribution.mjs` | `exitCodeFor(gateVerdict(...))` |
 | `packages/lab/scripts/score-rules.ts` | `exitCodeFor(gateVerdict(...))` |
-| `packages/lab/scripts/check-shipped-provenance.mjs` | `exitCodeFor(gateVerdict(...))` — **see finding below: structurally cannot return 2** |
+| `packages/lab/scripts/check-shipped-provenance.mjs` | `exitCodeFor(gateVerdict(...))` — **structurally cannot return 2, decided correct, see below** |
 | `packages/lab/scripts/gate-probe-order.mjs` | `exitCodeFor(fleetVerdict(...))` |
 | `packages/lab/scripts/stability-gate.mjs` | `exitCodeFor(fleetVerdict(...))` |
 | `packages/lab/scripts/check-real-page-findings.ts` | `exitCodeFor(gateVerdict(...))` (not re-verified line-by-line this pass; found via the same import scan as the other six) |
@@ -44,12 +44,23 @@ short of its own population reports INCONCLUSIVE rather than a false PASS — th
 wraps `gateVerdict` for the two fleet-sharded gates above, adding the control-plane host to `source` so a
 verdict states not just what it examined but which machine produced it.
 
-**Finding: `check-shipped-provenance.mjs` adopts the contract but can never produce its middle state.**
-It calls `gateVerdict({ examined: 1, of: 1, ... })` — both hardcoded — so `examined < of` (the line
-`verdict.mjs`'s own header calls "the whole point," coverage checked before failure) is `1 < 1`, always
-false. This gate can only ever return 0 or 1; the INCONCLUSIVE branch is dead code from this call site's
-own shape, not a defect in `verdict.mjs`. Worth knowing before assuming every `verdict.mjs` consumer can
-express all three states.
+**DECIDED: `check-shipped-provenance.mjs` adopts the contract but can never produce its middle state, and
+that is correct, not a defect.** It calls `gateVerdict({ examined: 1, of: 1, ... })` — both hardcoded — so
+`examined < of` (the line `verdict.mjs`'s own header calls "the whole point," coverage checked before
+failure) is `1 < 1`, always false. Investigated rather than left as an open question: this gate's subject
+is one shipped artefact and one binary fact ("does an entry account for it"), which is either true or false
+every time it runs — there is no population to have PARTIAL coverage of, so `examined` can never
+legitimately fall short of `of`. `verdict.mjs`'s own header names this exact gate as the reason `failures`
+is decoupled from `examined`/`of`: it can find several problems about the one artefact it examined ("N
+problem(s) across 1 of 1"), which is a different question from whether it examined all of a population.
+Stated explicitly in the gate's own code now, and proven in `provenance-gate-refuses.test.ts`'s
+"INCONCLUSIVE is unreachable from this gate, by construction" test, which sweeps every problem-count the
+gate's wiring can construct (0, 1 by two causes, 2 combined, 3 from three mutually-identical wrong entries)
+and asserts none reaches exit 2 — mutation-checked by decoupling `of` from `examined` and watching that
+exact test catch it first.
+
+Adopting the TYPE does not guarantee exercising every STATE it defines — this remains the general lesson
+for reading any `verdict.mjs` consumer, but it is no longer an open question for THIS gate.
 
 ## Every other gate, by area — codes, and what each one means
 
@@ -221,6 +232,8 @@ available.
    confirmed `verdict.mjs` adopter or named in this document, in the shape `cli-flags.test.ts` already uses
    for the same kind of population (a list that may only shrink, never grow silently).
 3. **Fix only what is unambiguous and cheap: nothing, this pass.** No script's contract was changed. The
-   `check-shipped-provenance.mjs` finding (adopts the contract, cannot return INCONCLUSIVE) is recorded
-   above rather than patched, because patching it means deciding what `of` should really count — a real
-   design question, not a typo.
+   `check-shipped-provenance.mjs` finding (adopts the contract, cannot return INCONCLUSIVE) was recorded
+   above rather than patched, because patching it meant first deciding what `of` should really count — a
+   real design question, not a typo. **That question was decided in a follow-up unit: see above.** The
+   answer was not a patch — `of` already counted the right thing (one artefact) — but a decision that the
+   unreachable state is correct, stated explicitly in the gate's own code and proven by a test.
