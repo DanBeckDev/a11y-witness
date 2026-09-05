@@ -33,11 +33,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import screenreader_features as features  # noqa: E402
 
-#: The channels a form-probe feature reads. Printed raw for a sampled record, because the interesting part
-#: is usually a field the feature does NOT read -- `kind` and `baselineQuiet` both travelled on every entry
-#: for weeks while nothing consulted them.
-INTERACTION_CHANNELS = ("stateChanges", "formChanges", "postSubmitFields", "controls")
-
 
 def positives_for(records: list[dict[str, Any]], subtype: str) -> list[dict[str, Any]]:
     return [r for r in records if subtype in (r.get("target", {}).get("subtypes") or [])]
@@ -52,10 +47,20 @@ def value_of(record: dict[str, Any], feature: str) -> float:
 
 
 def describe(record: dict[str, Any]) -> str:
+    # Every channel the RECORD carries, not a hand-written list of the ones `structured_feature_values`
+    # happens to read today. A fixed list here was found to already be a stale copy of the interaction
+    # channels this file's own featurizer reads (`controls`, `stateChanges`, `formChanges`,
+    # `postSubmitFields`, per the `.get("interaction")` calls in screenreader_features.py) -- correct only
+    # by accident, since it would go stale the moment a fifth channel started feeding a feature and nobody
+    # remembered to add it here. The interesting part is usually a field the feature does NOT read -- `kind`
+    # and `baselineQuiet` both travelled on every entry for weeks while nothing consulted them -- so printing
+    # whatever the record actually carries, unfiltered, is strictly more informative than a maintained list.
     interaction = (record.get("input", {}).get("interaction") or {})
     lines = [f"    case: {record.get('provenance', {}).get('caseId', '(unknown)')}"]
-    for channel in INTERACTION_CHANNELS:
-        value = interaction.get(channel) or []
+    if not interaction:
+        lines.append("      (no interaction channels captured)")
+    for channel in sorted(interaction):
+        value = interaction[channel] or []
         rendered = json.dumps(value)[:220] if value else "[]"
         lines.append(f"      {channel}: {rendered}")
     return "\n".join(lines)
