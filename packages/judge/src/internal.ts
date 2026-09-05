@@ -10,7 +10,8 @@
  * records that these guards were tuned against the eval cases, and a public promise on tuned thresholds
  * would freeze numbers this project fully intends to move (ADR 0004).
  */
-export { hasEvidenceFor, evidenceFor, findingsFromScores, scoreCapture } from "./local-judge.js";
+export { hasEvidenceFor, evidenceFor, findingsFromScores, scoreCapture, EVIDENCE_CHANNEL_CRITERIA }
+  from "./local-judge.js";
 export { applyGate, ABSENCE_CRITERIA } from "./verify-gate.js";
 export { CRITERION_COVERAGE, CHANNEL_LOCATION, channelsPresent, criteriaAssessableFrom } from "./criterion-coverage.js";
 export type { CriterionCoverage, EvidenceSource, EvidenceChannel, ChannelBearingCapture, BlockedCriterion }
