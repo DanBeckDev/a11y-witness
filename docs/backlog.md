@@ -201,6 +201,40 @@ moved underneath it.
 
 ---
 
+## CAPTURE_PROTOCOL_VERSION 14 -> 15, and the reason is the sharpest thing found today
+
+**`rules:coverage` reported `2.4.7 partial 0 0 NEVER FIRED ANYWHERE — the claim rests on nothing`**, on a
+rule shipped that afternoon, with nine `focus-removed-on-receipt-*` cases built specifically to exercise
+it. The rule was silent because **the evidence was never collected.** Fetching
+`focus-removed-on-receipt-order.bad` settled it in one line: captured `07:01:11Z`, hours before the probe
+existed, `focusOrder` and `focusConfinement` in its marks, **no `focusEventLog` at all**, and carrying the
+OLD `formProbe` mark name rather than `formFill`.
+
+**ADDING A PROBE DOES NOT INVALIDATE THE CAPTURE CACHE.** `workerCode` is deliberately outside the cache
+key — correctly, so that a reworded comment cannot invalidate 2,122 captures — so every case whose PAGE
+did not change was served its pre-probe capture. `focusEvents`, `focusReveal` and the census/focus
+`candidates` field are all new fields a RULE reads, which is this constant's own stated trigger: *"a new
+field a signal reads"*. None of them bumped it.
+
+**It presented as PARTLY working, which is the worst way.** A case with no cache entry captures fresh, so
+1.4.13's cases — added the same day — got the new probe and its rule fired 15 times. The F55 cases are
+older and their pages did not change. **A probe that reaches only the cases nobody had captured before is
+indistinguishable from a probe that works.**
+
+**Two independent detectors found it, hours apart, and the cheap one was right first.**
+`evidence-fields.test.ts` reported `interaction.focusEvents` compared and present on no capture — *"coverage
+that looks real and examines nothing"* — in under a second, while a multi-hour lab chain was finding the
+same thing at stage 11. It is a PENDING entry now, naming the recapture that closes it, and that guard
+retires the entry itself once the field arrives, so it cannot outlive its reason.
+
+**The bump costs a full recapture and that is what it is for.** The alternative was downgrading 2.4.7's
+claim in `criterion-coverage.ts` while the rule, the probe and nine corpus cases all sat there working —
+paying nothing and knowing nothing. The three channels are bundled deliberately, per this file's own rule
+that the cheap moment to pay a recapture is alongside any other pending bump rather than twice.
+
+**The deploy guard worked and is worth recording as such**: `fleet:deploy` refused, named
+`--allow-protocol-change`, and the flag was then passed deliberately rather than discovered.
+
 ## The architecture audit — `docs/architecture-audit.md`, commissioned 2026-09-05
 
 An outside-in audit by an external architect, with a follow-up review. **It is a record, not a second
