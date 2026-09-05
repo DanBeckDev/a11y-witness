@@ -51,7 +51,49 @@ Until then the gate is correctly red, which is the honest state rather than a de
 
 </details>
 
-## 2. CLOSED 2026-08-31 — ZERO free vetoes can now reach a report
+## 2. REOPENED 2026-09-06 — the test still holds, the count did not — OPEN
+
+> **The CLOSED claim below is stale, and the test it was built on is still the right one.** Computed
+> today from `packages/lab/scripts/scorer-shortcuts.baseline.json` at `3ffd775` (HEAD for that file),
+> cross-referenced against `packages/lab/rule-ownership.json` at `ae9565c` (current HEAD): **21 rows, 68
+> vetoes, 21 closable — not 13.** Of the 21 closable, 19 sit on a subtype `rule-ownership.json` marks
+> `decidedBy: "rules"` and cannot reach a report. **Two do not:**
+>
+> ```
+> 3.3.1:validation-error-silent   positives=143   closable: form_change_observed_absent (-1.21)
+> 4.1.3:form-activation-silent    positives=150   closable: form_change_observed_absent (-1.42)
+> ```
+>
+> Neither subtype has an entry in `rule-ownership.json`, which under this project's own convention means
+> MODEL-decided — the same two heads §2's original body spent most of its length on. So the headline is
+> false today: the free-veto count that can reach a report is **two, not zero.**
+>
+> **What changed, precisely, is not carelessness.** `git log` on the baseline file shows three commits
+> since the `CLOSED` one (`bda844f`, 2026-08-31): `7a99ae2` (2026-09-02, records 3.3.3's baseline —
+> rules-owned, its vetoes shielded), `f66e216` (2026-09-02, records 3.2.1/3.2.2 — closable EMPTY on both),
+> and `3ffd775` (2026-09-05, accepts 1.4.13's eight closable vetoes — also rules-owned). Separately,
+> `3.3.2:unnamed-form-field` was retired as a subtype in this window, its records relabelled to
+> `4.1.2:unnamed-control`. **None of those three commits is what exposed 3.3.1 and 4.1.3.** The feature
+> that does, `form_change_observed_absent`, appears ZERO times in `bda844f`, `7a99ae2` and `f66e216`, and
+> 17 times in the current file — a schema change (the feature-cross work, `not-working.md` §11), not a
+> baseline someone waved through. Nobody has run `scorer:shortcuts:baseline`'s deliberate-act ritual
+> against THIS reason for THESE two subtypes; the veto simply arrived with the retrain and has not been
+> looked at.
+>
+> **The old vetoes on these two heads did close, genuinely.** `state_unchanged` no longer appears on
+> either subtype's veto list at all (the `silent-toggle-inert` accompanying defect the CLOSED entry
+> below describes). `form_change_nonempty` is still a real veto on both — logits -2.42 and -3.60 — but is
+> now classified UNCLOSABLE rather than closable, which is a separate, already-argued state.
+> `form_change_observed_absent` is the new arrival and nobody has read it yet.
+>
+> **What would close it: the exact playbook §2's own body already wrote for `form_change_nonempty`,
+> applied to the new feature.** Read the exported corpus — `form_change_observed_absent` against
+> `provenance.subtype` on the 143/150 positives of these two subtypes — and find out which of: the channel
+> is genuinely never observed for a probe-coverage reason (§11), or it is observed and empty for a page
+> reason, or the classification itself is stale. Whether these two heads should move to rules instead, the
+> way `4.1.2:state-change-silent` and `1.4.13` did, is a real option this file does not decide here.
+
+### CLOSED 2026-08-31 — ZERO free vetoes can now reach a report
 
 > **CLOSED 2026-08-31, and the number is zero.** Every closable veto that remains is on a subtype
 > `rule-ownership.json` marks `decidedBy: "rules"`, so none can reach a report:
