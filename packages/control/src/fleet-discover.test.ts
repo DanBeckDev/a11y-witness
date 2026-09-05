@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { reconcile, inventoryHosts, normaliseMac, enrol } from "./fleet-discover.mjs";
-import { workersFromInventory } from "./fleet-env.mjs";
+import { workersFromInventory } from "../../worker-fleet/src/fleet-env.mjs";
 
 const health = { code: "abc", environment: { screenReaderVersion: "2026.1.1" } };
 
@@ -113,7 +113,7 @@ test("MAC formats are normalised, so 00-1A-2B and 00:1a:2b are one machine", () 
 });
 
 test("the real inventory parses, and its hosts carry an address", () => {
-  const text = readFileSync(fileURLToPath(new URL("../../control/ansible/inventory.yml", import.meta.url)), "utf8");
+  const text = readFileSync(fileURLToPath(new URL("../ansible/inventory.yml", import.meta.url)), "utf8");
   const hosts = inventoryHosts(text);
   assert.ok(hosts.length >= 1, "the shipped inventory should declare at least one worker");
   for (const h of hosts) assert.match(h.host, /^[\d.]+$/);
@@ -128,7 +128,7 @@ test("the real inventory parses, and its hosts carry an address", () => {
 // updated, never dispatched to, and nothing to say so.
 
 const REAL_INVENTORY = readFileSync(
-  fileURLToPath(new URL("../../control/ansible/inventory.yml", import.meta.url)), "utf8");
+  fileURLToPath(new URL("../ansible/inventory.yml", import.meta.url)), "utf8");
 
 test("an enrolled worker is visible to the reader a RUN uses, not merely present in the file", () => {
   const { text, added } = enrol(REAL_INVENTORY, [{ ip: "192.168.1.200", mac: "aa:bb:cc:dd:ee:ff", health }],

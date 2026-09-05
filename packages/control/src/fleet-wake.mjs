@@ -27,9 +27,12 @@ import { createSocket } from "node:dgram";
 import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+// MOVED here from packages/worker-fleet/src 2026-09-06 (architecture audit §3.2) -- see fleet-status.mjs's
+// header for why. `fleet-discover.mjs` moved alongside it, so that import stays local; the other two
+// cross back to worker-fleet the SANCTIONED way, by relative path.
 import { inventoryHosts } from "./fleet-discover.mjs";
-import { requestJson } from "./worker-http.mjs";
-import { refuseUnknownFlags } from "./cli-flags.mjs";
+import { requestJson } from "../../worker-fleet/src/worker-http.mjs";
+import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 
 /**
  * takes no flags: it wakes every box in the inventory.
@@ -134,7 +137,7 @@ export async function wakeFleet(workers, { port = 8765, broadcast, deadlineMs = 
 
 async function main() {
   const wanted = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-  const inventory = fileURLToPath(new URL("../../control/ansible/inventory.yml", import.meta.url));
+  const inventory = fileURLToPath(new URL("../ansible/inventory.yml", import.meta.url));
   const declared = inventoryHosts(readFileSync(inventory, "utf8"));
   const workers = wanted.length ? declared.filter((w) => wanted.includes(w.name)) : declared;
 
