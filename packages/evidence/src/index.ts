@@ -15,11 +15,81 @@ export type NavigationStrategy =
   | "by-landmark" // jump region to region
   | "forms"; // move through form fields and controls
 
+/**
+ * ONE declared form state to submit during the capture (ADR 0024), with the schema already checked by the
+ * caller. One per capture and never several: an error submission leaves a dirty form and an error banner,
+ * and a success submission may navigate away, so a second state cannot start from the first — the host
+ * issues a capture per state rather than the worker looping.
+ */
+export interface CaptureFormState {
+  state?: string;
+  submit: string;
+  fields: { field: string; within?: string; nth?: number; value?: string; choose?: string; check?: boolean }[];
+}
+
 export interface CaptureRequest {
   url: string;
   /** The task the user was attempting, in their own words. */
   task: string;
   strategy?: NavigationStrategy;
+
+  /**
+   * The fields below are the NVDA worker's own `POST /capture` wire body, not a cross-backend abstraction
+   * — this package has exactly one real backend today, and `CaptureResult`'s `environment` already
+   * documents that backend's specifics the same way. Declared here because nothing else does: until
+   * 2026-09-05 (architecture-audit.md §5, item 1) this interface named `url, task, strategy?` while the
+   * worker accepted 20 fields, so a consumer typing against `@a11y-witness/evidence` could not have known
+   * a single probe flag, `formState`, `captureId` or `async` existed.
+   *
+   * A future VoiceOver or Orca backend is free to ignore every field below; they are all optional for
+   * exactly that reason, the same way `strategy` already was.
+   */
+
+  /** The read-through's step budget; unset means the worker's own default. */
+  steps?: number;
+  /**
+   * A navigation-instrumentation detail, NOT the `strategy` hint above — `"object"` or `"line"`, read by
+   * `capture-core.mjs` alone. Named separately because the two are unrelated despite the similar name:
+   * `strategy` is an abstract cross-backend hint this package declared and nothing on the wire implements,
+   * while `nav` is a real, narrow NVDA-worker option.
+   */
+  nav?: "object" | "line";
+
+  /** Ten opt-in probes, each paying for evidence only when asked — `PROBE_FLAGS` in
+   *  `@a11y-witness/nvda-worker/capture-pure` is the worker's own copy of this exact list. */
+  probeForms?: boolean;
+  probeFocus?: boolean;
+  probeTables?: boolean;
+  probeNavigation?: boolean;
+  probeElementsList?: boolean;
+  probeArrows?: boolean;
+  probeTyping?: boolean;
+  probeFocusContext?: boolean;
+  probeDialog?: boolean;
+  probeFocusReveal?: boolean;
+
+  formState?: CaptureFormState;
+
+  /**
+   * Which order the two position-dependent probes run in — a NAME, never a caller-supplied list. Absent
+   * means the order that has always run, so no cached capture is affected by adding this field.
+   */
+  probeOrder?: "focus-first";
+
+  /** Edge stays alive between captures unless overridden per request (see `A11Y_REUSE_BROWSER`). */
+  reuseBrowser?: boolean;
+  /** Per-request browser choice, e.g. `"chrome"` — evidence, not configuration (CLAUDE.md). */
+  browser?: string;
+  /** Per-request override of the fleet's NVDA-reuse default. */
+  reuseScreenReader?: boolean;
+
+  /**
+   * Client-minted, so it can be asked about again after a lost response — the id has to come from the
+   * caller, since a worker-minted one would be returned in the very response that went missing.
+   */
+  captureId?: string;
+  /** `true` returns 202 `{captureId}` at once and delivers the result to the store; requires `captureId`. */
+  async?: boolean;
 }
 
 /** Screen-reader-derived structural quick-navigation results. These are
@@ -72,6 +142,39 @@ export interface CaptureInteraction {
    * when it is missing.
    */
   focusOrder?: string[];
+  /**
+   * What the screen reader said the page was called, and what its first heading was, before and after
+   * activating a navigation control (`probeNavigation`) — 2.4.1's inert-skip-link and 2.4.2's
+   * route-changed-but-title-did-not failures. Absent unless the probe was asked for; absence must make no
+   * claim, because a page nobody probed and a page that navigated silently are different facts.
+   *
+   * Added 2026-09-05 (architecture-audit.md §5, item 2): this evidence has existed on the wire since
+   * `probeNavigation` shipped, and this type described a capture as though it did not.
+   */
+  routeChange?: {
+    control?: string | null;
+    titleBefore?: string | null;
+    titleAfter?: string | null;
+    headingBefore?: string | null;
+    headingAfter?: string | null;
+    navigated?: boolean;
+    /** What one Tab landed on immediately after the activation, before anything rewound the caret. */
+    nextFocusAfter?: string | null;
+    error?: string;
+  };
+  /**
+   * Present only when submitting NAVIGATED the browser — `probeForms`'s own oracle for the difference
+   * between "the form failed silently" and "the form worked and moved on", which look identical to a probe
+   * that only asks whether anything was announced afterwards. Absent means submitting did not navigate,
+   * which for a 3.3.1/4.1.3 rule reading `postSubmitFields`/`formChanges` is the ordinary, examinable case.
+   */
+  navigatedOnSubmit?: { from: string; to: string };
+  /**
+   * What the page's accessibility tree shows AFTER a form submit, by name only, never counts — a
+   * diagnostic-grade oracle for 3.3.1/4.1.3, not model-visible evidence (`docs/local-model.md` bars the
+   * accessibility tree as a model feature). Present only alongside `postSubmitFields`, from the same probe.
+   */
+  postSubmitNames?: string[];
 }
 
 /** What a screen reader announced, plus capture metadata. `task` is request
@@ -93,6 +196,53 @@ export interface CaptureResult {
   diagnostics?: unknown[];
   /** Backend metadata: tool/SR versions, strategy used, timings, etc. */
   meta?: Record<string, unknown>;
+  /**
+   * Media elements the PAGE declares, from the DOM rather than the accessibility tree — `autoplay` and
+   * `muted` are attributes, not accessibility properties, so no screen reader can report them. `null`
+   * means the probe did not run, which is NOT the same as an empty array (the page declares no media);
+   * a rule reading this makes no claim on `null`.
+   *
+   * Added 2026-09-05 (architecture-audit.md §5, item 2): on the wire since 1.4.2's rule shipped, and this
+   * type described a capture as though the field did not exist.
+   */
+  media?: { tag: string; autoplay: boolean; muted: boolean; controls: boolean; loop: boolean }[] | null;
+  /**
+   * What this capture ASKED about each optional channel, beside what it heard — "the probe is opt-in and
+   * this case did not request it" and "the page had no control to activate" are different facts, and a
+   * consumer that only sees an empty array cannot tell them apart. Keyed by channel name.
+   */
+  observed?: Record<string, {
+    asked: boolean;
+    complete?: boolean;
+    why?: string;
+    activated?: number;
+    stop?: { prev: string; next: string };
+  }>;
+  /**
+   * The worker's own runtime, reported alongside every result — screen reader and browser versions, the
+   * settings digest, OS/architecture, the deployed code and protocol versions, and the provisioning
+   * revision. Every field here is a capture-cache-key input; two captures whose `environment`s differ must
+   * never be treated as interchangeable evidence.
+   *
+   * Added 2026-09-05 (architecture-audit.md §5, item 1/2): server.mjs has appended this to every response
+   * since the fleet existed, and cli.ts cast around its absence from this type rather than the type
+   * describing what actually arrives.
+   */
+  environment?: {
+    measuredAt: string;
+    screenReader: string;
+    screenReaderVersion: string;
+    browser: string;
+    browserVersion: string;
+    guidepupVersion: string;
+    screenReaderSettings: string;
+    nodeVersion: string;
+    windowsVersion: string;
+    architecture: string;
+    workerCode: string;
+    captureProtocol: number;
+    provisionRevision: string;
+  };
 }
 
 /**
