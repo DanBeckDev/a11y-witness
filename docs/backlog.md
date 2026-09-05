@@ -118,6 +118,47 @@ got wrong** — it is on, nothing reads it, and it is now a backlog row of its o
   That was wrong: the cause is one line's position in `runCapture`, readable without any recurrence at
   all. **"Cannot be scheduled" is a claim like any other and this one went unchecked for a day.**
 
+
+### Before publish — FILE SIZE. Asked for by the repository owner 2026-09-05.
+
+**"I get very worried when I see that a file is 3,000 lines long. In my head a file should be a maximum
+of 300 lines."** Recorded here rather than acted on immediately, by agreement, and it sits BEFORE the
+publish row on purpose: it is a condition of going to production, not a tidy-up afterwards.
+
+The measurement first, because it changes what the fix should be:
+
+| file | lines | of which |
+|---|---|---|
+| `case-matrix.mjs` | 5,699 | almost entirely DATA — 1,645 case definitions |
+| `capture-core.mjs` | 4,969 | **3,020 comment, 201 blank, 1,748 code** |
+| `rules.ts` | 1,993 | |
+
+**A flat 300-line cap is the wrong instrument here and the reason is this repo's own record.** Its most
+expensive recurring defect is a remedy applied at ONE call site when the behaviour reaches several — four
+instances on 2026-09-05 alone, and three were caught only because the sibling probe sat twenty lines away
+in the same file. Splitting a sequential capture pipeline across fifteen files makes those siblings
+invisible to each other. What the repo constrains instead is the unit of REASONING:
+`max-lines-per-function` 70, `complexity` 15, `max-params` 4, and a PHYSICAL-line budget of 90 that exists
+because `skipComments: true` lets a comment-dense function run to twice its lint budget.
+
+**What is genuinely wrong, and what to actually do:**
+
+- **`case-matrix.mjs` has no cohesion argument at all.** It is data, and it splits cleanly by CRITERION.
+  Lowest risk of anything here: pure movement, with the corpus hash as the check that no case changed.
+  Do this one first.
+- **`capture-core.mjs`'s 1,748 code lines are ~30 probes sharing one shape.** The probes are a real seam;
+  the orchestration around them is not. `probeFocusReveal`, `probeFocusContext`, `probeDialogEscape` and
+  `probeArrowNavigation` are siblings that already reference each other's lessons — move them together or
+  not at all, or the cross-reference that has saved this project four times stops working.
+- **Some of the comment bulk belongs in `docs/`.** A capture-path incident is worth recording; recording
+  it inline at forty lines is how a 1,748-line file wears 3,020 lines of prose. The test is whether the
+  next person reading THAT FUNCTION needs it: NVDA quirks and ordering constraints yes, post-mortems no.
+  Note that the 2026-09-05 session made this measurably worse and knows it.
+
+**Do NOT do this before the v19 verdict lands.** Moving 1,645 case definitions while a model chain is
+mid-flight makes its result uninterpretable, and `check-signals` would be comparing against a corpus that
+moved underneath it.
+
 ### Last, for the reason known-gaps already gives
 
 - **npm publish.** *"A changeset describes weights, so it should describe the final ones."* Stage C
