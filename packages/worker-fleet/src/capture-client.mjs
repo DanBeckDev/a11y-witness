@@ -19,11 +19,17 @@
  *
  * The worker is bare metal on real Ethernet with real power management, which is why this arrived now: on
  * three VMs sharing one Mac the socket was a virtual bridge and effectively lossless.
+ *
+ * MOVED HERE from `packages/lab/src/capture/capture-client.mjs` — architecture-audit.md §5, item 6: the
+ * product CLI sent no `captureId` at all, so this recovery path was unavailable to the one caller that is
+ * a user. `packages/cli` can depend on `@a11y-witness/worker-fleet` (it already does, for `requestJson`)
+ * but must never depend on `@a11y-witness/lab`, which is private and never published — so this is the
+ * seventh capture client and the last one, not an eighth copy of the recovery logic beside it.
  */
 import { randomUUID } from "node:crypto";
 
-import { requestJson, CAPTURE_CLIENT_TIMEOUT_MS } from "../../../worker-fleet/src/worker-http.mjs";
-import { isTransient } from "../training/capture-decisions.mjs";
+import { requestJson, CAPTURE_CLIENT_TIMEOUT_MS } from "./worker-http.mjs";
+import { isTransient } from "./transient-fault.mjs";
 
 /** Long enough to survive a worker that is briefly busy, short enough not to double a capture's cost. */
 const RECOVERY_TIMEOUT_MS = 30_000;

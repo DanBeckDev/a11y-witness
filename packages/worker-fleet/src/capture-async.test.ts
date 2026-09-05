@@ -184,7 +184,7 @@ test("the budget bounds the POLLING, so a capture that never finishes is not wai
  * arrives by a different route.
  */
 test("CAPTURE_LOST is distinguishable from a transport failure, because they need opposite handling", async () => {
-  const { isTransient } = await import("../training/capture-decisions.mjs");
+  const { isTransient } = await import("./transient-fault.mjs");
   const lost = Object.assign(new Error("worker forgot capture X — it restarted mid-capture"),
     { code: "CAPTURE_LOST" });
   assert.equal(isTransient(lost), false,
