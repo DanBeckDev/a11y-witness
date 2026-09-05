@@ -10,11 +10,11 @@ the WCAG list and what actually ships — so this page cannot drift from the cod
 |---|---|---|
 | **assessed** | 10 | a finding can be produced today |
 | **partial** | 7 | assessed, but a named failure mode of it is not covered |
-| **reachable** | 6 | not built, and the evidence to build it exists or could be captured |
-| **out of scope** | 32 | not answerable by this tool at all |
+| **reachable** | 7 | not built, and the evidence to build it exists or could be captured |
+| **out of scope** | 31 | not answerable by this tool at all |
 
 **17 of 55 produce findings.** That is not a small number
-for screen-reader evidence, and it is not a substitute for a rule scanner: the 32
+for screen-reader evidence, and it is not a substitute for a rule scanner: the 31
 out-of-scope criteria are mostly **visual**, which is exactly what axe-core is good at. Run both.
 
 ## Two things to read this table with
@@ -67,6 +67,7 @@ The evidence exists, or could be captured with a probe. Nothing here is a resear
 | 1.3.5 | Identify Input Purpose | AA | dom |
 | 1.4.13 | Content on Hover or Focus | AA | screen-reader + accessibility-tree |
 | 2.1.4 | Character Key Shortcuts | A | dom |
+| 2.4.7 | Focus Visible | AA | screen-reader + visual |
 | 2.5.3 | Label in Name | A | dom + accessibility-tree |
 | 3.1.1 | Language of Page | A | dom |
 | 3.1.2 | Language of Parts | AA | screen-reader + dom |
@@ -86,7 +87,7 @@ competing with it.
 | 1.2.5 | Audio Description (Prerecorded) | AA | human |
 | 1.3.2 | Meaningful Sequence | A | human + visual |
 | 1.3.3 | Sensory Characteristics | A | visual + human |
-| 1.3.4 | Orientation | AA | visual |
+| 1.3.4 | Orientation | AA | dom + visual |
 | 1.4.1 | Use of Color | A | visual |
 | 1.4.3 | Contrast (Minimum) | AA | visual |
 | 1.4.4 | Resize Text | AA | visual |
@@ -95,10 +96,9 @@ competing with it.
 | 1.4.11 | Non-text Contrast | AA | visual |
 | 1.4.12 | Text Spacing | AA | visual |
 | 2.2.1 | Timing Adjustable | A | dom + human |
-| 2.2.2 | Pause, Stop, Hide | A | visual + dom |
+| 2.2.2 | Pause, Stop, Hide | A | visual + dom + human |
 | 2.3.1 | Three Flashes or Below Threshold | A | visual |
 | 2.4.5 | Multiple Ways | AA | multi-page |
-| 2.4.7 | Focus Visible | AA | visual |
 | 2.4.11 | Focus Not Obscured (Minimum) | AA | visual |
 | 2.5.1 | Pointer Gestures | A | dom + human |
 | 2.5.2 | Pointer Cancellation | A | dom |
@@ -108,6 +108,6 @@ competing with it.
 | 3.2.3 | Consistent Navigation | AA | multi-page |
 | 3.2.4 | Consistent Identification | AA | multi-page |
 | 3.2.6 | Consistent Help | A | multi-page |
-| 3.3.4 | Error Prevention (Legal, Financial, Data) | AA | multi-page + human |
-| 3.3.7 | Redundant Entry | A | multi-page |
-| 3.3.8 | Accessible Authentication (Minimum) | AA | multi-page + human |
+| 3.3.4 | Error Prevention (Legal, Financial, Data) | AA | human |
+| 3.3.7 | Redundant Entry | A | multi-page + human |
+| 3.3.8 | Accessible Authentication (Minimum) | AA | dom + human |
