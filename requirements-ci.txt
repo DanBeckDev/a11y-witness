@@ -1,0 +1,18 @@
+# The SUBSET the Python test suite needs, so CI can run it.
+#
+# `requirements.txt` is the LAB's environment: torch, transformers, onnxruntime, huggingface-hub — an
+# encoder-sized install that exists to train and to score. The 195 pytest files do not need any of it, and
+# pinning CI to that file would have made "run the Python tests in CI" cost several minutes and a large
+# download, which is how a check ends up dispatch-only.
+#
+# MEASURED 2026-09-05 in a scratch venv rather than reasoned: with `pytest` and `numpy` alone, 194 of 195
+# pass and exactly one fails — `test_release_gate_contract.py`, on `score.py`'s safetensors import at the
+# point it refuses an ineligible model. Adding `safetensors` takes it to 195. Nothing else is reachable
+# from the tests.
+#
+# So this is not a second spelling of `requirements.txt` and must not drift into one: it is the answer to
+# "what do the TESTS import", and `python-ci-requirements.test.ts` pins that every package named here is
+# also named there, so a version can never diverge between the two environments.
+numpy>=2.0,<3
+safetensors>=0.5,<1
+pytest
