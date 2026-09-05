@@ -158,7 +158,7 @@ jobs:
               echo "It has NEVER RUN for this commit. Start it, then dispatch this workflow again:"
               echo "  gh workflow run action-smoke.yml --ref $sha"
             elif [ "$smoke_conclusion" = "none" ]; then
-              echo "It is RUNNING NOW ($status). Do NOT start another — wait for it, then dispatch this"
+              echo "It is RUNNING NOW ($smoke_status). Do NOT start another — wait for it, then dispatch this"
               echo "workflow again. A second run would answer a question already being answered."
               echo "  gh run watch \$(gh run list --workflow=action-smoke.yml --commit=$sha --json databaseId --jq 'first(.[].databaseId)')"
             else
