@@ -1,6 +1,6 @@
 # ADR 0008: What is deliberately not split, and what stays internal
 
-- Status: Proposed
+**Status:** accepted
 - Date: 2026-08-05
 
 ## Context

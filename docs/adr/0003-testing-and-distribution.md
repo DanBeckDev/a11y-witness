@@ -1,6 +1,6 @@
 # ADR 0003: Reproducible testing in CI + GitHub Action as the primary distribution
 
-- Status: Proposed
+**Status:** accepted
 - Date: 2026-06-26
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR 0007: Independent semver via Changesets, and the isolation gate
 
-- Status: Proposed
+**Status:** accepted
 - Date: 2026-08-05
 
 ## Context
