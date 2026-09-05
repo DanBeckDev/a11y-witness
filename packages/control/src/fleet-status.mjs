@@ -35,12 +35,18 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { requestJson } from "./worker-http.mjs";
+// MOVED here from packages/worker-fleet/src 2026-09-06 (architecture audit §3.2): this file has zero
+// cross-package dependents, so keeping it in the published worker-fleet package while it reads control's
+// own inventory was the cycle with nothing on the other side to justify it. `fleet-env.mjs` stays in
+// worker-fleet -- published bins (doctor.mjs, check-worker-code.mjs) depend on it -- so these imports
+// cross the boundary the SANCTIONED way, relative, exactly like `fleet-playbook.mjs` and `lab-job.mjs`
+// already do.
+import { requestJson } from "../../worker-fleet/src/worker-http.mjs";
 import { configuredWorkers, workersFromInventory, workerNamesFromInventory, portFromGroupVars }
-  from "./fleet-env.mjs";
-import { assessWorker } from "./worker-health.mjs";
-import { fleetConsistency, describeMismatches } from "./fleet-consistency.mjs";
-import { refuseUnknownFlags } from "./cli-flags.mjs";
+  from "../../worker-fleet/src/fleet-env.mjs";
+import { assessWorker } from "../../worker-fleet/src/worker-health.mjs";
+import { fleetConsistency, describeMismatches } from "../../worker-fleet/src/fleet-consistency.mjs";
+import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 
 /**
  * as `doctor`.
@@ -66,9 +72,9 @@ export function fleetToProbe() {
   const named = configuredWorkers();
   if (named.length) return named;
   try {
-    const inventory = readFileSync(fileURLToPath(new URL("../../control/ansible/inventory.yml", import.meta.url)), "utf8");
+    const inventory = readFileSync(fileURLToPath(new URL("../ansible/inventory.yml", import.meta.url)), "utf8");
     const groupVars = readFileSync(
-      fileURLToPath(new URL("../../control/ansible/group_vars/a11y_workers.yml", import.meta.url)), "utf8");
+      fileURLToPath(new URL("../ansible/group_vars/a11y_workers.yml", import.meta.url)), "utf8");
     const port = portFromGroupVars(groupVars);
     // The INVENTORY NAME beside the address, because every command that acts on a worker takes the name
     // (`fleet:deploy --limit=a11y-worker-4`, `fleet:sleep`, `lab:job -e worker=`) while this report showed
