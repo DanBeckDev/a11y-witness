@@ -29,7 +29,6 @@ const SOURCE = resolve(import.meta.dirname, "rules.ts");
  * A reason, not a name: an exemption list of bare identifiers is a list of things nobody re-examined.
  */
 const SAFE_WITHOUT_A_GATE: Record<string, string> = {
-  channelRelation: "computes the relation BETWEEN channels; it makes no finding and asserts nothing",
   addMissingHeadings: "decides on `census.heading === 0` — the ORACLE. The sweep is corroboration only, "
     + "and a phantom heading makes it return early, which loses a finding rather than inventing one",
   addUnnamedGraphics: "decides on `census.graphicUnnamed`. The sweep count appears in the evidence "
