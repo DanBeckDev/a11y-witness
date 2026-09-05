@@ -245,19 +245,27 @@ Running it is one command; getting value out of it is a few habits.
 
 This is not a footnote to the interesting work — it *is* some of the work. Screen readers are operating-system-bound desktop applications, not libraries. VoiceOver cannot be containerised at all; NVDA needs a full interactive Windows desktop, which Windows Server containers do not have. There is no Docker image that runs this product. The reproducible form of NVDA is a **Windows VM**, and a hand-tuned pet VM is not reproducible, scalable or usable by anyone else. So the infrastructure is built and documented as a deliverable. Rationale: [`ADR 0001`](./docs/adr/0001-capture-architecture.md).
 
+**This project's own worker fleet is bare metal, not a UTM VM.** The local UTM path below was the
+original testing setup and is deprecated for anything beyond a quick single-worker trial — "The UTM is
+deprecated, that was a testing thing" (repository owner, 2026-09-05). See `npm run fleet:status`,
+`npm run fleet:deploy` and [`packages/worker-fleet/README.md`](./packages/worker-fleet/README.md) for how
+the real fleet works; the table below is about getting ONE worker of your own running, which is still a
+reasonable way to try the tool on a machine that is not part of any fleet.
+
 | you have | do this | what you get |
 |---|---|---|
-| a Mac | [`docs/local-worker-vm.md`](./docs/local-worker-vm.md) | A scripted Windows VM: ISO build, unattended install, auto-logon, NVDA provisioning, capture verified — no GUI clicking |
-| a Windows box | [`packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1`](./packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1) | One idempotent script, then `A11Y_WORKER=http://host:8765` |
-| neither | [`capture-regression.yml`](./.github/workflows/capture-regression.yml) | Real NVDA on a GitHub-hosted runner, so a contributor needs no infrastructure at all |
+| a Windows box | [`packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1`](./packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1) | One idempotent script, then `A11Y_WORKER=http://host:8765` — the same script the bare-metal fleet's own boxes provision from |
+| neither a Windows box nor a Mac to spare | [`capture-regression.yml`](./.github/workflows/capture-regression.yml) | Real NVDA on a GitHub-hosted runner, so a contributor needs no infrastructure at all |
+| a Mac, and nothing else, for a quick trial only | [`docs/local-worker-vm.md`](./docs/local-worker-vm.md) — **deprecated** | A scripted Windows VM: ISO build, unattended install, auto-logon, NVDA provisioning, capture verified — no GUI clicking. Fine for trying the CLI once; not how this project runs its own captures |
 
 Because a Windows guest is never genuinely idle, the pipeline manages it **on demand**: with a local VM and no `A11Y_WORKER` set, a run starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15 s. Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`worker-ctl.sh`](./packages/worker-fleet/src/local-worker/worker-ctl.sh) does `up | pause | stop | status | idle-pause`.
 
 **Scaling past one worker.** Because captures serialise per machine, throughput comes from
-more machines. On a Mac that is one command, and the lifecycle is handled for you:
+more machines. For this project's own fleet that means more bare-metal boxes (`npm run fleet:status`);
+the commands below are the deprecated UTM equivalent, kept for a contributor's own local trial pool:
 
 ```bash
-./scripts/local-worker/clone-worker.sh          # add a worker (handles a MAC-copying trap)
+./packages/worker-fleet/src/local-worker/clone-worker.sh          # add a worker (handles a MAC-copying trap)
 ./packages/worker-fleet/src/local-worker/worker-ctl.sh pool       # what have I got
 npm run training:capture                        # uses them all, then puts them back
 ./packages/worker-fleet/src/local-worker/worker-ctl.sh pool-stop  # or release them yourself
