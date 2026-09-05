@@ -19,7 +19,7 @@
  * judge. Shadow output is log-only and never changes findings.
  */
 import { spawn } from "node:child_process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { judge } from "@a11y-witness/judge";
 import { scanWithAxe, axeAvailable, type AxeFinding, type AxeBrowserChannel } from "./scan/axe.js";
 import { fetchPageTitle } from "./scan/page-title.js";
@@ -30,7 +30,7 @@ import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11y-
 import { CAPTURE_CLIENT_TIMEOUT_MS, requestJson } from "@a11y-witness/worker-fleet/worker-http";
 import { captureTolerantly } from "@a11y-witness/worker-fleet/capture-client";
 import { workerIsUsable } from "@a11y-witness/worker-fleet/health";
-import type { CaptureStructure } from "@a11y-witness/evidence";
+import { annotateCapture, type CaptureStructure } from "@a11y-witness/evidence";
 import type { RuleLayerCoverage } from "@a11y-witness/judge/outcomes";
 import { captureDoubt, captureMentionsTitle, oracleCounts, type CaptureDoubt } from "@a11y-witness/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
@@ -226,13 +226,26 @@ export interface CaptureResponse {
 }
 
 const MAX_CAPTURE_ATTEMPTS = 3;
-// Both of these were resolved against `process.cwd()`, so the shadow scorer ran only when the CLI happened
-// to be invoked from the repo root — the same defect M0 found in `local-judge.ts`. The program's path now
-// comes from `@a11y-witness/scorer`, which resolves it from its own module; the interpreter is still
-// overridable, because choosing a Python is the caller's business and a Windows runner has no venv.
-const SHADOW_PYTHON = process.env.A11Y_SHADOW_PYTHON
-  ?? fileURLToPath(new URL("../.venv/bin/python", import.meta.url));
-const SHADOW_SCORER = scorerArtefact().scoreScript;
+
+/**
+ * Where the shadow scorer lives — same shape as `local-judge.ts`'s `scorerPaths()`, and for the same
+ * reason: the SCRIPT comes from `@a11y-witness/scorer`, resolved from its own module, so it never
+ * depended on the cwd. The INTERPRETER did: it defaulted to `packages/cli/.venv/bin/python`, a path
+ * nothing ever creates — the same defect M0 found in `local-judge.ts`'s own interpreter default, here
+ * one level removed. `local-judge.ts` settled on `A11Y_PYTHON` (falling back to `python3` on the PATH)
+ * as the shared answer; this mirrors it, with `A11Y_SHADOW_PYTHON` still able to point the shadow run at
+ * a different interpreter from the real judge's when that is deliberate.
+ *
+ * A function, not a module-level constant, so a test can assert the resolution the same way
+ * `local-judge.paths.test.ts` does — the module-level version could only ever be checked against
+ * whatever `process.env` happened to hold at import time.
+ */
+export function shadowScorerPaths(): { python: string; script: string } {
+  return {
+    python: process.env.A11Y_SHADOW_PYTHON ?? process.env.A11Y_PYTHON ?? "python3",
+    script: scorerArtefact().scoreScript,
+  };
+}
 
 /**
  * `--plan`: say what would be submitted, and submit nothing.
@@ -400,7 +413,8 @@ interface ShadowReport {
 async function shadowScreenReaderCapture(capture: CaptureResponse): Promise<void> {
   if (process.env.A11Y_SHADOW_MODEL !== "1") return;
   try {
-    const child = spawn(SHADOW_PYTHON, [SHADOW_SCORER, "--shadow", "--stdin"], {
+    const { python, script } = shadowScorerPaths();
+    const child = spawn(python, [script, "--shadow", "--stdin"], {
       cwd: process.cwd(),
       env: process.env,
       stdio: ["pipe", "pipe", "pipe"],
@@ -409,7 +423,11 @@ async function shadowScreenReaderCapture(capture: CaptureResponse): Promise<void
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
     child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
-    child.stdin.end(JSON.stringify(capture));
+    // Annotated, exactly as `local-judge.ts`'s `scoreCapture` does before it reaches the same script:
+    // the featurizer reads the `parsed` block rather than re-deriving it, so unannotated input either
+    // fails loudly or scores a shape the real judge path never produces -- either way "beside the
+    // existing judge" was comparing two different inputs, not one input through two scorers.
+    child.stdin.end(JSON.stringify(annotateCapture(capture as unknown as Record<string, unknown>)));
     const exitCode = await new Promise<number>((resolveExit, reject) => {
       child.once("error", reject);
       child.once("close", (code) => resolveExit(code ?? 1));
