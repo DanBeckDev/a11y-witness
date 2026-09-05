@@ -300,6 +300,41 @@ owns it elsewhere — `capture-results.mjs`, `desktop-prepare.mjs`, `diagnostics
 audit called it "a nine-line router beside 700 lines of policy"; the router being thin is not the defect,
 and the policy turns out to be cohesive.
 
+## `probeFocusReveal` was declared ON in the CLI and never sent — every user capture ran 1.4.13's probe OFF
+
+Found while tracing request-field propagation for the wire-contract work, not by a failure.
+
+`defaultArgs()` sets `probeFocusReveal: true` with a comment explaining that 1.4.13 needs it, and it was
+**never forwarded**. Six hand-named parameter lists sit between `Args` and the wire — `captureAndScan`,
+`recaptureUntilItReadsThePage`, `runWitness`, the `CaptureRequest` interface, and `captureViaWorker`'s own
+destructure and body — and every one of them listed the other four probe flags and omitted this one.
+`probeFlags()` on the worker defaults an unsent flag to `false`.
+
+**So every CLI-driven capture has run 1.4.13's probe off since the day it was turned on**, and silently:
+an un-asked probe returns an empty channel, which is indistinguishable from a conformant page's evidence.
+The lab path was unaffected — `capture-real-pages.mjs` sends it directly — which is why the corpus shows
+`1.4.13: 37 of 37` while the product could not have produced one.
+
+**The guard could not see it, and its own header says why.** `probe-consent.test.ts` checks that
+`defaultArgs()` DECLARES `true`; it never checks that the value survives six hops **inside the same file**.
+Its header already names the shape — *"the CLI is a sixth hop outside `probe-chain.test.ts`'s chain"* —
+without the file having a test for its own internal hops. `probe-forwarding.test.ts` now derives the
+canonical flag set from `Args` and asserts every flag reaches every named hop.
+
+**Two of the three new pinning tests caught defects in THEMSELVES before being trusted**, which is the part
+worth keeping: one extraction regex over-matched across three typedefs at once (a lazy match anchored to
+the wrong brace), and one matched a COMMENT as a field named `flag` — the exact source-text trap
+`source-text.ts` was written for and catalogues three prior instances of. Both were caught by the mutation
+check rather than by review, and the second is now fixed with `stripComments`.
+
+**And one premise was carried in, checked, and voided.** `packages/control` was believed to be a second
+permanent exception to one-owner, on the grounds that it constructs a capture body and can import nothing.
+It does not construct one at all — grepped for `probeForms`, `captureOptions` and `POST /capture`, nothing.
+The real control-plane involvement was `fleet-playbook.mjs` scraping `CAPTURE_PROTOCOL_VERSION`, a
+different finding already closed. **One owner, one real exception** — `capture-core.mjs`'s JSDoc, which
+cannot import a TypeScript type because the module is guidepup-poisoned, and is now pinned by a test that
+reads it as text.
+
 ## Audit findings closed since the recapture started
 
 | finding | what it turned out to be |
