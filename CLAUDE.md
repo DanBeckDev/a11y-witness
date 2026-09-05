@@ -552,6 +552,37 @@ once swept up 19 files, 16 of them another agent's half-finished work, and pushe
   makes git commit the working tree, not your staged hunk).
 - `git status` before you start. Files already modified are not yours to commit.
 
+### And more than one agent may be DRIVEN by another — what worked, measured 2026-09-05
+
+Three peer sessions worked units in their own worktrees while one session orchestrated and reviewed. It
+worked, and the session running it had predicted it would not, so the reasons are worth having.
+
+- **Every unit's acceptance test is named BEFORE the work starts, and it is a COMMAND, not a judgement.**
+  A corpus hash identical either side of a 1,600-line move; a byte-comparison of comment-stripped source;
+  a call graph proving four rules cannot be separated. The original sizing assumed each unit would be a
+  subtle capture-path change where re-deriving the reasoning IS the review — this file's defect catalogue
+  is full of those. Forcing a check instead is what made the throughput possible.
+- **Partition by RESOURCE, never by topic or by file.** A worktree isolates the checkout and isolates
+  NOTHING else: the fleet, the lab, the page server and `runs/` are single shared things, and this repo's
+  guards turn a collision into a *silent wrong answer*. `lab:job` refuses a second job of a name rather
+  than queueing it, and an agent reading that refusal as "already done" reports success for work that
+  never ran. `fleet:deploy` reboots every worker. `assertFleetRunsThisCheckout` means the fleet runs ONE
+  commit, so two worktrees on two commits means one of them is refused and which depends on who deployed
+  last. **One driver for all of it.**
+- **A fresh worktree has NO corpus** — `runs/` is gitignored — so `check-signals`, `rules:gate` and
+  `verify.corpus.test.ts` all skip there. The pre-push hook skips them *loudly*, which is honest and still
+  means a delegated change gets a weaker gate than the main checkout's. Symlink `runs/` and `.venv` in, and
+  run the corpus-dependent gates at merge time where they are real.
+- **Do NOT drive the fleet and review diffs at the same time.** That is how a progress file describing a
+  FINISHED run was read while a new one was a minute old — see the diagnostics table above; it cost 12
+  in-flight captures. If there are enough hands, the useful split is LATERAL: one agent owning fleet-and-lab
+  operations end to end, one owning review and merge. Not a hierarchy — review quality does not compose,
+  because each layer holds less of the system and this repo's defects are precisely the ones that pass
+  every mechanical check.
+- **Ask HOW a number was obtained, not just whether it is right.** *"Was that measured or inferred?"* got an
+  honest answer and a usable lesson where *"that is wrong"* would have got a correction and nothing else.
+  A plausible number from a peer is the same hazard as a plausible number from a tool.
+
 ## Which browser a capture drives
 
 `packages/nvda-worker/src/browsers.mjs` holds one plain-object preset per browser — exe search paths,
