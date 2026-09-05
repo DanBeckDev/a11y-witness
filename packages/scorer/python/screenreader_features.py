@@ -731,6 +731,12 @@ def observation_of(record: dict[str, Any], channel: str) -> bool:
     return bool((record.get("observation") or {}).get(channel))
 
 
+#: The `interaction` channels this function reads, named once so a second copy does not have to be
+#: maintained by hand elsewhere. `scorer:explain-feature` imports this rather than re-listing the four --
+#: a hand-written duplicate of exactly this set is what went stale there once already.
+FEATURIZED_INTERACTION_CHANNELS = ("controls", "stateChanges", "formChanges", "postSubmitFields")
+
+
 def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     """Extract only relations and presence facts observable in screen-reader output."""
     values = {name: 0.0 for name in FEATURE_NAMES}
