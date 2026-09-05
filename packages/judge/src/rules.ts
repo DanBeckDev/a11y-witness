@@ -1106,15 +1106,36 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
       + `while the title stayed ${JSON.stringify(titleAfter)}`);
 }
 
-/** How many separate FORMS the page announces. See `addBrokenFocusOrder` for why this decides anything. */
-function formsAnnounced(transcript: readonly string[]): number {
-  let forms = 0;
+/**
+ * How many REPEATED-STRUCTURE containers the page announces. See `addBrokenFocusOrder` for why this
+ * decides anything.
+ *
+ * COUNTS `section` AS WELL AS `form`, and Edge 152 is why. `w3c/html-aria#423` made the `form` role
+ * conditional on an accessible name, so an unnamed `<form>` — which is every form in this corpus and most
+ * on the web — now announces as "section". Measured on one unchanged page: `"form, name at example dot
+ * com, edit"` under Edge 151 became `"section, …"` under 152.
+ *
+ * Counting only "form" would therefore return 0 on a page with three unnamed forms, the guard below would
+ * stop firing, and 2.4.3 would go back to reporting a reordering built from two DIFFERENT forms on
+ * `w3.org/WAI/tutorials/forms/validation/` — the exact false positive this function was written to stop,
+ * reintroduced by a browser upgrade rather than by an edit.
+ *
+ * The cost is over-suppression: a page with several genuine `<section>` elements now suppresses 2.4.3 too,
+ * so a real reordering there is missed. That is the direction this file fails in DELIBERATELY — the
+ * comment above `addStaleRouteTitle` says so in as many words, "a MISSED finding rather than an invented
+ * one" — and it is the right trade here, because the alternative is accusing one of W3C's own tutorials.
+ *
+ * The name changed with the meaning. It is no longer counting forms and calling it `formsAnnounced` would
+ * be a comment that lies, which is the one kind this repo deletes.
+ */
+export function repeatedStructureContainers(transcript: readonly string[]): number {
+  let containers = 0;
   for (const line of transcript) {
     for (const container of parseAnnouncement(String(line), "transcript").containers) {
-      if (container.role === "form") forms += 1;
+      if (container.role === "form" || container.role === "section") containers += 1;
     }
   }
-  return forms;
+  return containers;
 }
 
 /**
@@ -1637,7 +1658,7 @@ function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
   // "form, Name (required):, edit, required, , button, Submit", where the name lands in `trailing`
   // rather than as a parsed object, so it is uncountable. Counting FORMS is the fact that is actually
   // available, and it is the right one — the ambiguity is a property of the page's structure.
-  if (formsAnnounced(input.transcript ?? []) > 1) return;
+  if (repeatedStructureContainers(input.transcript ?? []) > 1) return;
   const onPage = repeatedOnThePage(input.transcript ?? []);
   const shared = new Set([...readingOnce]
     .filter((name) => tabbedOnce.has(name) && !onPage.has(name)));
