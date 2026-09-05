@@ -27,10 +27,11 @@
 // therefore proves *installability*, not completeness of the repo; `src/referenced-scripts.test.ts` covers
 // the other half by asserting tracked-ness.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, copyFileSync, readFileSync, rmSync, readdirSync } from "node:fs";
+import { existsSync, mkdtempSync, copyFileSync, readFileSync, rmSync, readdirSync, realpathSync }
+  from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, basename } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const SMOKE = "isolation-smoke.mjs";
 
@@ -165,7 +166,14 @@ function countPrivatePackages() {
     .length;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// NOT `file://${process.argv[1]}`: a template-literal URL does not percent-encode, so a checkout path
+// containing a space makes this comparison false and `npm run gate:isolation` silently checks nothing —
+// entry-points.test.ts's own "the guard is the exact comparison" test polices this idiom, but its
+// discovery only matched packages/*.mjs|.ts until this file's own drift widened it to scripts/ too.
+// realpathSync'd for the same reason every published bin needed it this session: harmless for a plain
+// `node scripts/isolation-gate.mjs` invocation, but this file is ALSO imported by test files under
+// packages/, so the same guard idiom this repo now uses everywhere is worth using here too.
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   const args = process.argv.slice(2);
   const targets = args.length === 0 || args[0] === "--all" ? allPackages() : args;
   if (args.length > 0 && args[0] !== "--all" && targets.length === 0) {
