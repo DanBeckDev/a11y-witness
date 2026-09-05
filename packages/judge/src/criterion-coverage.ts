@@ -231,7 +231,7 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
         + "2026-08-25. The rule is exercised and silent because the failure does not occur on public-body "
         + "information pages, not because it cannot run",
     },
-    note: "Rule-only, and the exception that proves the boundary: `autoplay` and `muted` are attributes with no accessibility-tree equivalent, so a deterministic rule reads the DOM and no head is trained on it." },
+    note: "Rule-only, and the exception that proves the boundary: `autoplay` and `muted` are attributes with no accessibility-tree equivalent, so a deterministic rule reads the DOM and no head is trained on it. TWO OF THE CRITERION'S CLAUSES ARE OUT OF REACH and the rule is `secondary` because of them, not from timidity. It fails only when audio plays automatically FOR MORE THAN 3 SECONDS -- duration is a property of the media file, not an attribute, so a two-second chime conforms and the rule cannot tell it from a soundtrack. And it offers TWO alternatives: a pause/stop mechanism (the `controls` attribute, which the rule does check and skip) OR a mechanism to control volume independently of the system -- a custom slider conforms and nothing here can recognise one. Both make the rule over-eager, which is exactly what reporting `cantTell` is for." },
   // VALIDATED 2026-08-28, and every clause of what stood here was true when written and is now false.
   // It read: "no corpus case targets it, it is absent from `rule-ownership.json` ... and it reads
   // `focusOrder`, which is present on 0 of 4,899 corpus captures". There are now four cases, the subtype is

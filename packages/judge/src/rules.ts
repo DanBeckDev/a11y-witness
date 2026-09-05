@@ -694,11 +694,31 @@ const isLink = (line: string): boolean => /\blink\b/i.test(line);
  * That makes this the one rule here whose evidence is not something a screen reader said, which is stated
  * in its ACT description rather than hidden.
  */
+/*
+ * TWO OF THE CRITERION'S CLAUSES ARE OUT OF REACH HERE, and both are stated rather than left implicit --
+ * added 2026-09-05 by the audit that found three rules asserting where their criterion permits.
+ *
+ * Verbatim: "If any audio ... plays automatically for MORE THAN 3 SECONDS, either a mechanism is available
+ * to pause or stop the audio, OR a mechanism is available to control audio volume independently from the
+ * overall system volume level."
+ *
+ *   THE 3-SECOND THRESHOLD. Duration is not an attribute; it is a property of the media file. A two-second
+ *   notification chime conforms and this rule cannot tell it from a looping soundtrack.
+ *
+ *   THE VOLUME BRANCH. `controls` is checked below and is the pause/stop mechanism, but a page offering a
+ *   CUSTOM volume slider and no native controls also conforms, and nothing here can recognise one.
+ *
+ * Both make this rule over-eager in a direction the mapping already accounts for: 1.4.2 is declared
+ * `secondary` in `act-rules.ts`, so it reports `cantTell` and never accuses. That is what makes the two
+ * gaps tolerable rather than defects -- and stating them is what stops somebody later reading the
+ * `secondary` as timidity and "fixing" it.
+ */
 function addAutoplayingAudio(input: RuleInput, add: AddFinding): void {
   if (!input.media) return; // absent means not checked; only a probe's silence is a finding
   for (const element of input.media) {
     // Muted media makes no sound, so there is nothing to control. `controls` gives the native pause and
-    // stop mechanism the criterion asks for.
+    // stop mechanism the criterion asks for -- one of its two alternatives; see the note above for the
+    // other, which cannot be recognised from the DOM.
     if (!element.autoplay || element.muted || element.controls) continue;
     add("1.4.2 Audio Control",
       "Audio starts automatically with no visible control to pause or stop it, so it competes with the "
