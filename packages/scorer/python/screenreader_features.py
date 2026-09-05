@@ -255,6 +255,9 @@ TABLE_WORD = re.compile(r"\btable\b", re.IGNORECASE)
 
 ROW_WORD = re.compile(r"\brow\b", re.IGNORECASE)
 
+# PINNED EQUAL to `ANNOUNCED_ERROR_TEXT` (packages/judge/src/rules.ts) by vocabulary-parity.test.ts. Both
+# ask the narrow, scoring-facing question ("did the announcement actually say an error"); `local-judge.ts`'s
+# wider `ERROR_TEXT` is a deliberately different, applicability-only question and is not part of this pin.
 ERROR_WORD = re.compile(r"invalid|\berror\b", re.IGNORECASE)
 
 STATUS_UPDATE = re.compile(r"^(?:showing|displaying|updated|loaded|filtered)\b", re.IGNORECASE)
@@ -263,11 +266,32 @@ FORM_FIELD_ROLE = re.compile(r"\b(?:edit(?:\s+text)?|combo\s*box|list\s*box|chec
 
 GENERIC_HEADINGS = {"welcome", "overview", "stuff", "things", "information", "notes", "options", "updates", "more", "section", "introduction", "help", "miscellaneous", "details", "next"}
 
+# DELIBERATELY NOT THE SAME LIST AS `VAGUE_LINK_NAMES` (packages/judge/src/rules.ts) -- audited 2026-09-06
+# and confirmed intentional, not drift. This one answers "is the text vague ALONE" (2.4.9, AAA, unreported),
+# so it includes "read more"/"learn more"/"details" -- words the rule's list excludes because 2.4.4 lets
+# surrounding context rescue them. See `vague_link_lacks_context` below, which computes the CONJUNCTION
+# this feature alone cannot represent, and that function's own header for why the un-conjoined version was
+# removed as a model input (fired on 22 of 44 conformant pages carrying "Details" inside a peer index).
 VAGUE_LINKS = {"read more", "learn more", "click here", "here", "this", "that", "details", "more", "go", "info"}
 
 GENERIC_GRAPHICS = {"photo", "image", "graphic", "picture"}
 
-FILENAME_GRAPHIC = re.compile(r"\b(?:jpg|jpeg|png|gif|svg|webp)\b|\bdot\s+(?:jpg|jpeg|png|gif|svg|webp)\b", re.IGNORECASE)
+# PINNED EQUAL to `FILENAME_RE` (packages/judge/src/rules.ts) by `vocabulary-parity.test.ts` -- character
+# for character, so the two must be edited together. They answer the same question ("does this text look
+# like a filename used as alt text") for the same subtype (1.1.1:filename-alt, one of the four rules ASSERT
+# directly) from two sides of the language boundary: the rule reads a graphic's own accessible name, this
+# feature reads every evidence unit in the capture. Found diverged 2026-09-06 with no stated reason on
+# either side -- the rule alone had `bmp` and the bare-filename shape `IMG_1234` (no extension at all,
+# arguably the commonest bad-alt shape a camera default produces); this feature alone matched a BARE
+# extension word ANYWHERE in the evidence (`\bpng\b` with nothing requiring it to be part of a filename),
+# which is a real over-triggering risk this project's own shortcut-feature audits exist to catch (ADR 0015).
+# Verified before aligning: 0 of 5,200 unique `evidenceUnits` text values in the current training export
+# classify differently under the two patterns, so this closes the gap without changing what any SHIPPED
+# weight was fitted to -- the two edge cases (`bmp`, extensionless `IMG` filenames) are simply absent from
+# every capture on disk today, which is a corpus gap the two definitions no longer disagree about.
+FILENAME_GRAPHIC = re.compile(
+    r"\b(img[\s_]?\d+|\S+\s+dot\s+(jpe?g|png|gif|svg|webp|bmp)|\S+\.(jpe?g|png|gif|svg|webp|bmp))\b",
+    re.IGNORECASE)
 
 UNNAMED_GRAPHIC = re.compile(r"unlabeled\s+graphic|to get missing image descriptions", re.IGNORECASE)
 

@@ -142,6 +142,11 @@ const spokenText = (c: CaptureEvidence): string => [
  * A vocabulary list is a blunt instrument and it is used only to decide whether the criterion APPLIES,
  * never to score it. NVDA's own announcement of a properly marked field ("invalid entry") is included
  * because that is what the accessible version of this page produces.
+ *
+ * DELIBERATELY WIDER than `ANNOUNCED_ERROR_TEXT` (rules.ts) / `ERROR_WORD` (screenreader_features.py),
+ * which are pinned equal to EACH OTHER for the opposite, narrow question ("did the announcement actually
+ * say an error") — audited 2026-09-06 alongside that pair and confirmed as a deliberate applicability/
+ * scoring split, not drift, so this one is intentionally excluded from that pin.
  */
 const ERROR_TEXT = /\b(error|invalid|required|must be|cannot be|please enter|please provide|enter a|enter your|is not valid|missing)\b/i;
 

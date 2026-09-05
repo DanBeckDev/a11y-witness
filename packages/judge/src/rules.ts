@@ -231,6 +231,13 @@ const STATE_RE =
   /\b(not checked|checked|not pressed|pressed|collapsed|expanded|not selected|selected|read only|required|invalid entry|out of list|out of region|clickable|multi ?line|level \d+)\b/gi;
 
 // A spoken or written file name used as alt text: "IMG 4821", "photo dot jpg", "logo.png".
+//
+// PINNED EQUAL to `FILENAME_GRAPHIC` (screenreader_features.py) by `vocabulary-parity.test.ts` — character
+// for character, so the two must be edited together. Found diverged 2026-09-06 with no reason on either
+// side (Python was missing `bmp` and the extensionless `IMG_1234` shape, and separately over-matched a
+// bare extension word anywhere in the evidence); aligned after confirming 0 of 5,200 real evidenceUnits
+// values classify differently either way, so the fix could not have changed what any shipped weight was
+// fitted to.
 const FILENAME_RE = /\b(img[\s_]?\d+|\S+\s+dot\s+(jpe?g|png|gif|svg|webp|bmp)|\S+\.(jpe?g|png|gif|svg|webp|bmp))\b/i;
 
 // NVDA spells out a missing alt: it announces "Unlabelled graphic".
@@ -503,6 +510,11 @@ function addSilentStateChanges(
  * YYYY", so an alternative leaning on a symbol can never match an announcement — it looks like coverage
  * and matches nothing. Measured; it cost a chain run.
  */
+// PINNED EQUAL to `ERROR_WORD` (screenreader_features.py) by `vocabulary-parity.test.ts` — both ask the
+// SAME narrow question, "did the announcement actually say an error", for the strict, scoring-facing use
+// (this rule asserts; that feature feeds a head). `local-judge.ts`'s wider `ERROR_TEXT` is a DIFFERENT,
+// deliberately loose question ("does the on-screen prompt merely look error-related") used only to decide
+// whether 3.3.1 applies at all — see that constant's own comment. Do not merge the two kinds.
 const ANNOUNCED_ERROR_TEXT = /invalid|\berror\b/i;
 const REMEDY_INSTRUCTION =
   /\b(?:enter|use|choose|select|pick|include|must (?:be|start|contain)|for example|such as|format|as dd|at least|between \d)/i;
@@ -805,6 +817,14 @@ function reportIfUnnamed({ object, entry, channel, ambiguous }: UnnamedCheck, ad
  * Worth knowing: axe does not report these at all — its `link-name` rule asks whether a link HAS a name,
  * and "click here" has one. This is a judgement a rule scanner structurally cannot make and a screen
  * reader hears immediately.
+ *
+ * DELIBERATELY NOT THE SAME LIST AS `VAGUE_LINKS` (`screenreader_features.py`), and audit §9 asked
+ * whether that was an oversight — it is not. That list answers 2.4.9 (Link Purpose, Link Only, AAA):
+ * "is the text alone vague", which is why it happily includes "read more"/"learn more" and "details" —
+ * words THIS list excludes on purpose because 2.4.4 lets context rescue them. `vague_link_lacks_context`
+ * (features.py) computes the conjunction "vague alone AND unrescued by context" as one feature for the
+ * 2.4.4 head; see that function's own header for the measured cost of ever treating "vague alone" as
+ * sufficient on its own (`vague_link_present` fired on 22 of 44 conformant `component-index` pages).
  */
 const VAGUE_LINK_NAMES = new Set(["click here", "click", "here", "this link", "link", "click this"]);
 
