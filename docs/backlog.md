@@ -335,6 +335,54 @@ different finding already closed. **One owner, one real exception** — `capture
 cannot import a TypeScript type because the module is guidepup-poisoned, and is now pinned by a test that
 reads it as text.
 
+## FIVE PUBLISHED BINS COULD NOT RUN, and one of them exited 0 with no output
+
+The most user-facing defect of the day, and it would have shipped. Found by closing the audit's
+*"the published `dist/cli.js` bin is executed by nothing"* row — and closing it required actually
+running the installed bin, which is the only reason it was found at all.
+
+**Two stacked defects, both on `a11y-witness` and on four more bins:**
+
+1. **No shebang.** `ENOEXEC` on any POSIX host the moment npm creates the `.bin` symlink.
+2. **Worse, and silent.** The `isProgram` guard compared `import.meta.url` — which Node's ESM loader
+   resolves THROUGH symlinks — against a raw, unresolved `process.argv[1]`. On every macOS install
+   `/var` and `/tmp` are themselves symlinks to `/private/var` and `/private/tmp`, and `os.tmpdir()`
+   — where `npx` stages a package before running it — is `/var/folders/…`. **So the bin ran, matched
+   nothing, skipped `main()` entirely, and exited 0 with no output at all.**
+
+**Reproduced independently before merging**, by invoking both guards through a `/var` path: the old
+one prints `SILENTLY SKIPPED`, the new one `MAIN RAN`. A user typing `npx a11y-witness` would have
+got silence and a success exit code.
+
+**Why the gate that exists for this could not see it.** `isolation-smoke.mjs` checked the bin file
+EXISTS. That is the same shape as the `cli-flags` export the same gate missed earlier today —
+presence rather than function — and it is the third instance in one day of a smoke test covering only
+what it happens to touch.
+
+**The fix's own first version passed against the live bug**, and catching that is the better half:
+`execFileSync`'s `cwd` and `require.resolve()` both silently canonicalize a path, so a smoke test
+built from either sidesteps the exact defect it is meant to catch. `checkIsolation` now passes the
+consumer directory's RAW, un-realpath'd path explicitly.
+
+**Then the same shape was grepped for and found four more times** — `a11y-doctor`,
+`a11y-worker-code`, `a11y-worker-compare`, `a11y-worker-deploy`, all missing shebangs and all
+carrying the unresolved guard. Three verified live through their real `.bin` symlinks;
+`a11y-worker-deploy` was fixed identically but NOT executed, because it reaches for fleet and SSH
+state even under `--help` — the resource ban read correctly as applying to a raw binary and not only
+to an npm script.
+
+`entry-points.test.ts` now maps every declared `bin` to its build source and refuses any guard
+comparing `process.argv[1]` without `realpathSync`. `server.mjs` carries the identical pattern and is
+EXEMPT with a reason — Windows' `.cmd` shim does not resolve the same way, and it is a held
+capture-path file — rather than silently skipped.
+
+**Two dispatch-only gates also moved into `lint.yml`**, measured rather than assumed: `scorer:verify`
+(0.3 s) and `gate:isolation` (~18 s, 6/6 on Linux), both pure tracked-file checks with no network,
+venv or corpus dependency. `release:provenance` and `scorer:migration` did NOT move, and the reason
+is not caution: `scorer:migration` is **blocked on this tree right now** by the v18→v19 migration, so
+gating pushes on it would break every push for the duration of legitimate in-flight work —
+`release:provenance`'s own header already predicts exactly that failure mode.
+
 ## Audit findings closed since the recapture started
 
 | finding | what it turned out to be |
