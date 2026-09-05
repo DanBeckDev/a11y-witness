@@ -4,6 +4,19 @@ Everything needed to stand up, verify, and repair the Windows machine that drive
 real NVDA. Written for whoever (or whatever) is holding the terminal — no prior
 context assumed.
 
+> **`utmctl` appears throughout, and UTM is DEPRECATED — a testing path, not the fleet.** This project
+> captures on ten bare-metal Windows machines (`inventory.yml`), which have no `utmctl` and are reached by
+> SSH; `npm run fleet:status` is the equivalent of every `utmctl` status command below, and `fleet:deploy`
+> — never `worker:deploy` — is how code reaches them. **The `utmctl` procedures are kept and are still
+> correct for a local VM**, which remains a reasonable option for a single contributor on a Mac. What has
+> changed is which one this project exercises daily, and therefore which one is likely to be right when
+> the two disagree. Every UTM entry point now warns at runtime, so a command from this page that prints a
+> deprecation notice is behaving as intended.
+>
+> The section headed "Diagnosing a guest without `utmctl exec`" is worth reading FIRST rather than as a
+> fallback: `utmctl exec` wraps QEMU's `guest-exec`, which is known-unreliable on Windows, and a
+> diagnosis built on it can return success having run nothing.
+
 Three scripts do the work; this document explains *why* each step exists, so you can
 reason when reality diverges from them:
 

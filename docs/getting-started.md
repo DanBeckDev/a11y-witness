@@ -82,6 +82,14 @@ brew install qemu cdrtools socat wimlib aria2 cabextract
 brew install --cask utm
 ```
 
+**These scripts print a DEPRECATION warning, and here is what it does and does not mean.** UTM was this
+project's own testing path and its capture fleet is now ten bare-metal Windows machines, so nothing we
+capture comes from a VM any more — the warning is telling you that you are off the path this project
+exercises daily. **It is not telling you the scripts are broken.** For a single contributor on a Mac with
+no Windows hardware, a local VM is still a real option, and this is still how you build one. If you would
+rather not, the two supported alternatives are a Windows machine you already own (20 minutes, the section
+above) or the GitHub Action, which needs no worker of your own at all.
+
 Then:
 
 ```bash
