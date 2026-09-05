@@ -148,7 +148,8 @@ returns at its first line and `capture-screenreader-dataset.mjs` returns the exp
 `leaseWorkerPool` is called — so the UTM path is never entered.
 
 The **UTM guests on the Mac keep their own lifecycle** through `worker-ctl.sh` and are not managed from
-here. They are a development convenience; the bare-metal fleet is the thing.
+here. They are **deprecated** — "The UTM is deprecated, that was a testing thing" (repository owner,
+2026-09-05) — kept only for a quick single-worker trial; the bare-metal fleet is the thing.
 
 ## Verify it, before trusting it
 
