@@ -54,3 +54,26 @@ jobs:
       # Deterministic absence-rules fitness function: no model needed, so it runs
       # on every push and fails if the rules regress (e.g. a clean-page false positive).
       - run: npm run rules-check
+      # TWO OF `release:gate:ci`'s FOUR STAGES, moved here from dispatch-only — architecture-audit.md §7.2:
+      # "no push or PR checks packaging or provenance drift". Both are pure, tracked-file checks with no
+      # network, venv or corpus dependency, so nothing here makes them cheaper to prove than to just run:
+      # `gate:isolation` measured ~18 s locally and 6/6 on a Linux runner before this was written.
+      #
+      # `scorer:verify` and `gate:isolation` moved; `release:provenance` and `scorer:migration` did NOT,
+      # and that split is deliberate rather than an oversight to close later:
+      #
+      #   - `release:provenance`'s own header already states the reason and predicts the outcome of getting
+      #     this wrong: "Putting it in the unit suite would make it fail for everyone the moment somebody
+      #     started a promotion, which is how a check gets deleted." A promotion in progress is a normal,
+      #     multi-hour state that has nothing to do with most pushes.
+      #   - `scorer:migration` is not hypothetical here: it is BLOCKED on this tree right now, for a schema
+      #     migration opened 2026-09-03 that closes only when the in-flight recapture's retrain lands. Ran
+      #     it locally while writing this and got exit 1 — moving it here would fail every push and PR
+      #     until that migration closes, for reasons that have nothing to do with what most of them change.
+      #
+      # Both are release-readiness questions ("may this be published right now"), not packaging-integrity
+      # questions ("is what's tracked structurally sound") — and only the second kind holds on every commit
+      # regardless of what else is in flight. `scorer:verify` (is the shipped artefact a safe format) and
+      # `gate:isolation` (does the tarball install and run standalone) are both squarely the second kind.
+      - run: npm run scorer:verify
+      - run: npm run gate:isolation
