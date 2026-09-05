@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ruleFindings } from "./rules.js";
+import { ruleFindings, repeatedStructureContainers } from "./rules.js";
 
 const criteria = (findings: { wcag: string }[]): string[] =>
   findings.map((f) => f.wcag.match(/(\d+\.\d+\.\d+)/)?.[1] ?? f.wcag);
@@ -565,4 +565,36 @@ test("2.4.2 MAKES NO CLAIM when the probe could not read a heading", () => {
     "a heading that really changed is still a finding, or this passes by breaking the rule");
   assert.equal(ruleFindings(route(null)).filter((f) => f.wcag.startsWith("2.4.2")).length, 0,
     "an unread heading is 'cannot say', never 'the page moved to null'");
+});
+
+test("the 2.4.3 suppression counts a `section` container, which is what Edge 152 calls an unnamed form", () => {
+  // THE REGRESSION A BROWSER UPGRADE WOULD HAVE CAUSED. `w3c/html-aria#423` made the `form` role
+  // conditional on an accessible name, so Edge 152 announces an unnamed <form> as "section". This counter
+  // gates 2.4.3: more than one such container means control names repeat by construction, and comparing
+  // reading order with tab order across two of them invents a reordering. Counting only "form" returns 0
+  // on a page of unnamed forms, the guard stops firing, and 2.4.3 goes back to accusing
+  // `w3.org/WAI/tutorials/forms/validation/` — the false positive it was written to stop.
+  //
+  // TESTED DIRECTLY rather than through `ruleFindings`, and that is the second correction to this test.
+  // Two attempts to build a firing 2.4.3 fixture asserted nothing: the first repeated control names so
+  // `unambiguous` dropped them all, and the second put the container prefix on every line when NVDA
+  // announces it ONCE ON ENTRY. Real captures then showed why a hand-written fixture was the wrong
+  // instrument at all — the transcript carries a field's label and role on SEPARATE lines (bare "edit"),
+  // so reconstructing one faithfully means reproducing most of the capture shape. The counter is the thing
+  // that changed; test the thing that changed.
+  const entry = (role: string) => [`${role}, Given name, edit`, "Family name, edit", "Postcode, edit"];
+
+  assert.equal(repeatedStructureContainers(entry("form")), 1, "one form announced on entry");
+  assert.equal(repeatedStructureContainers(entry("section")), 1,
+    "Edge 152's name for the same thing must count the same");
+
+  // Two containers is what actually suppresses, under EITHER announcement — the old one included, because
+  // 3,246 captures on disk carry it and a rule that only reads the current browser cannot read its corpus.
+  for (const role of ["form", "section"]) {
+    assert.ok(repeatedStructureContainers([...entry(role), `${role}, Telephone, edit`, "Email, edit"]) > 1,
+      `two "${role}" containers must exceed the threshold that suppresses 2.4.3`);
+  }
+
+  // A page with no such container must not suppress anything.
+  assert.equal(repeatedStructureContainers(["heading, level 1, Contact us", "edit"]), 0);
 });
