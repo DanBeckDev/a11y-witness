@@ -124,6 +124,13 @@ says Y" — quoted, not paraphrased, because a paraphrase is what caused this.
 ## Rules that apply to the whole procedure
 
 - **Quote, never paraphrase.** The paraphrase is the defect.
+- **Sort a criterion's exceptions into NARROWING and REMOVING, and only the removing kind can make a
+  presence-check accuse a conformant page.** 1.1.1 has six. Four — Time-Based Media, Test, Sensory,
+  CAPTCHA — say text alternatives *"at least provide descriptive identification"*: they relax WHAT the
+  alternative says, not WHETHER it exists, so a rule testing presence is unaffected by all four. Only
+  Controls/Input (the name lives on the CONTROL) and Decoration (no alternative at all) can. Counting
+  exceptions gives you five risks; classifying them gives you two, and it is the classification that
+  tells you which rule shape is safe.
 - **An exception in the criterion is a rule you must NOT fire on.** 3.1.2 exempts proper names, technical
   terms, words of indeterminate language, and vernacular borrowings. 2.4.1 does not require a skip link at
   all — headings alone satisfy it (H69), landmarks alone satisfy it (ARIA11) — and a rule detecting its
