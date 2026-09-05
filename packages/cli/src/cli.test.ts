@@ -153,7 +153,7 @@ async function loopbackWorker(handler: (url: string, res: ServerResponse, body: 
 
 const CAPTURE_REQUEST: Omit<CaptureRequest, "worker"> = {
   task: "find the opening hours", probeForms: false, probeFocus: false,
-  probeNavigation: false, probeFocusContext: false,
+  probeNavigation: false, probeFocusContext: false, probeFocusReveal: false,
 };
 
 test("a capture that finished is RECOVERED, not reported as never examined", async () => {
