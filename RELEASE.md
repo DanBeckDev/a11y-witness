@@ -132,17 +132,22 @@ findings.
 
 ## Known limitations, stated plainly
 
-- **On a real page, ten criteria are actually assessed — five of them partially.** Seventeen in total can
+- **On a real page, ten criteria are actually assessed — five of them partially.** Eighteen in total can
   produce a finding, but four (2.4.6, 3.3.1, 3.3.2, 4.1.3) come only from the trained scorer, which abstains
   on pages unlike its training data — which today is still many real pages. A fifth, 3.3.3, is decided by a
   rule and still cannot fire on a page you do not own: it reads the form probe, which is deliberately off
-  there, because submitting somebody else's form is not a review. The ones that always work are the
-  deterministic rules:
+  there, because submitting somebody else's form is not a review. A sixth, 1.4.13, is rule-decided since
+  2026-09-05 and cannot fire on a real page yet for a different reason: the probe it reads has simply not
+  been turned on for real-page captures, not a consent boundary — see `criterion-coverage.ts`. The ones
+  that always work are the deterministic rules:
   - **In full: 1.1.1, 1.3.1, 1.4.2, 2.1.2, 2.4.4.**
   - **Only with an opt-in probe: 3.2.1, 3.2.2, 3.3.3** — a page that renames itself when a control is
     focused or typed into, and an announced validation error that names the problem and not the remedy.
     All three are rule-decided and exact, and all three read probes that press, type or submit — off for
     pages you do not own, so on somebody else's site they cannot fire in either direction.
+  - **Rule-decided but not yet turned on for real pages: 1.4.13** — content revealed on focus that Escape
+    does not dismiss. Rule-decided and reads no probe a consent boundary would gate; it simply has not been
+    enabled for real-page captures, which is an open gap rather than a decision, unlike the three above.
   - **Partially: 2.1.1, 2.4.1, 2.4.2, 2.4.3, 3.3.2, 4.1.2** — each covers one failure mode of several, and
     `criterion-coverage.ts` records which mode and why the others are out. Three of them (2.4.1, 2.4.2,
     2.4.3, added 2026-08-22) are failures a static analyser structurally cannot reach: a skip link that is
