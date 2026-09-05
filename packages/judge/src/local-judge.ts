@@ -80,14 +80,26 @@ export interface CaptureEvidence {
      * One entry per control this capture activated. `kind` distinguishes a disclosure from a task button
      * from a submit, and it is optional because captures made before protocol 3 do not carry it — code
      * reading it must treat `undefined` as "this capture cannot say", never as "not a submit".
+     *
+     * `after` admits `null` alongside `string | undefined`, matching `RuleInput`'s copy of this shape
+     * (`rules.ts`) rather than a narrower one written by hand here — found when `JudgeInput.interaction`
+     * was changed to derive from `RuleInput` and `judgeLocally(input)`'s call stopped type-checking. The
+     * read site already treated the two identically (`change.after ?? ""`), so this closes a type that had
+     * quietly stopped matching what flows, not a behaviour change.
      */
-    formChanges?: { control?: string; kind?: string; after?: string }[];
+    formChanges?: { control?: string; kind?: string; after?: string | null }[];
     /** Set only when submitting a form NAVIGATED. Absent means it did not, or was not checked. */
     navigatedOnSubmit?: { from: string; to: string };
     /** Accessible names the page exposed AFTER a submit — the visual side of 3.3.1 and 4.1.3. */
     postSubmitNames?: string[];
     /** What each Tab press announced. Absent means the focus probe did not run. Rule-only, like `media`. */
     focusOrder?: string[];
+    /**
+     * F55's focusin/focusout log verdict. Rule-only, like `focusOrder` above and read by `outcomes.ts`'s
+     * own applicability case for 2.4.7 the same way — `checked: false` is "the oracle could not run",
+     * never "no findings", so it must not collapse into an empty `focusOrder` here either.
+     */
+    focusEvents?: { checked: boolean; events?: number; scriptRemovedFocus?: { id: number; name: string; heldMs: number }[] | null };
   };
   /**
    * Media elements the page declares, from the DOM. Deliberately NOT added to `EVIDENCE_CHANNEL`: that

@@ -629,3 +629,38 @@ test("1.4.13's Dismissable finding fires only on revealed+held+not-dismissed, an
       `must make no claim on ${JSON.stringify(focusReveal)}`);
   }
 });
+
+test("2.4.7's F55 finding fires once per scripted-removal, only when checked, and always as secondary", () => {
+  // `focusEventVerdict` (`capture-pure.mjs`) is the decider; `addFocusEventFindings` just reports what it
+  // found. `secondary`, never `conformance`: the pair is a timing observation, not a read of whether a
+  // visible focus indicator was ever drawn (`coverage.ts`, `RULE_CRITERIA`'s 2.4.7 comment).
+  const capture = (focusEvents: unknown) => ({
+    transcript: [], structure: {}, interaction: { focusEvents },
+  } as never);
+
+  const found = ruleFindings(capture({ checked: true, scriptRemovedFocus: [
+    { id: 7, name: "Discount code", heldMs: 3 },
+  ] }));
+  assert.equal(found.length, 1, "the genuine positive must fire exactly once");
+  assert.equal(found[0].wcag, "2.4.7 Focus Visible");
+  assert.equal(found[0].mapping, "secondary",
+    "a focusin/focusout pair is evidence the mechanism is absent, not a read of a visible indicator");
+  assert.match(found[0].evidence, /Discount code/);
+  assert.match(found[0].evidence, /3ms/);
+
+  // Two removals in one capture must both be reported, independently.
+  const two = ruleFindings(capture({ checked: true, scriptRemovedFocus: [
+    { id: 1, name: "First", heldMs: 2 }, { id: 2, name: "Second", heldMs: 4 },
+  ] }));
+  assert.equal(two.length, 2, "each scripted removal is its own finding");
+
+  // `checked: false` is "cannot say", never "no findings" — must never be read as a clean zero even when a
+  // (stale or malformed) `scriptRemovedFocus` array is attached.
+  assert.equal(ruleFindings(capture({ checked: false, why: "no event log",
+    scriptRemovedFocus: null })).filter((f) => f.wcag.startsWith("2.4.7")).length, 0);
+  assert.equal(ruleFindings(capture(undefined)).filter((f) => f.wcag.startsWith("2.4.7")).length, 0);
+
+  // A real, checked zero is a real zero: the oracle ran and found nothing.
+  assert.equal(ruleFindings(capture({ checked: true, scriptRemovedFocus: [] }))
+    .filter((f) => f.wcag.startsWith("2.4.7")).length, 0);
+});

@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
 import { judgeLocally } from "./local-judge.js";
 import { ruleFindings } from "./rules.js";
+import type { RuleInput } from "./rules.js";
 import { applyGate } from "./verify-gate.js";
 
 /**
@@ -101,17 +102,22 @@ export interface JudgeInput extends OracleCounts {
    * `docs/local-model.md` bars the accessibility tree as a model feature, and `modelInput()`'s allowlist
    * is what enforces that.
    */
-  /** Optional interaction pass: how each interactive control is announced (found
-   * via quick-nav), the announced state after activating disclosures, and what
-   * was announced after submitting a form with no valid input. */
-  interaction?: {
-    controls: string[];
-    stateChanges: { control: string; after: string }[];
-    formChanges?: { control: string; after: string }[];
-    /** Form fields re-read after a submit: an accessible form marks the invalid
-     * field (aria-invalid + an associated error), an inaccessible one does not. */
-    postSubmitFields?: string[];
-  };
+  /**
+   * DERIVED from `RuleInput`, not a fifth spelling of it — known-gaps §15.
+   *
+   * This restated four of the channel fields by hand and had NONE of `focusContext`, `typedFeedback`,
+   * `focusReveal`, `focusOrder`, `routeChange`, `postSubmitNames`, `dialogEscape`, `arrowNavigation` or
+   * `focusEvents`. Nothing noticed, for the identical reason `structure` above survived missing
+   * `graphics`: `ruleFindings(input)` is called with the whole `JudgeInput` value, and both real
+   * construction sites (`cli.ts`'s `judge({interaction: cap.interaction, ...})` and
+   * `check-real-page-findings.ts`'s capture spread) pass the CAPTURE's own `interaction` object straight
+   * through rather than reconstructing this narrower literal field by field — so a real capture's
+   * `focusReveal`/`focusEvents`/etc. reached every rule regardless of what this type admitted, and the
+   * type just stopped describing what actually flows. Indexed off `RuleInput` so the next field added
+   * there cannot silently fail to be added here — the "derive one from the other" remedy this file's own
+   * `structure` field already uses, applied to the sibling that had not caught up.
+   */
+  interaction?: RuleInput["interaction"];
 }
 
 /**
@@ -368,7 +374,11 @@ function interactionBlock(input: JudgeInput): string {
   const lines = [
     ``,
     `Interactive controls (found by quick-nav; each line is how the control is announced, with its name/role/state):`,
-    ...it.controls.map((x, i) => `  ${i + 1}. ${x}`),
+    // `controls` was non-optional in this function's own copy of the shape before it was derived from
+    // `RuleInput` (which correctly marks it optional -- absent means the sweep did not run, not that it
+    // ran empty). The early return above already guards on `it.controls?.length`, but that guard is a
+    // compound condition across four fields and `tsc` cannot narrow a single property through it.
+    ...(it.controls ?? []).map((x, i) => `  ${i + 1}. ${x}`),
   ];
   if (it.stateChanges?.length) {
     lines.push(

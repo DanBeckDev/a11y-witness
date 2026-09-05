@@ -191,7 +191,28 @@ export type EvidenceChannel =
   /** The document title NVDA speaks on entry. Lives in the `documentReady` diagnostic, not in `structure`. */
   | "title"
   /** The accessibility-tree census, for cross-checks the sweeps cannot make alone. */
-  | "structureCensus";
+  | "structureCensus"
+  /**
+   * The `focusin`/`focusout` log over CDP, in capture order with element ids — `focusEventVerdict`
+   * (`capture-pure.mjs`) decides F55 from it: "using script to remove focus when focus is received",
+   * WCAG's own Failure listed under 2.1.1, 2.4.7, 2.4.13 and 3.2.1 together. Distinguishes a control that
+   * never received focus (2.1.1's signature — no event at all) from one that received it and had it
+   * stripped (a `focusin` immediately followed by a same-id `focusout`), which `focusOrder` alone cannot:
+   * both present as the control simply missing from the tab-stop list.
+   *
+   * ADDED 2026-09-06, and it was NOT already here — `focusEventVerdict` had shipped, been unit-tested and
+   * had a real capture carrying it for some time with no consumer, because a union member and a `Record`
+   * key are not the same omission. `routeChange` was IN this union and missing from the derived
+   * `INTERACTION_CHANNELS` array below, which is exactly the silent shape the exhaustive
+   * `Record<EvidenceChannel, ...>` now catches — a channel added to the union and left unclassified fails
+   * to compile. `focusEvents` was a member the union never had at all, so there was nothing for that check
+   * to catch: the first attempt to classify it here would have failed to compile on its own, loudly,
+   * before ever reaching a rule. **Loud is a far better failure than silent**, and it is worth stating
+   * where it cannot protect: the exhaustiveness fix guards "in the union, unclassified"; it cannot guard
+   * "never added to the union" — that gap still needs a reader to notice a shipped, tested, unconsumed
+   * function, which is what closed this one.
+   */
+  | "focusEvents";
 
 export interface CriterionCoverage {
   /**
@@ -541,10 +562,10 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "2.3.1": { status: "out-of-scope", needs: ["visual"], note: "Three Flashes needs frame-by-frame analysis of motion." },
     // Reclassified 2026-09-05: one of its two listed failures is not visual at all.
   "2.4.7": {
-    status: "reachable",
+    status: "partial",
     needs: ["screen-reader", "visual"],
-    channels: ["focusOrder", "focusContext"],
-    note: "TWO LISTED FAILURES, AND ONLY ONE OF THEM IS ABOUT PIXELS. F78 -- styling outlines and borders so the indicator is not visible -- is the common one and is rendering, exactly as the old note said. F55 is the other: \"using script to remove focus when focus is received\", which fails this criterion because nothing holds focus for an indicator to be drawn on. That is not a pixel question and `focusOrder` is the channel for it. THE REPO ALREADY KNEW THIS FROM THE OTHER END: 3.2.1's rule states F55 as an unclosed gap and says outright that `focusOrder` could witness it, so ONE PROBE WOULD SERVE BOTH CRITERIA -- and neither entry mentioned the other. THE AMBIGUITY IS REAL AND MUST BE DESIGNED FOR: a control that receives focus and has it stripped presents as a control focus never reached, which is 2.1.1's signature. Distinguishing them needs the focus event, not just the resulting tab-stop list, and that is why this is `reachable` rather than `partial` -- the evidence to tell the two apart is not captured yet. Do not build it without a corpus case that carries F55 specifically.",
+    channels: ["focusOrder", "focusContext", "focusEvents"],
+    note: "TWO LISTED FAILURES, AND ONLY ONE OF THEM IS ABOUT PIXELS. F78 -- styling outlines and borders so the indicator is not visible -- is the common one and stays out of reach: rendering, exactly as the old note said, and nothing here rasterises a page. F55 is the other: \"using script to remove focus when focus is received\", which fails this criterion because nothing holds focus for an indicator to be drawn on -- not a pixel question, and now assessed. `probeFocusOrder` installs a `focusin`/`focusout` log over CDP, `focusEventVerdict` (`capture-pure.mjs`) pairs same-id events under `FOCUS_SCRIPT_BLUR_WINDOW_MS`, and `addFocusEventFindings` (`rules.ts`) reports it as `secondary` -- a timing pair is evidence the mechanism is absent, not a read of whether an indicator was ever drawn, which is the inference `mapping` exists to mark. `PARTIAL`, not `assessed`: F78 remains entirely unassessed, so a clean report here is silent on it, never a pass for the criterion as a whole. THE REPO ALREADY KNEW F55 FROM THE OTHER END: 3.2.1's rule states it as an unclosed gap and says outright that `focusOrder` could witness it -- ONE PROBE SERVES BOTH CRITERIA, and this is that probe reaching its second consumer. THE AMBIGUITY WAS REAL AND IS NOW DESIGNED FOR: a control that receives focus and has it stripped presents as a control focus never reached, which is 2.1.1's signature -- `focusEventVerdict` matches by element id, never by name or position, precisely so a script-stripped control and a genuinely unreachable one are told apart by the event log rather than by the resulting tab-stop list. THE THRESHOLD'S LOWER BOUND IS UNVERIFIED: `FOCUS_SCRIPT_BLUR_WINDOW_MS`'s own comment (`capture-pure.mjs`) records a 12.6x margin confirmed on the negative side (real ordinary Tab transitions land far above it) and states plainly that no capture has yet recorded a real script `blur()` to confirm one lands under it -- so this channel can currently only ever report a real F55 case correctly, not yet prove it would catch a borderline one.",
   },
   "2.4.11": { status: "out-of-scope", needs: ["visual"], note: "Focus Not Obscured is geometry: is the focused element covered by other content." },
   "2.5.8": { status: "out-of-scope", needs: ["visual"], note: "Target Size is geometry: the rendered width and height of a control, and its spacing from its neighbours. Nothing in the accessibility tree carries it." },
@@ -619,6 +640,7 @@ export const CHANNEL_LOCATION: Record<EvidenceChannel, "structure" | "interactio
   focusContext: "interaction",
   focusReveal: "interaction",
   postSubmitNames: "interaction",
+  focusEvents: "interaction",
   frames: "structure",
   // Read from somewhere other than `structure`/`interaction`: `media` sits at the top level, `title`
   // inside the `documentReady` diagnostic, `structureCensus` is a diagnostic's presence.

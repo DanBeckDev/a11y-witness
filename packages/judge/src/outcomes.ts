@@ -87,6 +87,9 @@ const SWEEPS_FEEDING: Record<string, readonly string[]> = {
   // Not a quick-nav sweep, but it truncates the same way: the probe stops after a fixed number of Tab
   // presses, and a trap past that point was never looked for.
   "2.1.2": ["focusOrder"],
+  // Same probe, same truncation: `probeFocusOrder` installs the focusin/focusout log `focusEventVerdict`
+  // reads, so a script-removal past the Tab-stop cap was never looked for either.
+  "2.4.7": ["focusOrder"],
   // Both sequences it compares. A starved formField sweep shortens the reading order and a truncated focus
   // probe shortens the tab order; either way "never reached" stops meaning "unreachable".
   "2.1.1": ["formField", "focusOrder"],
@@ -226,6 +229,16 @@ function applicabilityOf(criterion: string, capture: CaptureEvidence): "applicab
     const stops = capture.interaction?.focusOrder;
     if (stops === undefined) return "notProbed";
     return stops.length > 0 ? "applicable" : "empty";
+  }
+  // 2.4.7 reads the SAME probe's event log, not `focusOrder`'s stop count — `focusEventVerdict`'s own
+  // contract makes `checked: false` the oracle's "could not run" (`why` says why), which must not read as
+  // "no script removed focus" any more than a missing `focusOrder` may read as "no trap". `events === 0`
+  // on a `checked: true` log is the 2.1.2-shaped case: the probe ran and nothing ever received focus, so
+  // there is nothing here for a script to have stripped.
+  if (criterion === "2.4.7") {
+    const focusEvents = capture.interaction?.focusEvents;
+    if (!focusEvents?.checked) return "notProbed";
+    return (focusEvents.events ?? 0) > 0 ? "applicable" : "empty";
   }
   return hasEvidenceFor(criterion, capture) ? "applicable" : "empty";
 }
