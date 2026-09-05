@@ -585,8 +585,20 @@ async function judgeOnce(input: JudgeInput): Promise<Judgment> {
     // If recall fails to parse, stage 2 still audits the transcript directly.
   }
   process.stderr.write(`Recall pass surfaced ${candidates.length} candidate issues.\n`);
-    const verdict = await ask("verify", buildVerifyPrompt(input, candidates), VERIFY_SCHEMA);
-    const judged = validateJudgment(JSON.parse(extractJson(verdict)));
+  const verdict = await ask("verify", buildVerifyPrompt(input, candidates), VERIFY_SCHEMA);
+  // The recall stage above tolerates a malformed response (it degrades to auditing the transcript
+  // directly). The verify stage cannot -- there is nothing to fall back to -- but a bare
+  // `JSON.parse`/`SyntaxError` names neither which STAGE failed nor which BACKEND produced the text, so a
+  // truncated or non-JSON response from a rented model crashed judge() with a message a user would have
+  // to already understand this file to act on. Named here instead, matching validateJudgment's own
+  // "judge output has invalid X" style.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(extractJson(verdict));
+  } catch (cause) {
+    throw new Error(`judge verify stage (${BACKEND}) did not return valid JSON`, { cause });
+  }
+  const judged = validateJudgment(parsed);
   judged.findings = keepRealCriteria(judged.findings ?? []);
   return judged;
 }
@@ -712,8 +724,12 @@ function runCodex(promptFile: string): Promise<string> {
  * Codex is asked for raw JSON; strip stray prose or fences just in case.
  * Handles both objects ({...}, the verdict) and arrays ([...], the recall
  * candidates) by anchoring on whichever delimiter appears first.
+ *
+ * EXPORTED so a test can drive this exact parser rather than a copy of it -- it is shared by every
+ * backend, and it is the one place a fenced or prose-wrapped response is turned into something
+ * `JSON.parse` can attempt.
  */
-function extractJson(text: string): string {
+export function extractJson(text: string): string {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const body = fenced ? fenced[1].trim() : text;
   const firstObj = body.indexOf("{");
