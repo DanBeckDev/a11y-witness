@@ -58,15 +58,26 @@ around, it is what makes the evidence real. Point the CLI at one:
 A11Y_WORKER=http://192.168.64.4:8765 npx a11y-witness <url> --task "..."
 ```
 
-On macOS with UTM, `@a11y-witness/worker-fleet` will lease a local VM for the run and put it back as it found
-it. See `@a11y-witness/nvda-worker` for the worker itself.
+**UTM is DEPRECATED — it was a testing path, not the fleet.** `@a11y-witness/worker-fleet` can still lease a
+local UTM VM on macOS and put it back as it found it, and every UTM entry point now says so at runtime. Point
+`A11Y_WORKER` at a Windows machine you have, or use the GitHub Action if you have none. See
+`docs/getting-started.md` for setting a worker up, and `@a11y-witness/nvda-worker` for the worker itself.
 
 ## A page behind a consent wall is REFUSED, not reported
 
-The screen reader gets held inside the modal, so the capture describes the dialog rather than the page. The run
-exits 2 and says which it was. This is deliberate and it is the check that matters most in the whole tool:
-on one real site the census found 793 links and 463 headings while the screen reader reached 1 heading and 0
-links, and an earlier version reported "No lived-experience findings" — for a page it had never seen.
+The screen reader gets held inside the modal, so the capture describes the dialog rather than the page.
+
+**What the CLI actually does — this paragraph used to say "the run exits 2", and it does not.** It writes a
+warning to stderr naming which kind of doubt it was, marks the result `captureVerified: false` with an
+`unverifiedReason`, and **reports no findings rather than describing the dialog**. The report says so in
+words. The run's exit code is decided by `--fail-on` as usual; the only thing here that exits 2 is a bad
+`--forms` config. (Exit 2 on an unverified capture is `capture-check.mjs`, a lab harness, and this README
+had inherited its behaviour.)
+
+This is deliberate and it is the check that matters most in the whole tool: on one real site the census
+found 793 links and 463 headings while the screen reader reached 1 heading and 0 links, and an earlier
+version reported "No lived-experience findings" — for a page it had never seen. **Refusing to report is the
+point; the exit code is not what does it.**
 
 ## Rendering the report yourself
 
