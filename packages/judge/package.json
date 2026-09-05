@@ -44,10 +44,14 @@
   },
   "peerDependencies": {
     "@a11y-witness/scorer": "0.1.0",
-    "@anthropic-ai/sdk": "^0.106.0"
+    "@anthropic-ai/sdk": "^0.106.0",
+    "@huggingface/transformers": ">=3.0.0"
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "@huggingface/transformers": {
       "optional": true
     }
   },

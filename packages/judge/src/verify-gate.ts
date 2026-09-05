@@ -153,7 +153,21 @@ async function getClassifier(): Promise<Classifier> {
       // Non-literal specifier: transformers.js is optional, so tsc must not try
       // to resolve it when the gate is unused.
       const spec: string = "@huggingface/transformers";
-      const tf = (await import(spec)) as TransformersModule;
+      let tf: TransformersModule;
+      try {
+        tf = (await import(spec)) as TransformersModule;
+      } catch (cause) {
+        // Reproduced from a real tarball install (architecture-audit.md §4.5/§3.5): a consumer who sets
+        // JUDGE_GATE=on without following the header's `npm install @huggingface/transformers` step got
+        // a bare `Cannot find package '@huggingface/transformers'`, and `judge.ts:642` has no catch
+        // around `applyGate`, so it crashed the WHOLE judge() call rather than just the opt-in gate.
+        throw new Error(
+          "JUDGE_GATE=on, but @huggingface/transformers is not installed. It is an optional peer "
+          + "dependency, lazy-loaded so the judge builds and runs without it when the gate is off: "
+          + "run `npm install @huggingface/transformers` to enable the discriminative gate.",
+          { cause },
+        );
+      }
       tf.env.allowLocalModels = true;
       tf.env.allowRemoteModels = false;
       tf.env.localModelPath = dirname(MODEL_DIR);
