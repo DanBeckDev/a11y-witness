@@ -215,14 +215,46 @@ independently-derived ground truth:
 interaction probes) can observe. The following are deliberately left to static
 scanners and other tools — a division of labour, not a blind spot:
 
-- **Visual / sensory:** contrast (1.4.3/1.4.6), use of colour (1.4.1), non-text
-  contrast (1.4.11), text spacing (1.4.12), reflow (1.4.10), focus visible
-  (2.4.7), target size (2.5.x). Not present in a transcript.
-- **Operable / behavioural:** keyboard operability and traps (2.1.1/2.1.2),
-  focus order (2.4.3), timing (2.2.x), motion/flashing (2.3.x). Partly
-  observable only in a *driven* session; a candidate future scope, not a passive
-  read, and called out by the source material as the highest-impact manual-only
-  failures (Cruse & Boudreau 2025, ch.20-21).
+> **THE PER-CRITERION LIST THAT USED TO BE HERE WAS STALE, AND IT UNDERSTATED THE
+> TOOL.** It listed keyboard operability and traps (2.1.1, 2.1.2) and focus order
+> (2.4.3) as "a candidate future scope, not a passive read". All three have been
+> assessed for months — they are `partial` in the coverage map, and driving a
+> session is exactly what this tool does. It also called focus visible (2.4.7)
+> "not present in a transcript"; the 2026-09-05 criterion audit moved it to
+> `reachable`, because F55 (script removing focus when focus is received) is one
+> of its two listed failures and is not a pixel question at all.
+>
+> **So this section no longer restates the list.** It is generated from
+> `criterion-coverage.ts` into [`coverage.md`](./coverage.md), with a per-criterion
+> reason and a test that fails when the two disagree — which is the only form of
+> this claim that cannot rot. A prose copy of a machine-readable fact is the defect
+> this repo records most often, and it had one here.
+
+**[`docs/coverage.md`](./coverage.md) is the answer**, all 55 criteria with the
+reason for each. The families that are out of scope, and why:
+
+- **Visual / sensory** — contrast, use of colour, text spacing, reflow, target
+  size. Properties of rendered output; no assistive-technology signal exists.
+  Note W3C directs contrast to be computed from *"the underlying markup and
+  stylesheets, rather than the text as presented on screen"*, so this is a static
+  scanner's job rather than a screenshot's.
+- **Pointer-only** — pointer gestures, cancellation, dragging, motion actuation.
+  Each is scoped by its own text to pointer input; a keyboard-driven session
+  cannot demonstrate a failure, and 2.5.1 adds that it *"does not apply to actions
+  required to operate the user agent or assistive technology"*.
+- **Media adequacy** — captions and audio description (1.2.x). Presence is often
+  detectable from markup; whether an alternative *conveys* the media is a
+  judgement about content.
+- **Multi-page** — consistent navigation, identification and help, multiple ways.
+  Each says *"set of web pages"* in its own text, and the capture is single-page
+  by construction. Note that criteria saying **"process"** are NOT in this family:
+  3.3.4, 3.3.7 and 3.3.8 were misfiled here for exactly that paraphrase.
+
+**Operable and behavioural criteria are IN scope, not out**, and are what this tool
+exists for — keyboard operability, traps, focus order and status messages are all
+driven rather than read passively. The source material calls these the
+highest-impact manual-only failures (Cruse & Boudreau 2025, ch.20-21), which is the
+argument for driving a session rather than a reason to defer it.
 - **Media production:** captions / audio description (1.2.x). Not screen-reader
   observable.
 - **Known fine-tune target, not a prompt fix:** link purpose (2.4.4) is a subtle
