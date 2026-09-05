@@ -82,10 +82,28 @@ jobs:
           test -s "$path" || { echo "::error::the inaccessible run produced no result-json" >&2; exit 1; }
           node packages/lab/src/harnesses/assert-action-report.mjs "$path" --require-wcag=1.1.1 --require-rule-layer
 
+      # NAMED BY THE PATH THE ACTION ALWAYS WRITES, never by the failing step's OUTPUT.
+      #
+      # This read `steps.witness.outputs.result-json`, which that step sets on its LAST line — so when it
+      # failed, the output was never set, the expression rendered empty, and this step died with
+      # "Input required and not supplied: path". A failure handler that fails precisely when it is needed:
+      # every one of the 85 consecutive red runs discarded the report that would have explained it, and
+      # `if-no-files-found: ignore` meant it did so quietly even on the runs where `path` was non-empty.
+      #
+      # `action.yml` writes to `$RUNNER_TEMP/a11y-witness-result.json`, a constant assigned BEFORE the CLI
+      # is invoked, so the file exists whatever happens next — which is the whole point of collecting it.
+      # The summary rides along for the same reason. `warn` rather than `ignore`: if this now collects
+      # nothing, that is itself a finding about the run, and silence is what hid the bug for 85 runs.
+      #
+      # NOTE, not fixed here: both `uses: ./` runs write the SAME filename, so run 2 overwrites run 1.
+      # That only loses information when run 1 passed and run 2 failed; naming them apart needs an input
+      # on `action.yml`, which is a consumer-facing change and does not belong in a workflow fix.
       - name: Keep the report when this fails
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: action-smoke-report
-          path: ${{ steps.witness.outputs.result-json }}
-          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/a11y-witness-result.json
+            ${{ runner.temp }}/a11y-witness-summary.md
+          if-no-files-found: warn
