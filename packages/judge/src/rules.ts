@@ -462,9 +462,14 @@ function addErrorWithoutRemedy(input: RuleInput, add: AddFinding): void {
   ].filter((text) => ANNOUNCED_ERROR_TEXT.test(text));
   if (!spoken.length) return;                                    // 3.3.1's finding, not this one
   if (spoken.some((text) => REMEDY_INSTRUCTION.test(text))) return;
+  // `secondary`, NOT `conformance` — and this literal said `conformance` for a day after the decision to
+  // downgrade it, because `act-rules.ts` was edited and this was not. 3.3.3 forbids withholding a
+  // suggestion that is KNOWN, and only where doing so would not "jeopardize the security or purpose of the
+  // content". This rule reads "the announced error carries no instruction", which is a different thing:
+  // "Incorrect password" is REQUIRED behaviour and was being asserted as a conformance failure.
   add("3.3.3 Error Suggestion",
     "A validation error was announced but names only the problem, never how to correct it",
-    spoken.join(" | "), "conformance");
+    spoken.join(" | "), "secondary");
 }
 
 /**
@@ -491,15 +496,18 @@ function contextChanged(channel: { titleBefore?: string | null; titleAfter?: str
 function addContextChanges(input: RuleInput, add: AddFinding): void {
   const focus = input.interaction?.focusContext;
   if (contextChanged(focus)) {
+    // `secondary` for the reason 3.3.3 above gives, and the same missed edit. The criterion's own note:
+    // "A change of content is not always a change of context." This reads "two titles differ" and asserted
+    // a change of CONTEXT, so a page appending a result count conformed and was accused.
     add("3.2.1 On Focus",
       "Focusing a control changed the page's title, so the user's context moved without them acting",
-      `${focus?.control ?? "first control"}: ${focus?.titleBefore} -> ${focus?.titleAfter}`, "conformance");
+      `${focus?.control ?? "first control"}: ${focus?.titleBefore} -> ${focus?.titleAfter}`, "secondary");
   }
   const typed = input.interaction?.typedFeedback;
   if (contextChanged(typed)) {
     add("3.2.2 On Input",
       "Typing into a control changed the page's title, so the user's context moved on input alone",
-      `${typed?.titleBefore} -> ${typed?.titleAfter}`, "conformance");
+      `${typed?.titleBefore} -> ${typed?.titleAfter}`, "secondary");
   }
 }
 
