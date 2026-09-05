@@ -514,6 +514,38 @@ Checked at HEAD, reading code rather than commit messages. Of ~50 findings with 
 are already fixed and 1 was already closed under different wording (§10.4 — corrected in §15, not listed
 below). The rest are genuinely open:
 
+> ### STATUS AT 2026-09-06 — most of this list is now CLOSED, and two entries were REFUTED
+>
+> Worked through in one session by five peer sessions with one reviewer. The bullets below are kept as
+> WRITTEN so the diff is readable against what was found; this box is what is true now.
+>
+> | finding | now |
+> |---|---|
+> | §3.3–3.5 export bypasses | **CLOSED.** `./host-address`, `./fleet-env`, `./fleet-consistency`, `./worker-code-check` added to `worker-fleet`'s `exports`; every `lab` site repointed at the package name; `generate-coverage-doc.ts`'s two bypasses of `judge` fixed |
+> | §3.3–3.5 undeclared dependencies | **REFUTED as publish-blocking.** Every undeclared use is in a `.test.ts`, and no test file ships — both tarballs are `dist`-only and `npm pack --dry-run \| grep -c test` is 0. `axe-core`/`playwright` are optional BY DESIGN and documented as such; `@huggingface/transformers` is a deliberately non-literal dynamic import behind an opt-in gate. Declared anyway as dev-dependency hygiene. **`gate:isolation` did not catch it because there was nothing to catch** |
+> | §4.4 the four channel tables disagreeing for 4.1.2 | **CLOSED** by `channel-tables-4.1.2.test.ts`, mutation-confirmed at 218 captures |
+> | §4.5 `cli.ts`'s "local Codex login" header | **CLOSED** — stale since the `local` default landed 2026-08-04 |
+> | §4.5 `verify-gate.ts`'s undeclared env vars and dependency | **CLOSED**, and it exposed a real bug: `JUDGE_GATE=on` without the package crashed the whole `judge()` call with a bare `Cannot find package`. Now rejects naming the fix |
+> | §7.2 no Python in CI | **CLOSED** — `requirements-ci.txt` + `setup-python` + pytest in `lint.yml` |
+> | §7.2 no Ansible check anywhere | **CLOSED** — `ansible-check.yml`, syntax-check plus `check-modules.py` at 230/0, proved in a scratch venv so a missing collection could not pass silently |
+> | §7.3 `release.yml:161`'s `$status` under `set -u` | **CLOSED.** Both forms executed: the old one dies `status: unbound variable` and the operator never sees the "wait, do not start another" guidance |
+> | §7.4 `pure-graph.test.ts` naming a retired file | **CLOSED**, and it was guarding five files while reporting six. `MUST_BE_PURE` is now verified to EXIST before it is walked |
+> | §7.4 `.c8rc.json`'s phantom exclude | **CLOSED** |
+> | §7.5 `examples/workflow.yml` contradicting the Action's default | **CLOSED, and it was wrong three ways** — `probe-forms` inverted, a `task:` comment true only because of that inversion, and the same unguarded `upload-artifact` path bug that discarded this repo's own action-smoke evidence for 85 runs. Pinned by `example-matches-action-defaults.test.ts`, DERIVED from `action.yml`'s declared defaults |
+> | §7.5 `action.yml` pip-installing unpinned versions behind a constant cache key | **OPEN and PUBLISH-BLOCKING** — its own row above. Cannot be verified until `action-smoke` can go green, so it rides the first green run after the v19 lock closes |
+> | §8 the UTM path | **DEPRECATION CLOSED, deletion deferred by decision.** ~2,190 lines measured UTM-only (not ~2,460 — general-purpose functions inside those files were excluded); every UTM entry point now warns to stderr, enforced by a discovery test with vacuity guards; the three docs corrected |
+> | §10.2 `packages/README.md`, `packages/control/`'s missing README, root `README.md` | **CLOSED.** The README said "nothing trained yet" while the trained scorer IS the product and the same document said so 40 lines later; `nvda-speech` was misdescribed; and its "18 of 55" had drifted from the generated `coverage.md`'s 19 **in a sentence claiming the number could not drift** — deleted rather than updated, which is the right remedy off the list |
+>
+> **Still open and assigned:** §5's consolidated wire contract, §6.5's `CRITERION_STATES` cross-check,
+> §9's remaining duplication (raw `fetch` at four sites, Windows-trimming in three files), §10.1's eleven
+> decisions with no ADR, and `PLAN.md`'s B1/B7 self-contradiction. **Still open and unassigned:**
+> `packages/cli/README.md` documenting the Action runner's exit-2 behaviour as the CLI's own.
+>
+> **And one finding that was NOT in the audit at all, found while triaging it:** the CLI hung for
+> **10 minutes 20 seconds in silence** when nothing answered — `ECONNREFUSED` is a transient network code,
+> so the lost-acceptance recovery ran to the full 620 s budget against an address nothing had ever
+> answered. Closed, and the fix was shown to fail first: 5.5 s with it, past a 15 s bound without.
+
 - **Package boundaries (§3.3–3.5):** `lab` still bypasses `worker-fleet`'s exports at `host-address.mjs`,
   `fleet-env.mjs`, `fleet-consistency.mjs`, `worker-code-check.mjs`, and `generate-coverage-doc.ts` still
   bypasses `judge`'s `./coverage` export. `scorer`'s pytest suite still reaches into `lab` by path in at
