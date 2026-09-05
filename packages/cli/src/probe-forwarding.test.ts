@@ -54,7 +54,10 @@ const HOPS: Record<string, [string, string]> = {
     ["async function captureAndScan(", "function reportOnTheCapture("],
   "runWitness's destructure and its captureAndScan call":
     ["async function runWitness(", "function printJson("],
-  "the CaptureRequest interface": ["export interface CaptureRequest {", "interface FormStateRequest {"],
+  // `CaptureRequest` derives its probe-flag field NAMES from `@a11y-witness/evidence`'s wire type via
+  // `Pick` (wire-contract unit, 2026-09-06) rather than spelling each out as its own field, but the flag
+  // names still appear here as the `Pick` string-literal union, which is what this span actually checks.
+  "the CaptureRequest interface": ["export type CaptureRequest =", "type FormStateRequest ="],
   "captureViaWorker's own destructure":
     ["export async function captureViaWorker(", "): Promise<CaptureResponse> {"],
   // NARROWED to the `body: {...}` object literal specifically, not the whole function — the destructure
