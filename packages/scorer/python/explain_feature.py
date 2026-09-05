@@ -47,19 +47,26 @@ def value_of(record: dict[str, Any], feature: str) -> float:
 
 
 def describe(record: dict[str, Any]) -> str:
-    # Every channel the RECORD carries, not a hand-written list of the ones `structured_feature_values`
-    # happens to read today. A fixed list here was found to already be a stale copy of the interaction
-    # channels this file's own featurizer reads (`controls`, `stateChanges`, `formChanges`,
-    # `postSubmitFields`, per the `.get("interaction")` calls in screenreader_features.py) -- correct only
-    # by accident, since it would go stale the moment a fifth channel started feeding a feature and nobody
-    # remembered to add it here. The interesting part is usually a field the feature does NOT read -- `kind`
-    # and `baselineQuiet` both travelled on every entry for weeks while nothing consulted them -- so printing
-    # whatever the record actually carries, unfiltered, is strictly more informative than a maintained list.
+    # THE UNION of every channel the RECORD carries and every channel the FEATURIZER reads.
+    #
+    # Printing only what the record carries (an earlier version of this function) has exactly the failure
+    # this repo names repeatedly: a channel `structured_feature_values` consults but this record lacks
+    # entirely never appears, so "this record has no formChanges" and "we did not print formChanges" become
+    # the same silence -- reproduced on `{"input": {"interaction": {"controls": [...]}}}`, which printed
+    # `controls` and said nothing about `formChanges` at all. `FEATURIZED_INTERACTION_CHANNELS` is imported
+    # rather than re-listed here, because a hand-written duplicate of exactly that set is what went stale
+    # in this file once already.
+    #
+    # Three states, printed distinguishably: a channel with entries, a channel present but empty (`[]` --
+    # captured, and there was nothing), and a channel ABSENT from the record (never captured at all). The
+    # last two look identical unless said in words.
     interaction = (record.get("input", {}).get("interaction") or {})
+    channels = sorted(set(interaction) | set(features.FEATURIZED_INTERACTION_CHANNELS))
     lines = [f"    case: {record.get('provenance', {}).get('caseId', '(unknown)')}"]
-    if not interaction:
-        lines.append("      (no interaction channels captured)")
-    for channel in sorted(interaction):
+    for channel in channels:
+        if channel not in interaction:
+            lines.append(f"      {channel}: (ABSENT -- not captured on this record)")
+            continue
         value = interaction[channel] or []
         rendered = json.dumps(value)[:220] if value else "[]"
         lines.append(f"      {channel}: {rendered}")

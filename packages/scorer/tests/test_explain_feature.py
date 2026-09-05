@@ -124,3 +124,18 @@ def test_a_channel_no_feature_reads_still_prints(capsys):
     rec["input"]["interaction"]["focusOrder"] = ["Search, edit", "Submit, button"]
     ef.report([rec], SUB, "form_change_nonempty", 3)
     assert "focusOrder" in capsys.readouterr().out
+
+
+def test_a_channel_the_feature_reads_but_the_record_lacks_is_named_absent(capsys):
+    # Reproduced against the FIRST version of the union fix: printing only what the record carries made a
+    # channel the featurizer consults but this record never captured (no key at all, not even `[]`) vanish
+    # silently -- "this record has no formChanges" and "we did not print formChanges" becoming the same
+    # silence, which is precisely the failure this repo's evidence rules exist to prevent. `describe` must
+    # name it as absent rather than omit it.
+    rec = record([SUB], SILENT, case="sparse")
+    del rec["input"]["interaction"]["formChanges"]
+    assert "formChanges" not in rec["input"]["interaction"], "the record must genuinely lack the key"
+    ef.report([rec], SUB, "form_change_nonempty", 3)
+    out = capsys.readouterr().out
+    assert "formChanges" in out, "a channel the feature reads must be mentioned even when the record lacks it"
+    assert "ABSENT" in out, "an absent channel must be distinguishable from one present but empty"
