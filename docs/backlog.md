@@ -686,6 +686,41 @@ What remains is corpus work, not capability: a per-page forms config in `real-pa
 **`npm run lab:job -- -e job=everything -e ref=main` was dispatched at 17:29 on `ea03f8e`.** Everything
 below is what it is doing and what to read when it stops; nothing here needs starting.
 
+> ### THE NUMBER THAT JUSTIFIES v19 RESTS ALMOST ENTIRELY ON AN INFERENCE — measured 2026-09-05, 23:5x
+>
+> `schema-migration.json` opens with *"61.7% of empty formChanges and 56.1% of empty postSubmitFields"*
+> are "nothing looked" rather than "the page has none". That is the whole case for the feature cross. Run
+> now against the corpus on disk, `corpus:observation-ambiguity` says:
+>
+> ```
+> formChanges       empty on 3724, of which 2227 never asked  59.8% (2209 of those by the pre-9 fallback, not the record)
+> postSubmitFields  empty on 4344, of which 2255 never asked  51.9% (2217 of those by the pre-9 fallback, not the record)
+> ```
+>
+> The percentages are close to the originals. **The parenthesis is the finding: 2,209 of 2,227 — 99.2% —
+> and 2,217 of 2,255 — 98.3% — are the pre-protocol-9 FALLBACK.** `channelWasAsked` returns
+> `byRecord: true` only when a capture carries an `observed.<channel>` block; without one it infers the
+> answer from the `formProbe` mark. So only **18** formChanges verdicts and **38** postSubmitFields
+> verdicts come from a capture that actually recorded whether it was asked. The rest is a best guess about
+> old captures.
+>
+> **This does not refute the migration and it is not a reason to revert.** The inference is a reasonable
+> one and it is the only answer those captures can give. What it means is that the CEO's condition —
+> re-derive on the RECAPTURED corpus — is not a formality, it is the first real measurement of this
+> quantity. Every capture at protocol 15 carries a real `observed` block, so the recaptured number is
+> `byRecord` throughout and can move in either direction.
+>
+> **And it was invisible until this morning.** `emptyByFallback` was introduced by `fdfa3a5` ("'asked'
+> meant two things, and the audit read the weaker one"). Before that commit the audit printed the
+> percentage with no indication of how much of it was inferred — a number with no provenance, which is
+> this file's own most-repeated rule arriving on the figure that a schema migration was opened on.
+>
+> **What to do when the chain finishes**, and it is one command, on the LAB because a laptop copy answers
+> `unknown`: `npm run lab:job -- -e job=observation-ambiguity`. Read the parenthesis first. If the
+> fallback share is near zero and the percentage holds, the case for v19 is measured rather than inferred
+> for the first time. If the percentage collapses once it is measured properly, that is a REVERT — and it
+> is the outcome this whole exercise existed to make visible.
+
 **Why `everything` rather than `--pipeline=migration-verdict`, which the previous version of this section
 recommended.** They sequence the same work; the difference is where the sequencing LIVES. `lab:pipeline`
 runs the ordering in a local node process, so each stage is a supervised unit and the thing deciding what
