@@ -305,7 +305,30 @@ of it. We press Tab only, and we cannot see an on-page advisory, so a repeat is 
 proof." Mapped `secondary` accordingly — and both its branches check `escapeReleasedFocus`, which is the
 standard exit method the criterion names.
 
-## 3.3.2 Labels or Instructions — CLEAN BOUND, one untested half
+## 3.3.2 Labels or Instructions — **THIS VERDICT WAS OVERTURNED THE NEXT DAY**
+
+> **READ THE CORRECTION BELOW BEFORE THE SECTION.** This was recorded as CLEAN with "one untested half".
+> It was not clean. Re-reading the criterion on 2026-09-05 against the tells this audit itself produced
+> found the rule ASSERTING a conformance failure against a page that SATISFIES the criterion, and 133
+> corpus records labelled the same way — the third rule in two days doing that, after 3.3.3 and
+> 3.2.1/3.2.2.
+>
+> **What the section below got right** is the bound it describes. **What it missed** is the word "or":
+> W3C states that 3.3.2 does NOT require labels or instructions to be marked up, identified, or ASSOCIATED
+> with their controls — that is 1.3.1 — and that a field can PASS 3.3.2 while FAILING 1.3.1. The corpus's
+> own bad page is `<span>Recipient name</span><input>`: a label IS provided, simply not associated. All
+> 133 carried one, so the count of genuine failures was ZERO.
+>
+> Fixed: the rule maps `secondary`, and the records are now `4.1.2:unnamed-control` — what the evidence
+> actually supports, since a bare "edit" proves the accessible NAME is absent and cannot show whether a
+> visible label exists elsewhere.
+>
+> **The lesson is about this document, not the criterion.** A verdict of CLEAN is a claim like any other,
+> and this one went stale in the OPTIMISTIC direction within a day — the failure `criterion-coverage.ts`
+> names as the one it exists to prevent. The section is kept rather than rewritten so the overturning is
+> visible; deleting it would hide that the first pass reached the wrong answer with the right method.
+
+## 3.3.2 Labels or Instructions — the original verdict, now superseded
 
 > "Labels or instructions are provided when content requires user input."
 > — [Understanding 3.3.2](https://www.w3.org/WAI/WCAG22/Understanding/labels-or-instructions)
@@ -584,6 +607,24 @@ changed a status — so the coverage CLAIMS were nearly all sound while the *exp
 
 The generalisable check, and it found ten of the twelve: **read the criterion for a second part, a second
 listed failure, or a word like "process" that was paraphrased.** Every defect here was one of those three.
+
+## What the audit CAUSED, 2026-09-04 to 09-05
+
+The audit's own output, so a reader can see it was acted on rather than filed:
+
+| | |
+|---|---|
+| **3 rules stopped asserting** | 3.3.3, 3.2.1/3.2.2, and 3.3.2 — each was claiming a conformance failure the criterion permits. Only 4 subtypes assert now, and `asserting-subtypes.test.ts` pins which |
+| **133 corpus records re-declared** | `3.3.2:unnamed-form-field` is gone; the pages fail 4.1.2, not the criterion they were filed under |
+| **2 criteria left `out-of-scope`** | 1.4.13 and 2.4.7, both wrongly ruled out on the hover trigger / on pixels |
+| **1 probe built** | `probeFocusReveal` for 1.4.13's Dismissable bullet, with 15 corpus cases and 3 held-out pairs |
+| **4 corpus gaps closed** | 4.1.3's waiting and progress categories, 2.4.6's labels half, F55, and 1.4.13 |
+| **8 acceptance subtypes covered** | the ledger went 17 → 25 of 25, after finding seven were INEXPRESSIBLE rather than unwritten |
+
+**And one thing the audit did not cause but did surface**: reading criteria this closely is what made the
+Edge 152 announcement change legible within minutes rather than as a mystery — `check-signals` reported 44
+non-discriminating cases and the shape of the failure was recognisable because the container grammar had
+just been read carefully for other reasons.
 
 ## Still to audit — NOTHING. All 55 criteria carry a reason that has been read.
 
