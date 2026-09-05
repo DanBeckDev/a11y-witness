@@ -10,11 +10,11 @@ the WCAG list and what actually ships — so this page cannot drift from the cod
 |---|---|---|
 | **assessed** | 10 | a finding can be produced today |
 | **partial** | 7 | assessed, but a named failure mode of it is not covered |
-| **reachable** | 7 | not built, and the evidence to build it exists or could be captured |
-| **out of scope** | 31 | not answerable by this tool at all |
+| **reachable** | 8 | not built, and the evidence to build it exists or could be captured |
+| **out of scope** | 30 | not answerable by this tool at all |
 
 **17 of 55 produce findings.** That is not a small number
-for screen-reader evidence, and it is not a substitute for a rule scanner: the 31
+for screen-reader evidence, and it is not a substitute for a rule scanner: the 30
 out-of-scope criteria are mostly **visual**, which is exactly what axe-core is good at. Run both.
 
 ## Two things to read this table with
@@ -71,6 +71,7 @@ The evidence exists, or could be captured with a probe. Nothing here is a resear
 | 2.5.3 | Label in Name | A | dom + accessibility-tree |
 | 3.1.1 | Language of Page | A | dom |
 | 3.1.2 | Language of Parts | AA | screen-reader + dom |
+| 3.3.7 | Redundant Entry | A | screen-reader |
 
 ## Out of scope
 
@@ -109,5 +110,4 @@ competing with it.
 | 3.2.4 | Consistent Identification | AA | multi-page |
 | 3.2.6 | Consistent Help | A | multi-page |
 | 3.3.4 | Error Prevention (Legal, Financial, Data) | AA | human |
-| 3.3.7 | Redundant Entry | A | multi-page + human |
 | 3.3.8 | Accessible Authentication (Minimum) | AA | dom + human |
