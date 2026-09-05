@@ -81,6 +81,15 @@ running more worker VMs (cloned from one image) and dispatching jobs across the
 pool. A Proxmox cluster is well suited to hosting that fleet; the same image
 shape works on cloud Windows instances for a hosted product.
 
+> **UPDATE 2026-09-06:** this project's own fleet is now bare metal, not VMs on
+> a Proxmox cluster or anywhere else — see
+> [ADR 0027](./0027-bare-metal-fleet-replaces-local-vm-capture.md). Local VM
+> hosting was built and measured first (as UTM guests on a single Mac) and
+> scaled **negatively** rather than horizontally, for reasons specific to
+> sharing one host's disk across guests; ADR 0027 has the measurements and the
+> decision record. This section is kept as the original bet, not edited to
+> match what shipped.
+
 ## Consequences
 
 - There is no single Docker image that runs the whole product on any machine.
