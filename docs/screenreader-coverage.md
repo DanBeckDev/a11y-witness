@@ -26,8 +26,17 @@ is real.
 | (measure only) whether focus was CONFINED to a ring | none — computed from the walk | `focusConfinement` diagnostic | — |
 | Follow a link and re-read the title | activate a navigation control, ask NVDA for the title before and after (**opt-in**) | `interaction.routeChange` | **2.4.2**, 2.4.1 |
 | **Fill a form the way its owner says it works, then submit** | walk to each field by ACCESSIBLE NAME, type the declared value, press the named control (**needs a config**) | `interaction.formChanges` (`kind: "submit"`), `postSubmitFields`, `interaction.formFill` | **3.3.1**, **3.3.3**, **4.1.3** |
+| Focus a control and see whether the page REVEALS something | walk up to 8 tab stops, census before and after, Escape twice | `interaction.focusReveal` (**opt-in**, `probeFocusReveal`) | **1.4.13** |
+| Have focus TAKEN AWAY the instant it arrives | a `focusin`/`focusout` listener installed over CDP; a same-id pair inside 50 ms is F55 | `interaction.focusEvents` (rides `probeFocus`) | **2.4.7**, 2.1.1, 3.2.1 |
+| Discover that focus alone changed the page's context | tab, then ask NVDA for the title and first heading again | `interaction.focusContext` (**opt-in**, `probeFocusContext`) | **3.2.1** |
+| Try to LEAVE a dialog with Escape | press Escape twice — NVDA eats the first, leaving focus mode | `interaction.dialogEscape` (**opt-in**, `probeDialog`) | **2.1.2** |
+| Move INSIDE a widget with the arrow keys | arrows in whatever the focus probe landed on | `interaction.arrowNavigation` (**opt-in**, `probeArrows`) | **2.1.1** |
+| Type into a field and hear the feedback | type `123456`, then read what was announced | `interaction.typedFeedback` (**opt-in**, `probeTyping`) | **3.2.2** |
 
-The first nine are on by default and cost ~15–17 s per capture. The last four are opt-in per
+**Every one of the six above is gated on `probeFocus`** — they act on whatever the focus walk landed on,
+so without it they have nothing to act upon and report their own absence rather than a page fact.
+
+The first nine are on by default and cost ~15–17 s per capture. The rest are opt-in per
 capture — `"probeFocus": true` (adds ~8 s), `"probeNavigation": true`, `"probeTables": true` (see the
 caveat below), and `"formState"`.
 
