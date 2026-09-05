@@ -134,17 +134,19 @@ The literature documents several biases in LLM judges. Our exposure:
 
 ## Honest status of current results
 
-As of this writing, our headline numbers (recall 100% on observable failures,
-high precision) come from:
+**This section was written 2026-06-26, at n = 5 cases, and was never updated as the fixture set grew.**
+`npm run eval` now runs against **34 labelled fixtures** (`packages/lab/src/eval/fixtures/`) — verified
+2026-09-05 by counting the tracked files, not re-measured here. The specific "recall 100%, high precision"
+headline below is the ORIGINAL n=5 result and has not been re-run at the current scale in this pass; do not
+read it as today's number. What has not changed, and is still the reason to distrust either number as a
+headline:
 
-- **n = 5 cases**, several of them famous public pages,
-- **iteratively tuned** judge guards (risking overfitting to those cases),
-- **single-run** scoring (no test-retest interval),
-- with **no human-agreement baseline**.
+- the judge guards are still **iteratively tuned** against these same fixtures (risking overfitting to them),
+- scoring is still **single-run** (no test-retest interval),
+- there is still **no human-agreement baseline**.
 
-Therefore these numbers are **preliminary and probably optimistic**, and should
-not be reported without these caveats. They are evidence that the approach is
-promising, not that it is validated.
+Therefore neither the original n=5 numbers above nor whatever `npm run eval` reports today should be quoted
+without these caveats. They are evidence that the approach is promising, not that it is validated.
 
 ## Pre-registration: what "trustworthy enough" will mean
 
