@@ -755,6 +755,49 @@ cycling NVDA destabilises the speech channel.
 A worker that fails three captures in a row is **evicted** from the pool and everything it failed goes
 back to the queue; the run summary names it.
 
+### THE BROWSER VERSION IS EVIDENCE TOO, and Edge 152 proved it by renaming a container
+
+`browserVersion` has been a capture cache key and the FIRST entry in `fleet-consistency`'s `MUST_MATCH`
+for a documented reason — *"a fleet can have more than one image"*. On 2026-09-05 it stopped being a
+precaution and became a measurement.
+
+Same page, same NVDA (2026.1.1), same guidepup (0.31.0). Only Edge moved:
+
+```
+Edge 151.0.4129.59    "form, name at example dot com, edit"
+                      "out of form, heading, level 1, Booking confirmation"
+Edge 152.0.4191.66    "section, name at example dot com, edit"
+                      "out of section, heading, level 1, Booking confirmation"
+```
+
+**The cause is a SPEC ALIGNMENT, not a browser bug.** [`w3c/html-aria#423`](https://github.com/w3c/html-aria/issues/423)
+made the `form` role conditional on an accessible name, the way `<section>` already was: a form nobody
+named is not a landmark, so it maps to generic and NVDA announces "section". **Every corpus form is
+unnamed**, so all of them moved at once.
+
+**The gate caught it and cost 4.9 hours to say so.** `check-signals` reported 39 blind and 5 contaminated
+and stopped `migration-verdict` at stage 4 of 13 — with the capture itself clean, 1,623 captured and 0
+failed. That is the design working: a browser upgrade changed what an unchanged page SAYS, and nothing
+reached a model.
+
+Three things follow, and the third is the one that generalises:
+
+- **`section` is now in `CONTAINER_ROLES`.** It is a container by NVDA's own account rather than by our
+  classification — it announces entry (`"section, …"`) and exit (`"out of section"`), which is what every
+  other member of that list does.
+- **The grammar must keep understanding OLD announcements.** 3,246 captures on disk carry `"form, …"`, and
+  a parser that only reads the current browser cannot read its own corpus. Both shapes are pinned in
+  `announcement.test.ts`.
+- **A hand-rolled prefix strip survives a grammar fix.** `placeholderOnlyIsPresent` stripped `^form,` by
+  name, so the grammar change did not reach it — and `announcement.ts`'s own header lists that failure
+  among the four it was written to end: *"signal regexes broke whenever a container prefix appeared in
+  front of the text they matched"*. **When a container word changes, grep for the WORD, not just for the
+  grammar** — the same shape as fixing a behaviour at one call site when it reaches several.
+
+**Before a corpus run, check `fleet:status` for consistency AND know which Edge you are on.** Following the
+pin forward is this fleet's policy and it is right; what this records is that doing so is an EVIDENCE
+CHANGE, to be paid for with a recapture and a gate run, never slipped in beside unrelated work.
+
 ### guidepup is pinned at 0.31.0, and the version is EVIDENCE
 
 `guidepup` parses NVDA's speech before this project ever sees it, so its version changes what a capture
