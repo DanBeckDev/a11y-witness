@@ -2145,6 +2145,37 @@ worker file took it from `Fleet runs this checkout (worker code bccf65cf76d4baef
 a refusal naming both hashes and exit 3. **A guard must be shown to fail before it is trusted** — both
 capture-client guards were mutation-checked the same way.
 
+### `lab:job` checks the fleet BEFORE dispatching, for the jobs that would actually need it
+
+The check above runs on the LAB, inside the job's own script — so `npm run lab:job -- -e job=capture` still
+dispatches over the lab's own SSH key, the lab starts the job, and only THEN does it refuse `10 stale
+worker(s)`. Correct, and one round trip too late: worker files merged, a capture dispatched, a wait, a
+refusal — twice in one day. `lab:pipeline` avoids this because `fleet: true` ships the ref to the workers
+before dispatching; `lab:job` cannot do that itself, because only the control plane holds both credentials
+(ADR 0012), so the job route depended on a human remembering to `fleet:deploy` first.
+
+`packages/control/src/lab-job.mjs` now wraps the `ansible-playbook` call: for a job whose `setenv` sets
+`A11Y_WORKERS` from `lab_fleet_workers` — `capture`, `capture-only`, `capture-real-pages`,
+`capture-acceptance`, `capture-acceptance-2`, `retrain`, `everything` — it asks every worker's `/health`
+over HTTP first, no SSH and no control-plane key needed, so it runs from wherever the operator already is.
+`--allow-stale-workers` is the same escape hatch and says so the same way.
+
+- **DERIVED, not hand-written.** `captureBearingJobs` reads `lab-job.yml`'s own text rather than naming the
+  jobs, for the same reason `worker-code-check.test.ts`'s `CORPUS_WRITERS` list exists: a forgotten job is
+  the one that slips through. `packages/control` cannot depend on the real YAML parser (ADR 0012), so it
+  slices the catalogue by the indentation the file already commits to and is mutation-checked against a
+  renamed or re-indented catalogue rather than trusted on the strength of reading it.
+- **Deliberately narrower than "every job that touches a worker".** `stability`, `gate-stability` and
+  `evidence-check` are excluded — they are diagnostics, one named worker or a comparison that never
+  persists, and `worker-code-check.test.ts`'s own rule applies: "a diagnostic must NEVER be the thing that
+  takes the pool offline". A stale worker there costs one wrong verdict; a stale worker on a corpus writer
+  costs 2,122 captures indistinguishable from current ones for ever.
+- **`assertFleetRunsThisCheckout`'s comparison moved to `code-drift.mjs`**, which imports nothing but
+  `node:child_process`. `expectedWorkerCode` still needs a SUBPATH import to avoid the TS5055 build error
+  this file already records above it — and a subpath resolves through `node_modules`, which `lab-job.mjs`
+  cannot have. So the pure half — compare, describe, decide — lives where both callers can reach it, and
+  each computes the hash itself, the same way `fleet-playbook.mjs` already does.
+
 ## Every other command, and when you would reach for it
 
 The sections above document a command where the problem it solves is described, which is more useful than

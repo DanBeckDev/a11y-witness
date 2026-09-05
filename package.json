@@ -60,7 +60,7 @@
     "fleet:status": "node packages/worker-fleet/src/fleet-status.mjs",
     "fleet:discover": "node packages/worker-fleet/src/fleet-discover.mjs",
     "fleet:wake": "node packages/worker-fleet/src/fleet-wake.mjs",
-    "lab:job": "ANSIBLE_CONFIG=packages/control/ansible/ansible.cfg ansible-playbook -i packages/control/ansible/inventory.yml packages/control/ansible/lab-job.yml",
+    "lab:job": "node packages/control/src/lab-job.mjs",
     "lab:pipeline": "node packages/control/src/lab-pipeline.mjs",
     "lab:status": "ANSIBLE_CONFIG=packages/control/ansible/ansible.cfg ansible-playbook -i packages/control/ansible/inventory.yml packages/control/ansible/lab-status.yml",
     "lab:log": "ANSIBLE_CONFIG=packages/control/ansible/ansible.cfg ansible-playbook -i packages/control/ansible/inventory.yml packages/control/ansible/lab-log.yml",
