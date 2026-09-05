@@ -2,8 +2,8 @@ name: lint
 
 # Mechanical code-convention gate (see CLAUDE.md "Code conventions"). The eval
 # needs a local Codex login and the capture worker needs the NVDA VM, so neither
-# runs here — CI is ESLint + tsc + unit tests, which need no browsers or external
-# state. (The discriminative-gate encoder is an optional dep, not installed here.)
+# runs here — CI is ESLint + tsc + unit tests + the PYTHON suite, none of which need browsers or
+# external state. (The discriminative-gate encoder is an optional dep, not installed here.)
 on:
   push:
     branches: [main]
@@ -21,6 +21,29 @@ jobs:
       # --ignore-scripts: skip Playwright/Guidepup postinstall browser/AT setup,
       # which the static checks don't need (keeps CI fast and Linux-safe).
       - run: npm ci --ignore-scripts
+      # PYTHON, because 195 pytest files ran NOWHERE AUTOMATED until 2026-09-05.
+      #
+      # `npm test` runs `test:python`, which prints an honest SKIP without `.venv/bin/pytest` and exits 0 —
+      # correct behaviour, and it meant the whole Python suite existed only on a laptop that happened to
+      # have a venv. The lab has no pytest either. Found by an external architecture audit under "gates
+      # that exist and run nowhere automated"; this repo's own version of that lesson is
+      # `packages/nvda-speech/tests/test_symbols.py`, written in pytest style with pytest never installed,
+      # so it had NEVER RUN — "a test that does not run is a comment with a docstring".
+      #
+      # `requirements-ci.txt`, not `requirements.txt`: the lab's environment is torch + transformers +
+      # onnxruntime + huggingface-hub, and the tests need none of it. Measured in a scratch venv rather
+      # than assumed — pytest and numpy alone pass 194 of 195, `safetensors` takes it to 195. Pinning CI
+      # to the full file would cost minutes and a large download, which is how a check becomes
+      # dispatch-only in the first place.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-ci.txt
+      # The two flags are not decoration. `spec_from_file_location` honours `__pycache__`, and a stale
+      # compile has decided a mutation check wrongly in this repo before — a working guard was deleted as
+      # dead code on the strength of it. Same flags as the root `test:python` script, deliberately.
+      - run: PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider packages/*/tests -q
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
