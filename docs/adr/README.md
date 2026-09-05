@@ -36,6 +36,12 @@ you which arguments have already been tried.
 | [0022](./0022-zero-false-positives-on-our-own-corpus-is-not-a-promise.md) | Zero false positives on our own corpus is not a promise | accepted 2026-08-24 |
 | [0023](./0023-a-consent-banner-is-part-of-the-page.md) | A consent banner is part of the page, and the capture must say so | accepted 2026-08-29 |
 | [0024](./0024-a-form-is-configured-with-states-not-values.md) | A form is configured with STATES, not values | accepted 2026-09-02 |
+| [0025](./0025-the-capture-cache-key-describes-evidence-not-code.md) | The capture cache key describes the evidence, never the code that produced it | accepted |
+| [0026](./0026-async-capture-with-a-client-minted-id.md) | Async capture with a client-minted idempotency key, not a long-held connection | accepted 2026-08-29 |
+| [0027](./0027-bare-metal-fleet-replaces-local-vm-capture.md) | The bare-metal fleet replaces local UTM VMs as the capture path | accepted |
+| [0028](./0028-recovery-keyed-on-fault-codes.md) | Recovery is keyed on fault codes, never on message text | accepted |
+| [0029](./0029-two-tier-readiness-ready-vs-ok.md) | Two-tier readiness — dispatch on `ready`, never on `ok` | accepted |
+| [0030](./0030-fleet-code-parity-is-a-precondition-not-a-cache-key.md) | Fleet code-version parity is a deploy precondition, never a capture cache key | accepted |
 
 ## If you read only one
 
