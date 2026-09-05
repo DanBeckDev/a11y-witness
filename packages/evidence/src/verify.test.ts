@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   captureDoubt, captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle,
-  captureRanRequestedProbes, probeStates, sweepCompleteness, captureReachedThePage, domCensus,
+  captureRanRequestedProbes, probeStates, sweepCompleteness, captureReachedThePage, domCensus, pageCensus,
 } from "./verify.js";
 import type { CapturedAnnouncements } from "./verify.js";
 
@@ -637,4 +637,61 @@ test("the LANGUAGE census reaches the rule layer, and an absent one is not 'no l
   const older = domCensus({ diagnostics: [{ event: "domCensus", heading: 2 }] } as never);
   assert.equal(older?.partLangCount, undefined, "a capture predating the census must read 'cannot say'");
   assert.equal(older?.documentLang, undefined);
+});
+
+test("a census whose CDP target was never confirmed reads as ABSENT, not as its own numbers", () => {
+  // The bathingwaters/lbhf shape, reproduced directly: two real page-type targets competed and neither
+  // matched the URL this capture navigated to. `targetMatch: "fallback"` alone cannot say whether the
+  // fallback was forced (this) or vacuous (one candidate); `candidates` is what tells them apart.
+  const suspectStructure = { diagnostics: [
+    { event: "structureCensus", heading: 173, link: 253, graphic: 6, targetMatch: "fallback", candidates: 2 },
+  ] } as never;
+  assert.equal(pageCensus(suspectStructure), null,
+    "a census from an unconfirmed target among real competitors must not be handed to a rule as this page's own");
+
+  const suspectDom = { diagnostics: [
+    { event: "domCensus", heading: 55, link: 281, targetMatch: "fallback", candidates: 2 },
+  ] } as never;
+  assert.equal(domCensus(suspectDom), null);
+
+  // "no-expected-url" is the same finding by a different route: nothing was recorded to compare against,
+  // so a real second candidate is exactly as unconfirmed as a fallback that failed to match one.
+  const noExpectedUrl = { diagnostics: [
+    { event: "structureCensus", heading: 40, targetMatch: "no-expected-url", candidates: 3 },
+  ] } as never;
+  assert.equal(pageCensus(noExpectedUrl), null);
+});
+
+test("a fallback with only ONE candidate is trusted -- nothing else it could have picked", () => {
+  // The vacuous half of the same mechanism: a redirect or a URL the page server normalised, with no real
+  // competing document. Demanding this read as absent too would make EVERY synthetic capture's census
+  // unusable, since a synthetic page's single CDP target legitimately never matches by host.
+  const census = pageCensus({ diagnostics: [
+    { event: "structureCensus", heading: 12, link: 40, targetMatch: "fallback", candidates: 1 },
+  ] } as never);
+  assert.equal(census?.heading, 12);
+  assert.equal(census?.link, 40);
+});
+
+test("a matched target is trusted regardless of how many candidates existed", () => {
+  const census = pageCensus({ diagnostics: [
+    { event: "structureCensus", heading: 12, targetMatch: "matched", candidates: 4 },
+  ] } as never);
+  assert.equal(census?.heading, 12);
+});
+
+test("a capture predating targetMatch entirely is trusted exactly as before -- this field cannot "
+  + "retroactively accuse a capture it was never computed for", () => {
+  const census = pageCensus({ diagnostics: [{ event: "structureCensus", heading: 12 }] } as never);
+  assert.equal(census?.heading, 12);
+});
+
+test("targetMatch present with candidates missing is read as suspect, not as trusted", () => {
+  // The transitional gap: a capture taken after `targetMatch` shipped and before `candidates` did.
+  // Conservative by design -- a census this function cannot vouch for is treated the same as one it can
+  // disprove, never the same as one it has no opinion about.
+  const census = pageCensus({ diagnostics: [
+    { event: "structureCensus", heading: 12, targetMatch: "fallback" },
+  ] } as never);
+  assert.equal(census, null);
 });
