@@ -588,6 +588,26 @@ remains is mechanical, in this order:
    dry run found two real defects, so do not skip it.
 5. Dispatch with `dry-run: false` and `confirm: publish-for-real`, typed exactly.
 
+**PRECONDITION ADDED 2026-09-05, and it is reported as a SENTENCE, never as a tick.** `action-smoke.yml`
+must be green **against the v19 weights, on the exact commit that ships** — reported as
+`green on <sha>, weights <schema>`, not as "green".
+
+The reason is a measurement, not caution. `gh run list --workflow=action-smoke.yml`, 200 runs:
+**114 success, 85 failure, and the most recent success was 2026-09-03T12:16** — the day
+`schema-migration.json` records the v18→v19 migration as opened. Every red run since dies in the same
+place, `score.py:536` → `verify_artifact` → *"scorer representation schema"*, which is the migration's
+own lock working exactly as designed.
+
+**Eighty-five consecutive red runs is the shape a workflow gets ignored in.** So the first green after
+the lock closes is the one that carries information, and it must be LOOKED AT rather than assumed —
+the run reaches the judge step, which means NVDA installs, a real capture runs, and only scoring is
+blocked. A green that arrives without anyone reading which weights it scored would be the
+`ok`-versus-`ready` conflation this project has already paid for once.
+
+**No hands are needed to make it happen**: it triggers on push, so the next push after v19 lands or
+reverts exercises it. What needs a human is reading the result and naming the sha and the schema.
+
+
 The only judgement left is *when*, and the order section above answers it: after stage 4, because a
 changeset describes weights and should describe the final ones. [not-working §8](./not-working.md)
 
