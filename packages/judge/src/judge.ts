@@ -322,7 +322,23 @@ export function validateJudgment(value: unknown): Judgment {
     if (typeof item.evidence !== "string" || !item.evidence.trim()) throw new Error(`judge finding ${index + 1} has invalid evidence`);
     if (!SEVERITIES.has(item.severity as Severity)) throw new Error(`judge finding ${index + 1} has invalid severity`);
     if (!isFiniteConfidence(item.confidence)) throw new Error(`judge finding ${index + 1} has invalid confidence`);
-    return item as Finding;
+    // RECONSTRUCTED field by field, never a cast of the raw object. `item as Finding` let every OTHER
+    // property an external model chose to include -- most dangerously `mapping` -- pass straight through
+    // unexamined. ADR 0021 reserves conformance-ASSERTING authority for the rule layer alone (rules.ts's
+    // own `add` closure builds Finding objects on a wholly separate path this function never touches), so
+    // a model backend must never be able to grant itself that authority merely by echoing the field back.
+    // A malicious or buggy provider need only include `mapping: "conformance"` in its JSON for
+    // `criterionOutcomes` to report the criterion "failed" on that provider's say-so, with no rule
+    // evidence at all -- reproduced end to end in judge-composition.test.ts. Omitting `mapping` here means
+    // every model-sourced finding reads as `secondary` (a referral), which is the correct default for
+    // anything that did not come from the rule layer.
+    return {
+      issue: item.issue,
+      wcag: item.wcag,
+      severity: item.severity as Severity,
+      evidence: item.evidence,
+      confidence: item.confidence,
+    };
   });
   return {
     taskCompletable: candidate.taskCompletable,
@@ -641,10 +657,22 @@ async function runModelJudge(input: JudgeInput): Promise<Judgment> {
  * (1.1.1, 4.1.2) the model judges poorly; add any whose criterion the model did
  * not already flag, so the hybrid gains recall without the model's over-flagging.
  * The rules produce nothing on conformant pages, so this cannot add false
- * positives. */
+ * positives.
+ *
+ * A CONFORMANCE-mapped rule finding is exempt from that dedup and is always added. It is an ASSERTION
+ * (ADR 0021: rules are the only layer that MAY assert), and a model referral on the same criterion is a
+ * different, weaker claim -- dropping the assertion because the criterion number matches silently turned
+ * a rules-only `failed` into `cantTell` on the DEFAULT backend too, since `judge()` runs this same
+ * function over the local scorer's verdict and every local finding is unmapped by construction
+ * (`findingsFromScores` sets no `mapping`). `criterionOutcomes` (outcomes.ts) already composes an
+ * assertion and a referral on one criterion correctly -- it is only the pre-filtering here that must
+ * stop discarding one of the two claims before it can. Only SECONDARY-mapped rule findings are still
+ * deduped against a criterion the model already covered, which is the original intent: two referrals on
+ * one criterion are redundant noise, not a compositional question. */
 function withRuleFindings(verdict: Judgment, input: JudgeInput): Judgment {
   const seen = new Set(verdict.findings.map((f) => criterionOf(f.wcag)));
-  const extra = ruleFindings(input).filter((f) => !seen.has(criterionOf(f.wcag)));
+  const extra = ruleFindings(input)
+    .filter((f) => f.mapping === "conformance" || !seen.has(criterionOf(f.wcag)));
   if (extra.length) process.stderr.write(`Rules added ${extra.length} absence finding(s) the model missed.\n`);
   return { ...verdict, findings: [...verdict.findings, ...extra] };
 }
