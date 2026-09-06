@@ -101,8 +101,9 @@ function section2() {
     "## Version one has no date until the outside user is named.",
     "",
     "**Version one means one person outside this project runs the tool on an application they own and "
-    + "says plainly whether it was worth their time**, approved by the board on 6 September. **It has no "
-    + "date until that person is named** — the board is introducing a candidate, and the date follows.",
+    + "says whether it was worth their time**, approved by the board on 6 September. **That person now "
+    + "exists and is waiting for first publish**, so the date is theirs: however long they take to form "
+    + "a view once they have something to run.",
     "",
     "| stage | what decides it | when |",
     "|---|---|---|",
@@ -186,23 +187,22 @@ function section5(d) {
       + "electricity.");
   }
   L.push("");
-  L.push("**A capture takes about a minute at median on our last sample** — 56 captures across five "
-    + "machines, at older recording formats — and **we have not established what it should cost on the "
-    + "current format**, the first of "
-    + `${throughput?.open_issues ?? "several"} stages in a programme opened today. It is outside the `
-    + "release: nothing in it delays September. The appendix lists them.");
-  L.push("");
-  L.push("**How long our engineering waits between finishing one piece of work and the next is not "
-    + "instrumented, and we print that rather than estimate it.** Recording started today; the figure "
-    + "appears once a week exists. The appendix says why the first design was wrong.");
+  L.push("**A capture takes about a minute at median on our last sample**, and **we have not established "
+    + "what it should cost on the current recording format** — the first of "
+    + `${throughput?.open_issues ?? "several"} stages in a programme opened today, outside the release: `
+    + "nothing in it delays September. The appendix lists them.");
   L.push("");
   L.push("**The architect's two findings are planned in; the appendix says what was done with each.**");
+  L.push("");
+  L.push("**The product has a name and a home: a11ign, at a11ign.com.** The board has also decided it "
+    + "is an all-in-one accessibility tool rather than a screen-reader one, so its parts are renamed "
+    + "around that **before** publication rather than after. The appendix says what that costs.");
   L.push("");
   L.push("### We recommend buying nothing yet, and one number would change that.");
   L.push("");
   L.push("**The number is how long one page takes to record with ten machines against five.** "
     + "Unchanged, and machines buy speed in proportion. Higher, and they do not — which is what happened "
-    + "last time, on older hardware, where they competed for the same disk.");
+    + "last time, on older hardware, where they competed for one disk.");
 
   return L.join("\n");
 }
@@ -251,8 +251,26 @@ function sourceTable(d) {
   return rows;
 }
 
+/** What the rename costs, and why the naming rule is more than a coat of paint. */
+function renameBackground(L) {
+  L.push("### The rename, and what it costs to do it before publication rather than after.");
+  L.push("");
+  L.push("Three hundred and fifty-two files in the project mention the old name, and every one of the "
+    + "six things we will publish changes its name. **Doing it now costs a fortnight's care; doing it "
+    + "after publication would cost every person who had already installed it** — and there is nobody in "
+    + "that position yet, which is exactly why now is the moment.");
+  L.push("");
+  L.push("**The naming rule is what makes it worth more than a coat of paint.** A part that produces one "
+    + "kind of evidence carries that in its name; a part belonging to the product itself never does. So "
+    + "the screen-reader pieces say so, and the pieces that would serve any future kind of checking do "
+    + "not. A second kind of checking can then join without a second rename, which is the debt this "
+    + "avoids.");
+  L.push("");
+}
+
 /** Why re-reading the library is expensive, and the programme opened for it. */
 function throughputBackground(L) {
+  renameBackground(L);
   L.push("### The architect's two findings, and what was done with each.");
   L.push("");
   L.push("**Our development copies read one another's build output rather than their own**, because they "
