@@ -2091,3 +2091,62 @@ protocol-15 recapture, the fix is not to lower 50 ms until a test passes — it 
 **What would tell you it is fixed:** `rules:coverage` reports `2.4.7` as fired with real captured evidence
 (not `NEVER FIRED ANYWHERE`), and a specific measured `blur()` latency is recorded beside
 `FOCUS_SCRIPT_BLUR_WINDOW_MS` in the same way the negative-side margin already is.
+
+### ANSWERED 2026-09-06 by the protocol-15 recapture — and the threshold was never the problem
+
+This section asked what `2.4.7` would report once real evidence existed. It exists now, and the answer is
+worse than the question anticipated. **The rule is wrong in BOTH directions at once:**
+
+```
+POSITIVES: 9 | with focusEvents evidence: 9 | CAUGHT by 2.4.7: 0
+FALSE POSITIVES on conformant records: 10 of 10
+```
+
+All nine `focus-removed-on-receipt-*.bad` records now carry real evidence — `checked: true`, 13 to 27
+events each — and every one reads `scriptRemovedFocus: []`. The probe ran, produced a log, and the
+predicate found nothing on the pages built to demonstrate the failure. It fires instead on ten conformant
+records it was never meant to touch.
+
+**`FOCUS_SCRIPT_BLUR_WINDOW_MS = 50` is the wrong axis for both halves, so no value of it helps.** Read
+from the event logs:
+
+- **The false positives are focus TRAPS.** `keyboard-trap-modal-escape.good` flags `focusin id=0 "Full
+  name" 3189 → focusout id=0 3189` (0 ms) — and `focusin id=1 "House number"` follows at 3190 ms. Focus
+  went somewhere real, 1 ms later. W3C's F55 does not cover redirection at all: every example is a
+  destination-less `.blur()` and the mechanism text says the practice "removes focus from the content
+  **entirely**". A dialog claiming focus for its first field is not this failure.
+- **The false negatives never form the pair the predicate looks for.** In
+  `focus-removed-on-receipt-order.bad`, `focusout id=1 "Delivery instructions"` appears with **no
+  `focusin`, ever, on either lap** — the script took focus and stripped it faster than a `focusin` could
+  fire. The real F55 in this corpus is an ORPHANED `focusout`, and a predicate hunting short focusin→
+  focusout pairs is structurally unable to see it.
+
+So: **DESTINATION separates the false positives; a MISSING `focusin` identifies the true positives.**
+Neither is a latency.
+
+**WHY NO GATE CAUGHT THE SILENT HALF, which is the part worth generalising.** `rules:gate` scores
+per-subtype from `rule-ownership.json`, and **`2.4.7` has no entry there** — 18 subtypes are declared and
+it is not one of them. So the gate reported `18 of 18 ... EXACT` while never scoring 2.4.7's positives at
+all. Its false POSITIVES surfaced only because the conformant-record check scans every finding regardless
+of ownership. **A gate can see an undeclared rule's false positives and is structurally blind to its false
+negatives.** `docs/backlog.md` predicted exactly this — *"Add it WITH the case, not after. This is the
+`3.3.2` shape: a subtype whose ownership nobody recorded, found later by a gate that could not attribute
+it"* — and the cases have existed since 2026-08-28.
+
+**Checked, once, whether any other rule is in this position.** The `PENDING_CAPTURE` exemption list in
+`evidence-fields.test.ts` names every field that reached no capture before protocol 15, and it is the
+complete list of rules that had never run against real evidence. Three entries have ever existed:
+
+| field | rule | caught its own positives? |
+|---|---|---|
+| `arrowNavigation` | `2.1.1:control-unreachable-by-keyboard` | **24/24 EXACT** |
+| `typedFeedback` | `3.2.2:input-context-change` | **28/28 EXACT** |
+| `interaction.focusEvents` | `2.4.7` — **undeclared** | **0 of 9** |
+
+Only 2.4.7, and the reason is the missing declaration rather than anything about the probe.
+
+**What would tell you it is fixed** (replacing the criterion above, which asked for a latency measurement
+that is now known to be the wrong question): `rules:gate` reads 0 false positives across all 1,398
+conformant records AND 2.4.7's nine positives are caught with the count printed — both halves, because
+silencing the ten alone reads 0 FPs and 0 of 9 and is worth nothing. Plus a `2.4.7` entry in
+`rule-ownership.json`, without which the second half cannot be measured at all.
