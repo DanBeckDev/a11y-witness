@@ -9,7 +9,7 @@ human or agent, *working on* the repo rather than using it.
 | doc | read it when |
 |---|---|
 | [`roles/worker-loop-orchestrator.md`](roles/worker-loop-orchestrator.md) | **who owns the worker loop, what they hand up, and the measurement that decides whether the split was right.** Created because one agent was the serial step and the measurement said which part |
-| [`roles/lead-orchestrator.md`](roles/lead-orchestrator.md) | fleet, lab, `runs/`, gates — and why nothing is checked out in the primary |
+| [`roles/orchestrator.md`](roles/orchestrator.md) | fleet, lab, `runs/`, gates — and why nothing is checked out in the primary |
 | [getting-started.md](./getting-started.md) | you have no capture worker and need one (~1.5–2 h, mostly downloading Windows) |
 | [local-worker-vm.md](./local-worker-vm.md) | you are a single contributor on a Mac with no other hardware and want the scripted UTM worker. **Superseded by a declared fleet for anyone with more than one machine** — `leaseWorker` already prefers `inventory.yml` over a local VM |
 | [control-plane-proxmox.md](./control-plane-proxmox.md) | you have (or are setting up) more than one worker — the bare-metal fleet, and the recommended path over local VMs |
