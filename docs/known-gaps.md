@@ -2804,3 +2804,67 @@ looked reasonable.
 The 3.2.1 finding on that page stays in the baseline until the page is recaptured. It is a REFERRAL, not an
 accusation, and removing it on the strength of a diagnosis rather than fresh evidence would be accepting a
 baseline edit as a substitute for the work.
+## 45. `focusEvents` IS NOT DETERMINISTIC, and nothing compared it until the day before this was found
+
+**`gate:stability` FAILED 2026-09-06, blocking a recapture.** Nine canaries, five captures each, compared by
+CONTENT:
+
+```
+FAIL — 2 problem(s) across 9 of 9
+  UNSTABLE  image-missing-alt-behind-consent/good   VARIES  focusEvents  counts 5,5,5,5,5
+  UNSTABLE  https://www.nls.uk/join/                VARIES  transcript   counts 11,11,11,11,11
+                                                    VARIES  focusEvents  counts 5,5,5,5,5
+```
+
+**The counts are identical every run and the content differs.** That is the class content comparison exists
+for and every count-based check is structurally blind to — the U+FFFC contaminant that sat in the corpus for
+weeks with every check green is the same shape.
+
+### Why it matters more than an ordinary flake
+
+`focusEvents` is the whole of 2.4.7's F55 evidence, and [§42](#42) DELETED `focusLossEvidence`'s `i === 0`
+exception on the strength of that log being trustworthy once the listener installed early. **An unstable log
+means unstable findings on a criterion that ASSERTS.**
+
+`https://www.nls.uk/join/` is in the canary set with this recorded reason: *"the page the determinism plan is
+named for: it gave two different verdicts at the same commit, and until it repeats identically the plan's
+headline claim is unmet."* It is still doing it, now with a second field.
+
+### WHAT IS NOT KNOWN, and the distinction is the whole entry
+
+Two readings fit and **nothing here separates them**:
+
+- §42's early listener install made the log witness more, including timing-dependent early events, and
+  introduced the variance;
+- the log was always non-deterministic and **nothing ever compared it**.
+
+`["interaction", "focusEvents"]` was added to `evidence-diff.mjs`'s compared fields on **2026-09-05** — one
+day before this failure — and that comment records that adding it is what exposed the nested-array
+flattening defect (`String({...})` is `"[object Object]"`, so an array of objects nested inside an object
+field compared as a count). So this is plausibly **the first stability run that has ever looked at the
+field.**
+
+### What would settle it
+
+One 25-minute run: `gate:stability` at a commit BEFORE §42's listener change.
+
+- unstable there too → §42 is exonerated, and this is a pre-existing defect the gate has just made visible
+- stable there → §42 caused it, and the listener change must be reconsidered before it ships
+
+### What this already proves regardless
+
+**A field that nothing compares is a field with no stability claim attached, however long it has shipped.**
+`focusEvents` has been carried, read by a rule, and cited in an ADR since protocol 15 — and its determinism
+was never once measured. The gate could not have told anyone, because the field was not in its list.
+
+That generalises past this instance: every entry in `EVIDENCE_FIELDS` is a claim that somebody checked, and
+every field ABSENT from it is a silence nobody has heard. `evidence-fields.test.ts` asserts the list against
+what captures carry in both directions — a field on disk that is neither compared nor excluded is a hole —
+and this failure is what that test is worth.
+
+### What was NOT the problem
+
+`postSubmitNames`, which is what stopped the recapture in the first place. `form-error-silent/good` — added
+as a canary the same day, the only one whose post-submit read produces the long announcements that had
+appeared fragmenting — came back **STABLE, 5 usable, all fields identical**. The fragmentation question is
+answered on that page and the answer is no.
