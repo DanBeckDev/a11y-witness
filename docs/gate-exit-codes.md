@@ -36,6 +36,7 @@ short of its own population reports INCONCLUSIVE rather than a false PASS — th
 | `packages/lab/scripts/check-dataset-distribution.mjs` | `exitCodeFor(gateVerdict(...))` |
 | `packages/lab/scripts/score-rules.ts` | `exitCodeFor(gateVerdict(...))` |
 | `packages/lab/scripts/check-shipped-provenance.mjs` | `exitCodeFor(gateVerdict(...))` — **structurally cannot return 2, decided correct, see below** |
+| `packages/lab/scripts/fleet-hours.mjs` | **not a gate — a REPORT.** `0` a real total; `2` it billed no capture and refuses to report one. Deliberately not `1`: that would read as "the fleet cost nothing", and a cost report that examined nothing prints the same small number as a cheap run |
 | `packages/lab/scripts/gate-probe-order.mjs` | `exitCodeFor(fleetVerdict(...))` |
 | `packages/lab/scripts/stability-gate.mjs` | `exitCodeFor(fleetVerdict(...))` |
 | `packages/lab/scripts/check-real-page-findings.ts` | `exitCodeFor(gateVerdict(...))` (not re-verified line-by-line this pass; found via the same import scan as the other six) |
