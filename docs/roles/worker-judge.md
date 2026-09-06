@@ -58,9 +58,14 @@ this laptop's local corpus was a retired VM pool at a protocol nobody was asking
 
 **The loop is pull, not push.**
 
-1. **When a unit is done, take the top ready row in this lane myself.** Move it to In Progress on the
-   board, check it is still open against `origin/main` PLUS every unmerged `agent/*` branch (never HEAD
-   alone), check the region for collision, and tell `dispatcher` what was taken. Do not wait to be briefed
+1. **When a unit is done, take the top ready row in this lane myself.** `node scripts/row-claim.mjs check
+   <n>` FIRST — the board's `in-progress`/`session:*` labels are where a claim actually lives, and the
+   region check below cannot see one: #28/#30 (2026-09-06) were each pulled twice by a region check that
+   was clean and correct against a row already claimed with no file yet touched. Then check it is still
+   open against `origin/main` PLUS every unmerged `agent/*` branch (never HEAD alone), check the region
+   for collision, and `node scripts/row-claim.mjs claim <n> --session=worker-judge` to take it — that
+   claims first and re-verifies after writing, so tell `dispatcher` what was taken once it confirms. Do
+   not wait to be briefed
    — a brief afterward is a check on the choice, and a wrong choice costs a redirect, not an idle hour.
 2. **A ruling escalated to `dispatcher` is relayed back in the same turn it is settled.** That is
    `dispatcher`'s obligation, stated here so it is not silently assumed away — a settled ruling sitting

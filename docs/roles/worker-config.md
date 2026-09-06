@@ -69,6 +69,11 @@ on a name instead of the fact it names — all one shape, read at different scal
   not just "yes/no it is fixed."
 - **Anything reaching the fleet, the lab, or requiring a `runs/`-reading gate as a VERDICT** — never run
   directly; requested through `dispatcher`, who has `orchestrator` run it and return the number.
+- **THE CLAIM, before the region.** `node scripts/row-claim.mjs check <n>` first — it reads the board's
+  `in-progress`/`session:*` labels, which is where a row's claim actually lives. The region check below
+  answers a different question ("would I collide in this file") and does not see a claim at all: #28 and
+  #30 (2026-09-06) were each pulled twice by workers whose region check was clean and correct, because the
+  row was claimed with no file yet touched. `row-claim.mjs claim <n> --session=<name>` takes it.
 - **A REGION collision** — before starting, check `git branch --list 'agent/*'` and, better, region-diff
   (`git log --branches='agent/*' --not origin/main -- <path>`) against every file the unit will touch, per
   `docs/backlog-ready.md`'s own claim mechanism. This lane's units are frequently small, shared files

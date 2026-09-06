@@ -153,9 +153,17 @@ trigger** — a completion arrives with its next row attached, in one message. *
 is reported the same way, naming what was checked**, which costs the dispatcher one message rather than
 costing the worker an hour.
 
-1. **A worker takes the top Ready row in its own lane itself**, moves it to In progress, checks the
-   collision and region rules, and says what it took. **The brief becomes a CHECK on that choice** — so a
-   wrong choice costs a redirect, not an idle hour.
+1. **A worker takes the top Ready row in its own lane itself.** First `node scripts/row-claim.mjs claim
+   <n> --session=<name>` — the CLAIM check, reading the board's `in-progress`/`session:*` labels, never
+   git history — then the collision and region rules, and says what it took. **The brief becomes a CHECK
+   on that choice** — so a wrong choice costs a redirect, not an idle hour. **The claim check and the
+   region check answer different questions and neither substitutes for the other**: #28 and #30
+   (2026-09-06) were each pulled twice by workers who ran the region check correctly and got a true
+   answer to *"would I collide in this file"* — the claim was never in a diff to find. `row-claim.mjs`
+   claims first and re-verifies after writing, because propagation lag is measured (a board query
+   reported a row `Ready` moments after it was known taken); it is NOT proven race-free against two
+   sessions writing within the same instant, and closing that narrower gap was refused as
+   disproportionate to the defect actually observed twice today — see the script's own header.
 2. **A ruling a worker escalated is relayed IN THE SAME TURN IT IS SETTLED**, before returning to
    anything else. Two workers idled on rulings that had already been made.
 3. **A worker idle without reporting is asked its state at the NEXT STATUS**, not discovered at the next
@@ -163,6 +171,13 @@ costing the worker an hour.
 4. **Re-run the collision check immediately before starting, not when picking.** A region was clear on one
    worker's check and contended on the dispatcher's twenty minutes later, because two commits landed in
    between. Neither was wrong; **the check has a shelf life.**
+5. **Set `in-progress` the MOMENT a row is taken — including the moment you discover someone else already
+   took it.** Recorded because it was got wrong once, in this row's own incident: a card was moved to In
+   progress, then reverted to Ready on seeing another branch, on the reasoning "someone else has it, so it
+   is not mine to assign" — which put a claimed row back into the pull queue at the exact moment a second
+   worker was looking at it. **The label is the claim; a row you know is taken must show that, whoever
+   holds it.** `node scripts/row-claim.mjs check <n>` before touching a row's status, `claim` to take it.
+   No command enforces this half — it is a discipline, not a check, and it is this role's to hold.
 
 **This is what the Ready queue was always for.** A queue nobody may pull from is a list, and a list needs
 somebody to read it aloud.
