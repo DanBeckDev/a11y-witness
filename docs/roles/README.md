@@ -18,6 +18,7 @@ where state actually lives, and the enforcement that keeps the set complete.
 | Chief | `ceo` | [`ceo.md`](./ceo.md) | — |
 | Fleet/lab driver ("the lead") | `orchestrator` | [`orchestrator.md`](./orchestrator.md) | `ceo` |
 | Worker-loop dispatcher | `dispatcher` | [`worker-loop-orchestrator.md`](./worker-loop-orchestrator.md) | `orchestrator` (utilisation line to `ceo`) |
+| Product loop | `product-manager` | [`product-manager.md`](./product-manager.md) | `ceo` |
 | Worker | `worker-audit` | [`worker-audit.md`](./worker-audit.md) | `dispatcher` |
 | Worker | `worker-capture` | [`worker-capture.md`](./worker-capture.md) | `dispatcher` |
 | Worker | `worker-config` | [`worker-config.md`](./worker-config.md) | `dispatcher` |
@@ -55,6 +56,8 @@ to and no ready queue to pull from has nothing to do that would not risk a colli
 
 `ceo` sits outside this sequence — it is the standing authority `orchestrator` escalates disputed rulings
 to (see `orchestrator`'s own file for what counts as one), not a step in bringing the loop up.
+
+**`product-manager` also sits outside it, and can be brought up at any point after `dispatcher`** — it owns the tracker, the release milestone and the daily board report, and touches no fleet, lab or merge. Its one bring-up step that is not a git clone is `bash scripts/install-board-report.sh`, which schedules the report on whichever machine is the control plane; without it the tracker still works and the daily edition simply does not arrive.
 
 ## The first message for each agent, ready to paste
 
@@ -99,6 +102,10 @@ Named here once, so nobody has to rediscover it under time pressure:
 | **Credentials: the fleet SSH key and the lab's `a11y-pve` key** | **This Mac only** | See "Credentials" below — this is the single point of failure the board finding is actually about. |
 | Agent memory — cross-session facts an agent has learned and chosen to keep (e.g. the lab's host address, which key does what) | **`~/.claude`** on this Mac, per agent/session | Not the repo, not backed up by a `git clone`. An agent rebuilding context after a loss starts with none of this and has to re-derive or re-be-told it. |
 | **The git hooks** (`core.hooksPath`), which run the full test suite on `git push` | **The repo's own git config**, installed by `scripts/install-git-hooks.mjs` via `npm run prepare` | Bring-up state, not a detail: it is what created a real exposure the same day this page was written — the audit row *"nothing installs the git hooks"* was CLOSED, so hooks began running `npm test` on push with `GIT_DIR` set in the environment, and a test that shells `git` with only `cwd` set follows `GIT_DIR` instead, onto the real repo. `ceo`'s own framing: a closed row created the exposure. See the contingency drill below for what this means for anything that shells git during bring-up. |
+
+| **What is open** — every work item, its acceptance command, its region, and which are release blockers | **GitHub Issues, the Project board and the `v0.1.0` milestone** on `DanBeckDev/a11y-witness` | Survives the loss of this machine, which is why it moved there on 2026-09-06. `docs/backlog.md` and `docs/known-gaps.md` stay as the RECORD of lessons and are NOT the tracker — the backlog contradicted itself (it says a closed row is deleted, and keeps them struck through) and five rows checked that day were already closed. Filed as issue #19 rather than fixed silently. |
+| **The daily board report's schedule** | **A launchd agent on this Mac only** — `bash scripts/install-board-report.sh`, one command, idempotent | A REAL contingency, not a detail. It posts to issue #20 at 08:00 Europe/London and **cannot be moved to a GitHub runner**: a runner only ever sees `origin/main`, so the merge count would miss anything merged locally and unpushed and the push-state line would read *"level, checked"* every day whether or not it was true — the two lines that exist to catch a push hold. A scheduled report confidently wrong about the thing it was built to see is worse than a manual one. **If this machine stops being the control plane, the report stops with it**; issue #20's body says a missing edition is a defect in this process, not a quiet period. Full notes: [`docs/board/README.md`](../board/README.md). |
+| The last gate result and the fleet-hours total the report quotes | **`docs/board/reported.json`** in the repo | Recorded by the agent that RAN the command, with its verbatim output. The report reads no gate itself — a checkout's `runs/` is only as fresh as its last sync. It REFUSES a fleet-hours total that does not name a finished run, because a total whose run is unstated cannot be checked or compared with the next edition. |
 
 ## Credentials are the single point of failure — described, never printed
 
