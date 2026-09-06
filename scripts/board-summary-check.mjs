@@ -21,6 +21,7 @@ import { REPO, ROOT, gh } from "./board-data.mjs";
 
 const HOURS_MS = 3600_000;
 const ISSUE = "20";
+const SUMMARY_WORDS = 120;
 
 /** The date the NEXT 08:00 edition will render for. */
 function nextEditionDay(now = new Date()) {
@@ -38,7 +39,19 @@ function main() {
   const present = existsSync(file) && readFileSync(file, "utf8").trim().length > 0;
 
   if (present) {
-    console.log(`summary for ${day} is written. The 08:00 edition will render.`);
+    // THE LENGTH IS CHECKED HERE, NOT ONLY AT RENDER TIME, and the reason is a real trap.
+    //
+    // The render-time gate reads TODAY's summary. A summary written the evening before is therefore the
+    // one nobody checks until the morning it is due -- so an over-length one sits looking fine all night
+    // and refuses the edition at 08:00, when nobody is awake to cut two words. Found by writing a
+    // 122-word summary and watching every check pass.
+    const words = readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean).length;
+    if (words > SUMMARY_WORDS) {
+      console.error(`The summary for ${day} is ${words} words, over the ${SUMMARY_WORDS}-word cap.\n`
+        + "The 08:00 edition will REFUSE it. Cut it now, while there is somebody awake to.");
+      process.exit(1);
+    }
+    console.log(`summary for ${day} is written, ${words} words. The 08:00 edition will render.`);
     process.exit(0);
   }
 
