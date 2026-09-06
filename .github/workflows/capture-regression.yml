@@ -3,56 +3,20 @@ name: capture-regression
 # Phase 1 (ADR 0003): the capture half's regression gate. Drives the real
 # capture worker (NVDA on a Windows runner via guidepup/setup-action) over the
 # bundled tutorial pages and asserts the stable raw signals each should yield
-# (see packages/lab/src/harnesses/capture-check.mjs). Path-filtered so it only spends
-# Windows-runner minutes when capture could have regressed; also on-demand.
+# (see packages/lab/src/harnesses/capture-check.mjs).
 #
-# The filter covers packages/lab/src/training/** as well as packages/lab/src/capture/**: a probe and the signal that reads it are
-# coupled, so a change to the case matrix can blind a probe without touching any capture code.
+# RELEASE-TIME ONLY, AND NOTHING ELSE — chairman's direction, 2026-09-06, same reasoning as
+# `action-smoke.yml`'s identical change: this used to be path-filtered to fire on a push to `main`
+# touching the capture path (and, briefly, on a matching PR too, which doubled the same commit's Windows
+# minutes). Both were the wrong question. `release.yml` is where "before a release" lives, and it now
+# calls this as a job (`workflow_call`) against the exact sha about to ship, rather than trusting a
+# separately-triggered push to have covered it. `workflow_dispatch` keeps the on-demand case. No `paths:`
+# filter is possible or needed under either trigger — this does not run on a diff at all now, so a probe
+# and its signal being coupled (the reason the old filter had to reach `packages/lab/src/training/**` as
+# well as the capture package) is no longer this workflow's problem to solve by naming files.
 on:
+  workflow_call:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      # THE WORKER, which is what this job exists to test. It was `src/capture/**` and a mechanical rewrite
-      # during M8 turned that into `packages/lab/src/capture/**` — a directory holding two lab files and no
-      # capture code at all. The filter would then have fired on lab edits and NEVER on a worker change: a
-      # check that silently stops running, which is worse than one that fails.
-      - "packages/nvda-worker/**"
-      - "!packages/nvda-worker/**/*.md" # doc-only edits shouldn't spend Windows minutes
-      # `packages/lab/src/training/**` is here because a probe and its signal are COUPLED, and this filter used
-      # to exclude it. `case-matrix.mjs` decides what each signal reads, so a change there can blind a probe
-      # without touching the worker at all -- and that is exactly where the guard bug lived that failed
-      # 44 cases in a live run. A filter that cannot fire on the file that broke it protects nothing.
-      - "packages/lab/src/training/**"
-      - "!packages/lab/src/training/**/*.md"
-      # The harness this job runs, and the fixture pages it drives.
-      # AND EVERYTHING THE HARNESS IMPORTS, which this filter did not cover until 2026-09-05.
-      #
-      # `capture-check.mjs` reaches six files and three were outside every pattern here:
-      # `capture-client.mjs` (how the harness talks to a worker at all -- moved into `worker-fleet` on
-      # 2026-09-05 so the published CLI could use it, which this derived check caught the same hour),
-      # `worker-http.mjs` (the HTTP client
-      # every capture goes through) and `host-address.mjs`. So a change to the code that DISPATCHES a
-      # capture never triggered the job that tests capturing. Not hypothetical: `capture-client.mjs` was
-      # changed the same day -- deadline clipping and lost-acknowledgement recovery -- and this filter would
-      # not have fired on any of it.
-      #
-      # `capture-regression-covers-its-imports.test.ts` DERIVES the closure and fails until each file is
-      # matched, so the next import cannot slip through the same way.
-      - "packages/lab/src/harnesses/capture-check.mjs"
-      - "packages/worker-fleet/src/capture-client.mjs"
-      - "packages/worker-fleet/src/transient-fault.mjs"
-      - "packages/worker-fleet/src/worker-http.mjs"
-      - "packages/worker-fleet/src/host-address.mjs"
-      - "packages/worker-fleet/src/cli-flags.mjs"
-      - "packages/lab/src/eval/pages/tutorials/**"
-      - ".github/workflows/capture-regression.yml"
-  # NO `pull_request:` TRIGGER — removed 2026-09-06 alongside the `ci.yml` rebuild. This ran a 25-minute
-  # Windows job (real NVDA, real Edge) on every PR touching the capture path, in addition to the identical
-  # `push: branches: [main]` run the SAME commit gets once merged. `main` only, plus `workflow_dispatch`
-  # for on-demand runs, matches `action-smoke.yml`'s own scoping and the same reasoning: a capture-path PR
-  # is reviewed and merged like any other now, and the Windows minutes are spent once, at the point a
-  # commit actually reaches `main`, rather than twice.
 
 jobs:
   capture:
