@@ -37,6 +37,23 @@ import applicability  # noqa: E402  (path shim must precede the import)
 import screenreader_features as feature_pipeline  # noqa: E402  (path shim must precede the import)
 
 
+class ArtifactSchemaMismatch(RuntimeError):
+    """The shipped weights and the running code disagree about the evidence format.
+
+    An EXPECTED domain failure, not a bug: the artefact and the runtime version independently of each
+    other, so this recurs by construction every time one moves without the other -- most recently the
+    v18/v19 migration, but the class outlives any one migration. Distinguished from `verify_artifact`'s
+    other `RuntimeError`s (a missing file, an invalid threshold, a malformed report) precisely so it can
+    be reported as a NAMED fault with what/try/where, matching `capture-faults.mjs`'s reasoning: model
+    expected domain failures as explicit results a caller can act on, not exceptions to be parsed.
+    """
+
+    #: The wire-level fault code -- read by `__main__` below to print a structured, parseable line rather
+    #: than a bare traceback, and by `local-judge.ts` on the TypeScript side, which pins this string equal
+    #: to its own copy the same way `fault-remediation.ts` already pins the worker's four fault codes.
+    FAULT = "artifact-schema-mismatch"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     sources = parser.add_mutually_exclusive_group(required=True)
@@ -280,22 +297,27 @@ def verify_artifact(
         metadata = handle.metadata() or {}
         keys = set(handle.keys())
     expected_features = list(feature_pipeline.FEATURE_NAMES)
+    # THE SEVEN CHECKS BELOW ARE ONE FAULT CLASS: the shipped artefact and the running code disagree
+    # about the evidence format, on the safetensors metadata or the training report. #81 named them
+    # "near-identical RuntimeErrors" reported as a bare traceback; ArtifactSchemaMismatch is what lets
+    # `__main__` (below) and `local-judge.ts` treat this as one recognisable, actionable fault rather
+    # than seven different messages a caller would have to pattern-match.
     if metadata.get("representation") != feature_pipeline.FEATURE_SCHEMA_VERSION:
-        raise RuntimeError("scorer representation schema does not match the runtime")
+        raise ArtifactSchemaMismatch("scorer representation schema does not match the runtime")
     if metadata.get("encoder_sha256") != actual_encoder_hash:
-        raise RuntimeError("scorer encoder SHA-256 metadata does not match the encoder")
+        raise ArtifactSchemaMismatch("scorer encoder SHA-256 metadata does not match the encoder")
     if json_metadata(metadata.get("structured_features"), "structured_features") != expected_features:
-        raise RuntimeError("scorer structured feature order does not match the runtime")
+        raise ArtifactSchemaMismatch("scorer structured feature order does not match the runtime")
     if float(metadata.get("structured_feature_scale", "nan")) != feature_pipeline.ENGINEERED_FEATURE_SCALE:
-        raise RuntimeError("scorer structured feature scale does not match the runtime")
+        raise ArtifactSchemaMismatch("scorer structured feature scale does not match the runtime")
     if json_metadata(metadata.get("structured_feature_multipliers"), "structured_feature_multipliers") != feature_pipeline.ENGINEERED_FEATURE_MULTIPLIERS:
-        raise RuntimeError("scorer structured feature multipliers do not match the runtime")
+        raise ArtifactSchemaMismatch("scorer structured feature multipliers do not match the runtime")
 
     representation = report.get("representation", {})
     if representation.get("schema") != feature_pipeline.FEATURE_SCHEMA_VERSION:
-        raise RuntimeError("training report representation schema does not match the runtime")
+        raise ArtifactSchemaMismatch("training report representation schema does not match the runtime")
     if representation.get("structuredFeatures") != expected_features:
-        raise RuntimeError("training report feature order does not match the runtime")
+        raise ArtifactSchemaMismatch("training report feature order does not match the runtime")
     try:
         embedding_size = int(representation["embeddingSize"])
     except (KeyError, TypeError, ValueError) as error:
@@ -609,6 +631,16 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
+    except ArtifactSchemaMismatch as error:
+        # A NAMED fault with a stated verdict, not a caught-and-reworded stack trace. Printed to STDOUT
+        # as one parseable line -- `main()` only ever reaches ITS print on success, so there is nothing
+        # to collide with here -- so a caller spawning this script (`local-judge.ts`'s `scoreCapture`)
+        # can read `fault` off stdout without scraping stderr prose. Exit 3, distinct from the config
+        # error's 2 and the generic tool failure's 1: an expected domain failure, not this caller's
+        # mistake and not a bug in this tool, so retrying will not help -- only a new model release will.
+        print(json.dumps({"fault": ArtifactSchemaMismatch.FAULT, "error": str(error)}))
+        print(f"screen-reader scorer failed: {error}", file=sys.stderr)
+        raise SystemExit(3)
     except Exception as error:
         print(f"screen-reader scorer failed: {error}", file=sys.stderr)
         raise
