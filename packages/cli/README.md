@@ -63,6 +63,29 @@ local UTM VM on macOS and put it back as it found it, and every UTM entry point 
 `A11Y_WORKER` at a Windows machine you have, or use the GitHub Action if you have none. See
 `docs/getting-started.md` for setting a worker up, and `@a11y-witness/nvda-worker` for the worker itself.
 
+## Judging what the screen reader heard
+
+By default the judge is a small trained scorer shipped with this tool — no API key, no metered cost, no
+network call for the judgment itself. Point it at a rented model instead if you want a second opinion or
+do not trust the local one yet:
+
+```bash
+JUDGE_BACKEND=openai OPENAI_API_KEY=sk-... npx a11y-witness <url> --task "..."
+```
+
+`JUDGE_BACKEND=openai` speaks plain `/v1/chat/completions`, so it works against hosted OpenAI, Anthropic's
+OpenAI-compatible endpoint, or a local server (Ollama, LM Studio, vLLM, llama.cpp) — set `JUDGE_BASE_URL`
+to point it somewhere other than `api.openai.com`. `JUDGE_API_KEY` is accepted as a project-neutral alias
+for `OPENAI_API_KEY` if you would rather not put a provider's name on the variable. Other knobs, all
+optional: `JUDGE_MODEL` (which model to ask for), `JUDGE_TIMEOUT_MS` (default 120000), `JUDGE_REASONING`
+(default `medium`, for models that support a reasoning-effort parameter). If a server rejects
+constrained/structured JSON output, set `JUDGE_STRUCTURED=off` — most reject silently in ways that read as
+a truncated or malformed response, so this is the first thing to try if `openai` backend responses look
+corrupted against a self-hosted server.
+
+`codex` and `anthropic` backends also exist, for comparison; none of the three rented backends is ever the
+default.
+
 ## A page behind a consent wall is REFUSED, not reported
 
 The screen reader gets held inside the modal, so the capture describes the dialog rather than the page.
