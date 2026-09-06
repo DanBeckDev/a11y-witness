@@ -715,6 +715,30 @@ type FocusLogEvent = { type: string; id: number; name: string; atMs: number };
  */
 function focusLossEvidence(log: FocusLogEvent[], i: number): string | null {
   const event = log[i];
+  // THE LOG'S FIRST EVENT CANNOT BE F55, and this is the ONE exception to "an orphaned focusout is F55
+  // regardless of what follows" stated below.
+  //
+  // The listener is installed after the page has loaded, so whatever already holds focus at that instant
+  // received it BEFORE anything was watching. When it then leaves -- an ordinary Tab -- the log opens on a
+  // focusout with no focusin, which is byte-for-byte the F55 signature and is nothing of the kind.
+  //
+  // MEASURED both directions before this line was written, 2026-09-06, on the recaptured real-page corpus
+  // and the corpus positives:
+  //
+  //   37 of 37 conformant real pages reported 2.4.7  -> EVERY ONE had exactly ONE orphan and it was log[0]
+  //   9 of 9 corpus positives (`focus-removed-on-receipt-*`) -> log[0] is a FOCUSIN, orphans at index 2+
+  //
+  // So the discriminator is not a heuristic about where orphans tend to appear, it is the listener's own
+  // start boundary: by index 1 the listener was demonstrably watching, so a missing focusin there is a
+  // real absence rather than a moment nobody was recording. A real F55 shows up as `focusout` for a field
+  // the script blurred on receipt, with focus landing on the NEXT field at the same millisecond -- exactly
+  // what `id 1` does at index 2 on every one of the nine.
+  //
+  // Safe against truncation in the one direction that matters: `capture-probes.mjs` cuts the log with
+  // `slice(0, FOCUS_EVENT_LOG_DIAGNOSTIC_LIMIT)`, so it drops the TAIL and never the head. `log[0]` is
+  // always the first event the listener saw. If that ever becomes a head-drop, this exception becomes
+  // unsound and must go with it.
+  if (i === 0) return null;
   const prior = log[i - 1];
   const completedReceipt = prior?.type === "focusin" && prior.id === event.id;
   const heldMs = completedReceipt ? event.atMs - prior.atMs : null;

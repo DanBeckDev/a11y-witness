@@ -773,14 +773,61 @@ test("more than one control can exhibit F55 in the same capture, and both are re
   assert.deepEqual(found.map((f) => f.evidence.split(" (")[0]), ["Coupon", "Gift card"]);
 });
 
-test("a lone focusout with nothing preceding it at all is still F55 -- it is orphaned by definition", () => {
-  // `anchorToTop`'s own Escape/Ctrl+Home can blur whatever a PRIOR probe left focused, before this log was
-  // installed for `probeFocusOrder` specifically, so the log can legitimately open on a bare focusout with
-  // no matching focusin in it. That is indistinguishable from a genuine orphan by the evidence alone, and
-  // per this rule's own decision an orphan is F55 unconditionally -- reading it as "nothing to pair" would
-  // be exactly the false-negative shape this rule exists to close.
-  const log = [{ type: "focusout", id: 0, name: "Whatever a prior probe focused", atMs: 5 }];
-  assert.equal(focusFindings(log).length, 1);
+test("THE LOG'S FIRST EVENT IS THE LISTENER'S START BOUNDARY, never F55 -- measured, not reasoned", () => {
+  // THIS TEST ASSERTED THE OPPOSITE UNTIL 2026-09-06, and the reversal is the useful part.
+  //
+  // It read "a lone focusout with nothing preceding it at all is still F55 -- it is orphaned by
+  // definition", and its comment NAMED the true mechanism before concluding against it: "`anchorToTop`'s
+  // own Escape/Ctrl+Home can blur whatever a PRIOR probe left focused, BEFORE THIS LOG WAS INSTALLED". It
+  // then called that indistinguishable from a genuine orphan and resolved the ambiguity by assumption --
+  // this repo's "a comment that names an ambiguity, above code that resolves it by assumption", in a test.
+  //
+  // The first recaptured real-page run settled it. 2.4.7 fired on 37 conformant real pages, and reading
+  // every one of their stored logs individually rather than diffing the count:
+  //
+  //   37 of 37 real pages   -> exactly ONE orphan each, and it was log[0], every time
+  //   9 of 9 corpus positives -> log[0] is a FOCUSIN; their orphans sit at index 2 and again at 9-23
+  //
+  // So it is not indistinguishable at all, and the discriminator is not a heuristic about where orphans
+  // tend to fall: by index 1 the listener was demonstrably watching, so a missing focusin THERE is a real
+  // absence rather than a moment nobody was recording. The nine keep firing (see the test above); the 37
+  // stop. Recall paid nothing.
+  const log = [{ type: "focusout", id: 0, name: "Whatever held focus when the listener installed", atMs: 5 }];
+  assert.deepEqual(focusFindings(log), [],
+    "the element that already held focus when the listener was installed necessarily has no focusin in "
+    + "this log -- its receipt happened before anything was recording, which is not evidence of a strip");
+});
+
+test("REAL PAGE SHAPE: an opening orphan followed by an ordinary Tab walk reports nothing", () => {
+  // www.nhs.uk/service-search/find-a-gp, verbatim from its stored log (first five events). Every one of
+  // the 37 conformant real pages has this shape: log[0] is a focusout for whatever the browser focused
+  // before the listener existed, and the very next focusin is the probe's own first Tab at the SAME
+  // millisecond -- which is what an ordinary transition looks like, not a script strip.
+  const log = [
+    { type: "focusout", id: 0, name: "A", atMs: 3171 },
+    { type: "focusin", id: 1, name: "nhsuk-cookie-banner__link_accept_analytics", atMs: 3171 },
+    { type: "focusout", id: 1, name: "nhsuk-cookie-banner__link_accept_analytics", atMs: 4663 },
+    { type: "focusin", id: 2, name: "nhsuk-cookie-banner__link_accept", atMs: 4663 },
+    { type: "focusout", id: 2, name: "nhsuk-cookie-banner__link_accept", atMs: 5298 },
+  ];
+  assert.deepEqual(focusFindings(log), [],
+    "a conformant real page must not be accused because the log had to start somewhere");
+});
+
+test("CORPUS POSITIVE SHAPE: the same orphan one index later IS F55, so the fix cannot go deaf", () => {
+  // focus-removed-on-receipt-order.bad, verbatim from its stored log (first four events), and the pairing
+  // with the test above is the whole point: the two differ ONLY in whether a focusin precedes them. This
+  // is the guard against the failure mode that matters more than the false positives -- "a rule can be
+  // clean because it has gone DEAF", where a real-page number looks excellent for the worst reason.
+  const log = [
+    { type: "focusin", id: 0, name: "Contact name", atMs: 3295 },
+    { type: "focusout", id: 0, name: "Contact name", atMs: 5213 },
+    { type: "focusout", id: 1, name: "Delivery instructions", atMs: 5214 }, // ORPHANED, and index > 0
+    { type: "focusin", id: 2, name: "Daytime telephone number", atMs: 5214 },
+  ];
+  const found = focusFindings(log);
+  assert.equal(found.length, 1, "an orphan the listener was watching for is still F55");
+  assert.match(found[0].evidence, /Delivery instructions/);
 });
 
 test("`checked: false` is 'cannot say', never 'no findings' -- must never read as a clean zero", () => {
