@@ -1,5 +1,43 @@
 # The worker-loop orchestrator — `dispatcher`
 
+## RESUMING AFTER CONTEXT LOSS — run this before anything else
+
+**Nothing about this role's state lives in a conversation.** After ten hours the session compacts, and
+whatever was only in context is gone. **Everything below is recoverable from outside**, and if any of it is
+not true right now, make it true before the next merge.
+
+| the state | where it lives — NOT in your head |
+|---|---|
+| the merge queue | **the open PRs on GitHub, in order.** Nothing else is a queue |
+| what is held, and why | **labels on the tracker**, plus a comment saying what it waits on |
+| the rules | **this file** |
+| what merged | `git log origin/main`, and the issue closed with its sha |
+
+**THE FIRST FOUR ACTIONS ON ANY RESUME, in order:**
+
+1. **Read this file.**
+2. **`gh pr list --state open`** — that is the queue.
+3. **`ListAgents`** — who exists, and who is idle.
+4. **Send `ceo` ONE LINE**: that you resumed, and what you found.
+
+**And the check that a compaction cannot survive without:** for every row labelled `in-progress` whose
+session is idle, run
+
+```
+git rev-list --count origin/main..origin/<branch>
+```
+
+**Idle plus in-progress is NOT a stall until that command says so.** Measured 2026-09-06: of five such
+rows, **four were merged and their labels stale**, and one pair was built and never pushed at all — a
+worker had verified its commit in the object DB after removing its worktree, which is a correct check of a
+different question. **Continuing all five would have redispatched four finished units.**
+
+**A routine that lives in your context is lost with it.** Close-on-merge was added as a step this
+afternoon and four merged rows were still open that evening — not because anyone forgot, but because the
+step was in a conversation. **Anything that must happen every time belongs in a script that refuses to
+complete without it, not in a list you intend to follow.**
+
+
 The agent filling this role is named **`dispatcher`**. It reports to **`orchestrator`** — the lead orchestrator, which owns the fleet, the lab, `runs/`, every corpus-reading gate and all cross-cutting review — and hands up to it the three triggers below. It sends its utilisation line to **`ceo`** with every status message.
 
 **Created 2026-09-06, because one agent was the serial step and the measurement said which part.**
