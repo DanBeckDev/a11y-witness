@@ -582,14 +582,25 @@ below). The rest are genuinely open:
 > | §7.4 `pure-graph.test.ts` naming a retired file | **CLOSED**, and it was guarding five files while reporting six. `MUST_BE_PURE` is now verified to EXIST before it is walked |
 > | §7.4 `.c8rc.json`'s phantom exclude | **CLOSED** |
 > | §7.5 `examples/workflow.yml` contradicting the Action's default | **CLOSED, and it was wrong three ways** — `probe-forms` inverted, a `task:` comment true only because of that inversion, and the same unguarded `upload-artifact` path bug that discarded this repo's own action-smoke evidence for 85 runs. Pinned by `example-matches-action-defaults.test.ts`, DERIVED from `action.yml`'s declared defaults |
-> | §7.5 `action.yml` pip-installing unpinned versions behind a constant cache key | **OPEN and PUBLISH-BLOCKING** — its own row above. Cannot be verified until `action-smoke` can go green, so it rides the first green run after the v19 lock closes |
+> | §7.5 `action.yml` pip-installing unpinned versions behind a constant cache key | **CLOSED, structurally** — its own row above (publish blocker B2). `packages/scorer/requirements.txt` now pins all six packages exactly; `action.yml`'s cache key hashes that file (`hashFiles('packages/scorer/requirements.txt')`) and its install step greps its four pins straight out of it rather than repeating them, with a count guard. `requirements-ci.txt` carries the identical `numpy`/`safetensors` pins, checked by `python-ci-requirements.test.ts`. Same residual as B4 below: verifiable by reading, not yet by a green `action-smoke` |
 > | §8 the UTM path | **DEPRECATION CLOSED, deletion deferred by decision.** ~2,190 lines measured UTM-only (not ~2,460 — general-purpose functions inside those files were excluded); every UTM entry point now warns to stderr, enforced by a discovery test with vacuity guards; the three docs corrected |
 > | §10.2 `packages/README.md`, `packages/control/`'s missing README, root `README.md` | **CLOSED.** The README said "nothing trained yet" while the trained scorer IS the product and the same document said so 40 lines later; `nvda-speech` was misdescribed; and its "18 of 55" had drifted from the generated `coverage.md`'s 19 **in a sentence claiming the number could not drift** — deleted rather than updated, which is the right remedy off the list |
 >
-> **Still open and assigned:** §5's consolidated wire contract, §6.5's `CRITERION_STATES` cross-check,
-> §9's remaining duplication (raw `fetch` at four sites, Windows-trimming in three files), §10.1's eleven
-> decisions with no ADR, and `PLAN.md`'s B1/B7 self-contradiction. **Still open and unassigned:**
-> `packages/cli/README.md` documenting the Action runner's exit-2 behaviour as the CLI's own.
+> #### SECOND PASS, same day: five more entries were found stale, verified by reading code at HEAD
+>
+> | finding | now |
+> |---|---|
+> | §5 the consolidated wire contract | **CLOSED, and not the way it was assigned.** `capture-screenreader-dataset.mjs` had already stopped hand-building its POST body on 2026-08-28 (`adfe293`) — it goes through the same shared `captureTolerantly` client `cli.ts` uses. The one genuine duplicate left was TS-to-TS, not cross-language: `cli.ts`'s own `CaptureRequest`/`CaptureResponse` were hand-typed independently of `@a11y-witness/evidence`'s canonical ones. Fixed by deriving (`Pick`/`Omit`/`Required`) rather than building a new shared module — `wire-request-describes-the-wire.test.ts` and `wire-types-describe-the-wire.test.ts` already pin the TS/`.mjs` boundary for `CaptureRequest`/`CaptureResult`, so there was nothing left needing the `name-normalisation.test.ts` treatment. Mutation-checked: renaming a field in `evidence/index.ts` broke `tsc --build` immediately |
+> | §6.5 `CRITERION_STATES` cross-check | **CLOSED.** `packages/cli/src/forms/coverage.test.ts`'s `"CRITERION_STATES covers exactly the assessed, forms-probe-backed criteria -- DERIVED from CRITERION_COVERAGE, not hand-listed"` cites this exact finding by name and derives the SET (not the per-criterion `needs`/`mode`, which genuinely cannot be derived — see that test's own comment) |
+> | §9 raw `fetch` surviving at four call sites | **CLOSED**, and more thoroughly than assigned — `97e757d` ("convert the five remaining raw-fetch-to-worker sites") fixed the original four PLUS five more `worker-fleet` sites a wider sweep found in passing (`protocol-guard.mjs`, `compare-workers.mjs`, `check-worker-code.mjs`, `code-drift.mjs`), leaving one deliberate exemption (`capture-screenreader-dataset.mjs`, fetching the page server's HTML rather than the worker's JSON API) — all pinned by `worker-http-client-owner.test.ts`. **One further raw fetch was found in passing, not covered by that test:** `deploy-worker.mjs:132`'s `healthCode()`, on the deprecated local-UTM `worker:deploy` path. Not fixed here — noted for whoever next touches that file |
+> | §10.1 eleven architectural decisions with no ADR | **6 of 11 CLOSED.** `docs/adr/` grew from 24 to 30 since the audit; ADRs 0025–0030 write up the capture cache key's composition, the async-capture client-minted id, bare-metal replacing local VMs, fault-code recovery, `ready`-vs-`ok` readiness, and fleet code-parity-as-precondition — content-checked against each decision's CLAUDE.md citation, not just matched by title. **5 remain with no ADR:** `.mjs` worker vs `.ts` control plane, the Python scorer boundary/venv/`A11Y_PYTHON`, guidepup's exact pin as evidence, the speech channel as a TLS socket, and the browser preset as evidence |
+> | `PLAN.md`'s B1/B7 self-contradiction | **Already resolved, not by this pass — the claim about it was stale.** Read every B1/B7 mention in `PLAN.md` (10 of them): all agree B7 is CLOSED 2026-08-31 and B1 is open-but-no-longer-blocked-by-B7, including a line that says so in the past tense (`PLAN.md:385`, `PLAN.md:408-413`) and a blockers table with B7 struck through (`PLAN.md:419`). No edit to `PLAN.md` was needed; the correction is entirely to this page's own stale claim about it |
+>
+> **Still open and assigned:** `PLAN.md`'s remaining un-ADR'd decisions have no ADR yet (5 of the original
+> 11), the `deploy-worker.mjs:132` raw-fetch gap just found, and Windows-trimming duplication across
+> `windows-trim.mjs`/`provision-nvda-worker.ps1`/`build-lean-worker-image.ps1`/`roles/worker/tasks/*.yml`
+> (still 3-4 places, unchanged). **Still open and unassigned:** none — `packages/cli/README.md`'s exit-2
+> claim (checked this pass) is already fixed, at `packages/cli/README.md:93`.
 >
 > **And one finding that was NOT in the audit at all, found while triaging it:** the CLI hung for
 > **10 minutes 20 seconds in silence** when nothing answered — `ECONNREFUSED` is a transient network code,
@@ -639,10 +650,14 @@ below). The rest are genuinely open:
   `packages/README.md` still tables six packages against nine that exist, `packages/control/` still has no
   README, and root `README.md` still misdescribes `nvda-speech` and still says "nothing trained yet".
 
-**Cheap and genuinely open, if anyone wants a small unit rather than folding these into a bigger one:**
-the `pure-graph.test.ts` stale filename, the `.c8rc.json` phantom exclude, the `release.yml:161` unbound
-variable, `cli.ts`'s stale "local Codex login" header line, and a one-line deprecation note on the three
-UTM docs still missing one — none of these touches a worker file or a cache key.
+**The paragraph that used to stand here — "cheap and genuinely open" — sent a reader at five rows that
+were all already closed.** Checked 2026-09-06: the `pure-graph.test.ts` filename (fixed, reads
+`browser-args.test.ts` at line 38), the `.c8rc.json` phantom exclude (entry gone), the `release.yml:161`
+unbound variable (reads `smoke_status` throughout), `cli.ts`'s "local Codex login" header (line 9 is now
+the comment recording the fix), and the UTM docs deprecation note (all three — root `README.md`,
+`docs/control-plane-proxmox.md`, `packages/worker-fleet/README.md` — carry one; the status box above
+already said so). See the STATUS box's SECOND PASS entry above for what else this same check found. There
+is no small, cheap, genuinely-open item left in this section as of this pass.
 
 ## ~~OPEN — the census fix does not reach the focus-event path~~ — CLOSED 2026-09-06
 
