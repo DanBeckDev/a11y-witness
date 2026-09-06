@@ -182,6 +182,44 @@ costing the worker an hour.
 **This is what the Ready queue was always for.** A queue nobody may pull from is a list, and a list needs
 somebody to read it aloud.
 
+## THE TURN IS THE UNIT, AND FILING IS THE EVENT — 2026-09-06, replacing the wake-up loop
+
+**Five workers went idle repeatedly across one day and not one had broken a rule.** The mechanism, found by
+`ceo`: **a session does nothing between messages.** A worker that finishes and reports ENDS ITS TURN, and
+nothing wakes it until someone sends it something — so "pull before you report" could only ever work inside
+that last turn. Every rule in this file above this line assumed continuous agents.
+
+**A self-paced wake-up loop was tried for about an hour and WITHDRAWN.** Polling is not the mechanism, and
+the events already exist. It also failed a second test that matters more: **a standing arrangement for a
+session to wake itself indefinitely is a change that session's user must sanction, not one a peer proposes
+and a dispatcher forwards.** Two sessions refused it on those grounds before it was withdrawn, and both
+were right. The cost lands on someone else's budget on a schedule nobody is watching.
+
+**Two rules replace it, and nothing polls.**
+
+1. **A worker's LAST action in any turn is to claim the next Ready row in its lane and start it.** Its turn
+   does not end while there is work for it. **Reporting comes after claiming, in the same turn, never
+   instead of it.** A completion message with no next row attached is an unfinished turn.
+2. **Whoever files a row into a lane that was EMPTY sends one line to that lane's worker at that moment** —
+   "row #N in your lane." Applies to the dispatcher and to `product-manager` equally. **Filing is the event
+   that wakes an empty lane**, because nothing else will.
+
+**The dispatcher's idle subscriptions stay** (`SendMessage` with `notify_when_idle`) as the backstop for a
+turn that ends for any other reason. They cost the worker nothing and they are the only mechanism that
+reports a loop that never started.
+
+### The shape both of these come from, and it is not about loops
+
+**A constraint correctly applied in one direction and never tested in the other.** The dispatcher declined
+to edit `CLAUDE.md` on a peer's request that morning — and then forwarded a standing wake-up loop to six
+sessions the same evening. A worker refused to touch a package that was not theirs and armed a schedule
+that was not theirs to arm. **Neither failed to know the rule; both failed to notice the second thing it
+covered.**
+
+**The check is cheap: when you apply a constraint, name the next-largest thing it also covers, and say why
+that one is or is not in scope.** Asking *what else does "not mine to authorise" cover today?* would have
+caught the loop, and the answer was one message above it.
+
 ## Standing rules inherited from the lead's own record
 
 - **Verify a row is OPEN by a command before briefing it.** Three units were dispatched at already-closed
