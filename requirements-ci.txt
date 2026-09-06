@@ -13,6 +13,9 @@
 # So this is not a second spelling of `requirements.txt` and must not drift into one: it is the answer to
 # "what do the TESTS import", and `python-ci-requirements.test.ts` pins that every package named here is
 # also named there, so a version can never diverge between the two environments.
-numpy>=2.0,<3
-safetensors>=0.5,<1
+#
+# EXACT, matching `requirements.txt`'s pins exactly (publish blocker B2) -- the test above compares the
+# constraint STRING, not just the version, so these two must be edited together or it fails on purpose.
+numpy==2.5.1
+safetensors==0.8.0
 pytest

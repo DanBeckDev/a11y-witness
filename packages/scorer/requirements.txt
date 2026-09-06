@@ -1,17 +1,29 @@
 # Local model work only. The base encoder is loaded with safetensors and the
 # training runner refuses pickle-style checkpoints.
-huggingface-hub>=0.30,<1
-numpy>=2.0,<3
+#
+# EXACT PINS, not ranges -- publish blocker B2. Ranges here meant the lab's actual installed versions
+# were whatever pip happened to resolve on the day that box was last built, silently different on its
+# next reinstall, which broke the premise of pinning `action.yml` to "the lab's runtime": there was no
+# single lab runtime to pin to, only a moving target. Pinning HERE, with everything else (action.yml's
+# cache key and pip-install line, this file's own CI subset below) deriving from this file, makes "the
+# Action matches the lab" true by construction instead of true by coincidence at one instant.
+#
+# Observed 2026-09-06 from a real scratch venv (.venv, this checkout) resolving the ranges these pins
+# replace -- not chosen, not guessed. Each one already satisfies its old range, so pinning changes
+# nothing that works today, and both the ONNX and the torch-fallback encode paths were run directly
+# against these exact versions and produced real embeddings (384-d, float32) from each.
+huggingface-hub==0.36.2
+numpy==2.5.1
 # The encoder's DEFAULT path, not an optional accelerator. `_encode` takes the ONNX branch whenever
 # `onnx/model.onnx` exists -- which is whenever the encoder has been fetched -- and its torch fallback
 # is guarded on the FILE being absent, not on the MODULE being importable. So an undeclared
 # onnxruntime does not degrade to the slower path, it raises ModuleNotFoundError and the lab cannot
 # score at all. It went unnoticed because it was installed by hand in one developer's venv and
 # declared nowhere; the first box built from this file found it immediately.
-onnxruntime>=1.20,<2
-safetensors>=0.5,<1
-torch>=2.7,<3
-transformers>=4.50,<6
+onnxruntime==1.28.0
+safetensors==0.8.0
+torch==2.13.0
+transformers==4.57.6
 
 # Test runner. Added 2026-08-23, and the reason is worth recording: `packages/nvda-speech/tests/
 # test_symbols.py` was written in pytest style, pytest was never installed, and `npm test` globbed
