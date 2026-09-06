@@ -583,9 +583,13 @@ below). The rest are genuinely open:
   five docs the audit named (root `README.md`, `docs/control-plane-proxmox.md`,
   `packages/worker-fleet/README.md`) still say nothing about deprecation. (`leaseWorker`'s inventory-first
   order and `doctor`'s fleet-aware checks are already fixed — commits `dd6299b` and `126f56c`; see §15.)
-- **Duplication with no owner (§9, excluding rows already tracked elsewhere on this page):** the `runs/`
-  layout, the gate exit-code contract, argv parsing, 95-variable environment configuration, raw `fetch`
-  surviving at four call sites, and Windows-trimming logic in three separate files.
+- **Duplication with no owner (§9, excluding rows already tracked elsewhere on this page):** the gate
+  exit-code contract, argv parsing, raw `fetch` surviving at four call sites, and Windows-trimming logic
+  in three separate files. The `runs/` layout is **closed** (`packages/lab/src/dataset-paths.mjs`,
+  enforced by `dataset-paths.test.ts`). The 95-variable environment configuration is **measured, not a
+  duplication defect** (`docs/architecture-audit.md`'s §9 table row) — the cross-package subset does not
+  disagree anywhere; the open item is 15 names read in 2+ files with no documentation, which is a
+  documentation task, not more code.
 - **Documentation architecture (§10.1, 10.2, 10.5):** eleven architectural decisions still live only in
   CLAUDE.md with no ADR. `PLAN.md` still self-contradicts on B1/B7's open/closed status.
   `packages/README.md` still tables six packages against nine that exist, `packages/control/` still has no
