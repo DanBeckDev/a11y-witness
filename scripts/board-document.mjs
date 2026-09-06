@@ -192,7 +192,8 @@ function section4(d) {
     + "schedule, exist on a single computer. The list of open work moved to a hosted service today, so "
     + "that at least now survives its loss; the credentials do not.",
     "",
-    "**Six saved changes carry the wrong author's name.** An automated test overwrote the project's "
+    `**${d.strays.length} saved changes carry the wrong author's name, out of the `
+    + `${d.merges.length} merges made since midnight.** An automated test overwrote the project's `
     + "identity settings. The settings are fixed; the historical record is not, and we have decided to "
     + "leave it rather than rewrite history that several people are working on top of. Cosmetic, and "
     + "disclosed so it is not discovered.",
@@ -278,7 +279,8 @@ function appendix(d) {
     "compared directly against the published copy, checked rather than assumed "
     + "(`git rev-list --count origin/main..main`)");
   push("Changes carrying the wrong author", String(d.strays.length),
-    "the project's own version history; the cause is diagnosed and the record is kept by decision");
+    `the project's own version history, over the SAME window as the merge count above (since `
+    + `${d.since}); the cause is diagnosed and the record is kept by decision`);
   push("Most recent automated check result",
     d.latestGate ? `${d.latestGate.command}${d.gateIsFresh ? "" : " — older than this report's window"}`
       : "**not reported**",
