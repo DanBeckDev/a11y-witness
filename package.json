@@ -6,6 +6,8 @@
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "scripts": {
+    "mutate": "node scripts/mutation-check.mjs",
+    "board:summary-check": "node scripts/board-summary-check.mjs",
     "board:document": "node scripts/board-document.mjs",
     "board:report": "node scripts/board-report.mjs",
     "spike": "tsx packages/lab/src/harnesses/run-spike.ts",
