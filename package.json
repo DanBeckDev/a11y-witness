@@ -105,6 +105,7 @@
     "pretest": "npm run build",
     "pretypecheck": "npm run build",
     "worker:ctl": "packages/worker-fleet/src/local-worker/worker-ctl.sh",
+    "worktrees:prune": "node scripts/prune-worktrees.mjs",
     "coverage": "c8 npx tsx --test \"packages/*/src/**/*.test.ts\"",
     "identity:rate": "tsx packages/lab/src/harnesses/page-identity-rate.mjs",
     "verdict:stability": "tsx packages/lab/src/harnesses/occurrence-verdict-stability.mjs",
