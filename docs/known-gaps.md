@@ -2230,3 +2230,51 @@ words rather than the bare token `fallback`. Proven two ways: post-fix the two G
 land within the sweep's own margin of `pageState` (25/188 and 36/324) **and differ from each other**; and
 with the order fix reverted, the trust rule refuses with `null` and a reason naming the moved URL rather
 than trusting 19/131.
+
+## 41. A GET FORM SUBMIT CHANGES THE URL, so the census trust rule refuses 18 of 2,796 records
+
+**Found 2026-09-06 while reading a fallback's reason for an unrelated investigation.** Small, bounded,
+conservative, and recorded here rather than fixed because the cost of getting it wrong runs the other way.
+
+### What happens
+
+`probeForms` submits. A form whose method is GET reloads the same page with a query string, and the URL
+the capture navigated to is no longer the URL the CDP target reports:
+
+```
+expected: http://.../focus-removed-on-receipt-order/bad.html
+actual  : http://.../focus-removed-on-receipt-order/bad?first=&second=&third=
+```
+
+`sameDocument` says those are different documents, so `choosePageTarget` returns `targetMatch: "fallback"`,
+and `censusSuspectReason` treats **every** fallback as suspect. `pageCensus` then returns `null` and every
+census-reading rule goes silent on that capture.
+
+### The scale, MEASURED, not estimated
+
+`rules:gate` on the current export: **2,778 of 2,796 records carry a census** — so 18 do not, 0.6%. And
+`census.heading === 0 on 29 record(s)` is intact, so `1.3.1:no-headings` — the criterion that depends
+entirely on a census confirming an absence — loses nothing. This was checked before deciding not to act,
+because "small" and "small and harmless" are different claims.
+
+### Why it is not fixed
+
+The refusal is in the safe direction: a refused census reads as ABSENT, which every reader already treats
+as "cannot say", so the failure mode is a rule staying silent rather than a rule accusing on another
+document's numbers. Widening `sameDocument` to ignore a query string is not obviously right either — a
+query string is exactly how a search results page differs from a search form, and those ARE different
+documents for everything this project measures. The nine `focus-removed-on-receipt-*` captures are the
+population that hits it, and their findings come from `focusEvents`, not from the census.
+
+### What would tell you it is fixed
+
+`choosePageTarget` distinguishes "the URL moved because our own probe submitted a form" from "the URL moved
+because we are looking at another document" — which needs the capture to record that it submitted, and
+`interaction.formChanges` already does. Then: the 18 carry a census, `2796 of 2796`, with no change to
+`census.heading === 0 on 29` and no new finding on any conformant record.
+
+### What would tell you it got WORSE
+
+The count moving. It is printed by `rules:gate` on every run (`N of M record(s) carry ruleEvidence; K carry
+a census`), which is the only reason this was findable at all — the same argument as every other number in
+this file: state it, and a drift becomes visible instead of inferable.
