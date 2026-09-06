@@ -1148,7 +1148,7 @@ packages/control/ansible/lab-job.yml` → nothing). Small and standing, not urge
 `evidence:check` and a real-page capture run already catch most of what a fleet-side `capture:check` would,
 and this is the one piece none of them names explicitly.
 
-## OPEN — "a check that answers correctly about the wrong population", four instances, named by `ceo`
+## OPEN — "a check that answers correctly about the wrong population", **NINE** instances, named by `ceo`
 
 Not "a check that always passes" — that is only the visible half. This is a check that is telling the
 truth about the thing it actually looked at, and the thing it looked at is not the thing the reader thinks
