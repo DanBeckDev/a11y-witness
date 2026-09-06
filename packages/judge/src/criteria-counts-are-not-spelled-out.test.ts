@@ -19,6 +19,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import { sandboxGitEnv } from "../../../scripts/git-env.mjs";
 
 import { assessedCriteria, SCORED_CRITERIA } from "./coverage.js";
 
@@ -38,7 +39,7 @@ test("NO COMMENT spells out how many criteria are assessed", () => {
   // `/Assessed 8 of 55/` against an explicit 8-criterion FIXTURE — correct, self-evident, and checked
   // every time the suite runs. The same numeral in a comment is a claim nothing verifies.
   const files = execFileSync("git", ["ls-files", "packages/judge/src", "packages/evidence/src"],
-    { cwd: ROOT, encoding: "utf8" }).split("\n").filter((f) => /\.ts$/.test(f));
+    { cwd: ROOT, env: sandboxGitEnv(), encoding: "utf8" }).split("\n").filter((f) => /\.ts$/.test(f));
   const offenders: string[] = [];
   for (const file of files) {
     if (file.endsWith("criteria-counts-are-not-spelled-out.test.ts")) continue;

@@ -30,7 +30,7 @@
  * risking the real one to prove the guard fires.
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -113,7 +113,10 @@ export class RepoIdentityMovedError extends Error {
  */
 export function withGitSandbox<T>(fn: (sandbox: GitSandbox) => T, root: string = REAL_REPO_ROOT): T {
   const before = repoFingerprint(root);
-  const dir = mkdtempSync(join(tmpdir(), "a11y-git-sandbox-"));
+  // REALPATH'd: on macOS `/var` is a symlink to `/private/var`, and `git status` reports paths against
+  // the resolved root -- an unresolved dir here made a caller's later path comparison against `git
+  // status --porcelain` output silently fail once already (promotion-refuses-dirty.test.ts).
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "a11y-git-sandbox-")));
   const sandbox = makeSandbox(dir);
   let result: T;
   try {
