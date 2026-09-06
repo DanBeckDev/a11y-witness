@@ -122,7 +122,7 @@ test("no fact file leaks a host address, a key filename, or the retired containe
 test("MUTATION: the leak guard catches each pattern shape and does not fire on the real redacted file", () => {
   const clean = "Two credential domains exist; ask whoever holds today's keys.";
   const leaks = [
-    "reached at 192.168.1.96 as root",
+    "reached at 192.168.1.254 as root", // private-shaped ON PURPOSE -- this proves the pattern fires
     "using the key at ~/.ssh/a11y-pve_ed25519",
     "via pct exec 121 -- bash -lc \"...\"",
   ];

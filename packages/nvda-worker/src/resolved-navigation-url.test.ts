@@ -22,7 +22,7 @@ import { choosePageTarget } from "./browser-session.mjs";
 
 import { resolvedNavigationUrl } from "./capture-pure.mjs";
 
-const REQUESTED = "http://192.168.1.79:5050/focus-panel/bad.html";
+const REQUESTED = "http://203.0.113.79:5050/focus-panel/bad.html";
 
 /** A main-frame navigation: no `parentId`. */
 const mainFrame = (url: string) => ({ method: "Page.frameNavigated", params: { frame: { url } } });

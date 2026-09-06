@@ -141,7 +141,7 @@ test("a shortened worker label must still distinguish the workers", () => {
   const distinct = describeMismatches([{
     field: "browserVersion",
     why: "Edge announces differently across releases",
-    values: { "http://192.168.1.83:8765": "151.0.1", "http://192.168.1.84:8765": "150.0.9" },
+    values: { "http://203.0.113.83:8765": "151.0.1", "http://192.168.1.84:8765": "150.0.9" },
   }])[0];
   assert.match(distinct, /\.83=151\.0\.1 \.84=150\.0\.9/);
 });
