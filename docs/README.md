@@ -68,6 +68,7 @@ human or agent, *working on* the repo rather than using it.
 | [adr/](./adr/README.md) | 36 architecture decision records, indexed — the *why*, including the alternatives that were rejected and what would falsify each |
 | [capture-phase-breakdown-audit.md](./capture-phase-breakdown-audit.md) | **checked the "3.9x" (12.4 s documented vs ~48.7 s measured) against what is actually on disk** — the ratio compares two different populations, protocols and statistic types, and this laptop's local corpus contains zero protocol-16 captures, so the current-fleet half of the question cannot be answered offline at all |
 | [fixture-pair-proof-audit.md](./fixture-pair-proof-audit.md) | **what a good/bad fixture pair actually proves, criterion by criterion** — checked whether "the good half produces no finding" is sufficient on its own (it is not: a BLIND good half satisfies it trivially) and what closes the gap |
+| [stale-row-audit.md](./stale-row-audit.md) | **why a tracker row goes stale** — eight open rows re-checked by RUNNING their own `Open-check`, four distinct shapes, and the finding that three publish-blockers share one root cause no row names. Only one of the nine is `not-working.md` §26's mechanism-rot; the rest are a premise verified once at filing and never asked again |
 | [isolation-spike.md](./isolation-spike.md) | the experiment that shaped the package split, run before anything was moved |
 | [history-2026-08.md](./history-2026-08.md) | what happened, month by month, for context a diff cannot give |
 
