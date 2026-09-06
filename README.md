@@ -167,9 +167,25 @@ jobs:
 
 That is the whole thing. **No API key and no account** — `judge-backend` defaults to `local`, this
 project's own trained scorer, which ships in the repo and never sends your page anywhere. Findings appear as
-a PR comment; `fail-on` decides whether they also fail the build, and defaults to `never` so adding it
-cannot break your pipeline on day one. `.github/workflows/action-smoke.yml` runs exactly this shape against
-two W3C pages on every push, as a consumer would.
+a PR comment; `fail-on` decides whether *findings* fail the build, and defaults to `never`. Read the known
+issue below before adding this to a pipeline you care about. `.github/workflows/action-smoke.yml` runs
+exactly this shape against two W3C pages on every push, as a consumer would — which is how the issue
+below is known.
+
+> **KNOWN ISSUE, 2026-09-06: this does not currently work on a real page, and no setting works around it.**
+> The scorer that ships in the repo and the code that loads it disagree about their schema, so a run does
+> all the real work — axe-core, then a full screen-reader capture — and then exits 1 at the judging step.
+> Tracked as [#4](https://github.com/DanBeckDev/a11y-witness/issues/4) — which is where this gets fixed and
+> where this paragraph gets deleted.
+>
+> **You get nothing, not a partial result.** The axe-core layer genuinely runs and finds what it finds, but
+> the step fails before anything is written, so no PR comment is posted and no JSON is saved. `fail-on:
+> never` does not protect you: it governs whether findings fail the build, and this is the step itself
+> failing.
+>
+> How this is known, so you can check whether it is still true rather than trusting this paragraph:
+> `gh run list --workflow=action-smoke.yml`. That workflow runs the snippet above on every push. Its last
+> green run was 2026-09-03; every run since has failed this same way.
 
 **→ [Full getting-started guide](./docs/getting-started.md)** — including running it locally.
 
