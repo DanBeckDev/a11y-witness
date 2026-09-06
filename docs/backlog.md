@@ -1042,6 +1042,25 @@ into the shared `runs/` symlink twice. All further validation after noticing thi
 `compare_to_baseline()` directly with `tmp_path` fixtures, which is how it should have been done from the
 start. No corpus evidence was touched; the affected file is a disposable, regenerated-on-every-run report.
 
+## OPEN, small — `capture:check` has no lab-side equivalent
+
+`architecture-audit.md` §7.2 named three things `capture-regression.yml`'s path filter could never fire
+on: changes to `deploy.yml`, `fleet-env.mjs`, or `worker-http.mjs`. Checked at HEAD, not carried forward
+from the audit's 2026-09-05 text: `worker-http.mjs` is **CLOSED** —
+`capture-regression-covers-its-imports.test.ts` DERIVES the filter's required file list from
+`capture-check.mjs`'s own import graph and fails until each one is present; the workflow's own comment
+names the exact incident that forced it (`capture-client.mjs` changed the same day the gap was found).
+`deploy.yml` and `fleet-env.mjs` were **never actually reachable from this workflow's import graph** —
+`capture-regression.yml` runs on a GitHub-hosted Windows runner against its own bundled worker code and
+never touches fleet deployment machinery at all, so the original finding conflated two different
+capture-testing surfaces rather than naming a real gap in this one.
+
+**What remains genuinely open, and appears nowhere else:** no lab job runs `capture:check`'s equivalent
+against the real fleet — `lab-job.yml` has no such job (`grep -n "capture-check\|capture_check"
+packages/control/ansible/lab-job.yml` → nothing). Small and standing, not urgent: `gate:stability`,
+`evidence:check` and a real-page capture run already catch most of what a fleet-side `capture:check` would,
+and this is the one piece none of them names explicitly.
+
 ## How an item leaves this page
 
 Delete the row, and put the *lesson* in the record — `known-gaps.md` for something the project did not
