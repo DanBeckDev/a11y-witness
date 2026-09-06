@@ -1,6 +1,7 @@
 // The verification layer's job is to refuse evidence that only looks like evidence.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   captureDoubt, captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle,
   captureRanRequestedProbes, probeStates, sweepCompleteness, captureReachedThePage, domCensus, pageCensus,
@@ -921,4 +922,88 @@ test("censusSuspectReason and censusTargetIsSuspect can never disagree -- one is
         `disagreement on ${JSON.stringify(record)} with submitNavigated=${submitNavigated}`);
     }
   }
+});
+
+/**
+ * ISSUE #30 — a GET submit reloads the same document with a query string, and the census refused it.
+ *
+ * `censusSuspectReason` trusts a one-candidate fallback UNLESS the submit navigated. A GET submit rewrites
+ * the URL, `submitNavigatedTheDocument` said "navigated", and a census of a page nothing was wrong with was
+ * refused. The widening branch that reads this predicate was added the same day, so this is the cost of
+ * that guard surfacing rather than an old defect.
+ *
+ * THE TWO QUESTIONS ARE DIFFERENT AND THAT IS THE WHOLE FIX. `sameDocument` asks "is this the same page for
+ * evidence purposes", where a search RESULTS page genuinely differs from the search FORM —
+ * `known-gaps.md`'s objection to widening on query strings, which stands. This predicate asks only whether
+ * the submit reached a different DOCUMENT. The last test below pins the objection's own example, so nobody
+ * widens `sameDocument` later on the strength of this change.
+ */
+const submitNav = (from: string, to: string) => ({
+  interaction: { navigatedOnSubmit: { checked: true, navigated: from !== to, from, to } },
+} as unknown as Parameters<typeof submitNavigatedTheDocument>[0]);
+
+test("#30: a GET submit that only adds a query string did NOT navigate to another document", () => {
+  const capture = submitNav(
+    "http://192.168.1.79:5050/focus-removed-on-receipt-order/bad",
+    "http://192.168.1.79:5050/focus-removed-on-receipt-order/bad?first=&second=&third=",
+  );
+  assert.equal(submitNavigatedTheDocument(capture), false,
+    "the form posted to itself; refusing the census of that page is the defect #30 describes");
+});
+
+test("#30: a submit that reaches a DIFFERENT PATH still counts as navigating away", () => {
+  // The direction that must not regress. If this ever returns false, the guard added this morning is gone
+  // and a census taken on the destination page would be trusted as the origin page's.
+  const capture = submitNav(
+    "http://192.168.1.79:5050/checkout/details",
+    "http://192.168.1.79:5050/checkout/confirmation?ref=A1",
+  );
+  assert.equal(submitNavigatedTheDocument(capture), true);
+});
+
+test("#30: a submit that reaches another ORIGIN has left the document, however similar the path", () => {
+  const capture = submitNav("http://192.168.1.79:5050/search", "https://www.bing.com/search?q=x");
+  assert.equal(submitNavigatedTheDocument(capture), true,
+    "same pathname, different host -- this is the wrong-page shape the URL guard exists to catch");
+});
+
+test("#30: identical from and to is not a navigation, and the query check does not invent one", () => {
+  const url = "http://192.168.1.79:5050/form/bad?first=";
+  assert.equal(submitNavigatedTheDocument(submitNav(url, url)), false);
+});
+
+test("#30: an unparseable URL claims nothing rather than guessing", () => {
+  // Absence is not proof, in either direction: a URL we cannot read must not become evidence that the
+  // document did or did not change. It falls through to the caller's existing answer.
+  const capture = {
+    interaction: { navigatedOnSubmit: { checked: true, navigated: true, from: "not a url", to: "also not" } },
+  } as unknown as Parameters<typeof submitNavigatedTheDocument>[0];
+  assert.equal(submitNavigatedTheDocument(capture), true, "it stays with `navigated: true` rather than overriding it");
+});
+
+test("#30: the OBJECTION'S OWN EXAMPLE — a search form to its results page is a DIFFERENT page for `sameDocument`", () => {
+  // known-gaps.md: "a query string is exactly how a search results page differs from a search form, and
+  // those ARE different." That is true of `sameDocument`, whose question is which page to MEASURE, and
+  // this change does not touch it. Pinned here so the narrower fix below cannot be cited as licence to
+  // widen the wider comparison.
+  //
+  // Note what this predicate answers for the same pair: the DOCUMENT did not change, because a search form
+  // submitting to itself is one document. Both answers are correct because the questions differ -- which is
+  // the entire argument, and it is asserted rather than left in a comment.
+  const searchToResults = submitNav(
+    "http://example.test/search",
+    "http://example.test/search?q=accessibility",
+  );
+  assert.equal(submitNavigatedTheDocument(searchToResults), false,
+    "one document, reloaded with a query -- the narrow question");
+
+  // AND `sameDocument` IS STILL STRICT ABOUT THE QUERY, checked rather than asserted in prose. A hardcoded
+  // `true` here would look checked and examine nothing, which is the shape this repo keeps paying for --
+  // so this reads the real source. If someone widens `sameDocument` on the strength of this change, the
+  // comparison below stops matching and this test says so.
+  const browserSession = readFileSync(
+    new URL("../../nvda-worker/src/browser-session.mjs", import.meta.url), "utf8");
+  assert.match(browserSession, /return samePath\(actual\.pathname, expected\.pathname\) && actual\.search === expected\.search;/,
+    "`sameDocument` must still compare `search` EXACTLY -- this fix deliberately does not touch it, because "
+    + "a search results page really is a different page to measure");
 });
