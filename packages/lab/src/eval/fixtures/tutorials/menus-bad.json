@@ -1,5 +1,5 @@
 {
-  "url": "http://192.168.1.79:5050/menus-bad.html",
+  "url": "http://192.168.64.1:5050/menus-bad.html",
   "screenReader": "NVDA",
   "capturedAt": "2026-08-21T14:31:26.507Z",
   "transcript": [
@@ -57,7 +57,7 @@
     {
       "event": "browserReused",
       "atMs": 55,
-      "url": "http://192.168.1.79:5050/menus-bad.html",
+      "url": "http://192.168.64.1:5050/menus-bad.html",
       "captures": 3
     },
     {
