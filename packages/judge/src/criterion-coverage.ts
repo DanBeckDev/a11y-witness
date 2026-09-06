@@ -563,7 +563,28 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   // pointer hover and geometry; the screen-reader path never hovers", which is true of HALF the criterion
   // and was written as if it settled the whole of it.
   "1.4.13": {
-    status: "assessed",
+    // PARTIAL, NOT `assessed` — corrected 2026-09-06, and this entry's own note already argued for it.
+    //
+    // The note below states that 1.4.13 has THREE bullets, that HOVERABLE is "genuinely out of reach and
+    // stays so", that PERSISTENT "can never be asserted here" because "remains visible" is pixels, and that
+    // only DISMISSABLE is reached -- and even that as `secondary`, because Dismissable's own text carves
+    // out two exceptions a census count cannot rule out. One bullet of three, reported as a referral, is
+    // not `assessed`; `assessed` says a clean report means the criterion is satisfied, and here a clean
+    // report is SILENT on two thirds of it.
+    //
+    // 2.4.7 sits twenty lines below with the identical reasoning written out: "PARTIAL, not `assessed`:
+    // F78 remains entirely unassessed, so a clean report here is silent on it, never a pass for the
+    // criterion as a whole." Same shape, same remedy, and this entry had the argument and not the status.
+    //
+    // FOUND BY `rules:coverage` REFUSING A PROMOTION, which is the part worth keeping. 1.4.13 is
+    // RULE-ONLY -- no trained head covers it -- and it had fired 15x on the corpus and 0x on a real page,
+    // so the gate said the claim "rests on the corpus alone, and the corpus is built from the same
+    // assumptions as the rule, so it cannot falsify them". That became measurable only when
+    // `probeFocusReveal` started actually being sent; before that the criterion was blind and the
+    // overclaim was invisible. A gate blocked a release over a status field, and the status field was
+    // wrong.
+    status: "partial",
+    needs: ["screen-reader", "visual"],
     channels: ["focusReveal"],
     // A RULE OWNS THE DISMISSABLE BULLET AS OF 2026-09-05, closing the gap this entry recorded twice
     // already (once when the note fell behind the probe's own build, once when it fell behind the
