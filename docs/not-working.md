@@ -2088,6 +2088,54 @@ negation.
 also produces a WORKING RETRY trains everyone who meets it to re-run rather than read. `orchestrator`
 recorded that it considered the skip flag and did not use it, which is the behaviour the class argues for.
 
+### A SIXTH, AND IT IS THE FIRST ONE THAT DEMONSTRABLY COST A DISPATCHED UNIT
+
+Every instance above cost an investigation that did not happen. This one produced a **board row against
+work that had already shipped**, and the trail from the stale mechanism to the wasted dispatch is complete
+rather than inferred.
+
+`gate-partial-corpus-contract.test.ts`'s header said:
+
+> *"PYTHON GATES ARE OUT OF SCOPE HERE … `exit-code-contract.test.ts`'s own discovery filters to
+> `.mjs`/`.ts`"* — and then named eight Python scripts, *"none has ever been examined by any test for this
+> question"*.
+
+Both sentences were true when written. Hours later, on the same day, `exit-code-contract.test.ts` gained a
+complete Python discover-and-classify side — `hasExitContractPy`, `DOCUMENTED_PY`, `INFRASTRUCTURE_PY`,
+twelve scripts, four mutation tests and a vacuity floor. It has **two** `endsWith` filters now, one per
+language. Nothing compared the comment to the file.
+
+**Then the comment was believed by a check built to be sceptical.** Board issue #12's own open-check ran:
+
+```
+$ grep -n 'endsWith' packages/lab/src/gates/exit-code-contract.test.ts
+258:  if (!(rel.endsWith(".mjs") || rel.endsWith(".ts"))) return false;
+```
+
+— matched the JS-side resolver, stopped, read the sibling comment agreeing with it, and concluded *"the
+filter is still `.mjs`/`.ts` and the sibling test names the gap in a comment."* The row was filed, marked
+Ready, and dispatched. **Two copies of one fact agreeing with each other while neither agreed with the
+code**, which is this repo's fact-stated-twice defect and the wrong-mechanism defect arriving as one event:
+the corroboration is what made the wrong answer credible.
+
+What makes it the sixth form rather than a repeat: the earlier five mislead a **reader**. This one misled
+an **instrument** — a check whose whole purpose was to establish whether the work was still open — and the
+instrument then produced a confident, specific, wrong answer with a command attached, which is the format
+this repo trusts most.
+
+Three things follow, and the third is the one that is cheap and was not done:
+
+- **A `grep` that stops at the first match answers "does this exist", never "is this all there is".**
+  Line 258 was real; line 371 was `hasExitContractPy`. The same shape as `ls -ld` answering "is this a
+  symlink" for "to WHICH checkout" below.
+- **Corroboration between two copies is not evidence when neither was compared to the source.** It is the
+  opposite: it raises confidence in proportion to how badly they have drifted together.
+- **Pin the comment to the thing it describes.** `gate-partial-corpus-contract.test.ts` now asserts that
+  `hasExitContractPy` and `DOCUMENTED_PY`/`INFRASTRUCTURE_PY` still exist in the file its Python-scope
+  paragraph cites, so removing that discovery fails a test naming the paragraph to rewrite. CLAUDE.md's
+  third remedy — *"pin them equal with a test when the duplication is forced"* — applied to a comment
+  rather than to a constant, which is where this class actually lives.
+
 ### The sibling shape, one layer along
 
 The same week: `ls -ld node_modules/@a11y-witness/judge` answered *"is this a symlink"* when the question

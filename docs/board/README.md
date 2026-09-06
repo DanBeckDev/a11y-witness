@@ -138,29 +138,70 @@ from a message.
 ```bash
 npm run board:report                          # generate to stdout and read it
 npm run board:report -- --post --issue=20     # publish it
-launchctl kickstart gui/$(id -u)/com.a11y-witness.board-report   # force one edition now
+gh workflow run board-report.yml --repo DanBeckDev/a11y-witness   # force one edition now
 ```
 
 Generating and posting are separate acts on purpose, so a bad report can be seen before it is posted.
 
-## Is the schedule actually installed, or just claimed?
+## Is the schedule actually installed, or just claimed? — retired with the launchd path
 
-Every job this repo schedules is only ever ASKED to run by something a human read and typed
-(`bash scripts/install-board-report.sh`) — nothing checks afterwards that it actually took, or that a
-later `launchctl bootout` (or a reinstalled OS, or a machine that quietly stopped being the control plane)
-did not silently remove it. A job that does not exist produces no output, no log and no alarm, which is
-the same silence as a job that ran and found nothing to report.
+This section described `npm run jobs:check`, built to ask launchd directly whether a claimed job (a
+`.plist` under this directory) was actually installed — because a job that does not exist produces no
+output, no log and no alarm, the same silence as a job that ran and found nothing to report. Both plists
+went with the launchd retirement above, and the question they existed to answer moved with them:
+`board-schedule.test.ts` now asks it of the two GitHub Actions workflows directly (both DST-bracketing
+crons present, every working step gated on London's clock) — a stronger answer than `jobs:check` ever
+gave, since a workflow file wrong in CI fails the PR that broke it rather than waiting to be asked.
+
+**The machinery is kept, not deleted, in case launchd is ever reintroduced.**
+`packages/lab/src/packaging/scheduled-jobs.mjs` and `scripts/check-scheduled-jobs.mjs` still work exactly
+as before; `scheduled-jobs.test.ts` now asserts the claimed-job population is EMPTY *by decision* rather
+than by discovery failure, and says so by name if a `.plist` reappears here without the floor being
+restored deliberately — "the schedule moved" and "the discovery broke" stay different states. Running
+`npm run jobs:check` today reports nothing to check, correctly, and is not wired into any gate.
+
+**But that answers PRESENCE, and this section's question is RUNNING.** `board-schedule.test.ts` proves
+the workflow FILES are right — both DST-bracketing crons, every working step gated on London's clock — and
+a file that is right in CI is not a job that ran. GitHub disables a scheduled workflow after 60 days
+without repository activity, silently, and every one of those assertions still passes while nothing has
+published for a month. The two are different questions and only one of them had an answer, which is what
+the section below is for.
+
+## Is the schedule actually RUNNING, or just present?
+
+**The question survived the move to GitHub Actions; the previous answer did not, and that is the whole of
+this section.**
+
+Every refusal in this pipeline is reported BY THE JOB ITSELF — `board-report.mjs` refuses without a
+summary and says so, `board-summary-check.mjs` warns eleven hours ahead, both comment on the report issue.
+All of it is correct and none of it can fire when the job does not run at all. A job that does not exist
+produces no output, no log and no alarm, which is the same silence as a job that ran and found nothing.
+
+Under launchd the risk was an install that never took, or a later `launchctl bootout`. Under GitHub
+Actions it is sharper and needs no human error at all: **GitHub disables a scheduled workflow after 60
+days without repository activity**, silently, producing no run and no red mark.
 
 ```bash
-npm run jobs:check                                # report every claimed job's real installed state
-A11Y_ASSERT_CONTROL_PLANE=1 npm run jobs:check     # THIS machine is meant to run every one — fail by
-                                                    # name if any is missing, rather than only report
+npm run board:liveness                        # have the editions stopped arriving?
+npm run board:liveness -- --post --issue=20   # and comment once on the report issue if they have
 ```
 
-**The env var is the judgement call, not an assumption.** Most machines that clone this repo are not the
-control plane, so a bare `npm run jobs:check` never fails — it would otherwise be the exact "red gate
-everyone learns to ignore" shape this repo has already been burned by (see the missing-role-file split in
-`docs/roles/README.md`'s own enforcing test). `A11Y_ASSERT_CONTROL_PLANE=1` is the explicit, per-run
-opt-in that turns "not installed" from a report into a defect, on the one machine the claim is actually
-about. It also reports any `com.a11y-witness.*` job launchd knows about that no `.plist` here claims —
-the opposite direction, lower stakes, but nothing else looked for that either.
+It asks about the **edition**, never about the run, and the distinction is not pedantry: both scheduled
+workflows carry TWO crons and gate on London's actual hour, so the wrong half of the pair exits
+successfully every single day by design. A run-based check reads green while the gate hour matches
+neither cron and nothing has been published for a month.
+
+It also refuses to collapse two causes that look identical. No edition with **no summary written** is the
+08:00 gate refusing exactly as specified — the pipeline working, and the missing thing is the summary. No
+edition with **a summary written** means the gate had no reason to refuse and nothing published anyway;
+only that one accuses the schedule. And a GitHub API it cannot reach exits **2**, never 0: whether
+editions are arriving is then unknown, and unknown reported as fine is how a check comes to mean nothing.
+
+**It runs on `push`, and that is the design rather than a convenience.** A watchdog that is itself
+scheduled has the disease it watches for, because the disable is repository-wide. A push trigger cannot be
+disabled by inactivity **because a push IS the activity** — so the one condition that silences the
+schedule is the one condition that silences this check, and in that condition a repository nobody has
+touched for sixty days having no board edition is not a defect to report.
+`board-liveness.test.ts` pins the absence of a `schedule:` key in `board-liveness.yml`, because moving it
+onto a cron would look like tidying three workflows into a neater set.
+

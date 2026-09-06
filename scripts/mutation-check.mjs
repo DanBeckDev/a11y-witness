@@ -24,8 +24,24 @@
 // Usage:
 //   npm run mutate -- --file=<path> --mutate='<shell that edits the file>' --test='<shell>'
 //
+// THE LIMIT OF EXIT 0, AND IT IS THE ONE THING THIS TOOL CANNOT CHECK FOR YOU.
+//
+// This script observes that the test command exited NONZERO while the file was mutated. It cannot observe
+// WHY. A mutation that breaks the build, mistypes an import, or trips an unrelated assertion produces the
+// identical red, and the report then says THE GUARD BITES about a guard that was never consulted. That is
+// step 4's warning ("suspect the guard before the code") pointed at this tool rather than at the test, and
+// it is the #51 lesson -- a forced-1ms mutation that failed for the wrong reason and nearly certified a
+// false pass -- reappearing inside the instrument built to prevent it.
+//
+// So for any mutation whose expected failure is SPECIFIC -- a named assertion, a particular skip, a
+// message you predicted -- run it once by hand as well (`cp` aside, mutate, run, READ THE OUTPUT, `cp`
+// back, `cmp`) and confirm the red says what you predicted. Measured 2026-09-06 on the corpus-guard
+// wiring: the expected result was the test being SKIPPED with `skipped: a capture is writing runs/`, and
+// only reading the output distinguished that from a compile error wearing the same exit code.
+//
 // Exit codes are the contract:
-//   0  the guard BITES -- passed clean, failed mutated, passed restored
+//   0  the guard BITES -- passed clean, failed mutated, passed restored. See the limit above: this means
+//      the suite went red, NOT that it went red for the reason you mutated
 //   1  the guard DID NOT BITE -- it passed while the code was broken
 //   2  refused before mutating -- the test was already failing, or the arguments are unusable
 //   3  THE RESTORE FAILED -- the file on disk is not what it was. Loud, and the copy is left in place.
