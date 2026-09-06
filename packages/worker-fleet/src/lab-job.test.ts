@@ -199,12 +199,27 @@ test("a job's environment additions come from the CATALOGUE, never from an extra
     "a job with no setenv must contribute nothing, not an empty string argument");
   // Every setenv value in the catalogue must be a template over inventory-derived facts or a literal --
   // never a bare `{{ something }}` a caller could set with -e.
+  // The permitted names are facts BUILT from the inventory and then asserted against a strict address
+  // pattern before use. Anything else -- notably a bare `-e` variable -- must fail here.
+  const ASSERTED_FACTS = ["lab_fleet_workers", "lab_named_worker", "lab_selected_workers"];
+
+  // AND "ASSERTED" IS NOW CHECKED, NOT ASSERTED BY THE LIST'S OWN NAME. This was a hand-maintained
+  // allowlist whose entire security argument lived in the comment above it, so adding a name to it was
+  // enough to wave a value through -- and adding a name is exactly what a change like
+  // `lab_selected_workers` needs to do. A list that grants permission on the strength of being written
+  // down is this repo's "a check whose result nothing consumes is decoration", pointed at a security
+  // boundary. Each permitted fact must really be put through the address-pattern assert in the playbook.
+  for (const fact of ASSERTED_FACTS) {
+    assert.match(LAB_JOB, new RegExp(`- ${fact} is match\\('\\^http://`),
+      `${fact} is permitted in setenv but the playbook never asserts it against the worker-address `
+      + "pattern. Either add that assert, or take it out of ASSERTED_FACTS -- this env is read by a "
+      + "process running as root on the box holding the corpus");
+  }
+
+  const permitted = new Set(ASSERTED_FACTS);
   for (const [, value] of LAB_JOB.matchAll(/setenv:\s*\[([^\]]*)\]/g)) {
-    // Both permitted names are facts BUILT from the inventory and then asserted against a strict address
-    // pattern before use. Anything else -- notably a bare `-e` variable -- must fail here.
-    const ASSERTED_FACTS = new Set(["lab_fleet_workers", "lab_named_worker"]);
     for (const [, expression] of value.matchAll(/\{\{\s*([a-z_]+)[^}]*\}\}/g)) {
-      assert.ok(ASSERTED_FACTS.has(expression),
+      assert.ok(permitted.has(expression),
         `setenv may only interpolate asserted facts; found ${expression}`);
     }
   }
@@ -556,14 +571,25 @@ const PLAY_VARS = RAW_LAB_JOB[0].vars;
 
 type JobEntry = { argv?: unknown[] | string; setenv?: string[]; timeout?: number;
                   params?: Record<string, "required" | "optional"> };
-type PlayVars = { lab_jobs: Record<string, JobEntry>; lab_caller_params: string[] };
+type PlayVars = { lab_jobs: Record<string, JobEntry>; lab_caller_params: string[];
+                  lab_param_aliases: Record<string, string> };
 
 /**
  * `-e worker=` is a NAME and the command needs an ADDRESS, so it reaches the job as `lab_named_worker`.
- * That indirection is invisible in the argv, so the derivation has to know it; it lives here rather than
- * in the playbook because here is where the deriving happens.
+ * That indirection is invisible in the argv, so the derivation has to know it.
+ *
+ * READ FROM THE PLAYBOOK, NOT RESTATED HERE — and it was restated here until 2026-09-06. `lab-job.yml`
+ * declared `lab_param_aliases` with a comment saying `lab-job-params.test.ts` kept the two in step; **that
+ * file has never existed in this repository**, nothing read the playbook's map, and this file carried its
+ * own hardcoded copy. A fact stated twice with nothing comparing the copies, wearing a sentence that said
+ * otherwise — which is the shape that stops anyone checking. Deleting a copy is this repo's FIRST remedy
+ * and it was available the whole time.
+ *
+ * The playbook's values are EXPRESSIONS, not bare names, so an alias can be optional: substituting
+ * `workers | default('the whole fleet')` lets the required-versus-optional derivation below decide it the
+ * same way it decides every other parameter, with no special case.
  */
-const VIA_DERIVED_FACT: Record<string, string> = { lab_named_worker: "worker" };
+const VIA_DERIVED_FACT: Record<string, string> = PLAY_VARS.lab_param_aliases;
 
 /** What a job's command actually reads: only what is INSIDE `{{ }}`, never literal text in a path. */
 function derivedParams(entry: JobEntry): Record<string, "required" | "optional"> {

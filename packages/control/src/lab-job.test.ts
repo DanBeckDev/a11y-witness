@@ -74,11 +74,18 @@ test("the discovery is real, so this cannot pass having examined nothing", () =>
 });
 
 test("a renamed setenv key or a re-indented catalogue is refused, not silently read as empty", () => {
-  // MUTATION CHECK on the ARTEFACT this derivation depends on, not the doc: rename the fact it looks for,
-  // and confirm the scan notices rather than quietly returning zero.
-  const renamed = CATALOGUE.replace(/A11Y_WORKERS=\{\{ lab_fleet_workers \}\}/g, "A11Y_WORKERS={{ pool }}");
+  // MUTATION CHECK on the ARTEFACT this derivation depends on, not the doc: rename the facts it looks
+  // for, and confirm the scan notices rather than quietly returning zero.
+  //
+  // BOTH FACTS, since 2026-09-06. `capture-only` reads `lab_selected_workers` (the inventory-derived
+  // subset `-e workers=` selects), so renaming `lab_fleet_workers` alone leaves it matching and this
+  // check reported one surviving job -- correctly. Renaming one of two and calling it "the fact every
+  // entry keys on" would have been a vacuity guard that had itself gone stale, which is the failure it
+  // exists to catch.
+  const renamed = CATALOGUE.replace(/A11Y_WORKERS=\{\{ lab_(fleet|selected)_workers \}\}/g,
+    "A11Y_WORKERS={{ pool }}");
   assert.deepEqual(captureBearingJobs(renamed), [],
-    "renaming the fact every entry keys on must drop every job, or this scan is reading something else");
+    "renaming the facts every entry keys on must drop every job, or this scan is reading something else");
 
   const reindented = CATALOGUE.replace(/\n {6}capture:\n/, "\n        capture:\n");
   assert.ok(!captureBearingJobs(reindented).includes("capture"),
