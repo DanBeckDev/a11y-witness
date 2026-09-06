@@ -2443,6 +2443,28 @@ deleted rather than kept alongside — with `rules:gate` still at 9/9 on `2.4.7:
 head-drop would make `log[0]` an arbitrary event and the exception would start hiding real findings at
 unpredictable positions. That dependency is stated at the code too, not only here.
 
+### A SECOND INTERACTION, found by worker-judge from one worktree over — 2026-09-06, `agent/focus-reset-not-logged`
+
+This section's own fix created the risk it closes: installing the listener early means it is now watching
+by the time `probeFocusReveal` (`§43`) runs, and that probe's `resetFocusToDocumentStart` blurs whatever an
+earlier probe left focused — a DIAGNOSTIC action, not a page behaviour. An unbracketed `focusout` from that
+blur is F55's exact signature, so this section's own fix could have made our own probe's bookkeeping read
+as a WCAG 2.4.7 failure against a page that did nothing wrong — worse than the 37 false positives this
+section exists to remove, because it is self-inflicted and indistinguishable from a real one.
+
+**Closed at the source rather than traded around.** `resetFocusToDocumentStart` now detaches the `focusout`
+listener immediately before its `el.blur()` and reattaches it immediately after, inside one page-side
+script wrapped in `try/finally` so the reattach survives even if `blur()` itself throws. An omission, not a
+marker: `focusLossEvidence` needs no new case to interpret, and the bracket travels with the blur itself
+rather than depending on where it sits in the probe sequence — the shape `§43` itself is about. The
+`focusReset` mark's `logSuppressed` field records whether the bracket applied (three states, same
+discipline as `blurred`: suppressed / nothing installed to suppress / reset never ran).
+
+**Not yet proven against real NVDA**, same boundary as everything else in this file that touches
+`packages/nvda-worker/src/*.mjs`: the pure judgement (`focusResetOutcome`'s handling of `logSuppressed`) is
+mutation-checked offline, but whether `removeEventListener`/`addEventListener` actually bracket the real
+DOM event on a live page is a fleet question. Bundled into the same recapture window as `§42` and `§43`.
+
 ## 43. 1.4.13's PROBE FINDS THE PANEL ONLY FROM ONE STARTING POSITION, and the corpus path happens to start there
 
 **Found 2026-09-06 by a fixture doing its job — by FAILING.** `rules:coverage` refused a promotion because
@@ -2530,9 +2552,15 @@ breaks its own dedicated test and only that test when removed). But nothing here
 not perturb something else the walk depends on — that needs a real capture. Filed with the acceptance
 criterion this section already names: `revealed: true` on the fixture's bad half and `revealed: false` on
 the good half through the real-page path, with the corpus capture's `revealedAt` unchanged. Still queued
-behind the same recapture window as §42 and `navigatedOnSubmit`'s third state; this one is independent of
-both (it touches only `probeFocusReveal`/`walkToReveal`, not the focus-event-log listener path or the
-form-submit `navigatedOnSubmit` logic) and is revertible alone.
+behind the same recapture window as §42 and `navigatedOnSubmit`'s third state.
+
+**CORRECTION, 2026-09-06 — the "touches only `probeFocusReveal`/`walkToReveal`" independence claim above is
+now WRONG.** `agent/focus-reset-not-logged` found that §42's own fix (installing the focus-event listener
+before this probe runs) made `resetFocusToDocumentStart`'s blur into a potential false F55 — see §42's own
+"A SECOND INTERACTION" update for the mechanism. The fix for that DOES touch the focus-event-log path
+(`resetFocusToDocumentStart` now brackets its `focusout` around the blur), so this section's change is no
+longer independent of §42 in the way originally stated. It remains revertible alone from `navigatedOnSubmit`'s
+third state.
 
 ## 44. THE "TITLE" THREE CRITERIA COMPARE IS THE LAST THING NVDA SAID, WHICH ON a LIVE-REGION PAGE IS NOT THE TITLE
 

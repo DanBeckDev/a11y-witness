@@ -735,6 +735,13 @@ function focusLossEvidence(log: FocusLogEvent[], i: number): string | null {
   // Depends on the capture-side fix having actually landed and been recaptured — see that commit and
   // `rules.test.ts`'s two verbatim-log regression tests, which is why the two changes are separate,
   // independently revertible commits rather than one.
+  //
+  // THIS ALSO MEANS A DIAGNOSTIC-ONLY BLUR IS NOW REAL EVIDENCE TO THIS FUNCTION UNLESS SOMETHING STOPS
+  // IT. `probeFocusReveal` (`capture-probes.mjs`, `§43`) blurs whatever an earlier probe left focused, and
+  // with the log watching from before it runs, an unbracketed blur is F55's exact signature -- an
+  // orphaned `focusout` -- against a page that did nothing wrong. `resetFocusToDocumentStart`
+  // (`browser-session.mjs`) is where that bracket lives; this comment and `installFocusEventListenerBeforeFirstFocus`'s
+  // (`capture-core.mjs`) are the other two corners of one interaction that no single file names alone.
   const prior = log[i - 1];
   const completedReceipt = prior?.type === "focusin" && prior.id === event.id;
   const heldMs = completedReceipt ? event.atMs - prior.atMs : null;
