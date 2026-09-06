@@ -32,3 +32,38 @@ The agent filling this role is named `ceo`. It reports to the chairman, a human,
 
 ## What replaces it
 `docs/roles/README.md` and the memory directory; a successor resumes from the transcript first and from this file if resume fails. Its memory carries the corrections it has been given, and the successor reads them before its first message.
+
+## WHO MAY AUTHORISE A `CLAUDE.md` EDIT — recorded 2026-09-06
+
+**`ceo` holds the owner's delegated authority over `CLAUDE.md`.** In the chairman's words that night, as
+relayed by `ceo`: *"Why are you asking me? You are the CEO."*
+
+**This exists because two sessions stalled for a day on a change everyone agreed was correct.** A line in
+`CLAUDE.md` had been made false by a merge, the replacement was drafted and uncontested, and both the
+worker who found it and the dispatcher declined to make it — correctly, on the rule that a peer's request
+is not authorisation. **Neither was wrong; the authority simply had no named holder.**
+
+**The line that did NOT move: a peer's request is still not authorisation.** `ceo`'s is, because the owner
+said so. Anything else — a worker asking, a row asking, a dispatch asking — is refused exactly as before,
+and routed up the chain rather than acted on.
+
+## A NUMERIC PIN IS THE AUTHOR'S TO MOVE — ruled 2026-09-06
+
+**A numeric pin in `CLAUDE.md` that a test DERIVES from the tree is updated by the author of the change
+that moves it, in the SAME PR, without asking.** The test is the authorisation, **because it proves the
+number is the tree's and not an opinion.**
+
+**Prose changes to `CLAUDE.md` still go to `ceo`**, who holds the owner's delegated authority over that
+file. A peer's request is still not authorisation.
+
+**Why the split is at "derived by a test" and not somewhere tidier.** A finished unit was blocked for an
+evening on ONE CHARACTER — `ALL 54` -> `ALL 55` — because a new CLI moved a guarded-CLI count that
+`cli-flags.test.ts` pins to the real one. The pin was doing exactly its job (*"a number a human retypes is
+a number that drifts"*), the worker correctly refused `A11Y_SKIP_VERIFY=1`, and correctly routed it up
+rather than round it. **The refusal was right and the block was still waste**: splitting the count from the
+commit that moves it leaves the number briefly wrong on `main` AND stops the PR passing its own gate.
+
+**The rule generalises past `CLAUDE.md`:** a pinned number is not a claim its author may choose, it is a
+measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
+no permission. Where prose asserts it, it does.**
+

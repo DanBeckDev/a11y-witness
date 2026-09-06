@@ -19,10 +19,10 @@
   "achievements": [
     {
       "claim": "What is open now survives the loss of this machine.",
-      "evidence": "The list of open work, its acceptance criteria and its release blockers now lives in a hosted issue tracker rather than in a document on one machine. Verified by listing the issues and the release milestone directly from the tracker. Previously the answer lived in a 1,049-line file that contradicted itself, and five items checked during the move were already finished. (GitHub Issues and milestones on DanBeckDev/a11y-witness; the contradiction is tracked as issue #19.)",
-      "issue": 19,
+      "evidence": "The list of open work, its acceptance criteria and its release blockers now lives in a hosted issue tracker rather than in a document on one machine. Verified by listing the issues and the release milestone directly from the tracker. Previously the answer lived in a 1,049-line file that contradicted itself, and five items checked during the move were already finished. That contradiction has since been closed. Whether the retired document still holds work that never became an issue is not yet known. (GitHub Issues and milestones on DanBeckDev/a11y-witness; open question tracked as issue #105.)",
+      "issue": 105,
       "reportedBy": "product-manager",
-      "at": "2026-09-06T12:00:00Z",
+      "at": "2026-09-06T20:40:00Z",
       "boardClaim": "The list of what is open now survives the loss of the one machine this project runs on."
     },
     {
@@ -34,20 +34,28 @@
       "boardClaim": "We can say for the first time how much machine time it costs to record a page with a screen reader."
     },
     {
-      "claim": "A rule that had never been demonstrated on a real page now has a page to demonstrate it on — written, not yet captured.",
-      "evidence": "One accessibility rule could previously only be demonstrated against pages we wrote ourselves, which cannot falsify the assumptions the rule was built on. A real web page that exercises it has now been added to the test set, verified present by reading the file. The recording has not yet been made, so this is a step towards the blocker rather than its closure. (A 1.4.13 fixture pair in `packages/lab/src/training/real-page-corpus.mjs`; tracked as issue #2.)",
-      "issue": 2,
-      "reportedBy": "product-manager",
-      "at": "2026-09-06T12:00:00Z",
-      "boardClaim": "An accessibility rule we could only demonstrate on our own test pages now has a real web page to prove it on, though we have not yet run it."
+      "claim": "The page written to prove a rule was recorded, and did not prove it.",
+      "evidence": "A rule could previously only be demonstrated on pages we wrote ourselves, which cannot falsify the assumptions behind it. A page exercising it was written and has now been recorded — and the recording showed the opposite of what was expected. The conformant version was measured correctly and the FAILING version was not, because the same property that makes a page fail this rule also prevents the tool from observing it. The tool now reports 'cannot say' on those pages instead of reporting them as clean, and the underlying fix is scheduled. Superseded issue #2, now tracked as #76. (`focus-panel-undismissable-help` in `packages/lab/src/training/real-page-corpus.mjs`; measured 2026-09-06 by orchestrator on both halves of the pair, same fleet, minutes apart.)",
+      "issue": 76,
+      "reportedBy": "orchestrator",
+      "at": "2026-09-06T20:50:00Z",
+      "boardClaim": "A page built to prove a rule showed instead that the rule cannot see that fault."
     },
     {
-      "claim": "Two capture defects that would have silently mismeasured real pages are fixed and awaiting merge.",
-      "evidence": "Two faults were found that would have made the tool measure a different web page from the one it was asked to examine, in both cases without any error being raised. Both are fixed and both are waiting to be merged, so nothing in production has changed yet. They were found by checking which parts of the code unmerged work already touches, rather than by reading the code. (Branch `agent/route-change-order-and-dialog-restore`; tracked as issue #16.)",
-      "issue": 16,
+      "claim": "Two capture defects that would have silently mismeasured real pages are fixed and merged.",
+      "evidence": "Two faults were found that would have made the tool measure a different web page from the one it was asked to examine, in both cases without any error being raised. They were awaiting merge when first reported and have since merged, so the product carries them. They were found by checking which parts of the code unmerged work already touches, rather than by reading the code. A third fault of the same kind — the tool accepting the previous page as a match for the one requested — is open and needs a capture machine. (Merged as dcf5377c on the main branch; the remaining fault is issue #71.)",
+      "issue": 71,
       "reportedBy": "product-manager",
-      "at": "2026-09-06T12:00:00Z",
-      "boardClaim": "We found and fixed two recording faults that would have silently measured the wrong web page."
+      "at": "2026-09-06T20:40:00Z",
+      "boardClaim": "We fixed two recording faults that would have silently measured the wrong web page; both now ship."
+    },
+    {
+      "claim": "The corpus survives losing its machine.",
+      "evidence": "Several thousand screen-reader recordings, which cannot be re-recorded once a browser updates, existed in exactly one place. A copy now sits off that machine, and it was checked by downloading it back and counting what was inside rather than by trusting that the upload succeeded. 7,694 files, 108.1 MB of evidence in an 8.5 MB archive, zero empty files. Each step of the chain distrusts the one before it: the machine holding the corpus verifies its own archive against what is on its disk, the transfer is counted on arrival, and the upload is verified by retrieval. (`corpus:snapshot` -> `lab:fetch -e artifact=corpus-archive` -> `corpus:release`, orchestrator, 2026-09-06; release tag corpus-2026-09-06_19-31-35; tracked as issue #43.)",
+      "issue": 43,
+      "reportedBy": "orchestrator",
+      "at": "2026-09-06T20:45:00Z",
+      "boardClaim": "The recordings this product rests on now exist in more than one place."
     }
   ],
   "capacity": {
