@@ -663,19 +663,46 @@ test("a census whose CDP target was never confirmed reads as ABSENT, not as its 
   assert.equal(pageCensus(noExpectedUrl), null);
 });
 
-test("a fallback with only ONE candidate is now ALSO suspect -- candidates <= 1 stopped meaning safe", () => {
-  // CORRECTED 2026-09-06. This test used to assert the OPPOSITE -- "nothing else it could have picked" --
-  // reasoning that a synthetic page's single candidate legitimately never matches by host. That reasoning
-  // does not survive `samePath` (which already normalises the one known benign cause, a `.html`/trailing-
-  // slash mismatch) or the measurement that replaced it: two real GOV.UK Design System pages' post-
-  // navigation censuses were BYTE-IDENTICAL to each other under exactly this shape -- `fallback,
-  // candidates: 1` -- because the SAME single tab had navigated to a shared `/cookies` settings page mid-
-  // capture (`probeRouteChange`, testing 2.4.2). Measured prevalence: 20 of 20 sampled real pages, and 25
-  // of 2,796 synthetic captures -- every synthetic one a `route-title-stale*` variant, the identical
-  // mechanism (`known-gaps.md` §40). This assertion would have FAILED against the pre-fix behaviour: it
-  // returned `{heading: 12, link: 40}`, trusted as this page's own numbers.
+test("a fallback with only ONE candidate and no submit-caused navigation is TRUSTED -- known-gaps §41", () => {
+  // CORRECTED AGAIN, 2026-09-06, same day as the correction this test used to describe. That correction
+  // (below, in spirit) was right for the risk it targeted: `probeRouteChange` navigating the SAME tab
+  // mid-capture, contaminating the census with a different real document's numbers -- measured on two GOV.UK
+  // Design System pages whose post-navigation censuses were byte-identical despite the requested pages
+  // differing by 11 headings and 136 links. But `navigateByStructure` now takes its one `structureCensus`
+  // reading BEFORE `probeRouteChange` runs (`capture-probes.mjs`, closing known-gaps §40), so that
+  // contamination can no longer reach this mark at all -- the ordering fix already closed the door this
+  // test was refusing everything to guard. What is LEFT behind a surviving `fallback, candidates: 1` is a
+  // genuine site redirect (`tfl.gov.uk/modes/tube/` -> a service-status page) or a server-side rewrite
+  // (`.../survey.html` served as `.../survey.php`) -- neither is a wrong document, and refusing them was
+  // refusing real, current pages for a risk this reading can no longer have. `navigatedOnSubmit` absent is
+  // what proves it: nothing this capture DID explains the mismatch, so it predates the capture entirely.
   const census = pageCensus({ diagnostics: [
     { event: "structureCensus", heading: 12, link: 40, targetMatch: "fallback", candidates: 1 },
+  ] } as never);
+  assert.equal(census?.heading, 12);
+});
+
+test("...but the identical shape stays suspect when OUR OWN submit explains the mismatch", () => {
+  // The risk `candidates <= 1` alone cannot rule out, and the reason this section is not a blanket
+  // reversion: a GET form submit that changes the URL (known-gaps §41's own population,
+  // `focus-removed-on-receipt-*`) is exactly as single-candidate as a genuine redirect, and trusting it
+  // would be trusting a different document -- the very objection §41 was opened for. `navigatedOnSubmit`
+  // present is the discriminator that keeps this case refused while the one above is not.
+  const census = pageCensus({
+    diagnostics: [
+      { event: "structureCensus", heading: 12, link: 40, targetMatch: "fallback", candidates: 1 },
+    ],
+    interaction: { controls: [], stateChanges: [], navigatedOnSubmit: { from: "a", to: "b" } },
+  } as never);
+  assert.equal(census, null);
+});
+
+test("a fallback with SEVERAL candidates stays suspect regardless of navigatedOnSubmit", () => {
+  // Real ambiguity (more than one page-type target existed) is a different question from causation, and
+  // an absent `navigatedOnSubmit` cannot answer it -- ruling out OUR navigation says nothing about which
+  // of several targets Edge was actually offering.
+  const census = pageCensus({ diagnostics: [
+    { event: "structureCensus", heading: 12, targetMatch: "fallback", candidates: 3 },
   ] } as never);
   assert.equal(census, null);
 });
@@ -706,11 +733,13 @@ test("targetMatch present with candidates missing is read as suspect, not as tru
 test("censusSuspectReason names the actual URL, not the bare word fallback", () => {
   // The CEO's standing requirement, and the reason `censusLine` (check-real-page-findings.ts) used to
   // print a WRONG explanation -- "a real second CDP target existed" -- on a capture that had exactly one.
+  // `navigatedOnSubmit` present, so this exercises the wording on a case that stays suspect either way --
+  // the case below covers the newly-trusted shape, and this one is not it.
   const reason = censusSuspectReason({
     targetMatch: "fallback", candidates: 1,
     targetUrl: "https://design-system.service.gov.uk/cookies",
     expectedUrl: "https://design-system.service.gov.uk/components/details/",
-  });
+  }, { from: "a", to: "b" });
   assert.match(reason ?? "", /cookies/);
   assert.match(reason ?? "", /components\/details/);
   assert.doesNotMatch(reason ?? "", /second CDP target/,
@@ -720,7 +749,8 @@ test("censusSuspectReason names the actual URL, not the bare word fallback", () 
 test("censusSuspectReason falls back to a candidate count when no URL was recorded", () => {
   // Historical captures predate `targetUrl`/`expectedUrl` (added alongside the fix this test's sibling
   // describes) -- the reason must still say SOMETHING true rather than crash on the missing fields.
-  const reason = censusSuspectReason({ targetMatch: "fallback", candidates: 2 });
+  // candidates: 2 keeps this suspect regardless of navigatedOnSubmit, so `undefined` changes nothing here.
+  const reason = censusSuspectReason({ targetMatch: "fallback", candidates: 2 }, undefined);
   assert.match(reason ?? "", /2 candidates/);
 });
 
@@ -733,8 +763,12 @@ test("censusSuspectReason and censusTargetIsSuspect can never disagree -- one is
     { targetMatch: "no-expected-url", candidates: 2 },
     { targetMatch: undefined, candidates: undefined },
   ];
+  // The SAME navigatedOnSubmit value passed to both calls each iteration -- this test's whole point is
+  // that the two functions agree with EACH OTHER given identical inputs, not what a specific input decides.
   for (const record of cases) {
-    assert.equal(censusTargetIsSuspect(record), censusSuspectReason(record) !== null,
-      `disagreement on ${JSON.stringify(record)}`);
+    for (const navigatedOnSubmit of [undefined, { from: "a", to: "b" }]) {
+      assert.equal(censusTargetIsSuspect(record, navigatedOnSubmit), censusSuspectReason(record, navigatedOnSubmit) !== null,
+        `disagreement on ${JSON.stringify(record)} with navigatedOnSubmit=${JSON.stringify(navigatedOnSubmit)}`);
+    }
   }
 });

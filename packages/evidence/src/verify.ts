@@ -27,6 +27,15 @@ export interface CapturedAnnouncements {
     controls: string[];
     stateChanges: { control: string; after: string }[];
     postSubmitFields?: string[];
+    /**
+     * Present only when submitting NAVIGATED the browser (`capture-probes.mjs`'s `probeFormSubmit`) —
+     * read by `censusSuspectReason` (known-gaps §41) to tell "the census disagrees because OUR OWN
+     * submit moved the page" from "the census disagrees because the page redirected before we touched
+     * it". Absence is not proof nothing navigated (`probeTaskButton`/`probeToggle` do not record it),
+     * but its PRESENCE is unambiguous: our own action is the explanation, so the mismatch is not evidence
+     * of a redirect worth trusting.
+     */
+    navigatedOnSubmit?: { from: string; to: string };
   };
   /**
    * The capture's diagnostic marks. Only the CDP census's accessible names are read here — they are the
@@ -255,7 +264,7 @@ export function domCensus(capture: CapturedAnnouncements):
     if (record.event !== "domCensus" || record.error) continue;
     // See `censusTargetIsSuspect` above `pageCensus`: a census whose CDP target was never confirmed reads
     // as absent, never as its own (possibly alien) numbers.
-    if (censusTargetIsSuspect(record)) return null;
+    if (censusTargetIsSuspect(record, capture.interaction?.navigatedOnSubmit)) return null;
     const num = (value: unknown) => (typeof value === "number" ? value : undefined);
     return {
       heading: num(record.heading), link: num(record.link), graphic: num(record.graphic),
@@ -810,23 +819,34 @@ export function consentBanner(capture: CapturedAnnouncements): ConsentBanner {
  * `targetMatch: "matched"` is the only outcome that PROVES the target: `choosePageTarget` confirmed its
  * path and query against the URL this capture navigated to.
  *
- * **`"fallback"` is now ALWAYS suspect, regardless of `candidates`** — corrected 2026-09-06.
- * `candidates <= 1` used to read as safe on the reasoning "nothing else this fallback COULD have picked;
- * the only target is the right one". That held only while the one known benign cause of a `fallback` with
- * a single candidate — a `.html`-extension or trailing-slash mismatch — was still open; `sameDocument`'s
- * `samePath` normalises exactly that now, so a `fallback` that survives it is no longer a normalisation
- * artefact. The surviving cause is the SAME single tab having navigated to a different real document mid-
- * capture: `probeRouteChange` (2.4.2) activates a link to test it, and on two real GOV.UK Design System
- * pages that link led to the site's own `/cookies` settings page — both post-navigation censuses read
- * `fallback, candidates: 1` and were BYTE-IDENTICAL to each other despite the requested pages differing by
- * 11 headings and 136 links. `candidates <= 1` describes that exactly as well as it describes safety, so it
- * can no longer decide the question. Measured prevalence: 20 of 20 real pages sampled, 0 of 2,796 synthetic
- * (`known-gaps.md` §40) — the synthetic corpus never exercises a route-change probe that lands off-page.
+ * **`"fallback"` is suspect UNLESS `candidates <= 1` AND our own submit did not cause it** — refined
+ * 2026-09-06, known-gaps §41. `candidates <= 1` used to read as safe outright ("nothing else this
+ * fallback COULD have picked"), until `probeRouteChange` (2.4.2's link-follow) was measured landing the
+ * SAME single tab on a different real document mid-capture — two GOV.UK Design System pages' post-
+ * navigation censuses read `fallback, candidates: 1` and were BYTE-IDENTICAL despite the requested pages
+ * differing by 11 headings and 136 links (20 of 20 real pages sampled, `known-gaps.md` §40). That made
+ * `candidates <= 1` ALONE unsafe — corrected 2026-09-06 by making `"fallback"` always suspect regardless
+ * of `candidates` — and this is the second correction, not a reversion to the first: `navigateByStructure`
+ * (`capture-probes.mjs`) now takes its one `structureCensus` reading BEFORE `probeRouteChange` runs (the
+ * §40 fix, already in place when this was written), so a route-change-caused mismatch can no longer reach
+ * the mark this function reads at all. The ONLY thing left capable of moving the document before that
+ * reading is our own form submit, and it says so when it happens (`navigatedOnSubmit`, second parameter).
+ * So: `candidates <= 1` AND no submit-caused navigation together mean the mismatch predates anything we
+ * did — a genuine site redirect (`tfl.gov.uk/modes/tube/`, TfL's own status-page redirect) or an
+ * extension/rewrite the requested URL never had (`.../survey.html` serving as `.../survey.php`) — and
+ * trusting it costs nothing a GET-submit widening would have: `focus-removed-on-receipt-*`'s own submit
+ * sets `navigatedOnSubmit`, so it stays suspect exactly as before.
+ *
+ * `navigatedOnSubmit`'s ABSENCE is not proof nothing navigated — `probeTaskButton`/`probeToggle` (the
+ * other two things a capture can activate before the census line) do not record it, a gap named and
+ * deliberately not closed in known-gaps.md §41's addendum. Its PRESENCE is unambiguous, which is the half
+ * this function needs: it only ever widens trust on an ABSENT value, so an unrecorded task-button
+ * navigation can make this function too generous, never too suspicious.
  *
  * `"no-expected-url"` is a genuinely different state: no comparison was even ATTEMPTED (a call outside an
  * active capture, e.g. `/diagnostics`), so there is nothing here to have failed. `candidates` remains the
  * deciding factor there — a real second page-type target with nothing to compare it against is still the
- * bathingwaters/lbhf shape.
+ * bathingwaters/lbhf shape, and `navigatedOnSubmit` is irrelevant to it.
  *
  * `candidates` absent while `targetMatch` is present is a capture taken in the gap between the two
  * shipping — this function cannot vouch for it, so it reads the SAME as `> 1`: suspect. `targetMatch`
@@ -838,15 +858,24 @@ export function consentBanner(capture: CapturedAnnouncements): ConsentBanner {
  * ask the identical question of the RAW mark -- the one place that must see a suspect census even though
  * `pageCensus`/`domCensus` correctly hide its numbers. One rule, not two: a second copy here is exactly the
  * "fact stated twice" shape this repo keeps paying for.
+ *
+ * @param record the census mark's own target fields
+ * @param navigatedOnSubmit the SAME capture's `interaction.navigatedOnSubmit`, or `undefined` — a caller
+ *   that does not have the capture at hand (there is none left; both readers below do) must still pass
+ *   `undefined` explicitly rather than omit the argument, so a future caller cannot silently default into
+ *   the wrong direction.
  */
-export function censusTargetIsSuspect(record: { targetMatch?: unknown; candidates?: unknown }): boolean {
-  return censusSuspectReason(record) !== null;
+export function censusTargetIsSuspect(
+  record: { targetMatch?: unknown; candidates?: unknown }, navigatedOnSubmit: unknown,
+): boolean {
+  return censusSuspectReason(record, navigatedOnSubmit) !== null;
 }
 
 /**
  * The `"fallback"` half of `censusSuspectReason`, split out purely to keep that function's complexity
- * under gate -- it is not a second concept, it is the same one written out. `"fallback"` is ALWAYS
- * suspect (see `censusTargetIsSuspect`'s header); this only decides which WORDS say so.
+ * under gate -- it is not a second concept, it is the same one written out. Called only once the caller
+ * has already decided the fallback IS suspect (see `censusSuspectReason`'s `candidates`/`navigatedOnSubmit`
+ * check); this only decides which WORDS say so.
  */
 function fallbackReason(
   candidates: number | undefined, targetUrl: string | undefined, expectedUrl: string | undefined,
@@ -867,11 +896,16 @@ function fallbackReason(
  */
 export function censusSuspectReason(record: {
   targetMatch?: unknown; candidates?: unknown; targetUrl?: unknown; expectedUrl?: unknown;
-}): string | null {
+}, navigatedOnSubmit: unknown): string | null {
   if (record.targetMatch === undefined) return null; // predates the field -- trusted as before it existed
   if (record.targetMatch === "matched") return null; // confirmed against the URL this capture navigated to
   const candidates = typeof record.candidates === "number" ? record.candidates : undefined;
   if (record.targetMatch === "fallback") {
+    // A REDIRECT WE DID NOT CAUSE is not suspect -- known-gaps §41. `candidates <= 1` means no real
+    // target ambiguity (there was only one page to pick), and an absent `navigatedOnSubmit` means our own
+    // submit did not move the document before the one census reading this decides on -- so the mismatch
+    // predates anything this capture did, and the census is exactly as trustworthy as one that matched.
+    if (candidates !== undefined && candidates <= 1 && navigatedOnSubmit === undefined) return null;
     const targetUrl = typeof record.targetUrl === "string" ? record.targetUrl : undefined;
     const expectedUrl = typeof record.expectedUrl === "string" ? record.expectedUrl : undefined;
     return fallbackReason(candidates, targetUrl, expectedUrl);
@@ -897,7 +931,7 @@ export function pageCensus(capture: CapturedAnnouncements):
     // own `domCensus` pairing -- so this reuses machinery already proven conservative rather than adding a
     // third state nothing downstream knows how to interpret. The raw counts stay on the diagnostic mark
     // itself for a human to read; only the RULE-FACING reader refuses to vouch for them.
-    if (censusTargetIsSuspect(record)) return null;
+    if (censusTargetIsSuspect(record, capture.interaction?.navigatedOnSubmit)) return null;
     return {
       heading: typeof record.heading === "number" ? record.heading : undefined,
       link: typeof record.link === "number" ? record.link : undefined,
