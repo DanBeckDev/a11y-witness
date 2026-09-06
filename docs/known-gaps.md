@@ -2426,3 +2426,60 @@ deleted rather than kept alongside — with `rules:gate` still at 9/9 on `2.4.7:
 `slice(0, FOCUS_EVENT_LOG_DIAGNOSTIC_LIMIT)`, so the first event is always the first the listener saw. A
 head-drop would make `log[0]` an arbitrary event and the exception would start hiding real findings at
 unpredictable positions. That dependency is stated at the code too, not only here.
+
+## 43. 1.4.13's PROBE FINDS THE PANEL ONLY FROM ONE STARTING POSITION, and the corpus path happens to start there
+
+**Found 2026-09-06 by a fixture doing its job — by FAILING.** `rules:coverage` refused a promotion because
+1.4.13 had fired 15x on the corpus and 0x on a real page, saying in its own words that "the corpus is built
+from the same assumptions as the rule, so it cannot falsify them". A fixture pair was added to give it real
+capture evidence. The bad half captured cleanly and **the rule did not fire on it.**
+
+### The measurement — the same URL, captured twice, two answers
+
+`http://.../focus-panel-undismissable-help/bad.html`, `probeFocusReveal` `asked: true` on both:
+
+| | corpus capture | real-page capture |
+|---|---|---|
+| `focusBefore` | `Security question, edit, focused, blank` | `Daytime telephone, edit, focused, blank` |
+| `tabs` | 2 | 8 |
+| `revealedAt` | 1 | −1 |
+| verdict | `revealed: true, focusHeld: true, dismissed: false` | `revealed: false, "nothing appeared on focus"` |
+
+The probe ran on both paths and started from a **different control**. From `Security question` the panel
+appears on the first Tab; from `Daytime telephone` eight Tabs never reach it.
+
+### What this means, and it is not small
+
+**1.4.13's 15 corpus positives rest on a starting position the product path does not reproduce.** The rule
+is not wrong about the page — the panel really is undismissable — but the EVIDENCE it decides on is
+reachable only from where the corpus capture happens to leave focus. That is this repo's already-recorded
+shape: *"a probe's precondition is established by ANOTHER probe, so where it sits in the sequence is part of
+its correctness"*, and the sibling finding that the default probe order *"does not work by design, it works
+by accident"* because `readWithRetry` leaves the caret past the last heading.
+
+**The gate was right and the fixture is what proved it.** The refusal said the corpus cannot falsify the
+rule's assumptions; the fixture put the same page through the other path and falsified one.
+
+### What would close it
+
+`probeFocusReveal` reaching the revealing control from any starting position — sweeping rather than tabbing
+from wherever the previous probe left focus, or recording the position it started from so a `revealed:
+false` can be told apart from `revealed: false FROM HERE`. Today those are the same evidence, which is the
+distinction this project refuses to allow anywhere else.
+
+It is a worker-file change, so it costs a deploy, a recapture and an `evidence:check`. It bundles with
+[§42](#42)'s listener-before-focus fix and `navigatedOnSubmit`'s third state, all three being probe changes
+waiting on one recapture.
+
+### What would tell you it is closed
+
+The fixture pair captures with `revealed: true` on the bad half and `revealed: false` on the good half
+through the REAL-PAGE path, `rules:coverage` reports `1.4.13 … 1 real` rather than `0`, and the corpus
+capture's `revealedAt` is unchanged — so the fix reached the product path without moving the evidence the
+15 corpus positives were labelled from.
+
+### What would tell you it got WORSE
+
+`revealed: false` appearing on the corpus path too. That would mean the fix moved the starting position
+rather than removing the dependence on it, and the 15 positives would need relabelling rather than
+recapturing.
