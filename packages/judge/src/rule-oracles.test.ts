@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import { sandboxGitEnv } from "../../../scripts/git-env.mjs";
 
 import { stripComments } from "@a11y-witness/evidence/source-text";
 
@@ -37,7 +38,7 @@ const NOT_CAPTURE_CALLERS: Record<string, string> = {
 
 function discoverCallers(): string[] {
   const out = execFileSync("git", ["grep", "-l", "ruleFindings", "--", "packages"], {
-    cwd: ROOT, encoding: "utf8",
+    cwd: ROOT, env: sandboxGitEnv(), encoding: "utf8",
   });
   // Executable modules only. Prose that MENTIONS the rules is not a caller, and the first run of this
   // test proved the point by demanding that `packages/judge/README.md` call a function.

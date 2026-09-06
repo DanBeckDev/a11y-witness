@@ -37,6 +37,16 @@ fi
 
 cd "$(git rev-parse --show-toplevel)"
 
+# BELT AND BRACES. git exports GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE into this hook's own environment, and
+# `npm test` inherits it — which is exactly how a test that spawned git with `cwd` alone and an inherited
+# `env` forged 15 commits into THIS repo on 2026-09-06 (docs/backlog.md, "a closed row created the
+# exposure"). `scripts/test-support/git-sandbox.ts` is the primary defence, applied per test; this is the
+# second, independent one `orchestrator` required: even a future test that bypasses the helper entirely
+# cannot reach this repository through an inherited GIT_DIR, because by the time `npm test` runs there is
+# none left to inherit. Scrubbed AFTER `git rev-parse --show-toplevel` above (which correctly needs
+# GIT_DIR to resolve THIS hook's own repo) and before anything that runs test code.
+for v in "${!GIT_@}"; do unset "$v"; done
+
 failed=()
 skipped=()
 
