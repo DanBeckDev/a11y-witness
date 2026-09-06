@@ -138,7 +138,7 @@ from a message.
 ```bash
 npm run board:report                          # generate to stdout and read it
 npm run board:report -- --post --issue=20     # publish it
-launchctl kickstart gui/$(id -u)/com.a11y-witness.board-report   # force one edition now
+gh workflow run board-report.yml --repo DanBeckDev/a11y-witness   # force one edition now
 ```
 
 Generating and posting are separate acts on purpose, so a bad report can be seen before it is posted.
@@ -159,3 +159,49 @@ as before; `scheduled-jobs.test.ts` now asserts the claimed-job population is EM
 than by discovery failure, and says so by name if a `.plist` reappears here without the floor being
 restored deliberately — "the schedule moved" and "the discovery broke" stay different states. Running
 `npm run jobs:check` today reports nothing to check, correctly, and is not wired into any gate.
+
+**But that answers PRESENCE, and this section's question is RUNNING.** `board-schedule.test.ts` proves
+the workflow FILES are right — both DST-bracketing crons, every working step gated on London's clock — and
+a file that is right in CI is not a job that ran. GitHub disables a scheduled workflow after 60 days
+without repository activity, silently, and every one of those assertions still passes while nothing has
+published for a month. The two are different questions and only one of them had an answer, which is what
+the section below is for.
+
+## Is the schedule actually RUNNING, or just present?
+
+**The question survived the move to GitHub Actions; the previous answer did not, and that is the whole of
+this section.**
+
+Every refusal in this pipeline is reported BY THE JOB ITSELF — `board-report.mjs` refuses without a
+summary and says so, `board-summary-check.mjs` warns eleven hours ahead, both comment on the report issue.
+All of it is correct and none of it can fire when the job does not run at all. A job that does not exist
+produces no output, no log and no alarm, which is the same silence as a job that ran and found nothing.
+
+Under launchd the risk was an install that never took, or a later `launchctl bootout`. Under GitHub
+Actions it is sharper and needs no human error at all: **GitHub disables a scheduled workflow after 60
+days without repository activity**, silently, producing no run and no red mark.
+
+```bash
+npm run board:liveness                        # have the editions stopped arriving?
+npm run board:liveness -- --post --issue=20   # and comment once on the report issue if they have
+```
+
+It asks about the **edition**, never about the run, and the distinction is not pedantry: both scheduled
+workflows carry TWO crons and gate on London's actual hour, so the wrong half of the pair exits
+successfully every single day by design. A run-based check reads green while the gate hour matches
+neither cron and nothing has been published for a month.
+
+It also refuses to collapse two causes that look identical. No edition with **no summary written** is the
+08:00 gate refusing exactly as specified — the pipeline working, and the missing thing is the summary. No
+edition with **a summary written** means the gate had no reason to refuse and nothing published anyway;
+only that one accuses the schedule. And a GitHub API it cannot reach exits **2**, never 0: whether
+editions are arriving is then unknown, and unknown reported as fine is how a check comes to mean nothing.
+
+**It runs on `push`, and that is the design rather than a convenience.** A watchdog that is itself
+scheduled has the disease it watches for, because the disable is repository-wide. A push trigger cannot be
+disabled by inactivity **because a push IS the activity** — so the one condition that silences the
+schedule is the one condition that silences this check, and in that condition a repository nobody has
+touched for sixty days having no board edition is not a defect to report.
+`board-liveness.test.ts` pins the absence of a `schedule:` key in `board-liveness.yml`, because moving it
+onto a cron would look like tidying three workflows into a neater set.
+

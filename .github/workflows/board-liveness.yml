@@ -1,0 +1,66 @@
+name: Board liveness
+
+# HAVE THE BOARD EDITIONS STOPPED ARRIVING? — asked from outside the jobs that publish them.
+#
+# `board-report.yml` and `board-summary-check.yml` report their own refusals, thoroughly and well. Neither
+# can report not running: a job that does not exist reports nothing. That was true of the launchd agent
+# this pipeline used until 2026-09-06 and it is still true now, by a different mechanism —
+# **GitHub disables a scheduled workflow after 60 days without repository activity**, silently, producing
+# no run, no log and no red mark.
+#
+# ## Why this is NOT on a schedule, and it is the whole design
+#
+# A watchdog that is itself scheduled has the disease it watches for: the disable is repository-wide, so a
+# third cron dies in the same breath as the two it guards.
+#
+# `push` cannot be disabled by inactivity, **because a push IS the activity**. That is the exact complement
+# of the failure mode rather than a workaround — the one condition that silences the schedule is the one
+# condition that silences this check, and in that condition a repository nobody has touched for sixty days
+# having no board edition is not a defect to report. Loud in every state where silence would be wrong;
+# silent only where silence is true.
+#
+# `board-liveness.test.ts` PINS the absence of a `schedule:` key here, because moving this onto a cron
+# would look like tidying two scheduled jobs into three and would quietly remove the only reason it works.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write          # the one comment per stale spell, on the report issue
+
+concurrency:
+  # Several merges land in a minute on a busy day. One verdict at a time; the newest is the true one.
+  group: board-liveness
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      # `continue-on-error`, DELIBERATELY, and it is the opposite of the usual reason.
+      #
+      # This job's finding is about the BOARD PIPELINE, not about the commit that happened to trigger it.
+      # Failing the push would put a red mark against an unrelated author's merge for a schedule GitHub
+      # disabled a week earlier -- which is how a signal gets attributed to the wrong thing and then
+      # ignored. The finding reaches a person the way every other finding in this pipeline does: as a
+      # comment on the report issue, once per stale spell.
+      #
+      # The step's own conclusion is still visible in the run, so "did not run" and "ran and found
+      # nothing" stay different states here too.
+      - name: Are the editions still arriving?
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/board-schedule-liveness.mjs --post --issue=20
