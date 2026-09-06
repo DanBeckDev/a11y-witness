@@ -15,6 +15,36 @@ It **checks the machine's timezone rather than assuming it**, because `StartCale
 and issue #20's body promises Europe/London. A report whose stated time and actual time disagree is the kind
 of small untruth this whole pipeline exists to refuse.
 
+## Working on this: a worktree, and what its `node_modules` symlink actually means
+
+**Nothing is edited or checked out in the primary checkout.** That is a fleet rule rather than tidiness:
+the primary is what the fleet's code hash is computed from and what every other worktree resolves its
+dependencies through, so a feature branch sitting there silently changes what every capture worker builds
+against.
+
+```bash
+git worktree add ../a11y-wt-board <branch>
+cd ../a11y-wt-board && ln -s ../a11y-witness/runs runs && ln -s ../a11y-witness/node_modules node_modules
+```
+
+**Sharing `node_modules` is normal here and it has a consequence worth knowing before it costs you an
+hour.** Every `@a11y-witness/*` import then resolves through the PRIMARY's packages, so you read the
+primary's `dist`, not yours. Building in your worktree changes nothing a cross-package tool sees. That
+cost the fleet driver most of an hour on 2026-09-06, convinced a generator was broken when it was
+faithfully emitting two-hour-old code.
+
+**Ask where it resolves, not whether the symlink exists** — checking that a symlink is a symlink is the
+mistake that hid it:
+
+```bash
+node -e "console.log(require.resolve('@a11y-witness/judge'))"
+```
+
+For the board tooling this is currently harmless: the scripts here import only `cli-flags` from
+`worker-fleet`, which this work never changes, and the tests reach the scripts by relative path. **It
+stops being harmless the moment this work touches a package's source**, and then the worktree needs its
+own install rather than the symlink.
+
 ## Why it cannot run on a GitHub runner
 
 A runner only ever sees `origin/main`. Two of the report's lines exist specifically to catch a push hold —
