@@ -92,33 +92,30 @@ function section1(d) {
     + "cannot arrive as a bare new date.",
     "2. **This carries most of the weight:** the date assumes the one item of unknown size finishes "
     + "inside the week we allowed, and this afternoon that week began resting on less.",
-    "3. We have not padded it against the risk most likely to move it, which is stated below.",
+    "3. It is not padded against the risk most likely to move it, stated below.",
   ].join("\n");
 }
 
 function section2() {
   return [
-    "## Version one has no date, because nobody has ever defined what it is.",
+    "## Version one has no date until the outside user is named.",
     "",
-    "None of our planning documents defines version one, so a date here would be a number with nothing "
-    + "behind it. **We propose that version one means one person outside this project runs the tool on an "
-    + "application they own and says plainly whether the result was worth their time.** Our plan has "
-    + "called that the deliverable since August, and it is already a release blocker — so adopting it "
-    + "renames the goal rather than adding work.",
+    "**Version one means one person outside this project runs the tool on an application they own and "
+    + "says plainly whether it was worth their time**, approved by the board on 6 September. **It has no "
+    + "date until that person is named** — the board is introducing a candidate, and the date follows.",
     "",
     "| stage | what decides it | when |",
     "|---|---|---|",
     "| The trained component is approved | Four checks pass, and a fifth stops objecting that one rule "
-    + "has never been shown to work on a real website | days |",
+    + "was never shown to work on a real website | days |",
     "| The real-website check reaches a verdict | A theory about two distrusted measurements is tested "
-    + "| the item of unknown size |",
+    + "| unknown |",
     "| The tool is published | A person creates the account, adds a credential, types the confirmation "
     + "| **20 September 2026** |",
     "| **Someone outside the project uses it** | **A person agrees to run it and reports back** | **not "
     + "schedulable from inside** |",
     "",
-    "**That last row is the honest answer to when version one arrives: it is a person we do not yet "
-    + "have, not an engineering estimate.**",
+    "**That last row is the honest answer: version one waits on a person we do not yet have.**",
   ].join("\n");
 }
 
@@ -154,9 +151,9 @@ function section4(d) {
     "| **Approve the definition of version one.** | The question the board keeps asking stays "
     + "unanswerable, and every edition repeats that. |",
     "| **Name one person outside the project to try the tool.** | Version one cannot start, whatever "
-    + "the engineering does. Open since August. |",
-    "| **Confirm publication may proceed in September.** | Three final steps need the owner's own "
-    + "hands, so the engineering finishes and the release waits. |",
+    + "engineering does. Open since August. |",
+    "| **Confirm publication may proceed in September.** | Three final steps need the owner's hands, so "
+    + "the engineering finishes and the release waits. |",
     "",
     "### Four risks are live, and only the first could move the date.",
     "",
@@ -166,13 +163,11 @@ function section4(d) {
     "| **One item still has no known size.** | We published a fix this morning, measured it wrong this "
     + "afternoon, and replaced it with a theory nobody has tested. The process working — and the week we "
     + "allowed now rests on less. |",
-    "| **Everything runs on one machine.** | The capture machines' credentials and this report's "
-    + "schedule live on one computer. The list of open work moved off it today; the credentials have "
-    + "not. |",
+    "| **Everything runs on one machine.** | The capture machines' credentials live on one computer. "
+    + "The list of open work moved off it today; the credentials have not. |",
     `| **${d.strays.length} of the ${d.merges.length} changes saved since midnight carry the wrong `
-    + "author.** | An automated test overwrote our identity settings. The settings are fixed; the record "
-    + "is not, and we leave it rather than rewrite history others are building on. Cosmetic, and "
-    + "disclosed so it is not discovered. |",
+    + "author.** | An automated test overwrote our identity settings. They are fixed; the record is not, "
+    + "and we leave it rather than rewrite history others are building on. Cosmetic, disclosed. |",
   ].join("\n");
 }
 
@@ -183,24 +178,32 @@ function section5(d) {
     + "scheduled.", ""];
   if (!fh || fh.status === "not instrumented") {
     L.push("**We cannot yet report how much machine time the capture fleet consumed, and we print that "
-      + "rather than estimate it.** A figure exists — 54.11 machine-hours across every page ever "
-      + "recorded — but it spans many runs and several recording formats, so it is nobody's single run.");
+      + "rather than estimate it.** A figure exists but spans many runs and formats, so it is nobody's "
+      + "single run.");
   } else {
     L.push(`**The capture machines consumed ${fh.total} on their most recent full run.** That counts `
       + "only time spent actively reading a page: not waiting between pages, setup, restarts or "
       + "electricity.");
   }
   L.push("");
-  L.push(`Re-reading every test page is the hidden cost behind most work we postpone, and we opened a `
-    + `${throughput?.open_issues ?? 5}-stage programme for it today, outside the release: nothing in it `
-    + "delays September. The appendix explains the cost and lists the stages.");
+  L.push("**A capture takes about a minute at median on our last sample** — 56 captures across five "
+    + "machines, at older recording formats — and **we have not established what it should cost on the "
+    + "current format**, the first of "
+    + `${throughput?.open_issues ?? "several"} stages in a programme opened today. It is outside the `
+    + "release: nothing in it delays September. The appendix lists them.");
+  L.push("");
+  L.push("**How long our engineering waits between finishing one piece of work and the next is not "
+    + "instrumented, and we print that rather than estimate it.** Recording started today; the figure "
+    + "appears once a week exists. The appendix says why the first design was wrong.");
+  L.push("");
+  L.push("**The architect's two findings are planned in; the appendix says what was done with each.**");
   L.push("");
   L.push("### We recommend buying nothing yet, and one number would change that.");
   L.push("");
-  L.push("**The number is how long one page takes to record with ten machines running against five.** "
+  L.push("**The number is how long one page takes to record with ten machines against five.** "
     + "Unchanged, and machines buy speed in proportion. Higher, and they do not — which is what happened "
-    + "last time, on older hardware, where they competed for the same disk. We wrote that down in advance "
-    + "as the result that would disprove buying.");
+    + "last time, on older hardware, where they competed for the same disk.");
+
   return L.join("\n");
 }
 
@@ -250,16 +253,57 @@ function sourceTable(d) {
 
 /** Why re-reading the library is expensive, and the programme opened for it. */
 function throughputBackground(L) {
+  L.push("### The architect's two findings, and what was done with each.");
+  L.push("");
+  L.push("**Our development copies read one another's build output rather than their own**, because they "
+    + "share one dependency folder between them — so building in your own copy changes nothing the tools "
+    + "see, which cost an engineer an hour convinced a component was broken when it was faithfully using "
+    + "two-hour-old code. The fix is a different dependency tool that gives each copy its own; it is "
+    + "**scheduled for after publication**, because that tool sits on the publishing path and changing it "
+    + "a fortnight before the one irreversible step is the wrong order.");
+  L.push("");
+  L.push("**What accumulates on the single machine we run everything from is now measured rather than "
+    + "guessed at** — thirty-six working copies, 4.4 gigabytes of them, a gigabyte of Python "
+    + "environments, and a 417-megabyte local copy of the test library. **Each now gets a rule or a "
+    + "recorded decision that it needs none**, rather than a clear-out that decays: the one accumulator "
+    + "that was given a rule today is the one that stopped growing.");
+  L.push("");
   L.push("### Why re-reading every test page is expensive, and the programme opened for it.");
   L.push("");
   L.push("The tool learns from several thousand recordings of a screen reader reading web pages. "
     + "Changing anything that alters what those recordings contain means making them all again, which "
     + "costs hours of machine time — and that is why a list of improvements sits deferred. The five "
-    + "stages are: explain a fourfold discrepancy between the 12.4 seconds our documentation claims per "
-    + "page and the 48.7 measured; measure what more machines actually give us, at ten against five, "
-    + "alternating; set a target from that measurement rather than from a wish; make the improvements, "
-    + "each accepted only by the check that can tell *faster* from *recorded less*; and decide on "
-    + "hardware with the numbers attached.");
+    + "stages are: establish what a page should cost to record on the current format; measure what more "
+    + "machines actually give us; set a target from that; make the improvements; and decide on hardware "
+    + "with the numbers attached.");
+  L.push("");
+  L.push("### Why the capacity measure is not instrumented yet, and what the first design got wrong.");
+  L.push("");
+  L.push("The measure is the gap between a session finishing a piece of work and being given the next. "
+    + "The first design keyed it on who a row was assigned to — and **every session in this project "
+    + "operates as the same account**, of which there are two assignable and nine sessions. It could "
+    + "have recorded *assigned* and never *which*, accruing a week of data that could not answer the "
+    + "question it was collected for. It now keys on a per-session label instead, which carries "
+    + "attribution and timing in one mechanism.");
+  L.push("");
+  L.push("**One thing that will distort the first week, recorded now so it cannot be read as progress:** "
+    + "the rule for taking the next piece of work changed today, from taking it after reporting to "
+    + "taking it before. The measured gap becomes structurally smaller from that moment. A first week "
+    + "spanning the change will show an improvement that is a definition change rather than anyone "
+    + "waiting less.");
+  L.push("");
+  L.push("**WITHDRAWN: a figure this board was given yesterday.** Yesterday's edition said our own "
+    + "documentation claimed 12.4 seconds to record a page while measurement showed 48.7 — a fourfold "
+    + "gap presented as the thing to explain. **Checked on 6 September against everything on disk, it "
+    + "cannot be derived.** No document in the project produces 48.7, and the 12.4 comes from three "
+    + "retired machines under an older recording format, measured as a median where the other number is "
+    + "a rate. Three different things compared as one ratio. There is no fourfold gap, and the stage that "
+    + "was to explain it is now the stage that establishes what a page should cost.");
+  L.push("");
+  L.push("**What the same check did establish, on the sample it could read:** the four costliest steps "
+    + "in recording a page are all the screen reader answering, and everything our own software controls "
+    + "sums to under two and a half seconds. If that holds on the current machines, faster software is "
+    + "not the lever.");
   L.push("");
   L.push("**One figure to discard if the board has heard it: twelve format changes in thirty-two days "
     + "is not twelve re-readings of the library.** Five of those versions produced almost no recordings "

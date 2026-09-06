@@ -98,10 +98,17 @@ function whatMerged(d, L) {
     L.push("**`origin/main` could not be compared** — no such ref in this checkout. Reported as unknown "
       + "rather than as zero: \"nothing is waiting to push\" and \"we could not ask\" are different answers.");
   } else if (unpushed === 0) {
-    L.push(`\`main\` and \`origin/main\` are level (\`${git(["rev-parse", "--short", "main"])}\`), checked, `
-      + "not assumed. So GitHub's default branch is current for this window. If a push hold has been "
-      + "declared and this reads 0, the hold has not yet produced divergence — the two look identical "
-      + "from here and only this line distinguishes them.");
+    // THIS LINE MEANS LESS THAN IT DID, AND SAYS SO. It was written when the report ran from a laptop,
+    // where local commits could genuinely sit ahead of `origin/main`. From a GitHub runner the comparison
+    // is 0 by construction -- the runner has only what was pushed -- so a clean reading here is not
+    // evidence that nothing is unpushed. It is evidence that the runner cannot tell. The rule that
+    // replaces it is that all work is pushed; the dispatcher's own branch count is what would contradict
+    // it, and if a branch is ever found unpushed this report says so rather than staying silent.
+    L.push("All work is on GitHub: `main` and `origin/main` are level "
+      + `(\`${git(["rev-parse", "--short", "main"])}\`), checked. **This report cannot itself detect an `
+      + "unpushed local branch** — it runs from GitHub, which has only what was pushed — so this line "
+      + "records the rule rather than proving it. A branch found unpushed by the dispatcher's count "
+      + "appears here as an exception.");
   } else {
     L.push(`**${unpushed} commit${unpushed === 1 ? "" : "s"} are on local \`main\` and not on `
       + `\`origin/main\`.** A flat \`origin/main\` on GitHub is therefore a HOLD, not a stall — anything `
