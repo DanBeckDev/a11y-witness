@@ -19,9 +19,9 @@ import { assertWorkerUrl } from "./worker-http.mjs";
 import { sourceFiles } from "./source-walk.mjs";
 
 test("a well-formed address is accepted, and normalised", () => {
-  assert.equal(assertWorkerUrl("http://192.168.1.107:8765"), "http://192.168.1.107:8765");
+  assert.equal(assertWorkerUrl("http://203.0.113.107:8765"), "http://203.0.113.107:8765");
   // Trailing slash removed, because every caller appends `/capture` and `//capture` is a different route.
-  assert.equal(assertWorkerUrl("http://192.168.1.107:8765/"), "http://192.168.1.107:8765");
+  assert.equal(assertWorkerUrl("http://203.0.113.107:8765/"), "http://203.0.113.107:8765");
   assert.equal(assertWorkerUrl("  http://host:1  "), "http://host:1");
   assert.equal(assertWorkerUrl("https://host:1"), "https://host:1");
 });
