@@ -1020,6 +1020,34 @@ into the shared `runs/` symlink twice. All further validation after noticing thi
 `compare_to_baseline()` directly with `tmp_path` fixtures, which is how it should have been done from the
 start. No corpus evidence was touched; the affected file is a disposable, regenerated-on-every-run report.
 
+## OPEN — "a check that answers correctly about the wrong population", four instances, named by `ceo`
+
+Not "a check that always passes" — that is only the visible half. This is a check that is telling the
+truth about the thing it actually looked at, and the thing it looked at is not the thing the reader thinks
+it answers for. Found four times in one morning, none by review — every one by someone disbelieving a
+clean answer enough to go and look at what the check could actually see.
+
+| # | the check | what it can see | what it cannot | measured |
+|---|---|---|---|---|
+| 1 | `git branch -r --list 'origin/agent/*'` used as a collision/claim check | whether an agent branch was ever PUSHED to `origin` | that agent branches in this workflow are never pushed at all — the check answers "clear" unconditionally, for every branch, for ever | `$ git branch -r --list 'origin/agent/*'` → empty output, every time, regardless of how many agent branches exist locally. Found twice in two hours: the role brief's own collision-check line, and `docs/backlog-ready.md`'s claim mechanism (`docs/backlog-ready.md:15`, "Check the region is free. `git branch -r --list 'origin/<branch name>'`") — still present there as of this row |
+| 2 | "Verified open at HEAD" as a ready-queue row's acceptance evidence | whether the finding's own grep/read still matches `origin/main` | a LOCAL, unmerged branch that has already fixed it — the population "what's open" silently narrows to "what's open in the one place nobody's unpushed work lives" | Checked all six `docs/backlog-ready.md` rows against local branch history, not just against HEAD. **3 of 6 already done, unmerged when listed, one already MERGED:** row 1 (`crossCheckAgainstElementsList` ordering) — `git log --oneline --all --since="6 hours ago" \| grep -i elementsList` finds `d0bf5aa fix(2.4.2): crossCheckAgainstElementsList reads the page before probeRouteChange can navigate away`, not yet in `origin/main`. Row 2 (`probeDialogEscape` cleanup) — same search finds `2db037c fix(capture): probeDialogEscape gives the browse mode back, in a finally like its four siblings`, also not yet merged; both landed on one branch, `agent/route-change-order-and-dialog-restore`, neither row's OWN stated branch name (`agent/elements-list-after-navigation`, `agent/dialog-escape-restore-browse-mode`). Row 4 (`criteriaAssessableFrom` decision) is the sharper case: `git merge-base --is-ancestor 37d8080 origin/main` → **already merged** — `decision(judge): criteriaAssessableFrom has zero production callers — keep it, enforce the deadness` (`5679ae7`) plus its anti-vacuity-guard follow-up (`37d8080`) landed under `agent/321-context-change-predicate` (row 3's stated branch name, not row 4's `agent/criteria-assessable-decision`, which does not exist). Re-running row 4's own printed verification command today prints the IDENTICAL output it printed when the row was written (`grep -rn "criteriaAssessableFrom(" ...` → no production call sites), because that grep answers "is there a caller" — unchanged — not "has the open QUESTION (call it, or decide and enforce the deadness) been settled", which it has |
+| 3 | `sourceFilesUnder`'s `readdirSync` in `criterion-coverage.test.ts`'s caller-discovery walk | files actually present under a correctly-resolved root | a WRONG root — `readdirSync` throws on a missing path and the `catch` returns `[]`, so a broken `repoRoot` resolution and "this file has zero callers" are the identical output | **Already guarded, and the guard was proven to fire, not just present.** `MIN_EXPECTED_SOURCE_FILES = 100` with the comment naming this exact shape ("readdirSync swallows a missing directory into []"). Ran it clean: `npx tsx --test packages/judge/src/criterion-coverage.test.ts` → `criteriaAssessableFrom has no production caller -- dead-by-design, not dead-by-accident` passes, walking 184 `packages/` files + 18 `scripts/` files today. Listed here as the reference example of the fix, not as an open item |
+| 4 | `docs/backlog.md`'s own architecture-audit STATUS box | the disposition of rows it explicitly re-verified and corrected | that the OLDER bullet list sitting directly below it, describing the same findings from before those corrections, was never struck through or removed | `$ grep -n "Still open and assigned: none" docs/backlog.md` → line 602, present. `$ sed -n '613,655p' docs/backlog.md \| grep -c "~~"` → **0** strikethroughs across 8 bullets in the list the box's own "none" claims to summarise. Found independently by two peer sessions (this one and worker-config) the same morning |
+
+**Filed as one row with four instances, per `ceo`'s instruction, rather than four unrelated ones — the
+shape is the finding.** `orchestrator` owns the verification-basis sentence in both `docs/backlog-ready.md`'s
+header and the role brief, so neither is edited here; this row is the record, not the fix for either.
+
+**Sweep for more, done and bounded, not exhaustive:** checked every `readdirSync`-based discovery test in
+the tree (55 files) for a missing vacuity guard the way instance 3 above needed one — all but that instance
+already have one, in varying phrasing (`.length > N`, `.size >= N`, underscored literals), so this specific
+probe surfaces nothing further. Checked other `docs/*.md` uses of "at HEAD" as a verification claim (11
+more, mostly in this file's own historical correction rows) — all describe checking a SHIPPED/merged claim
+against `origin/main`, which is the right population for that question; the defect in instance 2 is
+specific to a READY-QUEUE row, where "is this still open" must also ask whether unpushed local work already
+answered it, and no other document makes that particular claim. No further instances found; this bounds the
+shape at four for now.
+
 ## How an item leaves this page
 
 Delete the row, and put the *lesson* in the record — `known-gaps.md` for something the project did not
