@@ -8,10 +8,15 @@
 // reliable cross-package dependency graph from package.json files is a real project of its own, and a wrong
 // graph is a guard answering about the wrong population, which is the exact class this repo spent the day
 // closing (docs/backlog.md, "a check that answers correctly about the wrong population"). The chosen
-// tradeoff: the fast gate may legitimately MISS a cross-package regression, and CI (widened to run on every
-// `agent/**`/`lead/**` push, see .github/workflows/lint.yml) is the real, full-suite gate that catches it —
-// by design, not by oversight. A push that breaks another package's test is expected to pass the fast gate
-// and fail CI; that is the acceptance test this file exists to make possible, not a gap to close here.
+// tradeoff: the fast gate may legitimately MISS a cross-package regression, and CI is the real, full-suite
+// gate that catches it -- by design, not by oversight. A push that breaks another package's test is
+// expected to pass the fast gate and fail CI; that is the acceptance test this file exists to make
+// possible, not a gap to close here.
+//
+// CI RUNS ON THE PR, NOT ON THE BRANCH PUSH -- changed 2026-09-06 alongside `.github/workflows/ci.yml`
+// (which replaced the widened `lint.yml`). This function is also reused there, by
+// `scripts/ci-changed.mjs`, for the identical reason it exists here: one place that answers "which
+// packages did this diff touch", never a second copy re-deriving it inline in YAML.
 //
 // A diff touching nothing under `packages/` (docs, top-level scripts, .github/, package.json, tsconfig)
 // returns an EMPTY list, and the caller's job is to treat that as "run everything", never as "run nothing" --
