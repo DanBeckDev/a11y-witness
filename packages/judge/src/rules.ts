@@ -738,6 +738,15 @@ function focusLossEvidence(log: FocusLogEvent[], i: number): string | null {
   // `slice(0, FOCUS_EVENT_LOG_DIAGNOSTIC_LIMIT)`, so it drops the TAIL and never the head. `log[0]` is
   // always the first event the listener saw. If that ever becomes a head-drop, this exception becomes
   // unsound and must go with it.
+  //
+  // WHAT THIS RULE CAN NO LONGER SEE, stated because a limitation the code creates belongs where the code
+  // is: a REAL F55 on whatever element held focus when the listener was installed is now invisible, by
+  // construction. The two are indistinguishable in this log -- both are a focusout with no focusin -- and
+  // nothing here can separate them, so the choice is which error to make. 37 accusations against
+  // conformant pages against one unobservable failure on one element is not a close call, and it is a
+  // TRADE rather than a fix: `known-gaps.md` §42 carries it as a PARTIAL, with what it would cost to
+  // close (the listener installed before the page has focus at all, which is a capture-path change and a
+  // recapture) and what would tell you it is closed.
   if (i === 0) return null;
   const prior = log[i - 1];
   const completedReceipt = prior?.type === "focusin" && prior.id === event.id;
