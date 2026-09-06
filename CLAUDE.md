@@ -11,7 +11,7 @@ Three shorter documents came first for a reason, and they are not duplicated her
 |---|---|
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | the 60-second orientation, and the question that decides everything: **does your change need a Windows worker?** Most of the repo does not. |
 | [`SECURITY.md`](SECURITY.md) | what this tool does that somebody must know before running it — `probeForms` presses buttons, the worker has no authentication, `A11Y_PYTHON` is executable |
-| [`docs/README.md`](docs/README.md) | the index to every guide and runbook, grouped by task, with [`docs/adr/README.md`](docs/adr/README.md) for the 30 decision records |
+| [`docs/README.md`](docs/README.md) | the index to every guide and runbook, grouped by task, with [`docs/adr/README.md`](docs/adr/README.md) for the 35 decision records |
 | [`docs/backlog.md`](docs/backlog.md) | **THE ONE PLACE THAT ANSWERS "WHAT IS OPEN".** The two files below are RECORDS, not trackers — long-form, valuable, and unreadable as a task list: section numbers repeat, entries are not in order, and "closed" is spelled fourteen ways. If it is open, it is on the backlog |
 | [`docs/known-gaps.md`](docs/known-gaps.md) | **what this project does NOT do, or does not yet know** — each with what it would cost and what would tell you it is fixed. Read it before claiming a thing is finished; "all gates pass" and "everything is validated" are different claims |
 
@@ -593,6 +593,10 @@ worked, and the session running it had predicted it would not, so the reasons ar
 
 ## Which browser a capture drives
 
+See `docs/adr/0035-the-browser-preset-is-evidence-not-configuration.md` for the decision and what was
+rejected (a tidier preset name, falling back to any installed browser). What follows here is the mechanism
+and the incident that forced it.
+
 `packages/nvda-worker/src/browsers.mjs` holds one plain-object preset per browser — exe search paths,
 launch flags, profile directory, process image, window title. It exists because the browser was spread
 across **eight** sites, which is this repo's most expensive recurring shape: a change applied at seven of
@@ -886,6 +890,9 @@ pin forward is this fleet's policy and it is right; what this records is that do
 CHANGE, to be paid for with a recapture and a gate run, never slipped in beside unrelated work.
 
 ### guidepup is pinned at 0.31.0, and the version is EVIDENCE
+
+See `docs/adr/0033-guidepup-exact-pin-is-evidence-not-dependency-hygiene.md` for the decision itself — the
+caret range it rejects and what would change it. What follows here is the incident that forced it.
 
 `guidepup` parses NVDA's speech before this project ever sees it, so its version changes what a capture
 says. Upgrading 0.29.2 → 0.31.0 fixed an intermittent OBJECT REPLACEMENT CHARACTER (U+FFFC) that had
@@ -1349,6 +1356,9 @@ early, "nothing was said" and "we stopped listening" become the same observation
 caught it**. For `.mjs`, `node -e "import('./path.mjs')"` is the only real check.
 
 ### The speech channel is a socket, and a dead one looks exactly like a healthy NVDA
+
+See `docs/adr/0034-the-speech-channel-is-a-socket-forced-to-fail-loud.md` for the decision and the two
+rejected alternatives (restarting NVDA; a bare `socket.destroy()`). This is the incident that forced it.
 
 This is the root cause of the pool's most expensive fault, and the fix is one round trip.
 
@@ -2601,7 +2611,7 @@ Verification is layered; pick the layers your change touches:
 - **No worker to hand?** Build one: `docs/getting-started.md` (~1.5–2 h, almost all of it downloading Windows). Validating capture changes through CI is a ~10-minute loop and should be the fallback, not the habit.
 
 ## Environment facts
-- ESM throughout (`"type": "module"`). `.ts` for the control plane, `.mjs` for the capture worker (it runs under plain Node on the VM).
+- ESM throughout (`"type": "module"`). `.ts` for the control plane, `.mjs` for the capture worker (it runs under plain Node on the VM) — see `docs/adr/0031-the-worker-ships-plain-mjs-with-no-build-step.md` for why, and what was rejected to get there.
 - **The judge is our own trained scorer.** `JUDGE_BACKEND` defaults to `local` — the 27 KB of heads in
   `packages/scorer/models/screenreader-scorer/` over a frozen MiniLM encoder. `codex`, `anthropic` and `openai` remain
   available for comparison and are **never** the default.

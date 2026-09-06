@@ -131,7 +131,9 @@ The consequence for you:
 `A11Y_PYTHON` is read at five call sites and becomes the interpreter that is executed. Passing it is
 equivalent to running arbitrary code as the invoking user. The Ansible job interface never forwards
 environment from its caller for this reason — its env is a fixed dictionary in the role, and jobs are named
-from a fixed catalogue rather than passed as commands.
+from a fixed catalogue rather than passed as commands. See
+`docs/adr/0032-the-scorer-runs-as-a-subprocess-in-a-python-venv.md` for why the scorer is a spawned
+subprocess at all, rather than in-process JS.
 
 Treat `A11Y_PYTHON`, `A11Y_SCORER_MODEL` and `DATASET_ROOT` as trusted-input-only.
 
