@@ -990,15 +990,25 @@ const isProgram = process.argv[1] !== undefined
   && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
 
 if (isProgram) main().catch((err: unknown) => {
+  // A shipped-artefact/runtime-schema mismatch (#81) reaches here as an Error carrying `.fault` --
+  // `local-judge.ts`'s `scoreCapture` attaches it after reading score.py's own parseable fault line, so
+  // by the time it is caught here it is indistinguishable in SHAPE from a worker fault, and gets the
+  // same WHAT/TRY/WHERE treatment `describeWorkerError` already gives those, rather than the bare
+  // `err.message` every other failure prints.
+  const fault = err instanceof Error ? (err as Error & { fault?: string }).fault : undefined;
   // `console.error(err)` printed a Node stack trace as the entire user-facing output on the first real
   // website this was pointed at. A stack is for whoever is fixing the tool; a user needs the reason.
-  const message = err instanceof Error ? err.message : String(err);
+  const message = fault
+    ? formatFaultMessage(fault, err instanceof Error ? err.message : undefined)
+    : err instanceof Error ? err.message : String(err);
   process.stderr.write(`\n${message}\n`);
   if (process.argv.includes("--debug") && err instanceof Error && err.stack) {
     process.stderr.write(`\n${err.stack}\n`);
   }
   // A CONFIG error is the author's to fix and a tool failure is ours, so they exit differently. A CI job
   // that treats every non-zero exit as "the scan broke" will retry a malformed forms file for ever;
-  // exit 2 says the input is wrong and retrying it will not help.
-  process.exit(err instanceof FormsConfigError ? 2 : 1);
+  // exit 2 says the input is wrong and retrying it will not help. A named FAULT (currently only
+  // artifact-schema-mismatch) is a third thing again: not the caller's mistake and not an ordinary tool
+  // bug, so exit 3 says "wait for a release" rather than inviting a retry loop the way exit 1 would.
+  process.exit(err instanceof FormsConfigError ? 2 : fault ? 3 : 1);
 });
