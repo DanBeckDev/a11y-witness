@@ -143,3 +143,25 @@ launchctl kickstart gui/$(id -u)/com.a11y-witness.board-report   # force one edi
 ```
 
 Generating and posting are separate acts on purpose, so a bad report can be seen before it is posted.
+
+## Is the schedule actually installed, or just claimed?
+
+Every job this repo schedules is only ever ASKED to run by something a human read and typed
+(`bash scripts/install-board-report.sh`) — nothing checks afterwards that it actually took, or that a
+later `launchctl bootout` (or a reinstalled OS, or a machine that quietly stopped being the control plane)
+did not silently remove it. A job that does not exist produces no output, no log and no alarm, which is
+the same silence as a job that ran and found nothing to report.
+
+```bash
+npm run jobs:check                                # report every claimed job's real installed state
+A11Y_ASSERT_CONTROL_PLANE=1 npm run jobs:check     # THIS machine is meant to run every one — fail by
+                                                    # name if any is missing, rather than only report
+```
+
+**The env var is the judgement call, not an assumption.** Most machines that clone this repo are not the
+control plane, so a bare `npm run jobs:check` never fails — it would otherwise be the exact "red gate
+everyone learns to ignore" shape this repo has already been burned by (see the missing-role-file split in
+`docs/roles/README.md`'s own enforcing test). `A11Y_ASSERT_CONTROL_PLANE=1` is the explicit, per-run
+opt-in that turns "not installed" from a report into a defect, on the one machine the claim is actually
+about. It also reports any `com.a11y-witness.*` job launchd knows about that no `.plist` here claims —
+the opposite direction, lower stakes, but nothing else looked for that either.
