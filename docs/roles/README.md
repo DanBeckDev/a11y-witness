@@ -34,9 +34,11 @@ below reads each file's OWN content for its name, role and reporter, never the f
 reason — a naming convention is a fact this repo has learned not to trust something else to enforce.
 
 **A row with no working link is a gap this page is honest about, not one it hides.** As of this commit,
-only `ceo`, `orchestrator` and the five workers besides `worker-config` have not yet landed their file —
-each is writing it directly, per `ceo`'s instruction, and the enforcing test below will name exactly which
-are still missing until they do.
+`orchestrator`, `worker-contracts` and `worker-judge` have not yet landed their file — each is writing it
+directly, per `ceo`'s instruction, and the enforcing test below names exactly which are still missing
+until they do, as a **reported gap rather than a failure**: see that test's own comment for why a missing
+file (owned by an agent other than the one pushing) is not the same defect as a malformed row or an
+existing file missing one of its four required parts, and must not block everyone else's `npm test` for it.
 
 ## The bring-up order, and why it is not alphabetical
 
