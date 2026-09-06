@@ -191,16 +191,17 @@ function section5(d) {
       + "electricity.");
   }
   L.push("");
-  L.push(`Re-reading every test page is the hidden cost behind most work we postpone, and we opened a `
-    + `${throughput?.open_issues ?? 5}-stage programme for it today, outside the release: nothing in it `
-    + "delays September. The appendix explains the cost and lists the stages.");
+  L.push("**A capture takes about a minute at median on our last sample** — 56 captures across five "
+    + "machines, at older recording formats. **We have not established what it should cost on the current "
+    + "format**, and that baseline is the first stage of a programme opened today, outside the release: "
+    + "nothing in it delays September. The appendix explains the cost and lists the stages.");
   L.push("");
   L.push("### We recommend buying nothing yet, and one number would change that.");
   L.push("");
   L.push("**The number is how long one page takes to record with ten machines running against five.** "
     + "Unchanged, and machines buy speed in proportion. Higher, and they do not — which is what happened "
-    + "last time, on older hardware, where they competed for the same disk. We wrote that down in advance "
-    + "as the result that would disprove buying.");
+    + "last time, on older hardware, where they competed for the same disk.");
+
   return L.join("\n");
 }
 
@@ -255,11 +256,24 @@ function throughputBackground(L) {
   L.push("The tool learns from several thousand recordings of a screen reader reading web pages. "
     + "Changing anything that alters what those recordings contain means making them all again, which "
     + "costs hours of machine time — and that is why a list of improvements sits deferred. The five "
-    + "stages are: explain a fourfold discrepancy between the 12.4 seconds our documentation claims per "
-    + "page and the 48.7 measured; measure what more machines actually give us, at ten against five, "
+    + "stages are: establish what a page SHOULD cost to record on the current format; measure what more "
+    + "machines actually give us, at ten against five, "
     + "alternating; set a target from that measurement rather than from a wish; make the improvements, "
     + "each accepted only by the check that can tell *faster* from *recorded less*; and decide on "
     + "hardware with the numbers attached.");
+  L.push("");
+  L.push("**WITHDRAWN: a figure this board was given yesterday.** Yesterday's edition said our own "
+    + "documentation claimed 12.4 seconds to record a page while measurement showed 48.7 — a fourfold "
+    + "gap presented as the thing to explain. **Checked on 6 September against everything on disk, it "
+    + "cannot be derived.** No document in the project produces 48.7, and the 12.4 comes from three "
+    + "retired machines under an older recording format, measured as a median where the other number is "
+    + "a rate. Three different things compared as one ratio. There is no fourfold gap, and the stage that "
+    + "was to explain it is now the stage that establishes what a page should cost.");
+  L.push("");
+  L.push("**What the same check did establish, on the sample it could read:** the four costliest steps "
+    + "in recording a page are all the screen reader answering, and everything our own software controls "
+    + "sums to under two and a half seconds. If that holds on the current machines, faster software is "
+    + "not the lever.");
   L.push("");
   L.push("**One figure to discard if the board has heard it: twelve format changes in thirty-two days "
     + "is not twelve re-readings of the library.** Five of those versions produced almost no recordings "
