@@ -1774,3 +1774,70 @@ artefact that entry exists to rescue was unfetchable.
   on the local numbers was avoided by an hour, not by design.
 - **A count is where an investigation stops.** Where an entry gives one, it also gives what to look at.
 - **Nothing here is closed by declaring it.** That was the previous list's job and it is done.
+
+## 22. 2.4.7 ACCUSED 37 CONFORMANT REAL PAGES, and the test that could have caught it argued the other way
+
+**Measured and fixed 2026-09-06.** The first `rules:real-pages` run after the recaptured corpus landed
+reported **42 new findings on pages whose publishers declare them conformant**. 37 were one defect.
+
+### What was wrong
+
+2.4.7's F55 predicate treats an ORPHANED focusout — a `focusout` with no matching `focusin` anywhere
+before it — as a script strip, unconditionally. Its own comment argued the case, and for a log that begins
+before any focus exists the argument is sound: the missing focusin IS the signal, because a script that
+blurs on receipt can beat the browser's own `focusin` event.
+
+It is wrong at exactly one place: **the log's first event.** The listener is installed after the page has
+loaded, so whatever already holds focus at that instant received it before anything was watching. When it
+then leaves — an ordinary Tab — the log opens on a focusout with no focusin, which is byte-for-byte the F55
+signature and is nothing of the kind.
+
+### The measurement, taken in both directions BEFORE the fix was written
+
+```
+37 of 37 conformant real pages reported for 2.4.7  ->  exactly ONE orphan each, and it was log[0], every time
+9 of 9 corpus positives (focus-removed-on-receipt-*) ->  log[0] is a FOCUSIN; orphans at index 2 and 9-23
+```
+
+On nhs.uk the next focusin arrives at the SAME millisecond as that opening focusout — a Tab, not a strip.
+On `focus-removed-on-receipt-order.bad` the orphan sits at index 2, after a real focusin the listener saw.
+The two shapes differ ONLY in whether a focusin precedes them, which is what makes it a discriminator
+rather than a threshold.
+
+**Recall paid nothing.** The reason both halves were measured first is the failure that would have cost
+more than 37 false positives: *a rule can be clean because it has gone DEAF*, where a real-page number
+looks excellent for the worst possible reason. Cutting 37 accusations while silently losing the nine
+positives would have looked like a triumph in every report this project produces.
+
+### The part worth keeping
+
+**A test asserted the opposite, having NAMED the mechanism in its own comment.** It read *"a lone focusout
+with nothing preceding it at all is still F55 -- it is orphaned by definition"*, and its comment said:
+
+> `anchorToTop`'s own Escape/Ctrl+Home can blur whatever a PRIOR probe left focused, **before this log was
+> installed** for `probeFocusOrder` specifically, so the log can legitimately open on a bare focusout with
+> no matching focusin in it.
+
+It then called that indistinguishable from a genuine orphan and resolved the ambiguity by assumption. That
+is CLAUDE.md's *"a comment that names an ambiguity, above code that resolves it by assumption"* — recorded
+there three times over, always about a PROBE, and here for the first time about a TEST. A test written that
+way does not merely miss the defect; it defends it, and a later reader finds a passing assertion where the
+question was.
+
+The fix is in `rules.ts`'s `focusLossEvidence`; the rewritten test keeps the reversal in its comment rather
+than quietly asserting the new answer. Both new shapes are verbatim from real stored logs — nhs.uk and
+`focus-removed-on-receipt-order.bad` — because a shape I typed out is a claim about the evidence and not
+the evidence.
+
+Safe against truncation in the one direction that matters: `capture-probes.mjs` cuts the log with
+`slice(0, FOCUS_EVENT_LOG_DIAGNOSTIC_LIMIT)`, so it drops the TAIL and never the head, and `log[0]` is
+always the first event the listener saw. **If that ever becomes a head-drop, the exception becomes unsound
+and must go with it** — which is stated at the code, not only here.
+
+### What the remaining 5 were
+
+Read individually against their stored captures, not diffed: four are the documented combo-box case
+(`"combo box, collapsed, Sort by: Newest"`, where NVDA announces the VALUE where a name would go), and one
+is a real unnamed graphic on ons.gov.uk inside a link with no name of its own. Every one carries
+`mapping: "secondary"`, so **ASSERTED-WRONGLY was 0** — the column that matters, and the one that collapsing
+with `referred` made meaningless for a day.
