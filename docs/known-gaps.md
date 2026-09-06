@@ -2533,3 +2533,77 @@ the good half through the real-page path, with the corpus capture's `revealedAt`
 behind the same recapture window as §42 and `navigatedOnSubmit`'s third state; this one is independent of
 both (it touches only `probeFocusReveal`/`walkToReveal`, not the focus-event-log listener path or the
 form-submit `navigatedOnSubmit` logic) and is revertible alone.
+
+## 44. THE "TITLE" THREE CRITERIA COMPARE IS THE LAST THING NVDA SAID, WHICH ON a LIVE-REGION PAGE IS NOT THE TITLE
+
+**Found 2026-09-06 by chasing my own wrong reading of a finding — twice.** Recorded with that route intact,
+because it is the reason the defect survived: the finding looked explicable at every level except the one
+where it was wrong.
+
+### The mechanism
+
+`reportedTitle` (`capture-setup.mjs:871`) presses NVDA's `reportTitle` command, waits for speech to settle,
+and returns **`lastSpokenPhrase()`**. That is the last thing NVDA said — which is the title only if nothing
+else spoke in between.
+
+```js
+await nvda.perform(nvda.keyboardCommands.reportTitle);
+await waitForSpeechQuiet("anchorSettle");
+return (await nvda.lastSpokenPhrase()) || "";
+```
+
+`waitForSpeechQuiet` makes it WORSE for this purpose, not better: it waits for speech to stop, so on a page
+that speaks after the command it reliably returns the *later* phrase.
+
+### The measurement
+
+`design-system.service.gov.uk/components/checkboxes/`, real capture, `focusContext`:
+
+```
+titleBefore  "Checkboxes – GOV dot UK Design System - Profile 1 - Microsoft Edge"
+titleAfter   "No search results"
+```
+
+The first is a real window title, browser suffix and all. The second has no suffix because **it is not a
+title** — it is the search autocomplete's live region, which spoke when the combo box took focus. The rule
+compared them, found them different, and reported 3.2.1.
+
+**The two strings do not even come from the same kind of source, and nothing noticed** — the missing
+` - Profile 1 - Microsoft Edge` is visible in the stored evidence and was not being read.
+
+### Scope: three criteria, six call sites
+
+`reportedTitle` feeds `focusContext` (3.2.1), `typedFeedback` (3.2.2) and `routeChange` (2.4.2) — six call
+sites at `capture-probes.mjs` 2584/2607, 2682/2703, 3000/3029. **2.4.2 is the one that matters most**: the
+route-change probe activates a control and compares titles, and any live region that speaks on activation
+substitutes itself for the title. That is a criterion this project lists as one of three a static analyser
+structurally cannot reach.
+
+### Why every check missed it
+
+- The rule is correct given its input. It compares two strings and asks whether they differ.
+- Both fields are non-empty strings, so the absence rule this repo applies everywhere does not fire.
+- `check-signals` passes: on the synthetic corpus nothing speaks after `reportTitle`, so the two values ARE
+  titles and the signal behaves.
+- It reports `secondary` → `cantTell`, so it has never produced a wrong ASSERTION — which is why it has
+  been surviving in the baseline as an accepted referral rather than being investigated.
+
+### What would tell you it is fixed
+
+`reportedTitle` returns a title READ FROM THE DOCUMENT — `document.title` over CDP, which
+`evaluateOnPageTarget` already provides and which `domCensus` already uses — with NVDA's spoken report kept
+only as a diagnostic beside it. Then: the design-system capture's `titleAfter` reads
+`"Checkboxes – GOV dot UK Design System"`, 3.2.1 stops firing on it, and 2.4.2's corpus cases still fire
+(they change the real title, so reading the real title cannot make them quieter).
+
+### What would tell you it got WORSE
+
+2.4.2's `route-title-stale` corpus cases going silent. They are the population that proves the probe can
+still see a genuine title change, and a fix that reads the wrong document — the census defect of §40 —
+would take them to zero while looking cleaner everywhere else.
+
+### What this does NOT change
+
+The 3.2.1 finding on that page stays in the baseline until the fix lands and the page is recaptured. It is
+a REFERRAL, not an accusation, and removing it now on the strength of an unfixed diagnosis would be
+accepting a baseline edit as a substitute for the work.
