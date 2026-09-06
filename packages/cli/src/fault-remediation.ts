@@ -4,7 +4,11 @@
  * before. An error a user cannot act on is a support request, and there is nobody to answer it.
  *
  * Every fault code the worker can report over the wire (`packages/nvda-worker/src/capture-faults.mjs`'s
- * `FAULT`) gets an entry here naming three things: WHAT happened, WHAT TO TRY, and WHERE TO LOOK for more.
+ * `FAULT`) gets an entry here naming three things: WHAT happened, WHAT TO TRY, and WHERE TO LOOK for
+ * more. #81 extended this table to a JUDGE-layer fault too — `packages/scorer/python/score.py`'s
+ * `ArtifactSchemaMismatch.FAULT`, which reaches this table via `local-judge.ts`'s `scoreCapture` reading
+ * a parseable line the Python process prints on stdout, not over HTTP — the shape differs but the reason
+ * for having a table at all does not: a caller must not have to parse a message to act on a failure.
  *
  * DUPLICATED, deliberately: `@a11y-witness/nvda-worker` is not a dependency of this package.
  * `isolation-smoke.mjs` asserts it must not be — the CLI speaks HTTP to a worker, and importing that
@@ -55,6 +59,16 @@ export const FAULT_REMEDIATION: Record<string, FaultRemediation> = {
       + "from a page server serving stale content.",
     whereToLook: "the target site's own behaviour for the URL you passed — compare what it does in an "
       + "ordinary browser.",
+  },
+  "artifact-schema-mismatch": {
+    what: "The shipped scorer weights and the code running them disagree about the evidence format "
+      + "(schema version, encoder hash, feature order, feature scale, or feature multipliers). This is a "
+      + "known state of the current release, not a problem with your machine or your install.",
+    tryThis: "There is nothing to try locally — retrying will not help, because the mismatch is between "
+      + "two things this tool ships together and did not this time. Wait for a new release; if none has "
+      + "been announced, file an issue naming this fault code.",
+    whereToLook: "this is expected while a model migration is in progress — check the project's release "
+      + "notes or open issues for a note about it before assuming it is new.",
   },
 };
 

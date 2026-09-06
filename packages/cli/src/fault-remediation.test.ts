@@ -8,18 +8,33 @@
  * PUBLISHED package would resolve to a `dist` that could be stale relative to this worktree's source
  * (docs/backlog.md, issue #28's exact shape) — a relative import into `../../nvda-worker/src/` reads the
  * same source tree this checkout is testing, regardless of any package's build state.
+ *
+ * PLUS the one JUDGE-layer fault code (#81), read the same way but from Python source text rather than
+ * imported (this package cannot `import` Python) — `score.py`'s `FAULT = "..."` class attribute, pulled
+ * out with a regex rather than hand-copied, so a renamed fault code fails this discovery instead of
+ * silently leaving a stale string here.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { FAULT } from "../../nvda-worker/src/capture-faults.mjs";
 import { FAULT_REMEDIATION, remediationFor, formatFaultMessage, type FaultRemediation } from "./fault-remediation.js";
 
-const KNOWN_FAULTS: string[] = Object.values(FAULT);
+const SCORE_PY_PATH = fileURLToPath(new URL("../../scorer/python/score.py", import.meta.url));
+
+function judgeLayerFaultCodes(): string[] {
+  const source = readFileSync(SCORE_PY_PATH, "utf8");
+  const match = source.match(/FAULT\s*=\s*"([^"]+)"/);
+  return match ? [match[1]] : [];
+}
+
+const KNOWN_FAULTS: string[] = [...Object.values(FAULT), ...judgeLayerFaultCodes()];
 
 test("the discovery finds a non-trivial population -- vacuity guard for the walk itself", () => {
-  assert.ok(KNOWN_FAULTS.length >= 4,
-    `only found ${KNOWN_FAULTS.length} fault code(s) in capture-faults.mjs -- the import is broken, not `
-    + "the fault list shrinking");
+  assert.ok(KNOWN_FAULTS.length >= 5,
+    `only found ${KNOWN_FAULTS.length} fault code(s) across capture-faults.mjs and score.py -- a `
+    + "discovery is broken, not the fault list shrinking");
 });
 
 test("every declared fault code has a remediation entry with all three fields, non-empty", () => {
