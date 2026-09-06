@@ -1177,6 +1177,34 @@ shape at four for now.
 
 ## How an item leaves this page
 
-Delete the row, and put the *lesson* in the record — `known-gaps.md` for something the project did not
-yet do, `not-working.md` for something that was wrong. A closed row that stays here is how a tracker
-becomes a second record and stops being read.
+**CORRECTED 2026-09-06 — the rule below said "delete" while 51 closed rows sat here, struck through and
+kept. That is not cosmetic: it is the mechanism behind five stale dispatches in one day, because a reader
+cannot tell a live row from a closed one at a glance and the page's own stated rule said the closed ones
+should not be here at all.**
+
+**The actual rule, now stated to match what this page has been doing all along: strike the row
+(`~~closed finding~~`) and KEEP it, with its disposition — CLOSED, FIXED, REFUTED, DECIDED, or similar —
+stated in bold on the same line.** This is not a compromise; it is the right call for a reason `orchestrator`
+already established for the architecture-audit section specifically: *"the bullets record what was FOUND,
+the status box records what happened to each, and striking them destroys the first record to fix the
+second."* The same argument holds for every other closed row here — the original finding and the fix that
+closed it are two different facts, and deleting the row after closing it throws the first away to tidy the
+second.
+
+**What changed to make this the right trade tonight, not just a rationalisation of the mess:** this page is
+no longer the live queue — that moved to GitHub Issues. A page that must stay short enough to scan for
+"what's open" earns its keep by deleting; a page whose job is now "what was found, and what closed it"
+earns its keep by keeping the evidence, the same way `known-gaps.md` and `not-working.md` already do, and
+the same way `docs/architecture-audit.md` was FROZEN rather than edited down for the identical reason.
+**What this gives up:** the page is long and only grows longer — accepted, because `known-gaps.md` and
+`not-working.md` already carry that cost and are read for exactly this kind of history.
+
+**A row may still be DELETED, but only when it adds no distinct information** — a genuine duplicate of
+another row already present (see the two rows explicitly marked "duplicate of the CLOSED row above" for
+the pattern: kept struck-through long enough to record that the DUPLICATION was the defect, not the
+finding, then safe to delete), a typo, or a row superseded byte-for-byte by a later one. The default for a
+real, resolved finding is strike-through and keep, never delete.
+
+`packages/lab/src/packaging/backlog-lifecycle.test.ts` holds both halves of this rule to the same file:
+every struck-through row states its own disposition on the same line, and this section's own text says
+"keep", never "delete", so the two cannot drift apart silently again.
