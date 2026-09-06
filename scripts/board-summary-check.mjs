@@ -10,6 +10,15 @@
 // The moment this script writes a sentence of summary, it has become the machine-written summary that the
 // gate exists to prevent, arriving through the warning instead of through the document.
 //
+// IT ALSO ASKS THE SAME QUESTION OF `reported.json`, WHICH CARRIES MORE (#131). The summary is one
+// hand-written paragraph; `docs/board/reported.json` holds every number the document quotes that no gate
+// can recompute -- the gate outputs, the fleet-hours figure, the capacity note, every achievement. Both
+// are read by the 08:00 job from `origin/main`, so both have the identical failure: a correct, complete
+// record on the wrong side of a merge, which reads locally as done. That happened three times on
+// 2026-09-06 -- a corrected achievement replacing one that had become FALSE, #22's pre-registered median,
+// and the refreshed real-page gate output -- and each was found by a person typing `git show
+// origin/main:...` by hand. None was found by a tool.
+//
 //   npm run board:summary-check            say whether tomorrow's summary exists
 //   npm run board:summary-check -- --post  and comment on the report issue if it does not
 import { existsSync, readFileSync } from "node:fs";
@@ -24,24 +33,44 @@ import { REPO, ROOT, gh, git } from "./board-data.mjs";
 const HOURS_MS = 3600_000;
 const ISSUE = "20";
 const SUMMARY_WORDS = 120;
+const REPORTED = "docs/board/reported.json";
 
 /** Refused, but for a cause a person can act on tonight. */
 const EXIT = { WILL_RENDER: 0, ACT_TONIGHT: 1, CANNOT_ASK: 2 };
 
 /**
- * THE SUMMARY AS `origin/main` HAS IT — which is the only copy the 08:00 edition will ever see.
+ * ONE FETCH PER RUN, AND THE REASON IS NOT ECONOMY.
  *
- * `board-report.yml` checks out `ref: main` on a GitHub runner. A summary in somebody's working tree, or
- * on an unmerged branch, does not exist as far as the edition is concerned — and this check said *"the
- * 08:00 edition will render"* on the strength of the local file. **Correct about what it examined, and
- * examining the wrong copy**: a gate that does not exercise what ships, where the thing that ships is the
- * version on `origin/main`.
+ * Two `git fetch`es can straddle a push, so two reads of "origin/main" become two reads of two different
+ * commits -- and this file would then compare a summary from one and a record from another while calling
+ * both `origin/main`. That is the "two correct counts over different windows" defect that `board-data`'s
+ * own header records, arriving inside the check written to catch its sibling. The document is built once
+ * for the same reason; so is the ref this one reads.
  *
- * It cost twice in one evening. A rewritten summary was committed locally and the push was refused three
- * times — a non-fast-forward, a worktree with no toolchain, and a real test failure — and each time this
- * check went on saying the edition would render. Separately a correction to a false achievement was
- * pushed to a branch while `origin/main` kept the false sentence, caught only because somebody ran
- * `git show origin/main:...` by hand.
+ * A FAILED FETCH IS REMEMBERED AS A FAILURE, not retried per caller: a second attempt that happened to
+ * succeed would leave one answer inconclusive and the other confident about the same instant.
+ *
+ * @type {{ ok: true } | { ok: false, why: string } | undefined}
+ */
+let fetchedOriginMain;
+
+function fetchOriginMain() {
+  if (fetchedOriginMain === undefined) {
+    try {
+      git(["fetch", "origin", "main", "--quiet"]);
+      fetchedOriginMain = { ok: true };
+    } catch (error) {
+      fetchedOriginMain = { ok: false, why: `could not fetch origin/main: ${String(error).slice(0, 120)}` };
+    }
+  }
+  return fetchedOriginMain;
+}
+
+/**
+ * ONE TRACKED FILE, AS `origin/main` HAS IT — the only copy the 08:00 edition will ever see.
+ *
+ * `board-report.yml` checks out `ref: main` on a GitHub runner, so anything in a working tree or on an
+ * unmerged branch does not exist as far as the edition is concerned.
  *
  * FETCHES FIRST, and that is not belt-and-braces. A remote-tracking ref is only as fresh as the last
  * fetch, so reading `origin/main` without one reproduces the identical defect one layer along: a
@@ -49,20 +78,21 @@ const EXIT = { WILL_RENDER: 0, ACT_TONIGHT: 1, CANNOT_ASK: 2 };
  * "I could not ask" and "it is not there" demand opposite responses, and only one of them is somebody's
  * fault.
  *
- * @param {string} day
+ * ONE READER, TWO CALLERS, deliberately. The summary and the record ask the identical question of the
+ * identical remote, and two hand-written copies of that question are this repository's most-recorded
+ * shape -- the second copy is the one that forgets to fetch.
+ *
+ * @param {string} relPath
  * @returns {{ text: string | null, asked: boolean, why: string }}
  */
-function summaryOnOriginMain(day) {
-  const ref = `origin/main:docs/board/summaries/${day}.md`;
-  try {
-    git(["fetch", "origin", "main", "--quiet"]);
-  } catch (error) {
-    return { text: null, asked: false, why: `could not fetch origin/main: ${String(error).slice(0, 120)}` };
-  }
+function fileOnOriginMain(relPath) {
+  const ref = `origin/main:${relPath}`;
+  const fetch = fetchOriginMain();
+  if (!fetch.ok) return { text: null, asked: false, why: fetch.why };
   try {
     // STDERR CAPTURED, not forwarded. `git show` on a path the ref does not carry writes
     // `fatal: path ... does not exist in 'origin/main'`, and `execFileSync` passes a child's stderr
-    // through by default -- so the ORDINARY "no summary written yet" run printed a `fatal:` above its own
+    // through by default -- so the ORDINARY "not written yet" run printed a `fatal:` above its own
     // sentence. An expected state that prints a fatal error reads as a broken tool, and a tool that looks
     // broken on its normal path is one people stop believing. `sandboxGitEnv` is kept: an inherited
     // GIT_DIR would point this at another repository, which is the 2026-09-06 incident.
@@ -71,12 +101,30 @@ function summaryOnOriginMain(day) {
     return { text, asked: true, why: "read from origin/main" };
   } catch (error) {
     // `git show` fails the same way for "the ref has no such path" and for a broken repository. The first
-    // is the finding; treating the second as the finding would report an unwritten summary on a machine
+    // is the finding; treating the second as the finding would report an unwritten file on a machine
     // that simply could not look, so the message carries what git said rather than swallowing it.
     void error;
     return { text: null, asked: true, why: `no such path on origin/main (${ref})` };
   }
 }
+
+/**
+ * THE SUMMARY AS `origin/main` HAS IT.
+ *
+ * This check said *"the 08:00 edition will render"* on the strength of the local file. **Correct about
+ * what it examined, and examining the wrong copy**: a gate that does not exercise what ships, where the
+ * thing that ships is the version on `origin/main`.
+ *
+ * It cost twice in one evening (#91). A rewritten summary was committed locally and the push was refused
+ * three times — a non-fast-forward, a worktree with no toolchain, and a real test failure — and each time
+ * this check went on saying the edition would render. Separately a correction to a false achievement was
+ * pushed to a branch while `origin/main` kept the false sentence, caught only because somebody ran
+ * `git show origin/main:...` by hand.
+ *
+ * @param {string} day
+ * @returns {{ text: string | null, asked: boolean, why: string }}
+ */
+const summaryOnOriginMain = (day) => fileOnOriginMain(`docs/board/summaries/${day}.md`);
 
 const wordsIn = (text) => text.trim().split(/\s+/).filter(Boolean).length;
 
@@ -149,6 +197,130 @@ export function summaryVerdict({ day, present, localText, remote }) {
   return { code: EXIT.ACT_TONIGHT, message: "" };
 }
 
+/**
+ * WHICH ENTRIES DIFFER, never a bare "the file differs".
+ *
+ * *"reported.json has changed"* sends a reader to diff it themselves at 21:00; *"gates[npm run
+ * rules:real-pages] differs"* tells them whether it matters in one line. This repo's own rule -- a count
+ * is where an investigation stops -- applied to a comparison.
+ *
+ * KEYED ON EACH SECTION'S OWN IDENTITY FIELD, NOT ON ARRAY POSITION. Position-keyed identity is the
+ * defect `withRealisticScale` already paid for: inserting one entry re-labels every entry after it, so a
+ * single added gate would report the whole list as changed and the real difference would be one line in
+ * a wall of noise. An item with no identity field falls back to its own content, which makes it
+ * added/removed rather than changed -- honest, since there is nothing stable to call it by.
+ *
+ * COMPARED CANONICALLY, so a reformat is not a finding. The edition reads values; key order and
+ * indentation are not values, and reporting them would train people to ignore the line.
+ *
+ * @param {string} localText
+ * @param {string} remoteText
+ * @returns {string[]}
+ */
+export function reportedDifferences(localText, remoteText) {
+  const parsed = [["your tree", localText], ["origin/main", remoteText]].map(([where, text]) => {
+    try {
+      return { where, value: JSON.parse(text) };
+    } catch (error) {
+      return { where, value: null, broken: `${where}: ${REPORTED} is not valid JSON (${String(error).slice(0, 80)})` };
+    }
+  });
+  const broken = parsed.filter((p) => p.broken).map((p) => /** @type {string} */ (p.broken));
+  // UNREADABLE IS ITS OWN ANSWER. Diffing against a parse failure would report every entry as differing,
+  // which is a true statement that hides the one fact worth acting on.
+  if (broken.length > 0) return broken;
+  return sectionDifferences(parsed[0].value, parsed[1].value);
+}
+
+/** Identity field per array section, so a difference names an ENTRY a reader recognises. */
+const ARRAY_IDENTITY = { gates: "command", achievements: "issue" };
+
+/** Key order is not a value; this makes two spellings of one record compare equal. */
+const canonical = (value) => JSON.stringify(value, (_key, val) =>
+  val && typeof val === "object" && !Array.isArray(val)
+    ? Object.fromEntries(Object.keys(val).sort().map((k) => [k, val[k]]))
+    : val);
+
+/** @returns {Map<string, unknown>} */
+function indexEntries(section, items) {
+  const key = ARRAY_IDENTITY[section];
+  const named = (item) => (key && item && typeof item === "object" && item[key] !== undefined
+    ? String(item[key]) : canonical(item));
+  return new Map(items.map((item) => [named(item), item]));
+}
+
+function arrayDifferences(section, localItems, remoteItems) {
+  const mine = indexEntries(section, localItems);
+  const theirs = indexEntries(section, remoteItems);
+  const out = [];
+  for (const [id, item] of mine) {
+    if (!theirs.has(id)) out.push(`${section}[${id}] — in your tree, NOT on origin/main`);
+    else if (canonical(theirs.get(id)) !== canonical(item)) out.push(`${section}[${id}] — differs`);
+  }
+  for (const id of theirs.keys()) {
+    if (!mine.has(id)) out.push(`${section}[${id}] — on origin/main, NOT in your tree`);
+  }
+  return out;
+}
+
+function sectionDifferences(local, remote) {
+  const out = [];
+  for (const key of [...new Set([...Object.keys(local ?? {}), ...Object.keys(remote ?? {})])]) {
+    const mine = local?.[key];
+    const theirs = remote?.[key];
+    if (Array.isArray(mine) && Array.isArray(theirs)) out.push(...arrayDifferences(key, mine, theirs));
+    else if (mine === undefined) out.push(`${key} — on origin/main, NOT in your tree`);
+    else if (theirs === undefined) out.push(`${key} — in your tree, NOT on origin/main`);
+    else if (canonical(mine) !== canonical(theirs)) out.push(`${key} — differs`);
+  }
+  return out;
+}
+
+/**
+ * THE RECORD'S VERDICT, PURE — the same separation `summaryVerdict` uses, for the same reason: the state
+ * this exists for (edited locally, unpushed) is otherwise reachable only by arranging an unpushed commit
+ * at the moment the test runs.
+ *
+ * IT REPORTS; IT DOES NOT BLOCK A RENDER. Editing `reported.json` and not pushing yet is a normal working
+ * state, sometimes for hours -- what must never happen is BELIEVING it is published. So this lands on
+ * `ACT_TONIGHT`, which this file already defines as *"refused, but for a cause a person can act on
+ * tonight"*: nothing is prevented, and the run does not read as clean while a number the board will see
+ * sits unpushed. A refusal that stops a render belongs in `board:document`, which is the thing that
+ * renders.
+ *
+ * @param {{localText: string | null, remote: {text: string | null, asked: boolean, why: string}}} state
+ * @returns {{code: number, message: string}}
+ */
+export function reportedVerdict({ localText, remote }) {
+  if (!remote.asked) {
+    return { code: EXIT.CANNOT_ASK,
+      message: `CANNOT SAY whether the recorded figures are published: ${remote.why}.\n`
+        + `This is INCONCLUSIVE, not clear -- ${REPORTED} carries every number the document quotes that `
+        + "no gate can recompute, and a check that could not read origin/main has not checked any of "
+        + "them." };
+  }
+  if (remote.text === null) {
+    return { code: EXIT.ACT_TONIGHT,
+      message: `${REPORTED} is NOT on origin/main at all, so every figure it carries is unpublished and `
+        + "the edition will print `not reported` for each. Push it." };
+  }
+  if (localText === null) {
+    return { code: EXIT.ACT_TONIGHT,
+      message: `${REPORTED} is on origin/main and absent from your working tree. The edition will render `
+        + `from origin/main regardless; if you meant to delete it, that deletion is not pushed.` };
+  }
+  const differences = reportedDifferences(localText, remote.text);
+  if (differences.length === 0) {
+    return { code: EXIT.WILL_RENDER, message: `recorded figures: ${REPORTED} matches origin/main.` };
+  }
+  return { code: EXIT.ACT_TONIGHT,
+    message: `${REPORTED} in your working tree is NOT what the 08:00 edition will read:\n`
+      + differences.map((d) => `  ${d}`).join("\n")
+      + "\nThe edition renders from origin/main. See what will actually publish with:\n"
+      + `  git show origin/main:${REPORTED}\n`
+      + "If your edit is the one that should ship, push it. If it is not, this is only a note." };
+}
+
 /** The date the NEXT 08:00 edition will render for. */
 function nextEditionDay(now = new Date()) {
   return new Date(now.getTime() + 24 * HOURS_MS).toISOString().slice(0, 10);
@@ -168,11 +340,26 @@ function main() {
   const verdict = summaryVerdict({
     day, present, localText: present ? readFileSync(file, "utf8") : "", remote,
   });
+
+  // THE RECORD IS ASKED WHATEVER THE SUMMARY SAYS. They are independent facts about the same edition: a
+  // summary that will render says nothing about whether the figures beside it are published, and a
+  // missing summary does not make an unpushed gate result any less unpushed. Reporting only one of them
+  // is how the other stays invisible, which is the whole of #131.
+  const reportedFile = path.join(ROOT, REPORTED);
+  const reported = reportedVerdict({
+    localText: existsSync(reportedFile) ? readFileSync(reportedFile, "utf8") : null,
+    remote: fileOnOriginMain(REPORTED),
+  });
+
   if (verdict.message) {
     (verdict.code === EXIT.WILL_RENDER ? console.log : console.error)(verdict.message);
-    process.exit(verdict.code);
+    (reported.code === EXIT.WILL_RENDER ? console.log : console.error)(reported.message);
+    // SEVERITY WINS, and INCONCLUSIVE outranks a finding: "I could not check everything" must never leave
+    // the run reading as clean. Both messages are printed either way, so nothing is lost to the code.
+    process.exit(Math.max(verdict.code, reported.code));
   }
 
+  (reported.code === EXIT.WILL_RENDER ? console.log : console.error)(reported.message);
   console.error(`NO SUMMARY FOR ${day}. The 08:00 edition will REFUSE and there will be no edition.\n`
     + `Write at most 120 words in docs/board/summaries/${day}.md, answering three things: are we on the `
     + "date, what changed since yesterday, what must the board decide today.\n"
