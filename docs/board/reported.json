@@ -1,7 +1,14 @@
 {
   "//": "THE ONLY PLACE THE BOARD REPORT TAKES A NUMBER IT CANNOT COMPUTE ITSELF, and every entry names who measured it and when. The report reads GitHub for issues, the milestone and merges; those need no entry here. A gate result and the fleet-hours total cannot be read from GitHub, so they are recorded here VERBATIM by the agent that ran them. An absent or stale entry is printed as 'not reported since <date>' -- never omitted, and never estimated. The rule this enforces is the CEO's: nothing in the report comes from what an agent SAID, it comes from what merged and what gates PRINTED, so `output` must be the gate's own text and not a summary of it.",
   "staleAfterHours": 24,
-  "gates": [],
+  "gates": [
+    {
+      "command": "npm run lab:job -- -e job=promote -e ref=main",
+      "reportedBy": "orchestrator",
+      "at": "2026-09-06T19:30:00Z",
+      "output": "1652 discriminating, 0 blind, 0 contaminated, 0 uncaptured, 0 stale, 5 provisional (not yet proven, not blocking)\nPASS — all 1652 case(s) discriminate, and the corpus is complete. (5 provisional case(s) still BLIND, not counted either way)\n# conformant records\n  1405 scored, 0 false positive(s)\n  2810 of 2810 record(s) carry ruleEvidence; 2810 carry a census\nRULES: PASS — all 21 of 21 from rule-ownership.json, against 2810 record(s) in /opt/a11y/runs/screenreader-dataset/screenreader-evidence.jsonl examined and clean\n  PASS — every RULE-ONLY criterion has fired on a real page, or declares why it cannot. Nothing this project claims rests solely on an untested rule.\n  PASS — all 84 of 84 from conformant real pages scored against the baseline examined and clean\nPromoted candidate.\n  weights   -> /opt/a11y/packages/scorer/models/screenreader-scorer\n  changeset -> /opt/a11y/.changeset/promote-candidate-0d498ef6.md"
+    }
+  ],
   "fleetHours": {
     "status": "not instrumented",
     "note": "No cumulative total has been published. `fleet:hours` is built and measured (orchestrator, lead/fleet-hours) and reports 54.11 worker-hours across every capture on disk -- which spans several runs and protocol versions and is therefore NOT any single run's figure, which is why no edition carries it yet. Until an entry names one finished run, the report prints 'not instrumented' in those words.",
