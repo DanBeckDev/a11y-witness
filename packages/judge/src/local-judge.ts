@@ -95,8 +95,13 @@ export interface CaptureEvidence {
      * quietly stopped matching what flows, not a behaviour change.
      */
     formChanges?: { control?: string; kind?: string; after?: string | null }[];
-    /** Set only when submitting a form NAVIGATED. Absent means it did not, or was not checked. */
-    navigatedOnSubmit?: { from: string; to: string };
+    /**
+     * Set once `probeFormSubmit` runs. `checked: false` means `currentPageUrl()` failed on at least one
+     * side (could not ask) — a different fact from `navigated: false` (asked, stayed put). Captures from
+     * before this fix carry the OLD shape instead: a bare `{ from, to }`, present only when it navigated —
+     * `submitDidNotNavigate` below reads both. Absent entirely means the probe never ran.
+     */
+    navigatedOnSubmit?: { checked: boolean; navigated?: boolean; from?: string; to?: string };
     /** Accessible names the page exposed AFTER a submit — the visual side of 3.3.1 and 4.1.3. */
     postSubmitNames?: string[];
     /** What each Tab press announced. Absent means the focus probe did not run. Rule-only, like `media`. */
@@ -134,6 +139,27 @@ const submitWasProbed = (c: CaptureEvidence): boolean =>
   (c.interaction?.formChanges ?? []).some((change) => change.kind === "submit")
   || (!(c.interaction?.formChanges ?? []).some((change) => change.kind !== undefined)
     && nonEmpty(c.interaction?.postSubmitFields));
+
+/**
+ * True only when we can POSITIVELY say the submit stayed on the same document — an ASSERTING criterion
+ * (3.3.1 is one of the four that actually assert, see CLAUDE.md) must never fire on ambiguous evidence,
+ * so "checked and confirmed same page" is required, never merely "the field is absent".
+ *
+ * The two shapes need OPPOSITE defaults for absence, which is why this cannot be one `!navigatedOnSubmit`
+ * check any more. The current shape carries `checked`, and once a capture has that key, absence of the
+ * whole field means only "this probe never ran" — `submitWasProbed` above already gates on that
+ * separately, so this function need not repeat it, but a `checked: false` (could not ask) verdict must
+ * still read as "cannot say", not as "did not navigate", or an ambiguous submit would earn a false 3.3.1
+ * exactly like Wikipedia's search once did. A capture from before this fix carries the OLD shape instead —
+ * bare presence always meant navigated — so absence there keeps meaning what it always did: not navigated,
+ * as far as anything could tell. Changing that legacy reading would move this project's own measured
+ * false-positive baseline for every capture already on disk, with no recapture to justify it.
+ */
+const submitDidNotNavigate = (c: CaptureEvidence): boolean => {
+  const nav = c.interaction?.navigatedOnSubmit;
+  if (nav && typeof nav === "object" && "checked" in nav) return nav.checked === true && nav.navigated === false;
+  return !nav;
+};
 
 /** Everything the screen reader said, lowercased, for asking "was this ever spoken?". */
 const spokenText = (c: CaptureEvidence): string => [
@@ -223,7 +249,7 @@ const EVIDENCE_CHANNEL: Record<string, (c: CaptureEvidence) => boolean> = {
   // The accessibility tree settles it: `errorShownButNotAnnounced` asks whether the page displays an
   // error it never spoke. On apache.org this criterion fired on a SEARCH toggle that submitted nothing
   // and rejected nothing, because any non-empty `formChanges` counted as a submission.
-  "3.3.1": (c) => !c.interaction?.navigatedOnSubmit && submitWasProbed(c) && errorEvidencePermits(c),
+  "3.3.1": (c) => submitDidNotNavigate(c) && submitWasProbed(c) && errorEvidencePermits(c),
   // Status Messages is about a change the page ANNOUNCES nothing for. A result count that appears in the
   // tree and never in speech is the canonical example in WCAG's own understanding document.
   "4.1.3": (c) => nonEmpty(c.interaction?.formChanges) || nonEmpty(c.interaction?.stateChanges)

@@ -59,7 +59,7 @@ test("CaptureStructure declares every sweep a capture emits", () => {
 test("CaptureInteraction declares every probe a capture emits, focusOrder included", () => {
   const declared: Required<CaptureInteraction> = {
     controls: [], stateChanges: [], formChanges: [], postSubmitFields: [], focusOrder: [],
-    routeChange: {}, navigatedOnSubmit: { from: "", to: "" }, postSubmitNames: [],
+    routeChange: {}, navigatedOnSubmit: { checked: false }, postSubmitNames: [],
   };
   assert.deepEqual(Object.keys(declared).sort(), [...EMITTED_INTERACTION].sort());
 });

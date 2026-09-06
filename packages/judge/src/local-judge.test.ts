@@ -154,7 +154,9 @@ test("a form that NAVIGATED cannot evidence a silent validation error", () => {
     interaction: {
       formChanges: [{ control: "Search, button", after: "..." }],
       postSubmitFields: ["Rechercher sur Wikipédia, edit"],
-      navigatedOnSubmit: { from: "https://www.wikipedia.org/", to: "https://fr.wikipedia.org/" },
+      // Pre-fix shape, deliberately: this pins that a capture already on disk (no `checked` key) still
+      // reads as navigated on bare presence, exactly as it always did.
+      navigatedOnSubmit: { from: "https://www.wikipedia.org/", to: "https://fr.wikipedia.org/" } as never,
     },
   };
   assert.equal(hasEvidenceFor("3.3.1", navigated), false);
@@ -250,10 +252,55 @@ test("3.3.1 stays silent when submitting NAVIGATED, whatever else is present", (
       formChanges: [{ control: "Search, button", kind: "submit", after: "" }],
       postSubmitFields: ["a", "b"],
       postSubmitNames: ["Error: something"],
-      navigatedOnSubmit: { from: "https://en.wikipedia.org/", to: "https://fr.wikipedia.org/" },
+      // Pre-fix shape, deliberately -- see the sibling test above.
+      navigatedOnSubmit: { from: "https://en.wikipedia.org/", to: "https://fr.wikipedia.org/" } as never,
     },
   };
   assert.equal(hasEvidenceFor("3.3.1", navigated), false);
+});
+
+// --- The three states `navigatedOnSubmit` can now record, fixed 2026-09-06 (known-gaps §41) ---
+test("3.3.1 fires when the new shape CONFIRMS the submit did not navigate", () => {
+  const stayed = {
+    transcript: ["x"],
+    interaction: {
+      controls: ["Submit, button"],
+      formChanges: [{ control: "Submit, button", kind: "submit", after: "" }],
+      postSubmitFields: ["Email address, edit"],
+      navigatedOnSubmit: { checked: true, navigated: false, from: "https://a.test/", to: "https://a.test/" },
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", stayed), true);
+});
+
+test("3.3.1 stays silent when the new shape confirms the submit DID navigate", () => {
+  const navigated = {
+    transcript: ["x"],
+    interaction: {
+      controls: ["Search, button"],
+      formChanges: [{ control: "Search, button", kind: "submit", after: "" }],
+      postSubmitFields: ["a", "b"],
+      navigatedOnSubmit: { checked: true, navigated: true, from: "https://a.test/", to: "https://b.test/" },
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", navigated), false);
+});
+
+test("3.3.1 stays silent (never asserts) when the probe COULD NOT ASK -- ambiguous evidence must not " +
+  "produce a WCAG assertion", () => {
+  // This is the exact new risk this fix has to guard against: `checked: false` is truthy, so a naive
+  // `!navigatedOnSubmit` check would have started asserting 3.3.1 on every one of these once the field
+  // became always-present -- the opposite of this project's own "nothing asserted wrongly" bar.
+  const couldNotAsk = {
+    transcript: ["x"],
+    interaction: {
+      controls: ["Submit, button"],
+      formChanges: [{ control: "Submit, button", kind: "submit", after: "" }],
+      postSubmitFields: ["Email address, edit"],
+      navigatedOnSubmit: { checked: false },
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", couldNotAsk), false);
 });
 
 test("4.1.3 can be evidenced by a result count the page showed and never announced", () => {
