@@ -36,6 +36,10 @@ case "$status" in
      printf 'and not a quiet day -- see the issue body. Fix the read set and re-run by hand.\n' ;;
   4) printf 'NOT POSTED (exit 4): the board release tag is already PUBLISHED, so its asset was not\n'
      printf 'replaced -- that would change a document somebody has already been given.\n' ;;
+  5) printf 'NOT POSTED (exit 5): NO EXECUTIVE SUMMARY was written for today.\n'
+     printf 'A missing summary is a MISSING EDITION, never a summary-less document -- a summary\n'
+     printf 'assembled from the sections is what the board explicitly forbade. Write at most 120 words\n'
+     printf 'in docs/board/summaries/<today>.md and re-run by hand.\n' ;;
   *) printf 'NOT POSTED (exit %s): unexpected failure, text above. No edition was published.\n' "$status" ;;
 esac
 
