@@ -27,6 +27,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { sandboxGitEnv } from "./git-env.mjs";
 
 /** Relative, so it keeps working inside a `git worktree` — where `.git` is a file, not a directory. */
 export const HOOKS_PATH = "scripts/git-hooks";
@@ -57,9 +58,9 @@ export function installHooks({ run = gitConfig, exists = existsSync, log = conso
   }
   try {
     const current = String(run("git", ["config", "--get", "core.hooksPath"],
-      { cwd: REPO, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }) ?? "").trim();
+      { cwd: REPO, env: sandboxGitEnv(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }) ?? "").trim();
     if (current === HOOKS_PATH) return true;
-    run("git", ["config", "core.hooksPath", HOOKS_PATH], { cwd: REPO, stdio: "ignore" });
+    run("git", ["config", "core.hooksPath", HOOKS_PATH], { cwd: REPO, env: sandboxGitEnv(), stdio: "ignore" });
     log(`  git hooks installed: core.hooksPath -> ${HOOKS_PATH}`
       + (current ? ` (was ${current})` : ""));
     return true;
@@ -72,7 +73,7 @@ export function installHooks({ run = gitConfig, exists = existsSync, log = conso
     // `git config --get` exits 1 when the key is UNSET, which is the normal first-run case rather than an
     // error — so retry the write before reporting anything.
     try {
-      run("git", ["config", "core.hooksPath", HOOKS_PATH], { cwd: REPO, stdio: "ignore" });
+      run("git", ["config", "core.hooksPath", HOOKS_PATH], { cwd: REPO, env: sandboxGitEnv(), stdio: "ignore" });
       log(`  git hooks installed: core.hooksPath -> ${HOOKS_PATH}`);
       return true;
     } catch (cause) {

@@ -449,7 +449,27 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
       + "rather than judged: two titles are equal or they are not. It runs FIRST among the focus probes, "
       + "since `probeFocusOrder` walks the whole tab order and a page that renames itself on focus has "
       + "already done so by the time that finishes. Cost a CAPTURE_PROTOCOL_VERSION bump (13 -> 14) and "
-      + "one full recapture, bundled with 3.2.2.",
+      + "one full recapture, bundled with 3.2.2. "
+      + "A STATED LIMIT, checked against the criterion's own text 2026-09-06 rather than assumed: 'change "
+      + "of context' is defined as a change to one of four things -- user agent, viewport, FOCUS, or "
+      + "content that changes the meaning of the Web page -- and its own note is explicit that 'a change "
+      + "of content is not always a change of context'. `contextChanged` (rules.ts) reads only whether the "
+      + "title STRING differs, which is broader than any of the four: a page that rewrites its title with "
+      + "an in-place result count or a live-region status update reads identically to one that navigated, "
+      + "moved focus, or opened a window. Measured, not hypothetical -- a page appending a search-result "
+      + "count was ASSERTED against under this exact predicate before `docs/backlog.md`'s 2026-09-04 entry "
+      + "downgraded it. `focusContext` (rules.ts:108) carries only `{control, titleBefore, titleAfter}` -- "
+      + "no URL, no navigation flag, no record of where focus actually landed -- so nothing in the evidence "
+      + "this rule already has could narrow it: a text heuristic ('ignore a title that only grew') would be "
+      + "the wordlist/word-sense-monopoly mistake this project has already paid for once (`corpus:starvation`), "
+      + "and would still miss an unrelated NEW title that is itself just a content update. The genuine "
+      + "distinguishing signal is a focus-EVENT log, not a title string -- W3C's own Failure Technique F55 "
+      + "(script moving focus on receipt) is listed under 2.1.1, 2.4.7, 2.4.13 AND 3.2.1 together, and the "
+      + "focus-event channel built for 2.4.7 is not wired to any of the other three (a separate, tracked "
+      + "gap, `docs/backlog.md`'s 2.4.7 row). So `mapping: 'secondary'` is not a workaround pending a "
+      + "narrower predicate -- it is the correct and sufficient bound GIVEN the evidence this channel "
+      + "carries: the rule states 'a title changed, which MAY be a context change' and refers rather than "
+      + "asserts, precisely because 'we could not tell' is what is actually true here.",
   },
   "3.2.2": {
     status: "assessed",
@@ -471,7 +491,13 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
       + "decides this and 3.2.1, because the evidence differs only in which probe produced it — 3.2.2 is "
       + "3.2.1 'on change rather than focus', which is how this table described the pair years before "
       + "either was built. Cost a CAPTURE_PROTOCOL_VERSION bump (13 -> 14) and one full recapture, taken "
-      + "as a bundle with 3.2.1.",
+      + "as a bundle with 3.2.1. "
+      + "SAME STATED LIMIT AS 3.2.1, because the one helper (`contextChanged`) is shared: a title-string "
+      + "diff is broader than 'change of context' as WCAG defines it (a change to user agent, viewport, "
+      + "focus, or page meaning -- not every content change), the evidence this channel carries "
+      + "(`typedFeedback: {titleBefore, titleAfter}`) has nothing that could narrow it, and "
+      + "`mapping: 'secondary'` is therefore the correct bound rather than a placeholder. See 3.2.1's note "
+      + "for the full argument and the measured incident.",
   },
   "1.3.5": { status: "reachable", needs: ["dom"], channels: ["formFields"], note: "Identify Input Purpose is the `autocomplete` attribute against a fixed token list — deterministic, and squarely a rule. Needs the DOM, like 1.4.2." },
   "3.1.1": { status: "reachable", needs: ["dom"], channels: ["transcript"], note: "Language of Page: `<html lang>`. THE CONCLUSION STANDS AND ITS STATED MECHANISM WENT STALE on 2026-09-03. This read \"NVDA switching SYNTHESISER LANGUAGE is an indirect and unreliable proxy\", which described NVDA at its defaults; `speech.reportLanguage` has been ON since that date, so NVDA SPEAKS the language and it lands in the transcript as text. The signal is therefore direct, not a proxy -- and the criterion is still not decidable from it, for the reason 3.1.2 records: an announcement CONFIRMS a language was declared, while SILENCE is what both a missing `lang` and a page matching NVDA's own default produce. Absence is the failure here, so the transcript can satisfy but never accuse, and the attribute remains the fact. Keeping a stale mechanism beside a right answer is how a reader concludes the answer was never re-examined.", },
