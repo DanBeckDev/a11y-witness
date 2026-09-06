@@ -551,7 +551,7 @@ not return them.
 | **The deploy's own output showed the WRONG RUN.** `followUnit` ran `journalctl -u <unit>` with no bound, which returns every run since boot oldest-first — so the guard's first correct refusal was read as a successful deploy, because the PLAY RECAP above it was seven minutes old. **The fourth instance of the journal-window defect**, in the one place that had no window at all. | Bounded on `_SYSTEMD_INVOCATION_ID`, which survives here where it does not for `lab:job` (the unit is `--remain-after-exit` and is stopped and `reset-failed` before each run). An empty id falls back to the whole journal and SAYS SO. `journalScope` is pure and exported, the id is validated as 32 hex characters rather than interpolated into a remote shell on the box holding the fleet key, and relaxing that to a truthiness test fails exactly the injection case. |
 | **`capture:explain` said nothing about the interaction probes.** `whatItAsked` reads `observed`, which covers the SWEEP channels only — so `focusReveal`, `focusEvents`, `focusContext`, `routeChange` and the rest had verdicts sitting in diagnostic marks that nothing displayed. Reading `cap.focusReveal` (it lives under `interaction`) returned `undefined` and produced the conclusion "the 1.4.13 probe never ran", which was wrong and would have cost a recapture round. | A `WHICH INTERACTION PROBES RAN?` section, in three states — never ran / ran and could not ask / ran and found nothing — printing whatever fields the mark carries rather than a per-probe list of which ones matter. **The both-directions test found two real errors on its first run:** `formFill` was named while 1,182 captures carry `formProbe`, one probe with two names across a protocol version, so keying on either alone reports NOT ASKED for half the corpus; and `dialogEscape`, `typingLanding` and `arrowNavLanding` were on disk and named nowhere, leaving 2.1.2's dialog question, 3.2.2 and the arrow probe unaccounted for. |
 
-## OPEN — ~38 architecture-audit findings that never reached this page at all
+## ~~OPEN — ~38 architecture-audit findings~~ — CLOSED 2026-09-06. THE BULLETS BELOW ARE A RECORD, NOT A LIST
 
 **Found 2026-09-06 by an AUDIT → BACKLOG → HEAD pass**, prompted by two peer sessions independently
 finding stale rows on this page the same night — see [`architecture-audit.md`
@@ -562,9 +562,31 @@ most of §7.2–7.5, every §8 sub-finding, and its §§10.1, 10.2, 10.5 — had
 fixed, not refuted, not recorded open. A finding in neither state is invisible, which is this project's
 own "a check that examines nothing" shape applied to its own tracker.
 
+> ## READ THIS BEFORE THE BULLETS. THEY ARE NOT A WORK LIST.
+>
+> **This section contradicted itself for a day and it cost five wrong dispatches.** The line below used to
+> read *"The rest are genuinely open:"* immediately above the bullets, with the STATUS box that refutes it
+> sandwiched in between — so a reader hit an invitation, then the bullets, and the correction was the easy
+> thing to skip. I read the bullets myself and dispatched THREE units at rows already closed; `dispatcher`
+> caught two more the same hour, and `worker-config` verified independently that "closer to zero than ~17"
+> are both open and actionable.
+>
+> **A section whose heading and whose body disagree is worse than either alone**, because each reader picks
+> the half that matches what they came for. That is this page's own "a check that examines nothing" shape,
+> turned on the tracker itself for the second time.
+>
+> **The bullets are kept, unstruck, DELIBERATELY** — they are the record of what the audit found, and the
+> STATUS box above them is the record of what happened to each. Both are worth having. Neither is a queue.
+>
+> **The queue is [`backlog-ready.md`](./backlog-ready.md)**, where every row is re-verified open by a
+> command against `origin/main` PLUS every unmerged `agent/*` branch before it is listed — because HEAD
+> alone cannot see a finished-but-unmerged unit, and on a busy night three of six rows were in exactly
+> that state.
+
 Checked at HEAD, reading code rather than commit messages. Of ~50 findings with no prior disposition, 8
-are already fixed and 1 was already closed under different wording (§10.4 — corrected in §15, not listed
-below). The rest are genuinely open:
+were already fixed and 1 was already closed under different wording (§10.4 — corrected in §15, not listed
+below). **What was open then is now almost entirely closed — see the STATUS box below, which is the
+authority for this section.** The bullets that follow it record what the audit ORIGINALLY found:
 
 > ### STATUS AT 2026-09-06 — most of this list is now CLOSED, and two entries were REFUTED
 >

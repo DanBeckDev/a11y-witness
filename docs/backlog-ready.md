@@ -7,6 +7,24 @@ is what removes it from the loop for ordinary, well-bounded work. [`docs/backlog
 the place that answers "what is open" in full, including work that needs a decision or a live worker first.
 This page is the SUBSET of that which is ready to start right now, with nothing left to decide.
 
+## A GATE THAT READS `runs/` IS NOT YOURS TO REPORT
+
+**Ruled 2026-09-06.** `rules:gate`, `rules:coverage`, `check-signals`, `corpus:starvation`,
+`scorer:shortcuts` and anything else reading `runs/` give a VERDICT only when the lead orchestrator runs
+them — against a corpus just fetched, or on the lab, which owns the authoritative one.
+
+**A worker or the dispatcher may run one as a PRE-CHECK**, to decide whether a change is worth handing on.
+**Never as a reported result**, and never in an acceptance section as though it settled anything.
+
+The reason is measured, not procedural. `runs/` in any checkout is a copy only as fresh as its last sync —
+this laptop's was 89 hours old and carried neither `focusEvents` nor `baselineWaitedMs`, so a sweep across
+it found zero of the two keys it was written to find. A gate run there reports cleanly having examined a
+corpus that no longer exists. The pre-push hook already SKIPS the corpus-dependent checks loudly for
+exactly this reason, and calls that honest rather than passing quietly.
+
+**So a row's acceptance may name a `runs/`-reading gate, and must say who runs it.** Request it through the
+dispatcher; the lead runs it and returns the number.
+
 ## How to use this page
 
 1. **Read the row.** Region, branch, the CLAUDE.md sections that bound it, and the acceptance command are
