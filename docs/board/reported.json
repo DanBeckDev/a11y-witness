@@ -1,0 +1,9 @@
+{
+  "//": "THE ONLY PLACE THE BOARD REPORT TAKES A NUMBER IT CANNOT COMPUTE ITSELF, and every entry names who measured it and when. The report reads GitHub for issues, the milestone and merges; those need no entry here. A gate result and the fleet-hours total cannot be read from GitHub, so they are recorded here VERBATIM by the agent that ran them. An absent or stale entry is printed as 'not reported since <date>' -- never omitted, and never estimated. The rule this enforces is the CEO's: nothing in the report comes from what an agent SAID, it comes from what merged and what gates PRINTED, so `output` must be the gate's own text and not a summary of it.",
+  "staleAfterHours": 24,
+  "gates": [],
+  "fleetHours": {
+    "status": "not instrumented",
+    "note": "No cumulative total exists. Orchestrator has been asked to cost and build one, summing the per-case start and finish times already in every run's progress file -- never wall clock times worker count, which measures something else. Until it lands the report prints 'not instrumented' in those words."
+  }
+}
