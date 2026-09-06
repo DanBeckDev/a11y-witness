@@ -44,71 +44,67 @@ const startsBlock = (line, next = "") => /^```/.test(line) || /^\s*$/.test(line)
   || /^\s*[-*]\s+/.test(line) || /^\s*\d+\.\s+/.test(line)
   || (/^\|/.test(line) && /^\|[\s:|-]+\|?\s*$/.test(next));
 
+// ONE HANDLER PER BLOCK KIND. Each takes the lines and the cursor, and returns `[html, nextIndex]` when
+// it claims the line or `null` when it does not -- so `toHtml` is a loop over handlers rather than a
+// fifteen-branch conditional. Extracted when `complexity` refused the single function at 25 against a
+// budget of 15; the handlers are the shape the file already had, named.
+const fence = (lines, i) => {
+  if (!/^```/.test(lines[i])) return null;
+  const body = [];
+  for (i++; i < lines.length && !/^```/.test(lines[i]); i++) body.push(lines[i]);
+  return [`<pre><code>${escape(body.join("\n"))}</code></pre>`, i + 1];
+};
+
+const blank = (lines, i) => (/^\s*$/.test(lines[i]) ? ["", i + 1] : null);
+const rule = (lines, i) => (/^---+\s*$/.test(lines[i]) ? ["<hr/>", i + 1] : null);
+
+const heading = (lines, i) => {
+  const m = /^(#{1,4})\s+(.*)$/.exec(lines[i]);
+  return m ? [`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`, i + 1] : null;
+};
+
+const table = (lines, i) => {
+  if (!/^\|/.test(lines[i]) || !/^\|[\s:|-]+\|?\s*$/.test(lines[i + 1] ?? "")) return null;
+  const head = cells(lines[i]);
+  const rows = [];
+  let j = i + 2;
+  for (; j < lines.length && /^\|/.test(lines[j]); j++) rows.push(cells(lines[j]));
+  return [`<table><thead><tr>${head.map((h) => `<th>${inline(h)}</th>`).join("")}</tr></thead>`
+    + `<tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}`
+    + "</tbody></table>", j];
+};
+
+const quote = (lines, i) => {
+  if (!/^>\s?/.test(lines[i])) return null;
+  const body = [];
+  for (; i < lines.length && /^>\s?/.test(lines[i]); i++) body.push(lines[i].replace(/^>\s?/, ""));
+  return [`<blockquote>${toHtml(body.join("\n"))}</blockquote>`, i];
+};
+
+const listOf = (tag, pattern) => (lines, i) => {
+  if (!pattern.test(lines[i])) return null;
+  const items = [];
+  for (; i < lines.length && pattern.test(lines[i]); i++) items.push(lines[i].replace(pattern, ""));
+  return [`<${tag}>${items.map((t) => `<li>${inline(t)}</li>`).join("")}</${tag}>`, i];
+};
+
+const HANDLERS = [fence, blank, rule, heading, table, quote,
+  listOf("ul", /^\s*[-*]\s+/), listOf("ol", /^\s*\d+\.\s+/)];
+
 export function toHtml(md) {
   const lines = md.split("\n");
   const out = [];
-  let i = 0;
-  const flushList = (tag, items) => out.push(
-    `<${tag}>${items.map((t) => `<li>${inline(t)}</li>`).join("")}</${tag}>`);
-
-  while (i < lines.length) {
-    const line = lines[i];
-
-    if (/^```/.test(line)) {
-      const body = [];
-      for (i++; i < lines.length && !/^```/.test(lines[i]); i++) body.push(lines[i]);
-      i++;
-      out.push(`<pre><code>${escape(body.join("\n"))}</code></pre>`);
+  for (let i = 0; i < lines.length;) {
+    const claimed = HANDLERS.reduce((hit, handler) => hit ?? handler(lines, i), null);
+    if (claimed) {
+      const [html, next] = claimed;
+      if (html) out.push(html);
+      i = next;
       continue;
     }
-    if (/^\s*$/.test(line)) { i++; continue; }
-    if (/^---+\s*$/.test(line)) { out.push("<hr/>"); i++; continue; }
-
-    const heading = /^(#{1,4})\s+(.*)$/.exec(line);
-    if (heading) {
-      out.push(`<h${heading[1].length}>${inline(heading[2])}</h${heading[1].length}>`);
-      i++;
-      continue;
-    }
-
-    if (/^\|/.test(line) && /^\|[\s:|-]+\|?\s*$/.test(lines[i + 1] ?? "")) {
-      const head = cells(line);
-      i += 2;
-      const body = [];
-      for (; i < lines.length && /^\|/.test(lines[i]); i++) body.push(cells(lines[i]));
-      out.push(`<table><thead><tr>${head.map((h) => `<th>${inline(h)}</th>`).join("")}</tr></thead>`
-        + `<tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`)
-          .join("")}</tbody></table>`);
-      continue;
-    }
-
-    if (/^>\s?/.test(line)) {
-      const body = [];
-      for (; i < lines.length && /^>\s?/.test(lines[i]); i++) body.push(lines[i].replace(/^>\s?/, ""));
-      out.push(`<blockquote>${toHtml(body.join("\n"))}</blockquote>`);
-      continue;
-    }
-
-    if (/^\s*[-*]\s+/.test(line)) {
-      const items = [];
-      for (; i < lines.length && /^\s*[-*]\s+/.test(lines[i]); i++) {
-        items.push(lines[i].replace(/^\s*[-*]\s+/, ""));
-      }
-      flushList("ul", items);
-      continue;
-    }
-    if (/^\s*\d+\.\s+/.test(line)) {
-      const items = [];
-      for (; i < lines.length && /^\s*\d+\.\s+/.test(lines[i]); i++) {
-        items.push(lines[i].replace(/^\s*\d+\.\s+/, ""));
-      }
-      flushList("ol", items);
-      continue;
-    }
-
-    // UNCONDITIONAL. Every branch above has declined this line, so it is a paragraph -- the first line
-    // is taken without asking, and only the CONTINUATION is guarded. A fallback that can decline is a
-    // fallback that can delete.
+    // UNCONDITIONAL FALLBACK. Every handler has declined, so this is a paragraph -- the first line is
+    // taken without asking and only the CONTINUATION is guarded. A fallback that can decline is a
+    // fallback that can delete; see the note at the top of this file for what that cost.
     const para = [lines[i++]];
     for (; i < lines.length && !startsBlock(lines[i], lines[i + 1] ?? ""); i++) para.push(lines[i]);
     out.push(`<p>${inline(para.join(" "))}</p>`);

@@ -23,6 +23,7 @@
 // It writes to stdout by default. `--post` publishes it as a comment on the board-report issue, so the
 // generating and the publishing are separate acts and a bad report can be seen before it is posted.
 import { execFileSync } from "node:child_process";
+import { sandboxGitEnv } from "./git-env.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -47,11 +48,25 @@ export const HOURS_MS = 3600_000;
  */
 export const READ_SET = ["docs/board/reported.json", "scripts/board-report.mjs"];
 
+// EVERY SPAWN SCRUBS `GIT_*`, and this file is the one where getting it wrong is worst.
+//
+// git exports `GIT_DIR`/`GIT_WORK_TREE` into any hook environment, and a spawned git with an inherited
+// env obeys `GIT_DIR` over `cwd` -- that is not a hypothetical, it redirected fifteen real commits in this
+// repo on 2026-09-06. The board report READS LOCAL BRANCHES AND THE PUSH STATE; those are the two lines it
+// exists to produce, and the two nothing else can check. Under a leaked `GIT_DIR` it would report a merge
+// count and a push state from a different repository entirely, confidently and with a source line
+// attached. A report that is wrong about which repository it read is worse than no report.
+//
+// `gh` is scrubbed too. Every call here passes `--repo` explicitly so it does not resolve from git
+// remotes, but `gh` shells git internally and the scrub costs nothing -- the defence should not depend on
+// knowing which subprocess reads which variable.
 export function gh(args) {
-  return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+  return execFileSync("gh", args,
+    { encoding: "utf8", cwd: ROOT, env: sandboxGitEnv(), maxBuffer: 32 * 1024 * 1024 });
 }
 export function git(args) {
-  return execFileSync("git", args, { encoding: "utf8", cwd: ROOT, maxBuffer: 32 * 1024 * 1024 }).trim();
+  return execFileSync("git", args,
+    { encoding: "utf8", cwd: ROOT, env: sandboxGitEnv(), maxBuffer: 32 * 1024 * 1024 }).trim();
 }
 
 /** Merges are read from git, and the PUSH STATE is read with them.
@@ -68,7 +83,7 @@ export function mergeState(since) {
     const [sha, at, ...rest] = l.split("\t");
     return { sha, at, subject: rest.join("\t") };
   }) : [];
-  let unpushed = 0;
+  let unpushed;
   try {
     unpushed = Number(git(["rev-list", "--count", "origin/main..main"]));
   } catch {

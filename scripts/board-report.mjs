@@ -10,43 +10,35 @@
 // This is the DAILY edition, and it is the data trail. The weekly document the board actually reads is
 // `board-document.mjs`, which shares this one's data layer rather than re-deriving it.
 //
+// NOTHING RUNS ON IMPORT: `node -e "import(...)"` is the only real check that an .mjs file still
+// loads, and without the guard at the bottom that check would post a board edition as a side effect.
+// realpathSync'd because npm's `.bin` symlink makes a non-realpath'd comparison never match.
+//
 // It writes to stdout by default. `--post` publishes it as a comment on the board-report issue, so the
 // generating and the publishing are separate acts and a bad report can be seen before it is posted.
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 import {
   REPO, MILESTONE, HOURS_MS, READ_SET,
   gh, git, issues, milestone, mergeState, misAuthored, reported, daysUntil, readSetIsNotMain,
 } from "./board-data.mjs";
 
-refuseUnknownFlags(["--post", "--issue", "--since", "--allow-dirty-read-set"],
-  { entry: import.meta.url, command: "npm run board:report" });
-
 const argv = process.argv.slice(2);
 const flag = (name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
-const post = argv.includes("--post");
 
-function render({ since, sinceLabel }) {
-  const all = issues();
-  const ms = milestone();
-  const { merges, unpushed } = mergeState(since);
-  const strays = misAuthored(since);
-  const { latestGate, gateIsFresh, fleetHours } = reported();
-
-  const closed = all.filter((i) => i.state === "CLOSED" && i.closedAt && Date.parse(i.closedAt) >= Date.parse(since));
-  const open = all.filter((i) => i.state === "OPEN");
-  const blockers = open.filter((i) => i.milestone?.title === MILESTONE);
-  const ready = open.filter((i) => i.labelNames.includes("ready"));
-  const awaiting = open.filter((i) => i.labelNames.includes("awaiting-merge"));
-
-  const L = [];
-  L.push(`# Board report — ${new Date().toISOString().slice(0, 10)}`);
-  L.push("");
-  L.push(`Generated from GitHub and git by \`npm run board:report\`. Nothing here is taken from what an `
-    + `agent said: issues and the milestone are read from the API, merges from \`git log main\`, and the `
-    + `two figures neither can supply are quoted from \`docs/board/reported.json\` with their measurer `
-    + `named — or declared unreported. Window: ${sinceLabel}.`);
-  L.push("");
-
+/** ONE FUNCTION PER SECTION, and not as a style preference.
+ *
+ * A comment-dense renderer runs to twice its lint budget without lint noticing: `max-lines-per-function`
+ * sets `skipComments: true`, so it measures CODE lines while a board report is mostly prose. This file's
+ * `render` reached 157 physical lines against a 90-line budget with `npm run lint` green throughout, and
+ * `function-size.test.ts` -- which measures PHYSICAL lines -- is the guard that actually holds here.
+ *
+ * Each section takes the whole fact set and destructures only what it reads, so what a section depends on
+ * is visible in its first line rather than inferred from its body.
+ */
+function release(d, L) {
+  const { ms } = d;
   L.push("## Release");
   if (!ms) {
     L.push(`No milestone titled \`${MILESTONE}\` exists. That is a tracker fault, not a schedule one.`);
@@ -61,7 +53,10 @@ function render({ since, sinceLabel }) {
       + "reason, that is the defect — not the slip.");
   }
   L.push("");
+}
 
+function blockerTable(d, L) {
+  const { blockers } = d;
   L.push("## Blockers");
   if (blockers.length === 0) {
     L.push("None open on the milestone.");
@@ -74,7 +69,10 @@ function render({ since, sinceLabel }) {
     }
   }
   L.push("");
+}
 
+function issuesClosed(d, L) {
+  const { merges, closed } = d;
   L.push("## Issues closed");
   if (closed.length === 0) {
     L.push(`None in this window. **That is a fact about the window, not about the work** — `
@@ -83,7 +81,10 @@ function render({ since, sinceLabel }) {
     for (const c of closed) L.push(`- [#${c.number}](${c.url}) ${c.title}`);
   }
   L.push("");
+}
 
+function whatMerged(d, L) {
+  const { merges, unpushed, since } = d;
   L.push("## What merged");
   L.push(`**${merges.length}** merge${merges.length === 1 ? "" : "s"} to \`main\` since \`${since}\`, read `
     + "from `git log main --merges`, not from GitHub. **The window is stated because two correct counts "
@@ -107,7 +108,10 @@ function render({ since, sinceLabel }) {
       + "read from GitHub's default branch today is behind the work.");
   }
   L.push("");
+}
 
+function authorship(d, L) {
+  const { strays } = d;
   if (strays.length > 0) {
     L.push("## Commit authorship — a known defect, not a discovery");
     L.push(`${strays.length} commit${strays.length === 1 ? "" : "s"} in this window are authored by an `
@@ -120,7 +124,10 @@ function render({ since, sinceLabel }) {
       + "every git-shelling test, not the config unset.");
     L.push("");
   }
+}
 
+function lastGate(d, L) {
+  const { latestGate, gateIsFresh } = d;
   L.push("## Last gate result");
   if (!latestGate) {
     L.push("**Not reported.** No gate output has been recorded in `docs/board/reported.json`. This report "
@@ -137,7 +144,10 @@ function render({ since, sinceLabel }) {
     L.push("```");
   }
   L.push("");
+}
 
+function fleetHoursSection(d, L) {
+  const { fleetHours } = d;
   L.push("## Fleet hours");
   if (!fleetHours || fleetHours.status === "not instrumented") {
     L.push("**not instrumented.** " + (fleetHours?.note ?? ""));
@@ -171,7 +181,10 @@ function render({ since, sinceLabel }) {
       + "comparing two different quantities.");
   }
   L.push("");
+}
 
+function queue(d, L) {
+  const { open, ready, awaiting } = d;
   L.push("## Queue");
   L.push(`**Ready ${ready.length}** · **Awaiting merge ${awaiting.length}** · **Open ${open.length}**`);
   if (ready.length === 0) {
@@ -179,36 +192,81 @@ function render({ since, sinceLabel }) {
     L.push("An empty Ready column is a legitimate end state, not a broken filter — the other columns "
       + `still hold ${open.length - ready.length} row(s), which is what tells the two apart.`);
   }
+}
 
+/** Everything the sections read, gathered once. */
+function facts(since, sinceLabel) {
+  const all = issues();
+  const ms = milestone();
+  const { merges, unpushed } = mergeState(since);
+  const strays = misAuthored(since);
+  const { latestGate, gateIsFresh, fleetHours } = reported();
+
+  const closed = all.filter((i) => i.state === "CLOSED" && i.closedAt && Date.parse(i.closedAt) >= Date.parse(since));
+  const open = all.filter((i) => i.state === "OPEN");
+  const blockers = open.filter((i) => i.milestone?.title === MILESTONE);
+  const ready = open.filter((i) => i.labelNames.includes("ready"));
+  const awaiting = open.filter((i) => i.labelNames.includes("awaiting-merge"));
+
+  return { since, sinceLabel, all, ms, merges, unpushed, strays, latestGate, gateIsFresh,
+    fleetHours, closed, open, blockers, ready, awaiting };
+}
+
+function render(d) {
+  const { sinceLabel } = d;
+  const L = [];
+  L.push(`# Board report — ${new Date().toISOString().slice(0, 10)}`);
+  L.push("");
+  L.push(`Generated from GitHub and git by \`npm run board:report\`. Nothing here is taken from what an `
+    + `agent said: issues and the milestone are read from the API, merges from \`git log main\`, and the `
+    + `two figures neither can supply are quoted from \`docs/board/reported.json\` with their measurer `
+    + `named — or declared unreported. Window: ${sinceLabel}.`);
+  L.push("");
+  release(d, L);
+  blockerTable(d, L);
+  issuesClosed(d, L);
+  whatMerged(d, L);
+  authorship(d, L);
+  lastGate(d, L);
+  fleetHoursSection(d, L);
+  queue(d, L);
   return L.join("\n");
 }
 
-const since = flag("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString();
-const body = render({ since, sinceLabel: `commits and closures since ${since}` });
+function main() {
+  refuseUnknownFlags(["--post", "--issue", "--since", "--allow-dirty-read-set"],
+    { entry: import.meta.url, command: "npm run board:report" });
+  const post = argv.includes("--post");
 
-if (!post) {
-  process.stdout.write(body + "\n");
-} else {
-  const dirt = argv.includes("--allow-dirty-read-set") ? null : readSetIsNotMain();
-  if (dirt) {
-    console.error("REFUSING to post: the files this report reads out of the working tree are not "
-      + "`main`'s, so the edition would quote something nobody has reviewed.\n\n" + dirt
-      + "\n\nThe report was NOT posted and no partial edition was published. Commit and merge the read "
-      + "set, or pass --allow-dirty-read-set, which posts and says so in the edition itself.\n"
-      + "Read set: " + READ_SET.join(", "));
-    process.exit(3);
+  const since = flag("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString();
+  const body = render(facts(since, `commits and closures since ${since}`));
+
+  if (!post) {
+    process.stdout.write(body + "\n");
+  } else {
+    const dirt = argv.includes("--allow-dirty-read-set") ? null : readSetIsNotMain();
+    if (dirt) {
+      console.error("REFUSING to post: the files this report reads out of the working tree are not "
+        + "`main`'s, so the edition would quote something nobody has reviewed.\n\n" + dirt
+        + "\n\nThe report was NOT posted and no partial edition was published. Commit and merge the read "
+        + "set, or pass --allow-dirty-read-set, which posts and says so in the edition itself.\n"
+        + "Read set: " + READ_SET.join(", "));
+      process.exit(3);
+    }
+    const issue = flag("--issue");
+    if (!issue) {
+      console.error("--post needs --issue=<number>, the board-report issue to comment on. Refusing rather "
+        + "than opening a new issue per report: a report per issue is how a board stops being read.");
+      process.exit(2);
+    }
+    const published = argv.includes("--allow-dirty-read-set") && readSetIsNotMain()
+      ? body + "\n\n---\n\n**Posted with `--allow-dirty-read-set`.** The files this edition reads out of "
+        + "the working tree are not `main`'s, so the gate line and the fleet-hours line above may quote "
+        + "something unreviewed. Stated here rather than left for a reader to discover."
+      : body;
+    gh(["issue", "comment", issue, "--repo", REPO, "--body", published]);
+    process.stdout.write(`posted to https://github.com/${REPO}/issues/${issue}\n`);
   }
-  const issue = flag("--issue");
-  if (!issue) {
-    console.error("--post needs --issue=<number>, the board-report issue to comment on. Refusing rather "
-      + "than opening a new issue per report: a report per issue is how a board stops being read.");
-    process.exit(2);
-  }
-  const published = argv.includes("--allow-dirty-read-set") && readSetIsNotMain()
-    ? body + "\n\n---\n\n**Posted with `--allow-dirty-read-set`.** The files this edition reads out of "
-      + "the working tree are not `main`'s, so the gate line and the fleet-hours line above may quote "
-      + "something unreviewed. Stated here rather than left for a reader to discover."
-    : body;
-  gh(["issue", "comment", issue, "--repo", REPO, "--body", published]);
-  process.stdout.write(`posted to https://github.com/${REPO}/issues/${issue}\n`);
 }
+
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();

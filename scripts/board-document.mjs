@@ -12,18 +12,16 @@
 //
 //   npm run board:document                 markdown to stdout
 //   npm run board:document -- --pdf        render a PDF and print its path
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS } from "./board-data.mjs";
 import { toHtml } from "./board-markdown.mjs";
 
-refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release"],
-  { entry: import.meta.url, command: "npm run board:document" });
-
-const argv = process.argv.slice(2);
-const flagOf = (n) => argv.find((a) => a.startsWith(`${n}=`))?.split("=").slice(1).join("=");
+// Module scope, not inside main(): `section5` reads it, and `document()` is exported for the renderer
+// test, which builds a real document without ever calling main().
 const THROUGHPUT = "Capture throughput";
 
 /** ON TRACK / AT RISK / SLIPPED, from stated criteria rather than from a feeling.
@@ -341,64 +339,75 @@ const PAGE_CSS = `
   hr { border: 0; border-top: 0.4px solid #ccd2da; margin: 5mm 0; }
 `;
 
-const md = document(collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString()));
+// NOTHING RUNS ON IMPORT -- see the note in `board-report.mjs`. `document()` stays exported above
+// so the renderer test can build a real document without rendering a PDF or touching GitHub.
+function main() {
+  refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release"],
+    { entry: import.meta.url, command: "npm run board:document" });
 
-if (!argv.includes("--pdf")) {
-  process.stdout.write(md + "\n");
-} else {
-  // THE SAME REFUSAL AS THE GITHUB EDITION. A PDF that reaches the board is harder to retract than a
-  // comment, so the read set must be `main`'s or nothing is rendered.
-  const dirt = argv.includes("--allow-dirty-read-set") ? null : readSetIsNotMain();
-  if (dirt) {
-    console.error("REFUSING to render: the files this document reads out of the working tree are not "
-      + "`main`'s, so the PDF would carry something nobody has reviewed.\n\n" + dirt
-      + "\n\nNothing was written. Commit and merge the read set, or pass --allow-dirty-read-set, which "
-      + "renders and stamps the document with the fact.");
-    process.exit(3);
+  const argv = process.argv.slice(2);
+  const flagOf = (n) => argv.find((a) => a.startsWith(`${n}=`))?.split("=").slice(1).join("=");
+
+  const md = document(collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString()));
+
+  if (!argv.includes("--pdf")) {
+    process.stdout.write(md + "\n");
+  } else {
+    // THE SAME REFUSAL AS THE GITHUB EDITION. A PDF that reaches the board is harder to retract than a
+    // comment, so the read set must be `main`'s or nothing is rendered.
+    const dirt = argv.includes("--allow-dirty-read-set") ? null : readSetIsNotMain();
+    if (dirt) {
+      console.error("REFUSING to render: the files this document reads out of the working tree are not "
+        + "`main`'s, so the PDF would carry something nobody has reviewed.\n\n" + dirt
+        + "\n\nNothing was written. Commit and merge the read set, or pass --allow-dirty-read-set, which "
+        + "renders and stamps the document with the fact.");
+      process.exit(3);
+    }
+    const stamped = argv.includes("--allow-dirty-read-set") && readSetIsNotMain()
+      ? md + "\n\n---\n\n*Rendered with `--allow-dirty-read-set`: the files this edition reads out of the "
+        + "working tree are not `main`'s, so the gate line and the fleet-hours line may quote something "
+        + "unreviewed. Stated here rather than left for a reader to discover.*"
+      : md;
+
+    // NOT `runs/`. That directory is shared -- often a symlink to the corpus tree -- and a guard is
+    // landing that makes every `runs/` writer askable. A board PDF written every morning would be a writer
+    // nobody remembered when that guard was designed. Same directory as the launchd job's log, which is
+    // where a scheduled agent's output belongs on macOS anyway.
+    const outDir = flagOf("--out")
+      ?? path.join(process.env.HOME ?? ROOT, "Library", "Logs", "a11y-witness");
+    mkdirSync(outDir, { recursive: true });
+    const stem = `a11y-witness-board-${new Date().toISOString().slice(0, 10)}`;
+    const html = path.join(outDir, `${stem}.html`);
+    const pdf = path.join(outDir, `${stem}.pdf`);
+    writeFileSync(html, `<!doctype html><meta charset="utf-8"><title>${stem}</title>`
+      + `<style>${PAGE_CSS}</style>${toHtml(stamped)}`);
+
+    // HEADLESS CHROME, not pandoc or a PDF library. Chrome is already on this machine because the capture
+    // fleet needs a Chromium; pandoc is not installed and would make the board's daily document depend on
+    // an operator running `brew install`. A dependency the board's report cannot be produced without is a
+    // worse risk than a slightly plainer typeface.
+    const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    execFileSync(chrome, ["--headless", "--disable-gpu", "--no-pdf-header-footer",
+      `--print-to-pdf=${pdf}`, `file://${html}`], { stdio: "pipe" });
+    process.stdout.write(`${pdf}\n`);
+
+    if (argv.includes("--release")) publishToDraftRelease(pdf);
   }
-  const stamped = argv.includes("--allow-dirty-read-set") && readSetIsNotMain()
-    ? md + "\n\n---\n\n*Rendered with `--allow-dirty-read-set`: the files this edition reads out of the "
-      + "working tree are not `main`'s, so the gate line and the fleet-hours line may quote something "
-      + "unreviewed. Stated here rather than left for a reader to discover.*"
-    : md;
 
-  // NOT `runs/`. That directory is shared -- often a symlink to the corpus tree -- and a guard is
-  // landing that makes every `runs/` writer askable. A board PDF written every morning would be a writer
-  // nobody remembered when that guard was designed. Same directory as the launchd job's log, which is
-  // where a scheduled agent's output belongs on macOS anyway.
-  const outDir = flagOf("--out")
-    ?? path.join(process.env.HOME ?? ROOT, "Library", "Logs", "a11y-witness");
-  mkdirSync(outDir, { recursive: true });
-  const stem = `a11y-witness-board-${new Date().toISOString().slice(0, 10)}`;
-  const html = path.join(outDir, `${stem}.html`);
-  const pdf = path.join(outDir, `${stem}.pdf`);
-  writeFileSync(html, `<!doctype html><meta charset="utf-8"><title>${stem}</title>`
-    + `<style>${PAGE_CSS}</style>${toHtml(stamped)}`);
-
-  // HEADLESS CHROME, not pandoc or a PDF library. Chrome is already on this machine because the capture
-  // fleet needs a Chromium; pandoc is not installed and would make the board's daily document depend on
-  // an operator running `brew install`. A dependency the board's report cannot be produced without is a
-  // worse risk than a slightly plainer typeface.
-  const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  execFileSync(chrome, ["--headless", "--disable-gpu", "--no-pdf-header-footer",
-    `--print-to-pdf=${pdf}`, `file://${html}`], { stdio: "pipe" });
-  process.stdout.write(`${pdf}\n`);
-
-  if (argv.includes("--release")) publishToDraftRelease(pdf, stem);
+  /** Deliver the PDF as an asset on a DRAFT GitHub Release, which is one click from the Releases tab.
+   *
+   * A draft release was chosen over attaching to the report issue because GitHub's API cannot attach a file
+   * to an issue comment at all -- that is a web-UI drag-and-drop, so a daily automated attachment is
+   * impossible, not merely awkward.
+   *
+   * THE TAG IS NAMESPACED `board/<date>` AND THE RELEASE STAYS A DRAFT, both deliberately. A draft creates
+   * no git tag until it is published, so nothing here can be mistaken for a product version or picked up by
+   * the changesets machinery -- which matters in a repo whose first npm publish has not happened yet and
+   * whose release workflow reads tags.
+   */
 }
 
-/** Deliver the PDF as an asset on a DRAFT GitHub Release, which is one click from the Releases tab.
- *
- * A draft release was chosen over attaching to the report issue because GitHub's API cannot attach a file
- * to an issue comment at all -- that is a web-UI drag-and-drop, so a daily automated attachment is
- * impossible, not merely awkward.
- *
- * THE TAG IS NAMESPACED `board/<date>` AND THE RELEASE STAYS A DRAFT, both deliberately. A draft creates
- * no git tag until it is published, so nothing here can be mistaken for a product version or picked up by
- * the changesets machinery -- which matters in a repo whose first npm publish has not happened yet and
- * whose release workflow reads tags.
- */
-function publishToDraftRelease(pdf, stem) {
+function publishToDraftRelease(pdf) {
   const tag = `board/${new Date().toISOString().slice(0, 10)}`;
   const title = `Board report — ${new Date().toISOString().slice(0, 10)}`;
   const notes = "The daily board document. Generated from GitHub and git; every figure carries its "
@@ -428,3 +437,5 @@ function publishToDraftRelease(pdf, stem) {
   }
   process.stdout.write(`https://github.com/${REPO}/releases/tag/${encodeURIComponent(tag)} (draft)\n`);
 }
+
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
