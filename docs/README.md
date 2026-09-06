@@ -48,6 +48,7 @@ human or agent, *working on* the repo rather than using it.
 |---|---|
 | [**coverage.md**](./coverage.md) | **all 55 WCAG 2.2 A/AA criteria and which of four states each is in** — assessed, partial, reachable, or out of scope. Generated from the code and pinned against it, so it cannot drift |
 | [screenreader-coverage.md](./screenreader-coverage.md) | every user behaviour we drive, the field it lands in, and — the part that matters — **what we do not drive yet**. A behaviour missing from that table is a claim this project cannot make |
+| [probe-side-effects.md](./probe-side-effects.md) | every probe in `capture-probes.mjs`, what it DOES beyond what it reads — caret, DOM focus, NVDA mode, the page's own content — and which later probe could observe it. §43 and the §42/`focus-reset-not-logged` interaction both lived in this absence |
 | [METHODOLOGY.md](./METHODOLOGY.md) | how the numbers were produced, and why the eval figures must not be quoted as a headline |
 | [glossary.md](./glossary.md) | the vocabulary — capture, probe, sweep, signal, criterion, subtype |
 | [local-model.md](./local-model.md) | the trained scorer: what it is, what it abstains on, and why |
