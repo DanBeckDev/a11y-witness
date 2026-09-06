@@ -15,19 +15,26 @@ name: ci
 # trigger table, so a future "just add the tests to lint" (or the equivalent here) fails a unit test rather
 # than the PR budget.
 #
-# PUSH TRIGGERS ONLY MAIN, AND RUNS EVERYTHING UNCONDITIONALLY -- the same promise `lint.yml`'s own header
-# made ("the full suite runs in CI on this push"), carried forward rather than narrowed. A push straight to
-# `main` is already trusted with the full suite; a path-scoped merge run would silently narrow that promise
-# the day someone merges a multi-package change a scoped job was never asked to see all of.
+# PULL_REQUEST ONLY, AND THIS IS DELIBERATE -- chairman's direction, 2026-09-06, correcting this file's own
+# first version. The flow is PR then merge, and every check that gates code must run ON THE PR, before the
+# merge: a check that runs AFTER a merge cannot stop it, which is exactly what a `push: branches: [main]`
+# trigger was -- a gate with the barn door already open. There is no push trigger here at all now, and
+# branch protection (requiring these checks green AND the branch up to date with `main`) is what makes the
+# commit that was tested the commit that lands, via a squash or fast-forward merge, never a merge commit CI
+# never saw.
 #
-# AGENT/** AND LEAD/** BRANCH PUSHES NO LONGER TRIGGER THIS WORKFLOW -- a deliberate change, not an
-# oversight. Every unit now ends with `gh pr create` (the standing worker-loop flow), so the PR's own
-# `pull_request` trigger is where a branch's full check now runs; a push with no PR yet gets only the local
-# pre-push hook's fast gate. See `scripts/git-hooks/pre-push`'s own header for the other half of this.
+# THE FULL SUITE RUNS ON THE PR ITSELF, not on a separate main-only pass -- coverage, the rules fitness
+# function, `scorer:verify` and `gate:isolation` (below, in the `ts` job) used to be gated to
+# `github.event_name == 'push'`; with no push trigger left they simply run whenever `ts` runs, i.e.
+# whenever any package source changed. Four minutes on a one-package PR is the new, wider budget that
+# buys -- up from three, and worth it: it is the only place left these checks can run at all.
+#
+# AGENT/** AND LEAD/** BRANCH PUSHES DO NOT TRIGGER THIS WORKFLOW EITHER, same as before -- every unit ends
+# with `gh pr create` (the standing worker-loop flow), so the PR's own `pull_request` trigger is where a
+# branch's full check runs; a push with no PR yet gets only the local pre-push hook's fast gate. See
+# `scripts/git-hooks/pre-push`'s own header for the other half of this.
 on:
   pull_request:
-    branches: [main]
-  push:
     branches: [main]
 
 concurrency:
@@ -36,8 +43,8 @@ concurrency:
 
 jobs:
   # THE FIRST JOB, and everything else is conditional on it. Always runs -- cheap, no build, one git diff
-  # (or none, on a push) -- so a skipped downstream job is a real decision rather than an artefact of this
-  # job itself having been skipped.
+  # -- so a skipped downstream job is a real decision rather than an artefact of this job itself having
+  # been skipped.
   changed:
     runs-on: ubuntu-latest
     outputs:
@@ -55,12 +62,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - id: classify
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            node scripts/ci-changed.mjs --event=pull_request --base=origin/${{ github.base_ref }}
-          else
-            node scripts/ci-changed.mjs --event=push
-          fi
+        run: node scripts/ci-changed.mjs --event=pull_request --base=origin/${{ github.base_ref }}
 
   ts:
     needs: changed
@@ -79,43 +81,36 @@ jobs:
       - run: npm run build
       - run: npm run lint
       - run: npm run typecheck
-      - name: Unit tests -- touched packages on a PR, every package on a push to main
+      - name: Unit tests of the touched package(s)
         # GH_TOKEN: `packages/lab/src/packaging/*` (board-style.test.ts, row-claim.test.ts's live
-        # fetchLabels) is inside `packages/lab/src`, so `test:ts`'s whole-repo glob reaches it on every
-        # push, and a touched-package run reaches it whenever `lab` is among the touched packages -- the
-        # identical need as the `docs` job's own copy of these tests, here reached through `lab` instead
-        # of through `docs/`.
+        # fetchLabels) shells out to real `gh` calls against this repo's own Issues -- read-only, and
+        # `github.token` already has that scope for the repo the workflow runs in.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            npm run test:ts
-          else
-            globs=()
-            for pkg in ${{ needs.changed.outputs.packages }}; do
-              globs+=("packages/$pkg/src/**/*.test.ts")
-            done
-            if [ "${#globs[@]}" -eq 0 ]; then
-              echo "ts=true but no package was implicated -- ci-changed.mjs's own rule is that this should"
-              echo "never happen (a root config or scripts/*.mjs change adds every package); failing loudly"
-              echo "rather than silently running nothing."
-              exit 1
-            fi
-            npx tsx --test "${globs[@]}"
+          globs=()
+          for pkg in ${{ needs.changed.outputs.packages }}; do
+            globs+=("packages/$pkg/src/**/*.test.ts")
+          done
+          if [ "${#globs[@]}" -eq 0 ]; then
+            echo "ts=true but no package was implicated -- ci-changed.mjs's own rule is that this should"
+            echo "never happen (a root config or scripts/*.mjs change adds every package); failing loudly"
+            echo "rather than silently running nothing."
+            exit 1
           fi
-      # MAIN ONLY. Coverage is a whole-repo threshold (`.c8rc.json`'s 78%), and `rules-check`/
-      # `scorer:verify`/`gate:isolation` are repo-wide invariants, not package-scoped ones -- none of them
-      # answer "did THIS PR's diff regress", they answer "is the repository as a whole still sound", which
-      # is what a merge to `main` is the moment to ask. Moved here from `lint.yml`'s unconditional list
-      # rather than dropped.
+          npx tsx --test "${globs[@]}"
+      # THE FULL SUITE, on the PR -- there is nowhere else left for these to run now that `push` is gone.
+      # Coverage is a whole-repo threshold (`.c8rc.json`'s 78%), and `rules-check`/`scorer:verify`/
+      # `gate:isolation` are repo-wide invariants, not package-scoped ones -- none of them answer "did THIS
+      # PR's diff regress", they answer "is the repository as a whole still sound", and that question has
+      # to be answered before the merge now, not after it.
       - name: Coverage, the rules fitness function, and packaging integrity
-        if: github.event_name == 'push'
         # GH_TOKEN, THE SAME ONE THE STEP ABOVE ALREADY SETS. `npm run coverage` runs the WHOLE suite
         # under c8, so it reaches `board-style.test.ts` and `row-claim.test.ts`'s live `fetchLabels`
-        # exactly as `test:ts` does -- and without the token those five tests fail here while passing
+        # exactly as the step above does -- and without the token those tests fail here while passing
         # thirty lines up, in the same job, on the same commit. Measured on `main` at 830a7d4d: 2648 pass,
         # 5 fail, all five network-dependent; reproduced locally by putting a `gh` that exits 127 on the
-        # PATH, which fails those four and no others.
+        # PATH, which fails those and no others.
         #
         # A REMEDY APPLIED AT ONE CALL SITE WHEN THE BEHAVIOUR REACHES SEVERAL -- this repository's most
         # expensive recurring shape, here in the workflow that enforces it. Two steps in one job run the
@@ -215,12 +210,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-  # PULL REQUESTS ONLY, never on push -- `changeset-check.yml`'s own original reasoning, carried forward
-  # unchanged: pushing straight to `main` is how this repo currently works, and blocking that would make
-  # the check something to be bypassed rather than obeyed.
   changeset:
     needs: changed
-    if: github.event_name == 'pull_request' && needs.changed.outputs.changeset == 'true'
+    if: needs.changed.outputs.changeset == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
