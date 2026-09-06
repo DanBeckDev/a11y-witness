@@ -2562,6 +2562,41 @@ before this probe runs) made `resetFocusToDocumentStart`'s blur into a potential
 longer independent of §42 in the way originally stated. It remains revertible alone from `navigatedOnSubmit`'s
 third state.
 
+### THE SAME DEFECT, TWO MORE PROBES — 2026-09-06, `agent/tab-probe-start-position`
+
+`docs/probe-side-effects.md`'s audit found that `probeFocusContext` and `probeFocusOrder` share the
+IDENTICAL exposure this section describes: both call only `anchorToTop()`, which resets NVDA's caret and
+mode and never DOM focus, so both Tab-walk from wherever an earlier probe (or the sweep's own disclosure
+activation — unconditional, not gated on an opt-in flag) left DOM focus. **`probeFocusOrder` is the more
+consequential of the two**: it is the channel 2.1.1, 2.1.2, 2.4.1 and 2.4.3 all read, and its own comment
+says its evidence is consumed widely downstream.
+
+Fixed the same way, reusing the same functions without a second implementation: both probes now read
+`startedFrom` and call `resetFocusToDocumentStart()`/`focusResetOutcome()` before their Tab walk begins,
+recorded on their own diagnostic mark (`focusOrder`, `focusContext`). `resetFocusToDocumentStart` already
+brackets the resulting `focusout` out of the focus-event log (`agent/focus-reset-not-logged`), so this
+inherits that protection rather than needing a third bracket.
+
+**What this costs the corpus, honestly stated rather than guessed at.** `stops[0]` in `focusOrder` may not
+have been the page's true first tab stop on any PRE-EXISTING capture where `probeFocus` was on and the
+sweep activated a disclosure or an accessible form rejected input — that activation moves DOM focus
+unconditionally, per `operateControl`'s own comment, so it is not confined to an opt-in flag's cases. Since
+the tab order is a cycle, the SET of elements found is very likely unaffected; the ORDER (and therefore
+anything comparing it against reading order — 2.4.3's whole subject) is what could move. I cannot enumerate
+which corpus cases this touches without querying the corpus, which the resource ban for this unit forbids;
+the shape to check is: `probeFocus: true` AND a page with a disclosure/rejecting form the sweep reaches
+before `probeFocusOrder` runs.
+
+**Not yet proven against real NVDA** — same boundary as every worker-file change in this bundle. Provable
+now, offline: both probes call the reset before their walk (source-text tests, the documented exception for
+functions `capture-core.mjs`'s guidepup import makes unimportable — `pure-graph.test.ts`'s own reason), and
+mutation-checked. Not provable now: whether `stops[0]` actually changes on a real page, and whether
+`rules:coverage`/`rules:gate`'s 2.4.3 numbers move as a result — that is the fleet's recapture to answer.
+
+**Finding #2 from the same audit — `crossCheckAgainstElementsList` running after `probeRouteChange`,
+comparing against pre-navigation counts — is queued, not built here.** Same file, so it waits for this to
+land rather than colliding with it.
+
 ## 44. THE "TITLE" THREE CRITERIA COMPARE IS THE LAST THING NVDA SAID, WHICH ON a LIVE-REGION PAGE IS NOT THE TITLE
 
 **Found 2026-09-06 by chasing my own wrong reading of a finding — twice.** Recorded with that route intact,
