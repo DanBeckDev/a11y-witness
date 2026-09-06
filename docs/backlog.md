@@ -1097,6 +1097,37 @@ npm run Y` chain matching `release:gate`'s exact shape all correctly propagate a
 untouched; and `candidate:gate` does not share that exposure, since `promote-model.mjs` reads
 `acceptance-report.json`'s `passed`/`failureReasons` fields directly rather than any exit code.
 
+## A STALE-BUT-SETTLED corpus fails checks for a reason unrelated to the change, 2026-09-06
+
+**CORRECTED 2026-09-06, and the correction is the more useful half.** This row was filed citing
+`evidence-fields.test.ts`'s `interaction.focusEvents` failure as its evidence, on the reported cause that
+this laptop's `runs/` was ~89 hours old and predated the field. **That cause was wrong.** `orchestrator`
+diagnosed the real one and it was a COVERAGE HOLE, not staleness: the field was on disk the whole time, in
+a WRAPPED capture (`runs/fetched/candidate.real-page-capture.json`) that `fieldsOnDisk()` could not read —
+5,368 plain captures, 29 wrapped, and exactly one field reachable only through the wrapper. Fixed by
+unwrapping, not by re-exempting the field.
+
+**So the example is withdrawn and the row is kept**, because the shape it names is still real and still
+unaddressed — it simply was not what that failure was. A staleness skip there would have papered over a
+coverage hole, which is the opposite of what the guard is for. The lesson stands twice over: the reported
+cause was plausible, was supplied by someone with more context than the reporter, and was still wrong.
+
+**The insight is the OUTCOME-EQUIVALENCE, not that the corpus is old.** A stale-but-settled corpus produces
+exactly what the in-flight guard exists to prevent: a check goes red for a reason that has nothing to do
+with the change in front of you, the person re-runs it, it stays red, and they reach for
+`A11Y_SKIP_VERIFY=1` — which this project's own record says was done nine times in one evening. The guard
+correctly does not suppress it (a skip that fires always is a check that never runs), so it needs its own
+answer.
+
+Four states are now distinguished by `corpusReadable` (`corpus-settled.mjs`): absent, in-flight,
+present-but-a-stub, and settled. **This is the fifth**, and it sits inside `settled` — the corpus is not
+moving, it is simply older than the evidence shape the checks now expect.
+
+**Not costed, and the fix is a decision rather than code:** either the corpus gets refreshed (which is
+`orchestrator`'s, not a worker's), or the field-presence checks learn to say "this corpus predates the
+field" rather than "the field is compared but nothing carries it" — two different sentences that today are
+one. The second is the cheaper half and it is where the deception lives.
+
 ## How an item leaves this page
 
 Delete the row, and put the *lesson* in the record — `known-gaps.md` for something the project did not
