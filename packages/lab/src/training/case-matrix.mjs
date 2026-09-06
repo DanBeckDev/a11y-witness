@@ -753,6 +753,45 @@ const cases = [
         + "src=\"data:audio/wav;base64,UklGRiQAAAAAV0FWRWZtdCAQAAAAAQABAEANDgAgTgAAAgAQAGRhdGEAAAAA\"></audio>",
     }),
   }),
+  // 1.3.5 Identify Input Purpose -- issue #79, the F107 failure mode ("incorrect autocomplete attribute
+  // values"). Both variants declare a personal-data field's PURPOSE explicitly via `autocomplete`, so
+  // neither variant is missing a label or leaves the field unreachable -- the only difference is whether
+  // the value is a real token from HTML's Autofill field name table. `given-name` is real; `fname` is not.
+  //
+  // `provisional`: `RuleInput.formInputs`, which `addUnidentifiedInputPurpose` reads, has no worker-side
+  // census yet -- see that function's own comment (rules.ts) for why adding one is a separate, fleet-
+  // touching unit this row's region excludes. This case cannot discriminate on a real capture until that
+  // census lands; it exists now so the rule and its predicate are proven against a HAND-SPECIFIED shape,
+  // the same order 1.4.2's own `media-autoplay-audio` case went in.
+  pair({
+    id: "input-purpose-invalid-signup",
+    criterion: "1.3.5",
+    task: "Fill in the newsletter signup form.",
+    source: "WCAG 1.3.5 Understanding; HTML autofill field names "
+      + "(html.spec.whatwg.org/multipage/form-control-infrastructure.html#autofill-detail-tokens)",
+    mutation: "The first-name field's `autocomplete` attribute is a typo of the real token -- `fname` "
+      + "rather than `given-name` -- so a user agent cannot fill it from the user's own stored data even "
+      + "though the page tried to say what the field is for.",
+    badSignal: { type: "input-purpose-invalid" },
+    good: page({
+      title: "Newsletter signup", heading: "Newsletter signup",
+      body: "<form>"
+        + "<p><label for=\"first\">First name</label><input id=\"first\" name=\"first\" autocomplete=\"given-name\"></p>"
+        + "<p><label for=\"email\">Email address</label><input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"email\"></p>"
+        + "<button type=\"submit\">Subscribe</button>"
+        + "</form>",
+    }),
+    bad: page({
+      title: "Newsletter signup", heading: "Newsletter signup",
+      body: "<form>"
+        + "<p><label for=\"first\">First name</label><input id=\"first\" name=\"first\" autocomplete=\"fname\"></p>"
+        + "<p><label for=\"email\">Email address</label><input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"email\"></p>"
+        + "<button type=\"submit\">Subscribe</button>"
+        + "</form>",
+    }),
+    provisional: "added 2026-09-06 for issue #79 -- no capture exists yet; RuleInput.formInputs has no "
+      + "worker-side census (mirroring mediaCensus is a separate, fleet-touching unit)",
+  }),
 ];
 
 function imageVariant(/** @type {any} */ { id, title, heading, description, file, goodAlt, badAlt, task }) {

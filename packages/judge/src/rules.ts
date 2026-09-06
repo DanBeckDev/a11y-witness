@@ -223,6 +223,23 @@ export interface RuleInput {
    * of them into a silent pass for 1.4.2.
    */
   media?: { tag: string; autoplay: boolean; muted: boolean; controls: boolean; loop: boolean }[];
+  /**
+   * Form controls' `autocomplete` ATTRIBUTE, from the DOM — 1.3.5 Identify Input Purpose. Same reasoning as
+   * `media` just above: `autocomplete` has no accessibility-tree equivalent, so NVDA cannot report it and
+   * this is not screen-reader evidence.
+   *
+   * NOT YET POPULATED BY ANY CAPTURE. This field, `addUnidentifiedInputPurpose` and its corpus case
+   * (`focus-script-blur-window`'s sibling in shape, `input-purpose-*` in case-matrix.mjs) are issue #79's
+   * rule half, built and unit-tested against a hand-specified shape rather than against real evidence — the
+   * same order 1.4.2's `media` census went in, and the same one `docs/backlog.md` records for a fact stated
+   * twice: writing the rule first against a shape nothing produces yet is how `1.3.1:no-headings` shipped
+   * `NEVER FIRED ANYWHERE` for a time before anyone noticed the census never reached it. Declaring that risk
+   * here rather than discovering it later: a worker-side census reading this attribute (mirroring
+   * `mediaCensus`, `packages/nvda-worker/src/browser-session.mjs`) is a SEPARATE, fleet-touching unit this
+   * one's region deliberately excludes — worker source changes need `fleet:deploy`, which is not this
+   * unit's to run. Absent means NOT CHECKED, exactly as `media`'s own comment states.
+   */
+  formInputs?: { tag: string; type: string | null; autocomplete: string | null }[];
 }
 
 const EMPTY_NAME = "￼"; // ￼ — screen reader announced an element with no text/name
@@ -1031,6 +1048,90 @@ function addAutoplayingAudio(input: RuleInput, add: AddFinding): void {
 }
 
 /**
+ * The normative `autocomplete` token vocabulary — HTML's "Autofill field name" table
+ * (html.spec.whatwg.org/multipage/form-control-infrastructure.html#autofill-detail-tokens), which is what
+ * WCAG 2.2's "Input Purposes for User Interface Components" section names by reference. Two categories,
+ * because they take different optional qualifiers (below): most take an optional `shipping`/`billing`
+ * prefix, and the CONTACT category (`tel*`, `email`, `impp`) additionally takes an optional contact-type
+ * prefix (`home`/`work`/`mobile`/`fax`/`pager`) that the other category does not.
+ */
+const AUTOCOMPLETE_NORMAL_TOKENS = new Set([
+  "name", "honorific-prefix", "given-name", "additional-name", "family-name", "honorific-suffix",
+  "nickname", "organization-title", "username", "new-password", "current-password", "one-time-code",
+  "organization", "street-address", "address-line1", "address-line2", "address-line3", "address-level4",
+  "address-level3", "address-level2", "address-level1", "country", "country-name", "postal-code",
+  "cc-name", "cc-given-name", "cc-additional-name", "cc-family-name", "cc-number", "cc-exp",
+  "cc-exp-month", "cc-exp-year", "cc-csc", "cc-type", "transaction-currency", "transaction-amount",
+  "language", "bday", "bday-day", "bday-month", "bday-year", "sex", "url", "photo",
+]);
+const AUTOCOMPLETE_CONTACT_TOKENS = new Set([
+  "tel", "tel-country-code", "tel-national", "tel-area-code", "tel-local", "tel-local-prefix",
+  "tel-local-suffix", "tel-extension", "email", "impp",
+]);
+const AUTOCOMPLETE_CONTACT_PREFIXES = new Set(["home", "work", "mobile", "fax", "pager"]);
+const AUTOCOMPLETE_SHIPPING_PREFIXES = new Set(["shipping", "billing"]);
+
+/**
+ * Does this `autocomplete` value identify a real input purpose — a well-formed token from the list above,
+ * in the qualifier order the HTML spec fixes (`[section-*] [shipping|billing] [contact-type] TOKEN
+ * [webauthn]`) — per ACT rule 73f2c2's own expectation?
+ *
+ * DELIBERATELY NOT A FULL GRAMMAR. `section-*` and a trailing `webauthn` are stripped by POSITION alone
+ * (leading/trailing) without validating `section-*`'s own suffix is non-empty, and a value with tokens out
+ * of the fixed order (`"billing shipping"`, a contact-type prefix on a NON-contact token) is read the same
+ * as one with an unknown token -- both correctly read "does not identify a purpose", which is this
+ * function's only question. A caller wanting compliance-report-grade token-ordering detail should reach
+ * for the ACT rule's own reference implementation instead.
+ */
+function isValidAutocompletePurpose(value: string): boolean {
+  const tokens = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+  if (tokens.at(-1) === "webauthn") tokens.pop();
+  if (tokens.length === 0) return false;
+  if (tokens[0]?.startsWith("section-")) tokens.shift();
+  if (tokens.length && AUTOCOMPLETE_SHIPPING_PREFIXES.has(tokens[0]!)) tokens.shift();
+  if (tokens.length > 1 && AUTOCOMPLETE_CONTACT_PREFIXES.has(tokens[0]!)) tokens.shift();
+  if (tokens.length !== 1) return false;
+  const token = tokens[0]!;
+  return AUTOCOMPLETE_NORMAL_TOKENS.has(token) || AUTOCOMPLETE_CONTACT_TOKENS.has(token);
+}
+
+/**
+ * 1.3.5 Identify Input Purpose — Failure F107, "incorrect autocomplete attribute values".
+ *
+ * `secondary`, not `conformance` -- ACT rule 73f2c2's own ASSUMPTIONS note is the reason: "Custom taxonomy
+ * values may satisfy WCAG 1.3.5 even if this rule fails." A value outside the standard vocabulary is not
+ * provably wrong the way a missing `alt` is; it is merely NOT the mechanism H98 names, and a nonstandard
+ * taxonomy some assistive technology recognises is a real, if unlikely, second reading this project's own
+ * rule against asserting through genuine ambiguity (`rules.ts`'s own catalogue of that mistake) argues
+ * against overriding by default.
+ *
+ * ONLY THE F107 HALF, NOT THE WHOLE CRITERION -- named here rather than left implicit, matching 1.4.2's own
+ * practice above. 1.3.5 requires the purpose to be programmatically determinable AT ALL, and H98's only
+ * sufficient technique is a VALID `autocomplete` value -- so a personal-data field with NO `autocomplete`
+ * attribute is arguably just as unsatisfied as one with a malformed value. This rule does not say so,
+ * because doing so would need to decide WHICH fields "collect information about the user" independently of
+ * any attribute the page already declares -- exactly the word-sense/vocabulary guessing this project has
+ * paid for once already (`corpus:starvation`), and the fixed Input-Purposes list has no signal in a bare
+ * `<input>`'s tag, type or label that reliably says "this one is a name field" without reading the words a
+ * human wrote. Firing only when the page has ALREADY attempted to declare a purpose sidesteps that guess
+ * entirely: every field this rule examines is one whose own markup asserts it is one of the listed
+ * purposes, so the only question left is whether that assertion is spelled correctly.
+ */
+function addUnidentifiedInputPurpose(input: RuleInput, add: AddFinding): void {
+  if (!input.formInputs) return; // absent means not checked; only a probe's silence is a finding
+  for (const element of input.formInputs) {
+    const value = element.autocomplete?.trim().toLowerCase();
+    if (!value || value === "on" || value === "off") continue; // no purpose asserted; not this rule's claim
+    if (isValidAutocompletePurpose(value)) continue;
+    add("1.3.5 Identify Input Purpose",
+      "A form field's `autocomplete` attribute does not identify a real input purpose, so a user agent or "
+        + "assistive technology cannot fill it from the user's own stored data",
+      `<${element.tag}${element.type ? ` type="${element.type}"` : ""} autocomplete="${element.autocomplete}">`);
+  }
+}
+
+/**
  * 2.1.2 — Tab stopped moving, so focus is trapped.
  *
  * A non-interference criterion (WCAG §5.2.5): it applies to ALL content whether or not it is relied upon,
@@ -1522,6 +1623,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addMissingHeadings(input, add);
   addUnnamedGraphics(input, add);
   addAutoplayingAudio(input, add);
+  addUnidentifiedInputPurpose(input, add);
   addKeyboardTrap(input, add);
   addStaleRouteTitle(input, add);
   addBrokenFocusOrder(input, add);

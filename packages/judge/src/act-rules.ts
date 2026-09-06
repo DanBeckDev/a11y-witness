@@ -247,6 +247,44 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "audible to a given user, only that the page declared it to start on its own.",
   },
   {
+    id: "a11y-witness:input-purpose-invalid",
+    version: "2026-09-06",
+    name: "An `autocomplete` attribute does not identify a real input purpose",
+    description: "A form field's `autocomplete` value is not a token from HTML's Autofill field name "
+      + "table, so a user agent or assistive technology cannot fill it from the user's own stored data "
+      + "even though the page tried to say what it is for.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "1.3.5", mapping: "secondary" }],
+    inputAspects: ["DOM (autocomplete attribute)"],
+    applicability: "Every `input`, `select` and `textarea` element whose `autocomplete` attribute is "
+      + "present, non-empty, and not the bare state token `on`/`off`. A capture with no formInputs probe "
+      + "result at all is not applicable — it is unchecked, and the rule makes no claim.",
+    expectation: "The value is a well-formed autofill detail token per the HTML specification's fixed "
+      + "qualifier order, matching a name in the Input Purposes list WCAG 1.3.5 references by H98.",
+    assumptions: [
+      "ONLY THE F107 HALF. 1.3.5 also fails when a personal-data field carries NO autocomplete attribute "
+        + "at all — H98 is the criterion's only listed sufficient technique, so an absent value is arguably "
+        + "just as unsatisfied as a malformed one. This rule does not claim that half: deciding which "
+        + "fields \"collect information about the user\" independently of anything the markup already "
+        + "asserts would need a word-sense judgement over labels and field names this project has already "
+        + "paid for getting wrong once (corpus:starvation). Firing only when the page has already attempted "
+        + "a purpose declaration sidesteps that guess: every field this rule examines is one whose own "
+        + "markup asserts a purpose, so the only open question is whether the spelling is right.",
+      "SECONDARY rather than asserted, on ACT rule 73f2c2's own authority: 'Custom taxonomy values may "
+        + "satisfy WCAG 1.3.5 even if this rule fails.' An unrecognised token is not provably wrong the way "
+        + "a missing alt attribute is — it is merely not H98's own named mechanism, and a real but "
+        + "nonstandard taxonomy some assistive technology recognises is a second reading this rule cannot "
+        + "rule out.",
+      "The qualifier grammar is checked by POSITION, not fully validated — an out-of-order token "
+        + "('billing shipping', a contact-type prefix on a non-contact field) reads the same as an unknown "
+        + "one, which is correct for this rule's only question ('does this identify a purpose') but is not "
+        + "a complete implementation of the ordering ACT rule 73f2c2 itself checks.",
+    ],
+    accessibilitySupport: "Independent of the screen reader: read from the DOM over DevTools, so it holds "
+      + "for any browser that reports the attribute. It says nothing about whether the field is actually "
+      + "one the criterion covers, only that the page's own markup asserted a purpose and spelled it wrong.",
+  },
+  {
     id: "a11y-witness:keyboard-trap",
     version: "2026-08-08",
     name: "Tab stopped moving, so focus is trapped",

@@ -295,6 +295,59 @@ test("a capture with NO media field makes no 1.4.2 claim at all", () => {
 });
 
 /**
+ * 1.3.5 Identify Input Purpose — issue #79, the F107 failure mode ("incorrect autocomplete attribute
+ * values"). DOM-only, like 1.4.2: `autocomplete` has no accessibility-tree equivalent.
+ */
+test("a field whose autocomplete value is not a real input purpose token is reported", () => {
+  const findings = ruleFindings({
+    transcript: [],
+    formInputs: [{ tag: "input", type: "text", autocomplete: "fname" }],
+  } as never);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].wcag, /^1\.3\.5/);
+  assert.match(findings[0].evidence, /autocomplete="fname"/);
+  assert.equal(findings[0].mapping, "secondary",
+    "ACT rule 73f2c2: a custom taxonomy value may still satisfy 1.3.5 even though it fails this rule");
+});
+
+test("a valid token, with or without a shipping/billing or contact-type qualifier, is not a finding", () => {
+  const findings = ruleFindings({
+    transcript: [],
+    formInputs: [
+      { tag: "input", type: "text", autocomplete: "given-name" },
+      { tag: "input", type: "text", autocomplete: "shipping street-address" },
+      { tag: "input", type: "tel", autocomplete: "mobile tel" },
+      { tag: "input", type: "text", autocomplete: "cc-number webauthn" },
+    ],
+  } as never);
+  assert.equal(findings.length, 0);
+});
+
+test("no autocomplete, or the bare state values on/off, is not this rule's claim", () => {
+  // A field with NO autocomplete attribute at all may still fail 1.3.5 -- H98 is the criterion's only
+  // sufficient technique -- but deciding that needs to know the field COLLECTS PERSONAL DATA independent
+  // of any attribute it carries, which this rule deliberately does not attempt (criterion-coverage.ts's
+  // 1.3.5 note explains why). `on`/`off` assert no purpose at all, so there is nothing to validate.
+  const findings = ruleFindings({
+    transcript: [],
+    formInputs: [
+      { tag: "input", type: "text", autocomplete: null },
+      { tag: "input", type: "text", autocomplete: "on" },
+      { tag: "textarea", type: null, autocomplete: "off" },
+    ],
+  } as never);
+  assert.equal(findings.filter((f) => f.wcag.startsWith("1.3.5")).length, 0);
+});
+
+test("a capture with NO formInputs field makes no 1.3.5 claim at all", () => {
+  const findings = ruleFindings({ transcript: ["heading, level 1, News"] } as never);
+  assert.equal(findings.filter((f) => f.wcag.startsWith("1.3.5")).length, 0);
+  const probed = ruleFindings({ transcript: [], formInputs: [] } as never);
+  assert.equal(probed.filter((f) => f.wcag.startsWith("1.3.5")).length, 0,
+    "an empty probe result is also not a finding — it is a page with no form inputs");
+});
+
+/**
  * 2.1.2 No Keyboard Trap — a non-interference criterion, and the only failure here that is TOTAL: a
  * keyboard user who cannot leave a control cannot use the rest of the page at all.
  *

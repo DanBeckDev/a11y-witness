@@ -167,6 +167,16 @@ export type EvidenceChannel =
    */
   | "media"
   /**
+   * The DOM form-input census — `<input>`/`<select>`/`<textarea>` with their `autocomplete` attribute, for
+   * 1.3.5 Identify Input Purpose.
+   *
+   * Not screen-reader output, for the same reason `media` above is not: `autocomplete` has no
+   * accessibility-tree equivalent. NOT YET POPULATED BY ANY CAPTURE — see `RuleInput.formInputs`'s own
+   * comment (rules.ts) for why the worker-side census is a separate, fleet-touching unit issue #79's
+   * region excludes.
+   */
+  | "formInputs"
+  /**
    * The DOM tab-stop census — how many RENDERED, non-`inert` elements Tab can reach.
    *
    * CAPTURED SINCE 2026-08-28 AND CLAIMED BY NO CRITERION, which is deliberate rather than an oversight.
@@ -499,7 +509,25 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
       + "`mapping: 'secondary'` is therefore the correct bound rather than a placeholder. See 3.2.1's note "
       + "for the full argument and the measured incident.",
   },
-  "1.3.5": { status: "reachable", needs: ["dom"], channels: ["formFields"], note: "Identify Input Purpose is the `autocomplete` attribute against a fixed token list — deterministic, and squarely a rule. Needs the DOM, like 1.4.2." },
+  "1.3.5": {
+    status: "partial", needs: ["dom"], channels: ["formInputs"],
+    note: "Identify Input Purpose, ASSESSED for its F107 half since 2026-09-06 (issue #79) and decided by "
+      + "a RULE, `addUnidentifiedInputPurpose` -- deterministic against HTML's fixed Autofill field name "
+      + "table, needing the DOM rather than a screen reader, like 1.4.2. `PARTIAL`, not `assessed`: the "
+      + "criterion's OTHER failure mode -- a personal-data field with NO `autocomplete` attribute at all, "
+      + "which H98 (the criterion's only listed sufficient technique) makes just as unsatisfied as a "
+      + "malformed value -- is NOT covered, and cannot be from an attribute the field never carries. Seeing "
+      + "that failure would need deciding which fields \"collect information about the user\" from their "
+      + "label or name alone, independent of any attribute the markup already asserts -- the word-sense "
+      + "guessing this project has paid for once already (corpus:starvation) -- so the rule fires only "
+      + "when a field's OWN markup has already attempted a purpose declaration and gotten it wrong. "
+      + "`mapping: 'secondary'`, on ACT rule 73f2c2's own authority that a nonstandard token may still "
+      + "satisfy the criterion under some assistive technology's own taxonomy. NOT YET VALIDATED ON A REAL "
+      + "CAPTURE: `RuleInput.formInputs` has no worker-side census yet -- mirroring `mediaCensus` "
+      + "(browser-session.mjs) for `autocomplete` is a separate, fleet-touching unit this one's region "
+      + "excludes, so `rules:coverage` reads this subtype as NEVER FIRED ANYWHERE until that lands and a "
+      + "real page is captured.",
+  },
   "3.1.1": { status: "reachable", needs: ["dom"], channels: ["transcript"], note: "Language of Page: `<html lang>`. THE CONCLUSION STANDS AND ITS STATED MECHANISM WENT STALE on 2026-09-03. This read \"NVDA switching SYNTHESISER LANGUAGE is an indirect and unreliable proxy\", which described NVDA at its defaults; `speech.reportLanguage` has been ON since that date, so NVDA SPEAKS the language and it lands in the transcript as text. The signal is therefore direct, not a proxy -- and the criterion is still not decidable from it, for the reason 3.1.2 records: an announcement CONFIRMS a language was declared, while SILENCE is what both a missing `lang` and a page matching NVDA's own default produce. Absence is the failure here, so the transcript can satisfy but never accuse, and the attribute remains the fact. Keeping a stale mechanism beside a right answer is how a reader concludes the answer was never re-examined.", },
   // 3.1.2 CLAIMED THE TRANSCRIPT AND THE TRANSCRIPT CANNOT CARRY IT — corrected 2026-09-01, measured.
   //
@@ -777,9 +805,10 @@ export const CHANNEL_LOCATION: Record<EvidenceChannel, "structure" | "interactio
   postSubmitNames: "interaction",
   focusEvents: "interaction",
   frames: "structure",
-  // Read from somewhere other than `structure`/`interaction`: `media` sits at the top level, `title`
-  // inside the `documentReady` diagnostic, `structureCensus` is a diagnostic's presence.
+  // Read from somewhere other than `structure`/`interaction`: `media` and `formInputs` sit at the top
+  // level, `title` inside the `documentReady` diagnostic, `structureCensus` is a diagnostic's presence.
   media: "read-specially",
+  formInputs: "read-specially",
   title: "read-specially",
   structureCensus: "read-specially",
   // CAPTURED AND CLAIMED BY NO CRITERION, deliberately — see the union's own note: the 2.1.2 rule that
@@ -824,6 +853,21 @@ const nonEmpty = (value: unknown): boolean => {
  * has no title field, though `documentTitle` is computed and passed to the read-through. Promoting it would
  * be cleaner and is a capture change; reading it here is honest about where the evidence actually is.
  */
+/**
+ * The four channels read from somewhere other than `structure`/`interaction` — `CHANNEL_LOCATION`'s own
+ * "read-specially" group. Split out of `channelsPresent` so adding `formInputs` (issue #79) did not push
+ * that function's complexity over the lint ceiling; the four have nothing else in common.
+ */
+function addReadSpeciallyChannels(capture: ChannelBearingCapture, present: Set<EvidenceChannel>): void {
+  if (nonEmpty((capture as { media?: unknown[] }).media)) present.add("media");
+  if (nonEmpty((capture as { formInputs?: unknown[] }).formInputs)) present.add("formInputs");
+  const ready = (capture.diagnostics ?? []).find((mark) => mark.event === "documentReady");
+  if (typeof ready?.title === "string" && ready.title.trim()) present.add("title");
+  if ((capture.diagnostics ?? []).some((mark) => mark.event === "structureCensus")) {
+    present.add("structureCensus");
+  }
+}
+
 export function channelsPresent(capture: ChannelBearingCapture): Set<EvidenceChannel> {
   const present = new Set<EvidenceChannel>();
   if (nonEmpty(capture.transcript)) present.add("transcript");
@@ -833,12 +877,7 @@ export function channelsPresent(capture: ChannelBearingCapture): Set<EvidenceCha
   for (const channel of INTERACTION_CHANNELS) {
     if (nonEmpty((capture.interaction ?? {})[channel])) present.add(channel);
   }
-  if (nonEmpty((capture as { media?: unknown[] }).media)) present.add("media");
-  const ready = (capture.diagnostics ?? []).find((mark) => mark.event === "documentReady");
-  if (typeof ready?.title === "string" && ready.title.trim()) present.add("title");
-  if ((capture.diagnostics ?? []).some((mark) => mark.event === "structureCensus")) {
-    present.add("structureCensus");
-  }
+  addReadSpeciallyChannels(capture, present);
   return present;
 }
 
