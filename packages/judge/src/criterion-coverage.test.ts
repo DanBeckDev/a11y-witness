@@ -7,6 +7,9 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
 
@@ -161,5 +164,40 @@ test("2.4.2 is assessable from a capture carrying a routeChange", () => {
   });
   assert.ok(assessable.includes("2.4.2"),
     `2.4.2 needs title+routeChange and both are present: ${JSON.stringify(assessable)}`);
+});
+
+/** Every non-test `.ts`/`.mjs` source file under `dir`, skipping `node_modules`, `dist` and dotfiles. */
+function sourceFilesUnder(dir: string): string[] {
+  const out: string[] = [];
+  let entries: string[];
+  try { entries = readdirSync(dir); } catch { return out; }
+  for (const name of entries) {
+    if (name === "node_modules" || name === "dist" || name.startsWith(".")) continue;
+    const full = resolve(dir, name);
+    if (statSync(full).isDirectory()) { out.push(...sourceFilesUnder(full)); continue; }
+    if (/\.test\.(ts|mjs)$/.test(name)) continue; // any OTHER test may call it too, harmlessly
+    if (/\.(ts|mjs)$/.test(name)) out.push(full);
+  }
+  return out;
+}
+
+test("criteriaAssessableFrom has no production caller -- dead-by-design, not dead-by-accident", () => {
+  // Established by grep, not assumed or inherited from a peer's earlier grep: this walks packages/ and
+  // scripts/ itself, because trusting a remembered audit is exactly the mistake this test exists to
+  // prevent -- see the function's own doc comment for the incident that prompted it. The definition file
+  // is exempt: its own declaration line contains the literal substring being searched for.
+  const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
+  const definitionFile = fileURLToPath(new URL("./criterion-coverage.ts", import.meta.url));
+  const files = [
+    ...sourceFilesUnder(resolve(repoRoot, "packages")),
+    ...sourceFilesUnder(resolve(repoRoot, "scripts")),
+  ].filter((f) => f !== definitionFile);
+
+  const offenders = files.filter((f) => readFileSync(f, "utf8").includes("criteriaAssessableFrom("));
+
+  assert.deepEqual(offenders, [],
+    `criteriaAssessableFrom is called from non-test code: ${offenders.join(", ")} -- either it has `
+    + "shipped (delete this test and the warning above the function) or it is a stray caller nobody "
+    + "decided on (revert it).");
 });
 
