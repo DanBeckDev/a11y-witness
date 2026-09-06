@@ -67,6 +67,7 @@ human or agent, *working on* the repo rather than using it.
 | [wcag-criterion-audit.md](./wcag-criterion-audit.md) | **every claim-bearing criterion checked against W3C's own text**, using the [`wcag-criterion-check`](../.claude/skills/wcag-criterion-check/SKILL.md) procedure — the record of what was read, what was wrong, and what changed as a result. Findings land here first; `docs/backlog.md` links back to this file rather than restating them |
 | [adr/](./adr/README.md) | 35 architecture decision records, indexed — the *why*, including the alternatives that were rejected and what would falsify each |
 | [capture-phase-breakdown-audit.md](./capture-phase-breakdown-audit.md) | **checked the "3.9x" (12.4 s documented vs ~48.7 s measured) against what is actually on disk** — the ratio compares two different populations, protocols and statistic types, and this laptop's local corpus contains zero protocol-16 captures, so the current-fleet half of the question cannot be answered offline at all |
+| [fixture-pair-proof-audit.md](./fixture-pair-proof-audit.md) | **what a good/bad fixture pair actually proves, criterion by criterion** — checked whether "the good half produces no finding" is sufficient on its own (it is not: a BLIND good half satisfies it trivially) and what closes the gap |
 | [isolation-spike.md](./isolation-spike.md) | the experiment that shaped the package split, run before anything was moved |
 | [history-2026-08.md](./history-2026-08.md) | what happened, month by month, for context a diff cannot give |
 
