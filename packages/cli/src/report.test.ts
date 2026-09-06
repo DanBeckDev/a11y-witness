@@ -190,6 +190,24 @@ test("the report says how far the page sat from what the scorer was validated on
   assert.doesNotMatch(render({ verdict: { ...verdict, findings: [] } as Report["verdict"] }), /Support:/);
 });
 
+test("the report names the scorer's own runtime versions, so a disputed finding is traceable to them", () => {
+  // Publish blocker B2: `action.yml` pins onnxruntime/transformers/safetensors/numpy behind a cache key
+  // that used to name the packages and no versions. A disputed finding has to be traceable to the runtime
+  // it was scored under, not only to the weights.
+  const withRuntime = {
+    ...verdict,
+    findings: [],
+    runtime: { numpy: "2.5.1", onnxruntime: "1.28.0", safetensors: "0.8.0", transformers: null },
+  } as Report["verdict"];
+  const line = render({ verdict: withRuntime });
+  assert.match(line, /Scorer runtime:.*numpy 2\.5\.1/);
+  assert.match(line, /onnxruntime 1\.28\.0/);
+  assert.match(line, /transformers absent/, "a null version must read as absent, not print literal `null`");
+
+  // Absent for the LLM backends, and for a local-scorer artifact old enough to predate this field.
+  assert.doesNotMatch(render({ verdict: { ...verdict, findings: [] } as Report["verdict"] }), /Scorer runtime:/);
+});
+
 test("A CONFIDENCE OF 1 IS NOT PRINTED OVER AN EMPTY FINDINGS LIST", () => {
   // `local-judge` defines confidence as the weakest FINDING's — "a report is only as good as its shakiest
   // claim" — and returns 1 when there are none. Printed, that read
