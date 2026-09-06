@@ -1954,3 +1954,63 @@ becoming possible: *the sites needing updating are the ones that ENUMERATE state
 the new identifier's text.* Here it is two independent changes each valid alone, where the connection is a
 runtime ORDERING rather than a call graph — and the only thing that saw it was one reader holding both
 diffs at once. Review does not compose: a sub-reviewer given either branch would have approved it.
+
+## 25. TWO COMPARISON IMPLEMENTATIONS, and the two gates that judge evidence disagree about what evidence IS
+
+**Found 2026-09-06 by fixing the wrong one, twice in a row.** The sharpest instance of this file's oldest
+shape, because of WHERE it sits: on the pair of gates whose entire job is deciding whether evidence can be
+trusted.
+
+```
+packages/lab/src/capture/evidence-diff.mjs      <- evidence:check    "may I keep the cached captures?"
+packages/lab/src/training/repeat-capture.mjs    <- gate:stability    "is this page's evidence repeatable?"
+```
+
+Each carries its own `flatten`, its own field list, and its own idea of what counts as evidence.
+
+### How it presented
+
+`gate:stability` FAILED with `VARIES focusEvents counts 5,5,5,5,5` — identical counts, differing content —
+blocking a recapture. Diagnosed as `atMs`, a wall-clock key inside every focus-log entry, compared as
+evidence. Fixed `evidence-diff.mjs`'s deny-list, re-ran, **and it failed identically**, because
+`gate:stability` uses the other file. Confirmed at the line: `repeat-capture.mjs:196` flattens `focusEvents`
+with a function containing zero exclusions.
+
+### THE TWO FILES ALREADY KNEW ABOUT EACH OTHER
+
+`repeat-capture.mjs`'s own comment, of an earlier nested-array flattening defect:
+
+> *`evidence-diff.mjs` had the identical gap, fixed the same way.*
+
+So they have drifted before, somebody noticed, fixed both — **and left two implementations for the next
+divergence.** Fixing both copies is not fixing the defect; it is paying it again on a schedule.
+
+### Three drifts, and the third is the one that shows the cost
+
+1. **Nested-array flattening** — present in both, noticed, fixed in both. The comment above is the receipt.
+2. **The deny-list** — fixed in one, missed in the other, cost a blocked recapture and a second failed gate
+   run.
+3. **A comment describing a field that no longer exists.** `repeat-capture.mjs:112` still explains the
+   flattening in terms of `focusEvents.scriptRemovedFocus` — a capture-computed verdict ADR 0021 replaced
+   with the raw `focusEvents.log`. The sibling's comment describes the current shape. **The pair has
+   drifted in its explanations as well as its behaviour**, so a reader of one is told about a field that
+   was deleted.
+
+### Why it was invisible
+
+Both gates were GREEN for the things each was asked about. Nothing compares the comparers, and no test
+asserts that the two agree — which is the remedy this repo prefers only as a LAST resort, and the reason
+the first two remedies exist: delete a copy, or derive one from the other.
+
+### What would tell you it is fixed
+
+One comparison. `repeat-capture.mjs` importing `evidence-diff.mjs`'s, or both importing a third module that
+owns `flatten`, the field list and the deny-list. Then: `gate:stability` passes with both `focusEvents`
+canaries STABLE, and **no canary that was STABLE becomes UNSTABLE** — the second half matters, because a
+merged comparison that is stricter somewhere it should not be would look like success on the two cases
+being watched.
+
+### What would tell you it got WORSE
+
+A second deny-list. Adding one to `repeat-capture.mjs` fixes today's symptom and guarantees the fourth
+drift — it is precisely what was done last time, and this entry is what that cost.
