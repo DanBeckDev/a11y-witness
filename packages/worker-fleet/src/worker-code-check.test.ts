@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { codeDrift, describeCodeDrift, describeEmptyPool, expectedWorkerCode } from "./worker-code-check.mjs";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
-const FLEET = ["http://192.168.1.107:8765", "http://192.168.1.59:8765", "http://192.168.1.175:8765"];
+const FLEET = ["http://203.0.113.107:8765", "http://203.0.113.59:8765", "http://203.0.113.175:8765"];
 const CURRENT = "d1c98aa032198754";
 const BEHIND = "22822b7a3a08969c";
 
