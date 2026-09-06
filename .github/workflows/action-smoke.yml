@@ -12,6 +12,12 @@ name: action-smoke
 
 on:
   push:
+    # MAIN ONLY — added 2026-09-06 alongside the `ci.yml` rebuild. This carried no `branches:` filter at
+    # all before, so it fired on every `agent/**`/`lead/**` push matching the paths below and ran a
+    # 10-minute Windows job on ordinary branch work. Scoped to `main` for the same reason `ci.yml` itself
+    # is: the branch's own PR is where feedback belongs now, and `workflow_dispatch` below covers the
+    # on-demand case.
+    branches: [main]
     # PATH-FILTERED, AND THE FILTER WAS INCOMPLETE — corrected 2026-09-06 by
     # `workflow-path-coverage.test.ts` on its first run.
     #

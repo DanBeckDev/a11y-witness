@@ -2560,7 +2560,7 @@ release-time: a 75-minute check on `git push` gets the hook deleted within a day
 
 Verification is layered; pick the layers your change touches:
 - `npm run lint` and `npm run typecheck` — must pass. **CI gates on both**, and on `npm test`
-  (`.github/workflows/lint.yml`).
+  (`.github/workflows/ci.yml`).
 - **Run `npm test`, never `npx tsx --test <file>` directly, when you have changed another package's
   source.** Cross-package imports resolve to `dist` (every `exports` entry points there), and `npm test`
   has a `pretest` build that keeps it honest. Run the file runner on its own and you test the LAST BUILD:
