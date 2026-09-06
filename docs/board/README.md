@@ -96,6 +96,32 @@ once, and a guard that fires on somebody else's unrelated edit is one people dis
 reasoning `promote:model` uses when it checks its target paths rather than the whole tree. Everything else
 the report reads is a ref or the GitHub API, and neither is affected by an uncommitted file.
 
+## Knowing a failure mode does not protect you from it; only a check that runs does
+
+Two things happened within an hour of `npm run mutate` being built **by the person who then did them**,
+and they are the two halves of this repository's oldest defect. They are here rather than in a commit
+message because the next person building a generator will open this file, not that commit.
+
+**An edit that matched nothing and reported success.** A scripted replacement whose anchor was indented
+four spaces inside a function while the pattern used two. Python replaced nothing, exited zero, and the
+change was announced as done. It was caught only because the render afterwards went to the old path —
+that is, by the *behaviour* disagreeing, not by anything checking. **Assert the anchor before writing**,
+so a pattern that matches nothing fails loudly:
+
+```python
+assert old in s, "ANCHOR NOT FOUND -- refusing a no-op edit"
+```
+
+**A check whose answer was ignored.** Two files were compared before deleting one; the comparison printed
+`DIFFER — leaving both`, and the delete ran anyway, because the check and the action had been written as
+two separate commands rather than one gating the other. Nothing was lost that time. **Gate the action on
+the check** — `cmp -s a b && rm a` — because a check whose result nothing consumes is decoration.
+
+**Use `npm run mutate` even where it feels like overhead.** It refuses a mutation that changed nothing,
+which is the first of these exactly; and it runs the test again after restoring, which is the discipline
+of the second. Both of the above were done by hand, going round the outside of a tool built that hour to
+catch them.
+
 ## Recording a result the report cannot compute
 
 `reported.json` is the only place it takes a number it cannot read from GitHub or git, and **both entry
