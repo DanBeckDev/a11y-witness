@@ -844,6 +844,22 @@ export function censusTargetIsSuspect(record: { targetMatch?: unknown; candidate
 }
 
 /**
+ * The `"fallback"` half of `censusSuspectReason`, split out purely to keep that function's complexity
+ * under gate -- it is not a second concept, it is the same one written out. `"fallback"` is ALWAYS
+ * suspect (see `censusTargetIsSuspect`'s header); this only decides which WORDS say so.
+ */
+function fallbackReason(
+  candidates: number | undefined, targetUrl: string | undefined, expectedUrl: string | undefined,
+): string {
+  const unconfirmed = candidates !== undefined && candidates > 1
+    ? ` (${candidates} candidates, none confirmed)` : "";
+  if (targetUrl && expectedUrl) return `landed on ${targetUrl}, not the requested ${expectedUrl}${unconfirmed}`;
+  return candidates !== undefined && candidates > 1
+    ? `${candidates} candidates existed and none was confirmed to be the requested page`
+    : "no CDP target could be confirmed as the requested page";
+}
+
+/**
  * The REASON a census target is suspect, in words -- or `null` when it is not. See `censusTargetIsSuspect`,
  * just above, for the full reasoning; this is the same decision, restated so a human reading a report is
  * told what actually happened rather than the bare word `fallback`, which used to print as "a real second
@@ -855,16 +871,10 @@ export function censusSuspectReason(record: {
   if (record.targetMatch === undefined) return null; // predates the field -- trusted as before it existed
   if (record.targetMatch === "matched") return null; // confirmed against the URL this capture navigated to
   const candidates = typeof record.candidates === "number" ? record.candidates : undefined;
-  const targetUrl = typeof record.targetUrl === "string" ? record.targetUrl : undefined;
-  const expectedUrl = typeof record.expectedUrl === "string" ? record.expectedUrl : undefined;
   if (record.targetMatch === "fallback") {
-    if (targetUrl && expectedUrl) {
-      return `landed on ${targetUrl}, not the requested ${expectedUrl}`
-        + (candidates !== undefined && candidates > 1 ? ` (${candidates} candidates, none confirmed)` : "");
-    }
-    return candidates !== undefined && candidates > 1
-      ? `${candidates} candidates existed and none was confirmed to be the requested page`
-      : "no CDP target could be confirmed as the requested page";
+    const targetUrl = typeof record.targetUrl === "string" ? record.targetUrl : undefined;
+    const expectedUrl = typeof record.expectedUrl === "string" ? record.expectedUrl : undefined;
+    return fallbackReason(candidates, targetUrl, expectedUrl);
   }
   // "no-expected-url": no comparison was attempted, so `candidates` is the only information available.
   return candidates === undefined || candidates > 1
