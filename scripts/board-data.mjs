@@ -127,6 +127,61 @@ export function reported() {
     achievements: raw.achievements ?? [] };
 }
 
+/**
+ * HAS THE WORLD MOVED UNDER AN AUTHORED ACHIEVEMENT? — the one section of the board document no gate
+ * computes, and therefore the one nothing ever re-checks.
+ *
+ * Section 3 is authored on purpose: what the product can now DO is not derivable from an API. The cost is
+ * that an entry is true when written and nothing asks again. Measured 2026-09-06 (#90), entry [2] read
+ * *"a rule that had never been demonstrated on a real page now has a page to demonstrate it on — written,
+ * not yet captured"*. Every clause was true when written; by the time it would have reached the board
+ * three were false, including a citation of an issue that had been closed as superseded. **It was caught
+ * by a person happening to re-read it. Nothing in the pipeline could have.**
+ *
+ * THIS DOES NOT JUDGE THE CLAIM, which is unanswerable. It asks the cheap question the data already
+ * supports: the entry cites an issue and carries a timestamp, so *did the world move under this
+ * sentence?* A machine can ask GitHub whether that issue is still open without understanding a word.
+ *
+ * RE-AFFIRMING IS THE ESCAPE, and it is a field rather than a flag: `affirmed` carries WHY the claim
+ * still stands now that its issue is closed. A bare boolean would let the guard be cleared by a keystroke
+ * with no thought, which is how a refusal becomes a formality — the same reason every EXEMPT table in
+ * this repository demands a reason and not a name.
+ *
+ * @param {{achievements: any[], issueState: Record<string, string>, now?: number,
+ *          staleAfterHours?: number}} input
+ * @returns {{index: number, claim: string, why: string}[]}
+ */
+export function achievementsWhoseWorldMoved({ achievements, issueState, now = Date.now(),
+  staleAfterHours = 24 }) {
+  const findings = [];
+  achievements.forEach((entry, index) => {
+    const claim = String(entry.boardClaim ?? entry.claim ?? "(no claim text)").slice(0, 90);
+    const affirmed = typeof entry.affirmed === "string" && entry.affirmed.trim().length > 20;
+    const state = issueState[String(entry.issue)];
+    // UNKNOWN IS NOT OPEN. An issue the listing did not carry is a question that could not be asked --
+    // reporting it as fine is the "unchecked is not clean" defect, and reporting it as CLOSED would
+    // refuse an edition over a paging limit. It gets its own sentence.
+    if (entry.issue !== undefined && state === undefined) {
+      findings.push({ index, claim,
+        why: `cites issue #${entry.issue}, which the issue listing did not carry -- so whether it is `
+          + "still open COULD NOT BE ASKED. Widen the listing or check by hand; do not assume." });
+    } else if (state === "CLOSED" && !affirmed) {
+      findings.push({ index, claim,
+        why: `cites issue #${entry.issue}, which is now CLOSED. The claim may still be true -- this does `
+          + "not judge that -- but the world moved under it and nobody has looked since. Re-affirm it by "
+          + `adding an \`affirmed\` field saying why it still stands, or retire the entry.` });
+    }
+    const ageHours = (now - Date.parse(entry.at)) / HOURS_MS;
+    if (Number.isFinite(ageHours) && ageHours > staleAfterHours && !affirmed) {
+      findings.push({ index, claim,
+        why: `was reported ${ageHours.toFixed(0)}h ago, past the ${staleAfterHours}h freshness this file `
+          + "already declares for a gate result. Same rule, same reason: a number nobody has re-read is "
+          + "not a current one." });
+    }
+  });
+  return findings;
+}
+
 export function daysUntil(iso) {
   return Math.ceil((Date.parse(iso) - Date.now()) / (24 * HOURS_MS));
 }
