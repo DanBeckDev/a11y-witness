@@ -2136,6 +2136,42 @@ Three things follow, and the third is the one that is cheap and was not done:
   third remedy — *"pin them equal with a test when the duplication is forced"* — applied to a comment
   rather than to a constant, which is where this class actually lives.
 
+### A SEVENTH, AND IT IS NOT A STALE MECHANISM — IT IS A CORRECT CHECK WHOSE SCOPE WAS OVERSTATED
+
+Every form above is a claim that was true and stopped being true. This one was never true, and it is the
+harder kind to see: **the CHECK is right, the PROSE about it one file away claims more than it does, and
+nothing compares the two because they are not the same artefact.**
+
+`board-schedule.test.ts` asserts that both scheduled workflows carry their DST-bracketing cron pair and
+that every working step is gated on London's actual hour. Correct, well argued, and mutation-checked.
+`docs/board/README.md` then wrote it up as the successor to `jobs:check`:
+
+> *"the question they existed to answer moved with them: `board-schedule.test.ts` now asks it of the two
+> GitHub Actions workflows directly — **a stronger answer than `jobs:check` ever gave**"*
+
+**It is a stronger answer to a DIFFERENT question.** `jobs:check` asked whether the schedule was RUNNING.
+`board-schedule.test.ts` asks whether the workflow FILES are RIGHT. Every one of its assertions still
+passes while GitHub has silently disabled the schedule — which it does after 60 days without repository
+activity, with no run, no log and no red mark — and nothing has published for a month. Presence and
+running are two questions and only one of them had an answer.
+
+Why it belongs beside the six above rather than among them:
+
+- **Nothing in the code is wrong**, so no mutation check, no re-read of the source and no grep would have
+  found it. The defect lives entirely in the sentence describing the code's SCOPE.
+- **The overstatement is in the direction that closes an investigation**, which is the whole class: a
+  reader who wants to know "is the schedule still running" reads that line, sees the question marked
+  answered by a test that passes, and stops.
+- **It arrived through a migration**, which is when this shape is likeliest: the old check was retired and
+  the new one described as replacing it, when it replaced part of it. *"X now answers what Y used to"* is
+  a claim about two scopes and is almost never checked.
+
+The remedy applied was not to weaken the test — it is right — but to say at the point of the claim what it
+does and does not cover, and to build the missing half (`npm run board:liveness`, which asks about the
+EDITION rather than the run, and runs on push because a scheduled watchdog has the disease it watches
+for). **When retiring a check, state the new one's scope against the OLD one's question, not against the
+new one's implementation.**
+
 ### The sibling shape, one layer along
 
 The same week: `ls -ld node_modules/@a11y-witness/judge` answered *"is this a symlink"* when the question
