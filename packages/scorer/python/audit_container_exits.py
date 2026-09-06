@@ -32,7 +32,15 @@ REPO = Path(__file__).resolve().parents[3]
 
 
 def survey(records: list[dict[str, Any]]) -> dict[str, Any]:
-    """Which container roles are entered, which are left, and which are never left. PURE."""
+    """Which container roles are entered, which are left, and which are never left. PURE.
+
+    `examined` used to be reported with no denominator, so a run that silently parsed 3 of 3,000 records
+    (every other one predating the `parsed` block, the exact shape `audit_grants.py`/`audit-scorer-
+    shortcuts.py` already count and report) looked identical to a full survey -- both just printed a bare
+    number. `of` is the population this function was HANDED, so a reader -- human or `vague_link_lacks_
+    context`, the rule this report's own module docstring names as the one that must read it -- can tell
+    "examined everything" from "examined almost nothing" without cross-referencing the input file by hand.
+    """
     entered: collections.Counter[str] = collections.Counter()
     left: collections.Counter[str] = collections.Counter()
     examined = 0
@@ -51,6 +59,7 @@ def survey(records: list[dict[str, Any]]) -> dict[str, Any]:
                     entered[role] += 1
     return {
         "examined": examined,
+        "of": len(records),
         "entered": dict(entered),
         "left": dict(left),
         "neverLeft": sorted(role for role in entered if role not in left),
@@ -78,7 +87,10 @@ def main() -> int:
         print("\n  NO RECORD COULD BE PARSED — refusing rather than reporting a clean survey.")
         return 2
 
-    print(f"\n  {report['examined']} record(s) parsed\n")
+    skipped = report["of"] - report["examined"]
+    print(f"\n  {report['examined']} of {report['of']} record(s) parsed"
+          + (f" -- {skipped} could not be (no `parsed` block; this copy of runs/ likely predates the "
+             "parse, or is a partial sync)" if skipped else "") + "\n")
     print("  ENTERED                        entered    left")
     for role, count in sorted(report["entered"].items(), key=lambda kv: -kv[1]):
         closes = report["left"].get(role, 0)
