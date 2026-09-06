@@ -2075,6 +2075,15 @@ contradicts the explanation.
 | **"this is the exact hang this test exists to catch"** (#51's own failure message) | the assertion cannot distinguish the hang it was written for from a host too loaded to answer inside a 15-second wall-clock bound. It asserted a cause it has no way to tell apart |
 | **`no-worker-refusal` is flaky under load** | it is not occasional, it is load-DEPENDENT: it passes alone, twice, and fails inside the full suite. It blocked two pushes and passed on retry both times — **the shape that teaches retry-rather-than-read** |
 
+**A FIFTH FORM, and it is worse than a false negative: the comment INVERTS the verdict.** worker-contracts
+fixed a matcher that could not see its own change, then found the fix would have produced a *new* wrong
+answer — an unstripped search matched the hook's own header prose (*"`npm test` inherits it…"*) sitting
+**above** the real scrub line, so the test would have reported the scrub running **after** `npm test`. The
+other four make a check say nothing, or say the wrong cause. This one makes it **assert the opposite of
+what the file does**, and it would have read as a confident pass. It is listed separately because the
+remedy differs: stripping comments is not a tidy-up here, it is the difference between an answer and its
+negation.
+
 **The fourth is the most expensive of the four**, and not because it is the biggest: a wrong mechanism that
 also produces a WORKING RETRY trains everyone who meets it to re-run rather than read. `orchestrator`
 recorded that it considered the skip flag and did not use it, which is the behaviour the class argues for.

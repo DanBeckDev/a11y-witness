@@ -137,6 +137,13 @@ agent being free carries that agent's latency in every worker's day.
   choice, sent when they are next free.
 - **A wrong choice is cheap and idling is not.** Taking a row `dispatcher` would not have given you costs
   one redirect; an idle hour costs an hour. **Take the row.**
+- **PULL BEFORE YOU REPORT, NOT AFTER.** Take the next row FIRST, then send completion and the new row in
+  ONE message. **A permission is not a trigger**: "you may pull" says nothing about WHEN to look, so
+  reporting felt like the end of the unit and the queue check never happened — three workers idled that
+  way in one hour, on a rule written to stop exactly that. Making the report itself the trigger is what
+  closes it. **Never send a completion without a row attached.** If the lane has nothing, say so in the
+  same message with what you checked — that is a complete report, and it costs one message to fix rather
+  than an hour to notice.
 - **Report state rather than going quiet.** An unreported idle worker is discovered at the next audit; a
   reported one is redirected in a minute.
 
