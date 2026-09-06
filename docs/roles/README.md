@@ -1,5 +1,16 @@
 # If this machine is lost, can the organisation be reconstituted from the repo alone?
 
+## THE HIERARCHY
+
+The chairman speaks to `ceo` and to nobody else. `ceo` decides and reports to the chairman. `orchestrator`
+(fleet, lab, gates, cross-cutting review), `dispatcher` (worker loop, PR review and merge) and
+`product-manager` (tracker, milestone, board document) report to `ceo`. Workers report to `dispatcher`.
+Nobody messages the chairman; a question only the chairman can answer goes up the chain to `ceo`, who asks.
+An idle notice, a status line, a finding, a refusal: each goes to the agent above you, not sideways and not
+up two levels, unless `ceo` has asked you directly, in which case you answer `ceo` and copy your reporting
+line in one sentence.
+
+
 **Board finding, 2026-09-06: no.** Every role tonight except `dispatcher` existed only in this machine's
 session history — nowhere written down, nowhere a fresh agent could read to become `ceo`, `orchestrator`,
 or any of the five workers. Lose this Mac and the git history, the tests, and the corpus survive; the
@@ -193,3 +204,26 @@ acceptance test. Findings from the run performed while writing this page:
   printed" section above is not just caution, it is the actual boundary of what a clone can reconstitute.
   `orchestrator` and the fleet/lab-touching half of this org cannot be brought up from a fresh clone alone;
   only the repo-visible half (`dispatcher`, the five workers, `ceo`) can.
+
+## A GATE THAT READS `runs/` IS NOT YOURS TO REPORT
+
+**Ruled 2026-09-06.** `rules:gate`, `rules:coverage`, `check-signals`, `corpus:starvation`,
+`scorer:shortcuts` and anything else reading `runs/` give a VERDICT only when the agent driving the fleet
+and the lab runs them — against a corpus just fetched, or on the lab, which owns the authoritative one.
+
+**Anyone else may run one as a PRE-CHECK**, to decide whether a change is worth handing on. **Never as a
+reported result**, and never in an acceptance section as though it settled anything.
+
+The reason is measured rather than procedural. `runs/` in any checkout is a copy only as fresh as its last
+sync — one measured here was 89 hours old and carried neither `focusEvents` nor `baselineWaitedMs`, so a
+sweep across it found zero of the two keys it was written to find. **A gate run there reports cleanly
+having examined a corpus that no longer exists.** The pre-push hook already SKIPS the corpus-dependent
+checks loudly for exactly this reason, and calls that honest rather than passing quietly.
+
+**So an issue's acceptance may name a `runs/`-reading gate, and must say who runs it.**
+
+> **Moved here from `CLAUDE.md` on 2026-09-06 (issue #52), where it had been a deliberately temporary
+> home.** It belongs here because it governs **who may report a gate result**, which is role territory —
+> `CLAUDE.md` is operational instruction for working ON the repository. The move was blocked for a day
+> because it needs a `CLAUDE.md` deletion, and two sessions correctly declined to make one on a peer's
+> request; it landed once the owner delegated that authority explicitly.
