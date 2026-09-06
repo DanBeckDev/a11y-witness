@@ -40,6 +40,15 @@ export interface Report {
    * rather than skipped — see `outcomesSection`.
    */
   outcomes?: CriterionOutcome[];
+  /**
+   * The capture's own `environment` block, from the RUNNING WORKER, never from a pin or a manifest —
+   * publish blocker B4. `screenReaderVersion` and `guidepupVersion` matter most: the shipped scorer was
+   * trained on evidence from the fleet's NVDA, so a consumer's report has to say which NVDA build (and
+   * which client drove it) actually produced these announcements, not which one a lockfile or an
+   * installer manifest merely NAMES. The `browserVersion` memo defect, precisely: a pin says what was
+   * asked for, and only the instrument can say what was there. Optional so an older caller still renders.
+   */
+  environment?: Record<string, string>;
 }
 
 /**
@@ -214,7 +223,27 @@ function runtimeLine(verdict: Judgment): string[] {
   return [`Scorer runtime: ${parts.join(", ")}.`];
 }
 
-function findingsSection(verdict: Judgment, screenReader: string, announcements: number): string[] {
+/**
+ * The screen reader and client versions the CAPTURE actually ran under, read from `environment` — the
+ * running instance, never a pin. Publish blocker B4: the shipped scorer was trained on the fleet's NVDA,
+ * so a consumer needs to know which build produced the evidence in front of them, not which one a
+ * lockfile or an installer manifest names. Silent when `environment` (or the fields inside it) is
+ * missing — an older capture that predates this block, or a non-NVDA backend with nothing to report.
+ */
+function screenReaderRuntimeLine(environment?: Record<string, string>): string[] {
+  const screenReaderVersion = environment?.screenReaderVersion;
+  const guidepupVersion = environment?.guidepupVersion;
+  if (!screenReaderVersion && !guidepupVersion) return [];
+  const parts = [
+    screenReaderVersion ? `${environment?.screenReader ?? "screen reader"} ${screenReaderVersion}` : null,
+    guidepupVersion ? `guidepup ${guidepupVersion}` : null,
+  ].filter((part): part is string => part !== null);
+  return [`Screen reader runtime: ${parts.join(", ")}.`];
+}
+
+function findingsSection(
+  verdict: Judgment, screenReader: string, announcements: number, environment?: Record<string, string>,
+): string[] {
   const lines = [
     // Names what actually assessed the page rather than claiming "AI judge". The shipped default is
     // this project's own trained scorer, not an LLM — and when that scorer abstains on a page unlike
@@ -226,6 +255,7 @@ function findingsSection(verdict: Judgment, screenReader: string, announcements:
     verdictHeadline(verdict),
     verdict.summary,
     ...noveltyLine(verdict),
+    ...screenReaderRuntimeLine(environment),
     ...runtimeLine(verdict),
     `${verdict.findings.length} finding(s):`,
     // Stated once, above the list, rather than repeated per finding. Without it "INDICATOR" is jargon; with
@@ -257,7 +287,7 @@ function findingsSection(verdict: Judgment, screenReader: string, announcements:
 
 /** The whole report, ready to print. */
 export function reportLines(
-  { url, task, screenReader, announcements, verdict, axe, conformance, outcomes }: Report,
+  { url, task, screenReader, announcements, verdict, axe, conformance, outcomes, environment }: Report,
 ): string[] {
   return [
     "",
@@ -268,7 +298,7 @@ export function reportLines(
     "",
     ...axeSection(axe),
     "",
-    ...findingsSection(verdict, screenReader, announcements),
+    ...findingsSection(verdict, screenReader, announcements, environment),
     "",
     ...outcomesSection(outcomes),
     "",

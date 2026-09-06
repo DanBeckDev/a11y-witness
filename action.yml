@@ -212,29 +212,55 @@ runs:
       env:
         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
-    # Cache the NVDA install (31 s). Keyed on the LOCKFILE, deliberately tightly: guidepup parses NVDA's
-    # speech before this project ever sees it, so its version is EVIDENCE — upgrading 0.29.2 -> 0.31.0
-    # changed what captures said. A cache that served a different screen reader than the manifest pins
-    # would silently corrupt evidence, which is far worse than paying 31 s. Any dependency change misses
-    # the key and reinstalls, which is the conservative direction.
+    # Cache the NVDA install (31 s). Keyed on the LOCKFILE plus the RESOLVED MANIFEST -- publish
+    # blocker B4. Two things used to be conflated here: the CLIENT that drives NVDA (`@guidepup/guidepup`,
+    # pinned in package-lock.json at 0.31.0) and the INSTALLER that fetches NVDA itself
+    # (`@guidepup/setup`, invoked below), which was not a declared dependency at all -- `npx --yes
+    # @guidepup/setup ...` fetched whatever npm currently published, on every run, unversioned and outside
+    # every cache key. `@guidepup/setup` is now a pinned devDependency (see package.json), so the lockfile
+    # hash below is honest about it by construction rather than by a hand-written string.
+    #
+    # That alone does not pin the NVDA BUILD, and it cannot: `@guidepup/setup install nvda` takes no
+    # version argument (confirmed against its source -- `selectTargets` matches by screen-reader id/name
+    # only) and reads no override. What it DOES read is `node_modules/@guidepup/guidepup/manifest.json`,
+    # shipped inside the already-pinned client package, which names NVDA's exact resolved build under a
+    # verified sha256 -- `"version": "0.2.1-2026.1.1"` at the pin this project currently carries, matching
+    # the fleet's own `screenReaderVersion` exactly. So the RESOLVED build is hashed directly rather than
+    # typed by hand: stronger than "tell the installer a version" would have been, because the manifest
+    # IS the ground truth the installer reads, sha256 and all, not a proxy for it.
+    #
+    # This is the `browserVersion` memo defect's remedy applied one layer up: `bootConstant` cached Edge's
+    # version on the premise that updating Edge restarts the worker, nothing made that true, and captures
+    # were stamped with a version they were not taken under. A pin says what was asked for; only the
+    # RUNNING INSTANCE can say what was there -- which is why the report (below) reads NVDA's version from
+    # the capture, never from this key or from either package's own version number.
+    #
+    # The shipped scorer was trained on evidence from the fleet's NVDA, so scoring announcements from a
+    # different build is a distribution shift nobody can see -- a stale cache serving last run's NVDA
+    # under this run's key would corrupt evidence exactly as silently as the browserVersion memo did.
     - name: Cache the NVDA install
       id: nvda-cache
       uses: actions/cache@v4
       with:
         path: ~\AppData\Local\guidepup
-        key: a11y-witness-nvda-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+        key: a11y-witness-nvda-${{ runner.os }}-${{ hashFiles('package-lock.json', 'node_modules/@guidepup/guidepup/manifest.json') }}
 
     # Install NVDA with the repo's OWN guidepup rather than guidepup/setup-action. The action predates
     # the @guidepup/setup 0.24.0 CLI rewrite and installs the pre-0.29 layout (registry pointer +
     # %TEMP%), which guidepup >= 0.29 does not look at -- CI fails with "NVDA is not supported", which
     # reads like a missing install and is not one. Running the installer from this checkout makes it read
     # our manifest, keeping the screen reader and the driver in lockstep.
+    #
+    # No `--yes`: that flag exists so npx may fetch a package it does not already have, and `@guidepup/setup`
+    # is now a pinned devDependency installed by `npm ci` two steps up -- the same reason `npx tsx ...`
+    # elsewhere in this file never needs it either. Its absence is the point: this must run the pinned
+    # local copy or fail, never silently fetch a different one.
     - name: Set up NVDA
       shell: pwsh
       working-directory: ${{ github.action_path }}
       run: |
-        npx --yes @guidepup/setup setup
-        npx --yes @guidepup/setup install nvda
+        npx @guidepup/setup setup
+        npx @guidepup/setup install nvda
 
     # Guidepup ships NVDA's Speech Viewer ON, and its focus event lands in the speech-log delta captured
     # after activating a control -- so an interaction probe records "NVDA Speech Viewer" instead of the

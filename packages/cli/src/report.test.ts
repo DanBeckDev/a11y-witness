@@ -208,6 +208,19 @@ test("the report names the scorer's own runtime versions, so a disputed finding 
   assert.doesNotMatch(render({ verdict: { ...verdict, findings: [] } as Report["verdict"] }), /Scorer runtime:/);
 });
 
+test("the report names the screen reader and client versions the CAPTURE actually ran under", () => {
+  // Publish blocker B4: the shipped scorer was trained on the fleet's NVDA, so the report has to say
+  // which build produced the evidence in front of a reader -- from the running capture, never a pin.
+  const withEnvironment = render({
+    environment: { screenReader: "NVDA", screenReaderVersion: "2026.1.1", guidepupVersion: "0.31.0" },
+  });
+  assert.match(withEnvironment, /Screen reader runtime: NVDA 2026\.1\.1, guidepup 0\.31\.0\./);
+
+  // Absent when the capture predates the field, or carries neither version.
+  assert.doesNotMatch(render(), /Screen reader runtime:/);
+  assert.doesNotMatch(render({ environment: { screenReader: "NVDA" } }), /Screen reader runtime:/);
+});
+
 test("A CONFIDENCE OF 1 IS NOT PRINTED OVER AN EMPTY FINDINGS LIST", () => {
   // `local-judge` defines confidence as the weakest FINDING's — "a report is only as good as its shakiest
   // claim" — and returns 1 when there are none. Printed, that read
