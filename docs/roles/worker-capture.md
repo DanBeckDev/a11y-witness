@@ -125,3 +125,27 @@ rather than deleting a genuine finding because the evidence attached to it was w
   falling into it.
 - **When a fix reaches one call site, grep for the behaviour, not the name.** A remedy reaching one of six
   is this repo's most-recorded shape.
+
+## The loop is PULL, not push — 2026-09-06
+
+`ceo`'s ruling, after three workers idled in one hour. All three were the same shape: **a finished worker
+waiting on `dispatcher`, who was busy.** None was blocked on work. A loop whose throughput depends on one
+agent being free carries that agent's latency in every worker's day.
+
+- **When a unit is done, take the top READY row in this lane yourself.** Move it to *In progress* on the
+  board, then tell `dispatcher` what you took. Do not wait to be briefed — a brief becomes a CHECK on the
+  choice, sent when they are next free.
+- **A wrong choice is cheap and idling is not.** Taking a row `dispatcher` would not have given you costs
+  one redirect; an idle hour costs an hour. **Take the row.**
+- **Report state rather than going quiet.** An unreported idle worker is discovered at the next audit; a
+  reported one is redirected in a minute.
+
+**Two things this does NOT change**, and they are the ones that make pulling safe:
+
+- **The hand-up triggers stand.** A shared file another unit owns, a cache key, or a probe another unit
+  touches still goes to `dispatcher`, and `packages/nvda-worker/src/` is still `orchestrator`'s to merge.
+- **VERIFYING THE ROW IS OPEN IS NOW YOURS.** Against `origin/main` **plus every unmerged `agent/*`
+  branch** — the local form with `--not origin/main`, never a bare `origin/agent/*` check, which answered
+  "clear" for every row for as long as agent branches went unpushed. Two briefs were refuted on exactly
+  this check and both refutations were worth more than the work would have been. On a row you pulled
+  yourself there is nobody else who might have checked.
