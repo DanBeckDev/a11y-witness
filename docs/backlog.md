@@ -125,7 +125,7 @@ The measurement first, because it changes what the fix should be:
 
 | file | lines | of which | now |
 |---|---|---|---|
-| `case-matrix.mjs` | 5,699 | almost entirely DATA — 1,645 case definitions | **4,121** — checked `wc -l` 2026-09-06, matches the two-cuts figure below exactly. Drifted from 4,074 the same day, unrelated to the split: the 2.4.7 false-positive fix (agent/2-1-2-false-positives) rewrote the comment on the three `focus-removed-on-receipt-*` cases to record why 2.1.1 stays primary and why `alsoFails: ["2.4.7:..."]` waits on a rule-ownership bucket that does not exist yet (`assert_declaration_matches_data` would crash the next retrain without it). The two-cuts split, not the exact count, is what to trust. |
+| `case-matrix.mjs` | 5,699 | almost entirely DATA — 1,645 case definitions | **4,148** — checked `wc -l` 2026-09-06, matches the two-cuts figure below exactly. Drifted from 4,074 the same day, unrelated to the split: the 2.4.7 false-positive fix (agent/2-1-2-false-positives) rewrote the comment on the three `focus-removed-on-receipt-*` cases to record why 2.1.1 stays primary and why `alsoFails: ["2.4.7:..."]` waits on a rule-ownership bucket that does not exist yet (`assert_declaration_matches_data` would crash the next retrain without it). The two-cuts split, not the exact count, is what to trust. |
 | `capture-core.mjs` | 4,969 | **3,020 comment, 201 blank, 1,748 code** | **DONE, and superseded by the three-way split below: `capture-core.mjs` 372, `capture-setup.mjs` 1575, `capture-probes.mjs` 3205 (checked `wc -l` 2026-09-06, latest: `agent/tab-probe-start-position` applied the §43 `resetFocusToDocumentStart` pattern to `probeFocusOrder` and `probeFocusContext`, 3182 -> 3205,
 updated again same day: known-gaps.md §44's `currentTitle`/`titleSourceVerdict` fix added the sixth
 change to `capture-probes.mjs` in two days). This row's own "4,856" was the state ONE post-mortem-move ago; the recapture-validated split further down this page (`capture-core.mjs 4,885 -> 362`) then ran, and both files have drifted since across FIVE changes across two days — the census moving before `probeRouteChange` and the 2.4.7 `FOCUS_EVENT_LOG_DIAGNOSTIC_LIMIT` raise (known-gaps.md §40, merged together), §43's `startedFrom`/`focusReset` on `probeFocusReveal`, §42's listener-install move in `capture-core.mjs`, and the cross-file comment (`agent/focus-reset-not-logged`) naming the interaction between this file's early install and `resetFocusToDocumentStart`'s log-suppression bracket. **NO BRANCH'S OWN ROW WAS RIGHT AFTER THE MERGE, AND THAT IS THE THIRD TIME** — each counted its own change and not the others', and the two 2026-09-06 bundle branches CONFLICTED here on exactly these numbers, which is `backlog-file-facts.test.ts` doing its job one step earlier than usual: a pinned number turned a silent drift into a merge conflict. The split, not the exact count, is what to trust.** |
@@ -1041,6 +1041,139 @@ command), which wrote `runs/scorer-shortcuts.json` — a report file, gitignored
 into the shared `runs/` symlink twice. All further validation after noticing this went through
 `compare_to_baseline()` directly with `tmp_path` fixtures, which is how it should have been done from the
 start. No corpus evidence was touched; the affected file is a disposable, regenerated-on-every-run report.
+
+## A leaked GIT_DIR forged 15 commits into this repo, 2026-09-06 — closed same day
+
+Closing "nothing installs the git hooks" made the pre-push hook run `npm test` for the first time with
+`GIT_DIR` set — git exports it into every hook environment. A test that spawned git with `cwd` alone and
+an inherited `env` then operated on THIS repository instead of its own throwaway one: `core.bare` flipped
+to `true` twice, stray `base`/`init` commits landed with `a.txt`/`b.txt`, and
+`pre-commit-hook.test.ts:42`'s `git config user.name "Pre-Commit Hook Test"` was written into the real
+repo and reused as author on 15 commits across all refs — six of them real work already on
+`origin/main`, this unit's own acceptance-exit-code fix among them. **A closed row created the
+exposure.** History was kept rather than rewritten (`ceo`'s ruling: rewriting a branch several agents
+held would trade a cosmetic defect for a real one); identity was unset back to `Dan Beck` and
+`core.bare` back to `false` by hand.
+
+**CLOSED.** Three independent defences, none of them alone sufficient:
+
+1. `scripts/git-env.mjs` (`sandboxGitEnv`) strips every `GIT_*` key by PREFIX, not by a name list, before
+   a caller adds back what it wants. Applied to every production git spawn found reaching outside a
+   throwaway repo with an inherited env: `install-git-hooks.mjs`, `code-drift.mjs` (`workerSourceDirty` —
+   a redirected `git status` would read a dirty worker checkout as clean), `check-worker-code.mjs` and
+   `deploy-worker.mjs` (the `CAPTURE_PROTOCOL_VERSION` guard), `promote-model.mjs`, `fleet-playbook.mjs`,
+   `lab-pipeline.mjs`. `@a11y-witness/worker-fleet` ships `check-worker-code.mjs`/`deploy-worker.mjs` as
+   `bin` entries, so `packages/worker-fleet/src/git-safe-env.mjs` is a deliberate, disclosed duplicate
+   (the repo-root `scripts/` does not exist in a published tarball), pinned equal to the original by
+   `git-safe-env.test.ts`.
+2. Identity is set PER COMMAND (`git -c user.name=… -c user.email=… commit`) rather than via
+   `git config user.name`, which writes to whatever `GIT_DIR` names regardless of how complete the env
+   strip is — the mechanism that produced the forged author. `scripts/test-support/git-sandbox.ts`'s
+   `GitSandbox.commit()` is the only sanctioned way to attach identity in a test and never writes config.
+   `withGitSandbox` additionally fingerprints a target repo's HEAD/identity/`core.bare` before and after
+   and throws if any moved — shown to fire under a SIMULATED HOOK ENVIRONMENT (`GIT_DIR` set) against a
+   decoy repo, never the real one, in `git-sandbox.test.ts`.
+3. All eleven git-shelling tests found (worker-fleet: `protocol-guard`, `lab-job`; lab:
+   `referenced-scripts`, `packaging/backlog-ready`, `packaging/pre-commit-hook`,
+   `packaging/action-reference`, `packaging/promotion-refuses-dirty`, `gates/verdict-adoption`; judge:
+   `criteria-counts-are-not-spelled-out`, `rule-oracles`; control: `lab-reset-removal`) migrated.
+   `packages/lab/src/packaging/git-spawn-classification.test.ts` DISCOVERS every git-spawning file across
+   the whole repo, test or production (~18 at the time this was written — a floor, not a pin), by scanning
+   comment-stripped tracked source for `<identifier>("git", ...)` — not anchored to `execFileSync`/
+   `spawnSync` by name, since `install-git-hooks.mjs` calls git through an injected `run` seam — plus
+   anything using `withGitSandbox`, since three of the eleven no longer contain a literal git call at all
+   after migrating (the exact gap this test had on its own first run: those three were briefly invisible
+   until `withGitSandbox` usage was added as a second discovery criterion — "a classification is only as
+   good as the population the walk can actually see", the same shape as the `evidence-fields.test.ts`
+   coverage hole found in parallel this session). Verified live: staging a real, unclassified twelfth
+   git-spawning file makes this test fail by name. `scripts/git-hooks/pre-push` also now scrubs every
+   `GIT_*` variable from its own environment before running `npm test`, belt and braces, so a future test
+   that bypasses the helper entirely still cannot reach this repository through an inherited `GIT_DIR`.
+
+**Two claims checked rather than assumed, and both came back different from how they were framed:**
+`release:gate`'s flat `&&` chain (a separate, earlier row this session) needed no restructuring for a
+third exit code — `sh -c 'exit 2'`, a single `npm run <script exiting 2>`, and a two-stage `npm run X &&
+npm run Y` chain matching `release:gate`'s exact shape all correctly propagate a non-1 exit code
+untouched; and `candidate:gate` does not share that exposure, since `promote-model.mjs` reads
+`acceptance-report.json`'s `passed`/`failureReasons` fields directly rather than any exit code.
+
+## A STALE-BUT-SETTLED corpus fails checks for a reason unrelated to the change, 2026-09-06
+
+**CORRECTED 2026-09-06, and the correction is the more useful half.** This row was filed citing
+`evidence-fields.test.ts`'s `interaction.focusEvents` failure as its evidence, on the reported cause that
+this laptop's `runs/` was ~89 hours old and predated the field. **That cause was wrong.** `orchestrator`
+diagnosed the real one and it was a COVERAGE HOLE, not staleness: the field was on disk the whole time, in
+a WRAPPED capture (`runs/fetched/candidate.real-page-capture.json`) that `fieldsOnDisk()` could not read —
+5,368 plain captures, 29 wrapped, and exactly one field reachable only through the wrapper. Fixed by
+unwrapping, not by re-exempting the field.
+
+**So the example is withdrawn and the row is kept**, because the shape it names is still real and still
+unaddressed — it simply was not what that failure was. A staleness skip there would have papered over a
+coverage hole, which is the opposite of what the guard is for. The lesson stands twice over: the reported
+cause was plausible, was supplied by someone with more context than the reporter, and was still wrong.
+
+**The insight is the OUTCOME-EQUIVALENCE, not that the corpus is old.** A stale-but-settled corpus produces
+exactly what the in-flight guard exists to prevent: a check goes red for a reason that has nothing to do
+with the change in front of you, the person re-runs it, it stays red, and they reach for
+`A11Y_SKIP_VERIFY=1` — which this project's own record says was done nine times in one evening. The guard
+correctly does not suppress it (a skip that fires always is a check that never runs), so it needs its own
+answer.
+
+Four states are now distinguished by `corpusReadable` (`corpus-settled.mjs`): absent, in-flight,
+present-but-a-stub, and settled. **This is the fifth**, and it sits inside `settled` — the corpus is not
+moving, it is simply older than the evidence shape the checks now expect.
+
+**Not costed, and the fix is a decision rather than code:** either the corpus gets refreshed (which is
+`orchestrator`'s, not a worker's), or the field-presence checks learn to say "this corpus predates the
+field" rather than "the field is compared but nothing carries it" — two different sentences that today are
+one. The second is the cheaper half and it is where the deception lives.
+
+## OPEN, small — `capture:check` has no lab-side equivalent
+
+`architecture-audit.md` §7.2 named three things `capture-regression.yml`'s path filter could never fire
+on: changes to `deploy.yml`, `fleet-env.mjs`, or `worker-http.mjs`. Checked at HEAD, not carried forward
+from the audit's 2026-09-05 text: `worker-http.mjs` is **CLOSED** —
+`capture-regression-covers-its-imports.test.ts` DERIVES the filter's required file list from
+`capture-check.mjs`'s own import graph and fails until each one is present; the workflow's own comment
+names the exact incident that forced it (`capture-client.mjs` changed the same day the gap was found).
+`deploy.yml` and `fleet-env.mjs` were **never actually reachable from this workflow's import graph** —
+`capture-regression.yml` runs on a GitHub-hosted Windows runner against its own bundled worker code and
+never touches fleet deployment machinery at all, so the original finding conflated two different
+capture-testing surfaces rather than naming a real gap in this one.
+
+**What remains genuinely open, and appears nowhere else:** no lab job runs `capture:check`'s equivalent
+against the real fleet — `lab-job.yml` has no such job (`grep -n "capture-check\|capture_check"
+packages/control/ansible/lab-job.yml` → nothing). Small and standing, not urgent: `gate:stability`,
+`evidence:check` and a real-page capture run already catch most of what a fleet-side `capture:check` would,
+and this is the one piece none of them names explicitly.
+
+## OPEN — "a check that answers correctly about the wrong population", four instances, named by `ceo`
+
+Not "a check that always passes" — that is only the visible half. This is a check that is telling the
+truth about the thing it actually looked at, and the thing it looked at is not the thing the reader thinks
+it answers for. Found four times in one morning, none by review — every one by someone disbelieving a
+clean answer enough to go and look at what the check could actually see.
+
+| # | the check | what it can see | what it cannot | measured |
+|---|---|---|---|---|
+| 1 | `git branch -r --list 'origin/agent/*'` used as a collision/claim check | whether an agent branch was ever PUSHED to `origin` | that agent branches in this workflow are never pushed at all — the check answers "clear" unconditionally, for every branch, for ever | `$ git branch -r --list 'origin/agent/*'` → empty output, every time, regardless of how many agent branches exist locally. Found twice in two hours: the role brief's own collision-check line, and `docs/backlog-ready.md`'s claim mechanism (`docs/backlog-ready.md:15`, "Check the region is free. `git branch -r --list 'origin/<branch name>'`") — still present there as of this row |
+| 2 | "Verified open at HEAD" as a ready-queue row's acceptance evidence | whether the finding's own grep/read still matches `origin/main` | a LOCAL, unmerged branch that has already fixed it — the population "what's open" silently narrows to "what's open in the one place nobody's unpushed work lives" | Checked all six `docs/backlog-ready.md` rows against local branch history, not just against HEAD. **3 of 6 already done, unmerged when listed, one already MERGED:** row 1 (`crossCheckAgainstElementsList` ordering) — `git log --oneline --all --since="6 hours ago" \| grep -i elementsList` finds `d0bf5aa fix(2.4.2): crossCheckAgainstElementsList reads the page before probeRouteChange can navigate away`, not yet in `origin/main`. Row 2 (`probeDialogEscape` cleanup) — same search finds `2db037c fix(capture): probeDialogEscape gives the browse mode back, in a finally like its four siblings`, also not yet merged; both landed on one branch, `agent/route-change-order-and-dialog-restore`, neither row's OWN stated branch name (`agent/elements-list-after-navigation`, `agent/dialog-escape-restore-browse-mode`). Row 4 (`criteriaAssessableFrom` decision) is the sharper case: `git merge-base --is-ancestor 37d8080 origin/main` → **already merged** — `decision(judge): criteriaAssessableFrom has zero production callers — keep it, enforce the deadness` (`5679ae7`) plus its anti-vacuity-guard follow-up (`37d8080`), via `c779550 Merge branch 'agent/criteria-assessable-from-decision'` (`git log --oneline --merges origin/main \| grep criteria-assessable`) — a NEAR-MISS of row 4's stated branch name, `agent/criteria-assessable-decision` (missing "-from-"), not a different branch entirely. **CORRECTED 2026-09-06** after `worker-config` caught the first version of this cell: it named `agent/321-context-change-predicate` (row 3's branch) as where the fix landed, reasoning from `git log --oneline agent/321-context-change-predicate` including `37d8080` in its history — which only shows that commit is an ANCESTOR of that branch's tip (it branched after `origin/main` already had it), not that the branch introduced it. `git log <branch> --not origin/main` is the form that isolates a branch's OWN commits; `git branch --contains <sha>` answers a different question again ("which branches have this commit downstream") and will list every branch cut afterwards. Kept as a live example rather than silently fixed: an "at HEAD, checking every branch" methodology can ALSO answer about the wrong population if the git command itself conflates ancestry with authorship. Re-running row 4's own printed verification command today still prints the IDENTICAL output it printed when the row was written (`grep -rn "criteriaAssessableFrom(" ...` → no production call sites), because that grep answers "is there a caller" — unchanged — not "has the open QUESTION (call it, or decide and enforce the deadness) been settled", which it has. **A fifth manifestation, per `dispatcher`: this is a check about the wrong QUESTION, one level up from the wrong POPULATION** |
+| 3 | `sourceFilesUnder`'s `readdirSync` in `criterion-coverage.test.ts`'s caller-discovery walk | files actually present under a correctly-resolved root | a WRONG root — `readdirSync` throws on a missing path and the `catch` returns `[]`, so a broken `repoRoot` resolution and "this file has zero callers" are the identical output | **Already guarded, and the guard was proven to fire, not just present.** `MIN_EXPECTED_SOURCE_FILES = 100` with the comment naming this exact shape ("readdirSync swallows a missing directory into []"). Ran it clean: `npx tsx --test packages/judge/src/criterion-coverage.test.ts` → `criteriaAssessableFrom has no production caller -- dead-by-design, not dead-by-accident` passes, walking 184 `packages/` files + 18 `scripts/` files today. Listed here as the reference example of the fix, not as an open item |
+| 4 | `docs/backlog.md`'s own architecture-audit STATUS box | the disposition of rows it explicitly re-verified and corrected | that the OLDER bullet list sitting directly below it, describing the same findings from before those corrections, was never struck through or removed | `$ grep -n "Still open and assigned: none" docs/backlog.md` → line 602, present. `$ sed -n '613,655p' docs/backlog.md \| grep -c "~~"` → **0** strikethroughs across 8 bullets in the list the box's own "none" claims to summarise. Found independently by two peer sessions (this one and worker-config) the same morning |
+
+**Filed as one row with four instances, per `ceo`'s instruction, rather than four unrelated ones — the
+shape is the finding.** `orchestrator` owns the verification-basis sentence in both `docs/backlog-ready.md`'s
+header and the role brief, so neither is edited here; this row is the record, not the fix for either.
+
+**Sweep for more, done and bounded, not exhaustive:** checked every `readdirSync`-based discovery test in
+the tree (55 files) for a missing vacuity guard the way instance 3 above needed one — all but that instance
+already have one, in varying phrasing (`.length > N`, `.size >= N`, underscored literals), so this specific
+probe surfaces nothing further. Checked other `docs/*.md` uses of "at HEAD" as a verification claim (11
+more, mostly in this file's own historical correction rows) — all describe checking a SHIPPED/merged claim
+against `origin/main`, which is the right population for that question; the defect in instance 2 is
+specific to a READY-QUEUE row, where "is this still open" must also ask whether unpushed local work already
+answered it, and no other document makes that particular claim. No further instances found; this bounds the
+shape at four for now.
 
 ## How an item leaves this page
 

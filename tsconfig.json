@@ -10,7 +10,13 @@
     "types": [
       "node"
     ],
-    "allowJs": true
+    "allowJs": true,
+    // Tests importing `scripts/test-support/git-sandbox.ts` by relative path need the literal `.ts`
+    // extension (there is no `dist` to resolve to -- it is a repo-root helper, never built, per the
+    // comment on that include entry below). Safe only because this program is `noEmit: true` and never
+    // builds a package: each package's own tsconfig excludes its tests, so this flag cannot reach a
+    // package's published `dist`.
+    "allowImportingTsExtensions": true
   },
   // `packages/*/src/**/*.ts` is here because each package's own tsconfig EXCLUDES its tests (they must not
   // reach a consumer's node_modules), and the root program only had "src" — so as packages were extracted in
@@ -32,6 +38,11 @@
     "packages/*/src/**/*.mjs",
     "packages/*/scripts/**/*.mjs",
     "packages/*/bin/**/*.mjs",
-    "packages/*/*.mjs"
+    "packages/*/*.mjs",
+    // The shared git-sandbox test helper lives at the repo root, not inside a package, because it is
+    // imported by tests across four packages (lab, judge, control, worker-fleet) and none of those may
+    // depend on each other -- see ADR 0004. Same shape as the gate scripts above: a helper eleven tests
+    // rely on to avoid corrupting the real repo is not one to leave outside the typecheck.
+    "scripts/test-support/**/*.ts"
   ]
 }
