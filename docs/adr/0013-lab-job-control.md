@@ -5,12 +5,17 @@
 Accepted, 2026-08-21. Narrows ADR 0012's "there is no service between them" rather than contradicting it,
 and applies ADR 0001's "SSH is only for provisioning and debugging" to a case that rule did not anticipate.
 
+**REDACTED 2026-09-06, decision unchanged.** The quoted command below named a real host address and
+container id — this repo went public, and `inventory.yml` is the one place that fact belongs, per the
+project's own "fact-stated-once" rule. Placeholders replace both; the shape of the retired command, and
+the reasoning against it, are exactly as accepted.
+
 ## Context
 
 Training runs, dataset exports, corpus builds, abstention sweeps and real-page captures were started by an
 operator typing:
 
-    ssh root@192.168.1.96 'pct exec 121 -- bash -lc "..."'
+    ssh root@<the lab's host> 'pct exec <container id> -- bash -lc "..."'
 
 **None of that existed in the source tree.** `pct exec` and `ssh root@` appear nowhere in the repo, so the
 way this project's most expensive operations were launched was untested, unversioned and unreviewable. Every

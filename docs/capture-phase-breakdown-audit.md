@@ -40,13 +40,15 @@ Composition by worker host and `provenance.captureProtocol`:
 | `192.168.64.4` | 1888 | no — deprecated local UTM guest | `5` | 2026-08-06 .. 2026-08-09 |
 | `192.168.64.6` | 220 | no — deprecated local UTM guest | `5` | 2026-08-07 .. 2026-08-08 |
 | `192.168.64.5` | 14 | no — deprecated local UTM guest | `5` | 2026-08-06 (one day) |
-| `192.168.1.107` | 16 | **yes**, `a11y-worker-2` | `6, 11, 13, 14` | 2026-08-27 .. 2026-09-02 |
-| `192.168.1.59` | 16 | **yes**, `a11y-worker-3` | `6, 11, 13, 14` | 2026-08-28 .. 2026-09-02 |
-| `192.168.1.224` | 10 | **yes**, `a11y-worker-5` | `6, 11, 13` | 2026-08-27 .. 2026-09-02 |
-| `192.168.1.90` | 8 | **yes**, `a11y-worker-6` | `6, 11, 13` | 2026-08-28 .. 2026-09-01 |
-| `192.168.1.175` | 6 | **yes**, `a11y-worker-4` | `6, 11, 13` | 2026-08-27 .. 2026-09-01 |
+| `a11y-worker-2` | 16 | **yes** | `6, 11, 13, 14` | 2026-08-27 .. 2026-09-02 |
+| `a11y-worker-3` | 16 | **yes** | `6, 11, 13, 14` | 2026-08-28 .. 2026-09-02 |
+| `a11y-worker-5` | 10 | **yes** | `6, 11, 13` | 2026-08-27 .. 2026-09-02 |
+| `a11y-worker-6` | 8 | **yes** | `6, 11, 13` | 2026-08-28 .. 2026-09-01 |
+| `a11y-worker-4` | 6 | **yes** | `6, 11, 13` | 2026-08-27 .. 2026-09-01 |
 
-(Fleet hosts and addresses cross-checked against `packages/control/ansible/inventory.yml`.)
+(Fleet hosts cross-checked by address against `packages/control/ansible/inventory.yml`, which is the one
+place those addresses belong — this table names the boxes, not their addresses, per the project's own
+"fact-stated-once" rule.)
 
 **97.4% of this local corpus (2,122 of 2,178) is `protocol 5` on the retired 3-guest UTM pool, captured
 2026-08-06 to 2026-08-09** — reading "all captures on disk" blind, as the brief warned against, would
