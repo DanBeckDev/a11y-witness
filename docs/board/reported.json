@@ -7,6 +7,12 @@
       "reportedBy": "orchestrator",
       "at": "2026-09-06T19:30:00Z",
       "output": "1652 discriminating, 0 blind, 0 contaminated, 0 uncaptured, 0 stale, 5 provisional (not yet proven, not blocking)\nPASS — all 1652 case(s) discriminate, and the corpus is complete. (5 provisional case(s) still BLIND, not counted either way)\n# conformant records\n  1405 scored, 0 false positive(s)\n  2810 of 2810 record(s) carry ruleEvidence; 2810 carry a census\nRULES: PASS — all 21 of 21 from rule-ownership.json, against 2810 record(s) in /opt/a11y/runs/screenreader-dataset/screenreader-evidence.jsonl examined and clean\n  PASS — every RULE-ONLY criterion has fired on a real page, or declares why it cannot. Nothing this project claims rests solely on an untested rule.\n  PASS — all 84 of 84 from conformant real pages scored against the baseline examined and clean\nPromoted candidate.\n  weights   -> /opt/a11y/packages/scorer/models/screenreader-scorer\n  changeset -> /opt/a11y/.changeset/promote-candidate-0d498ef6.md"
+    },
+    {
+      "command": "npm run lab:job -- -e job=capture-only -e only=<7 families> -e capture_root=arm-ten   (then -e workers=5 -e capture_root=arm-five)\nnpm run lab:job -- -e job=fleet-hours -e captures_dir=/opt/a11y/runs/screenreader-dataset/arm-ten   (then arm-five)",
+      "reportedBy": "orchestrator",
+      "at": "2026-09-06T22:00:00Z",
+      "output": "arm-ten   {\"capturesBilled\": 98, \"medianSeconds\": 46.5, \"q1Seconds\": 42.1, \"q3Seconds\": 53.3, \"iqrSeconds\": 11.2, \"p95Seconds\": 60.2, \"dir\": \"/opt/a11y/runs/screenreader-dataset/arm-ten\"}\narm-five  {\"capturesBilled\": 99, \"medianSeconds\": 45.6, \"q1Seconds\": 42.6, \"q3Seconds\": 52.9, \"iqrSeconds\": 10.3, \"p95Seconds\": 58.1, \"dir\": \"/opt/a11y/runs/screenreader-dataset/arm-five\"}\nCapture complete: 49 captured, 0 failed  (both arms)\ncapture window, journal Capturing -> Capture complete:  ten boxes 525s,  five boxes 998s  = 1.90x"
     }
   ],
   "fleetHours": {
