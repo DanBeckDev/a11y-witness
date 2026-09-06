@@ -1081,6 +1081,15 @@
     #
     # Empty is the normal case and must stay allowed: unset is what every existing caller passes, and
     # `dataset-paths.mjs` already falls back to "captures" on an empty value.
+    # THE FACT HAS TO BE BUILT, not just declared. `lab_param_aliases` tells the DERIVATION which
+    # parameter produced a fact; it does not create one. Referencing `lab_capture_root` in `setenv`
+    # without this task fails at render with `'lab_capture_root' is undefined` — caught by a ONE-CASE
+    # probe before a 26-minute two-arm run, which is this repo's own rule about proving a condition can
+    # be true before backgrounding anything that waits on it.
+    - name: Which captures directory this job writes to
+      ansible.builtin.set_fact:
+        lab_capture_root: "{{ capture_root | default('') }}"
+
     - name: A capture root must be a name, so a path cannot be expressed
       when: lab_capture_root | default('') | length > 0
       ansible.builtin.assert:
