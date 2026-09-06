@@ -43,6 +43,7 @@ you which arguments have already been tried.
 | [0029](./0029-two-tier-readiness-ready-vs-ok.md) | Two-tier readiness — dispatch on `ready`, never on `ok` | accepted |
 | [0030](./0030-fleet-code-parity-is-a-precondition-not-a-cache-key.md) | Fleet code-version parity is a deploy precondition, never a capture cache key | accepted |
 | [0031](./0031-the-worker-ships-plain-mjs-with-no-build-step.md) | The capture worker ships as plain, unbuilt `.mjs`; the control plane compiles from `.ts` | accepted |
+| [0032](./0032-the-scorer-runs-as-a-subprocess-in-a-python-venv.md) | The trained scorer runs as a Python subprocess, chosen by `A11Y_PYTHON`, not in-process JS | accepted |
 
 ## If you read only one
 
