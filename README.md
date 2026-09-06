@@ -512,9 +512,11 @@ carries the known limitations, stated plainly. `CLAUDE.md` is operational instru
      gate result recorded in docs/board/reported.json. Do not TYPE a number here: a figure the report
      cannot source is a figure that outlives its measurement, and one already did. -->
 
-**On our own corpus of 1,398 conformant records the deterministic rules asserted no failures. The trained
-component refers, it never asserts, and a referral on a conformant page is expected rather than a defect.
-The real-page figure is being re-measured and this sentence will carry it when the gate has printed it.**
+**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures, and on 84
+conformant real pages the same gate examined them and found them clean. That real-page denominator
+excludes one page the gate cannot examine, which is listed with its reason and with the condition that
+would put it back. The trained component refers, it never asserts, and a referral on a conformant page is
+expected rather than a defect.**
 
 <!-- CLAIM:END -->
 
