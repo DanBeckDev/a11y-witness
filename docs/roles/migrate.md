@@ -16,6 +16,7 @@ while a capture is running.
 | The daily board report's schedule | a launchd agent on this Mac (`bash scripts/install-board-report.sh`) | GitHub Actions, per `ceo`'s ruling — see "The board report job" below | nothing to migrate once the Action lands; kept as a row here until it does |
 | `docs/board/reported.json` | tracked in the repo | tracked in the repo | moves automatically with `git clone` — nothing to do |
 | `runs/` in the primary checkout | this Mac's local copy | re-synced on the new machine | `runs/` is gitignored and a LOCAL COPY everywhere, including the primary checkout today — the new machine starts with none and that is normal; `npm run lab:inventory` says how stale a copy is once one exists. The authoritative corpus never moved (see row above) |
+| **`packages/control/ansible/inventory.yml`** | this Mac's filesystem, gitignored — restored from the secrets store, never committed | the new machine's filesystem, same way | Posture change, `ceo`-ruled (issue #54): real fleet/lab/control-plane addresses no longer live in git history going forward. `inventory.example.yml` is the committed, syntax-checkable stand-in (same worker names and group structure, placeholder addresses) — a fresh clone gets an honest absence, which the code already handles (37 of 40 readers funnel through two absence-tolerant functions returning `[]` on ENOENT). Same category as the two SSH keys above: describe it, restore it out of band, never assume `git clone` alone brings it |
 
 ## The project-key rename
 
