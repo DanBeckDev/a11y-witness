@@ -27,8 +27,16 @@ count=$(printf '%s\n' "$staged" | wc -l | tr -d ' ')
 stale=""
 while IFS= read -r f; do
   [ -f "$f" ] || continue
-  # Minutes since last modification, via stat's epoch seconds (BSD stat on macOS).
-  mtime=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
+  # Minutes since last modification, via stat's epoch seconds. GNU form FIRST, not BSD: GNU coreutils'
+  # `-f` means "filesystem status" (a different mode entirely) and happily exits 0 printing filesystem
+  # info -- Namelen, Block size, Inodes -- instead of failing, so `stat -f %m || stat -c %Y` never reaches
+  # the correct fallback on Linux, and the garbage multi-line "mtime" later reaches an arithmetic context
+  # containing the bareword `File`, which bash's arithmetic evaluator reads as a variable reference and
+  # `set -u` refuses as unbound. BSD stat (macOS) does the safe thing here: an unrecognised `-c` is a real
+  # error ("illegal option"), so the fallback fires correctly in that direction. Found running this hook's
+  # own test suite in CI for the first time -- `pre-commit-hook.test.ts` had never actually run on Linux
+  # before the ts/docs jobs split out of one shared, earlier-failing job.
+  mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo 0)
   [ "$mtime" = 0 ] && continue
   age_min=$(( ( $(date +%s) - mtime ) / 60 ))
   [ "$age_min" -ge "$STALE_MIN" ] && stale="$stale  $f (last touched ${age_min}m ago)"$'\n'
