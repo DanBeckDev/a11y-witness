@@ -2062,31 +2062,39 @@ red about it. A reader checking known-gaps.md for what this tool cannot do would
 
 ## 39. 2.4.7's F55 lower bound is unverified, because no capture has ever recorded a real script `blur()`
 
-**Added 2026-09-05.** `2.4.7` Focus Visible ships as a rule (see the acceptance-audit work of early
-September), and its detection of F55 — "using script to remove focus when focus is received" — rests on
-`FOCUS_SCRIPT_BLUR_WINDOW_MS = 50`, a threshold separating a scripted blur from an ordinary Tab
-transition. The MARGIN on the negative side is well measured: 24 real focusin→focusout pairs on real
-pages, minimum gap 633 ms against the 50 ms cutoff — a 12.6× margin at least, 38.9× on one page. **No
-capture anywhere in this corpus has ever recorded a genuine script `blur()`.** So the threshold's positive
-side — does a real F55 case land comfortably under 50 ms, or does it sit near the boundary — has never
-been measured, only assumed.
+**CLOSED 2026-09-06, and the answer was sharper than "measure where 50ms sits".** The protocol-15
+recapture this section was waiting on ran, and `rules:gate` promptly found the OPPOSITE problem from the
+one this gap anticipated: not a threshold sitting too close to a real positive, but a threshold-based
+predicate silencing 10 conformant records while catching 0 of 9 real positives — the 2.4.3 deafness trap,
+on the exact rule this gap was tracking.
 
-**Why this is not yet closed, and what would close it.** `case-matrix.mjs` carries nine
-`focus-removed-on-receipt-*` cases built specifically to exercise F55, and as of `CAPTURE_PROTOCOL_VERSION`
-14 their evidence had never actually been collected — the cases were captured before the `focusEventLog`
-probe existed, and `workerCode` being outside the cache key meant the pre-probe captures were served
-unchanged. `CAPTURE_PROTOCOL_VERSION` was bumped 14 → 15 specifically to force their recapture (see
-`docs/backlog.md`'s "CAPTURE_PROTOCOL_VERSION 14 -> 15" entry), and **a full recapture at protocol 15 was
-running on the fleet as this section was written** — this entry cannot say whether it has finished or what
-`rules:coverage` reports for `2.4.7` once it has, and does not claim to; that is a live question for
-whoever reads this after the recapture completes, not answered here.
+**The real measured positive, from `focus-removed-on-receipt-order.bad`'s captured 27-event log:** the
+skipped field (`id=1`, "Delivery instructions") never appears as a completed `focusin`→`focusout` pair at
+all. It appears ONLY as an orphaned `focusout`, twice — the script intercepts focus so fast that the
+browser's own `focusin` event never finishes dispatching before the `blur()` fires. That is a **stronger**
+answer than "the gap is comfortably under 50 ms": there is no gap to measure, because there is no
+completed receipt to measure it from. `FOCUS_SCRIPT_BLUR_WINDOW_MS` (capture-pure.mjs) could never have
+seen this shape, at 50 ms or any other value — it looked for a pair to time, and a scripted-fast-enough
+blur does not produce one.
 
-**The explicit warning against the tempting shortcut, preserved because it is easy to reach for.**
-`docs/backlog.md`'s own words: *"the threshold's unverified lower bound is the next suspect... not
-before [checking whether the recapture makes the rule fire], because a threshold tuned to make a test
-pass is a canary that cannot express the fault."* If `2.4.7` still reads `NEVER FIRED ANYWHERE` after the
-protocol-15 recapture, the fix is not to lower 50 ms until a test passes — it is to capture a real script
-`blur()` and measure where it actually lands.
+**What actually shipped (agent/2-1-2-false-positives, superseding the threshold approach entirely for the
+orphan case).** Two real captures — this bad page's 27-event log, and `keyboard-trap-modal-escape.good`'s
+17-event log showing focus REDIRECTED to a different real control on receipt, which is F55's own text
+explicitly excluding ("removes focus from the content ENTIRELY", every W3C example a destination-less
+`.blur()`) — refuted a capture-time verdict in both directions on the same night. Per ADR 0021 ("captures
+record, rules decide"), the worker (`capture-pure.mjs`) no longer judges anything: `focusEventVerdict` is a
+passthrough reporting the whole bounded event log. `addFocusEventFindings` (`packages/judge/src/rules.ts`)
+does the full analysis: an orphaned `focusout` (no preceding `focusin` for that id) is F55 unconditionally;
+a COMPLETED pair is F55 only if held under `FOCUS_SCRIPT_WINDOW_MS = 50` (the renamed, relocated constant
+— same value, now judging a held-time rather than gating a capture-time pairing) AND not redirected to a
+different real control within that window. The 50 ms figure itself is unchanged and still carries the
+original negative-side margin (24 real pairs, minimum 633 ms, 12.6×+ margin) — what closed is not the
+number, it is recognising that a THIRD shape (the orphan) needed no threshold at all.
+
+**What tells you this is still correct:** `rules.test.ts`'s orphan-first test suite (built directly from
+the two real logs above, mutation-checked) and `rules:gate` reporting the rule's own positive count
+alongside 0 false positives across the conformant corpus — printed, never silently assumed, per this
+gap's own original warning against a rule going quiet by going blind.
 
 **What would tell you it is fixed:** `rules:coverage` reports `2.4.7` as fired with real captured evidence
 (not `NEVER FIRED ANYWHERE`), and a specific measured `blur()` latency is recorded beside

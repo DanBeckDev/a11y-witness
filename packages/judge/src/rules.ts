@@ -123,17 +123,26 @@ export interface RuleInput {
     focusOrder?: string[];
     /**
      * F55 — "using script to remove focus when focus is received" (2.1.1, 2.4.7, 2.4.13, 3.2.1 together,
-     * per W3C's own Failure listing) — decided by `focusEventVerdict` (`capture-pure.mjs`) from the
-     * `focusin`/`focusout` log `probeFocusOrder` installs. `checked: false` means the oracle could not run
-     * (`why` says why) and `scriptRemovedFocus: null` follows it — "cannot say", never "no findings".
-     * `checked: true` with an EMPTY array is a real reading of zero: the log ran and found no script
-     * stripping focus, which is not the same absence as never having asked.
+     * per W3C's own Failure listing). `checked: false` means the oracle could not run (`why` says why) and
+     * `log: null` follows it — "cannot say", never "no findings". `checked: true` with an EMPTY array is a
+     * real reading of zero: the log ran and genuinely recorded no focus events, which is not the same
+     * absence as never having asked.
      *
-     * Matched by `id`, not by name or position, in `focusEventVerdict` — two controls sharing a name must
-     * never be read as one control losing the focus it just received.
+     * **CAPTURE RECORDS, RULES DECIDE — this shape changed 2026-09-06, twice in one night.** A first
+     * revision had `focusEventVerdict` (`capture-pure.mjs`) pre-digest the log into per-control
+     * candidates; the CEO's own review went one step further and asked for the RAW SEQUENCE instead,
+     * because a stored count or a stored candidate list is still a capture-time judgement about what
+     * mattered, and this criterion's own history (see `addFocusEventFindings`'s comment) is two rounds of
+     * that judgement being wrong. So `log` is the bounded event sequence itself
+     * (`{type, id, name, atMs}[]`, capped by `FOCUS_EVENT_LOG_LIMIT` in `capture-pure.mjs`), and
+     * `addFocusEventFindings` below does the ENTIRE analysis — pairing, orphan detection, destination —
+     * from it. Nothing upstream of the rule decides anything about this criterion any more.
+     *
+     * Matched by `id`, not by name or position — two controls sharing a name must never be read as one
+     * control losing the focus it just received.
      */
-    focusEvents?: { asked?: boolean; checked: boolean; why?: string; events?: number;
-      scriptRemovedFocus: { id: number; name: string; heldMs: number }[] | null };
+    focusEvents?: { asked?: boolean; checked: boolean; why?: string; events?: number; truncated?: boolean;
+      log: { type: string; id: number; name: string; atMs: number }[] | null };
     /**
      * What the screen reader said the page was called, and what its first heading was, before and after
      * activating a navigation control. Absent unless `probeNavigation` was asked for — and absence must
@@ -616,30 +625,123 @@ function addFocusRevealFindings(input: RuleInput, add: AddFinding): void {
 }
 
 /**
- * 2.4.7 Focus Visible — Failure F55, "using script to remove focus when focus is received", from
- * `focusEventVerdict`'s (`capture-pure.mjs`) `focusin`→`focusout` pairing on the same element id.
+ * How fast a script's synchronous focus change happens — the ONE threshold `addFocusEventFindings` uses
+ * twice: whether a completed `focusin`→`focusout` hold is suspiciously fast, and whether a landing counts
+ * as the SAME script tick that caused a loss (a redirect) rather than the probe's own later Tab press (an
+ * unrelated recovery). Measured twice on real pages at a 633ms floor (12.6x margin) and a 1,944ms mean
+ * (38.9x margin) for the slowest side this threshold must stay under; no capture has yet recorded a real
+ * script `blur()` to bound the fast side, so this remains a hypothesis with a wide margin, not a
+ * calibrated value (`known-gaps.md` §39).
+ */
+const FOCUS_SCRIPT_WINDOW_MS = 50;
+
+/** Did focus land on a DIFFERENT real control, on the same script tick that caused the loss at `lostId`? */
+function focusLandedOnADifferentControl(
+  lostId: number, lostAtMs: number, after: { type: string; id: number; atMs: number } | undefined,
+): boolean {
+  if (after?.type !== "focusin" || after.id === lostId) return false; // nothing next, or "landed" on itself
+  return after.atMs - lostAtMs < FOCUS_SCRIPT_WINDOW_MS;
+}
+
+/**
+ * 2.4.7 Focus Visible — Failure F55, "using script to remove focus when focus is received".
  *
  * `secondary`, not `conformance` — argued in `coverage.ts`, at `RULE_CRITERIA`'s definition, rather than
- * defaulted here. The observation is a TIMING pair over CDP, not a read of whether a focus indicator was
- * ever drawn; F55 is the reasoned conclusion from that pair (nothing can hold a visible indicator if
- * nothing holds focus), and that inference is exactly the gap `secondary` exists to mark. Also unruled-out:
- * the other listed failure, F78 (styling an indicator away), which this evidence says nothing about either
- * way — a clean report here is silent on F78, never a pass for 2.4.7 as a whole.
+ * defaulted here. The observation is a TIMING/sequencing read over CDP, not a read of whether a focus
+ * indicator was ever drawn; F55 is the reasoned conclusion from it (nothing can hold a visible indicator
+ * if nothing holds focus), and that inference is exactly the gap `secondary` exists to mark. Also
+ * unruled-out: the other listed failure, F78 (styling an indicator away), which this evidence says
+ * nothing about either way — a clean report here is silent on F78, never a pass for 2.4.7 as a whole.
  *
- * `checked: false` means the oracle could not run — reported nowhere, per `focusEvents`' own contract
- * (`rules.ts`'s field doc): "cannot say", never "no findings". Only a real `checked: true` reading is
- * examined, and even then only a NON-EMPTY `scriptRemovedFocus` is a finding — an empty array is a real
- * zero, not an absence.
+ * THIS RULE DID NOT EXIST UNTIL 2026-09-06, and it went through two designs the same night before this
+ * one, each refuted by a real capture:
+ *
+ * - The ORIGINAL capture-side verdict paired `focusin(X)`→`focusout(X)` within a synchronous window and
+ *   called that F55 unconditionally. `keyboard-trap-modal-escape.good`, CONFORMANT, refuted it: its log
+ *   holds two such pairs at 0ms — a modal correctly claiming focus for its first field, and the tab ring
+ *   correctly wrapping — and BOTH landed on a different real control (id 1, "House number") within 0-1ms.
+ *   F55's own text (w3.org/WAI/WCAG22/Techniques/failures/F55) is explicit that every example is a
+ *   destination-less `.blur()` and the mechanism "removes focus from the content ENTIRELY" — redirecting
+ *   focus to a real destination is not this failure, however fast.
+ * - A SECOND capture-side revision added a destination check, but still only recognised COMPLETED pairs.
+ *   `focus-removed-on-receipt-order.bad`, one of this criterion's own NINE POSITIVES, refuted that too:
+ *   its real failure is an ORPHANED `focusout` — "Delivery instructions" appears in the log only as a
+ *   focusout, twice, with no matching `focusin` ever recorded, because the script intercepts so fast the
+ *   browser's own focus event never completes. A rule keyed on completed pairs cannot see this at all: it
+ *   is not a pair that arrived late, it is one that never formed. Measured against the exported corpus,
+ *   both designs together: 0 of 9 positives caught while firing on 10 conformant records.
+ *
+ * So the decision needs the FULL sequence, walked here rather than pre-digested at capture time (`log`'s
+ * own field doc) — captures record, rules decide (ADR 0021). For every `focusout`:
+ *
+ * 1. Is it a COMPLETED receipt (the immediately preceding event is a `focusin` on the same id) or an
+ *    ORPHANED one (anything else)? An orphaned focusout has no `heldMs` to measure and is reported as one
+ *    regardless of what follows — the missing `focusin` IS the signal, per the worked example above.
+ * 2. A completed receipt is only worth reporting if the hold was script-fast (`FOCUS_SCRIPT_WINDOW_MS`) —
+ *    an ordinary Tab transition's `focusout(A)` is caused by the NEXT Tab press, measured at a
+ *    633ms-to-1,944ms floor, two orders of magnitude slower.
+ * 3. EITHER shape is cleared if focus landed on a different real control within the same script tick
+ *    (`focusLandedOnADifferentControl`) — the trap/dialog-redirect case above. Landing on itself, landing
+ *    too slowly (the probe's own later Tab press, an unrelated recovery), or nothing following at all are
+ *    all still F55.
+ *
+ * THE PREDICATE MUST NOT MISREAD CONTAINING FOCUS AS RELOCATING IT — "focus trap" is two different
+ * mechanisms and only one of them can ever trip this rule. RELOCATING traps (the synthetic modal above)
+ * move focus programmatically on `focusin`, which is exactly the 0ms pair this rule reads. CONTAINING
+ * traps (a real cookie banner's usual shape) hold focus by tab order and DOM position alone — nothing
+ * moves focus on receipt, so no such pair exists and this rule is correctly silent on them already, not
+ * silent by accident. Confirmed 2026-09-06 on three real pages whose consent dialogs are exactly this
+ * shape, fetched at protocol 15 specifically to check: `design-system.service.gov.uk/components/details/`
+ * (296 events), `.../components/radios/` (222 events), `check-for-flooding.service.gov.uk/river-and-sea-
+ * levels` (54 events) — hundreds of real focus transitions between them, zero findings. Do not "fix" that
+ * silence into firing; it is CONTAINING working as intended, not a gap.
+ *
+ * ANY 2.4.7 FINDING ON A REAL PAGE MUST BE READ INDIVIDUALLY AGAINST ITS STORED LOG before it is treated
+ * as a false positive or absorbed into a baseline — a page that genuinely strips focus with no destination
+ * is a real F55 whoever published it, and the baseline must not learn to ignore that any more than it must
+ * learn to accuse a conformant redirect. The stored `log` (not a capture-time count) is what makes reading
+ * one individually possible at all.
+ *
+ * `checked: false` means the oracle could not run — reported nowhere, per `focusEvents`' own contract:
+ * "cannot say", never "no findings". Only a real `checked: true` reading is examined, and even then a
+ * cleared or empty log is a real zero, not an absence.
  */
+type FocusLogEvent = { type: string; id: number; name: string; atMs: number };
+
+/**
+ * Is `log[i]` (already known to be a `focusout`) a genuine F55, and if so what should the evidence say?
+ * Split out purely to keep `addFocusEventFindings`'s complexity under gate -- the decision itself is the
+ * whole of that function's doc comment, unchanged by moving where the `if`s live.
+ */
+function focusLossEvidence(log: FocusLogEvent[], i: number): string | null {
+  const event = log[i];
+  const prior = log[i - 1];
+  const completedReceipt = prior?.type === "focusin" && prior.id === event.id;
+  const heldMs = completedReceipt ? event.atMs - prior.atMs : null;
+  if (completedReceipt && heldMs !== null && heldMs >= FOCUS_SCRIPT_WINDOW_MS) return null; // an ordinary Tab transition
+  // A redirect can only clear a COMPLETED receipt. An ORPHANED focusout is F55 regardless of what follows
+  // -- the missing focusin is itself the signal, and the very next event after an orphaned loss is
+  // routinely another real focusin (whatever the probe reaches next), which must NOT be read as this
+  // control's own destination.
+  if (completedReceipt && focusLandedOnADifferentControl(event.id, event.atMs, log[i + 1])) return null;
+  const holdPhrase = heldMs === null
+    ? "focus was never fully received before it was removed"
+    : `focus held ${heldMs}ms`;
+  return `${event.name || "unnamed control"} (id ${event.id}): ${holdPhrase}`;
+}
+
 function addFocusEventFindings(input: RuleInput, add: AddFinding): void {
   const focusEvents = input.interaction?.focusEvents;
   if (!focusEvents?.checked) return;
-  for (const removed of focusEvents.scriptRemovedFocus ?? []) {
+  const log = focusEvents.log ?? [];
+  for (let i = 0; i < log.length; i += 1) {
+    if (log[i]?.type !== "focusout") continue;
+    const evidence = focusLossEvidence(log, i);
+    if (!evidence) continue;
     add("2.4.7 Focus Visible",
       "A control received focus and had it removed by script before a visible focus indicator could "
         + "have been shown to the user",
-      `${removed.name || "unnamed control"} (id ${removed.id}): focus held ${removed.heldMs}ms`,
-      "secondary");
+      evidence, "secondary");
   }
 }
 

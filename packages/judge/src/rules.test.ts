@@ -630,37 +630,165 @@ test("1.4.13's Dismissable finding fires only on revealed+held+not-dismissed, an
   }
 });
 
-test("2.4.7's F55 finding fires once per scripted-removal, only when checked, and always as secondary", () => {
-  // `focusEventVerdict` (`capture-pure.mjs`) is the decider; `addFocusEventFindings` just reports what it
-  // found. `secondary`, never `conformance`: the pair is a timing observation, not a read of whether a
-  // visible focus indicator was ever drawn (`coverage.ts`, `RULE_CRITERIA`'s 2.4.7 comment).
-  const capture = (focusEvents: unknown) => ({
-    transcript: [], structure: {}, interaction: { focusEvents },
-  } as never);
+// 2.4.7 F55 -- addFocusEventFindings walks the RAW `focusEvents.log` itself as of 2026-09-06 (see that
+// function's own doc comment for the two capture-side designs it replaced and why both were wrong).
+const focusEventsCapture = (focusEvents: unknown) => ({
+  transcript: [], structure: {}, interaction: { focusEvents },
+} as never);
+const focusFindings = (log: unknown) =>
+  ruleFindings(focusEventsCapture({ checked: true, log })).filter((f) => f.wcag.startsWith("2.4.7"));
 
-  const found = ruleFindings(capture({ checked: true, scriptRemovedFocus: [
-    { id: 7, name: "Discount code", heldMs: 3 },
-  ] }));
-  assert.equal(found.length, 1, "the genuine positive must fire exactly once");
-  assert.equal(found[0].wcag, "2.4.7 Focus Visible");
+test("TRUE POSITIVE FIRST: an ORPHANED focusout -- no matching focusin ever recorded -- is F55 regardless of what follows", () => {
+  // The real shape from focus-removed-on-receipt-order.bad's 27-event log (trimmed to what matters): the
+  // script intercepts focus so fast the browser's own focusin never fires, so "Delivery instructions"
+  // (id 1) appears ONLY as a focusout, immediately followed by a real focusin elsewhere (id 2) -- which a
+  // rule that only clears COMPLETED pairs on a destination would wrongly read as this control's own
+  // redirect. This is the false negative that made the earlier capture-side designs catch 0 of 9 positives.
+  const log = [
+    { type: "focusin", id: 0, name: "Contact name", atMs: 3195 },
+    { type: "focusout", id: 0, name: "Contact name", atMs: 5097 },
+    { type: "focusout", id: 1, name: "Delivery instructions", atMs: 5098 }, // ORPHANED: no focusin for id 1
+    { type: "focusin", id: 2, name: "Daytime telephone", atMs: 5098 },
+    { type: "focusout", id: 2, name: "Daytime telephone", atMs: 5711 },
+  ];
+  const found = focusFindings(log);
+  assert.equal(found.length, 1, "the orphaned control must be caught, not cleared by id 2's real focusin");
+  assert.match(found[0].evidence, /Delivery instructions/);
+  assert.match(found[0].evidence, /never fully received/);
   assert.equal(found[0].mapping, "secondary",
-    "a focusin/focusout pair is evidence the mechanism is absent, not a read of a visible indicator");
-  assert.match(found[0].evidence, /Discount code/);
-  assert.match(found[0].evidence, /3ms/);
+    "a focus-event read is evidence the mechanism is absent, not a read of a visible indicator");
+});
 
-  // Two removals in one capture must both be reported, independently.
-  const two = ruleFindings(capture({ checked: true, scriptRemovedFocus: [
-    { id: 1, name: "First", heldMs: 2 }, { id: 2, name: "Second", heldMs: 4 },
-  ] }));
-  assert.equal(two.length, 2, "each scripted removal is its own finding");
+test("the SAME orphaned control across two laps of a ring still reports as ONE finding, not two", () => {
+  // The real 27-event log wraps the ring twice; both occurrences of id 1's orphaned focusout must collapse
+  // to the one finding `add()`'s own dedup already provides (`wcag|evidence` key), the same as any other
+  // rule reporting the same evidence twice.
+  const log = [
+    { type: "focusout", id: 1, name: "Delivery instructions", atMs: 5098 },
+    { type: "focusin", id: 2, name: "Daytime telephone", atMs: 5098 },
+    { type: "focusout", id: 2, name: "Daytime telephone", atMs: 5711 },
+    { type: "focusin", id: 0, name: "Contact name", atMs: 12646 },
+    { type: "focusout", id: 0, name: "Contact name", atMs: 14582 },
+    { type: "focusout", id: 1, name: "Delivery instructions", atMs: 14582 },
+    { type: "focusin", id: 2, name: "Daytime telephone", atMs: 14583 },
+  ];
+  assert.equal(focusFindings(log).length, 1);
+});
 
-  // `checked: false` is "cannot say", never "no findings" — must never be read as a clean zero even when a
-  // (stale or malformed) `scriptRemovedFocus` array is attached.
-  assert.equal(ruleFindings(capture({ checked: false, why: "no event log",
-    scriptRemovedFocus: null })).filter((f) => f.wcag.startsWith("2.4.7")).length, 0);
-  assert.equal(ruleFindings(capture(undefined)).filter((f) => f.wcag.startsWith("2.4.7")).length, 0);
+test("REDIRECTION IS NOT F55: a completed receipt that lands on a DIFFERENT real control is silent", () => {
+  // The real 17-event log from keyboard-trap-modal-escape.good, CONFORMANT: a modal claims focus for its
+  // first field (id 0 held 0ms, landed on id 1 within 1ms) and the tab ring wraps (id 5 held 0ms, landed
+  // on id 1 within 0ms). F55's own text (w3.org/WAI/WCAG22/Techniques/failures/F55) is explicit that every
+  // example is a destination-less `.blur()` -- redirecting to a real control is not this failure.
+  const log = [
+    { type: "focusin", id: 0, name: "Full name", atMs: 3189 },
+    { type: "focusout", id: 0, name: "Full name", atMs: 3189 },
+    { type: "focusin", id: 1, name: "House number", atMs: 3190 },
+    { type: "focusout", id: 1, name: "House number", atMs: 5105 },
+    { type: "focusin", id: 2, name: "Street", atMs: 5106 },
+    { type: "focusout", id: 2, name: "Street", atMs: 5718 },
+    { type: "focusin", id: 3, name: "Town", atMs: 5719 },
+    { type: "focusout", id: 3, name: "Town", atMs: 6328 },
+    { type: "focusin", id: 4, name: "County", atMs: 6329 },
+    { type: "focusout", id: 4, name: "County", atMs: 7964 },
+    { type: "focusin", id: 5, name: "A", atMs: 7965 },
+    { type: "focusout", id: 5, name: "A", atMs: 7965 },
+    { type: "focusin", id: 1, name: "House number", atMs: 7965 },
+    { type: "focusout", id: 1, name: "House number", atMs: 8568 },
+    { type: "focusin", id: 2, name: "Street", atMs: 8569 },
+    { type: "focusout", id: 2, name: "Street", atMs: 9174 },
+    { type: "focusin", id: 3, name: "Town", atMs: 9175 },
+  ];
+  assert.deepEqual(focusFindings(log), [],
+    "this exact 17-event log was the real false positive -- it must stay silent");
+});
 
-  // A real, checked zero is a real zero: the oracle ran and found nothing.
-  assert.equal(ruleFindings(capture({ checked: true, scriptRemovedFocus: [] }))
+test("ordinary Tab transitions produce NO finding, however adjacent the pair looks", () => {
+  // Per the UI Events spec, a Tab transition from A to B fires focusout(A) THEN focusin(B) as one
+  // browser-level change, so A's own focusin is followed, a few entries later, by A's own focusout --
+  // exactly the F55 shape by adjacency alone. TIME is what tells them apart: an ordinary transition's
+  // focusout is caused by the NEXT Tab press, hundreds of ms away, never single digits.
+  //
+  // Deliberately starts on a focusin, not a leading focusout: a log opening on a bare focusout is its own,
+  // separately-tested shape ("a lone focusout with nothing preceding it at all is still F55" below) and
+  // would make THIS fixture assert two different things at once.
+  const log = [
+    { type: "focusin", id: 0, name: "First name", atMs: 1 },
+    { type: "focusout", id: 0, name: "First name", atMs: 850 },
+    { type: "focusin", id: 1, name: "Last name", atMs: 851 },
+    { type: "focusout", id: 1, name: "Last name", atMs: 1600 },
+    { type: "focusin", id: 2, name: "Submit", atMs: 1601 },
+  ];
+  assert.deepEqual(focusFindings(log), []);
+});
+
+test("a completed pair held under the window with NO landing at all is F55 -- the textbook destination-less blur", () => {
+  const log = [
+    { type: "focusin", id: 1, name: "Promo code", atMs: 851 },
+    { type: "focusout", id: 1, name: "Promo code", atMs: 853 },
+  ];
+  const found = focusFindings(log);
+  assert.equal(found.length, 1);
+  assert.match(found[0].evidence, /Promo code/);
+  assert.match(found[0].evidence, /held 2ms/);
+});
+
+test("landing back on the SAME control does not count as a destination", () => {
+  const log = [
+    { type: "focusin", id: 1, name: "Promo code", atMs: 851 },
+    { type: "focusout", id: 1, name: "Promo code", atMs: 853 },
+    { type: "focusin", id: 1, name: "Promo code", atMs: 854 },
+  ];
+  assert.equal(focusFindings(log).length, 1, "'landing' on itself is not a real destination");
+});
+
+test("a landing that arrives too slowly is the probe's OWN next Tab press, not the same script tick", () => {
+  const log = [
+    { type: "focusin", id: 1, name: "Promo code", atMs: 851 },
+    { type: "focusout", id: 1, name: "Promo code", atMs: 853 },
+    { type: "focusin", id: 2, name: "Submit", atMs: 1700 }, // ~850ms later -- an ordinary Tab press
+  ];
+  assert.equal(focusFindings(log).length, 1,
+    "a slow landing is an unrelated recovery, not evidence the strip never happened");
+});
+
+test("matched by id, never by name -- two DIFFERENT controls sharing a name is not F55", () => {
+  const log = [
+    { type: "focusin", id: 0, name: "Submit", atMs: 10 },
+    { type: "focusout", id: 0, name: "Submit", atMs: 900 },
+    { type: "focusin", id: 1, name: "Submit", atMs: 901 },
+  ];
+  assert.deepEqual(focusFindings(log), [],
+    "different ids, same name, ~900ms apart -- an ordinary Tab transition, not F55");
+});
+
+test("more than one control can exhibit F55 in the same capture, and both are reported", () => {
+  const log = [
+    { type: "focusin", id: 0, name: "Coupon", atMs: 10 },
+    { type: "focusout", id: 0, name: "Coupon", atMs: 11 },
+    { type: "focusin", id: 1, name: "Gift card", atMs: 500 },
+    { type: "focusout", id: 1, name: "Gift card", atMs: 501 },
+  ];
+  const found = focusFindings(log);
+  assert.deepEqual(found.map((f) => f.evidence.split(" (")[0]), ["Coupon", "Gift card"]);
+});
+
+test("a lone focusout with nothing preceding it at all is still F55 -- it is orphaned by definition", () => {
+  // `anchorToTop`'s own Escape/Ctrl+Home can blur whatever a PRIOR probe left focused, before this log was
+  // installed for `probeFocusOrder` specifically, so the log can legitimately open on a bare focusout with
+  // no matching focusin in it. That is indistinguishable from a genuine orphan by the evidence alone, and
+  // per this rule's own decision an orphan is F55 unconditionally -- reading it as "nothing to pair" would
+  // be exactly the false-negative shape this rule exists to close.
+  const log = [{ type: "focusout", id: 0, name: "Whatever a prior probe focused", atMs: 5 }];
+  assert.equal(focusFindings(log).length, 1);
+});
+
+test("`checked: false` is 'cannot say', never 'no findings' -- must never read as a clean zero", () => {
+  assert.equal(ruleFindings(focusEventsCapture({ checked: false, why: "no event log", log: null }))
     .filter((f) => f.wcag.startsWith("2.4.7")).length, 0);
+  assert.equal(ruleFindings(focusEventsCapture(undefined)).filter((f) => f.wcag.startsWith("2.4.7")).length, 0);
+});
+
+test("a real, checked, empty log is a real zero: the oracle ran and found nothing", () => {
+  assert.equal(focusFindings([]).length, 0);
 });
