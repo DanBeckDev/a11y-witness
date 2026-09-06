@@ -158,3 +158,46 @@ def test_the_held_out_set_is_NOT_enough_to_qualify_a_precondition():
         f"start detecting a miss rate around 12%. Re-run `lab:job -e job=applicability-audit` and "
         f"re-decide whether the precondition is safe, rather than inheriting this test's conclusion."
     )
+
+
+def test_would_gating_reports_unfeaturizable_records_instead_of_dropping_them_silently():
+    """`docs/backlog.md`'s "Named, not fixed" disposition, overturned.
+
+    A record with no `parsed` block makes `features.structured_feature_values` raise `RuntimeError`, and
+    `would_gating` used to just `continue` past it — no count, in a function whose own docstring promises
+    "a count over the whole corpus". `audit_grants.py` and `audit_container_exits.py` already measured
+    "predates the parsed block" as a real, non-trivial corpus population, not a hypothetical this test is
+    inventing. So a shrunken, unreported population feeding a "SAFE" verdict is exactly the small-sample
+    failure this function exists to prevent, reproduced inside it.
+    """
+    good = {
+        "input": {"parsed": {"formFields": []}, "structure": {}, "interaction": {}, "transcript": []},
+        "target": {"subtypes": []},
+        "provenance": {"caseId": "featurizable", "variant": "good"},
+    }
+    unfeaturizable = {
+        "input": {"structure": {}, "interaction": {}, "transcript": []},  # no `parsed` block at all
+        "target": {"subtypes": []},
+        "provenance": {"caseId": "no-parsed-block", "variant": "bad"},
+    }
+
+    cost = audit_applicability.would_gating("1.3.1:fake-heading", "plain_heading_candidate_present",
+                                             [good, unfeaturizable])
+
+    assert cost["unfeaturizable"] == 1, (
+        "one record has no `parsed` block and must be counted, not silently dropped from every other count"
+    )
+    assert cost["cleanRecords"] == 1, "the featurizable record is the only one that should reach the tally"
+
+
+def test_would_gating_counts_only_records_that_actually_fail_to_featurize():
+    """The count must not be a proxy for corpus size — it has to track the real failure, or a caller cannot
+    trust it any more than the silence it replaces."""
+    all_good = [
+        {"input": {"parsed": {}, "structure": {}, "interaction": {}, "transcript": []},
+         "target": {"subtypes": []}, "provenance": {"caseId": f"good-{i}", "variant": "good"}}
+        for i in range(5)
+    ]
+    cost = audit_applicability.would_gating("1.3.1:fake-heading", "plain_heading_candidate_present", all_good)
+    assert cost["unfeaturizable"] == 0, "every record here featurizes cleanly; nothing should be skipped"
+    assert cost["cleanRecords"] == 5

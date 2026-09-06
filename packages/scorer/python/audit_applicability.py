@@ -107,14 +107,25 @@ def would_gating(subtype: str, feature: str, records: list[dict[str, Any]]) -> d
     Added because the same question was answered wrongly twice on 2026-08-25 — once from a 5-positive
     held-out sample that could not see a 12% miss rate, and once from a theory about which probe ran. The
     only trustworthy answer is a count over the whole corpus, so it is a function rather than an argument.
+
+    **`unfeaturizable` exists because this docstring's own claim was not true until it did.** A record
+    predating `annotateCapture`'s `parsed` block makes `features.structured_feature_values` raise
+    `RuntimeError`, and that record was silently excluded from BOTH `positives` and `cleanRecords` — the
+    exact "predates the parsed block" population `audit_grants.py` and `audit_container_exits.py` already
+    measured as real and non-trivial in this corpus's history, not a hypothetical edge case. So "measured
+    over the whole corpus" and "measured over whatever happened to featurize" were producing identical
+    output, and a caller had no way to tell which one they were reading. Silently shrinking the population
+    THIS function's own header names as the fix for a small-sample miss rate is that exact defect wearing
+    this function's own clothes. See `docs/backlog.md`'s amended row for the full argument.
     """
     silenced: list[str] = []
-    positives = clean = clean_with = 0
+    positives = clean = clean_with = unfeaturizable = 0
     for record in records:
         labelled = subtype in set((record.get("target") or {}).get("subtypes") or [])
         try:
             values = features.structured_feature_values(record)
         except RuntimeError:
+            unfeaturizable += 1
             continue
         present = float(values.get(feature, 0.0)) > 0
         if labelled:
@@ -126,7 +137,8 @@ def would_gating(subtype: str, feature: str, records: list[dict[str, Any]]) -> d
             clean += 1
             clean_with += present
     return {"subtype": subtype, "feature": feature, "positives": positives,
-            "wouldSilence": silenced, "cleanRecords": clean, "cleanCarryingFeature": clean_with}
+            "wouldSilence": silenced, "cleanRecords": clean, "cleanCarryingFeature": clean_with,
+            "unfeaturizable": unfeaturizable}
 
 
 def main() -> int:
@@ -182,6 +194,13 @@ def main() -> int:
         print(f"    {verdict:12s} {subtype:32s} on {feature}")
         print(f"                 {cost['positives']} positive(s); "
               f"{cost['cleanCarryingFeature']} of {cost['cleanRecords']} clean records also carry it")
+        # "Measured over the whole corpus" and "measured over whatever happened to featurize" must never
+        # print identically — an unfeaturizable record is silently dropped from both counts above, so a
+        # verdict of SAFE with a nonzero skip here is a claim about a SUBSET, not the corpus.
+        if cost["unfeaturizable"]:
+            print(f"                 SKIPPED {cost['unfeaturizable']} record(s) with no `parsed` block — "
+                  "excluded from both counts above, so this verdict covers fewer records than the corpus "
+                  "holds")
         for case in cost["wouldSilence"][:5]:
             print(f"                 would silence: {case}")
 
