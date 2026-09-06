@@ -302,13 +302,26 @@ runs:
     # unchanged in outcome — recall 59%, 0 false positives — and per-criterion scores move by at most
     # 1.1e-08, which is float32 noise.
     #
-    # Keyed on the pinned set, so a stale cache cannot serve a different runtime than the one asked for.
+    # THIS USED TO SAY "Keyed on the pinned set, so a stale cache cannot serve a different runtime than
+    # the one asked for" -- WITH NO PINNED SET BEHIND IT: the key named the four package NAMES and
+    # nothing else, and `pip install onnxruntime transformers safetensors numpy` (no version at all)
+    # meant which runtime a consumer scored against was decided by whenever this cache was first
+    # populated. A comment naming the exact protection it does not provide is the `browserVersion` memo
+    # defect (CLAUDE.md), arriving in the one artifact strangers actually run. Publish blocker B2.
+    #
+    # HASHES `packages/scorer/requirements.txt` -- the same move as B4's NVDA manifest hash, and for the
+    # same reason: a file is stronger than a string copied out of it, and needs no maintenance when the
+    # pin changes. That file is now EXACT versions rather than ranges (see its own header): a range meant
+    # the lab's own installed versions were whatever pip resolved on the day that box was last built,
+    # silently different on its next reinstall, so "pin the Action to the lab" had no fixed target to
+    # pin to. Now it does, and the install step below reads its four package pins FROM that file rather
+    # than repeating them, so this key and that install can never separately drift from it.
     - name: Cache the scorer's Python wheels
       if: ${{ inputs.judge-backend == 'local' }}
       uses: actions/cache@v4
       with:
         path: ~\AppData\Local\pip\Cache
-        key: a11y-witness-pip-${{ runner.os }}-onnxruntime-transformers-safetensors-numpy
+        key: a11y-witness-pip-${{ runner.os }}-${{ hashFiles('packages/scorer/requirements.txt') }}
 
     # NO encoder cache (87 MB), and no npm cache (18 s). Both needed `${{ github.action_path }}` in a
     # path, and that is "." when the action is used locally (`uses: ./`) — actions/cache then rejects
@@ -322,7 +335,19 @@ runs:
       working-directory: ${{ github.action_path }}
       run: |
         python -m pip install --quiet --upgrade pip
-        python -m pip install --quiet onnxruntime transformers safetensors numpy
+        # EXACT versions, READ from packages/scorer/requirements.txt rather than copied by hand -- so this
+        # line and the cache key above can never separately drift from what that file pins. torch and
+        # huggingface-hub stay OUT on purpose: torch is a training-only dependency this Action never
+        # installs (see the comment above), and huggingface-hub is not independently pinnable at this
+        # layer (it rides in as a transitive of transformers).
+        pins=$(grep -E '^(onnxruntime|transformers|safetensors|numpy)==' packages/scorer/requirements.txt)
+        count=$(echo "$pins" | grep -c .)
+        if [ "$count" -ne 4 ]; then
+          echo "::error::expected 4 pinned packages (onnxruntime, transformers, safetensors, numpy) in " \
+            "packages/scorer/requirements.txt, found $count: $pins" >&2
+          exit 1
+        fi
+        python -m pip install --quiet $pins
         python packages/scorer/python/fetch-encoder.py
         # Fail here rather than at judging time: a missing model must not read as "this page is clean".
         test -f packages/scorer/models/screenreader-scorer/model.safetensors \
