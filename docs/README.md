@@ -30,6 +30,7 @@ human or agent, *working on* the repo rather than using it.
 | [reliability-plan.md](./reliability-plan.md) | the CLOSED plan (A1–A3), kept for the three refutations inside A3 — a rule that is exact on the corpus and wrong on the web, four times over |
 | [**proving-a-gate.md**](./proving-a-gate.md) | **how to take a check from BELIEVED to WATCHED FAILING** — the recipe, and the measurements behind it. Nine defects in one session were all checks that could not report themselves, and none had ever been observed to fire. `gates-are-proven.test.ts` holds the count: 5 of 16 |
 | [gate-exit-codes.md](./gate-exit-codes.md) | **what a gate's non-zero exit code actually means, per script** — read from source, because the same number means usage error, no data, or INCONCLUSIVE depending which gate returned it. Names the confirmed instances of the most dangerous shape: a code meaning "I stopped observing" read as "the thing failed" |
+| [publish-blocker.md](./publish-blocker.md) | **the npm trusted-publishing checklist (#72/#73)** — which steps need a human logged into npmjs.com or GitHub's org settings, and `npm run npm-token:check`, the push-triggered watchdog that answers "is the first-publish token gone" as present/gone/could-not-ask rather than guessing |
 
 ## Running the long jobs
 
