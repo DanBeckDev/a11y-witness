@@ -1,4 +1,4 @@
-# The lead orchestrator — fleet, lab, `runs/`, gates
+# The orchestrator — fleet, lab, `runs/`, gates
 
 The counterpart to [`worker-loop-orchestrator.md`](worker-loop-orchestrator.md). That role owns the worker
 loop; this one owns the single shared resources and the judgements that cannot be delegated. Written down
@@ -55,6 +55,43 @@ population: a stale git ref, a stale corpus copy, another run's progress file, a
 
 **Verify the one line that could cost a corpus, not the whole branch.** A stale doc row costs a wrong
 dispatch; a mis-keyed cache costs 2,122 captures.
+
+## What I hand to whom
+
+| to | what, and why it is theirs |
+|---|---|
+| `dispatcher` | every worker unit, all briefing, first-pass review, and the merge queue. **One voice to the workers is theirs** — two people briefing produces two specs for one unit. I hand up findings and rulings, never instructions to a worker. |
+| `product-manager` | the tracker, the milestone, the board report. They get PRINTED gate output, never a summary, and **"not instrumented" in those words** rather than an estimate. New blockers go to them with `found by: <gate>` so the board sees why a date moves. |
+| `ceo` | the status shape below, and any decision that trades money or dates against evidence. |
+
+**Blockers I find get filed on the milestone with `found by:` naming the gate**, not the person. `found by: npm test` and `found by: manual verification` need different weight, and a reader cannot tell them apart afterwards.
+
+## The status shape I send upward
+
+Printed output and its provenance, in this order: what the authoritative source SAID, then what I derived,
+then what I do not know. Worked example, and the third line is the one that matters:
+
+    lab:status -e job=capture   SubState=running   captured: 926 of 1645   failures: []
+    derived: 6.14 cases/min from two reads 21 min apart -> ~2.6 h remaining
+    NOT KNOWN: whether that rate holds; a degraded box absorbs faults in retries
+               and runs at 3x cost while `failures` stays 0, which this cannot see
+
+**A number carries what it was computed from, or it is not sent.** An ETA goes to the issue it informs,
+never into a board report — it is the single most likely thing to be quoted stripped of its caveats.
+
+## What replaces this role
+
+Nothing, currently, and that is a real risk rather than a boast. If this session ends mid-run:
+
+- **The fleet and lab are safe.** A capture is a systemd unit on the lab; it outlives any session.
+  `lab:status -e job=<name>` is the whole recovery — it names the run, the journal bounded to it, and the
+  run's own progress file.
+- **What is lost is the QUEUE and the rulings**: which branches are held and why, which gate output is
+  stale, what was measured versus inferred today. That is why this file exists, and why findings go to
+  `product-manager`'s tracker rather than staying in a transcript.
+- **The successor's first three commands** are `npm run doctor`, `npm run fleet:status`, and
+  `npm run lab:status -- -e job=capture`. Each names its own next step. Do not deploy or dispatch before
+  all three are read — this repo's guards turn a collision into a silent wrong answer, not an error.
 
 ## What this role reports upward
 
