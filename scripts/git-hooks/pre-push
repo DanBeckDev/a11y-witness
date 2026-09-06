@@ -78,10 +78,39 @@ for v in "${!GIT_@}"; do unset "$v"; done
 failed=()
 skipped=()
 
+# A CHECK THAT COULD NOT RUN IS NOT A CHECK THAT FAILED, and until 2026-09-06 they printed the same.
+#
+# Pushing `main` from a worktree with no `node_modules` produced `3 check(s) failed: lint typecheck unit
+# tests`, which reads exactly like the change breaking the build. The cause was `sh: eslint: command not
+# found` — the gate examined NOTHING and reported three failures. That is this hook's own stated defect
+# (see the comment above about "verified" coming to mean "unexamined") arriving in the runner rather than
+# in a gate, and it is the condition under which somebody reaches for `A11Y_SKIP_VERIFY=1` and pushes
+# something genuinely broken, because from the output there is no way to tell the two apart.
+#
+# So the toolchain is checked ONCE, before any check runs, and its absence STOPS the hook with a
+# different message rather than being spread across three false failures. Refusing here is safe: a
+# worktree cannot verify anything without its dependencies, so there is no honest push to allow through.
+if [ ! -x node_modules/.bin/eslint ]; then
+  echo "pre-push: REFUSING — no toolchain here (node_modules/.bin/eslint is missing)."
+  echo "  This checkout cannot run lint, typecheck or the tests, so a push from it would be UNVERIFIED."
+  echo "  It is not your change: nothing has been examined."
+  echo "  Run \`npm install\` here, or push from a checkout that has one."
+  exit 1
+fi
+
 run() { # run <label> <command...>
   local label="$1"; shift
-  if "$@" >/tmp/a11y-prepush.$$ 2>&1; then
+  local status=0
+  "$@" >/tmp/a11y-prepush.$$ 2>&1 || status=$?
+  if [ "$status" -eq 0 ]; then
     echo "  ok      $label"
+  elif [ "$status" -eq 127 ]; then
+    # 127 is the shell's "command not found". The toolchain guard above catches the common cause; this
+    # catches a check whose OWN binary is missing, and keeps it out of `failed` so the summary cannot
+    # claim a verdict it did not reach.
+    echo "  COULD NOT RUN  $label — a command it needs is not installed; nothing was examined"
+    tail -5 /tmp/a11y-prepush.$$ | sed 's/^/            /'
+    skipped+=("$label (could not run)")
   else
     echo "  FAILED  $label"
     tail -20 /tmp/a11y-prepush.$$ | sed 's/^/            /'
