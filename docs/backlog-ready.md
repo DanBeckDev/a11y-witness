@@ -30,27 +30,33 @@ dispatcher; the lead runs it and returns the number.
 1. **Read the row.** Region, branch, the CLAUDE.md sections that bound it, and the acceptance command are
    all here — you should not need to read `docs/backlog.md` or `known-gaps.md` first, though the row links
    to the exact section if you want the full derivation.
-2. **Check the region is free — LOCALLY, never on `origin`.** Agent branches in this repo are never
-   pushed, so `git branch -r --list 'origin/agent/*'` always returns empty and would report every row
-   unclaimed forever if trusted. Use the local forms instead:
+2. **Check the region is free — by REGION, never by matching a branch NAME.** A row's `Branch:` field is
+   only a SUGGESTION for whoever claims it, not an identifier anything checks against: measured
+   2026-09-06, of the five rows this page has had actually addressed, only one landed under its own
+   suggested name — the rest landed under names nobody could have guessed (two rows bundled onto one
+   branch neither of them named; a third under a name close to but not identical to its suggestion). A
+   check keyed on a name would have reported all of those as unclaimed while real, sometimes-merged work
+   existed. Run this instead, once per path in the row's `Region:` field:
    ```
-   git branch --list 'agent/<branch name>'
-   git worktree list
+   git log --branches='agent/*' --not origin/main --oneline --source -- <region path>
    ```
-   If the branch exists AND has a worktree with commits from the last day or so, someone is on it — pick
-   another row, or message them. A branch with no worktree, or a worktree stuck at its base commit for
-   more than a day, is abandoned; treat it as free and say so when you take it. **Also check whether a
-   DIFFERENTLY-NAMED branch already covers the row** — this page's own suggested branch names are a
-   starting point, not a guarantee of what a worker actually used; a row that says so explicitly (because
-   this was already found once) names the real branch to check first.
-3. **Claim it by pushing the named branch to `origin` if this repo's workflow does that for you, or by
-   creating the local branch and worktree if it does not — whichever this session's convention already
-   is.** No file anywhere needs editing to claim a row — the branch's existence IS the claim, checked live
-   rather than trusted from a written date. That is deliberate: a date written into this file can go stale
+   Empty output means nobody local has touched it. Any output names the real branch(es) that have,
+   directly from the commit, never from a name you have to already know — `--source` prints which branch
+   each commit was reached through. Also check `git worktree list` for whether that branch still has an
+   active worktree with recent commits; a branch with no worktree, or one stuck at its base commit for
+   more than a day, is abandoned and the region is free to take.
+   Agent branches in this repo are never pushed, so `git branch -r --list 'origin/agent/*'` always returns
+   empty and would report every row unclaimed forever if trusted — do not reach for it.
+3. **Claim it by creating a local branch and worktree** (or pushing, if this repo's workflow does that for
+   you — whichever this session's convention already is). No file anywhere needs editing to claim a row —
+   the branch's existence and its diff against the row's Region ARE the claim, checked live rather than
+   trusted from a written date or a name. That is deliberate: a date written into this file can go stale
    the moment its owner stops working and nobody remembers to erase it, which is the exact "fact stated
-   twice" shape this repo's own guards exist to close. A branch cannot go stale that way — it either
-   exists or it does not — but it must be checked in the place branches in THIS repo actually live, which
-   tonight is local worktrees, not `origin`.
+   twice" shape this repo's own guards exist to close, and a NAME can be typed differently by every worker
+   who tries — this page's own first draft hand-wrote "Currently claimed" notes into two rows, which is
+   the identical rot risk one layer up: a note in the file that nothing keeps honest once the branch it
+   names merges, gets renamed, or gets abandoned. A region-diff check has neither problem: it asks the
+   region itself, live, every time.
 4. **Do the row's acceptance command, for real, before reporting done.** Every row's acceptance is a
    command whose output is the verdict, not a description of intent.
 5. **When you finish, delete the row** (same rule as `docs/backlog.md`'s own "How an item leaves this
@@ -77,12 +83,7 @@ as what remains. Do not run anything reaching the fleet or the lab until that ch
 ### 1. `crossCheckAgainstElementsList` reads the Elements List of whatever page `probeRouteChange` navigated to, not the page under test
 
 - **Region:** `packages/nvda-worker/src/capture-probes.mjs`
-- **Branch:** `agent/elements-list-after-navigation`
-- **Currently claimed** under a DIFFERENT branch — `agent/route-change-order-and-dialog-restore` — which
-  bundles this row with row 2 below (same region, same underlying investigation). Confirmed via
-  `git branch --list 'agent/route-change-order-and-dialog-restore'` and `git worktree list` before
-  starting either row. If that branch is stale (no worktree, or a worktree stuck at its base commit for
-  more than a day), treat both rows as free again under their own suggested names.
+- **Branch:** `agent/elements-list-after-navigation` (a suggestion only — check by region, see step 2 above)
 - **CLAUDE.md sections:** "A FACT STATED TWICE, and the copies drifted" (the general shape — a remedy
   applied at one call site when the behaviour reaches several); "The census can measure the wrong
   document" material under "Verifying changes" is the SAME bug in the sibling it was already fixed in
@@ -128,11 +129,9 @@ NEW page's Elements List. Same shape, same document, one call site the earlier f
 
 ### 2. `probeDialogEscape` is the only focus-riding probe with no `restoreBrowseMode` cleanup
 
-- **Region:** `packages/nvda-worker/src/capture-probes.mjs` — **same file as row 1: claim only one of the
-  two at a time, and check `git branch --list` locally for BOTH branch names before starting either.**
-- **Branch:** `agent/dialog-escape-restore-browse-mode`
-- **Currently claimed** under `agent/route-change-order-and-dialog-restore` — see row 1's note; this is the
-  same bundled branch, not a separate claim.
+- **Region:** `packages/nvda-worker/src/capture-probes.mjs` — **same file as row 1: check the region
+  (step 2 above) before starting either, since one branch may already cover both.**
+- **Branch:** `agent/dialog-escape-restore-browse-mode` (a suggestion only — check by region)
 - **CLAUDE.md sections:** "Focus mode makes quick-nav keys TYPE THEMSELVES INTO THE PAGE" (why an
   un-restored mode is dangerous for whatever probe runs next); "A fix applied at ONE call site when the
   behaviour reaches several"
@@ -207,17 +206,15 @@ assertion) already makes the broad predicate an acceptable trade — the same ar
 **Acceptance:** Run the `wcag-criterion-check` skill against 3.2.1's own text. Either narrow
 `contextChanged` to the criterion's actual triggers, or write the limit explicitly into
 `criterion-coverage.ts`'s 3.2.1 note (the same way the 4.1.2 settability gap and the 2.1.4 gap are already
-stated there) so the next reader does not have to re-derive it. **Not fleet-gated** — `npm run rules:gate`
-reads the corpus already on disk (this worktree's `runs/` symlink has one) rather than a live worker, so
-the fix is fully verifiable tonight:
+stated there) so the next reader does not have to re-derive it. **Not fleet-gated**, but `rules:gate`
+reads `runs/` for a verdict — per "A GATE THAT READS `runs/` IS NOT YOURS TO REPORT" above, it is not
+yours to run and report; a local run is a pre-check only, never the acceptance evidence:
 ```
 npx tsx --test packages/judge/src/criterion-coverage.test.ts
-npm run rules:gate
 ```
-Passing means: the test suite is green, and `rules:gate` reports the same or fewer 3.2.1 referrals on the
+Then request `rules:gate` through the dispatcher, who has the lead run it and return the number. Passing
+means: the test suite is green, and `rules:gate` reports the same or fewer 3.2.1 referrals on the
 1,183-conformant-record corpus with no new assertions.
-
----
 
 ---
 
@@ -234,11 +231,49 @@ Re-checked each against the actual branch diff, not against the claim about it:
 |---|---|---|
 | 5 — Python lab-job partial-corpus exit codes | `agent/python-gate-exit-codes`, 1 commit | **Confirmed closed.** `git diff origin/main...agent/python-gate-exit-codes` shows real fixes to `audit-scorer-shortcuts.py` (a subtype losing all its positives silently omitted its row rather than reporting `positives: 0`, so `compare_to_baseline()` could never see "lost coverage" — now a named, gate-blocking check) and `audit_container_exits.py` (`examined` printed with no denominator, so 3 of 3,000 read identically to 3 of 3), plus two new test files, all eight scripts individually assessed with a verdict in `docs/backlog.md`'s diff on that branch. This is more thorough than what row 5 asked for, not less. |
 | 4 — `criteriaAssessableFrom` decision | `agent/criteria-assessable-from-decision`, 2 commits | **Confirmed closed** as the row's own option 2 ("document the deadness rather than wire it up"): the diff adds a doc comment on `criteriaAssessableFrom` stating plainly it has zero production callers and why it is kept anyway, plus a discovery test (`criteria-assessable-from-has-no-production-caller`, with its own anti-vacuity guard) enforcing that claim against the real tree. It does **not** separately test the `structureCensus`/`censusTargetIsSuspect` latent inconsistency row 4 also named — accepted as sufficient anyway, because the function is now enforced dead: anyone who wires up a real caller has to touch this code and confront the gap directly at that point, which the comment's own last line says outright ("if that test ever fails... this function has shipped"). |
-| 6 — train rotation on crash | none — claimed closed "at HEAD" by the same 12-line comment this row's own "Verified open" entry had already quoted | **Not confirmed. Disputed, and removed from this page either way pending `dispatcher`'s reply.** `git diff origin/main...<every local agent/* branch> -- packages/lab/scripts/train-screenreader-model.py` finds NOTHING — no branch touches this file. The comment cited as the closure is the identical text this row's own verification already read as evidence the row was OPEN ("the stronger form... is a backlog row and deliberately not built here"). A comment stating why a fix was deferred is not the fix; it is the reason the row existed. What may be true instead is that the comment's own reasoning ("a hazard that measurement says does not currently bite") is a complete enough argument to reclassify this as "Decided — not defects" rather than ready work — which would justify removing it from this page for the SAME reason row 6 is gone, by a different route. Either way the practical outcome here is identical (not listed), so it is removed now rather than left blocking the rest of this page, with the disagreement stated plainly rather than silently accepted. |
+| 6 — train rotation on crash | none — claimed closed "at HEAD" by the same 12-line comment this row's own "Verified open" entry had already quoted | **Objection sustained by `dispatcher` on review, 2026-09-06: not closed.** `git diff origin/main...<every local agent/* branch> -- packages/lab/scripts/train-screenreader-model.py` finds NOTHING — no branch touches this file. The comment cited as the closure is the identical text this row's own verification already read as evidence the row was OPEN ("the stronger form... is a backlog row and deliberately not built here"). A comment stating why a fix was deferred is not the fix; it is the reason the row existed. Passed to `orchestrator`, who owns backlog curation, to decide whether the comment's own reasoning ("a hazard that measurement says does not currently bite") is a complete enough argument to reclassify this as "Decided — not defects" on `docs/backlog.md` — a judgement about what the project has decided, not about what is open, so not decided here. Either reading keeps it off this page. |
 
 Rows 1 and 2 were independently re-verified against every local branch too and are still genuinely open;
-row 3 is unaffected (no branch touches it). See the "Currently claimed" notes on rows 1 and 2 above — they
-are already briefed under `agent/route-change-order-and-dialog-restore`, found the same way.
+row 3 is unaffected (no branch touches it). All three are checked by REGION now, not by matching a branch
+name — see "How to use this page" step 2 and the section immediately below.
+
+## The claim mechanism was keyed on a branch NAME, and real work does not reliably use one
+
+**Found by `dispatcher`, independently re-verified before accepting, 2026-09-06.** Of the five rows this
+page has had actually addressed, only ONE (row 3) landed under its own suggested `Branch:` name. Checked
+directly, one suggested name at a time:
+
+```
+git branch --list agent/elements-list-after-navigation        -> (nothing)
+git branch --list agent/dialog-escape-restore-browse-mode      -> (nothing)
+git branch --list agent/321-context-change-predicate           -> agent/321-context-change-predicate  (matched)
+git branch --list agent/criteria-assessable-decision           -> (nothing)
+git branch --list agent/python-partial-corpus-exit-codes       -> (nothing)
+```
+
+Real branches used instead, confirmed by diff CONTENT rather than name similarity: rows 1 and 2 both
+landed on one branch neither of them named (`agent/route-change-order-and-dialog-restore`); row 4 landed
+on `agent/criteria-assessable-from-decision`, close to but not identical to its suggestion; row 5 on
+`agent/python-gate-exit-codes`, unrelated to its suggestion. A claim check keyed on the suggested name
+would have reported all three as unclaimed while real, sometimes-merged work existed.
+
+**The fix is region-diff, not a naming convention**, per `dispatcher`'s argument to the CEO over the CEO's
+own initial ruling (which had been `agent/<row-id>`, enforced by the test): a `Region:` path is already a
+required field on every row, so checking whether any local `agent/*` branch's diff touches it derives the
+claim from something the row already states, rather than depending on a worker typing a name correctly —
+this repo's own rule that a check relying on a human to remember something is a check that gets broken.
+`packages/lab/src/packaging/backlog-ready.test.ts` now proves the mechanism correctly attributes rows 1
+and 2 to their real branch by region alone, with the branch name appearing only as the test's EXPECTED
+result, never inside the matching logic. This also retired the "Currently claimed" notes this page's first
+draft hand-wrote onto rows 1 and 2 — the same hand-written-state-can-rot shape the claim design already
+argued against for a written date, just one layer up, in prose rather than in a field.
+
+**One honest limitation, found while building this and not papered over:** region-diff finds a branch only
+when the real fix touches the FILE the row named. Row 3's own real fix (once it lands) may take either of
+its own two stated options — narrowing the predicate in `rules.ts`, or writing the limit into
+`criterion-coverage.ts`'s note — and only one of those is the row's declared Region. A fix landing under
+the second option would be invisible to a region-diff check scoped to the first. Broader than a name match
+(which only rows 1/2/5 could ever pass), not a complete guarantee.
 
 **`docs/backlog.md`'s own "~38 architecture-audit findings" section (554–663) is almost entirely stale, and
 that is worth stating as plainly as any row above.** Spot-checked five of its still-unstruck bullet points
