@@ -1,0 +1,62 @@
+name: NPM token liveness
+
+# HAS THE FIRST-PUBLISH NPM TOKEN OUTLIVED ITS REASON TO EXIST? — #73, sibling of `board-liveness.yml`.
+#
+# `NPM_TOKEN` is an organisation-level Actions secret that exists to cover exactly one thing: the first
+# publish of packages that (per #72) may not yet be able to have a trusted publisher attached. #73 asks,
+# on 2026-11-20, whether it is gone. This workflow is the mechanism that carries that date rather than a
+# person remembering it.
+#
+# ## Why this is NOT on a schedule, and it is the whole design
+#
+# A watchdog that is itself scheduled has the disease it watches for: GitHub disables a scheduled workflow
+# after 60 days without repository activity, silently, producing no run, no log and no red mark — the
+# exact failure `board-liveness.yml` was built to stop reaching this repo a second time.
+#
+# `push` cannot be disabled by inactivity, because a push IS the activity. `npm-token-liveness.test.ts`
+# pins the absence of a `schedule:` key here for the same reason `board-liveness.test.ts` does.
+#
+# ## This job cannot always answer, and that is stated rather than hidden
+#
+# `gh secret list --org a11ign` needs org-admin or a fine-grained "Organization secrets: read" permission.
+# `github.token` has neither, so most runs of this job — until a human deliberately grants a narrowly
+# scoped read-only credential — will report CANNOT_TELL rather than a real answer. That is a genuine,
+# named limitation, not a bug: see `docs/publish-blocker.md` for the credential this needs and why it is a
+# much smaller risk than the publish-capable token it is checking for. If `ORG_SECRETS_READ_TOKEN` is
+# later added as an organisation secret with that scope, this job picks it up with no further change.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write          # the one comment per stale spell, on #73
+
+concurrency:
+  group: npm-token-liveness
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      # `continue-on-error`, deliberately, and for the same reason `board-liveness.yml` uses it: this
+      # job's finding is about a CREDENTIAL, not about the commit that happened to trigger the check.
+      # Failing the push would put a red mark against an unrelated author's merge for a token someone else
+      # forgot to revoke weeks earlier.
+      - name: Is NPM_TOKEN still there?
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.ORG_SECRETS_READ_TOKEN || github.token }}
+        run: node scripts/npm-token-liveness.mjs --post --issue=73
