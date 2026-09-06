@@ -176,10 +176,10 @@ function section4(d) {
     "| **Confirm publication may proceed in September.** | Three final steps need the owner's hands, so "
     + "the engineering finishes and the release waits. |",
     "",
-    "**We have withdrawn a claim.** The tool said it could assess one rule — content appearing on hover "
-    + "or focus — and on a real user's path it cannot, because that failure conceals itself. **The check "
-    + "now refuses to answer rather than answering \"nothing appeared\"**, and restoring the claim needs "
-    + "a real website to trigger it. The appendix says how it hid.",
+    "**One rule we assess can currently be seen only on some pages**, because a page that fails it hides "
+    + "its own evidence from the path a user takes. **The check now says \"cannot say\" rather than "
+    + "\"nothing found\"**, which is the difference between a gap and a clean bill of health. Widening "
+    + "it is tracked work. The appendix says how the failure hid.",
     "",
     "### Four risks are live, and only the first could move the date.",
     "",
@@ -282,16 +282,17 @@ function renameBackground(L) {
       + `assesses**, **${counts.partial} it assesses in part**, and **${counts.reachable} it could reach `
       + "and does not yet.**");
     L.push("");
-    L.push("**One moved today, from the middle column to the last.** 1.4.13, content on hover or focus, "
-      + "was claimed in part and is now only reachable — so the count of rules we claim anything about "
-      + `falls from ${counts.assessed + counts.partial + 1} to ${counts.assessed + counts.partial}. `
-      + "**The number of rules fully assessed is unchanged**, because this one was never in that column.");
+    L.push("**None of those numbers moved today, and one nearly did.** Content on hover or focus is "
+      + "claimed as partly assessed. Downgrading it to *reachable* was ruled and then **refused by our "
+      + "own coverage test**: the rule still produces findings, and calling it unassessed would document "
+      + "a criterion we report on as one we do not. **Partial is true as written**, and it stays.");
     L.push("");
-    L.push("**The failure concealed itself, which is why it survived.** A page that fails this rule keeps "
-      + "its panel open, so by the time the check looked, the thing it was looking for had already "
-      + "happened — it compared a changed page against a changed page and saw no change. **On a page "
-      + "that passes, the same check is correct.** So it read as working for as long as it was only ever "
-      + "asked about pages that pass.");
+    L.push("**What changed is what the check says when it cannot see.** A page that FAILS this rule "
+      + "leaves its panel open, so the check compared a changed page against a changed page and found no "
+      + "change. **On a page that passes, the same check is correct** — which is why it read as working "
+      + "for exactly as long as it was only ever asked about pages that pass. It now speaks only from a "
+      + "baseline it trusts and is silent otherwise, so the claim is narrower than it looked and true. "
+      + "Widening it is tracked work.");
     L.push("");
   }
 
