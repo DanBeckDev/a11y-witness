@@ -1,0 +1,124 @@
+name: Backlog row (internal work item)
+description: A unit of work on this project, in the form a worker can pick up without asking anyone a question first.
+title: ""
+labels: ["backlog"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This form is for the project's own work items.** If a finding looks wrong, or a worker is
+        broken, use the other templates instead.
+
+        Three fields below are REQUIRED because a row missing any one of them is not ready to pick up:
+        the **acceptance command**, the **region** it owns, and the **open-check command**. They are
+        ported from `docs/backlog-ready.md`, which argued each of them into existence — read that page
+        before deciding a field does not apply to your row.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What it is
+      description: >
+        The defect or the work, and what it costs. Say what was MEASURED rather than what was reasoned —
+        this project's record is full of mechanisms that were inferred and wrong. If a number appears,
+        say where it was measured from.
+    validations:
+      required: true
+
+  - type: input
+    id: region
+    attributes:
+      label: Region
+      description: >
+        The path(s) this row owns, repo-relative, comma-separated. This is not documentation — it is what
+        the claim check keys on, so it must be the file a fix would actually touch.
+      placeholder: packages/nvda-worker/src/capture-probes.mjs
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance — a COMMAND whose output is the verdict
+      description: >
+        Not a description of intent. A command, and what its output must say. If the only honest
+        acceptance needs the fleet or the lab, give the OFFLINE step that is completable now and name
+        the fleet step as what remains — see "Fleet-gated" below.
+
+        A gate that reads `runs/` (rules:gate, rules:coverage, check-signals, corpus:starvation,
+        scorer:shortcuts) is NOT yours to report: a checkout's `runs/` is only as fresh as its last sync,
+        and one measured here was 89 hours stale and answered cleanly having examined a corpus that no
+        longer exists. Name it, say the orchestrator runs it, and never quote it as settled.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: open-check
+    attributes:
+      label: Open-check — the command that shows this row is still open
+      description: >
+        Run it before filing and paste its output. Re-run it before starting work: three of six rows
+        seeded on 2026-09-06 were already addressed by branches nobody had merged.
+
+        THE BASIS IS `origin/main` PLUS EVERY UNMERGED LOCAL `agent/*` BRANCH, never HEAD alone, because
+        HEAD cannot see finished-but-unmerged work. Claim is derived from the region DIFF, never from a
+        branch NAME — measured 2026-09-06, only 1 of 6 rows landed under its suggested name and 4 of the
+        6 names never existed. Do NOT write a check against `origin/agent/*`: agent branches here are
+        never pushed, so that namespace is always empty and answers "clear" forever.
+
+        Two limitations to carry, not drop: region-diff only sees a fix touching the EXACT region path,
+        so a row whose acceptance offers two options in different files is invisible under the other one;
+        and an empty result must be distinguishable from a BROKEN check — an empty queue is the correct
+        end state.
+      value: |
+        # is the defect still present?
+        <the command that reads the code or the artefact, plus its output>
+
+        # has anyone already claimed the region, merged or not?
+        git log --branches='agent/*' --not origin/main --oneline --source -- <region path>
+        git worktree list
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: derivation
+    attributes:
+      label: Where the full derivation lives
+      description: >
+        The record entry this row summarises — `docs/known-gaps.md` for something the project did not yet
+        do, `docs/not-working.md` for something that was wrong, an ADR for a decision. The markdown files
+        are the RECORD; this issue is the tracker. Do not restate the derivation here; link it.
+      placeholder: docs/known-gaps.md §40
+    validations:
+      required: false
+
+  - type: input
+    id: claude-md
+    attributes:
+      label: CLAUDE.md sections that bound this work
+      description: The headings a worker should read before touching this region.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: fleet
+    attributes:
+      label: Does the acceptance need the fleet or the lab?
+      options:
+        - "No — completable offline, start now"
+        - "Partly — offline step given above, fleet step named as what remains"
+        - "Yes — cannot start until the orchestrator frees a worker"
+    validations:
+      required: true
+
+  - type: textarea
+    id: not
+    attributes:
+      label: What this row is NOT
+      description: >
+        Optional, and worth more than it looks. Naming the adjacent work this row deliberately excludes is
+        how a unit stops growing while somebody is inside it.
+    validations:
+      required: false
