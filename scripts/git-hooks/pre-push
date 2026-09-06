@@ -194,6 +194,26 @@ for s in ${skipped+"${skipped[@]}"}; do echo "  SKIPPED $s"; done
 if [ ${#failed[@]} -gt 0 ]; then
   echo "" >&2
   echo "pre-push: ${#failed[@]} check(s) failed: ${failed[*]}" >&2
+  # THE GATE READS THE WORKING TREE, NOT THE COMMITS BEING PUSHED — and in a SHARED checkout those are
+  # different things. Measured 2026-09-06: a push from the primary was refused with
+  # `1391 problems (2 errors)`, and `npm run lint` re-run immediately afterwards exited 0 with none. The
+  # errors were another agent's in-flight edit, present when the gate ran and gone by the time anyone
+  # looked. The pusher had not created that state and could not reproduce it.
+  #
+  # That is worse than a plain false failure because it is NOT REPRODUCIBLE: re-running gives a clean
+  # result, which reads as flakiness, and a flaky gate is the one people learn to push past. So a refusal
+  # NAMES the possibility rather than leaving the reader to guess — this cannot make the gate correct,
+  # and it makes an unattributable refusal attributable, which is what stops `A11Y_SKIP_VERIFY=1`
+  # becoming the habit.
+  dirty="$(git status --porcelain 2>/dev/null | head -20)"
+  if [ -n "$dirty" ]; then
+    echo "" >&2
+    echo "NOTE: the working tree was NOT CLEAN when these checks ran, and the gate reads the TREE" >&2
+    echo "rather than the commits you are pushing. In a shared checkout some of this may not be yours:" >&2
+    echo "$dirty" | sed 's/^/    /' >&2
+    echo "  Re-run the failing check before believing it. If it passes, the gate saw somebody else's" >&2
+    echo "  half-finished edit and this refusal is not about your commits." >&2
+  fi
   echo "Fix them, or push anyway with:  A11Y_SKIP_VERIFY=1 git push ..." >&2
   exit 1
 fi
