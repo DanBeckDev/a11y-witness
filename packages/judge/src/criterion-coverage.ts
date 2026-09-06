@@ -763,6 +763,22 @@ export interface BlockedCriterion { criterion: string; missing: EvidenceChannel[
  *
  * `out-of-scope` criteria are absent from both lists rather than reported as blocked — nothing is missing,
  * they are simply not this tool's business, and listing them as blocked would imply a probe could fix it.
+ *
+ * **THIS FUNCTION HAS ZERO PRODUCTION CALLERS, AND THAT WAS ESTABLISHED BY GREP, NOT ASSUMED — 2026-09-06.**
+ * `channelsPresent` and `CRITERION_COVERAGE` above it are both live (`audit-rule-coverage.ts`'s
+ * `rules:coverage` gate calls `channelsPresent` directly; `docs/coverage.md` is generated from
+ * `CRITERION_COVERAGE`), but nothing that ships calls this {assessable, blocked} combinator. It is called
+ * only from `criterion-coverage.test.ts` (its own unit tests) and `channel-tables-4.1.2.test.ts` (a
+ * real-corpus regression that uses it correctly, as a TEST tool proving the channel tables stay honest —
+ * see that file's own header). A peer session spent a night reasoning about a `BLOCKED: 2.4.2 ->
+ * routeChange` message as though it were product output; that phrase has only ever appeared in this
+ * repo's test-file prose. Kept rather than deleted because it is the tested implementation of the ANY/ALL
+ * `channelMode` combinator and `channel-tables-4.1.2.test.ts` depends on it to catch a real regression
+ * class (146 of 218 real captures once reported 4.1.2 BLOCKED after an asserted finding); reimplementing
+ * that check inline would restate logic this file already owns, the "second copy" shape this repo has
+ * paid for repeatedly. `criteria-assessable-from-has-no-production-caller` in `criterion-coverage.test.ts`
+ * enforces the claim in this paragraph — if that test ever fails because a real caller was added, this
+ * function has shipped, and the fix is to delete the test and this warning, not to loosen either.
  */
 export function criteriaAssessableFrom(capture: ChannelBearingCapture):
   { assessable: string[]; blocked: BlockedCriterion[] } {
