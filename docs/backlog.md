@@ -433,11 +433,22 @@ and `-enrolment`, which is why all four are listed separately — a trailing `+`
 `+also-`/`+with-` variants, never everything sharing the prefix.
 
 ```
-npm run lab:pipeline -- --pipeline=verify --no-cache --only=\
+npm run lab:pipeline -- --pipeline=verify --only=\
   focus-removed-on-receipt-booking+,focus-removed-on-receipt-claim+,focus-removed-on-receipt-order+,\
   image-missing-alt-behind-consent+,keyboard-trap-modal-cycle+,keyboard-trap-modal-escape+,\
   route-title-stale+,route-title-stale-catalogue+,route-title-stale-claim+,route-title-stale-enrolment+
 ```
+
+**NO `--no-cache` ON THIS COMMAND, and the first version of this row had it wrong.** `lab:pipeline`
+accepts exactly `--pipeline= --ref= --only= --list --local --status --log`, so `refuseUnknownFlags` would
+have REFUSED the run — the guard working, at the worst possible moment. It is unnecessary anyway: the
+`capture-only` job's own argv already ends `--no-cache`, with a comment recording why it must
+(*"`training:capture --only=<case>` on a case that already has one returns the STORED capture and reports
+success... it re-serves the evidence from before the change"*), found on 2026-09-01 when this job
+"reproduced" a pathological capture twice and it was the cache both times.
+
+**`verify` runs `capture-only`, `grants-audit`, `check-signals` — NOT `rules:gate`.** That is a separate
+dispatch afterwards, and it is the one carrying the acceptance numbers.
 
 `--no-cache` because the PAGES have not changed — `workerCode` is deliberately outside the cache key, so
 a cached capture would be served unchanged and the fix would be invisible. `--pipeline=verify` deploys the
