@@ -323,8 +323,33 @@ def verify_artifact(
                 f"{criterion}: report carries a criterion-level threshold. These weights predate "
                 "per-subtype calibration and must be retrained before they can be scored."
             )
+        # A CRITERION MAY DECLARE THAT IT HAS NO HEAD, and that is a different state from having lost one.
+        #
+        # `rule-ownership.json`'s `modelHead: false` means the RULES decide a subtype outright and no head
+        # is ever fitted for it. When every subtype of a criterion carries it, the trainer records the
+        # criterion with `"modelHead": false` and a `why` rather than omitting it -- so "no head" and
+        # "never considered" stay different states. This check predates that field and read the declared
+        # case as corruption.
+        #
+        # Measured 2026-09-06: the first v19 candidate trained after `1.4.2:autoplay-uncontrollable` and
+        # `2.4.7:focus-removed-on-receipt` were declared could not be LOADED --
+        # `RuntimeError: criterion 2.4.7 has no scorer heads` -- so held-out acceptance could not run and
+        # the artefact would have been unusable in the product, not merely ungradeable. That is the SAME
+        # exemption reaching its seventh site, and the first one on the path that ships.
+        #
+        # STILL A HARD FAILURE WITHOUT THE DECLARATION. An empty `subtypes` with no `modelHead: false` is
+        # exactly the corruption this check was written for -- weights that lost a head, or a report
+        # written against a different artefact -- and it must keep failing loudly. The declaration is what
+        # separates them, and it can only come from the trainer, which reads `rule-ownership.json`.
         if not criterion_report.get("subtypes"):
-            raise RuntimeError(f"criterion {criterion} has no scorer heads")
+            if criterion_report.get("modelHead") is False:
+                continue
+            raise RuntimeError(
+                f"criterion {criterion} has no scorer heads, and does not declare `modelHead: false`. "
+                "A criterion whose subtypes are all rule-decided is recorded with that field and a "
+                "`why`; an empty one without it means these weights lost a head or this report describes "
+                "different weights."
+            )
         for subtype, subtype_report in criterion_report.get("subtypes", {}).items():
             head = subtype_report.get("head")
             if not isinstance(head, str) or not head:
