@@ -420,6 +420,11 @@ today's fixes are that pattern applied where it was missing.
 
 ## Open defects
 
+| | what would tell you it is fixed | detail |
+|---|---|---|
+| **`rules:gate` AND `rules:real-pages` READ ONE CORPUS THROUGH DIFFERENT PATHS, so a capture-layer fix is invisible to one of them — found 2026-09-06.** `export-screenreader-dataset.mjs:236` bakes `ruleEvidence: oracleCounts(capture)` at EXPORT time, so the census in `screenreader-evidence.jsonl` is frozen under whatever trust rule was current when the export ran. `rules:real-pages` reads CAPTURES and sees a change immediately; `rules:gate` reads the EXPORT and sees nothing until a re-export. **Measured**: after merging the census trust-rule tightening, every rule finding across all 2,796 exported records was byte-identical — 1,398 conformant, 10 with a finding, same per-criterion counts — while the same change demonstrably alters what a capture-reading rule concludes. | The two paths agree about what a rule may read, or the divergence is stated where somebody running either gate will see it. | **This is the "two gates disagreeing about one corpus" signal from the 1.3.1 episode**, where `rules:gate` said `29/29 EXACT` and `rules:coverage` said `fired 0x` about the same rule. Here it is worse in one respect: it presents as **the fix appearing not to work**. Anyone who lands a capture-layer fix, runs `rules:gate`, and sees no movement will conclude the fix is wrong — and be wrong. Not urgent, and it must not be forgotten: the whole reason it was caught is that a prediction was checked against the artefact instead of accepted. |
+
+
 **THE RECAPTURE LIST FOR THE TWO WORKER FIXES — derived and verified 2026-09-06, so it is not re-derived
 under time pressure.** The 2.4.7 predicate and the census-before-navigation fix both change what a capture
 STORES, so the affected cases must be recaptured before any gate can see the difference. Computed from the
