@@ -15,7 +15,7 @@ The findings it is *for* are the ones a rule scanner structurally cannot produce
 *Asserted* — the evidence decides it, so the tool states the criterion is not satisfied. A control that
 announced `collapsed`, was activated, and still announces `collapsed` has contradicted itself; there is no
 second reading. These come from the deterministic rule layer, which is exact on every criterion it owns with
-**zero false positives across 1,183 conformant records**, re-verified by `npm run rules:gate` on every push.
+**zero false positives across 1,405 conformant records**, re-verified by `npm run rules:gate` on every push.
 
 *Referred* — the evidence is suggestive and the judgement is a human's. Whether a link named "Details" is
 adequate depends on context WCAG itself says may be off-screen; the tool reports `cantTell` in ACT and EARL's
