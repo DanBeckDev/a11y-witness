@@ -166,6 +166,26 @@ test("2.4.2 is assessable from a capture carrying a routeChange", () => {
     `2.4.2 needs title+routeChange and both are present: ${JSON.stringify(assessable)}`);
 });
 
+test("3.2.1 and 3.2.2's notes state that a title diff is broader than WCAG's 'change of context'", () => {
+  // 2026-09-06 `wcag-criterion-check`: the criterion defines change of context as a change to user agent,
+  // viewport, FOCUS, or page meaning, and says outright "a change of content is not always a change of
+  // context". `contextChanged` (rules.ts) reads only whether two title STRINGS differ, which is strictly
+  // broader -- a page appending a result count was once ASSERTED against under exactly this predicate
+  // (docs/backlog.md, 2026-09-04) before it was downgraded to `secondary`. That downgrade is the closure;
+  // this pins that the REASON is stated where the coverage claim lives, not left to be re-derived.
+  for (const num of ["3.2.1", "3.2.2"] as const) {
+    const note = CRITERION_COVERAGE[num].note;
+    assert.match(note, /change of context/i,
+      `${num}'s note must name the criterion's own term, not a paraphrase of it`);
+    assert.match(note, /content is not always a change of context|broader than/i,
+      `${num}'s note must state that a title diff is broader than a change of context, not merely `
+      + "correlated with one");
+    assert.match(note, /secondary/,
+      `${num}'s note must connect the scope limit to WHY the mapping is secondary (referral, not `
+      + "assertion) -- a limit stated with no consequence attached is trivia, not a decision");
+  }
+});
+
 /** Every non-test `.ts`/`.mjs` source file under `dir`, skipping `node_modules`, `dist` and dotfiles. */
 function sourceFilesUnder(dir: string): string[] {
   const out: string[] = [];
