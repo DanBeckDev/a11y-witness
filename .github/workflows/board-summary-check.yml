@@ -1,0 +1,35 @@
+name: Board summary check
+
+# 21:00: is tomorrow's hand-written executive summary committed?
+#
+# The morning job refuses an edition with no summary for that day, which is correct. A refusal at 08:00
+# is a missing edition discovered at 08:00, by nobody. This fires eleven hours earlier and comments once
+# on the report issue, while a person is still awake to write it.
+#
+# IT GENERATES NO SUMMARY TEXT. The moment it did it would BE the machine-written summary the gate exists
+# to prevent, arriving through the warning instead of through the document.
+on:
+  schedule:
+    # 20:00 UTC is 21:00 Europe/London under BST. See the note in board-report.yml about the winter shift.
+    - cron: "0 20 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Is tomorrow's summary committed?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/board-summary-check.mjs --post

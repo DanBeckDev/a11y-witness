@@ -1,0 +1,57 @@
+name: Board report
+
+# THE BOARD DOCUMENT, PUBLISHED FROM GITHUB RATHER THAN FROM A LAPTOP.
+#
+# It ran as a launchd job on one Mac until 2026-09-06, for a reason that was correct at the time: the
+# report's merge count and push-state lines exist to catch work that is committed locally and not pushed,
+# and a runner only ever sees `origin/main`. The chairman has since ruled that EVERYTHING IS PUSHED, so
+# GitHub is the complete record -- which removes the reason and takes the schedule off a single machine
+# that nobody else can see, restart, or inherit.
+#
+# WHAT THAT RULING COSTS, stated rather than absorbed: this workflow cannot see an unpushed local branch,
+# so it cannot report one. The two lines that did are replaced by a statement that all work is on GitHub,
+# and the dispatcher's own count is what would contradict it. If a branch is ever found unpushed, the
+# report says so -- an absent check must not read as a clean one.
+on:
+  schedule:
+    # 07:00 UTC is 08:00 Europe/London while London is on BST, and 07:00 GMT in winter. GitHub schedules
+    # in UTC only, so the stated hour and the fired hour diverge for part of the year. Named here rather
+    # than discovered: a report whose stated time and actual time disagree is the small untruth this
+    # pipeline refuses.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write        # the Release draft that carries the PDF
+  issues: write          # the daily edition, as a comment on the report issue
+
+concurrency:
+  # One edition per day. A re-run replaces the asset on the same draft rather than racing it.
+  group: board-report
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # THE MERGE COUNT NEEDS HISTORY. A shallow checkout makes `git log --merges --since` report
+          # whatever the depth happened to include, which is a number that looks right and is not.
+          fetch-depth: 0
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      # THE SUMMARY GATES THE EDITION, exactly as it did locally. A summary assembled from the sections
+      # is what the board forbade, so there is no fallback: no committed summary for today, no edition.
+      - name: Publish the edition
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/board-report.mjs --post --issue=20
+          node scripts/board-document.mjs --pdf --release

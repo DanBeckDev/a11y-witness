@@ -98,13 +98,13 @@ function section1(d) {
 
 function section2() {
   return [
-    "## Version one has no date, because nobody has ever defined what it is.",
+    "## Version one has no date until the outside user is named.",
     "",
-    "None of our planning documents defines version one, so a date here would be a number with nothing "
-    + "behind it. **We propose that version one means one person outside this project runs the tool on an "
-    + "application they own and says plainly whether the result was worth their time.** Our plan has "
-    + "called that the deliverable since August, and it is already a release blocker — so adopting it "
-    + "renames the goal rather than adding work.",
+    "**Version one means one person outside this project runs the tool on an application they own and "
+    + "says plainly whether the result was worth their time.** The board approved that definition on 6 "
+    + "September. **Version one has no date until that person is named**, and no amount of engineering "
+    + "capacity changes it — the board is introducing a candidate, and the date follows from who and "
+    + "when.",
     "",
     "| stage | what decides it | when |",
     "|---|---|---|",
