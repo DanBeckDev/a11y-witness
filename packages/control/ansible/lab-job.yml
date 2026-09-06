@@ -79,7 +79,7 @@
     # makes a name a job ignores answerable rather than silently dropped. A name absent from this list is
     # outside the interface and Ansible will discard it — there is no way to enumerate extra vars, so this
     # list is the boundary of what can be checked at all, and adding a parameter means adding it here.
-    lab_caller_params: [only, out, role, shard, model, worker, workers, sample, subtype, feature, capture_root, dir]
+    lab_caller_params: [only, out, role, shard, model, worker, workers, sample, subtype, feature, capture_root, captures_dir]
     # A parameter that reaches its command through a DERIVED FACT rather than by its own name. The
     # derivation below reads the job's own command, and a command saying `{{ lab_named_worker }}` cannot
     # say which parameter produced it — so the one indirection is declared, with its reason, rather than
@@ -780,9 +780,9 @@
         # readable at all: #22's two arms now write to their own roots (`-e capture_root=`), and without
         # this the only thing `fleet:hours` could report is the whole corpus — every arm and every
         # protocol averaged into one number describing no run that ever happened.
-        params: {dir: optional}
+        params: {captures_dir: optional}
         argv: ["/usr/bin/node", "packages/lab/scripts/fleet-hours.mjs", "--json",
-               "--dir={{ dir | default(lab_repo_path ~ '/runs') }}"]
+               "--dir={{ captures_dir | default(lab_repo_path ~ '/runs') }}"]
         timeout: 1800
       # THE CORPUS'S ONLY DEFENCE, AND IT HAD NO JOB — added 2026-09-06 for issue #43.
       #
