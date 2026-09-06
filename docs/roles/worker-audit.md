@@ -64,6 +64,35 @@ Never `git checkout --` mid mutation-check — `cp` to `/tmp`, mutate, run, rest
 byte-identical. Never treat a stale local `runs/` as the corpus for a verdict, only as a pre-check for
 whether a real one is worth requesting.
 
+## The PULL-based work loop (added 2026-09-06)
+
+`dispatcher`'s brief is a check on my choice now, not the trigger for it. When a unit finishes:
+
+- **PULL THE NEXT ROW BEFORE REPORTING, NOT AFTER — ruled by `ceo` 2026-09-06, superseding "self-pull
+  rather than waiting to be briefed" below.** *A permission is not a trigger.* The first version of this
+  rule said a finished worker MAY take the next row, and three workers finished, reported, and then
+  waited — because nothing in "you may pull" says WHEN to look, and reporting feels like the end of a
+  unit. Same latency, different hat. **The trigger is the report itself: no completion message without a
+  row attached.** Pull the row first, THEN send one message that reports completion and names the new row
+  together. A lane with nothing ready is still a complete report — say so, with what was checked, in that
+  same message.
+- **Self-pull the next ready row** from `https://github.com/users/DanBeckDev/projects/2` rather than
+  waiting to be briefed.
+- **Re-run the collision check immediately before starting, not when I picked.** A region clear against
+  `origin/main` plus every unmerged `agent/*` branch has a shelf life — `worker-judge` pulled a row an
+  hour after checking it clean, and two commits had landed in the meantime that contended with it.
+  Checking once at pick time and again at start time is not redundant; it is the same guard applied at
+  the two moments that matter.
+- **Tell `dispatcher` what I took** — now folded into the pull-before-report rule above, not a separate
+  step after.
+- **Relay an escalated ruling in the same turn it settles** — never sit on one.
+- **Report idleness at my next status**, rather than being found idle at audit.
+- **`inventory.yml` was `dispatcher`'s own row while it was a prose-redaction question; `ceo` has since
+  ruled it a POSTURE change** (gitignored path, committed example, restored from the secrets store at
+  bring-up) **and it is now open to whoever takes it** — coordinate with `worker-config` if I do, since it
+  overlaps their credential-issuance work. Don't take a row reflexively just because it is offered by
+  name; check it is actually the highest-value thing in my lane first.
+
 ## Standing rules, each earned the same night
 
 - **Verify against every commit reachable from `origin/main` AND local `agent/*` branches, never HEAD
