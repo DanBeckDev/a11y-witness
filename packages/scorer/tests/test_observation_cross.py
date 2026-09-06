@@ -71,9 +71,14 @@ POST = ["Email, edit, Error: enter an address"]
 # `stateChanges` is DELIBERATELY not here. It has no `observed` entry and needs none -- the disclosure
 # probe is not gated on `probeForms`, so an empty channel means one thing. Crossing it produced two
 # constant-zero columns, and `test_crossed_columns_name_a_real_channel.py` now refuses that directly.
+# `postSubmitFields` is DELIBERATELY not here either, and it was withdrawn for a DIFFERENT reason from
+# `stateChanges` above -- the two look alike and need opposite remedies. There the CHANNEL was missing; here
+# the channel is real and one of the pair's two OUTCOMES cannot occur. `asked and absent` needs a submit
+# that navigates to a fieldless confirmation, which needs a `formState`, and `CASES` declares one on ZERO
+# of 1,645 cases. `test_crossed_columns_are_not_constant.py` measures that over the real captures, and
+# `screenreader_features.py`'s call site carries the full record.
 CROSSED = (
     ("form_change_observed_present", "form_change_observed_absent"),
-    ("post_submit_observed_present", "post_submit_observed_absent"),
 )
 ASKED = {"formChanges": True, "postSubmitFields": True}
 NOT_ASKED = {"formChanges": False, "postSubmitFields": False}

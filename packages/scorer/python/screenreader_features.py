@@ -133,9 +133,9 @@ FEATURE_NAMES = (
     "form_change_nonempty",
     "form_change_empty",
     "status_update_announced",
+    # NOT CROSSED, and the reason is the corpus rather than the channel -- see `cross_with_observation`'s
+    # call site below for the measurement. `formChanges` is the only crossed pair in v19.
     "post_submit_present",
-    "post_submit_observed_present",
-    "post_submit_observed_absent",
     "validation_error_announced",
     "validation_error_missing",
     "generic_heading_present",
@@ -917,12 +917,32 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
         any(STATUS_UPDATE.match(change.get("after", "").strip()) for change in form_changes)
     )
     values["post_submit_present"] = float(bool(post_submit_fields))
-    # The second crossed pair, and it is a stronger case than `formChanges`. `observed.postSubmitFields`
-    # reads `asked: true` only when `probeForms` ran AND something was actually activated -- the capture
-    # says so in its own words, "probeForms ran and activated nothing, so there was no submit to re-read
-    # after" -- and 56.1% of the empty ones are that. So a `0` here is more often a fact about the probe
-    # than about the page, and this is the channel 3.3.1 and 4.1.3 are decided from.
-    cross_with_observation(values, record, "post_submit", "postSubmitFields", bool(post_submit_fields))
+    # `postSubmitFields` IS NOT CROSSED. It was, and the pair was WITHDRAWN before the verdict rather than
+    # in response to one -- `schema-migration.json`'s `correctedBeforeTheVerdict_2026_09_05` is the whole
+    # record, and this is the summary the next reader of THIS function needs.
+    #
+    # TWO DEFINITIONS OF "asked", and the 56.1% that justified the pair measured the wrong one.
+    # `observation-ambiguity.mjs` counts a channel as asked whenever the form probe RAN; the capture writes
+    # `observed.postSubmitFields.asked` only when a submit HAPPENED and was re-read, and says so in its own
+    # `why`: "probeForms ran and activated nothing, so there was no submit to re-read after". The feature
+    # reads the capture's definition, so the audit measured a quantity this column does not see. On the 40
+    # local captures carrying the field they disagree on exactly 10: by the mark, 68.8% of empties were
+    # never asked; by the capture's own record, 100% were.
+    #
+    # AND `asked and not present` IS UNREACHABLE BY CONSTRUCTION, not merely rare. Reaching it needs a
+    # submit that navigates to a fieldless confirmation, which needs a `formState` -- and `CASES` declares
+    # one on ZERO of 1,645 cases. The only formState anywhere is one real page in the `error` state, since
+    # SECURITY.md forbids a `success` state on a stranger's site. So the column reads a single value across
+    # the whole corpus with certainty, which is the dead column `state_change` was withdrawn for, arriving
+    # by a different door: there the CHANNEL was missing, here the channel is real and one of its two
+    # OUTCOMES cannot occur.
+    #
+    # `test_crossed_columns_are_not_constant.py` now measures that over the real captures, so the next dead
+    # pair fails before a retrain is paid for rather than after one.
+    #
+    # The corpus case that would make it reachable -- a synthetic SUCCESS formState navigating to a
+    # fieldless confirmation, which is also the 4.1.3 success-message case the corpus lacks -- is a backlog
+    # row. Re-cross this channel when that case exists and its captures are on disk, never before.
     values["validation_error_announced"] = float(
         any(ERROR_WORD.search(value) for value in post_submit_fields)
         or any(ERROR_WORD.search(change.get("after", "")) for change in form_changes)
