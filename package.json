@@ -129,7 +129,8 @@
     "lab:collect-promotion": "node packages/lab/scripts/collect-promotion.mjs",
     "scorer:shortcuts:baseline:candidate": "npm run --silent corpus:unclosable-map && .venv/bin/python packages/lab/scripts/audit-scorer-shortcuts.py --model runs/model-candidate --data runs/screenreader-dataset/with-realism.jsonl --update-baseline",
     "fleet:recover": "node packages/control/src/fleet-playbook.mjs --playbook=recover.yml",
-    "fleet:hours": "node packages/lab/scripts/fleet-hours.mjs"
+    "fleet:hours": "node packages/lab/scripts/fleet-hours.mjs",
+    "fleet:inventory-install": "node packages/control/src/fleet-playbook.mjs --playbook=inventory-install.yml"
   },
   "dependencies": {
     "@a11y-witness/evidence": "0.1.0",
