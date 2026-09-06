@@ -10,6 +10,15 @@
 an edition with no summary dated for that day, and the scheduled job records that refusal rather than
 publishing a document without one. A missing summary is a missing edition.
 
+## The 120 words are checked the EVENING you write it, not the morning it is due
+
+The render-time gate reads **today's** summary. A summary written the night before is therefore the one
+nothing checks until the morning it is published — so an over-length one sits looking fine all night and
+refuses the edition at 08:00, when nobody is awake to cut two words.
+
+**`board:summary-check` counts it at 21:00 and fails if it is over**, which is the moment somebody can
+still act. Found by writing a 122-word summary and watching every check pass.
+
 ## The dateline is for when nobody is there, not a licence
 
 A summary written the evening before is a **forecast**, and it says so in its own first line. **If you are
