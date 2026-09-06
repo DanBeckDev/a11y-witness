@@ -11,6 +11,22 @@ cd "$REPO" || exit 1
 
 printf '\n===== %s  board report =====\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+# THE BRANCH IS CHECKED AT RUN TIME, NOT ONLY AT INSTALL TIME, and that is the half that matters.
+#
+# Checking at install time catches installing from a feature branch. It does NOT catch the real case: the
+# tree is checked out to a branch AFTER the job is installed -- which is ordinary here, several agents
+# move this checkout daily -- and the 08:00 job then renders from whatever is checked out at 08:00. An
+# install-time check would have reported success and published the wrong document anyway.
+BRANCH="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+  git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+printf 'checkout is on %s\n' "$BRANCH"
+if [ "$BRANCH" != "main" ]; then
+  printf 'NOT POSTED: this checkout is on %s, not main, so the edition would come from that branch.\n' \
+    "$BRANCH"
+  printf 'Nothing was published. Check out main, or re-run by hand once the tree is back.\n'
+  exit 2
+fi
+
 # ONE RUN PRODUCES BOTH, so the GitHub edition and the PDF cannot disagree. They already share a data
 # layer; running them from one invocation closes the other half -- two invocations minutes apart would
 # read GitHub twice and could straddle a merge.
