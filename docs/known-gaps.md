@@ -2231,7 +2231,7 @@ land within the sweep's own margin of `pageState` (25/188 and 36/324) **and diff
 with the order fix reverted, the trust rule refuses with `null` and a reason naming the moved URL rather
 than trusting 19/131.
 
-## ~~41. A GET FORM SUBMIT CHANGES THE URL, so the census trust rule refuses 18 of 2,796 records~~ — **CLOSED 2026-09-06**
+## 41. ~~A GET FORM SUBMIT CHANGES THE URL, so the census trust rule refuses 18 of 2,796 records~~ — **CLOSED 2026-09-06**
 
 **Every condition this section states was met, measured on the lab at `733d0f5` with the fleet consistent:** `2810 of 2810 record(s) carry a census` (was 2,778 of 2,796 — the corpus grew), `census.heading === 0 on 29 record(s)` unchanged, and `1405 scored, 0 false positive(s)` on conformant records. The guard still refuses a genuine wrong document — `survey.html` landing on `survey.php` and `tfl.gov.uk` redirecting — which is the half this section insisted on and the half a merely-quieter fix would have failed. Those two are the `sameDocument` redirect gap below, a different and still-open cause.
 
