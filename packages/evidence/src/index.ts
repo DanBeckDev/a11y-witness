@@ -163,12 +163,16 @@ export interface CaptureInteraction {
     error?: string;
   };
   /**
-   * Present only when submitting NAVIGATED the browser — `probeForms`'s own oracle for the difference
-   * between "the form failed silently" and "the form worked and moved on", which look identical to a probe
-   * that only asks whether anything was announced afterwards. Absent means submitting did not navigate,
-   * which for a 3.3.1/4.1.3 rule reading `postSubmitFields`/`formChanges` is the ordinary, examinable case.
+   * Set once `probeFormSubmit` runs — `probeForms`'s own oracle for the difference between "the form
+   * failed silently" and "the form worked and moved on", which look identical to a probe that only asks
+   * whether anything was announced afterwards. `checked: false` means `currentPageUrl()` returned falsy
+   * on at least one side (we could not ask), a DIFFERENT fact from `navigated: false` (we asked, and it
+   * stayed on the same document) — collapsing those two into one absence is exactly what let
+   * `w3.org/.../survey.html`'s submit navigate away with this field absent anyway. Absence of the whole
+   * field now means only that this probe never ran. `submitNavigatedTheDocument` (verify.ts) still reads
+   * the OLD `{ from, to }`-present-only-when-navigated shape correctly, for captures on disk before this.
    */
-  navigatedOnSubmit?: { from: string; to: string };
+  navigatedOnSubmit?: { checked: boolean; navigated?: boolean; from?: string; to?: string };
   /**
    * What the page's accessibility tree shows AFTER a form submit, by name only, never counts — a
    * diagnostic-grade oracle for 3.3.1/4.1.3, not model-visible evidence (`docs/local-model.md` bars the
