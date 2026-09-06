@@ -231,6 +231,18 @@ same scorer beside the existing witness judge for a live capture, set
 rules remain authoritative; a scorer failure or ineligible artifact leaves the
 current result unchanged.
 
+`A11Y_SHADOW_PYTHON` chooses the interpreter the shadow run uses, falling back to `A11Y_PYTHON` and
+then a bare `python3` on the `PATH` if neither is set — the same interpreter the real judge resolves to
+by default, so a shadow run compares against the environment the real judge actually runs in unless you
+deliberately point it elsewhere (a different venv, to check the scorer under a different torch/transformers
+version without disturbing the one the judge uses).
+
+`A11Y_SCORER_MODEL=<path>` points the scorer at a candidate model directory instead of the shipped
+weights — read both by the shadow path above and by the real `local` judge backend itself, so setting it
+runs the witness pipeline end to end against a candidate rather than the shipped model. Unset, it always
+scores the shipped `packages/scorer/models/screenreader-scorer/`. Use it to see what a candidate under
+training would actually report on a real page, before deciding whether to promote it.
+
 Each score result records SHA-256 identities for the encoder, scorer weights,
 training report, and exported training dataset. That provenance is the release
 identity for an inference result; a filesystem path alone is not sufficient
