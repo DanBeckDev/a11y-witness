@@ -7,5 +7,36 @@
     "note": "No cumulative total has been published. `fleet:hours` is built and measured (orchestrator, lead/fleet-hours) and reports 54.11 worker-hours across every capture on disk -- which spans several runs and protocol versions and is therefore NOT any single run's figure, which is why no edition carries it yet. Until an entry names one finished run, the report prints 'not instrumented' in those words.",
     "//": "A FLEET-HOURS ENTRY MUST NAME THE RUN IT WAS COMPUTED FROM **AND** THAT RUN'S finishedAt. The report REFUSES a total missing either, rather than printing it with a caveat -- a footnote is something a reader skips, and unlike a convention a refusal cannot be satisfied by remembering. `runFinishedAt` was added 2026-09-06 on orchestrator's suggestion after a total named a run still in flight: a NAMED but UNFINISHED run makes the field fillable and FALSE, which is harder to catch than a missing one. Shape (the placeholder values below are deliberately not plausible numbers -- an example that reads like data gets copied): {\"total\": \"<HH h MM m, from the instrument, never typed>\", \"run\": \"<unit + InvocationID + case count + protocol>\", \"runFinishedAt\": \"<ISO 8601, the run's own finish, not when you recorded it>\", \"reportedBy\": \"orchestrator\", \"at\": \"<ISO 8601>\", \"method\": \"sum of each capture's last cumulative diagnostics.atMs -- never wall clock x worker count\"}. Delete the `status` key when adding these. THE METHOD IS NOT NEGOTIABLE AND AN EARLIER VERSION OF IT WAS IMPOSSIBLE: this field read 'sum of per-case startedAt..finishedAt from the run's progress file' until orchestrator measured that no such data exists -- 0 of 1,623 cases carry any time field, because only the transient `current` array holds startedAt and an entry leaves it the moment the case completes. The timings a finished run needs are exactly the ones that file has discarded. Same shape as this repo's waiter polling for a `p.captured` that was never a field. The cost lives in each capture's own diagnostics, where bench-capture has read it all along. WHAT THE INSTRUMENT MEASURES, so an edition can caveat it accurately: capture OCCUPANCY only -- not idle time between dispatches, not provisioning, reboots or power. It refuses rather than printing 0.00 when it billed nothing, and distinguishes 'no JSON found' from 'walked N and billed none'."
   },
-  "gates_//": "Shape of a `gates` entry: {\"command\": \"npm run lab:job -- -e job=rules-real-pages\", \"reportedBy\": \"orchestrator\", \"at\": \"<ISO 8601>\", \"output\": \"<the gate's OWN text, verbatim, not a summary>\"}. The newest entry by `at` is the one printed. Older than `staleAfterHours` still prints, marked STALE and saying it describes an earlier state of the corpus -- an absent line and an old line mean different things and must never render the same."
+  "gates_//": "Shape of a `gates` entry: {\"command\": \"npm run lab:job -- -e job=rules-real-pages\", \"reportedBy\": \"orchestrator\", \"at\": \"<ISO 8601>\", \"output\": \"<the gate's OWN text, verbatim, not a summary>\"}. The newest entry by `at` is the one printed. Older than `staleAfterHours` still prints, marked STALE and saying it describes an earlier state of the corpus -- an absent line and an old line mean different things and must never render the same.",
+  "achievements_//": "SECTION 3 OF THE BOARD DOCUMENT: what the product can now DO or PROVE that it could not before -- never commit counts, which measure activity rather than capability. This is the one section no API can derive, so it is authored, and every entry carries the EVIDENCE that makes it a capability claim rather than an assertion. An empty list prints as 'nothing recorded for this window' with what that means, never as a gap the reader has to notice. Shape: {\"claim\": \"<what the product can now do or prove, in a sentence a non-engineer reads>\", \"evidence\": \"<the command, the artefact or the measurement that shows it>\", \"issue\": <number or null>, \"reportedBy\": \"<agent>\", \"at\": \"<ISO 8601>\"}. AN ENTRY WHOSE `evidence` IS ANOTHER AGENT'S SUMMARY IS NOT EVIDENCE. Point at what printed it.",
+  "achievements": [
+    {
+      "claim": "What is open now survives the loss of this machine.",
+      "evidence": "24 issues, a milestone with its date-move log, and a Ready column, all on GitHub. Verified by `gh issue list` and `gh api .../milestones`. Previously the answer lived in a 1,049-line markdown file that contradicted itself; five rows checked during the migration were already closed.",
+      "issue": 19,
+      "reportedBy": "product-manager",
+      "at": "2026-09-06T12:00:00Z"
+    },
+    {
+      "claim": "The project can say what a capture costs in worker time, for the first time.",
+      "evidence": "`fleet:hours`, built and measured by orchestrator on `lead/fleet-hours` (`10ad2e5`): 54.11 worker-hours over 5,395 of 5,396 captures found, median 27.4 s, p95 134.2 s. Computed per capture from each one's own diagnostics, not from wall clock times worker count.",
+      "issue": 21,
+      "reportedBy": "orchestrator",
+      "at": "2026-09-06T12:00:00Z"
+    },
+    {
+      "claim": "A rule that had never been demonstrated on a real page now has a page to demonstrate it on — written, not yet captured.",
+      "evidence": "A 1.4.13 fixture pair in `packages/lab/src/training/real-page-corpus.mjs` (lines ~731-756), `publishedClaim: \"inaccessible\"`, `witnessableAs: [\"1.4.13\"]`. Verified by grep in this checkout. THE CAPTURE HAS NOT RUN, so this is a step towards issue #2, not its closure.",
+      "issue": 2,
+      "reportedBy": "product-manager",
+      "at": "2026-09-06T12:00:00Z"
+    },
+    {
+      "claim": "Two capture defects that would have silently mismeasured real pages are fixed and awaiting merge.",
+      "evidence": "`agent/route-change-order-and-dialog-restore`: the structural cross-check no longer reads whichever page a probe navigated to, and the dialog probe restores browse mode like its four siblings. Both found by region-diff during the tracker migration, both verified present on the branch by `git log --source`. NOT MERGED, so nothing in production has changed yet.",
+      "issue": 16,
+      "reportedBy": "product-manager",
+      "at": "2026-09-06T12:00:00Z"
+    }
+  ]
 }
