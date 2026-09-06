@@ -62,6 +62,7 @@ human or agent, *working on* the repo rather than using it.
 | [provisioning-parity.md](./provisioning-parity.md) | **does the Ansible role provision the same worker the PowerShell script does, and is parity still the goal?** Measured concern-by-concern; the role is ahead on everything that changes what a capture observes, and the decision is that parity is no longer the goal for the fleet — the script's remaining audience is a solo contributor's local worker |
 | [wcag-criterion-audit.md](./wcag-criterion-audit.md) | **every claim-bearing criterion checked against W3C's own text**, using the [`wcag-criterion-check`](../.claude/skills/wcag-criterion-check/SKILL.md) procedure — the record of what was read, what was wrong, and what changed as a result. Findings land here first; `docs/backlog.md` links back to this file rather than restating them |
 | [adr/](./adr/README.md) | 35 architecture decision records, indexed — the *why*, including the alternatives that were rejected and what would falsify each |
+| [fixture-pair-proof-audit.md](./fixture-pair-proof-audit.md) | **what a good/bad fixture pair actually proves, criterion by criterion** — checked whether "the good half produces no finding" is sufficient on its own (it is not: a BLIND good half satisfies it trivially) and what closes the gap |
 | [isolation-spike.md](./isolation-spike.md) | the experiment that shaped the package split, run before anything was moved |
 | [history-2026-08.md](./history-2026-08.md) | what happened, month by month, for context a diff cannot give |
 
