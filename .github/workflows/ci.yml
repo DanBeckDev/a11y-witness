@@ -115,6 +115,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # NODE TOO, deliberately, though this is "the Python job". A handful of Python tests shell out to a
+      # `node` script (`test_grants_map_is_current.py`, `test_unclosable_map_is_current.py`) to read a JS
+      # declaration the Python-side audit must agree with -- `lint.yml` ran this correctly by accident,
+      # because it was ONE job with both `setup-node`+`npm ci` and `setup-python` in sequence. Splitting
+      # them cleanly (this row's whole point) first shipped WITHOUT this step and broke both files on the
+      # very first real PR run: `node_modules` did not exist, so the subprocess failed before pytest could
+      # even report why. Found by watching this PR's own first CI run, not by inspection.
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      # `@a11y-witness/worker-fleet/cli-flags` resolves through its package.json `exports` to
+      # `dist/cli-flags.mjs` -- `npm ci` alone is not enough, the same stale-dist trap CLAUDE.md already
+      # names for cross-package imports in the TS suite, here reached from a Python subprocess instead.
+      - run: npm run build
       - uses: actions/setup-python@v5
         with: { python-version: "3.12", cache: pip }
       # `requirements-ci.txt`, not `requirements.txt` -- the lab's full environment is torch + transformers
@@ -173,7 +187,14 @@ jobs:
       # already the repo's own home for "guard, not capture/fleet" tests (leak sweeps, worktree lifecycle,
       # lab-job catalogue checks alongside the doc guards), so a hand-picked list would need its own
       # discovery test to stay honest -- simpler to run the directory a docs change could plausibly affect.
+      #
+      # GH_TOKEN: a handful of these (board-style.test.ts, the live issue-fetch tests) shell out to `gh`
+      # against this repo's own real Issues/labels -- read-only, and `github.token` already has that scope
+      # for the repo the workflow runs in. Found missing on this PR's own first real CI run: these tests
+      # had never reached this far before either (same earlier-failing-job shape as the Python split).
       - run: npx tsx --test "packages/lab/src/packaging/*.test.ts"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   # PULL REQUESTS ONLY, never on push -- `changeset-check.yml`'s own original reasoning, carried forward
   # unchanged: pushing straight to `main` is how this repo currently works, and blocking that would make
