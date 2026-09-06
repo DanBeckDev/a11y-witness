@@ -189,8 +189,9 @@ function section5(d) {
   L.push("");
   L.push("**A capture takes about a minute at median on our last sample** — 56 captures across five "
     + "machines, at older recording formats — and **we have not established what it should cost on the "
-    + "current format**. That baseline is the first stage of a programme opened today, outside the "
-    + "release: nothing in it delays September. The appendix lists its stages.");
+    + "current format**. That baseline is the first of "
+    + `${throughput?.open_issues ?? "several"} stages in a programme opened today, outside the release: `
+    + "nothing in it delays September. The appendix lists them.");
   L.push("");
   L.push("**How long our engineering waits between finishing one piece of work and being given the next "
     + "is not instrumented, and we print that rather than estimate it.** Recording started today; the "
