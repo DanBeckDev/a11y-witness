@@ -935,6 +935,37 @@ right: *"a job that quietly runs four commits behind reports success for code yo
 
 </details>
 
+## THE ONE THING BLOCKING PROMOTION — `rules:coverage` refuses 1.4.13, 2026-09-06 07:00
+
+**All four v19 migration gates PASS and nothing is promoted.** `promote:gated` refused twice and wrote
+nothing, which is the guard working. The refusal is not a v19 gate:
+
+```
+1 RULE-ONLY criterion(a) claimed but never demonstrated on a real page — nothing else covers these:
+  1.4.13 (partial) — fired 15x on the corpus and never on a real page. The corpus is built from the
+  same assumptions as the rule, so it cannot falsify them.
+```
+
+**The obvious fix was made, was right, and did not unblock.** 1.4.13 claimed `assessed` while its own note
+said HOVERABLE is out of reach, PERSISTENT is pixels, and only DISMISSABLE is reached — as a referral. One
+bullet of three is `partial`, which is what 2.4.7 twenty lines below already says for the same reason.
+Corrected in `6e67f2e`; the gate blocks any RULE-ONLY *claim*, `partial` included.
+
+| remedy | assessment |
+|---|---|
+| capture a real page that exercises it | the gate's own first suggestion |
+| downgrade further | below `partial` is `reachable`, which would be FALSE — the rule fires correctly 15 times |
+| declare `realPageEvidence: {available: false, because}` | the form 3.3.1, 4.1.3 and two others use. **Deliberately not taken by the orchestrator**: its effect is to unblock a release by writing a sentence, which is a decision about what the product CLAIMS |
+| **a FIXTURE — precedented four times and not mentioned by the gate** | `REAL_PAGES` carries 7 `inaccessible` entries, four of them fixtures we serve (`skip-link-broken`, `route-title-stale`, `keyboard-unreachable-action`, `focus-order-tabindex`), each existing because a criterion needed real capture evidence a conformant page cannot give. 1.4.13 is the fifth instance of that need: a panel revealed on focus that Escape does not dismiss |
+
+**The honest caveat on the fixture, stated because it is the recommended route:** a fixture written here is
+built from the same assumptions as the rule, so it proves the rule FIRES on real capture evidence — not
+that its assumptions are right. That is exactly what the four existing fixtures prove and no more. The
+gate asks for a DEMONSTRATION, not a falsification, and says so in its own words.
+
+Cost: one page, one `fixture`-role capture. It also collects a loose end — the `fixture` role has not been
+recaptured in twelve days, which nothing said out loud until the capture-age report named it.
+
 ## How an item leaves this page
 
 Delete the row, and put the *lesson* in the record — `known-gaps.md` for something the project did not
