@@ -814,6 +814,16 @@ blocked. A green that arrives without anyone reading which weights it scored wou
 **No hands are needed to make it happen**: it triggers on push, so the next push after v19 lands or
 reverts exercises it. What needs a human is reading the result and naming the sha and the schema.
 
+**CORRECTED 2026-09-06 (worker-audit, #5): "the name half is settled" above is stale.** It was true for
+`a11y-witness`/`@a11y-witness` on 2026-09-02. `#63`/`#64`/`#66` have since decided the product renames to
+**`a11ign`** before the org transfer (2026-09-15, latest 2026-09-16) — npm scope `@a11ign`, repository
+`a11ign/a11ign`. Checked live: `package.json` still reads `@a11y-witness/*`; the rename (#66) has not been
+executed. Step 2 above must target `@a11ign`, not `@a11y-witness`, and cannot happen before #66 lands.
+Also: `action-smoke`'s red streak is now 161 consecutive runs (last success unchanged, 2026-09-03T12:16:52Z)
+and the underlying fault is now tracked with its own fix, `#81` (a fault code and stated verdict, since the
+mismatch recurs at every future schema version, not only v19). Full sequencing and per-step verification
+commands added as a comment on #5 rather than repeated here.
+
 **AND EVERY ONE OF THOSE 85 RED RUNS THREW AWAY ITS OWN REPORT — fixed 2026-09-05.** The
 `if: failure()` step that exists to keep the evidence read `path: ${{ steps.witness.outputs.result-json }}`,
 an output that step sets on its LAST line. So on a failure it was never set, the expression rendered
