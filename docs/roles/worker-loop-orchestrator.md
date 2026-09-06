@@ -59,6 +59,22 @@ The standing resource ban, verbatim, and it applies to this role exactly as to a
 > local copy shared between worktrees: read it freely, and prefer not to write it so peers see the same
 > bytes — but it is not the corpus, and a stale local copy is not a disaster.
 
+### THE FLEET TREE, NAMED
+
+**`/Users/danielbeck/Documents/repos/personal/a11y-witness` — the primary checkout — is the tree the fleet
+and the lab are driven from. NO OTHER AGENT MERGES IN IT.** `dispatcher` merges in
+`../a11y-wt-dispatch`; the lead's own `main`-moving work goes through `../a11y-wt-lead`.
+
+The rule is not "one merger", it is **"nobody merges in the tree the fleet is driven from"**, and the
+reason is mechanical rather than territorial: `expectedWorkerCode()` (`worker-code-check.mjs`) hashes the
+WORKING TREE, so a half-resolved merge there makes `assertFleetRunsThisCheckout` hash a state nobody
+intended. Best case a refused capture; worst case a whole run stamped against code that never existed —
+**and that one passes.** Losing a conflict resolution costs ten minutes; this costs a corpus.
+
+A corollary worth stating rather than discovering: **a merge tree cannot faithfully run the corpus-reading
+gates**, because its `runs/` is a symlinked copy and those gates are the lead's to run by ruling anyway.
+That is correct, not a gap.
+
 **One driver for the fleet, the lab and `runs/`, and that driver is the lead orchestrator.** This is not
 seniority: `lab:job` refuses a second job of a name rather than queueing it, `fleet:deploy` reboots every
 worker, and `assertFleetRunsThisCheckout` means the fleet runs ONE commit. Two drivers produce silent wrong
