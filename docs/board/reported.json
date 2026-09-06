@@ -34,12 +34,12 @@
       "boardClaim": "We can say for the first time how much machine time it costs to record a page with a screen reader."
     },
     {
-      "claim": "A rule that had never been demonstrated on a real page now has a page to demonstrate it on — written, not yet captured.",
-      "evidence": "One accessibility rule could previously only be demonstrated against pages we wrote ourselves, which cannot falsify the assumptions the rule was built on. A real web page that exercises it has now been added to the test set, verified present by reading the file. The recording has not yet been made, so this is a step towards the blocker rather than its closure. (A 1.4.13 fixture pair in `packages/lab/src/training/real-page-corpus.mjs`; tracked as issue #2.)",
-      "issue": 2,
-      "reportedBy": "product-manager",
-      "at": "2026-09-06T12:00:00Z",
-      "boardClaim": "An accessibility rule we could only demonstrate on our own test pages now has a real web page to prove it on, though we have not yet run it."
+      "claim": "The page written to prove a rule was recorded, and did not prove it.",
+      "evidence": "A rule could previously only be demonstrated on pages we wrote ourselves, which cannot falsify the assumptions behind it. A page exercising it was written and has now been recorded — and the recording showed the opposite of what was expected. The conformant version was measured correctly and the FAILING version was not, because the same property that makes a page fail this rule also prevents the tool from observing it. The tool now reports 'cannot say' on those pages instead of reporting them as clean, and the underlying fix is scheduled. Superseded issue #2, now tracked as #76. (`focus-panel-undismissable-help` in `packages/lab/src/training/real-page-corpus.mjs`; measured 2026-09-06 by orchestrator on both halves of the pair, same fleet, minutes apart.)",
+      "issue": 76,
+      "reportedBy": "orchestrator",
+      "at": "2026-09-06T20:50:00Z",
+      "boardClaim": "A page built to prove a rule showed instead that the rule cannot see that fault."
     },
     {
       "claim": "Two capture defects that would have silently mismeasured real pages are fixed and awaiting merge.",
@@ -48,6 +48,14 @@
       "reportedBy": "product-manager",
       "at": "2026-09-06T12:00:00Z",
       "boardClaim": "We found and fixed two recording faults that would have silently measured the wrong web page."
+    },
+    {
+      "claim": "The corpus survives losing its machine.",
+      "evidence": "Several thousand screen-reader recordings, which cannot be re-recorded once a browser updates, existed in exactly one place. A copy now sits off that machine, and it was checked by downloading it back and counting what was inside rather than by trusting that the upload succeeded. 7,694 files, 108.1 MB of evidence in an 8.5 MB archive, zero empty files. Each step of the chain distrusts the one before it: the machine holding the corpus verifies its own archive against what is on its disk, the transfer is counted on arrival, and the upload is verified by retrieval. (`corpus:snapshot` -> `lab:fetch -e artifact=corpus-archive` -> `corpus:release`, orchestrator, 2026-09-06; release tag corpus-2026-09-06_19-31-35; tracked as issue #43.)",
+      "issue": 43,
+      "reportedBy": "orchestrator",
+      "at": "2026-09-06T20:45:00Z",
+      "boardClaim": "The recordings this product rests on now exist in more than one place."
     }
   ],
   "capacity": {
