@@ -1,4 +1,22 @@
-# Ready queue
+# Ready queue — **RETIRED. DO NOT READ THIS PAGE FOR WHAT IS OPEN.**
+
+> **THE QUEUE MOVED TO GITHUB ISSUES AND THIS FILE DID NOT GO WITH IT.** The board's Ready column carried
+> **eleven rows** on 2026-09-06 while this page listed one, then none — so a reader who trusts this file
+> concludes the queue is empty when it is not. I am that reader: I closed this page's last row, wrote
+> "the queue is empty" here, and reported it. `dispatcher` caught it.
+>
+> **This is the fact-stated-twice shape in its most expensive form — not two copies that disagree, but a
+> DEAD copy that still answers.** A stale row costs a wrong dispatch; a stale PAGE costs the belief that
+> there is nothing to dispatch. The retirement was agreed when `region-diff-claims` landed and only half
+> happened: the mechanism moved, the page stayed.
+>
+> **What is open lives on the GitHub project board.** `gh issue list --state open`, or the Ready column.
+>
+> **Deliberately not deleted by me.** `product-manager` owns the tracker and worker-config owns this file;
+> one of them should remove it so the deletion carries a reason rather than appearing as a stray. Until
+> then this banner is the honest state, and everything below it is a RECORD of how the page worked — the
+> region-diff claim check and the delete-don't-strike rule are both still worth reading.
+
 
 **PULL, not push.** This page exists so a worker who has just finished a unit — or a fresh session with no
 context from tonight — can pick up the NEXT one without waiting for a person to read a report, review a
@@ -174,23 +192,10 @@ inherit an unrestored mode with nothing to catch it.
 
 ---
 
-**THE QUEUE IS EMPTY, and that is a real state rather than a broken page.** Every row seeded here has been
-addressed or refuted. The last one — 3.2.1's predicate firing on any title difference — was closed on
-2026-09-06 by `089cd15`, which took the second of the two closures that row offered: the limit is written
-into `criterion-coverage.ts`'s 3.2.1 note, checked against the criterion's own text, naming all four of
-WCAG's context-change triggers and stating that `contextChanged` reads only whether the title STRING
-differs, *"broader than any of the four"*. 3.2.2 carries the same note because the helper is shared.
-Verified by reading `packages/judge/src/criterion-coverage.ts` on `origin/main`, not from a commit message.
-
-**The row is DELETED rather than struck through, which is this page's rule and not `docs/backlog.md`'s.**
-The two pages differ deliberately and a guard enforces it: `backlog-ready.test.ts` treats every `###` as a
-ROW and requires a Region, a Branch, bounding sections and a runnable Acceptance, so a closed row left in
-place fails the suite — correctly, because this page is a PULL queue and anything on it is meant to be
-startable right now. `docs/backlog.md` is a RECORD and keeps its closures visible. Getting this wrong is
-how a queue fills with rows nobody can start.
-
-**A worker arriving here with nothing to pull should ask the dispatcher rather than assume the page is
-broken.** New rows come from [`docs/backlog.md`](./backlog.md), whose honest open count is single figures.
+The last row this page carried — 3.2.1's predicate firing on any title difference — was closed on
+2026-09-06 by `089cd15`, verified by reading `packages/judge/src/criterion-coverage.ts` on `origin/main`.
+It is DELETED rather than struck through, which is this page's rule and not `docs/backlog.md`'s: a guard
+treats every `###` as a startable row, so a closed row left here fails the suite.
 
 ---
 
