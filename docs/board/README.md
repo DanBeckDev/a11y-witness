@@ -7,9 +7,17 @@
 | `board-report.yml` | 07:00 UTC daily | posts the engineering edition to the report issue and the PDF to a draft Release |
 | `board-summary-check.yml` | 20:00 UTC daily | comments once if tomorrow's executive summary is not committed. It writes no summary text |
 
-**The stated hour is Europe/London and the cron is UTC**, so they diverge for the winter half of the year.
-Named here rather than discovered: a report whose stated time and its actual time disagree is exactly the
-small untruth this pipeline refuses.
+**The stated hour is true year round, and it costs two crons to be so.** GitHub schedules in UTC only, so
+one cron is the right London hour for half the year and an hour out for the other half. **Both are
+scheduled and every working step is gated on London's actual clock**, so exactly one of the pair acts on
+any given day. The off-hour run does nothing, says so in its log, and **exits successfully** — a job that
+failed daily for behaving correctly would put a red mark on the repository every morning, and a signal
+that is red every day is a signal nobody reads.
+
+A stated time that is wrong for half the year is the same small untruth this pipeline refuses everywhere
+else. `board-schedule.test.ts` pins the pair and the gate together, because they are two facts that must
+agree: move the publish time and it is the second one you forget, and the failure is silent — the job
+simply never runs.
 
 ```bash
 bash scripts/fetch-board-report.sh            # today's PDF into ~/Documents/a11y-witness-board-reports/
