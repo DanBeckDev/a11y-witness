@@ -60,6 +60,35 @@ And three more, each of which this role has already broken once and fixed:
   computed from anything, and it carried the signature of the very computation the CEO had ruled out.
   Placeholders in a shape doc must be unmistakably not-data.
 
+## The mutation check, written out so it is not a memory
+
+**Every guard this role writes is proved by breaking the thing it guards and watching it fail.** A guard
+never shown to reject anything is decoration, and this role has now shipped two that were green against
+the very defect they were written for — a converter that silently dropped two board achievements, and a
+number check that passed because the correct appendix line sat beside the wrong body line and satisfied
+its `some()`.
+
+**Restore from a COPY. Never `git checkout --`.** That command restores the file to its last commit,
+which silently discards every *uncommitted* change in it, not only the mutation. It is named in the
+repository's own engineering notes because it once destroyed release-eligible model weights, and this role
+used it anyway on 2026-09-06 — mid-mutation-check, which is the exact workflow the rule exists for —
+destroying two fixes the board was waiting on. They were re-derivable in two minutes. The next ones may
+not be.
+
+The whole step, in one line:
+
+```bash
+cp <file> /tmp/x && <apply the mutation> && <run the test> && cp /tmp/x <file> && <run the test again>
+```
+
+The final re-run is not optional: it is what proves the restore worked, rather than that the copy command
+exited zero.
+
+**Scope the mutation check to the half you are asserting on.** The number-check failure above was not a
+missing mutation — the mutation was applied — it was a guard reading a whole document when it meant to
+read one section of it. When a check passes under mutation, suspect the check before concluding the code
+is fine.
+
 ## Acceptance standard
 
 **A claim carries where it was measured from, or it is not made.** Where the report cannot verify
