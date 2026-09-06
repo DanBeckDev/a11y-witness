@@ -2540,6 +2540,21 @@ Verification is layered; pick the layers your change touches:
   firing, because the mutation was in source and the test was reading `dist`. That reads as "my test is
   weak" and is really "my test is old" — the same stale-`dist` shape as `rules:gate` scoring a rule the
   compiled bundle did not contain, arriving through the test runner instead of through a gate.
+  > **This said "resolves to `dist`" and never said WHOSE, and that gap cost real time on 2026-09-06.**
+  > A worktree whose `node_modules` is a symlink to the PRIMARY checkout's resolves every
+  > `@a11y-witness/*` import to the primary's `packages/*/dist`, not the worktree's own — so `npm run
+  > build` in your own worktree changes nothing a cross-package tool reads there. `orchestrator` read the
+  > primary's two-hour-stale `dist`, concluded a generator was broken, and was about to dispatch a worker
+  > at a defect that did not exist. The check that missed it was `ls -ld
+  > node_modules/@a11y-witness/judge` — a proper symlink, to another repository, which answered "is this
+  > a symlink" when the question was "to WHICH checkout". **Verify WHOSE, by resolving the exact
+  > specifier you import** — not the package name, since a package can export subpaths from elsewhere and
+  > resolving `@a11y-witness/judge` does not prove `@a11y-witness/judge/rules` came from your tree:
+  > `node -e "console.log(require.resolve('@a11y-witness/judge'))"`. A mutation check that BITES is
+  > itself evidence the resolution reached the code under test — if a worktree's test were reading
+  > another checkout's `dist`, editing the worktree's source could not have reached it and the mutation
+  > would never fail. See `docs/roles/worker-loop-orchestrator.md` for why the fleet-driving primary
+  > checkout stays on `main` with nothing checked out in it, which is the second half of this fact.
 - **RESTORE FROM A COPY, NEVER `git checkout --`. Three times in one night, 2026-09-06.** Mutation
   checking means editing a file you are about to restore, and `git checkout -- <file>` restores it to
   HEAD — which silently discards every UNCOMMITTED change in that file, not just the mutation. Twice in
