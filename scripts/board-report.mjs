@@ -232,22 +232,34 @@ function render({ since, sinceLabel }) {
   L.push("## Fleet hours");
   if (!fleetHours || fleetHours.status === "not instrumented") {
     L.push("**not instrumented.** " + (fleetHours?.note ?? ""));
-  } else if (!fleetHours.run) {
+  } else if (!fleetHours.run || !fleetHours.runFinishedAt) {
     // A TOTAL WITH NO RUN BEHIND IT IS REFUSED, not printed with a caveat.
     //
     // "Fleet hours: 214" is a number whose whole meaning is which runs it summed, and this project's
     // record is precisely the failure of numbers that were correct about something other than the thing
     // being reported. So the report will not carry the figure at all until the entry names its source.
     // Refusing is cheaper than a footnote nobody reads, and it cannot be satisfied by remembering.
-    L.push(`**REFUSED — a fleet-hours total was recorded without naming the run it was computed from.** `
-      + `The entry reads \`${fleetHours.total}\`, measured by ${fleetHours.reportedBy ?? "nobody named"}. `
-      + "A total whose runs are unstated cannot be checked, re-derived, or compared with the next one, so "
-      + "it is not printed. Add a `run` field naming the job and its invocation, and it appears.");
+    // TWO REFUSALS, and the second is the harder case. A total with no `run` is a missing field, which
+    // is visible. A total naming a run that has not FINISHED is a field that is filled and false — added
+    // 2026-09-06 after a total named `a11y-job-capture.service` while it sat at 285 of 1,645, so the
+    // number could not have come from the run it cited whatever else was true of it.
+    const missing = !fleetHours.run ? "does not name the run it was computed from"
+      : "names a run with no `runFinishedAt`, so that run had not finished and the total cannot have come "
+        + "from it";
+    L.push(`**REFUSED — a fleet-hours total was recorded that ${missing}.** The entry reads `
+      + `\`${fleetHours.total}\`, measured by ${fleetHours.reportedBy ?? "nobody named"}`
+      + `${fleetHours.run ? `, citing \`${fleetHours.run}\`` : ""}. A total whose run is unstated or `
+      + "unfinished cannot be checked, re-derived, or compared with the next edition, so it is not "
+      + "printed. See `docs/board/reported.json` for the shape.");
   } else {
-    L.push(`**${fleetHours.total}**, computed from **${fleetHours.run}** — measured by `
-      + `${fleetHours.reportedBy} at ${fleetHours.at}.`);
+    L.push(`**${fleetHours.total}**, computed from **${fleetHours.run}**, which finished `
+      + `${fleetHours.runFinishedAt} — measured by ${fleetHours.reportedBy} at ${fleetHours.at}.`);
     L.push("");
     L.push(`Method: ${fleetHours.method}`);
+    L.push("");
+    L.push("**This is capture OCCUPANCY**, not the fleet's cost. It excludes idle time between "
+      + "dispatches, provisioning, reboots and power. A reader comparing it with an electricity bill is "
+      + "comparing two different quantities.");
   }
   L.push("");
 
