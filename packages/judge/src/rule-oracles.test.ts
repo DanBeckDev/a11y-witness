@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 
+import { stripComments } from "@a11y-witness/evidence/source-text";
+
 /**
  * EVERY module that runs the rules against a capture must extract the oracle counts with `oracleCounts`.
  *
@@ -58,7 +60,15 @@ test("the callers are DISCOVERED rather than trusted from a list", () => {
 for (const file of callers) {
   const reason = NOT_CAPTURE_CALLERS[file];
   test(reason ? `${file} is exempt: ${reason}` : `${file} extracts the oracle counts`, () => {
-    const source = readFileSync(resolve(ROOT, file), "utf8");
+    // COMMENTS STRIPPED FIRST, and the reason is this repo's own rule: a guard that a correct comment can
+    // break is a guard that gets weakened rather than fixed. `score-rules.ts`'s exemption reason is
+    // literally "carries ruleEvidence from oracleCounts", so the moment that file's own header explained
+    // the freeze it describes -- naming the function in prose, as it must -- this test failed it for
+    // CALLING a function it does not call. `lab-job.test.ts` reached the same conclusion for the same
+    // reason and `executable()` is its version of this line.
+    //
+    // It does not weaken the check: a commented-out call is not a call, which is the whole claim.
+    const source = stripComments(readFileSync(resolve(ROOT, file), "utf8"));
     const extracts = /\boracleCounts\(/.test(source);
     if (reason) {
       // The other direction, and the worse one: a caller holding evidence the PRODUCT does not build
