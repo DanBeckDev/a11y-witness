@@ -16,10 +16,10 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
-import { collect, readSetIsNotMain, ROOT, MILESTONE, HOURS_MS, git } from "./board-data.mjs";
+import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS } from "./board-data.mjs";
 import { toHtml } from "./board-markdown.mjs";
 
-refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set"],
+refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release"],
   { entry: import.meta.url, command: "npm run board:document" });
 
 const argv = process.argv.slice(2);
@@ -199,12 +199,15 @@ function section5(d) {
     "",
   ];
   if (!fh || fh.status === "not instrumented") {
-    L.push("**Not instrumented, and printed as that rather than estimated.** " + (fh?.note ?? ""));
-    L.push("");
-    L.push("**A number exists and is deliberately not published here**: 54.11 worker-hours across every "
-      + "capture on disk. It spans several runs and several protocol versions, so it is not any one "
-      + "run's figure, and this document will not print a total that cannot name the run it came from. "
-      + "The generator enforces that — it refuses such a total rather than printing it with a footnote.");
+    // ONE paragraph, not two. Edition 1 said "not instrumented" in consecutive paragraphs and gave the
+    // 54.11 figure twice -- a document that repeats itself about a number it is withholding reads as
+    // hedging, which is the opposite of what the withholding is for.
+    L.push("**Not instrumented, and printed as that rather than estimated.** A figure exists — "
+      + "**54.11 worker-hours** across every capture on disk, measured per capture from its own "
+      + "diagnostics — and it is deliberately not published as the fleet's utilisation, because it "
+      + "spans several runs and several protocol versions and is therefore not any one run's number. "
+      + "The generator enforces that rather than trusting anyone to remember it: it REFUSES a total "
+      + "that cannot name a finished run, instead of printing one with a footnote.");
   } else {
     L.push(`**${fh.total}**, computed from **${fh.run}**, which finished ${fh.runFinishedAt} — measured `
       + `by \`${fh.reportedBy}\`. Method: ${fh.method}.`);
@@ -359,7 +362,12 @@ if (!argv.includes("--pdf")) {
       + "unreviewed. Stated here rather than left for a reader to discover.*"
     : md;
 
-  const outDir = flagOf("--out") ?? path.join(ROOT, "runs", "board");
+  // NOT `runs/`. That directory is shared -- often a symlink to the corpus tree -- and a guard is
+  // landing that makes every `runs/` writer askable. A board PDF written every morning would be a writer
+  // nobody remembered when that guard was designed. Same directory as the launchd job's log, which is
+  // where a scheduled agent's output belongs on macOS anyway.
+  const outDir = flagOf("--out")
+    ?? path.join(process.env.HOME ?? ROOT, "Library", "Logs", "a11y-witness");
   mkdirSync(outDir, { recursive: true });
   const stem = `a11y-witness-board-${new Date().toISOString().slice(0, 10)}`;
   const html = path.join(outDir, `${stem}.html`);
@@ -375,4 +383,48 @@ if (!argv.includes("--pdf")) {
   execFileSync(chrome, ["--headless", "--disable-gpu", "--no-pdf-header-footer",
     `--print-to-pdf=${pdf}`, `file://${html}`], { stdio: "pipe" });
   process.stdout.write(`${pdf}\n`);
+
+  if (argv.includes("--release")) publishToDraftRelease(pdf, stem);
+}
+
+/** Deliver the PDF as an asset on a DRAFT GitHub Release, which is one click from the Releases tab.
+ *
+ * A draft release was chosen over attaching to the report issue because GitHub's API cannot attach a file
+ * to an issue comment at all -- that is a web-UI drag-and-drop, so a daily automated attachment is
+ * impossible, not merely awkward.
+ *
+ * THE TAG IS NAMESPACED `board/<date>` AND THE RELEASE STAYS A DRAFT, both deliberately. A draft creates
+ * no git tag until it is published, so nothing here can be mistaken for a product version or picked up by
+ * the changesets machinery -- which matters in a repo whose first npm publish has not happened yet and
+ * whose release workflow reads tags.
+ */
+function publishToDraftRelease(pdf, stem) {
+  const tag = `board/${new Date().toISOString().slice(0, 10)}`;
+  const title = `Board report — ${new Date().toISOString().slice(0, 10)}`;
+  const notes = "The daily board document. Generated from GitHub and git; every figure carries its "
+    + "source, and anything unmeasured says so rather than being estimated. The GitHub issue edition is "
+    + "the data trail.";
+  const exists = (() => {
+    try {
+      const raw = execFileSync("gh", ["release", "view", tag, "--repo", REPO, "--json", "isDraft"],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      return JSON.parse(raw);
+    } catch { return null; }
+  })();
+
+  if (!exists) {
+    execFileSync("gh", ["release", "create", tag, pdf, "--repo", REPO, "--draft",
+      "--title", title, "--notes", notes], { stdio: "pipe" });
+  } else if (!exists.isDraft) {
+    // REFUSE rather than overwrite. A published release is visible to everyone with the repository; a
+    // re-render replacing its asset would change what somebody has already been sent, silently.
+    console.error(`REFUSING to replace assets on ${tag}: it is PUBLISHED, not a draft. A re-render would `
+      + "change a document somebody has already been given. Render with --out and deliver by hand, or "
+      + "cut a new tag.");
+    process.exitCode = 4;
+    return;
+  } else {
+    execFileSync("gh", ["release", "upload", tag, pdf, "--repo", REPO, "--clobber"], { stdio: "pipe" });
+  }
+  process.stdout.write(`https://github.com/${REPO}/releases/tag/${encodeURIComponent(tag)} (draft)\n`);
 }
