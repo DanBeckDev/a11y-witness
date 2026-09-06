@@ -715,39 +715,26 @@ type FocusLogEvent = { type: string; id: number; name: string; atMs: number };
  */
 function focusLossEvidence(log: FocusLogEvent[], i: number): string | null {
   const event = log[i];
-  // THE LOG'S FIRST EVENT CANNOT BE F55, and this is the ONE exception to "an orphaned focusout is F55
-  // regardless of what follows" stated below.
+  // THE `i === 0` EXCEPTION THAT USED TO LIVE HERE IS DELETED, 2026-09-06 — `known-gaps.md` §42, closed
+  // rather than left as a PARTIAL. It read "the log's first event cannot be F55" because the listener
+  // used to install immediately before `probeFocusOrder`, well after the sweep, `probeFocusContext` and
+  // `probeFocusReveal` could already have moved real focus — so whatever was focused by then was blurred
+  // with nobody watching, and that blur was indistinguishable from a genuine script strip. Measured then:
+  // 37 of 37 conformant real pages had exactly one orphan, always `log[0]`; the 9 corpus positives had
+  // `log[0]` as a real focusin, with their orphans at index 2 and 9-23. Excluding index 0 traded "37 wrong
+  // accusations" for "one unobservable failure on whatever element held focus at install time" — a real
+  // trade, and a capture-layer limitation rather than a rule defect, which is why it was recorded rather
+  // than silently tuned away.
   //
-  // The listener is installed after the page has loaded, so whatever already holds focus at that instant
-  // received it BEFORE anything was watching. When it then leaves -- an ordinary Tab -- the log opens on a
-  // focusout with no focusin, which is byte-for-byte the F55 signature and is nothing of the kind.
+  // The trade is no longer needed: `installFocusEventListenerBeforeFirstFocus` (`capture-core.mjs`) now
+  // installs the listener before the capture's own first `anchorToTop()`, ahead of the sweep and every
+  // focus-walking probe, so `log[0]` is a real focusin the listener actually witnessed rather than a
+  // moment nobody was recording. An orphaned focusout at ANY index — including 0 — is therefore F55
+  // exactly as it is everywhere else in this function: the missing focusin is the signal, full stop.
   //
-  // MEASURED both directions before this line was written, 2026-09-06, on the recaptured real-page corpus
-  // and the corpus positives:
-  //
-  //   37 of 37 conformant real pages reported 2.4.7  -> EVERY ONE had exactly ONE orphan and it was log[0]
-  //   9 of 9 corpus positives (`focus-removed-on-receipt-*`) -> log[0] is a FOCUSIN, orphans at index 2+
-  //
-  // So the discriminator is not a heuristic about where orphans tend to appear, it is the listener's own
-  // start boundary: by index 1 the listener was demonstrably watching, so a missing focusin there is a
-  // real absence rather than a moment nobody was recording. A real F55 shows up as `focusout` for a field
-  // the script blurred on receipt, with focus landing on the NEXT field at the same millisecond -- exactly
-  // what `id 1` does at index 2 on every one of the nine.
-  //
-  // Safe against truncation in the one direction that matters: `capture-probes.mjs` cuts the log with
-  // `slice(0, FOCUS_EVENT_LOG_DIAGNOSTIC_LIMIT)`, so it drops the TAIL and never the head. `log[0]` is
-  // always the first event the listener saw. If that ever becomes a head-drop, this exception becomes
-  // unsound and must go with it.
-  //
-  // WHAT THIS RULE CAN NO LONGER SEE, stated because a limitation the code creates belongs where the code
-  // is: a REAL F55 on whatever element held focus when the listener was installed is now invisible, by
-  // construction. The two are indistinguishable in this log -- both are a focusout with no focusin -- and
-  // nothing here can separate them, so the choice is which error to make. 37 accusations against
-  // conformant pages against one unobservable failure on one element is not a close call, and it is a
-  // TRADE rather than a fix: `known-gaps.md` §42 carries it as a PARTIAL, with what it would cost to
-  // close (the listener installed before the page has focus at all, which is a capture-path change and a
-  // recapture) and what would tell you it is closed.
-  if (i === 0) return null;
+  // Depends on the capture-side fix having actually landed and been recaptured — see that commit and
+  // `rules.test.ts`'s two verbatim-log regression tests, which is why the two changes are separate,
+  // independently revertible commits rather than one.
   const prior = log[i - 1];
   const completedReceipt = prior?.type === "focusin" && prior.id === event.id;
   const heldMs = completedReceipt ? event.atMs - prior.atMs : null;
