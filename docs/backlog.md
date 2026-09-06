@@ -1044,10 +1044,18 @@ start. No corpus evidence was touched; the affected file is a disposable, regene
 
 ## A STALE-BUT-SETTLED corpus fails checks for a reason unrelated to the change, 2026-09-06
 
-**Found while wiring the in-flight guard, and deliberately NOT fixed by it.** `evidence-fields.test.ts`
-fails here on `interaction.focusEvents` — *"compared but appears on no capture"* — because this laptop's
-`runs/` is ~89 hours old and predates the field. Verified pre-existing by restoring `origin/main`'s copy of
-the file and re-running: identical failure, 10 pass / 1 fail.
+**CORRECTED 2026-09-06, and the correction is the more useful half.** This row was filed citing
+`evidence-fields.test.ts`'s `interaction.focusEvents` failure as its evidence, on the reported cause that
+this laptop's `runs/` was ~89 hours old and predated the field. **That cause was wrong.** `orchestrator`
+diagnosed the real one and it was a COVERAGE HOLE, not staleness: the field was on disk the whole time, in
+a WRAPPED capture (`runs/fetched/candidate.real-page-capture.json`) that `fieldsOnDisk()` could not read —
+5,368 plain captures, 29 wrapped, and exactly one field reachable only through the wrapper. Fixed by
+unwrapping, not by re-exempting the field.
+
+**So the example is withdrawn and the row is kept**, because the shape it names is still real and still
+unaddressed — it simply was not what that failure was. A staleness skip there would have papered over a
+coverage hole, which is the opposite of what the guard is for. The lesson stands twice over: the reported
+cause was plausible, was supplied by someone with more context than the reporter, and was still wrong.
 
 **The insight is the OUTCOME-EQUIVALENCE, not that the corpus is old.** A stale-but-settled corpus produces
 exactly what the in-flight guard exists to prevent: a check goes red for a reason that has nothing to do
