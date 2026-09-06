@@ -19,7 +19,7 @@ import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
-import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS } from "./board-data.mjs";
+import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS, issues, achievementsWhoseWorldMoved} from "./board-data.mjs";
 import { toHtml } from "./board-markdown.mjs";
 
 // Module scope, not inside main(): `section5` reads it, and `document()` is exported for the renderer
@@ -561,6 +561,34 @@ function requireSummary(publishing) {
   return summary;
 }
 
+/**
+ * REFUSE, DO NOT WARN, and the reason is the render itself: this document is produced at 08:00
+ * unattended. A warning in a log nobody reads is exactly how the false sentence would have shipped —
+ * which it nearly did (#90), and was caught only because a person happened to re-read it.
+ *
+ * The refusal names the entry, its claim and what moved, so re-affirming is a ten-second act rather than
+ * an investigation. `--allow-dirty-read-set` deliberately does NOT override it: that flag is about which
+ * COPY of the read set is quoted, and this is about whether a quoted sentence still describes the world.
+ */
+function refuseIfTheWorldMoved(achievements) {
+  const cited = achievements.map((a) => a.issue).filter((n) => n !== undefined);
+  if (!cited.length) return;
+  const issueState = Object.fromEntries(issues().map((i) => [String(i.number), i.state]));
+  const moved = achievementsWhoseWorldMoved({ achievements, issueState });
+  if (!moved.length) return;
+
+  console.error(`REFUSING to render: ${moved.length} achievement(s) in docs/board/reported.json have `
+    + "outlived what they were written against. Section 3 is the one part of this document no gate "
+    + "computes, so it is also the one nothing re-checks -- and an entry that is true when written stays "
+    + "in the file after it stops being true.\n");
+  for (const { index, claim, why } of moved) {
+    console.error(`  achievements[${index}]  ${claim}\n      ${why}\n`);
+  }
+  console.error("This does NOT say the claims are false -- it says nobody has looked since the world "
+    + "moved. Re-affirm an entry with an `affirmed` field saying why it still stands, or retire it.");
+  process.exit(1);
+}
+
 function main() {
   refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release"],
     { entry: import.meta.url, command: "npm run board:document" });
@@ -570,6 +598,10 @@ function main() {
 
   const summary = requireSummary(argv.includes("--pdf") || argv.includes("--release"));
   const d = collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString());
+  // THE WORLD-MOVED CHECK RUNS FIRST, before the markdown is built: a stale claim should not be
+  // rendered at all, and this is the cheaper of the two refusals. The body cap needs `md` and so must
+  // follow it.
+  refuseIfTheWorldMoved(d.achievements);
   const md = document(d, summary);
   // UNCONDITIONAL, unlike the summary check above: a body over the cap is wrong in the plain markdown
   // preview too, not only when publishing, and catching it earlier is the whole point of issue #88 (the
