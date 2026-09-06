@@ -9,7 +9,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { sandboxGitEnv } from "../../../../scripts/git-env.mjs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -171,5 +173,147 @@ test("lint.yml, ansible-check.yml and changeset-check.yml are retired, not merel
   for (const retired of ["lint.yml", "ansible-check.yml", "changeset-check.yml"]) {
     assert.throws(() => readWorkflow(retired), /ENOENT/,
       `${retired} still exists on disk -- it was meant to be folded into ci.yml and removed`);
+  }
+});
+
+// -------------------------------------------------------------------------------------------------------
+// THE CLI ITSELF, driven end to end -- `classify()` and `knownPackages()` above are the pure core, but
+// `main()` is what `ci.yml`'s own `changed` job actually invokes, and a pure-function test cannot see a
+// bug in the argv handling, the GITHUB_OUTPUT write, or the git subprocess it shells out to.
+// -------------------------------------------------------------------------------------------------------
+
+const SCRIPT = fileURLToPath(new URL("../../../../scripts/ci-changed.mjs", import.meta.url));
+
+/** A disposable git repo with one `packages/*` layout, real commits on two branches, so `--event=
+ *  pull_request` has a real base/HEAD diff to compute and `--event=push` has a real `packages/` to walk. */
+function repo(): { dir: string; base: string } {
+  const dir = mkdtempSync(join(tmpdir(), "ci-changed-cli-"));
+  const run = (...args: string[]) => execFileSync("git", args, { cwd: dir, encoding: "utf8", env: sandboxGitEnv() });
+  run("init", "-q");
+  run("config", "user.email", "t@example.com");
+  run("config", "user.name", "t");
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", workspaces: ["packages/*"] }));
+  mkdirSync(join(dir, "packages", "lab", "src"), { recursive: true });
+  writeFileSync(join(dir, "packages", "lab", "src", "index.mjs"), "export const x = 1;\n");
+  run("add", "-A");
+  run("commit", "-q", "-m", "base");
+  const base = run("rev-parse", "HEAD").trim();
+  writeFileSync(join(dir, "docs.placeholder"), "placeholder\n"); // present only so mkdirSync above has a sibling
+  mkdirSync(join(dir, "docs"), { recursive: true });
+  writeFileSync(join(dir, "docs", "note.md"), "a doc change\n");
+  run("add", "-A");
+  run("commit", "-q", "-m", "docs change");
+  return { dir, base };
+}
+
+/** Runs the real CLI and returns its exit code, stdout/stderr, and whatever it wrote to GITHUB_OUTPUT. */
+function runCli(args: string[], cwd: string): { code: number; out: string; outputs: Record<string, string> } {
+  const outFile = join(cwd, "github_output");
+  writeFileSync(outFile, "");
+  let out: string;
+  let code = 0;
+  try {
+    out = execFileSync("node", [SCRIPT, ...args, `--repo=${cwd}`],
+      { cwd, encoding: "utf8", env: { ...process.env, GITHUB_OUTPUT: outFile } });
+  } catch (error) {
+    const e = error as { status?: number; stdout?: string; stderr?: string };
+    code = e.status ?? -1;
+    out = `${e.stdout ?? ""}${e.stderr ?? ""}`;
+  }
+  const outputs: Record<string, string> = {};
+  for (const line of readFileSync(outFile, "utf8").split("\n")) {
+    const eq = line.indexOf("=");
+    if (eq !== -1) outputs[line.slice(0, eq)] = line.slice(eq + 1);
+  }
+  return { code, out, outputs };
+}
+
+test("CLI: --event=push writes every category true and every package touched", () => {
+  const { dir } = repo();
+  try {
+    const { code, outputs } = runCli(["--event=push"], dir);
+    assert.equal(code, 0);
+    assert.equal(outputs.ts, "true");
+    assert.equal(outputs.python, "true");
+    assert.equal(outputs.ansible, "true");
+    assert.equal(outputs.docs, "true");
+    assert.equal(outputs.changeset, "false");
+    assert.equal(outputs.packages, "lab");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI: --event=pull_request computes the real diff against --base", () => {
+  const { dir, base } = repo();
+  try {
+    const { code, outputs } = runCli(["--event=pull_request", `--base=${base}`], dir);
+    assert.equal(code, 0);
+    // The second commit touched only docs/note.md -- ts/ansible/changeset must all read false.
+    assert.equal(outputs.docs, "true");
+    assert.equal(outputs.ts, "false");
+    assert.equal(outputs.ansible, "false");
+    assert.equal(outputs.changeset, "false");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI: an invalid --event is refused, exit 2", () => {
+  const { dir } = repo();
+  try {
+    const { code, out } = runCli(["--event=merge_group"], dir);
+    assert.equal(code, 2);
+    assert.match(out, /--event must be "push" or "pull_request"/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI: --event=pull_request with no --base is refused, exit 2", () => {
+  const { dir } = repo();
+  try {
+    const { code, out } = runCli(["--event=pull_request"], dir);
+    assert.equal(code, 2);
+    assert.match(out, /--base=<ref> is required/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI: an empty diff against --base is refused rather than reported as nothing changed", () => {
+  const { dir } = repo();
+  try {
+    // HEAD against itself -- a real, zero-file diff, the shape a wrong --base or a no-op PR produces.
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8", env: sandboxGitEnv() }).trim();
+    const { code, out } = runCli(["--event=pull_request", `--base=${head}`], dir);
+    assert.equal(code, 2);
+    assert.match(out, /returned nothing/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI: an unknown flag is refused by the shared guard, not silently ignored", () => {
+  const { dir } = repo();
+  try {
+    const { code, out } = runCli(["--event=push", "--branch=main"], dir);
+    assert.equal(code, 2);
+    assert.match(out, /unknown flag --branch/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI: with no GITHUB_OUTPUT set, writeOutputs prints to stdout instead of throwing", () => {
+  const { dir } = repo();
+  try {
+    const env = { ...process.env };
+    delete env.GITHUB_OUTPUT;
+    const out = execFileSync("node", [SCRIPT, "--event=push", `--repo=${dir}`], { cwd: dir, encoding: "utf8", env });
+    assert.match(out, /^ts=true$/m);
+    assert.match(out, /^packages=lab$/m);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
