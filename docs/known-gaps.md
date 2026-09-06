@@ -2308,16 +2308,47 @@ form submit, and `probeFormSubmit` already records it: `interaction.navigatedOnS
 *"present only when submitting NAVIGATED the browser"*.
 
 So: **a fallback census is trustworthy exactly when `candidates <= 1` (no real target ambiguity to resolve)
-AND `interaction.navigatedOnSubmit` is absent (nothing our own submit did explains the mismatch).** Both
-conditions are already on the wire, on captures already taken — this needs no new worker-side field.
+AND `interaction.navigatedOnSubmit` is absent (nothing our own submit did explains the mismatch).** ~~Both
+conditions are already on the wire, on captures already taken — this needs no new worker-side field.~~
 
-**Worked through all three:**
+> #### CORRECTED THE SAME DAY: `navigatedOnSubmit`'s absence is not proof, checked against the real capture
+>
+> `w3.org/.../survey.html`'s real capture refuted the line struck through above. Its timeline, verbatim:
+>
+> ```
+> atMs    154   browserReused    url: .../survey.html
+> atMs    178   pageServed       requested .../survey.html, status 200
+> atMs 191443   focusEventLog    installTargetMatch: "matched", installTargetUrl: .../survey.html
+> atMs 302934   structureCensus  targetMatch: "fallback", targetUrl: .../survey.php
+> ```
+>
+> At 191s the document was CONFIRMED `.html`; by 303s it is `.php`, and the only thing between them is the
+> form probe — `interaction.formChanges[0]` names the destination outright: `{"control": "submit, button",
+> "kind": "submit", "after": "Citylights Survey - Submission Failed Accessible Survey Page, document"}`. A
+> different document's title. **And `navigatedOnSubmit` is null anyway** — `capture-probes.mjs:3082` sets
+> it only when `before && after && before !== after`, and its ABSENCE conflates three states: no
+> navigation, `currentPageUrl()` returning falsy on either side, or the probe never running. Here
+> `postSubmitFields: 15` proves the probe ran; the title proves it navigated. So absence was never proof —
+> only PRESENCE was, and the design above leaned on the wrong half.
+>
+> **The ordering argument is untouched and still correct** — census before `probeRouteChange`, only a
+> submit can move the document before that line. What was wrong is the SIGNAL, not the shape. The fix adds
+> a second signal, `submitNavigatedTheDocument(capture)`: `navigatedOnSubmit` present is still sufficient
+> on its own, and a `"submit"`-kind `formChanges` entry whose `after` matches NVDA's own new-document
+> announcement (a title followed by the role "document" — `capture-probes.mjs:2050`'s own comment quotes
+> one, `"Energy results, document"`) is the second, interim signal. It is a heuristic on announced TEXT,
+> not a wire fact: a genuine error message ending the same way would read as a navigation it was not, and
+> an unusual document announcement this grammar does not anticipate would read as none. The HONEST fix —
+> `navigatedOnSubmit` recording a third state, "checked, could not tell", instead of collapsing it into
+> absence — needs the worker to compute it and rides a future deploy, bundled with §42's listener change.
 
-| case | `formState`/submit configured? | `navigatedOnSubmit` at census time | verdict |
+**Worked through all three, against this correction:**
+
+| case | `formState`/submit configured? | `submitNavigatedTheDocument(capture)` | verdict |
 |---|---|---|---|
-| `focus-removed-on-receipt-*` (this section, §41) | yes — GET submit is the defect under test | present (submit changed the URL) | **stays suspect** — correctly unchanged. The census read is genuinely post-submit; trusting it would be trusting a different document, which is this section's own original objection |
-| `tfl.gov.uk/modes/tube/` | no `formState` in its corpus entry, and no probe before the census can navigate | necessarily absent (nothing could have set it) | **becomes trusted**, PROVIDED `candidates <= 1` — independently corroborated: this page is ALSO consent-blocked (focus confined to the banner ring), so nothing could have reached and activated a real control either |
-| `w3.org/.../survey.html` | **yes** — `formState: {state: "error", ...}` is configured for this exact page | **unconfirmed without the real capture** — if the `.php` landing is a consequence of ITS OWN submit (e.g. the form's own `action="survey.php"`), `navigatedOnSubmit` will be present and this stays suspect, matching §41 exactly, not newly trusted | **check before implementing further; the design's answer is correct either way, but which answer it gives for this one page is not yet known** |
+| `focus-removed-on-receipt-*` (this section, §41) | yes — GET submit is the defect under test | `navigatedOnSubmit` present | **stays suspect** — correctly unchanged. The census read is genuinely post-submit; trusting it would be trusting a different document, which is this section's own original objection |
+| `tfl.gov.uk/modes/tube/` | no `formState` in its corpus entry, and no probe before the census can navigate | both signals necessarily false (nothing could have set either) | **trusted**, PROVIDED `candidates <= 1` — independently corroborated: this page is ALSO consent-blocked (focus confined to the banner ring), so nothing could have reached and activated a real control either |
+| `w3.org/.../survey.html` | **yes** — `formState: {state: "error", ...}` is configured for this exact page | **CONFIRMED true** — `navigatedOnSubmit` is null, but `formChanges[0].after` matches the new-document announcement (verbatim above) | **stays suspect**, matching §41 rather than being newly trusted — the answer the design predicted for this branch, now confirmed rather than assumed |
 
 **The residual gap, found while tracing this, not fixed by it:** `probeFormSubmit` is the only activation
 that records whether it navigated. `probeTaskButton` and `probeToggle` (the other two things
@@ -2339,16 +2370,16 @@ carries none of the ten-machines-stale risk a worker change would.
 
 ### What would tell you it is fixed
 
-`rules:real-pages` reports `85 of 85` examined (not 83), with `tfl.gov.uk` no longer in `suspectCensus`,
-`survey.html` either also out of it (if its redirect is not submit-caused) or still correctly in it
-(if it is — see the table above), and `focus-removed-on-receipt-*`'s 9 captures unchanged. `rules:gate`'s
-`census.heading === 0 on 29` must not move, and no new finding may appear on a conformant record.
+`rules:real-pages` reports `84 of 85` examined (not 83) — `tfl.gov.uk` out of `suspectCensus`,
+`survey.html` correctly still in it (confirmed submit-caused, not a bug), and `focus-removed-on-receipt-*`'s
+9 captures unchanged. `rules:gate`'s `census.heading === 0 on 29` must not move, and no new finding may
+appear on a conformant record.
 
 ### What would tell you it got WORSE
 
 The same signal as this section's own original entry: the `N of M carry a census` count moving in the
-wrong direction, or a new finding appearing on a page that carries `navigatedOnSubmit` — which would mean
-the widened check let a genuinely different document through.
+wrong direction, or a new finding appearing on a page where `submitNavigatedTheDocument` reads true — which
+would mean the widened check let a genuinely different document through despite both signals saying so.
 
 ## 42. PARTIAL — 2.4.7 cannot see an F55 on whatever element held focus when the listener was installed
 
