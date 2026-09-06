@@ -347,7 +347,20 @@ export function declaresBootstrap(chosen, read = readFileSync) {
 function runBootstrapFromHere(chosen) {
   process.stdout.write(`  running ${chosen} FROM THIS MACHINE against ${CONTROL_PLANE}\n`
     + "  (it declares `a11y_bootstrap`, and a bootstrap cannot run on what it bootstraps)\n\n");
-  const result = spawnSync("ansible-playbook", ["-i", `${CONTROL_PLANE},`, chosen],
+  // `root@`, and the bare host is not enough. Ansible defaults an unqualified `-i '<host>,'` to the LOCAL
+  // username, so it tried `danielbeck@` and got `Permission denied (publickey)` — a credentials failure
+  // that reads like a missing key rather than a wrong user. Everything else in this file already reaches
+  // the control plane as root (`ssh()` builds `root@${CONTROL_PLANE}`); this is the same fact, and it has
+  // to be stated again because `-i` does not inherit it.
+  // AND THE KEY. `ssh()` twenty lines up passes `-i CONTROL_KEY` explicitly, because the control plane is
+  // a separate credential domain (ADR 0012) and the operator's default identity does not open it. Ansible
+  // has its own name for the same thing, so the fact is stated a third time in a third spelling —
+  // `root@` in the host, `--private-key` here — and neither inherits from the other.
+  //
+  // Without it: `root@<host>: Permission denied (publickey,password)`, which reads as a MISSING key rather
+  // than an unpassed one. The key is present and correct; nothing asked for it.
+  const result = spawnSync("ansible-playbook",
+    ["-i", `root@${CONTROL_PLANE},`, "--private-key", CONTROL_KEY, chosen],
     { cwd: ANSIBLE_DIR, stdio: "inherit" });
   if (result.error) {
     process.stderr.write(`\n  could not run ansible-playbook here: ${result.error.message}\n`);
@@ -404,7 +417,20 @@ try {
   ssh(`systemctl stop ${unit} 2>/dev/null; systemctl reset-failed ${unit} 2>/dev/null; `
     + `systemd-run --unit=${unit} --remain-after-exit --working-directory=${CHECKOUT}/packages/control/ansible `
     + `--setenv=ANSIBLE_CONFIG=ansible.cfg `
-    + `ansible-playbook -i inventory.yml ${chosen} -e a11y_git_ref=${ref}`
+    // NO `-i` HERE. `ansible.cfg` sets `inventory = /etc/a11ign/inventory.yml,inventory.yml` so the
+    // durable copy is read FIRST -- and an explicit `-i` on the command line OVERRIDES that config
+    // entirely, which made the whole outside-the-checkout fix inert on the one path that dispatches
+    // everything.
+    //
+    // Measured 2026-09-06, minutes after installing and verifying the durable copy: `fleet:deploy` still
+    // printed `Unable to parse .../packages/control/ansible/inventory.yml` and matched no hosts. The
+    // config was correct, on main, and on the control plane -- and unread, because this line outranked it.
+    //
+    // I VERIFIED THAT CONFIG IN FOUR STATES WITH `ansible-inventory --list`, which READS the config. The
+    // dispatch path does not. A verification that exercises a different invocation from the one that ships
+    // is this repo's most-recorded defect, and it is the reason to remove the flag rather than to point it
+    // at the new path: one source of truth, in the file every playbook already honours.
+    + `ansible-playbook ${chosen} -e a11y_git_ref=${ref}`
     // The COMMIT that ref resolves to here, so each guest can assert it landed on it rather than the
     // deploy inferring success from a shell that exited 0. The 2026-08-24 note above fixed WHICH ref
     // the guests fetch; this catches the fetch silently not taking.
