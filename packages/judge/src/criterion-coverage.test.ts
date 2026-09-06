@@ -181,6 +181,13 @@ function sourceFilesUnder(dir: string): string[] {
   return out;
 }
 
+// Below this, the walk has genuinely found nothing -- `sourceFilesUnder`'s own `readdirSync` swallows a
+// missing/wrong `repoRoot` into `[]`, which is precisely the shape that would move a resolution failure
+// into `offenders` reading clean. The one thing that would break `repoRoot` is moving THIS FILE, which is
+// exactly when the guard is most needed -- the `SIGNAL_TYPES` scrape and the `sweepLog` guard that
+// "passed against the very corpus carrying 604 crashes" are both this same defect.
+const MIN_EXPECTED_SOURCE_FILES = 100;
+
 test("criteriaAssessableFrom has no production caller -- dead-by-design, not dead-by-accident", () => {
   // Established by grep, not assumed or inherited from a peer's earlier grep: this walks packages/ and
   // scripts/ itself, because trusting a remembered audit is exactly the mistake this test exists to
@@ -193,11 +200,19 @@ test("criteriaAssessableFrom has no production caller -- dead-by-design, not dea
     ...sourceFilesUnder(resolve(repoRoot, "scripts")),
   ].filter((f) => f !== definitionFile);
 
+  // ANTI-VACUITY: a resolution failure must fail LOUDLY, before the deepEqual below gets a chance to pass
+  // having examined nothing.
+  assert.ok(files.length > MIN_EXPECTED_SOURCE_FILES,
+    `walked only ${files.length} file(s) under ${repoRoot} -- this looks like a broken repoRoot resolution `
+    + "(readdirSync swallows a missing directory into []), not a small repo. The offender list below "
+    + "cannot be trusted until this walk finds a realistic population.");
+
   const offenders = files.filter((f) => readFileSync(f, "utf8").includes("criteriaAssessableFrom("));
 
   assert.deepEqual(offenders, [],
-    `criteriaAssessableFrom is called from non-test code: ${offenders.join(", ")} -- either it has `
-    + "shipped (delete this test and the warning above the function) or it is a stray caller nobody "
-    + "decided on (revert it).");
+    `criteriaAssessableFrom( appears in non-test code: ${offenders.join(", ")} -- this is a plain text `
+    + "search and a match may be a COMMENT mentioning the call rather than an actual call site, so check "
+    + "the line before concluding it shipped. Either way: it has shipped (delete this test and the "
+    + "warning above the function) or it is a stray caller nobody decided on (revert it).");
 });
 
