@@ -36,6 +36,7 @@ short of its own population reports INCONCLUSIVE rather than a false PASS — th
 | `packages/lab/scripts/check-dataset-distribution.mjs` | `exitCodeFor(gateVerdict(...))` |
 | `packages/lab/scripts/score-rules.ts` | `exitCodeFor(gateVerdict(...))` |
 | `packages/lab/scripts/check-shipped-provenance.mjs` | `exitCodeFor(gateVerdict(...))` — **structurally cannot return 2, decided correct, see below** |
+| `packages/lab/scripts/check-preregistered-verdict.mjs` | `exitCodeFor(gateVerdict(...))` — and the mapping is the point: `of` is every recorded gate, `examined` is those DECLARING a `verdictStatistic`, `failures` is those that declared and did not report it. A file where nothing declares one is `0 of N` → **INCONCLUSIVE**, never PASS, because an entry that declares nothing must not be counted as one that reported everything |
 | `packages/lab/scripts/fleet-hours.mjs` | **not a gate — a REPORT.** `0` a real total; `2` it billed no capture and refuses to report one. Deliberately not `1`: that would read as "the fleet cost nothing", and a cost report that examined nothing prints the same small number as a cheap run |
 | `packages/lab/scripts/gate-probe-order.mjs` | `exitCodeFor(fleetVerdict(...))` |
 | `packages/lab/scripts/stability-gate.mjs` | `exitCodeFor(fleetVerdict(...))` |
