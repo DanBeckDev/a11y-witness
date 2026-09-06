@@ -38,8 +38,11 @@ The problems are of three kinds, and they share a cause.
 
 1. **The contracts between parts have no single owner.** The capture wire shape is declared in at least six
    places that disagree; the worker's protocol version and fault codes are reached from other packages by
-   regex and string literal because the package exports the wrong subpaths; the `runs/` layout is spelled
-   eleven times; 95 environment variables are read with no module defining any of them. The repo's own
+   regex and string literal because the package exports the wrong subpaths; the `runs/` layout was spelled
+   across roughly thirty call sites (**closed** — see the table below). 95 environment variables are read
+   across the repo, but measurement found the cross-package subset of those does not actually disagree
+   anywhere; the real cost is 15 names read in more than one file that are documented nowhere (see the
+   table below) — a documentation gap, not a "fact stated twice" defect. The repo's own
    most-repeated lesson is "a fact stated twice drifts", and it has been applied rigorously to *evidence*
    and hardly at all to *interfaces*.
 2. **Four modules have grown past the point where their seams are visible.** `capture-core.mjs` is ten
@@ -556,11 +559,11 @@ not to infrastructure. Each row is a fact with more copies than owners.
 
 | fact | copies | owner |
 |---|---|---|
-| where `runs/` and its artefacts live | `DATASET_ROOT` resolution in 11 files; repo-root resolution in 14 scripts; the capture filename `${id}.${variant}.json` spelled 7 times; three env names for one root (`RUNS_ROOT`, `A11Y_RUNS_ROOT`, `A11Y_*_ROOT`); two anchoring conventions (`process.cwd()` in `src/training`, `import.meta.url` in `scripts/`) | none. `capture-progress.mjs:28` is the only module that names one path |
+| where `runs/` and its artefacts live | **CLOSED.** `packages/lab/src/dataset-paths.mjs` is now the one resolution (`REPO_ROOT`, `runsRoot()`, `datasetRoot()`, `captureRoot()`, `datasetExportPath()`, `realCorpusRoot()`, `repeatCapturesRoot()`), with `evidence-diff.mjs`'s `captureFilePath()`/`rejectedCaptureFilePath()` for the filename half — the real count was closer to thirty call sites once `score-rules.ts`, `bench-capture.mjs` and several `.corpus.test.ts` files were found, not the eleven originally tallied. `dataset-paths.test.ts` discovers a new duplicate and refuses it; three cross-package exceptions remain, each with a stated reason (`nvda-worker`'s corpus test and `worker-fleet`'s `doctor.mjs`/`compare-workers.mjs` cannot import `@a11y-witness/lab` without a cycle; `promote-model.mjs`/`check-shipped-provenance.mjs` take their own per-script fixture-tree override) | `packages/lab/src/dataset-paths.mjs`, enforced by a discovering test |
 | how to read a capture | `readCapture` at `evidence-diff.mjs:295`, `check-signals.mjs:53`, `export-screenreader-dataset.mjs:91`, `capture-cache.mjs:162`, with differing error semantics (throw with cause vs swallow to null); usable-capture predicate in 3 files, one weaker | none |
 | the gate exit-code contract | `verdict.mjs:56-58` (0 pass / 1 fail / 2 inconclusive) adopted by 7 of ~25 gate scripts; elsewhere exit 2 means usage, stale build, missing precondition, worker refused or no run, and exit 3 means wedged, dirty targets, fleet inconsistent or wrong page | a shared type, no shared runner; 24 of 29 scripts define their own `main`, 46 hand-roll the entrypoint guard |
 | argv parsing | `refuseUnknownFlags` guards all 52 CLIs (verified by `cli-flags.test.ts`), but parsing is a hand-rolled `arg()` in 10 files, and the 8 unguarded readers are all `.ts` | validation owned; parsing not |
-| environment configuration | 95 distinct `process.env` names across packages, 17 read in more than one package (`A11Y_WORKER` in three; `DATASET_PAGES_PORT` read by `worker-fleet` from `lab`'s config; `JUDGE_BACKEND` re-derived in `doctor`); six key- or shell-selecting variables (`A11Y_CONTROL_HOST`, `A11Y_PVE_KEY`, `A11Y_SSH_KEY`, `A11Y_DEBUG_VM`, `A11Y_VM_NAME`, `A11Y_DEBUG`) documented nowhere; 23 more `A11Y_*` in shell and PowerShell | none. `fleet-env.mjs` covers two |
+| environment configuration | **MEASURED, 2026-09-06 — the 95 was real but the shape underneath it was not what a first read suggests.** 70 distinct `process.env` names in JS/TS source (plus 1 in Python, `A11Y_EMBEDDING_CACHE`) — close to the ~77 an earlier pass counted, with the rest of the 95 in shell/PowerShell/CI. Three populations, not one: **(1) cross-package readers, checked for actual disagreement rather than assumed** — 10 names read in 2+ packages (`A11Y_WORKER` cli+lab+worker-fleet, `DATASET_PAGES_PORT` lab+worker-fleet, `JUDGE_BACKEND` judge+worker-fleet among them), and **zero disagree**: each pair either matches exactly (`A11Y_PORT`, `A11Y_SCORER_MODEL`, `JUDGE_BACKEND`, `DATASET_PAGES_PORT`), duplicates identical validation logic (`A11Y_VM_AFTER`), or uses a genuinely different default for a genuinely different deployment context that is not a bug (`A11Y_PYTHON` defaults to a bare `python3` lookup in judge/scorer/cli — deliberately, to survive an installed package with no venv — and to the repo's own `.venv/bin/python` in three lab-internal-only audit scripts that never ship installed; `DATASET_BASE_URL` computes a real LAN address for the fleet and assumes `localhost` for a single local worker). **(2) documentation coverage**: of the 70, 55 (79%) appear nowhere in `CLAUDE.md`, `README.md`, or `docs/*.md` (excluding this file, whose own mentions are audit prose, not documentation) — but 40 of those 55 are also read in exactly one file, i.e. an internal knob with no cross-file stakes; the other **15 are read in 2+ files and documented nowhere**, which is the real gap (`DATASET_PAGES_PORT`, `DATASET_BASE_URL`, `A11Y_PORT`, `A11Y_LOCAL_VM`, `A11Y_SCORER_MODEL`, `A11Y_VM_AFTER`, `A11Y_RUNS_ROOT`/`RUNS_ROOT`, `A11Y_CONTROL_HOST`, `A11Y_PVE_KEY`, `A11Y_SHADOW_PYTHON`, `A11Y_POINTER_AT`, `GUIDEPUP_SCREEN_READERS_PATH`, `JUDGE_STRUCTURED`, `OPENAI_API_KEY`). **(3) single-file, sensible default**: 48 of 70 (69%) are read in exactly one file total — not a problem, and should stop being counted as if all 95 were. **Verdict: this row is documentation work, not a refactor.** A shared config module was considered and rejected: `packages/control` takes no npm dependency (ADR 0012) so it could not import one, and `promote-model.mjs`/`check-shipped-provenance.mjs` need a per-script override a shared constant cannot serve — the same shape `dataset-paths.mjs`'s exceptions already document. No guard was added: a documentation-coverage test would open with 15+ exemptions for vars nobody has written up yet, which is noise, not protection — worth adding once the 15 are actually documented, not before | none for (1) — nothing to fix. Bucket (2)'s 15 are the scoped follow-up, as documentation |
 | the worker port | `a11y_port` in `group_vars`, `worker_port` in the role defaults, literal `8765` at 21 sites, `DEFAULT_WORKER_PORT` in node reading only `a11y_port` | a change to `worker_port` splits the role from every other consumer silently |
 | the HTTP client | `requestJson` used by 21 files; raw `fetch` survives at `doctor.mjs:106-108`, `capture-status.mjs:46`, `capture-check.mjs:300`, `capture-screenreader-dataset.mjs:257`, outside `assertWorkerUrl` and the keepalive policy | mostly owned |
 | wake-on-LAN | `fleet-wake.mjs:57-113` and `wake.yml`, one per host that may wake the fleet | two by design (ADR 0012); the packet format is fixed by spec |
@@ -1053,13 +1056,17 @@ that most needed this review: it had no backlog row at all, of any kind.**
   occurrences of "deprecat", and `README.md` still presents the scripted local VM as the plain Mac path.
 
 **§9 duplication-table rows not already tracked (excludes `readCapture`, the worker port, provisioning,
-`provisionRevision` and vocabularies, which all already have backlog rows) — all still open:**
-`runs/`-layout duplication (`DATASET_ROOT` still appears in 22+ files); the gate exit-code contract
-(`verdict.mjs` still has a small minority of adopters); argv parsing (validated by `refuseUnknownFlags`
-everywhere, still hand-rolled per-CLI); 95-variable environment-configuration duplication; raw `fetch`
-surviving at all four originally-cited call sites despite `requestJson` growing to 29 importers; Windows
+`provisionRevision` and vocabularies, which all already have backlog rows):**
+`runs/`-layout duplication — **CLOSED**, see the table row above (`dataset-paths.mjs`, discovered and
+enforced by `dataset-paths.test.ts`); the gate exit-code contract
+(`verdict.mjs` still has a small minority of adopters — still open); argv parsing (validated by `refuseUnknownFlags`
+everywhere, still hand-rolled per-CLI — still open); 95-variable environment-configuration — **MEASURED, not a
+duplication defect**: the cross-package subset does not disagree (see the table row above), and the actual
+gap is 15 names read in 2+ files with no documentation, which is a docs task rather than more code to write;
+raw `fetch`
+surviving at all four originally-cited call sites despite `requestJson` growing to 29 importers — still open; Windows
 trimming still duplicated across `windows-trim.mjs`, `provision-nvda-worker.ps1` and
-`build-lean-worker-image.ps1` with no consolidation.
+`build-lean-worker-image.ps1` with no consolidation — still open.
 
 **§10.1 eleven architectural decisions with no ADR — still open.** `docs/adr/` still tops out at
 `0024-a-form-is-configured-with-states-not-values.md`; none of the eleven has been written up.
