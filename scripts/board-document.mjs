@@ -347,20 +347,14 @@ const PAGE_CSS = `
 
 // NOTHING RUNS ON IMPORT -- see the note in `board-report.mjs`. `document()` stays exported above
 // so the renderer test can build a real document without rendering a PDF or touching GitHub.
-function main() {
-  refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release"],
-    { entry: import.meta.url, command: "npm run board:document" });
-
-  const argv = process.argv.slice(2);
-  const flagOf = (n) => argv.find((a) => a.startsWith(`${n}=`))?.split("=").slice(1).join("=");
-
-  // THE SUMMARY GATES THE EDITION, and a missing one is a MISSING EDITION rather than a summary-less
-  // document. A summary assembled from the sections below it is precisely what the chairman's third rule
-  // forbids, so there is no fallback to generate one -- the only way to publish is for a person to have
-  // written it.
+/** THE SUMMARY GATES THE EDITION, and a missing one is a MISSING EDITION rather than a summary-less
+ * document. A summary assembled from the sections below it is precisely what the chairman's third rule
+ * forbids, so there is no fallback to generate one -- the only way to publish is for a person to have
+ * written it. Returns the summary, or exits.
+ */
+function requireSummary(publishing) {
   const today = new Date().toISOString().slice(0, 10);
   const summary = summaryFor(today);
-  const publishing = argv.includes("--pdf") || argv.includes("--release");
   if (publishing && !summary) {
     console.error(`REFUSING to render: no executive summary for ${today}.\n\n`
       + `Write at most ${SUMMARY_WORDS} words in docs/board/summaries/${today}.md, answering three `
@@ -375,6 +369,17 @@ function main() {
       + `${SUMMARY_WORDS}-word cap. Cut it; that cap is what makes it a summary.`);
     process.exit(5);
   }
+  return summary;
+}
+
+function main() {
+  refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release"],
+    { entry: import.meta.url, command: "npm run board:document" });
+
+  const argv = process.argv.slice(2);
+  const flagOf = (n) => argv.find((a) => a.startsWith(`${n}=`))?.split("=").slice(1).join("=");
+
+  const summary = requireSummary(argv.includes("--pdf") || argv.includes("--release"));
   const md = document(collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString()),
     summary);
 
