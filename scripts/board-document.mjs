@@ -101,9 +101,8 @@ function section2() {
     "## Version one has no date until the outside user is named.",
     "",
     "**Version one means one person outside this project runs the tool on an application they own and "
-    + "says plainly whether the result was worth their time.** The board approved that definition on 6 "
-    + "September. **It has no date until that person is named** — the board is introducing a candidate, "
-    + "and the date follows from who and when.",
+    + "says plainly whether it was worth their time**, approved by the board on 6 September. **It has no "
+    + "date until that person is named** — the board is introducing a candidate, and the date follows.",
     "",
     "| stage | what decides it | when |",
     "|---|---|---|",
@@ -153,8 +152,8 @@ function section4(d) {
     + "unanswerable, and every edition repeats that. |",
     "| **Name one person outside the project to try the tool.** | Version one cannot start, whatever "
     + "engineering does. Open since August. |",
-    "| **Confirm publication may proceed in September.** | Three final steps need the owner's own "
-    + "hands, so the engineering finishes and the release waits. |",
+    "| **Confirm publication may proceed in September.** | Three final steps need the owner's hands, so "
+    + "the engineering finishes and the release waits. |",
     "",
     "### Four risks are live, and only the first could move the date.",
     "",
@@ -179,8 +178,8 @@ function section5(d) {
     + "scheduled.", ""];
   if (!fh || fh.status === "not instrumented") {
     L.push("**We cannot yet report how much machine time the capture fleet consumed, and we print that "
-      + "rather than estimate it.** A figure exists but spans many runs and several recording formats, "
-      + "so it is nobody's single run.");
+      + "rather than estimate it.** A figure exists but spans many runs and formats, so it is nobody's "
+      + "single run.");
   } else {
     L.push(`**The capture machines consumed ${fh.total} on their most recent full run.** That counts `
       + "only time spent actively reading a page: not waiting between pages, setup, restarts or "
@@ -189,13 +188,15 @@ function section5(d) {
   L.push("");
   L.push("**A capture takes about a minute at median on our last sample** — 56 captures across five "
     + "machines, at older recording formats — and **we have not established what it should cost on the "
-    + "current format**. That baseline is the first of "
-    + `${throughput?.open_issues ?? "several"} stages in a programme opened today, outside the release: `
-    + "nothing in it delays September. The appendix lists them.");
+    + "current format**, the first of "
+    + `${throughput?.open_issues ?? "several"} stages in a programme opened today. It is outside the `
+    + "release: nothing in it delays September. The appendix lists them.");
   L.push("");
-  L.push("**How long our engineering waits between finishing one piece of work and being given the next "
-    + "is not instrumented, and we print that rather than estimate it.** Recording started today; the "
-    + "figure appears once a week of it exists. The appendix says why the first design was wrong.");
+  L.push("**How long our engineering waits between finishing one piece of work and the next is not "
+    + "instrumented, and we print that rather than estimate it.** Recording started today; the figure "
+    + "appears once a week exists. The appendix says why the first design was wrong.");
+  L.push("");
+  L.push("**The architect's two findings are planned in; the appendix says what was done with each.**");
   L.push("");
   L.push("### We recommend buying nothing yet, and one number would change that.");
   L.push("");
@@ -252,6 +253,21 @@ function sourceTable(d) {
 
 /** Why re-reading the library is expensive, and the programme opened for it. */
 function throughputBackground(L) {
+  L.push("### The architect's two findings, and what was done with each.");
+  L.push("");
+  L.push("**Our development copies read one another's build output rather than their own**, because they "
+    + "share one dependency folder between them — so building in your own copy changes nothing the tools "
+    + "see, which cost an engineer an hour convinced a component was broken when it was faithfully using "
+    + "two-hour-old code. The fix is a different dependency tool that gives each copy its own; it is "
+    + "**scheduled for after publication**, because that tool sits on the publishing path and changing it "
+    + "a fortnight before the one irreversible step is the wrong order.");
+  L.push("");
+  L.push("**What accumulates on the single machine we run everything from is now measured rather than "
+    + "guessed at** — thirty-six working copies, 4.4 gigabytes of them, a gigabyte of Python "
+    + "environments, and a 417-megabyte local copy of the test library. **Each now gets a rule or a "
+    + "recorded decision that it needs none**, rather than a clear-out that decays: the one accumulator "
+    + "that was given a rule today is the one that stopped growing.");
+  L.push("");
   L.push("### Why re-reading every test page is expensive, and the programme opened for it.");
   L.push("");
   L.push("The tool learns from several thousand recordings of a screen reader reading web pages. "
