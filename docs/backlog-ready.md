@@ -19,7 +19,7 @@ This file is kept only as a signpost, so an old link leads somewhere that explai
 | The ready rows | GitHub Issues, labelled `ready`, in Project 2's **Ready** column |
 | The three fields every row must carry — acceptance as a command, region, open-check | `.github/ISSUE_TEMPLATE/backlog-row.yml`, which **requires** them rather than asking. `backlog-ready.test.ts` guards that, and states the gap it cannot close |
 | The region-diff claim mechanism, and why a branch NAME cannot be the key | the same template, in the open-check field's own guidance |
-| **A gate that reads `runs/` is not yours to report** | [`CLAUDE.md`](../CLAUDE.md) — it existed **nowhere else**, so retiring this page would have deleted a live rule. It is not left here as well: a rule stated twice is what the move was cleaning up after |
+| **A gate that reads `runs/` is not yours to report** | [`docs/roles/README.md`](./roles/README.md) — moved there 2026-09-06, beside the resource ban it is a sibling of. It governs WHO MAY REPORT a gate result, which is role territory; `CLAUDE.md` held it only while `docs/roles/README.md` was on an unmerged branch, and a pointer into a file that does not exist yet dangles. One home, not two — the `CLAUDE.md` copy was deleted in the same commit |
 
 `docs/backlog.md` and `docs/known-gaps.md` remain the **record** of lessons. They are not the tracker and
 have not been since the move.
