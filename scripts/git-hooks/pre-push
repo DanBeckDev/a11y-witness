@@ -52,16 +52,20 @@
 # about the wrong population, the exact class closed elsewhere today (docs/backlog.md). CI is the real gate
 # for a branch now; this hook is the fast, local first pass.
 #
-# ## UPDATE 2026-09-06: CI moved from the branch push to the branch's PR
+# ## UPDATE 2026-09-06: CI moved from the branch push to the branch's PR, then off `push` entirely
 #
 # `lint.yml` (above) is retired, replaced by `.github/workflows/ci.yml`. Everything above this paragraph
 # is still literally true of the LOCAL hook -- the fast/full split, the scoping, the "empty means
 # everything" rule -- and none of it changed. What changed is WHERE the full suite the fast gate hands off
-# to actually runs: `ci.yml` triggers on `pull_request` and on `push: branches: [main]` only, never on an
-# `agent/**`/`lead/**` push directly. That is safe rather than a silent reduction because every unit's
-# workflow now ends with `gh pr create` immediately after pushing (the standing worker-loop flow) -- a
-# branch push with no PR yet open gets only this hook, same as before 2026-09-06; a branch push followed by
-# its PR gets this hook AND the full `ci.yml` run, on the PR rather than on the push event.
+# to actually runs, TWICE in one day: first to `ci.yml` triggering on `pull_request` and on
+# `push: branches: [main]`, then (chairman's direction, same day) to `pull_request` ONLY -- a check that
+# runs after a merge cannot stop it, so `push` is not merely scoped to `main` now, it is ABSENT. That is
+# safe rather than a silent reduction because every unit's workflow ends with `gh pr create` immediately
+# after pushing (the standing worker-loop flow), and branch protection requires the PR's checks green AND
+# the branch up to date with `main` before the dispatcher may merge -- so the commit CI tested is the
+# commit that lands, via a squash or fast-forward, never a merge commit CI never saw. A branch push with no
+# PR yet open gets only this hook; a branch push followed by its PR gets this hook AND the full `ci.yml`
+# run, on the PR, before anything reaches `main` at all.
 #
 # `A11Y_TEST_CONCURRENCY=4` bounds a single suite's own tsx worker count regardless of how many other
 # suites are running elsewhere on this host -- set here, in the LOCAL hook, never in `package.json`'s
