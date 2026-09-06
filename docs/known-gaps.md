@@ -2150,3 +2150,75 @@ that is now known to be the wrong question): `rules:gate` reads 0 false positive
 conformant records AND 2.4.7's nine positives are caught with the count printed — both halves, because
 silencing the ten alone reads 0 FPs and 0 of 9 and is worth nothing. Plus a `2.4.7` entry in
 `rule-ownership.json`, without which the second half cannot be measured at all.
+
+## 40. THE CENSUS MEASURED THE WRONG DOCUMENT ON EVERY REAL PAGE, and it was TRUSTED rather than refused
+
+**Found 2026-09-06. Same class as the mistargeting bug `94a286f` closed, arriving through a different
+door: not a competing CDP target, but OUR OWN PROBE navigating the page away.**
+
+### The proof
+
+Two different pages, one identical census:
+
+```
+/components/details/   pageState  25 headings / 188 links   ->  domCensus  19 / 131
+/components/radios/    pageState  36 headings / 324 links   ->  domCensus  19 / 131
+```
+
+Two documents cannot produce one census. Both captures show the cause one event earlier — the same link,
+really followed:
+
+```
+routeChange  {activating: "View cookies, visited, link"}
+routeChange  {found: true, titleChanged: true}
+structureCensus / domCensus  {targetMatch: fallback, candidates: 1}
+```
+
+### The mechanism
+
+`probeRouteChange` (2.4.2's probe, added `9cd9bc1`, 2026-08-22) runs LAST, on the argument in its own
+comment: *"it is the only probe that can leave the page under measurement... Everything position-dependent
+has finished by here, so navigating away costs nothing."* **True of the probes it was reasoning about.
+False for the once-per-capture `structuralCensus`/`domCensus`, which `navigateByStructureThenAudit` runs
+AFTER it.**
+
+`choosePageTarget` is NOT the bug — it correctly reports `fallback`, because the tab genuinely no longer
+matches the expected URL. The failure is that **`censusTargetIsSuspect` treats `candidates <= 1` as
+unconditionally safe** (*"nothing else this fallback COULD have picked; the only target is the right
+one"*). That invariant holds for a competing target and does not hold for a lone target that has since
+moved. So this shape is not among the captures the gate refuses — **it is silently accepted.**
+
+`structureCrossCheck` even reports the disagreement (`heading 11 vs 4, link 129 vs 12`) and attributes it
+to sweep incompleteness, having no vocabulary for "wrong document".
+
+### Scope, MEASURED both sides
+
+| | affected | of | note |
+|---|---|---|---|
+| **real pages** | **20** | 20 sampled of 49 | **100%, zero exceptions** — GOV.UK Design System, W3C's own WAI demos and tutorials alike |
+| **synthetic corpus** | **25** | 2,796 | every one a `route-title-stale*` variant — the 2.4.2 family, whose whole purpose is to navigate |
+
+The other 77 records carrying `interaction.routeChange` did not navigate (no `found`, no title change), so
+their census was taken on the page under test and is sound.
+
+### Did any verdict depend on the wrong census? NO, and here is the check
+
+`ruleFindings` run over all 25 suspect synthetic records: **0 produced any rule finding.** Their censuses
+are non-zero (`heading: 2`, `heading: 6`) so `1.3.1:no-headings` — which requires `census.heading === 0` —
+could not fire, and `graphicUnnamed: 0` so the census-based 1.1.1 rule could not fire either. None of the
+25 is a case whose criterion reads the census; they are all 2.4.2. **So on the synthetic side the wrong
+evidence was harmless, by luck rather than by design.**
+
+**The real-page side has no equivalent all-clear**, and that is the honest statement: census-reading rules
+are `1.3.1:no-headings` and the census branch of 1.1.1 (`graphicUnnamed`), and on real pages they have been
+reading a document other than the one requested since the navigation probe landed on 2026-08-22. Any
+real-page number quoted from those rules since then rests on that.
+
+### What would tell you it is fixed
+
+The census is taken BEFORE any navigating probe, and describes the document the sweeps swept — same
+target, same URL — with the mark recording the URL it was taken at and, for any fallback, the REASON in
+words rather than the bare token `fallback`. Proven two ways: post-fix the two GOV.UK captures' censuses
+land within the sweep's own margin of `pageState` (25/188 and 36/324) **and differ from each other**; and
+with the order fix reverted, the trust rule refuses with `null` and a reason naming the moved URL rather
+than trusting 19/131.
