@@ -938,9 +938,53 @@ const DOCUMENT_ANNOUNCEMENT = /,\s*document$/i;
  *
  * @param capture a capture, unwrapped
  */
+/**
+ * A GET SUBMIT RELOADS THE SAME DOCUMENT WITH A QUERY STRING, and that is not a navigation to a different
+ * document — issue #30.
+ *
+ * ## The two questions are different, and conflating them is the defect
+ *
+ * `sameDocument` (browser-session.mjs) asks *"is this the same page for evidence purposes"*, and
+ * `known-gaps.md` records the objection to widening it on query strings: *"a query string is exactly how a
+ * search results page differs from a search form, and those ARE different."* **That objection is correct
+ * and this does not touch it.** A results page really is a different page to measure.
+ *
+ * This function asks something narrower: *did the submit take us to a different DOCUMENT?* A form that
+ * posts to itself and comes back with `?first=&second=` did not. The answer feeds
+ * `censusSuspectReason`'s trust decision, and answering the wider question there is what refuses a census
+ * of a page nothing was wrong with.
+ *
+ * ## Why no extension normalisation, unlike `samePath`
+ *
+ * `samePath` (capture-pure.mjs) strips `.html`, a trailing slash and `/index`, because it compares a
+ * REQUESTED url against a BROWSER url and a server may resolve the extension between the two. **Both
+ * values here come from the SAME source** — `currentPageUrl()`, moments apart, on either side of the
+ * submit — so any rewrite the server performs has already been applied to both identically. Duplicating
+ * `samePath`'s rules here would be a second answer to a question this comparison does not ask, and
+ * `packages/evidence` cannot import the first one anyway: everything depends on evidence, so evidence
+ * depends on nothing.
+ */
+function submitOnlyAddedAQueryString(from: unknown, to: unknown): boolean {
+  if (typeof from !== "string" || typeof to !== "string") return false;
+  try {
+    const before = new URL(from);
+    const after = new URL(to);
+    // ORIGIN as well as path: a submit that posts to another host has left the document, however similar
+    // the path looks. And the query must actually DIFFER -- identical URLs are not a navigation at all,
+    // which the caller has already decided by other means.
+    return before.origin === after.origin && before.pathname === after.pathname && before.search !== after.search;
+  } catch {
+    return false; // unparseable either side -- claim nothing, and let the caller's own answer stand
+  }
+}
+
 export function submitNavigatedTheDocument(capture: CapturedAnnouncements): boolean {
   const nav = capture.interaction?.navigatedOnSubmit;
   if (nav && typeof nav === "object" && "checked" in nav) {
+    // A self-reload is not a document change. Checked here rather than at `censusSuspectReason` because
+    // this is the function that OWNS the question, and the caller should not have to know the shape of a
+    // GET submit to read its answer.
+    if (nav.checked && nav.navigated === true && submitOnlyAddedAQueryString(nav.from, nav.to)) return false;
     if (nav.checked) return nav.navigated === true;
     // checked: false -- could not ask; fall through to the heuristic below, same as an old-shape absence.
   } else if (nav) {
