@@ -28,6 +28,34 @@
 #
 # Override, for a work-in-progress branch or when something below is broken for unrelated reasons:
 #   A11Y_SKIP_VERIFY=1 git push ...
+#
+# ## The FAST/FULL split, added 2026-09-06
+#
+# Six agents pushing after every commit (chairman's rule) multiplied the heaviest thing this repo runs by
+# the number of agents: each push ran the full suite, and `npm test` spawns a tsx worker per test file, so
+# several full suites at once starved the host of memory. `.github/workflows/lint.yml` was widened the same
+# day to run on every `agent/**`/`lead/**` push -- CI now has somewhere to run the full suite that isn't
+# this laptop, which is what makes shrinking the LOCAL hook for a branch push safe rather than a silent
+# reduction in what gets checked.
+#
+# `main` pushes are UNCHANGED: full suite, every time, because nothing else gates a merge to `main`.
+# `agent/*`/`lead/*` pushes run a FAST gate instead — lint, typecheck (both whole-repo checks regardless of
+# branch, so neither shrinks), and unit tests SCOPED to the packages/<name> directories the branch actually
+# touched against `origin/main` (`scripts/changed-packages.mjs`). A push touching no `packages/` file at
+# all (docs, this hook, the workflow) runs every package's tests -- an EMPTY touched-package result must
+# read as "run everything", never as "run nothing", the same rule this repo's discovery tests already
+# apply to an empty walk.
+#
+# THIS IS DELIBERATELY NOT A REPLACEMENT FOR THE FULL SUITE. A branch that breaks a package it never
+# touched will pass this gate and fail CI -- by design, not by gap: building a reliable cross-package
+# dependency graph to close that gap is a real project of its own, and a wrong graph is a guard answering
+# about the wrong population, the exact class closed elsewhere today (docs/backlog.md). CI is the real gate
+# for a branch now; this hook is the fast, local first pass.
+#
+# `A11Y_TEST_CONCURRENCY=4` bounds a single suite's own tsx worker count regardless of how many other
+# suites are running elsewhere on this host -- set here, in the LOCAL hook, never in `package.json`'s
+# shared `test:ts` script, because CI runs on its own machine and capping it there only makes runs slower
+# for no memory benefit.
 set -euo pipefail
 
 if [ "${A11Y_SKIP_VERIFY:-0}" = "1" ]; then
@@ -62,11 +90,31 @@ run() { # run <label> <command...>
   rm -f /tmp/a11y-prepush.$$
 }
 
-echo "pre-push: the cheap tier (~5s). Release gates are separate: npm run release:gate"
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 run "lint"       npm run --silent lint
 run "typecheck"  npm run --silent typecheck
-run "unit tests" npm test
+
+if [ "$BRANCH" = "main" ]; then
+  echo "pre-push: FULL suite (main). Release gates are separate: npm run release:gate"
+  run "unit tests" env A11Y_TEST_CONCURRENCY=4 npm test
+else
+  echo "pre-push: FAST gate ($BRANCH) -- lint, typecheck, and tests of the package(s) touched against"
+  echo "origin/main. The full suite runs in CI on this push: .github/workflows/lint.yml"
+  # A branch that breaks a package it never touched passes THIS gate and fails CI -- deliberate, not a
+  # gap: see scripts/changed-packages.mjs's header for why a real cross-package dependency graph was not
+  # built here.
+  changed="$(node scripts/changed-packages.mjs)"
+  if [ -z "$changed" ]; then
+    echo "  no packages/ file touched against origin/main -- running every package's tests"
+    run "unit tests (all packages)" npx tsx --test --test-concurrency=4 "packages/*/src/**/*.test.ts"
+  else
+    echo "  touched: $changed"
+    globs=()
+    for pkg in $changed; do globs+=("packages/$pkg/src/**/*.test.ts"); done
+    run "unit tests ($changed)" npx tsx --test --test-concurrency=4 "${globs[@]}"
+  fi
+fi
 
 # The corpus lives in gitignored `runs/`, so these two cannot run on a fresh clone or in CI. Say so out
 # loud rather than passing quietly: a check that reports success when it examined nothing is how "verified"
@@ -80,7 +128,11 @@ run "unit tests" npm test
 #
 # The strict form lives where the corpus is authoritative: `release:gate` and the lab job pass
 # --require-complete, and there a hole in the corpus IS the answer.
-if [ -d runs/screenreader-dataset/captures ]; then
+#
+# main ONLY: these are corpus-scale checks, not package-scoped ones, so the FAST gate above has no smaller
+# version of them to run — an agent/lead push skips straight past this section, same as it always would on
+# a fresh worktree with no corpus, and CI (which also has no corpus) still cannot run them either.
+if [ "$BRANCH" = "main" ] && [ -d runs/screenreader-dataset/captures ]; then
   # `&& x=0 || x=$?`, never `cmd; x=$?`: `set -e` is on (line 31), so a non-zero exit terminates the hook
   # BEFORE the status can be captured -- which meant the INCONCLUSIVE handling below had never once run. The
   # symptom is a push that dies after the last "ok" line with no failure named, because the hook's own exit
@@ -107,6 +159,8 @@ if [ -d runs/screenreader-dataset/captures ]; then
        failed+=("check-signals") ;;
   esac
   rm -f /tmp/a11y-signals.$$
+elif [ "$BRANCH" != "main" ]; then
+  skipped+=("check-signals (fast gate — main-only; runs in the full suite at merge)")
 else
   skipped+=("check-signals (no runs/screenreader-dataset/captures — needs a local corpus)")
 fi
@@ -115,7 +169,9 @@ fi
 # cannot ATTRIBUTE -- a stale export looks exactly like a broken exclusion from here. Reported as SKIPPED,
 # never as a pass. This was the last check that could fail on a stale corpus, and therefore the last reason
 # to reach for A11Y_SKIP_VERIFY=1, which turns off lint, typecheck and 953 tests as collateral.
-if [ -f runs/screenreader-dataset/screenreader-evidence.jsonl ] && [ -x .venv/bin/python ]; then
+#
+# main ONLY, same reasoning as check-signals above.
+if [ "$BRANCH" = "main" ] && [ -f runs/screenreader-dataset/screenreader-evidence.jsonl ] && [ -x .venv/bin/python ]; then
   rules_status=0
   npm run --silent rules:gate >/tmp/a11y-rules.$$ 2>&1 || rules_status=$?
   case $rules_status in
@@ -127,6 +183,8 @@ if [ -f runs/screenreader-dataset/screenreader-evidence.jsonl ] && [ -x .venv/bi
        failed+=("rules:gate") ;;
   esac
   rm -f /tmp/a11y-rules.$$
+elif [ "$BRANCH" != "main" ]; then
+  skipped+=("rules:gate (fast gate — main-only; runs in the full suite at merge)")
 else
   skipped+=("rules:gate (needs the exported corpus and .venv)")
 fi
