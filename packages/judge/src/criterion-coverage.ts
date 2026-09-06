@@ -609,7 +609,77 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
     // `probeFocusReveal` started actually being sent; before that the criterion was blind and the
     // overclaim was invisible. A gate blocked a release over a status field, and the status field was
     // wrong.
+    //
+    // REACHABLE, NOT `partial` — 2026-09-06, and this is the claim being FALSE today rather than a
+    // sentence written to unblock a release. Issue #76, measured on the real-page path, same fleet,
+    // minutes apart, on the two halves of the 1.4.13 fixture pair:
+    //
+    //   good.html   revealed:true  focusHeld:true  dismissed:true     correct
+    //   bad.html    revealed:false why:"nothing appeared on focus"    blind
+    //
+    // `probeFocusContext` runs before `probeFocusReveal` and presses Tab, which opens a panel revealed on
+    // focus; `anchorToTop` then presses Escape before the baseline census is taken. On a conformant page
+    // that Escape closes the panel and the probe measures correctly. On a failing page Escape does
+    // nothing -- THAT IS THE FAILURE UNDER TEST -- so the panel is still open and the delta is empty.
+    //
+    // **The property that makes a page fail this criterion is the property that stops the product path
+    // from seeing it**, and `packages/cli/src/cli.ts` runs both probes, so that IS the product path. The
+    // 15 corpus firings come from the dataset path, which runs neither `probeFocusContext` nor
+    // `probeNavigation` -- a path the product does not run.
+    //
+    // The probe now REFUSES rather than answering when its baseline was not the untouched document
+    // (`focusRevealVerdict`'s `baselineUntouched`), so a failing page reads "cannot say" instead of
+    // reading exactly like a conformant one. That stops the tool being confidently wrong; it does not
+    // make the criterion assessable, which is why the status moves rather than staying put.
+    //
+    // `reachable` WAS RULED AND IS REFUSED BY THE CODEBASE, correctly, and the refusal is worth the space.
+    //
+    // `criterion-coverage.test.ts` requires the `assessed`/`partial` set to equal
+    // `assessedCriteria()` = SCORED_CRITERIA union RULE_CRITERIA -- *"coverage.ts and this map disagree
+    // about what ships, one of them is lying to a consumer"*. 1.4.13 is RULE-OWNED, so `reachable`
+    // ("not assessed") while `addFocusRevealFindings` can still emit a finding for it is a lie in the
+    // OTHER direction: a criterion we report on, documented as one we do not assess.
+    //
+    // AND THE FIX ABOVE MOVED THE FACTS THE RULING WAS MADE ON. It was ruled against a probe that
+    // answered `revealed: false` on a failing page -- reading exactly like a conformant one. With the
+    // refusal in place the rule speaks only from a TRUSTED baseline and is silent otherwise, so `partial`
+    // is now true as written: the DISMISSABLE bullet is assessed when it can be seen, and a clean report
+    // is explicitly silent on this criterion, which is what `partial` already promises.
+    //
+    // What is NOT fixed, and is why #76 stays open: on the product path the refusal is the common case,
+    // so this criterion is mostly SILENT rather than mostly assessed. That is a coverage gap, not an
+    // overclaim, and it closes when the reveal probe's baseline is taken on an untouched document -- it
+    // runs before any probe that presses Tab, or the page is reloaded before it -- with the fixture's BAD
+    // half firing on the REAL-PAGE path as the acceptance. A worker change with an `evidence:check`
+    // behind it.
     status: "partial",
+    // DECLARED 2026-09-06, AND IT WAS REFUSED EARLIER THE SAME DAY — the refusal and the permission are
+    // the same principle, and recording both is the point.
+    //
+    // `docs/backlog.md` listed this declaration as a remedy and the orchestrator declined it: *"its effect
+    // is to unblock a release by writing a sentence, which is a decision about what the product CLAIMS."*
+    // That was right at the time. Nobody knew WHY the fixture would not fire, so the sentence would have
+    // asserted a limit that had not been measured — the difference between a declaration and an excuse.
+    //
+    // What changed is that the mechanism is now measured, not assumed (#76): `probeFocusContext` presses
+    // Tab and opens the panel, `anchorToTop` presses Escape, and only a CONFORMANT page's Escape closes it
+    // again before the baseline census — so on the product path a failing page cannot produce a delta. The
+    // probe now REFUSES on that rather than answering, the fix is filed with its acceptance, and the page
+    // that will close it exists and is captured.
+    //
+    // So this says what is TRUE: not "no real page can exhibit this", which is false, but "the product
+    // path cannot currently SEE one, and here is the page and the issue that will change that".
+    realPageEvidence: {
+      available: false,
+      because: "The FIXTURE that demonstrates this failure exists, is captured, and its bad half reads "
+        + "`revealed: null` on the real-page path — not because the page conforms but because "
+        + "`probeFocusContext` opens the panel before this probe's baseline census, and Escape closes it "
+        + "again only on a page where Escape WORKS, which is the failure under test. Measured 2026-09-06, "
+        + "both halves of the pair, same fleet, minutes apart. Closed by issue #76, whose acceptance is "
+        + "`focus-panel-undismissable-help/bad.html` firing on the REAL-PAGE path; that URL is already in "
+        + "`REAL_PAGES` as a `fixture`-role page. This is a gap in what the product path can OBSERVE, not "
+        + "a claim that no real page exhibits it",
+    },
     needs: ["screen-reader", "visual"],
     channels: ["focusReveal"],
     // A RULE OWNS THE DISMISSABLE BULLET AS OF 2026-09-05, closing the gap this entry recorded twice
