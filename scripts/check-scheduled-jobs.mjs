@@ -3,6 +3,11 @@
 // asked before this, because every existing signal for a broken schedule is the job itself telling you,
 // and a job that was never installed (or was silently removed) tells you nothing.
 //
+// THE LAUNCHD PATH THIS SCRIPT CHECKS WAS RETIRED 2026-09-06 -- the board report now runs from GitHub
+// Actions (see docs/board/README.md), both docs/board/*.plist were deleted, and zero claimed jobs is the
+// CORRECT state, not a broken discovery. This script is kept for the day launchd is reintroduced, or a
+// different local job is claimed the same way; it reports that honestly rather than refusing on empty.
+//
 // Usage:
 //   npm run jobs:check                          # report only -- never fails
 //   A11Y_ASSERT_CONTROL_PLANE=1 npm run jobs:check   # THIS machine is meant to run every claimed job;
@@ -25,9 +30,10 @@ function main() {
   });
 
   if (report.length === 0) {
-    console.error(`REFUSING: found zero claimed jobs under docs/board/*.plist -- the discovery itself is `
-      + "broken, since this repo has always claimed at least one scheduled job.");
-    process.exit(2);
+    console.log("No jobs are claimed under docs/board/*.plist -- expected since the launchd board-report "
+      + "path was retired for GitHub Actions on 2026-09-06 (see board-schedule.test.ts for its check). "
+      + "If a .plist was meant to be here, that is the defect, not this script.");
+    process.exit(0);
   }
 
   for (const job of report) {
