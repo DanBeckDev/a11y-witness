@@ -76,6 +76,14 @@ then what I do not know. Worked example, and the third line is the one that matt
     NOT KNOWN: whether that rate holds; a degraded box absorbs faults in retries
                and runs at 3x cost while `failures` stays 0, which this cannot see
 
+**A KILLED BACKGROUND WAITER READS EXACTLY LIKE ONE THAT HAS NOT FIRED YET.** Measured 2026-09-06: two
+recapture waiters were killed an hour apart by the OS for low memory, with 896 MB of swap left of 22.5 GB
+across fifteen agent processes. Neither announced itself; both simply stopped existing, which from inside
+is indistinguishable from "the run is still going". That is the diagnostics-lied shape at the process
+layer, and the remedy is the same as everywhere else here — **poll the authoritative source by hand rather
+than trusting a watcher that cannot report its own death.** When the host is under memory pressure, do not
+background anything whose silence you intend to read as information.
+
 **A number carries what it was computed from, or it is not sent.** An ETA goes to the issue it informs,
 never into a board report — it is the single most likely thing to be quoted stripped of its caveats.
 
