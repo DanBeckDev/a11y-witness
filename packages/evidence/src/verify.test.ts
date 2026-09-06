@@ -732,6 +732,34 @@ test("REAL PAGE SHAPE: w3.org/WAI/demos/bad/after/survey.html, verbatim -- the c
     "the formChanges document-title signal must catch what navigatedOnSubmit's ambiguous absence could not");
 });
 
+test("REAL PAGE SHAPE: tfl.gov.uk/modes/tube/, verbatim -- proves the \"submit\" kind check is load-bearing", () => {
+  // Not "no formChanges at all", which would make the kind check redundant. Verbatim from the stored
+  // capture's marks:
+  //
+  //   navigatedOnSubmit: null
+  //   formChanges: 1  ->  kind='route', after=''
+  //
+  // There IS one formChanges entry -- from `probeRouteChange`'s own delta-capture, not a submit -- and its
+  // `kind` is `"route"`, excluded by `submitNavigatedTheDocument`'s `kind === "submit"` guard before the
+  // DOCUMENT_ANNOUNCEMENT regex is even consulted. Its `after` is empty anyway, so even an unguarded regex
+  // would find nothing here -- but a future capture whose route-change delta legitimately ends "..., document"
+  // must not be misread as OUR submit navigating, which is exactly what the guard exists to prevent.
+  const census = pageCensus({
+    diagnostics: [
+      { event: "structureCensus", heading: 12, targetMatch: "fallback", candidates: 1,
+        targetUrl: "https://tfl.gov.uk/tube-dlr-overground/status/",
+        expectedUrl: "https://tfl.gov.uk/modes/tube/" },
+    ],
+    interaction: {
+      controls: [], stateChanges: [],
+      formChanges: [{ control: undefined, kind: "route", after: "" }],
+      // navigatedOnSubmit ABSENT, same as survey.html -- the difference is entirely the `kind` guard.
+    },
+  } as never);
+  assert.equal(census?.heading, 12,
+    "a non-submit formChange must not be read as evidence of our own submit navigating");
+});
+
 test("submitNavigatedTheDocument: an ordinary error message does not read as a navigation", () => {
   // The heuristic's own false-positive risk, stated and checked: an error message ending in a word this
   // grammar could mistake for the document role would over-fire. "document" itself is not that common a

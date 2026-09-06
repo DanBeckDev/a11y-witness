@@ -892,9 +892,21 @@ export function censusTargetIsSuspect(
   return censusSuspectReason(record, submitNavigated) !== null;
 }
 
-/** NVDA's own announcement for a NEWLY LOADED top-level document: the title, then the role "document" —
- *  `capture-probes.mjs:2050`'s own comment quotes a real one, `"Energy results, document"`. A "submit"
- *  formChange whose `after` matches this reached a different document, whatever `navigatedOnSubmit` says. */
+/**
+ * NVDA's own announcement for a NEWLY LOADED top-level document: the title, then the role "document" —
+ * `capture-probes.mjs:2050`'s own comment quotes a real one, `"Energy results, document"`. A "submit"
+ * formChange whose `after` matches this reached a different document, whatever `navigatedOnSubmit` says.
+ *
+ * ANCHORED TO THE END, deliberately, not a stylistic choice: NVDA's document announcement is the LAST
+ * thing in this delta, evidenced by every real case checked so far — 10 of 10 (the nine
+ * `focus-removed-on-receipt-*` captures plus `w3.org/.../survey.html`) end in exactly `, document` with
+ * nothing following it. An unanchored match would ALSO catch a control announced elsewhere in a longer
+ * delta whose OWN role happens to be "document" (an embedded document/iframe read mid-delta, say), which
+ * is a different claim than "this delta ended by arriving at a new page". If a genuine near-miss ever
+ * turns up — a document announcement followed by more text — relax this with a NEW measurement behind it,
+ * not on the strength of it looking safe; an unanchored version quietly widens the false-positive surface
+ * `submitNavigatedTheDocument`'s own header documents.
+ */
 const DOCUMENT_ANNOUNCEMENT = /,\s*document$/i;
 
 /**
