@@ -81,6 +81,34 @@ WORKING TREE, so a half-resolved merge there makes `assertFleetRunsThisCheckout`
 intended. Best case a refused capture; worst case a whole run stamped against code that never existed —
 **and that one passes.** Losing a conflict resolution costs ten minutes; this costs a corpus.
 
+**AND NOTHING IS EVER CHECKED OUT OR EDITED IN IT EITHER — added 2026-09-06, after the primary was found
+sitting on `agent/product-tracker` with two files modified eleven seconds earlier.** The rule above says
+nobody MERGES there; that was too narrow. Feature work is worktrees only, and the second reason is the one
+nobody had:
+
+**Every worktree's `node_modules` can be a symlink to the primary's, so `@a11y-witness/*` resolves to the
+PRIMARY's `packages/*/dist` — not the worktree's.** Measured: `require.resolve('@a11y-witness/judge')` from
+a worktree prints a path inside the primary checkout. Two consequences, and both cost real time the day this
+was written:
+
+- **Building your own worktree changes nothing a cross-package tool reads.** A generator emitted a page
+  missing two paragraphs its source plainly contained, because the primary's `dist` was two hours old. That
+  was diagnosed as a broken generator, and a "regeneration" was committed that reverted another agent's
+  work. `npm run build` in the worktree had already been tried and proved nothing.
+- **So a feature branch checked out in the primary silently changes what every other agent compiles and
+  tests against**, on top of moving the hash. The stale-`dist` case is the passive version of this; a
+  feature branch there is the active one.
+
+**Rebuild the primary after merges** — `npm run build` — or every worktree inherits whatever it last built.
+Verified safe during a live capture: a build writes `dist/` only, `nvda-worker` has no build step at all
+(plain `.mjs`, ADR 0031), and `workerSourceDirty()` reads `git status -- packages/nvda-worker/src`. Measured
+worker source 0 dirty either side and `worker:code` 10/10 after.
+
+**And when a tool reads stale code, resolve the module and print the PATH, not the link type.** The check
+that missed this was `ls -ld node_modules/@a11y-witness/judge`, which answered *is this a symlink* when the
+question was *to which checkout*. `node -e "console.log(require.resolve('@a11y-witness/judge'))"` answers the
+right one.
+
 A corollary worth stating rather than discovering: **a merge tree cannot faithfully run the corpus-reading
 gates**, because its `runs/` is a symlinked copy and those gates are the lead's to run by ruling anyway.
 That is correct, not a gap.
