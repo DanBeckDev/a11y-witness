@@ -781,10 +781,10 @@ test("submitNavigatedTheDocument: a non-submit activation's document-shaped delt
   } as CapturedAnnouncements), false);
 });
 
-test("submitNavigatedTheDocument: navigatedOnSubmit present is sufficient on its own", () => {
+test("submitNavigatedTheDocument: navigatedOnSubmit present is sufficient on its own (pre-fix shape)", () => {
   assert.equal(submitNavigatedTheDocument({
     transcript: [], interaction: { controls: [], stateChanges: [],
-      navigatedOnSubmit: { from: "https://example.test/a", to: "https://example.test/b" } },
+      navigatedOnSubmit: { from: "https://example.test/a", to: "https://example.test/b" } as never },
   } as CapturedAnnouncements), true);
 });
 
@@ -793,6 +793,58 @@ test("submitNavigatedTheDocument: neither signal present means false, not absenc
   assert.equal(submitNavigatedTheDocument({
     transcript: [], interaction: { controls: [], stateChanges: [] },
   } as CapturedAnnouncements), false);
+});
+
+// --- The three states `navigatedOnSubmit` can now record, fixed 2026-09-06 (known-gaps §41) ---
+//
+// Before this fix, `capture-probes.mjs` set this field only on a confirmed navigation, so its absence
+// conflated "did not navigate" with "could not ask" with "this probe never ran" -- exactly what let
+// survey.html's real navigation go unrecorded. `checked` is the new discriminant; these three tests are
+// each one of its states, and the fourth pins that the pre-fix shape (no `checked` key at all) still
+// reads the way it always did, for the thousands of captures on disk before a recapture happens.
+
+test("submitNavigatedTheDocument: checked and navigated -- trusted directly, no heuristic needed", () => {
+  assert.equal(submitNavigatedTheDocument({
+    transcript: [], interaction: { controls: [], stateChanges: [],
+      navigatedOnSubmit: { checked: true, navigated: true, from: "https://a.test/", to: "https://b.test/" } },
+  } as CapturedAnnouncements), true);
+});
+
+test("submitNavigatedTheDocument: checked and did NOT navigate -- trusted directly, even with a " +
+  "document-shaped formChanges the heuristic would otherwise have caught", () => {
+  // The confirmed "no" must win over the heuristic, not merely be consulted alongside it -- a genuine
+  // error message that happens to end ", document" (a page named "Booking, document" in its error banner,
+  // say) must not be turned into a false navigation once we HAVE a direct answer.
+  assert.equal(submitNavigatedTheDocument({
+    transcript: [],
+    interaction: {
+      controls: [], stateChanges: [],
+      navigatedOnSubmit: { checked: true, navigated: false, from: "https://a.test/", to: "https://a.test/" },
+      formChanges: [{ control: "submit, button", kind: "submit", after: "Booking, document" }],
+    },
+  } as CapturedAnnouncements), false);
+});
+
+test("submitNavigatedTheDocument: checked: false (could not ask) falls through to the text heuristic, " +
+  "exactly like an old-shape absence", () => {
+  const couldNotAsk = {
+    transcript: [],
+    interaction: { controls: [], stateChanges: [], navigatedOnSubmit: { checked: false } },
+  } as CapturedAnnouncements;
+  assert.equal(submitNavigatedTheDocument(couldNotAsk), false, "no other signal either -> false");
+  assert.equal(submitNavigatedTheDocument({
+    ...couldNotAsk,
+    interaction: { ...couldNotAsk.interaction, controls: [], stateChanges: [],
+      formChanges: [{ control: "submit, button", kind: "submit", after: "Confirmation, document" }] },
+  } as CapturedAnnouncements), true, "the heuristic must still fire when checked is false");
+});
+
+test("submitNavigatedTheDocument: the OLD pre-fix shape (no `checked` key) still means navigated=true " +
+  "on presence alone -- backward compatibility for every capture already on disk", () => {
+  assert.equal(submitNavigatedTheDocument({
+    transcript: [],
+    interaction: { controls: [], stateChanges: [], navigatedOnSubmit: { from: "a", to: "b" } as never },
+  } as CapturedAnnouncements), true);
 });
 
 test("a fallback with SEVERAL candidates stays suspect regardless of navigatedOnSubmit", () => {
