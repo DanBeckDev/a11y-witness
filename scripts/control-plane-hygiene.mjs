@@ -10,9 +10,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { sandboxGitEnv } from "./git-env.mjs";
 
-const REPO_ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+const REPO_ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"],
+  { encoding: "utf8", env: sandboxGitEnv() }).trim();
 
 function du(path) {
   if (!existsSync(path)) return 0;
@@ -31,7 +34,8 @@ function humanMb(bytes) {
 /** Every registered worktree, real path and branch -- `git worktree list --porcelain`, not a glob, so a
  * worktree living outside the usual sibling-directory convention is still counted. */
 export function worktrees(repoRoot = REPO_ROOT) {
-  const out = execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot, encoding: "utf8" });
+  const out = execFileSync("git", ["worktree", "list", "--porcelain"],
+    { cwd: repoRoot, encoding: "utf8", env: sandboxGitEnv() });
   const paths = [];
   for (const line of out.split("\n")) {
     if (line.startsWith("worktree ")) paths.push(line.slice("worktree ".length));
@@ -76,7 +80,8 @@ export function packagesImportedByName(repoRoot, packages) {
   const grepArgs = ["grep", "-l", "-F", ...bareQuoted.flatMap((pattern) => ["-e", pattern])];
   let rgOut;
   try {
-    rgOut = execFileSync("git", grepArgs, { cwd: repoRoot, encoding: "utf8" }).split("\n").filter(Boolean);
+    rgOut = execFileSync("git", grepArgs, { cwd: repoRoot, encoding: "utf8", env: sandboxGitEnv() })
+      .split("\n").filter(Boolean);
   } catch {
     rgOut = []; // git grep exits 1 when nothing matches at all -- an empty result, not an error
   }
@@ -166,4 +171,9 @@ function main() {
   process.exit(0);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+// A string-concatenated `file://${path}` guard does not percent-encode, so a path containing a space
+// (or another URL-reserved character) never equals `import.meta.url`, and this entry point silently
+// never runs -- not a crash, not a warning, just an exit 0 that did nothing. `pathToFileURL` builds the
+// comparison the way Node itself would, the exact defect class this row's own dist-trap check exists
+// to catch, sitting in this row's own tooling until fixed here.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
