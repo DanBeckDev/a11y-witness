@@ -1189,6 +1189,52 @@ run or a smaller verification slice. **What would settle it:** the lab's own job
 window (`lab:status`/`lab:log` for whichever job ran, if its record still exists) — out of this pass's
 resource bounds (fleet/lab access banned for this unit) and named rather than guessed at.
 
+## The always-passing-guard class, closed as a class, 2026-09-06
+
+`ceo`'s follow-up to the row above: every test that greps a ref namespace, walks a directory, or asserts
+over a file list must prove its population non-empty before asserting over it. Six named instances
+across the day; this closes the two still open (items 1 and 3 above were already fixed or corrected in
+prose) and sweeps the rest of the tree, bounded rather than exhaustive.
+
+**The candidate population is large and mostly a false alarm, measured rather than assumed:**
+`grep -rl "readdirSync\|readFileSync" packages --include="*.test.ts"` finds 168 files, and that number is
+candidates, not offenders — the `readdirSync` subset (55 files) was already swept separately (see the row
+above), all but one already guarded, in phrasing varied enough (`.length > N`, `.size >= N`, a named
+local compared to a floor) that a naive regex over the remaining ~50 `matchAll`-based files produced false
+positives on a first pass, exactly as warned: several flagged files turned out to already be guarded
+under a spelling a bare `\.length\s*[><]=?` grep does not match (`playbook-variables.test.ts`'s
+`scanned > 30`, `doc-references.test.ts`'s `checked > 30`).
+
+**Confirmed, fixed, and mutation-checked live (staged a real offender, watched the discovery/assertion
+fail by name, reverted):**
+
+| file | the gap | the fix |
+|---|---|---|
+| `packages/judge/src/criteria-counts-are-not-spelled-out.test.ts` | `git ls-files packages/judge/src packages/evidence/src` had no floor — a wrong `ROOT` or a renamed package returns nothing, and zero files means zero offenders, reported clean having examined none | `assert.ok(files.length >= 40, ...)` |
+| `packages/lab/src/packaging/candidate-gate-examines-the-candidate.test.ts` | `chain()` extracts `candidate:gate`'s stages via `matchAll(/npm run .../)` with no floor — THREE separate tests iterate this list, so a restructure to a wrapper script (still a truthy, non-empty `scripts["candidate:gate"]`) would silently zero out all three at once, not one | `assert.ok(stages.length >= 5, ...)` inside `chain()` itself, so every caller inherits it |
+| `packages/nvda-worker/src/capture-faults.test.ts` | asserts an ABSENCE (`swapped.length === 0`) with no proof the file it reads is non-trivial — a moved file, an empty read, or a broken regex all produce the identical "0 swapped" pass | added `assert.ok(realCallSites.length >= 3, ...)` proving real `captureFault(` call sites exist before checking none are swapped |
+| `packages/lab/src/packaging/action-reference.test.ts` | the ref-existence test computed `usesLines()` independently of the sibling test that guards it — `node:test` runs both regardless, so a sibling's failure does not stop this one reporting a false pass on the same empty population | this test now guards its own `lines.length >= 3` rather than trusting a neighbour's |
+
+**New standing guard**, over the narrower, tractable slice of the six-instance shape — the git-ref/branch/
+tag/log-enumeration class specifically (items 1-2's mechanism):
+`packages/lab/src/packaging/git-population-vacuity.test.ts` discovers every test spawning
+`git branch`/`tag`/`log`/`grep`/`ls-files`/`show`/`for-each-ref` (9 files, comments stripped so a
+docstring mention cannot count), and requires each to be classified with its guard expression, checked to
+still literally appear in the file. **8 of 9 were already guarded** before this unit — only
+`criteria-counts-are-not-spelled-out.test.ts` above was a real gap in this slice; the rest confirm the
+class was already mostly closed, which is itself worth having measured rather than assumed. Mutation-
+checked live both directions: a staged, unclassified 10th git-population test fails the discovery by
+name; removing a classified file's guard expression fails the drift check by name; both reverted.
+
+**Not folded into an automated standing guard beyond the git-ref slice**: a fully general "does this test
+prove its population non-empty" detector over arbitrary `matchAll`/`readFileSync` shapes was tried in
+triage and abandoned for the reason stated above — the false-positive rate on real, already-guarded files
+was high enough that trusting the regex's verdict without reading every flagged file would have produced
+exactly the false work list this row exists to prevent. The four fixes above were each found and fixed by
+reading, not by a pattern that will catch the next one automatically; a future instance of this class
+needs the same discipline; `git-population-vacuity.test.ts` catches new instances only within its
+specific, narrower slice.
+
 ## How an item leaves this page
 
 **CORRECTED 2026-09-06 — the rule below said "delete" while 51 closed rows sat here, struck through and
