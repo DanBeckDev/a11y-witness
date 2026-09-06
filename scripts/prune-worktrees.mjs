@@ -4,7 +4,7 @@
 // trees by hand, and 36 remained the next day: 4.4 GB, 38 real `node_modules` directories. A rule
 // maintained by hand is a rule that lapses.
 //
-// FOUR POPULATIONS, and conflating them is the whole risk in this file:
+// FIVE POPULATIONS, and conflating them is the whole risk in this file:
 //   - LIST every worktree whose branch is merged into origin/main (a "gone" branch -- deleted outright --
 //     is the same population read a different way: nothing to lose either way).
 //   - REMOVE the ones that are also CLEAN -- no uncommitted changes, no commits origin/main does not have.
@@ -22,6 +22,12 @@
 //       commit's content already on main). Reported as its own state and left for a human, never folded
 //       into "dirty" (which reads as real, uncaptured work) or auto-removed (which would be right most of
 //       the time and catastrophic the one time a cherry-pick left something behind it did not carry).
+//       INCONCLUSIVE: merge or clean status could not be DETERMINED at all -- `origin/main` missing, a
+//       corrupt ref, an unreadable working tree. A dispatcher's own manual pass had exactly this bug:
+//       `[ "$(git rev-list --count origin/main..branch 2>/dev/null)" != 0 ]` reads an EMPTY (errored)
+//       result the same as a real nonzero count, silently treating "could not tell" as "not merged".
+//       Reported and left for a human -- never folded into "not merged" or "dirty" by a default that only
+//       looks safe.
 //
 // A dirty worktree holds uncommitted work, which is exactly the case where deletion is unrecoverable --
 // this project has one recorded near-miss already (`git checkout main` refused in the primary over
@@ -90,7 +96,7 @@ export function isPrimaryWorktree(worktreePath) {
 /**
  * @typedef {{
  *   path: string, branch: string | null,
- *   mergedIntoMain: boolean, workingTreeClean: boolean, contentMerged: boolean,
+ *   merge: "merged" | "not-merged" | "unknown", workingTreeClean: boolean | "unknown", contentMerged: boolean,
  * }} WorktreeAssessment
  */
 
@@ -108,23 +114,29 @@ export function isStandingBranch(branch) {
 }
 
 /**
- * Pure: given what is already known about a worktree, which of the FOUR populations is it in?
+ * Pure: given what is already known about a worktree, which of the FIVE populations is it in?
  *
  * ORDER MATTERS. A detached worktree is refused first (no branch to reason about at all). A standing
  * branch is refused next, UNCONDITIONALLY -- a role tree that happens to look clean and merged is still
  * never a prune candidate, because "merged and clean" is not the question for a tree that is not a unit
- * tree in the first place. Only then does "remove" become reachable, and "cherry-picked" is checked
- * before the general "dirty" fallback so a content-identical branch is never lumped in with real,
- * uncaptured work.
+ * tree in the first place. `"unknown"` on EITHER `merge` or `workingTreeClean` is checked before "remove"
+ * becomes reachable at all -- INCONCLUSIVE, never silently folded into "not merged" or "dirty". That
+ * collapse is a real, measured incident, not a hypothetical: a manual prune script's own
+ * `[ "$(git rev-list --count origin/main..branch 2>/dev/null)" != 0 ]` compares an EMPTY result (the
+ * count errored) against `0` as unequal, treating "could not tell" as "definitely not merged" -- the same
+ * shape this project has paid for repeatedly elsewhere, here inside the very tool meant to enforce
+ * hygiene. Only past both of those does "cherry-picked" get checked, before the general "dirty" fallback,
+ * so a content-identical branch is never lumped in with real, uncaptured work.
  *
- * @param {Pick<WorktreeAssessment, "branch" | "mergedIntoMain" | "workingTreeClean" | "contentMerged">} assessment
- * @returns {"remove" | "dirty" | "standing" | "cherry-picked"}
+ * @param {Pick<WorktreeAssessment, "branch" | "merge" | "workingTreeClean" | "contentMerged">} assessment
+ * @returns {"remove" | "dirty" | "standing" | "cherry-picked" | "inconclusive"}
  */
-export function classify({ branch, mergedIntoMain, workingTreeClean, contentMerged }) {
+export function classify({ branch, merge, workingTreeClean, contentMerged }) {
   if (branch === null) return "dirty";
   if (isStandingBranch(branch)) return "standing";
-  if (mergedIntoMain && workingTreeClean) return "remove";
-  if (!mergedIntoMain && contentMerged) return "cherry-picked";
+  if (merge === "unknown" || workingTreeClean === "unknown") return "inconclusive";
+  if (merge === "merged" && workingTreeClean) return "remove";
+  if (merge === "not-merged" && contentMerged) return "cherry-picked";
   return "dirty";
 }
 
@@ -133,22 +145,29 @@ export function classify({ branch, mergedIntoMain, workingTreeClean, contentMerg
  * branch that no longer exists at all (deleted since `git worktree list` last ran, or by another agent
  * moments ago) is treated as merged: nothing on it can be lost by removing a worktree pointing nowhere.
  *
+ * TRISTATE, deliberately, not a boolean: `git merge-base --is-ancestor` exits 1 for its own documented
+ * "not an ancestor" answer, and exits with anything ELSE (128, most commonly) when it could not even ask
+ * the question -- `origin/main` missing, a corrupt ref, a repo mid-operation. Reading "anything non-zero"
+ * as "not merged" is exactly the collapse measured in the incident this function's caller documents;
+ * `"unknown"` keeps that third state visible instead of guessing which of the other two it must be.
+ *
  * @param {string} repoRoot
  * @param {string} branch
  * @param {{ run?: typeof defaultRun }} [deps]
- * @returns {boolean}
+ * @returns {"merged" | "not-merged" | "unknown"}
  */
-export function isMergedIntoMain(repoRoot, branch, { run = defaultRun } = {}) {
+export function mergeStatus(repoRoot, branch, { run = defaultRun } = {}) {
   try {
     run("git", ["rev-parse", "--verify", `refs/heads/${branch}`], { cwd: repoRoot });
   } catch {
-    return true; // the branch itself is gone -- nothing left to merge or lose
+    return "merged"; // the branch itself is gone -- nothing left to merge or lose
   }
   try {
     run("git", ["merge-base", "--is-ancestor", branch, "origin/main"], { cwd: repoRoot });
-    return true;
-  } catch {
-    return false; // exits non-zero when NOT an ancestor -- a real "not merged", not a failure to guess about
+    return "merged";
+  } catch (error) {
+    const status = /** @type {{ status?: number }} */ (error).status;
+    return status === 1 ? "not-merged" : "unknown";
   }
 }
 
@@ -182,21 +201,30 @@ export function isContentMerged(repoRoot, branch, { run = defaultRun } = {}) {
 
 /**
  * Whether a worktree's working directory has no uncommitted changes -- exactly `git status --porcelain`,
- * nothing more. Deliberately NOT also checking for commits `origin/main` lacks: that is
- * `isMergedIntoMain`'s question, asked once, so a worktree with a real unmerged commit but a clean
- * `git status` (committed, just not yet integrated) is not read as "clean" here and "unmerged" there --
- * `classify` requires BOTH facts true to remove, so either check alone catches that case, and folding
- * "ahead of origin/main" into this function too would just be the same fact asked twice.
+ * nothing more. Deliberately NOT also checking for commits `origin/main` lacks: that is `mergeStatus`'s
+ * question, asked once, so a worktree with a real unmerged commit but a clean `git status` (committed,
+ * just not yet integrated) is not read as "clean" here and "unmerged" there -- `classify` requires BOTH
+ * facts true to remove, so either check alone catches that case, and folding "ahead of origin/main" into
+ * this function too would just be the same fact asked twice.
+ *
+ * TRISTATE for the same reason as `mergeStatus`: an unreadable working tree (permissions, a corrupted
+ * index, the directory vanishing mid-run) must read as `"unknown"`, never as `false` -- collapsing "could
+ * not check" into "dirty" is a safer-LOOKING default that still hides the same failure this file exists
+ * to stop hiding.
  *
  * @param {string} worktreePath
  * @param {string | null} branch
  * @param {{ run?: typeof defaultRun }} [deps]
- * @returns {boolean}
+ * @returns {boolean | "unknown"}
  */
 export function isWorkingTreeClean(worktreePath, branch, { run = defaultRun } = {}) {
   if (branch === null) return false; // detached: no branch to reason about safely either way
-  const status = run("git", ["status", "--porcelain"], { cwd: worktreePath });
-  return status.trim() === "";
+  try {
+    const status = run("git", ["status", "--porcelain"], { cwd: worktreePath });
+    return status.trim() === "";
+  } catch {
+    return "unknown";
+  }
 }
 
 /**
@@ -206,6 +234,7 @@ export function isWorkingTreeClean(worktreePath, branch, { run = defaultRun } = 
  *   dirty: ReportedWorktree[],
  *   standing: ReportedWorktree[],
  *   cherryPicked: ReportedWorktree[],
+ *   inconclusive: ReportedWorktree[],
  *   skippedPrimary: string | null,
  * }} PruneReport
  */
@@ -213,9 +242,10 @@ export function isWorkingTreeClean(worktreePath, branch, { run = defaultRun } = 
 /**
  * The whole flow: list, classify, remove the clean+merged, name the rest, never touch the primary.
  *
- * `contentMerged` is only computed when `mergedIntoMain` is false and `branch` is a real, non-standing
- * name -- `git cherry` is meaningless for a detached or already-merged worktree, and skipping it there is
- * not an optimisation, it is avoiding a question that does not apply.
+ * `contentMerged` is only computed when `merge` is `"not-merged"` (a real, resolved "no") and `branch` is
+ * a real, non-standing name -- `git cherry` is meaningless for a detached, already-merged, or
+ * UNKNOWN-status worktree, and skipping it there is not an optimisation, it is avoiding a question that
+ * does not apply, or that the first question already failed to answer.
  *
  * @param {string} repoRoot the repository whose `git worktree list` is authoritative
  * @param {{ run?: typeof defaultRun, remove?: (path: string, deps: { run: typeof defaultRun }) => void }} [deps]
@@ -225,7 +255,9 @@ export function pruneWorktrees(repoRoot, { run = defaultRun, remove } = {}) {
   const porcelain = run("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot });
   const entries = parseWorktreeList(porcelain);
   /** @type {PruneReport} */
-  const report = { removed: [], dirty: [], standing: [], cherryPicked: [], skippedPrimary: null };
+  const report = {
+    removed: [], dirty: [], standing: [], cherryPicked: [], inconclusive: [], skippedPrimary: null,
+  };
   const doRemove = remove ?? ((path, { run: r }) => {
     r("git", ["worktree", "remove", path], { cwd: repoRoot });
   });
@@ -240,16 +272,18 @@ export function pruneWorktrees(repoRoot, { run = defaultRun, remove } = {}) {
       report.standing.push(reported);
       continue;
     }
-    const mergedIntoMain = entry.branch !== null && isMergedIntoMain(repoRoot, entry.branch, { run });
+    const merge = entry.branch !== null ? mergeStatus(repoRoot, entry.branch, { run }) : "not-merged";
     const workingTreeClean = isWorkingTreeClean(entry.path, entry.branch, { run });
-    const contentMerged = entry.branch !== null && !mergedIntoMain
+    const contentMerged = entry.branch !== null && merge === "not-merged"
       && isContentMerged(repoRoot, entry.branch, { run });
-    const verdict = classify({ branch: entry.branch, mergedIntoMain, workingTreeClean, contentMerged });
+    const verdict = classify({ branch: entry.branch, merge, workingTreeClean, contentMerged });
     if (verdict === "remove") {
       doRemove(entry.path, { run });
       report.removed.push(reported);
     } else if (verdict === "cherry-picked") {
       report.cherryPicked.push(reported);
+    } else if (verdict === "inconclusive") {
+      report.inconclusive.push(reported);
     } else {
       report.dirty.push(reported);
     }
@@ -264,6 +298,11 @@ function formatReport(report) {
   if (report.dirty.length > 0) {
     lines.push(`refused ${report.dirty.length} DIRTY worktree(s) -- uncommitted or unmerged work, named, nothing removed:`);
     for (const d of report.dirty) lines.push(`  ${d.path}  (${d.branch ?? "detached"})`);
+  }
+  if (report.inconclusive.length > 0) {
+    lines.push(`${report.inconclusive.length} INCONCLUSIVE worktree(s) -- merge or clean status could not `
+      + `be determined; never guessed at, nothing removed:`);
+    for (const i of report.inconclusive) lines.push(`  ${i.path}  (${i.branch ?? "detached"})`);
   }
   if (report.cherryPicked.length > 0) {
     lines.push(`${report.cherryPicked.length} CHERRY-PICKED worktree(s) -- content already on main under `
