@@ -158,6 +158,48 @@ are — it is the guard, not something the guard watches.
 | `fleet-playbook.mjs` | 2 any of five distinct argument-validation refusals in `parseArgs` (bad `--playbook=`, `--limit=`, `--serial=`, unreachable control plane checking `SubState`) — all usage/precondition, one code; **3 a `CAPTURE_PROTOCOL_VERSION` refusal** (`guardProtocolChange`) — the OTHER, separate meaning of 3, confirming this repo already has at least two live meanings for exit 3 before counting `promote-model.mjs`'s third; 1 the control plane is on the wrong commit, OR whatever raw exit status the started unit reports (passed through directly, so this is NOT always literally 1 despite the source code, in the same way `lab-job.mjs` is not always literally its own number); **4 `followUnit` gave up watching a unit still in `SubState=running` past its own budget** — self-documented in the code's own stderr message: *"It has NOT been stopped — this command gave up watching, which is not the same thing."* **This is the clearest, cleanest confirmed instance of the exact shape flagged going into this unit** |
 | `lab-pipeline.mjs` | 2 SEVEN distinct causes share this one code: invalid `--only=`, a job needing `--only=` that lacks it, an unreachable control plane, "NO CURRENT INVOCATION" is not one of these — actually see below, unknown `--pipeline=`, invalid `--ref=`, and a `--ref=` that does not resolve on origin — all usage/precondition, none of them INCONCLUSIVE in the `verdict.mjs` sense; 3 "NOT LOADED", no pipeline of this name has run since the last reap — a genuine "no run recorded" state, matching `wait-for-capture.mjs`'s 2 and giving exit 3 its FOURTH distinct meaning across this table; 1 `Result !== success \|\| ExecMainStatus !== "0"` after the unit finished — a real failure; 0 covers three DIFFERENT states on purpose and says so: `--list`, "RUNNING" (still in progress — explicitly not a verdict about the pipeline, just that dispatch worked and the unit exists), and "SUCCEEDED". The `status` exit at the end of `--follow` mode passes through whatever the failing STAGE reported, the same non-literal-number caveat as `fleet-playbook.mjs`'s 1 |
 
+## Python — `packages/lab/scripts` and `packages/scorer/python`
+
+Added 2026-09-06, after the earlier Python audit ("Python gates and the partial-corpus question",
+`docs/backlog.md`) found two real gaps and fixed them — and then this file's own discovery test was
+found to filter to `.mjs`/`.ts`, so that audit was a one-off, not a standing guard: nothing stopped a
+ninth Python gate arriving with the same defect, and nothing would have noticed if either fix were
+reverted. `exit-code-contract.test.ts` now discovers and classifies Python scripts too, over the
+identical discover-and-classify shape as the table above.
+
+**Scope: these two directories only**, matching this document's own existing boundary statement two
+sections up ("this table covers the `.mjs`/`.ts` layer, not the Ansible playbook layer"). Two other
+directories hold `.py` files that call `sys.exit`/raise `SystemExit` and are deliberately out of scope,
+each for a stated reason: `packages/control/ansible/**` (Ansible module/playbook tooling — a different
+exit-code domain entirely, module scripts follow Ansible's own contract) and `packages/nvda-speech/**`
+(a separately-licensed GPL announcement-composition port with its own standalone, hand-run data-generation
+scripts — no `lab-job.yml` entry or npm script reads any of their exit codes as a verdict).
+
+No shared Python `verdict.py` was built. The earlier audit ruled this out explicitly — "a second
+`gateVerdict` across the language boundary is the fact-stated-twice hazard in its most expensive form" —
+and that ruling stands; `test_release_gate_contract.py`/`exit-code-contract.test.ts` already show how to
+pin one contract from two sides without either importing the other.
+
+| script | codes → meaning |
+|---|---|
+| `audit-scorer-shortcuts.py` | 0 `--update-baseline` written, `--no-baseline`, no baseline file exists yet, or `compare_to_baseline` finds nothing wrong; 1 any of REGRESSION / UNAUDITED / LOST COVERAGE (three distinct findings, collapsed) OR the exported corpus file is empty (a plain-string `SystemExit`, which Python reports as exit 1); 2 no record in the corpus could be featurized at all — the real "examined nothing" refusal, distinct from an empty corpus |
+| `check-screenreader-hardening.py` | 0 every adversarial/hardening check passed; 1 any failed. Run via `npm run training:hardening` |
+| `compose-multi-defect-probe.py` | A module-level ADR 0015 mechanism probe with no `if __name__` guard and no caller anywhere in this repo — run by hand only, never dispatched. Its one `raise SystemExit(f'...')` (a string, so exit 1) refuses when the corpus has no donor page carrying a required marker feature |
+| `diagnose-false-positives.py` | 0 always, unconditionally, including on zero records read — **named, not fixed**, in the earlier audit: no gate or promotion decision reads this script's exit code today, a human runs it deliberately with a record count already in hand |
+| `evaluate-screenreader-acceptance.py` | 0 held-out acceptance passed; 1 the acceptance result failed OR a precondition refusal (stamping a verdict into tracked source) — two distinct causes share 1. The bare exit code cannot itself distinguish "capture-to-capture stability could not be measured" from a real regression; only the JSON/message can |
+| `train-screenreader-model.py` | 0 (implicit — `main() -> None`) trained; 1 three distinct precondition failures share it (a stale realism-tier dataset since the export changed, an unknown `rule-ownership.json` key, a `forbidden`/`unavailable` key present in the export) — all plain-string `SystemExit`s; 3 refuses to overwrite a RELEASE-ELIGIBLE model directory — a separate code on purpose, because the fix is different (train to a scratch `--output` rather than fixing the corpus) |
+| `audit_applicability.py` | 0 no precondition silences a labelled positive; 1 a precondition DELETES real evidence a labelled positive depends on; 2 no corpus found under `runs/` — the real INCONCLUSIVE. (`would_gating()`, the print-only "if this were gated" cost estimate, silently skips unfeaturizable records with no count reported — cosmetic, does not affect the exit code, named in the earlier audit) |
+| `audit_container_exits.py` | 0 always, whenever anything could be examined — report-only by design, a fact about NVDA's own container announcements, never a corpus defect, never blocking; 2 no corpus found OR no record could be parsed — two causes share it |
+| `audit_grants.py` | 0 every accompanying defect grants the feature it declares; 1 a defect declares evidence the corpus does not contain; 2 FOUR distinct refusal causes collapsed to one INCONCLUSIVE (no grants map on disk, no corpus records, nothing survives the stale-`parsed`-block filter, no multi-defect record matched) |
+| `explain_feature.py` | 0 always, whenever the requested subtype/feature pair has any samples; 2 no exported dataset at `--data`, OR zero samples for the requested pair — both real preconditions, collapsed |
+| `export-encoder-onnx.py` | 0 the exported ONNX encoder matches the torch reference within tolerance; 1 embedding drift exceeds tolerance, refuses to ship the export. Run once, offline, by hand — CI never runs this |
+
+**Shared infrastructure, not a gate of its own:** `screenreader_features.py`'s `assert_input_version`
+raises `SystemExit` (a plain string, exit 1) when a record was built under a stale model-input contract.
+It has no `if __name__ == "__main__":` block — it is never run as a script — and is called by every
+trainer/audit that reads exported records, so its exit code is inherited rather than chosen by each of
+them, the same role `dispatch.mjs` and `cli-flags.mjs` play on the JS side above.
+
 ## Cross-cutting: what each code means, collected
 
 **0** — success, in every script, but "success" itself varies: some scripts' 0 means "clean" (most gates),
@@ -230,7 +272,10 @@ available.
 2. **The discovery test** (`packages/lab/src/gates/exit-code-contract.test.ts`) requires every script that
    calls `process.exit`/`process.exitCode =` with a code the caller might read as a verdict to be either a
    confirmed `verdict.mjs` adopter or named in this document, in the shape `cli-flags.test.ts` already uses
-   for the same kind of population (a list that may only shrink, never grow silently).
+   for the same kind of population (a list that may only shrink, never grow silently). Extended 2026-09-06
+   to Python: every `.py` script under `packages/lab/scripts`/`packages/scorer/python` calling
+   `sys.exit`/`raise SystemExit` must be documented here too — a ninth Python gate fails the test the same
+   way a fifty-first JS one would.
 3. **Fix only what is unambiguous and cheap: nothing, this pass.** No script's contract was changed. The
    `check-shipped-provenance.mjs` finding (adopts the contract, cannot return INCONCLUSIVE) was recorded
    above rather than patched, because patching it meant first deciding what `of` should really count — a
