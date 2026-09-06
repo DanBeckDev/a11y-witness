@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   captureDoubt, captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle,
   captureRanRequestedProbes, probeStates, sweepCompleteness, captureReachedThePage, domCensus, pageCensus,
+  censusTargetIsSuspect, censusSuspectReason,
 } from "./verify.js";
 import type { CapturedAnnouncements } from "./verify.js";
 
@@ -662,15 +663,21 @@ test("a census whose CDP target was never confirmed reads as ABSENT, not as its 
   assert.equal(pageCensus(noExpectedUrl), null);
 });
 
-test("a fallback with only ONE candidate is trusted -- nothing else it could have picked", () => {
-  // The vacuous half of the same mechanism: a redirect or a URL the page server normalised, with no real
-  // competing document. Demanding this read as absent too would make EVERY synthetic capture's census
-  // unusable, since a synthetic page's single CDP target legitimately never matches by host.
+test("a fallback with only ONE candidate is now ALSO suspect -- candidates <= 1 stopped meaning safe", () => {
+  // CORRECTED 2026-09-06. This test used to assert the OPPOSITE -- "nothing else it could have picked" --
+  // reasoning that a synthetic page's single candidate legitimately never matches by host. That reasoning
+  // does not survive `samePath` (which already normalises the one known benign cause, a `.html`/trailing-
+  // slash mismatch) or the measurement that replaced it: two real GOV.UK Design System pages' post-
+  // navigation censuses were BYTE-IDENTICAL to each other under exactly this shape -- `fallback,
+  // candidates: 1` -- because the SAME single tab had navigated to a shared `/cookies` settings page mid-
+  // capture (`probeRouteChange`, testing 2.4.2). Measured prevalence: 20 of 20 sampled real pages, and 25
+  // of 2,796 synthetic captures -- every synthetic one a `route-title-stale*` variant, the identical
+  // mechanism (`known-gaps.md` §40). This assertion would have FAILED against the pre-fix behaviour: it
+  // returned `{heading: 12, link: 40}`, trusted as this page's own numbers.
   const census = pageCensus({ diagnostics: [
     { event: "structureCensus", heading: 12, link: 40, targetMatch: "fallback", candidates: 1 },
   ] } as never);
-  assert.equal(census?.heading, 12);
-  assert.equal(census?.link, 40);
+  assert.equal(census, null);
 });
 
 test("a matched target is trusted regardless of how many candidates existed", () => {
@@ -694,4 +701,40 @@ test("targetMatch present with candidates missing is read as suspect, not as tru
     { event: "structureCensus", heading: 12, targetMatch: "fallback" },
   ] } as never);
   assert.equal(census, null);
+});
+
+test("censusSuspectReason names the actual URL, not the bare word fallback", () => {
+  // The CEO's standing requirement, and the reason `censusLine` (check-real-page-findings.ts) used to
+  // print a WRONG explanation -- "a real second CDP target existed" -- on a capture that had exactly one.
+  const reason = censusSuspectReason({
+    targetMatch: "fallback", candidates: 1,
+    targetUrl: "https://design-system.service.gov.uk/cookies",
+    expectedUrl: "https://design-system.service.gov.uk/components/details/",
+  });
+  assert.match(reason ?? "", /cookies/);
+  assert.match(reason ?? "", /components\/details/);
+  assert.doesNotMatch(reason ?? "", /second CDP target/,
+    "must not repeat the old, now-false explanation for a single-candidate fallback");
+});
+
+test("censusSuspectReason falls back to a candidate count when no URL was recorded", () => {
+  // Historical captures predate `targetUrl`/`expectedUrl` (added alongside the fix this test's sibling
+  // describes) -- the reason must still say SOMETHING true rather than crash on the missing fields.
+  const reason = censusSuspectReason({ targetMatch: "fallback", candidates: 2 });
+  assert.match(reason ?? "", /2 candidates/);
+});
+
+test("censusSuspectReason and censusTargetIsSuspect can never disagree -- one is derived from the other", () => {
+  const cases = [
+    { targetMatch: "matched", candidates: 1 },
+    { targetMatch: "fallback", candidates: 1 },
+    { targetMatch: "fallback", candidates: 2 },
+    { targetMatch: "no-expected-url", candidates: 1 },
+    { targetMatch: "no-expected-url", candidates: 2 },
+    { targetMatch: undefined, candidates: undefined },
+  ];
+  for (const record of cases) {
+    assert.equal(censusTargetIsSuspect(record), censusSuspectReason(record) !== null,
+      `disagreement on ${JSON.stringify(record)}`);
+  }
 });
