@@ -11,13 +11,14 @@
 // `classify` is PURE — a file list in, five booleans and a package list out — so the categories are
 // testable without a checkout, a diff, or a runner, and a category that stops matching anything is a red
 // unit test rather than a silent CI budget regression. The CLI wrapper is the only impure part: it reads
-// `git diff --name-only` for a pull request, or skips the diff entirely for a push to main.
+// `git diff --name-only` against the PR's base.
 //
-// PUSH RUNS EVERYTHING, DELIBERATELY UNCONDITIONAL. A merge to main is the moment this repo's own
-// convention already trusted with the full suite — `lint.yml`'s own header called it "the full suite runs
-// in CI on this push" — and a path-scoped push would quietly narrow that promise the day somebody merges
-// a multi-package PR whose diff a scoped job cannot see all of. `--event=push` short-circuits the diff and
-// reports every category true, every package touched.
+// PULL_REQUEST ONLY, DELIBERATELY -- chairman's direction, 2026-09-06. This file used to also support
+// `--event=push`, unconditionally reporting every category true for a push straight to `main`; `ci.yml`
+// no longer HAS a push trigger at all (a check that runs after a merge cannot stop it), so that mode had
+// no caller left and was removed rather than kept as an unused, untested escape hatch. Every check now
+// runs on the PR, before the merge; branch protection (checks green AND up to date with `main`) is what
+// makes the tested commit the one that lands.
 import { execFileSync } from "node:child_process";
 import { readFileSync, appendFileSync } from "node:fs";
 // RELATIVE, NOT `@a11y-witness/worker-fleet/cli-flags` — every other root script uses the package
@@ -135,20 +136,19 @@ async function main() {
   const KNOWN_FLAGS = ["--event", "--base", "--repo"];
   refuseUnknownFlags(KNOWN_FLAGS, { entry: import.meta.url, command: "ci-changed" });
 
+  // `--event` stays a required, explicit flag rather than being dropped outright: a caller that types
+  // `--event=push` today gets a clear refusal naming why, instead of silently falling through some
+  // default — the same "an ignored flag runs the default and reports success" defect `cli-flags.mjs`
+  // exists to prevent, one value along.
   const event = flagValue(process.argv, "event");
-  if (event !== "push" && event !== "pull_request") {
-    console.error(`ci-changed: --event must be "push" or "pull_request", got ${JSON.stringify(event)}`);
+  if (event !== "pull_request") {
+    console.error(`ci-changed: --event must be "pull_request", got ${JSON.stringify(event)}. `
+      + "--event=push was removed: ci.yml has no push trigger left to call it from.");
     process.exit(2);
   }
 
   const repoRoot = flagValue(process.argv, "repo") ?? process.cwd();
   const packages = knownPackages(repoRoot);
-
-  if (event === "push") {
-    // Unconditional — see the file header for why a push to main is never path-scoped.
-    writeOutputs({ ts: true, python: true, ansible: true, docs: true, changeset: false, packages });
-    return;
-  }
 
   const base = flagValue(process.argv, "base");
   if (!base) {
