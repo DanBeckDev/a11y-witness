@@ -30,6 +30,16 @@ A reviewer given either alone would have approved it. See [`not-working.md` §24
   worker pulls rather than waits.
 - **First-pass review.** Reading the diff, checking the acceptance test is a COMMAND and not a judgement,
   confirming the mutation check was run and reported.
+  **`npm run mutate` is the required form, and a hand-typed sequence is not evidence.** It runs the
+  test first and refuses if it is already red, copies the file aside rather than `git checkout --`,
+  **proves the mutation actually landed**, requires the test to FAIL, then restores and runs the test
+  again. Its exit code is the report: **0** the guard bites, **1** it did not — suspect the guard
+  before the code, **2** refused before mutating, **3** the restore failed. Built 2026-09-06 after two
+  agents got the sequence wrong in one day: one destroyed uncommitted work with `git checkout --`
+  mid-check, and two guards shipped GREEN against the very defect they were written for — one because
+  a quoting slip made the edit a no-op, one because it read a whole document where it meant to read
+  one section. **A worker reporting "mutation-checked" without that exit code is reporting a
+  memory.**
 - **Running the local gates**: `npm test`, `npm run lint`, `npx tsc --noEmit`, and for any `.mjs`,
   `node -e "import('./path.mjs')"` — which neither lint nor tsc catches and this repo has paid for more
   than once, including in a merge resolution by the lead the same night.
