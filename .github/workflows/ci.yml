@@ -80,6 +80,13 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - name: Unit tests -- touched packages on a PR, every package on a push to main
+        # GH_TOKEN: `packages/lab/src/packaging/*` (board-style.test.ts, row-claim.test.ts's live
+        # fetchLabels) is inside `packages/lab/src`, so `test:ts`'s whole-repo glob reaches it on every
+        # push, and a touched-package run reaches it whenever `lab` is among the touched packages -- the
+        # identical need as the `docs` job's own copy of these tests, here reached through `lab` instead
+        # of through `docs/`.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             npm run test:ts
