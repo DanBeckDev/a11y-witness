@@ -2578,6 +2578,25 @@ Verification is layered; pick the layers your change touches:
   > another checkout's `dist`, editing the worktree's source could not have reached it and the mutation
   > would never fail. See `docs/roles/worker-loop-orchestrator.md` for why the fleet-driving primary
   > checkout stays on `main` with nothing checked out in it, which is the second half of this fact.
+- **A WORKTREE IS NOT A GATE ENVIRONMENT, AND THE PRE-PUSH HOOK CANNOT TELL YOU SO.** Same root as the
+  note above — where a checkout resolves its dependencies — and the opposite symptom. A worktree with no
+  `node_modules` of its own and no symlink to one produced `3 check(s) failed: lint typecheck unit tests`
+  on a push of `main`, which reads exactly like the change breaking the build. The cause was
+  `sh: eslint: command not found`: **the gate examined nothing and reported three failures.** One route
+  resolves to another checkout's `dist` and reports a stale PASS; the other resolves to nothing and
+  reports a false FAILURE. The second is the more dangerous, because the documented response to "your
+  push broke the build" is `A11Y_SKIP_VERIFY=1`, which this file already records being reached for six
+  times in one evening. Guarded 2026-09-06: the hook checks the toolchain once, before any check runs,
+  and refuses with *"It is not your change: nothing has been examined."*
+- **AND THE THIRD ROUTE TO THE SAME OUTPUT, WHICH IS THE ONE YOU CANNOT REPRODUCE: THE GATE READS THE
+  WORKING TREE, NOT THE COMMITS YOU ARE PUSHING.** In a shared checkout those are different things. A
+  push from the primary was refused with `1391 problems (2 errors)`; `npm run lint` re-run immediately
+  afterwards exited 0 with none. The errors were **another agent's in-flight edit**, present when the
+  gate ran and gone by the time anyone looked — a state the pusher had not created and could not
+  reproduce. Re-running gives a clean result, which reads as flakiness, and **a flaky gate is the one
+  people learn to push past.** The hook now prints the dirty paths beside any failure and says the gate
+  reads the tree rather than the push, so an unattributable refusal becomes an attributable one. That is
+  a mitigation and not a fix: the fix is one agent per tree, which is the rule this exists to enforce.
 - **RESTORE FROM A COPY, NEVER `git checkout --`. Three times in one night, 2026-09-06.** Mutation
   checking means editing a file you are about to restore, and `git checkout -- <file>` restores it to
   HEAD — which silently discards every UNCOMMITTED change in that file, not just the mutation. Twice in
