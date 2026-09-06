@@ -1,9 +1,33 @@
 # Backlog
 
-**This is the one place that answers "what is open".** It was created 2026-09-02 because the answer was
-previously "read 2,700 lines of two other files and infer it".
+**[GitHub Issues](https://github.com/DanBeckDev/a11y-witness/issues) is the one place that answers "what
+is open". This file is a RECORD.** It stopped being the tracker on 2026-09-06 and this heading is the
+last thing about it to catch up.
 
-## Why this file exists, and the rule
+| question | ask |
+|---|---|
+| what is open, who is on it, what is next | [Issues](https://github.com/DanBeckDev/a11y-witness/issues) — `ready` is pickable, `in-progress` plus a `session:` label is claimed |
+| what was found, what it cost, what was tried and refuted | this file, [`known-gaps.md`](./known-gaps.md), [`not-working.md`](./not-working.md) |
+
+**This is not a demotion, it is the same argument this file was created with, applied to itself.** It was
+written on 2026-09-02 because open work could not be found mechanically in two long records. It is now
+1,049 lines with 51 struck-through closed rows kept deliberately (see *How an item leaves this page*), and
+"what is open" again requires inferring which strikethroughs are current. **Measured cost, 2026-09-06:
+five rows checked in one day were already closed and nothing here said so, and three more were addressed
+on unmerged branches — which no reading of this file could ever have caught, because a file records claims
+and not branches.** A tracker has to know about work in flight; a record cannot.
+
+So the split is now by what each is GOOD at, rather than by which came first. Issues carry state, an
+assignee, a claim, and a timestamped history of both. This file carries the thing an issue is bad at: the
+measurement, the wrong turn, the mechanism that was refuted, the command that settles it. **Do not delete
+the closed rows to "tidy up"** — the prose is the asset, and it is the half GitHub does not hold.
+
+**What this costs, stated rather than absorbed:** a row here can now go stale without anything noticing,
+because nothing compares this file to the issue list. That was already true and is now expected rather
+than a defect — which is why a row that is still live should say so by naming its issue, and why
+`backlog.test.ts` requires a record heading marked `— OPEN` to name the issue tracking it.
+
+## Why this file was created, and the rule it had
 
 [`known-gaps.md`](./known-gaps.md) and [`not-working.md`](./not-working.md) are **records**. They are
 long-form, they are valuable, and they are where a closed item's *lesson* lives — the measurement, the
@@ -22,10 +46,12 @@ The consequence was that open work could not be found mechanically. Section numb
 > naming half. An item that turns out to need a decision does not belong here until the decision exists;
 > a backlog whose rows stall on "go and ask" is a reading list.
 >
-> **The rule: if it is open, it is on this page.** Detail may live in a record entry, and this page links
-> to it rather than restating it — a fact stated twice is this repo's most-repeated defect, and two
-> copies of a status is exactly the shape that drifts. `backlog.test.ts` enforces one direction of that:
-> any record heading marked `— OPEN` must appear here.
+> **The rule WAS: if it is open, it is on this page.** Its reasoning is kept, unstruck, because it is
+> still right and it is precisely why the rule moved: a fact stated twice is this repo's most-repeated
+> defect, and **two copies of a status is exactly the shape that drifts**. This page became the second
+> copy. **The rule now: if it is open, it is an issue** — and `backlog.test.ts` enforces the same
+> direction against the new target, requiring a record heading marked `— OPEN` to name the issue tracking
+> it rather than to appear here.
 
 ---
 
