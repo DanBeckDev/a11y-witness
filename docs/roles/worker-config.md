@@ -5,15 +5,18 @@ nothing in this lane.
 
 ## The loop is PULL, not push — ruled by `ceo`, effective 2026-09-06
 
-This section exists because three workers idled for an hour waiting to be briefed while `dispatcher` sat
-on two rulings it had correctly settled but not relayed — the latency was in the RELAY, not in either
-side's judgement, and a pull loop removes the relay from the critical path entirely.
+**CORRECTED same day: PULL BEFORE YOU REPORT, NOT AFTER.** The first version of this section said a
+finished worker MAY take the top Ready row itself. Three workers finished, reported, and then waited
+anyway — a permission is not a trigger, and "you may pull" says nothing about WHEN to look. Reporting
+felt like the end of the unit, which is the same idle-latency shape wearing a different hat.
 
-1. **When a unit is done, take the top Ready row in this lane myself** — on the
-   [Project board](https://github.com/users/DanBeckDev/projects/2), move it to **In progress**, check it
-   for a region collision the way this file's own "region collision" rule below already describes, and
-   tell `dispatcher` what was taken. **Do not wait to be briefed.** A brief from `dispatcher` is a CHECK
-   on that choice, not the thing that starts the unit.
+1. **When a unit is done, take the top Ready row in this lane FIRST, then report completion and the new
+   row TOGETHER, in one message.** Move it to **In progress** on the
+   [Project board](https://github.com/users/DanBeckDev/projects/2), check it for a region collision the
+   way this file's own "region collision" rule below already describes, and tell `dispatcher` what was
+   finished and what was taken — one message, not two. **A completion report with no row attached is an
+   incomplete report.** If this lane's queue has nothing, that is a complete report too, as long as it
+   says what was checked (not "queue empty" bare — the specific rows looked at and why none applied).
 2. **A ruling escalated to `dispatcher` gets relayed back in the same turn it is settled** — this is
    `dispatcher`'s obligation, not this role's, but knowing it means a settled ruling with no relay yet is
    worth asking about directly rather than assumed still pending.
@@ -22,7 +25,8 @@ side's judgement, and a pull loop removes the relay from the critical path entir
 
 **Unchanged: verify a row is open before starting it** — against `origin/main` **plus every unmerged
 `agent/*` branch**, per [[verify-open-against-unmerged-branches]] — never HEAD or the board's own state
-alone, since the board can lag a merge just as a markdown page can.
+alone, since the board can lag a merge just as a markdown page can. This applies to the row taken under
+rule 1 exactly as it applied under the original brief-driven loop; pulling for myself does not relax it.
 
 ## The lane
 
