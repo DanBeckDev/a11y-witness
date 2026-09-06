@@ -87,8 +87,11 @@ const OBJECT_REPLACEMENT = /￼/g; // ￼ — strip the empty-name marker for cl
 // for this to suppress today. It belongs anyway: membership is derived from `rule-ownership.json`'s
 // `decidedBy`/`reportsAs`, not from whether a head currently exists, and a future head trained on this
 // subtype (RULE_SUBSTITUTED_SUBTYPES keeps its records in the export) must be suppressed the same way.
+// `1.3.5` JOINED ON 2026-09-06 (issue #79, `input-purpose-invalid`), for the identical reason 1.4.13
+// above joined: `modelHead: false`, no head has ever shipped, and membership is derived from
+// `decidedBy`/`reportsAs` rather than from whether a head currently exists.
 export const ABSENCE_CRITERIA = new Set([
-  "1.1.1", "1.3.1", "1.4.13", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "3.2.1", "3.2.2",
+  "1.1.1", "1.3.1", "1.3.5", "1.4.13", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "3.2.1", "3.2.2",
   "3.3.3", "4.1.2",
   "1.4.2", "2.4.7",
 ]);
