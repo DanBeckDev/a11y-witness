@@ -68,11 +68,12 @@ whether a real one is worth requesting.
 
 - **Verify against every commit reachable from `origin/main` AND local `agent/*` branches, never HEAD
   alone** — three of six rows I was told were open had already been done, unmerged, under mismatched names.
-- **`git log <branch>` includes everything the branch is downstream of, not just what it introduced.** Got
-  this wrong once — read a fix as "landed under" a branch because its commits showed in that branch's log,
-  when the branch was simply cut after `origin/main` already had it. `worker-config` caught it; `git log
-  <branch> --not origin/main` is the form that isolates what a branch actually added. Corrected visibly, in
-  the row itself, not silently.
+- **`git log <branch>` includes everything the branch is downstream of, not just what it introduced —
+  use `git log <branch> --not origin/main` to isolate what a branch actually added, and `git log --oneline
+  --merges origin/main | grep <name>` to find which branch a commit REALLY merged through.** Got this wrong
+  once — read a fix as "landed under" a branch because its commits showed in that branch's log, when the
+  branch was simply cut after `origin/main` already had it. `worker-config` caught it with the second
+  command above. Corrected visibly, in the row itself, not silently.
 - **A number from a stale or mismatched artefact is a discrepancy to report, not one to resolve by
   guessing which looks right.**
 - **A mechanical check beats a hand-written list whenever the population can change without anyone editing
