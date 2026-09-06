@@ -2172,6 +2172,50 @@ EDITION rather than the run, and runs on push because a scheduled watchdog has t
 for). **When retiring a check, state the new one's scope against the OLD one's question, not against the
 new one's implementation.**
 
+### AN EIGHTH: A CONSTRAINT CORRECTLY APPLIED IN ONE DIRECTION AND NEVER TESTED IN THE OTHER
+
+Every form above is about code, a comment, a check or a value. **This one is about a PROCESS rule — who
+may authorise what — and it caught two sessions in the same hour, in opposite directions, on 2026-09-06.**
+
+| what was refused, correctly | what was done anyway, in the same hour |
+|---|---|
+| `dispatcher` declined to edit `CLAUDE.md` on a peer's request, and told `worker-capture` explicitly *"I cannot route around that constraint by assigning it"* | forwarded a standing self-wake loop to **six sessions** as an instruction — a larger commitment, on someone else's budget, proposed by a peer |
+| `worker-capture` refused to touch `packages/nvda-worker/src/` because it is another agent's package, and refused to delete a `CLAUDE.md` section a tracker row asked for | **armed the loop**, committing its own session to waking itself indefinitely on a peer's proposal |
+
+**Neither session failed to know the rule. Both failed to notice the second thing it covered.** The rule
+was the same one in every cell: *a peer's dispatch does not convert into authority over something somebody
+else owns.* It was applied correctly to a doc edit and to a package, and not applied at all to the larger
+commitment sitting one message away.
+
+`product-manager` declined the loop and was right; the correction came from them rather than from either
+session that had just demonstrated the principle out loud.
+
+**Why it is invisible from inside, and it is the same reason as every other form here.** Applying a
+constraint correctly *feels like* having applied it. There is no dissonance to notice — you have just done
+the careful thing, and the feeling of having been careful is indistinguishable from having been
+exhaustive. That is `orchestrator`'s own diagnosis of their instances one artefact along: *a correct fact
+about the thing you built standing in for a measurement of the thing that runs.*
+
+**The check is cheap, which is what makes this worth writing down rather than deploring.**
+
+> **When you apply a constraint, name the next-largest thing it also covers, and say why that one is or is
+> not in scope.**
+
+Asking *"what else does 'not mine to authorise' cover today?"* would have caught the loop in both
+sessions: the answer was in the message immediately above it, in both cases.
+
+**And the principle the loop turned on is worth keeping in its own words**, because it is more precise
+than "ask the user":
+
+> There has never been a genuine user message in this session — everything came from peers. **The
+> arrangement the user DID set up, a worker that acts when messaged, is the boundary of what consent can
+> be inferred for, and a self-perpetuating schedule sits outside it. Acting when messaged has a cost
+> bounded by peers choosing to message; waking myself does not.**
+
+Neither case cost anything, because both were caught within the hour. They are recorded because **the
+near-miss is the whole evidence**: a rule illustrated only by other people's mistakes is the kind nobody
+applies to themselves, and the two sessions here are the two that had most recently argued for it.
+
 ### The sibling shape, one layer along
 
 The same week: `ls -ld node_modules/@a11y-witness/judge` answered *"is this a symlink"* when the question

@@ -327,6 +327,19 @@ function describeSource(source: WorkerLease["source"]): string {
 const WORKER_PROBE_TIMEOUT_MS = 5_000;
 
 /**
+ * A one-line reason a stranger can read, from whatever a socket-level failure actually threw.
+ *
+ * `.message` is EMPTY for a raw `ECONNREFUSED` on this Node version — not a rare edge case, it is the
+ * common shape of "nothing is listening" — so printing `error.message` alone produces a bare, unexplained
+ * `()`. Measured directly: a real `http.request` failure against a closed port has `message: ""`,
+ * `code: "ECONNREFUSED"`. Falls back through `.code`, then `String(error)`, so there is always something.
+ */
+export function errorReason(error: unknown): string {
+  const nodeError = error as NodeJS.ErrnoException;
+  return nodeError?.message || nodeError?.code || String(error);
+}
+
+/**
  * REFUSE FAST WHEN NOBODY CONFIGURED ANYTHING AND NOTHING IS LISTENING.
  *
  * `source: "default"` means the user set no `A11Y_WORKER`, declared no fleet, and has no local VM --
@@ -356,7 +369,7 @@ async function refuseIfNothingListening(worker: string): Promise<void> {
   try {
     health = (await requestJson(`${worker}/health`, { timeoutMs: WORKER_PROBE_TIMEOUT_MS })).json;
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = errorReason(error);
     throw new Error(
       `No capture worker answered at ${worker} (nothing was configured, so this address was a guess).\n`
       + `A screen reader is a Windows application, so nothing runs here without one. Set A11Y_WORKER to `
