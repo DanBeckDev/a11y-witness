@@ -134,10 +134,10 @@ without renaming anything — ADR 0001 deferred VoiceOver, it did not rule it ou
   *independently of the package semver*. Conflating them would be expensive in both
   directions: a package major must not invalidate 2,122 cached captures, and a
   protocol bump must not wait for a major. Documented on the package README.
-- `@guidepup/guidepup` pinned **exactly** `0.31.0`, not `^0.31.0` — CLAUDE.md
-  establishes that guidepup parses NVDA's speech before we see it, so its version
-  is evidence and a caret range would let a consumer's `npm update` silently change
-  what a capture says.
+- `@guidepup/guidepup` pinned **exactly** `0.31.0`, not `^0.31.0` — see ADR 0033
+  for why: it parses NVDA's speech before we see it, so its version is evidence,
+  and a caret range would let a consumer's `npm update` silently change what a
+  capture says.
 
 **`@a11y-witness/worker-fleet`** — host-side lifecycle and diagnosis.
 - bin — `a11y-doctor`, `a11y-worker-ctl`, `a11y-worker-deploy`, `a11y-worker-compare`.
