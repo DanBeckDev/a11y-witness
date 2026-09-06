@@ -40,6 +40,12 @@ test("NO COMMENT spells out how many criteria are assessed", () => {
   // every time the suite runs. The same numeral in a comment is a claim nothing verifies.
   const files = execFileSync("git", ["ls-files", "packages/judge/src", "packages/evidence/src"],
     { cwd: ROOT, env: sandboxGitEnv(), encoding: "utf8" }).split("\n").filter((f) => /\.ts$/.test(f));
+  // A wrong ROOT or a renamed package makes `git ls-files` return nothing, and an empty `files` reports
+  // zero offenders having examined nothing -- the exact "check answers correctly about the wrong
+  // population" shape (docs/backlog.md). ~62 at the time this guard was added; a floor, not a pin.
+  assert.ok(files.length >= 40,
+    `only found ${files.length} .ts file(s) under packages/judge/src and packages/evidence/src -- the `
+    + "scan is broken (wrong ROOT, or the packages moved), not the population shrinking");
   const offenders: string[] = [];
   for (const file of files) {
     if (file.endsWith("criteria-counts-are-not-spelled-out.test.ts")) continue;
