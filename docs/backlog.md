@@ -1229,7 +1229,7 @@ specific to a READY-QUEUE row, where "is this still open" must also ask whether 
 answered it, and no other document makes that particular claim. No further instances found; this bounds the
 shape at four for now.
 
-## OPEN, small — one unresolved question from the `CAPTURE_PROTOCOL_VERSION` bump-cost review (issue #23)
+## ~~OPEN, small — one unresolved question from the `CAPTURE_PROTOCOL_VERSION` bump-cost review (issue #23)~~ — **CLOSED 2026-09-06, ANSWERED**
 
 See [`docs/capture-protocol-bump-costs.md`](./capture-protocol-bump-costs.md) for the full table (twelve
 bumps in 32 days, verified from the constant's own value history, not from the 28 commits that merely
