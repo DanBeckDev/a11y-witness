@@ -509,17 +509,20 @@ halves — no figure that a recorded gate result cannot source, and not that phr
 
 ## What this tool sends anywhere
 
-**Nothing.** The command-line tool and the trained scorer talk to exactly two things: the page you point
-them at, and your own capture machine. There is no telemetry, no usage reporting, and no call home. That
-is a statement of fact about the code as it stands, verified by reading it, rather than a promise about
-the future.
+**Nothing, and that is a commitment rather than a description.** The command-line tool and the trained
+scorer talk to exactly two things: the page you point them at, and your own capture machine. There is no
+telemetry, no usage reporting, and no call home. **There will not be.**
 
-**The policy, if that ever changes: any telemetry would be opt-in and would arrive in a major version**,
-never switched on in a patch. Whether *"never"* is the stronger commitment is a decision for the project's
-owners rather than a property of the code.
+**If that ever changed it would be opt-in and would arrive in a major version**, never switched on in a
+patch and never on by default. Decided 2026-09-06 and stated here because a tool run against pages your
+organisation owns should not leave you to infer its position on your data.
 
 ## Licence
 
 Licensed under the **GNU Affero General Public License v3.0 or later** (`AGPL-3.0-or-later`); see [`LICENSE`](./LICENSE). **Two published packages differ, deliberately, and [`packages/README.md`](./packages/README.md) carries the whole split**: `evidence` is Apache-2.0 so its wire types and pure predicates can be embedded in other people's glue, and `nvda-speech` — which does not publish — is GPL-3.0-or-later because it is derived from NVDA's own GPL-2.0-or-later code. The AGPL's network copyleft means anyone running a modified version as a service must publish their changes, so the project stays genuinely open and a closed hosted fork is not a free ride.
 
-**Commercial licensing.** If the AGPL does not fit — embedding in a closed-source product, or a proprietary hosted service — a separate commercial licence is available; open an issue to start the conversation. A hosted version and enterprise features may sit on top of the open core later, following the standard open-core model.
+**At first publish this project is open source only.** No commercial licence is offered yet; the question
+is deliberately deferred until after version one, when there is a first outside user's reaction to decide
+it against. Decided 2026-09-06.
+
+**Commercial licensing, later.** If the AGPL does not fit — embedding in a closed-source product, or a proprietary hosted service — a separate commercial licence is available; open an issue to start the conversation. A hosted version and enterprise features may sit on top of the open core later, following the standard open-core model.
