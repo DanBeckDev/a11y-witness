@@ -36,8 +36,19 @@ that silently produces a permanently green check is the failure nobody notices, 
 what they expected.
 
 **No rented judge by default.** `judge-backend: local` uses the scorer trained on this project's own
-1,061-pair corpus. It scores **eight criteria** and is silent on everything else — narrower than an LLM,
-and measured at zero false positives across 1,034 conformant records. `anthropic` and `openai` remain
+1,061-pair corpus. It scores **eight criteria** and is silent on everything else — narrower than an LLM.
+
+<!-- CLAIM:BEGIN — every figure between these markers must be sourceable from a recorded gate result in
+     docs/board/reported.json. `public-claim.test.ts` enforces it across every file in CLAIM_FILES.
+
+     THE FIGURES THIS PAGE USED TO CARRY, kept here rather than published: it said "zero false positives
+     across 1,034 conformant records", the README said 1,183, and the guarded claim said 1,405. Only
+     1,405 is in a recorded gate. Three documents disagreeing about one measurement is why this sentence
+     now states the honest position instead of picking one. -->
+**The false-positive rate of the local judge on the conformant corpus is being re-measured**, so this
+page does not state one. That is the honest position rather than a placeholder: a figure appears here
+only when a recorded gate has printed it.
+<!-- CLAIM:END --> `anthropic` and `openai` remain
 available for broader, noisier coverage; the action refuses at once if you name one without a key or an
 endpoint, rather than discovering it after a 20-minute capture.
 
