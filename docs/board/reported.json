@@ -19,10 +19,10 @@
   "achievements": [
     {
       "claim": "What is open now survives the loss of this machine.",
-      "evidence": "The list of open work, its acceptance criteria and its release blockers now lives in a hosted issue tracker rather than in a document on one machine. Verified by listing the issues and the release milestone directly from the tracker. Previously the answer lived in a 1,049-line file that contradicted itself, and five items checked during the move were already finished. (GitHub Issues and milestones on DanBeckDev/a11y-witness; the contradiction is tracked as issue #19.)",
-      "issue": 19,
+      "evidence": "The list of open work, its acceptance criteria and its release blockers now lives in a hosted issue tracker rather than in a document on one machine. Verified by listing the issues and the release milestone directly from the tracker. Previously the answer lived in a 1,049-line file that contradicted itself, and five items checked during the move were already finished. That contradiction has since been closed. Whether the retired document still holds work that never became an issue is not yet known. (GitHub Issues and milestones on DanBeckDev/a11y-witness; open question tracked as issue #105.)",
+      "issue": 105,
       "reportedBy": "product-manager",
-      "at": "2026-09-06T12:00:00Z",
+      "at": "2026-09-06T20:40:00Z",
       "boardClaim": "The list of what is open now survives the loss of the one machine this project runs on."
     },
     {
@@ -42,12 +42,12 @@
       "boardClaim": "A page built to prove a rule showed instead that the rule cannot see that fault."
     },
     {
-      "claim": "Two capture defects that would have silently mismeasured real pages are fixed and awaiting merge.",
-      "evidence": "Two faults were found that would have made the tool measure a different web page from the one it was asked to examine, in both cases without any error being raised. Both are fixed and both are waiting to be merged, so nothing in production has changed yet. They were found by checking which parts of the code unmerged work already touches, rather than by reading the code. (Branch `agent/route-change-order-and-dialog-restore`; tracked as issue #16.)",
-      "issue": 16,
+      "claim": "Two capture defects that would have silently mismeasured real pages are fixed and merged.",
+      "evidence": "Two faults were found that would have made the tool measure a different web page from the one it was asked to examine, in both cases without any error being raised. They were awaiting merge when first reported and have since merged, so the product carries them. They were found by checking which parts of the code unmerged work already touches, rather than by reading the code. A third fault of the same kind — the tool accepting the previous page as a match for the one requested — is open and needs a capture machine. (Merged as dcf5377c on the main branch; the remaining fault is issue #71.)",
+      "issue": 71,
       "reportedBy": "product-manager",
-      "at": "2026-09-06T12:00:00Z",
-      "boardClaim": "We found and fixed two recording faults that would have silently measured the wrong web page."
+      "at": "2026-09-06T20:40:00Z",
+      "boardClaim": "We fixed two recording faults that would have silently measured the wrong web page; both now ship."
     },
     {
       "claim": "The corpus survives losing its machine.",
