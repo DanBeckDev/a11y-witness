@@ -1201,7 +1201,7 @@ resolved correctly and then been ignored, which is worse than not resolving at a
 `capture-core.mjs` and had never run once, because running it needed a laptop with a route to a worker. The
 one check written for the least testable code in this repo was the one nobody could dispatch.
 
-## OPEN — "a check that answers correctly about the wrong population", **NINE** instances, named by `ceo`
+## OPEN — "a check that answers correctly about the wrong population", **ELEVEN** instances, named by `ceo`
 
 Not "a check that always passes" — that is only the visible half. This is a check that is telling the
 truth about the thing it actually looked at, and the thing it looked at is not the thing the reader thinks
