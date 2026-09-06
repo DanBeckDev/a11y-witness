@@ -709,52 +709,76 @@ function focusLandedOnADifferentControl(
 type FocusLogEvent = { type: string; id: number; name: string; atMs: number };
 
 /**
- * Is `log[i]` (already known to be a `focusout`) a genuine F55, and if so what should the evidence say?
+ * The three things a `focusout` can mean, kept as a discriminated union rather than collapsed into
+ * `string | null` — "not F55" and "cannot be asked" must never share one representation, and doing that
+ * inside this very function is exactly the defect issue #62 exists to fix, one layer in from where it
+ * was already fixed for the caller. `"unpairable"` and `"clear"` are BOTH silence to `addFocusEventFindings`
+ * (neither adds a finding), and TypeScript's exhaustiveness is what stops that from re-collapsing them.
+ */
+type FocusLossVerdict =
+  | { kind: "finding"; evidence: string }
+  | { kind: "unpairable" }
+  | { kind: "clear" };
+
+/**
+ * Is `log[i]` (already known to be a `focusout`) a genuine F55, unpairable, or genuinely clear?
  * Split out purely to keep `addFocusEventFindings`'s complexity under gate -- the decision itself is the
  * whole of that function's doc comment, unchanged by moving where the `if`s live.
  */
-function focusLossEvidence(log: FocusLogEvent[], i: number): string | null {
+export function focusLossVerdict(log: FocusLogEvent[], i: number): FocusLossVerdict {
   const event = log[i];
-  // THE `i === 0` EXCEPTION THAT USED TO LIVE HERE IS DELETED, 2026-09-06 — `known-gaps.md` §42, closed
-  // rather than left as a PARTIAL. It read "the log's first event cannot be F55" because the listener
-  // used to install immediately before `probeFocusOrder`, well after the sweep, `probeFocusContext` and
-  // `probeFocusReveal` could already have moved real focus — so whatever was focused by then was blurred
-  // with nobody watching, and that blur was indistinguishable from a genuine script strip. Measured then:
-  // 37 of 37 conformant real pages had exactly one orphan, always `log[0]`; the 9 corpus positives had
-  // `log[0]` as a real focusin, with their orphans at index 2 and 9-23. Excluding index 0 traded "37 wrong
-  // accusations" for "one unobservable failure on whatever element held focus at install time" — a real
-  // trade, and a capture-layer limitation rather than a rule defect, which is why it was recorded rather
-  // than silently tuned away.
+  // AN ORPHAN AT INDEX 0 IS UNPAIRABLE, NOT EVIDENCE -- brought back 2026-09-06 (issue #62), by
+  // MEASUREMENT rather than reasoned back into existence. The `i === 0` exception was deleted the same
+  // day on the premise that `installFocusEventListenerBeforeFirstFocus` (`capture-core.mjs`) makes
+  // `log[0]` always a real, listener-witnessed focusin -- true of a FRESH capture, and not yet true of
+  // the captures already on disk: `rules:real-pages` produced 80 findings at exactly this position.
   //
-  // The trade is no longer needed: `installFocusEventListenerBeforeFirstFocus` (`capture-core.mjs`) now
-  // installs the listener before the capture's own first `anchorToTop()`, ahead of the sweep and every
-  // focus-walking probe, so `log[0]` is a real focusin the listener actually witnessed rather than a
-  // moment nobody was recording. An orphaned focusout at ANY index — including 0 — is therefore F55
-  // exactly as it is everywhere else in this function: the missing focusin is the signal, full stop.
+  // Read individually rather than trusted from the count: the nhs.uk cookie-banner shape kept as a
+  // regression fixture in `rules.test.ts` (`log[0]` a bare focusout, immediately followed by a real
+  // focusin on the very next control WITHIN THE SAME MILLISECOND) is the identical signature the nine
+  // genuine corpus positives show one index later, where a preceding `focusin` proves the listener really
+  // was watching. At index 0 there is no preceding event to prove that either way -- "the page stripped
+  // focus with nowhere to go" and "the listener started after this element already held it" produce the
+  // same three fields (`type`, `id`, `atMs`), and no amount of looking at the log alone tells them apart.
   //
-  // Depends on the capture-side fix having actually landed and been recaptured — see that commit and
-  // `rules.test.ts`'s two verbatim-log regression tests, which is why the two changes are separate,
-  // independently revertible commits rather than one.
+  // So this is UNPAIRABLE: neither a finding (the ambiguity is real, and asserting through it repeats the
+  // 37-false-positive mistake §42 was written to fix) nor silently "clear" (the page is not thereby
+  // vindicated -- `addFocusEventFindings` treats this identically to `"clear"` in that neither adds a
+  // finding, and this type exists so the two can never again be merged into one bare `null` the way this
+  // function's own prior revision did). Half 2 -- the listener recording `document.activeElement` as the
+  // log's own first entry, so `i === 0` stops being a special position -- closes this from the capture
+  // side and is explicitly NOT this function's fix; see the comment above `addFocusEventFindings`.
   //
-  // THIS ALSO MEANS A DIAGNOSTIC-ONLY BLUR IS NOW REAL EVIDENCE TO THIS FUNCTION UNLESS SOMETHING STOPS
-  // IT. `probeFocusReveal` (`capture-probes.mjs`, `§43`) blurs whatever an earlier probe left focused, and
-  // with the log watching from before it runs, an unbracketed blur is F55's exact signature -- an
-  // orphaned `focusout` -- against a page that did nothing wrong. `resetFocusToDocumentStart`
-  // (`browser-session.mjs`) is where that bracket lives; this comment and `installFocusEventListenerBeforeFirstFocus`'s
-  // (`capture-core.mjs`) are the other two corners of one interaction that no single file names alone.
+  // ONE EXCEPTION, VERIFIED AGAINST TWO SEPARATE REAL MECHANISMS BEFORE BEING CARVED OUT: a focusout at
+  // index 0 immediately followed by a focusin for the SAME id (`focus-event-order.test.ts`'s REVERSED
+  // fixture) is decidable with no prior context at all. UI Events can dispatch a synchronous same-tick
+  // `.blur()` from inside a `focus` handler BEFORE the browser's own `focusin` for that identical receipt
+  // completes, so the pair describes one control's own out-of-order receipt-then-loss -- it does not
+  // depend on whether the listener was already watching, unlike the different-id case just above, which
+  // is `case-matrix.mjs`'s own `focus-removed-on-receipt-*` mechanism (an `onfocus` handler that calls
+  // `.focus()` on a LATER field): verified against that family's real captured `order.bad` log, per its
+  // own construction comment, which shows exactly an orphaned focusout for the skipped field followed
+  // immediately by a real focusin on the NEXT field -- the identical shape a real page's ambiguous index-0
+  // orphan produces, and the reason position (having prior context), not "what follows", is what actually
+  // separates the two for a DIFFERENT id.
+  if (i === 0) {
+    const next = log[i + 1];
+    const sameControlReversed = next?.type === "focusin" && next.id === event.id;
+    if (!sameControlReversed) return { kind: "unpairable" };
+  }
   const prior = log[i - 1];
   const completedReceipt = prior?.type === "focusin" && prior.id === event.id;
   const heldMs = completedReceipt ? event.atMs - prior.atMs : null;
-  if (completedReceipt && heldMs !== null && heldMs >= FOCUS_SCRIPT_WINDOW_MS) return null; // an ordinary Tab transition
+  if (completedReceipt && heldMs !== null && heldMs >= FOCUS_SCRIPT_WINDOW_MS) return { kind: "clear" }; // an ordinary Tab transition
   // A redirect can only clear a COMPLETED receipt. An ORPHANED focusout is F55 regardless of what follows
   // -- the missing focusin is itself the signal, and the very next event after an orphaned loss is
   // routinely another real focusin (whatever the probe reaches next), which must NOT be read as this
   // control's own destination.
-  if (completedReceipt && focusLandedOnADifferentControl(event.id, event.atMs, log[i + 1])) return null;
+  if (completedReceipt && focusLandedOnADifferentControl(event.id, event.atMs, log[i + 1])) return { kind: "clear" };
   const holdPhrase = heldMs === null
     ? "focus was never fully received before it was removed"
     : `focus held ${heldMs}ms`;
-  return `${event.name || "unnamed control"} (id ${event.id}): ${holdPhrase}`;
+  return { kind: "finding", evidence: `${event.name || "unnamed control"} (id ${event.id}): ${holdPhrase}` };
 }
 
 function addFocusEventFindings(input: RuleInput, add: AddFinding): void {
@@ -763,12 +787,14 @@ function addFocusEventFindings(input: RuleInput, add: AddFinding): void {
   const log = focusEvents.log ?? [];
   for (let i = 0; i < log.length; i += 1) {
     if (log[i]?.type !== "focusout") continue;
-    const evidence = focusLossEvidence(log, i);
-    if (!evidence) continue;
+    const verdict = focusLossVerdict(log, i);
+    // "unpairable" and "clear" are both silence here, and the TYPE above is what keeps them distinguishable
+    // to a reader and a test rather than merged into the same bare skip.
+    if (verdict.kind !== "finding") continue;
     add("2.4.7 Focus Visible",
       "A control received focus and had it removed by script before a visible focus indicator could "
         + "have been shown to the user",
-      evidence, "secondary");
+      verdict.evidence, "secondary");
   }
 }
 

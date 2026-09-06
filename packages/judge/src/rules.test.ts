@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ruleFindings, repeatedStructureContainers } from "./rules.js";
+import { ruleFindings, repeatedStructureContainers, focusLossVerdict } from "./rules.js";
 
 const criteria = (findings: { wcag: string }[]): string[] =>
   findings.map((f) => f.wcag.match(/(\d+\.\d+\.\d+)/)?.[1] ?? f.wcag);
@@ -773,47 +773,50 @@ test("more than one control can exhibit F55 in the same capture, and both are re
   assert.deepEqual(found.map((f) => f.evidence.split(" (")[0]), ["Coupon", "Gift card"]);
 });
 
-test("THE LOG'S FIRST EVENT IS F55 LIKE ANY OTHER, once more -- the capture-side fix removed the ambiguity", () => {
-  // THIS TEST HAS ASSERTED BOTH ANSWERS, and the history is the useful part.
+test("THE LOG'S FIRST EVENT IS UNPAIRABLE, not F55 and not a clean page -- reversed again, by measurement", () => {
+  // THIS TEST HAS NOW ASSERTED THREE ANSWERS, and the history is the useful part (issue #62).
   //
   // ORIGINALLY (before 2026-09-06) it read "a lone focusout with nothing preceding it at all is still
-  // F55 -- it is orphaned by definition", correctly, because nothing about a genuine orphan changes at
-  // index 0.
+  // F55 -- it is orphaned by definition", correctly for a genuine orphan, but blind to the ambiguity below.
   //
   // THEN (2026-09-06, `known-gaps.md` §42) it flipped to "never F55", when the first real-page recapture
-  // showed 37 conformant pages carrying exactly this shape at `log[0]` and none of them were script
-  // strips: the listener installed immediately before `probeFocusOrder`, well after the sweep,
-  // `probeFocusContext` and `probeFocusReveal` could already have moved real focus, so whatever was
-  // focused by then was blurred with nobody watching. That version's own comment named the ambiguity
-  // ("indistinguishable from a genuine orphan") and resolved it by EXCLUSION rather than by removing the
-  // cause -- a trade, recorded as a PARTIAL rather than a fix.
+  // showed 37 conformant pages carrying exactly this shape at `log[0]`.
   //
-  // NOW it is back to the original answer, and for a different reason than the original had: the capture
-  // side no longer produces this ambiguity at all. `installFocusEventListenerBeforeFirstFocus`
-  // (`capture-core.mjs`) installs the listener before the sweep and every focus-walking probe, so
-  // `log[0]` is always a real focusin the listener witnessed. An orphaned focusout at index 0 is
-  // therefore exactly as diagnostic as one anywhere else in the log, and the exception in
-  // `focusLossEvidence` that read otherwise is deleted, not kept alongside the fix.
-  const log = [{ type: "focusout", id: 0, name: "Whatever held focus when the listener installed", atMs: 5 }];
-  const found = focusFindings(log);
-  assert.equal(found.length, 1, "an orphan at index 0 is F55 -- the listener now starts before any focus "
-    + "exists, so there is no earlier moment for this receipt to have happened unwatched");
-  assert.match(found[0].evidence, /Whatever held focus when the listener installed/);
+  // THEN it flipped a third time to "F55 like any other", on the premise that
+  // `installFocusEventListenerBeforeFirstFocus` (`capture-core.mjs`) makes `log[0]` always a real
+  // listener-witnessed focusin -- true of a FRESH capture only. Issue #62 measured the captures already on
+  // disk: `rules:real-pages` produced 80 findings at exactly this position, so the premise had not landed
+  // for the evidence this rule is actually scored against.
+  //
+  // NOW: UNPAIRABLE. Neither "F55" (asserting through a real ambiguity repeats the 37-false-positive
+  // mistake) nor "clear" (the page is not thereby vindicated -- there may be a real strip here that the
+  // evidence simply cannot distinguish from the capture-side gap). `focusLossVerdict`'s own return type
+  // keeps this a THIRD, distinct value rather than a `null` shared with genuine clearance.
+  const log: { type: string; id: number; name: string; atMs: number }[] =
+    [{ type: "focusout", id: 0, name: "Whatever held focus when the listener installed", atMs: 5 }];
+  assert.deepEqual(focusLossVerdict(log, 0), { kind: "unpairable" });
+  assert.equal(focusFindings(log).length, 0,
+    "an orphan at index 0 must not be reported as F55 -- the ambiguity is real, not resolved");
 });
 
-test("PRE-FIX REAL-PAGE SHAPE (nhs.uk): kept as a regression fixture, and it now correctly fires", () => {
-  // www.nhs.uk/service-search/find-a-gp, verbatim from its stored log (first five events), captured BEFORE
-  // the listener-install fix landed. This is the exact shape that produced 37 false positives and is the
-  // reason the `i === 0` exception existed at all -- kept here, unmodified, as the regression fixture
-  // `not-working.md` §22 names.
+test("PRE-FIX REAL-PAGE SHAPE (nhs.uk): kept as a regression fixture, and it is UNPAIRABLE, not a finding", () => {
+  // www.nhs.uk/service-search/find-a-gp, verbatim from its stored log (first five events). This is one of
+  // the 80 real-page findings issue #62 closes, and the reason the `i === 0` exception existed at all --
+  // kept here, unmodified, as the regression fixture `not-working.md` §22 names.
   //
-  // IT NOW FINDS A POSITIVE, AND THAT IS CORRECT FOR THIS FIXTURE, NOT A REGRESSION. This log is evidence
-  // of the OLD bug (the listener starting after `id 0` already held focus), and the rule cannot tell that
-  // apart from a genuine strip -- nothing in a `focusin`/`focusout` log records when the LISTENER itself
-  // started. The capture-side fix means a FRESH capture of this same page will not produce this shape any
-  // more (`id 0`'s receipt will be in the log, because the listener will have been watching for it), so
-  // this fixture is not a claim about what nhs.uk looks like today -- it is a permanent record of what the
-  // old bug's evidence looked like, kept so nobody has to re-derive it by re-reading a stale capture.
+  // THE SAME SIGNATURE THE NINE GENUINE POSITIVES SHOW ONE INDEX LATER: `id 0`'s bare focusout at `atMs:
+  // 3171` is followed, within the SAME MILLISECOND (3171), by a real focusin on `id 1` -- exactly the
+  // "Tab had already moved on" shape `focus-removed-on-receipt-order.bad`'s own fixture shows at index 2.
+  // The only difference is the missing preceding event, which is what makes index 0 unpairable rather
+  // than a third, unrelated shape.
+  //
+  // NOT A FINDING, AND NOT A CLAIM THAT NHS.UK IS CLEAN. This log is evidence of the OLD capture-side bug
+  // (the listener starting after `id 0` already held focus), and the rule cannot tell that apart from a
+  // genuine strip -- nothing in a `focusin`/`focusout` log records when the LISTENER itself started. A
+  // fresh capture of this same page, once half 2 lands, will not produce this shape any more (`id 0`'s own
+  // gain will be in the log), so this fixture is not a claim about what nhs.uk looks like today -- it is a
+  // permanent record of what the old bug's evidence looked like, kept so nobody has to re-derive it by
+  // re-reading a stale capture.
   const log = [
     { type: "focusout", id: 0, name: "A", atMs: 3171 },
     { type: "focusin", id: 1, name: "nhsuk-cookie-banner__link_accept_analytics", atMs: 3171 },
@@ -821,11 +824,30 @@ test("PRE-FIX REAL-PAGE SHAPE (nhs.uk): kept as a regression fixture, and it now
     { type: "focusin", id: 2, name: "nhsuk-cookie-banner__link_accept", atMs: 4663 },
     { type: "focusout", id: 2, name: "nhsuk-cookie-banner__link_accept", atMs: 5298 },
   ];
-  const found = focusFindings(log);
-  assert.equal(found.length, 1,
-    "the pre-fix shape is genuinely indistinguishable from a strip in the log alone -- the fix is that a "
-    + "fresh capture cannot produce this shape any more, not that this exact log reads differently");
-  assert.match(found[0].evidence, /^A \(id 0\)/);
+  assert.deepEqual(focusLossVerdict(log, 0), { kind: "unpairable" });
+  assert.equal(focusFindings(log).length, 0,
+    "the pre-fix shape must not be reported as F55 -- the fix is that a fresh capture cannot produce this "
+    + "shape any more, not that this exact log is safe to assert through");
+});
+
+test("focusLossVerdict: unpairable, clear and finding are three distinct values, never collapsed to one null", () => {
+  // The direct proof that "we could not ask" (unpairable) and "we asked and it was fine" (clear) cannot
+  // be silently merged -- the exact defect class this criterion's own history keeps producing one layer
+  // in from where it was last fixed (`docs/known-gaps.md` §42, then again here for issue #62).
+  const orphanAtZero = [{ type: "focusout", id: 0, name: "X", atMs: 5 }];
+  assert.deepEqual(focusLossVerdict(orphanAtZero, 0), { kind: "unpairable" });
+
+  const ordinaryTab = [
+    { type: "focusin", id: 0, name: "First name", atMs: 1 },
+    { type: "focusout", id: 0, name: "First name", atMs: 850 },
+  ];
+  assert.deepEqual(focusLossVerdict(ordinaryTab, 1), { kind: "clear" });
+
+  const realStrip = [
+    { type: "focusin", id: 0, name: "Promo code", atMs: 851 },
+    { type: "focusout", id: 0, name: "Promo code", atMs: 853 },
+  ];
+  assert.deepEqual(focusLossVerdict(realStrip, 1), { kind: "finding", evidence: "Promo code (id 0): focus held 2ms" });
 });
 
 test("CORPUS POSITIVE SHAPE: the same orphan one index later IS F55, so the fix cannot go deaf", () => {

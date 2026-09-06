@@ -3,23 +3,31 @@
 `PLAN.md`'s multi-package split. M1 built the scaffolding **before** anything moved into it, so the
 enforcement was in place before the code could drift against it.
 
-| package | licence | contents |
-|---|---|---|
-| `evidence` (M2) | Apache-2.0 | wire types (`.`), pure verification predicates (`./verify`), the WCAG 2.2 AA list (`./wcag`) — zero deps, no I/O |
-| `scorer` (M3) | AGPL-3.0-or-later | the trained heads, the training report, the Python scoring program and the feature contract. The weights are the API, so a retrain is a major bump |
-| `judge` (M4) | AGPL-3.0-or-later | `judge()` (`.`), the deterministic absence rules (`./rules`), experience-layer ordering (`./layers`), and `./internal` with no semver guarantee |
-| `nvda-worker` (M5) | AGPL-3.0-or-later | the Windows capture worker. `.mjs` ships verbatim, so no build step; the HTTP contract is the API and `CAPTURE_PROTOCOL_VERSION` versions it independently of semver |
-| `worker-fleet` (M6) | AGPL-3.0-or-later | host-side lease/health/capacity, the `a11y-doctor` and `a11y-worker-*` bins, and the UTM provisioning scripts. Touches no NVDA |
-| `a11y-witness` (M7) | AGPL-3.0-or-later | the CLI, unscoped so `npx a11y-witness` needs no wrapper. Exports `reportLines` only; the root package was renamed to `a11y-witness-monorepo` to free the name |
+**Renamed under [ADR 0036](../docs/adr/0036-the-layer-model.md), ahead of the `a11ign` rename (#66): a
+package is either PRODUCT (layer-neutral) or LAYER (names the evidence source it belongs to), and a layer
+package's name says which layer.** Today's only real layer is the screen reader; `evidence` and `judge`
+decide across whichever layers exist and so name none of them.
+
+| package | new scope | licence | contents |
+|---|---|---|---|
+| `evidence` (M2) | `@a11ign/evidence` — product | Apache-2.0 | wire types (`.`), pure verification predicates (`./verify`), the WCAG 2.2 AA list (`./wcag`) — zero deps, no I/O |
+| `scorer` (M3) | `@a11ign/screenreader-scorer` — screen-reader layer | AGPL-3.0-or-later | the trained heads, the training report, the Python scoring program and the feature contract. The weights are the API, so a retrain is a major bump |
+| `judge` (M4) | `@a11ign/judge` — product | AGPL-3.0-or-later | `judge()` (`.`), the deterministic absence rules (`./rules`), experience-layer ordering (`./layers` — a DIFFERENT "layer" from ADR 0036's, see that ADR's own collision note), and `./internal` with no semver guarantee |
+| `nvda-worker` (M5) | `@a11ign/screenreader-worker` — screen-reader layer | AGPL-3.0-or-later | the Windows capture worker. `.mjs` ships verbatim, so no build step; the HTTP contract is the API and `CAPTURE_PROTOCOL_VERSION` versions it independently of semver |
+| `worker-fleet` (M6) | `@a11ign/screenreader-fleet` — screen-reader layer | AGPL-3.0-or-later | host-side lease/health/capacity, the `a11y-doctor` and `a11y-worker-*` bins, and the UTM provisioning scripts. Touches no NVDA |
+| `a11y-witness` (M7) | **`a11ign`, unscoped** — product | AGPL-3.0-or-later | the CLI. Stays unscoped so `npx a11ign` needs no wrapper — ADR 0036 rejected `@a11ign/cli` for exactly this reason. Exports `reportLines` only; the root package was renamed to `a11y-witness-monorepo` to free the name |
 
 **Three more exist and are deliberately absent from the migration table above** — that table is M1–M8's
 *published* split; these are `"private": true` and never reach the registry:
 
-| package | licence | contents |
-|---|---|---|
-| `control` | AGPL-3.0-or-later | the control plane: holds the fleet SSH key, dispatches work to the fleet and to `lab`. Dependency-free by design — [ADR 0012](../docs/adr/0012-control-plane-split.md) |
-| `lab` | AGPL-3.0-or-later | the eval harness, the training corpus pipeline, the release gates and the analysis programs. Ships nothing |
-| `nvda-speech` | GPL-3.0-or-later | NVDA's announcement composition, ported to run without Windows — GPL because it is derived from NVDA, so `evidence` (Apache-2.0) must never import it |
+| package | new scope | licence | contents |
+|---|---|---|---|
+| `control` | unchanged, private | AGPL-3.0-or-later | the control plane: holds the fleet SSH key, dispatches work to the fleet and to `lab`. Dependency-free by design — [ADR 0012](../docs/adr/0012-control-plane-split.md) |
+| `lab` | unchanged, private | AGPL-3.0-or-later | the eval harness, the training corpus pipeline, the release gates and the analysis programs. Ships nothing |
+| `nvda-speech` | `@a11ign/screenreader-speech` — screen-reader layer, private today | GPL-3.0-or-later | NVDA's announcement composition, ported to run without Windows — GPL because it is derived from NVDA, so `evidence` (Apache-2.0) must never import it. Named for publication now so it does not need renaming twice if it is ever published |
+
+`control` and `lab` keep plain names under ADR 0036's rule too: the naming rule governs published names,
+and neither reaches the registry.
 
 The order is deliberate. M0 tested the assumption that could invalidate the whole design — that a consumer
 can install and run one package in isolation — and its findings are in `docs/isolation-spike.md`. M1 adds

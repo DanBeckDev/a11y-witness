@@ -11,7 +11,7 @@ Three shorter documents came first for a reason, and they are not duplicated her
 |---|---|
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | the 60-second orientation, and the question that decides everything: **does your change need a Windows worker?** Most of the repo does not. |
 | [`SECURITY.md`](SECURITY.md) | what this tool does that somebody must know before running it — `probeForms` presses buttons, the worker has no authentication, `A11Y_PYTHON` is executable |
-| [`docs/README.md`](docs/README.md) | the index to every guide and runbook, grouped by task, with [`docs/adr/README.md`](docs/adr/README.md) for the 35 decision records |
+| [`docs/README.md`](docs/README.md) | the index to every guide and runbook, grouped by task, with [`docs/adr/README.md`](docs/adr/README.md) for the 36 decision records |
 | [`docs/backlog.md`](docs/backlog.md) | **THE ONE PLACE THAT ANSWERS "WHAT IS OPEN".** The two files below are RECORDS, not trackers — long-form, valuable, and unreadable as a task list: section numbers repeat, entries are not in order, and "closed" is spelled fourteen ways. If it is open, it is on the backlog |
 | [`docs/known-gaps.md`](docs/known-gaps.md) | **what this project does NOT do, or does not yet know** — each with what it would cost and what would tell you it is fixed. Read it before claiming a thing is finished; "all gates pass" and "everything is validated" are different claims |
 
@@ -2323,6 +2323,7 @@ failure as `capture-check` being mandatory and never running once.
 
 | command | when |
 |---|---|
+| `worktrees:prune` | after a merge, or whenever `git worktree list` looks long: removes a linked worktree only when its branch is fully merged into `origin/main` AND its working tree is clean, names every other one as DIRTY with its branch and touches nothing about it, and never the primary checkout (identified by `.git` being a real directory there, a file everywhere else). A rule maintained by hand ("prune after every merge") reached 36 worktrees and 4.4 GB the day after a 28-tree hand-prune |
 | `fleet:normalise` | bring every LOCAL UTM guest to one baseline, elevated, and prove it took. The bare-metal equivalent is `fleet:provision` |
 | `fleet:recover` | **a worker that is UP, ANSWERING and not working.** Measured 2026-09-02 on a11y-worker-6: a capture began at 03:00 and was still `current` at 06:32, with every readiness check green and `busy: true` for three and a half hours — from the run's side that is a slow page, so it waited and a corpus recapture made no progress at all. `fleet:deploy` cannot fix it: `Stop-ScheduledTask` will not end a node process wedged in a capture, the restart loses the race for port 8765, and the old process keeps serving a `/health.code` read from files the deploy just updated — so `verify-code.yml` sees a MATCH and its reboot never fires. This kills node outright and reboots, and PROVES it by requiring `vitals.uptimeMinutes` to have fallen: a worker that answers is not a worker that restarted, and that box answered perfectly for six days |
 | `guest:run` | run a script on a UTM guest elevated and actually get its output — `utmctl exec` returns exit 0 and no output whether or not it ran |

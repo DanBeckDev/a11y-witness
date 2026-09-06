@@ -8,6 +8,7 @@
   "scripts": {
     "mutate": "node scripts/mutation-check.mjs",
     "board:summary-check": "node scripts/board-summary-check.mjs",
+    "board:liveness": "node scripts/board-schedule-liveness.mjs",
     "board:document": "node scripts/board-document.mjs",
     "board:report": "node scripts/board-report.mjs",
     "jobs:check": "node scripts/check-scheduled-jobs.mjs",
@@ -106,6 +107,7 @@
     "pretest": "npm run build",
     "pretypecheck": "npm run build",
     "worker:ctl": "packages/worker-fleet/src/local-worker/worker-ctl.sh",
+    "worktrees:prune": "node scripts/prune-worktrees.mjs",
     "coverage": "c8 npx tsx --test \"packages/*/src/**/*.test.ts\"",
     "identity:rate": "tsx packages/lab/src/harnesses/page-identity-rate.mjs",
     "verdict:stability": "tsx packages/lab/src/harnesses/occurrence-verdict-stability.mjs",
