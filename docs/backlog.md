@@ -1175,6 +1175,20 @@ specific to a READY-QUEUE row, where "is this still open" must also ask whether 
 answered it, and no other document makes that particular claim. No further instances found; this bounds the
 shape at four for now.
 
+## OPEN, small — one unresolved question from the `CAPTURE_PROTOCOL_VERSION` bump-cost review (issue #23)
+
+See [`docs/capture-protocol-bump-costs.md`](./capture-protocol-bump-costs.md) for the full table (twelve
+bumps in 32 days, verified from the constant's own value history, not from the 28 commits that merely
+mention it). Eleven of twelve show explicit, dated evidence that batching was either done correctly or
+correctly not needed. **One does not: `6 → 7` (`5a92f96`, 2026-08-29 14:49) and `7 → 8` (`0c53dc2`,
+2026-08-30 00:18) are under 10 hours apart — shorter than one full recapture (~3h46m measured elsewhere) —
+and unlike every other tight gap in the table, neither commit states whether a real recapture completed and
+was used under protocol 6 before 7 superseded it.** 16 protocol-6 records survive in this worktree's local
+copy today, which proves SOME real capture activity happened under 6, but not whether it was a wasted full
+run or a smaller verification slice. **What would settle it:** the lab's own job history for that 10-hour
+window (`lab:status`/`lab:log` for whichever job ran, if its record still exists) — out of this pass's
+resource bounds (fleet/lab access banned for this unit) and named rather than guessed at.
+
 ## How an item leaves this page
 
 **CORRECTED 2026-09-06 — the rule below said "delete" while 51 closed rows sat here, struck through and

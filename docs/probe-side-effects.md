@@ -49,8 +49,108 @@ probe re-establishes a KNOWN precondition before acting, or inherits whatever th
 | 8 | `probeTypedFeedback` (3.3.1/3.2.2, opt-in) | — | `landOnControl` + **types 6 digits into a real page field** — the only probe here that changes the PAGE'S OWN CONTENT, and its own comment states it must run last for exactly that reason | yes (via `landOnControl`) | nothing within `runFocus` (it is last); leaves a typed value in a field for anything after `runProbeSequence` to read |
 | 9 | `runConfiguredForm` / `probeConfiguredForm` / `fillFormState` | — | fills every declared field (typing/toggling/choosing), submits the named control | `anchorToTop()` at `fillFormState`'s start, and again after EVERY field (`applyFill` ends in `restoreBrowseMode`) | quick-nav-based throughout, so DOM-focus-safe; but its OWN submit may move DOM focus (accessible-form rejection) and nothing blurs it afterward |
 | 10 | `censusBeforeNavigating` (structural/DOM/media census) | — | none — pure reads over CDP | n/a | — |
-| 11 | `probeRouteChange` (2.4.2, opt-in) | — | `anchorToTop()`, quick-nav to first link, **activates it — the one probe that can leave the page under measurement entirely** | yes (quick-nav-based, DOM-focus-safe) | `crossCheckAgainstElementsList` (next) — see "New findings" |
+| 11 | `probeRouteChange` (2.4.2, opt-in) | — | `anchorToTop()`, quick-nav to first link, **activates it — the one probe that can leave the page under measurement entirely**; then `focusedAfterTab` presses **Tab**, which moves DOM FOCUS on whatever page the activation landed on | yes for the caret; **NO for DOM focus** — this row said "DOM-focus-safe" and that was wrong, see F1 | `crossCheckAgainstElementsList` (next) — see "New findings" |
 | 12 | `crossCheckAgainstElementsList` / `probeElementsListCounts` (opt-in) | `structure` counts captured **at sweep time, before anything moved the page** | opens NVDA's Elements List — a MODAL dialog that blocks input — reads counts, closes it unconditionally (2×`Escape`) | n/a (its own read is self-contained) | **compares evidence from two different documents if `probeRouteChange` navigated — see below** |
+
+## SECOND PASS, 2026-09-06 — the question re-asked of every probe, and of the CLEANUPS
+
+The first pass asked what each probe DOES. This one asks the sharper question today's two findings both
+came out of: **is any probe's cleanup load-bearing for something else, and is that dependency deliberate or
+an accident of what happens to run next?** `orchestrator`'s note on the elements-list move is the template
+— relocating that call made its single-`Escape` cleanup load-bearing for the first time, and it is safe
+only because `probeRouteChange` and `landOnControl` each anchor themselves.
+
+### FIRST: THIS DOCUMENT HAD GONE STALE, WHICH IS THE FINDING IT KEEPS RECORDING ABOUT OTHER FILES
+
+Rows 3, 5 and 6 above describe defects that are FIXED, and row 12 describes an ordering that is not on
+`main`. Checked rather than assumed:
+
+```
+$ for f in probeFocusContext probeFocusOrder probeDialogEscape; do
+    awk "/^async function $f\(/,/^}/" capture-probes.mjs | grep -c "resetFocusToDocumentStart()\|restoreBrowseMode("
+  done
+  probeFocusContext: 2      probeFocusOrder: 1      probeDialogEscape: 0
+
+$ grep -n "crossCheckAgainstElementsList({\|probeRouteChange({" capture-probes.mjs
+  530:    ? await probeRouteChange({ interaction, deadline, diag })
+  532:  if (probeElementsList) await crossCheckAgainstElementsList({ structure, deadline, diag });
+```
+
+So on `main` today: `probeFocusContext` and `probeFocusOrder` DO reset DOM focus (rows 3 and 5 are closed);
+**`probeDialogEscape` still does not**, and **the cross-check still runs AFTER `probeRouteChange`**. Both of
+those fixes exist and are committed on `agent/route-change-order-and-dialog-restore`, which is **not
+merged**. A reader taking rows 3/5/6/12 at face value would have believed three fixes had landed and one
+had not, with the truth being the reverse for two of them.
+
+**A record that stopped being current while nobody was looking at it** — the same shape as
+`case-matrix.mjs`'s settled hypothesis, in the document written to catch that shape elsewhere.
+
+### F1 — `probeRouteChange` MOVES DOM FOCUS, and this audit said it did not
+
+Row 11 read *"quick-nav-based, DOM-focus-safe"*. It is not: after activating the link it calls
+`focusedAfterTab`, whose whole job is to press Tab.
+
+```
+$ awk '/^async function focusedAfterTab/,/^}/' capture-probes.mjs
+async function focusedAfterTab(kind) {
+  try {
+    await withTimeout(nvda.press("Tab"), NAV_TIMEOUT_MS, kind).catch(() => undefined);
+```
+
+That is deliberate and correct for its own purpose — where the next Tab lands is the only way to tell a
+working skip link from an inert one, which is 2.4.1's whole question. The defect was in the AUDIT, not the
+probe: a row that says a probe cannot affect DOM focus is exactly the claim a later reader builds on.
+
+**Consequence today: none, and that is why it is worth writing down rather than fixing.** `probeRouteChange`
+runs last among the position-dependent probes, so the only thing downstream is the cross-check, which
+drives NVDA through its own dialog gesture rather than through Tab. **The exposure is entirely positional**
+— it becomes real the moment anything Tab-based is added below it, and nothing in the code says so.
+
+### F2 — A CLEANUP WHOSE DEPENDENT IS THE NEXT CAPTURE, NOT A LATER PROBE
+
+`probeElementsListCounts` closes NVDA's Elements List in a `finally`, twice, unconditionally. Its own
+comment names the stake: *"This is a MODAL dialog: leaving it open blocks input on the guest and wedges the
+next capture, which is a fault that once took two days to attribute correctly."*
+
+**No probe depends on that cleanup. The NEXT CAPTURE does.** NVDA is reused for up to
+`MAX_CAPTURES_PER_NVDA = 25` captures, so a leaked modal outlives the capture that opened it and blocks a
+different page's evidence — and from outside, a wedged worker is indistinguishable from a dead machine.
+
+This is a class the first pass did not have: **cleanup whose blast radius is the NVDA instance rather than
+the probe sequence.** Every other cleanup in this file is scoped to the capture. Two things follow:
+its `finally` can never become conditional, and a future probe that opens anything modal inherits the same
+obligation without anything reminding it.
+
+### F3 — `probeTableCells` leaves the caret in a grid, and is saved by the next phase anchoring
+
+It is the LAST thing in `sweepEveryStructuralType`, and it walks Ctrl+Alt+Arrow through a grid, leaving the
+caret inside a table. Quick navigation cannot reach the element the caret occupies, so a sweep starting
+from inside a grid loses at least the element under it.
+
+Nothing breaks today because `rescanFormFieldsAfterSubmit` opens with `anchorToTop()` and the focus pass
+re-establishes its own state. **That is protection by successor, not by design** — the same shape as
+`probeDialogEscape` being saved by `landOnControl`, and it holds only while the sweep's last step remains
+something that anchors.
+
+### REFUTED, and these are the majority — checked, not assumed
+
+- **`probeDisclosure` / `probeFormSubmit` / `probeTaskButton` / `probeToggle`** all reach the page through
+  `operateControl`, whose `finally` presses Escape and waits for speech to settle. Their cleanup is
+  deliberate, documented at length, and load-bearing for the REST OF THE SWEEP — which is the 353-capture
+  contamination, already the most-documented dependency in the file. Nothing new.
+- **`applyFill`** (configured forms) ends every field in `restoreBrowseMode`, and `fillFormState` re-anchors
+  after each one and restarts the walk. Belt and braces, deliberate, commented.
+- **`censusBeforeNavigating`** performs no keystrokes at all — three CDP reads. It cannot leave state behind.
+- **`landOnControl`** anchors before it lands, so it is insensitive to whatever preceded it. It is the
+  reason two of the accidental saves above hold; that makes it a dependency, not a defect.
+- **`firstHeadingFromTop`** anchors first, same reasoning.
+
+### What this pass did NOT do
+
+**No code change, deliberately.** F1 is a documentation defect in this file. F2 and F3 describe dependencies
+that are real and currently safe; making either explicit means editing
+`packages/nvda-worker/src/capture-probes.mjs`, which is `orchestrator`'s and is mid-recapture. The audit
+records them so the next person changing the order finds them before the capture does.
 
 ## New findings — §43's shape, unaddressed elsewhere
 

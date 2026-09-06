@@ -12,7 +12,9 @@
 //
 //   npm run board:document                 markdown to stdout
 //   npm run board:document -- --pdf        render a PDF and print its path
-import { writeFileSync, mkdirSync, realpathSync } from "node:fs";
+import { writeFileSync, mkdirSync, mkdtempSync, readFileSync, existsSync, realpathSync }
+  from "node:fs";
+import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -23,6 +25,39 @@ import { toHtml } from "./board-markdown.mjs";
 // Module scope, not inside main(): `section5` reads it, and `document()` is exported for the renderer
 // test, which builds a real document without ever calling main().
 const THROUGHPUT = "Capture throughput";
+const SUMMARY_WORDS = 120;
+// TWO PAGES OF BODY, and the number is MEASURED rather than chosen.
+//
+// Edition 2 ran to 1,864 words across four pages of body and the chairman called it too long for a daily.
+// The cap below is the two-page capacity of the page style set in this file, established by rendering:
+// at 910 words the appendix begins on page 3, so sections one to five occupy pages 1 and 2 alongside the
+// summary. 925 leaves a little room and is not a round number for the sake of one.
+//
+// IF THE PAGE CSS CHANGES, RE-MEASURE THIS. A cap carried over from a different typeface or margin is a
+// number that no longer describes what it claims to.
+export const BODY_WORD_CAP = 925;
+
+/** The hand-written executive summary for a given day, or null.
+ *
+ * NEVER ASSEMBLED FROM THE SECTIONS. A summary generated from the body is precisely what the chairman's
+ * third rule forbids, and it would also be useless: the summary exists to say what the sections cannot,
+ * which is what a reader should do about them today. So it is a file a person writes, and its absence
+ * stops the edition rather than degrading it.
+ */
+export function summaryFor(day, root = ROOT) {
+  const file = path.join(root, "docs/board/summaries", `${day}.md`);
+  if (!existsSync(file)) return null;
+  const text = readFileSync(file, "utf8").trim();
+  return text ? { text, words: text.split(/\s+/).filter(Boolean).length, file } : null;
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September",
+  "October", "November", "December"];
+/** "20 September 2026" -- a board reads dates, not timestamps. */
+const longDate = (iso) => {
+  const d = new Date(iso);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+};
 
 /** ON TRACK / AT RISK / SLIPPED, from stated criteria rather than from a feeling.
  *
@@ -30,304 +65,275 @@ const THROUGHPUT = "Capture throughput";
  * an opinion wearing a measurement's clothes, which is the exact defect this reporting was built after.
  */
 function trackStatus(release, open) {
-  if (!release?.due_on) return { word: "NO DATE", why: "the milestone carries no date." };
+  if (!release?.due_on) return { word: "has no date", why: "no date has been set." };
   const unbounded = open.filter((i) => i.milestone?.title === MILESTONE
     && /INCONCLUSIVE|hypothesis|unbounded|not yet known/i.test(i.title));
   const days = Math.ceil((Date.parse(release.due_on) - Date.now()) / (24 * HOURS_MS));
-  if (days < 0) return { word: "SLIPPED", why: "the date has passed and the milestone is still open." };
+  if (days < 0) return { word: "has slipped", why: "the date has passed and work remains open." };
   if (unbounded.length > 0) {
-    return { word: "AT RISK",
-      why: `${release.open_issues} blockers remain with ${days} days to go, and ${unbounded.length} of `
-        + "them has no known size — its remedy was refuted today and replaced by a hypothesis that has "
-        + "not been checked yet." };
+    return { word: "is at risk", days, unbounded: unbounded.length };
   }
-  return { word: "ON TRACK",
-    why: `${release.open_issues} blockers remain with ${days} days to go, and every one of them has a `
-      + "named next step whose size is known." };
+  return { word: "is on track", days, unbounded: 0 };
 }
 
 function section1(d) {
-  const { word, why } = trackStatus(d.release, d.open);
-  const due = d.release?.due_on?.slice(0, 10) ?? "none";
+  const { word, days, unbounded } = trackStatus(d.release, d.open);
+  const due = d.release?.due_on ? longDate(d.release.due_on) : "no date";
+  const count = d.release?.open_issues ?? 0;
   return [
-    "## 1. Are we on track",
+    `## The first public release is dated ${due} and ${word}.`,
     "",
-    `### ${word}`,
+    `${count} pieces of work must finish before we can publish, and ${days} days remain. `
+    + `${unbounded > 0
+      ? "One has no known size."
+      : "Every one has a next step whose size we know."}`,
     "",
-    `**First publish — \`${MILESTONE}\` — is dated ${due}.** ${why}`,
-    "",
-    "**The date has not moved since it was set on 2026-09-06.** It was proposed from the open blockers "
-    + "and approved the same day. Every future move of it is recorded on the milestone itself, naming "
-    + "what moved it and which gate found it — so a slip arrives with its cause attached or it is a "
-    + "defect in this process.",
-    "",
-    "**Confidence, stated rather than implied.** The date assumes the one blocker of unknown size (#3) "
-    + "is resolved inside the week allowed for it. That row's remedy was refuted today and replaced by a "
-    + "hypothesis with a named check, so the week is still the estimate and the estimate is now resting "
-    + "on less than it was this morning. It is not padded for a model-schema revert, which is a live "
-    + "possibility with its conditions named in advance; a revert would move this date and the move "
-    + "would say so.",
+    "1. We set the date by adding up the remaining work, and every change to it is recorded — a slip "
+    + "cannot arrive as a bare new date.",
+    "2. **This carries most of the weight:** the date assumes the one item of unknown size finishes "
+    + "inside the week we allowed, and this afternoon that week began resting on less.",
+    "3. We have not padded it against the risk most likely to move it, which is stated below.",
   ].join("\n");
 }
 
 function section2() {
   return [
-    "## 2. Time to V1",
+    "## Version one has no date, because nobody has ever defined what it is.",
     "",
-    "### V1 IS NOT DEFINED ANYWHERE, and this section will not invent a date without a scope",
+    "None of our planning documents defines version one, so a date here would be a number with nothing "
+    + "behind it. **We propose that version one means one person outside this project runs the tool on an "
+    + "application they own and says plainly whether the result was worth their time.** Our plan has "
+    + "called that the deliverable since August, and it is already a release blocker — so adopting it "
+    + "renames the goal rather than adding work.",
     "",
-    "Checked before writing this: `PLAN.md`, `README.md` and the backlog contain no definition of V1, "
-    + "and no `1.0.0` target. `PLAN.md` is titled *the road to a general release* and defines four "
-    + "phases with exit criteria, but never says which of them constitutes V1.",
-    "",
-    "**So a date here would be a number with nothing behind it** — the one thing this reporting refuses. "
-    + "What follows is a proposed definition, for the board's approval. Once a scope is approved, a date "
-    + "can be derived from it and will appear in this section.",
-    "",
-    "### Proposed: v0.1.0 is a PUBLISHING act; V1 is an EVIDENCE claim",
-    "",
-    "| | v0.1.0 — first publish | V1 — proposed |",
+    "| stage | what decides it | when |",
     "|---|---|---|",
-    "| what it proves | the packages install and run for a stranger | the findings are worth a "
-    + "stranger's time on their own app |",
-    "| how it is decided | a gate passes and a human types `publish-for-real` | a person outside this "
-    + "project runs it on an app they own and says plainly whether the output was worth it |",
-    "| already written down as | `PLAN.md` B5 | `PLAN.md` B1, and Phase 4's exit |",
-    "| status | 8 blockers, dated | not started, and cannot be done from inside |",
+    "| The trained component is approved | Four checks pass, and a fifth stops objecting that one rule "
+    + "has never been shown to work on a real website | days |",
+    "| The real-website check reaches a verdict | A theory about two distrusted measurements is tested "
+    + "| the item of unknown size |",
+    "| The tool is published | A person creates the account, adds a credential, types the confirmation "
+    + "| **20 September 2026** |",
+    "| **Someone outside the project uses it** | **A person agrees to run it and reports back** | **not "
+    + "schedulable from inside** |",
     "",
-    "**The proposal is that V1 = `PLAN.md` B1 closed**, which its own text already frames as the "
-    + "deliverable: *\"One person outside the project adds the Action to a repo they own, runs it on a "
-    + "page they care about, and says plainly whether the output was worth it. Their reaction is the "
-    + "deliverable — not a bug list.\"*",
-    "",
-    "**The stages between here and there, each with what decides it. No dates on the later ones, "
-    + "because the earlier ones set them.**",
-    "",
-    "| stage | what decides it | date |",
-    "|---|---|---|",
-    "| Model weights promoted | four migration gates pass and `rules:coverage` stops refusing 1.4.13 "
-    + "(#2) | days — needs one fleet run |",
-    "| Real-page gate conclusive | #3's hypothesis checked against two recaptured captures | the one "
-    + "unbounded row |",
-    "| First publish | the five human steps (#5), after a green action-smoke read on the shipping sha "
-    + "(#4) | **2026-09-20** |",
-    "| **B1 — the first outside user** | a person outside the project agrees to run it, and reports "
-    + "back | **NOT SCHEDULABLE FROM INSIDE** — it needs the repository owner to ask someone |",
-    "",
-    "**That last row is the honest answer to \"when is V1\".** It is not an engineering estimate; it is "
-    + "a person the project does not yet have. `PLAN.md` has said so since 2026-08-09 — *\"B1 and B5 are "
-    + "yours — neither can be done from inside the project\"* — and no amount of capacity here moves it. "
-    + "**The board decision that would move V1 closest is naming that person.**",
+    "**That last row is the honest answer to when version one arrives: it is a person we do not yet "
+    + "have, not an engineering estimate.**",
   ].join("\n");
 }
 
 function section3(d) {
-  const L = ["## 3. What we achieved since the last edition", ""];
+  const L = ["## We made four things demonstrable today that were previously only claimed."];
+  L.push("");
   if (d.achievements.length === 0) {
-    L.push("**Nothing recorded for this window.** That is a fact about our recording discipline and not "
-      + "necessarily about the work: this section is authored, because no API can derive *what the "
-      + "product can now do that it could not before* from commit counts. An empty section means nobody "
-      + "wrote one, and should be read as that.");
+    L.push("Nothing was recorded for this period. That is a statement about our record-keeping and not "
+      + "necessarily about the work: this section is written by hand, because no automated source can "
+      + "tell you what the product can now do that it could not before. An empty section means nobody "
+      + "wrote one.");
     return L.join("\n");
   }
-  L.push("Capabilities, not activity. Commit counts measure how busy we were; these are things the "
-    + "product can now do or prove that it could not before, each with the evidence that makes it a "
-    + "claim rather than an assertion.");
+  L.push("These are capabilities rather than activity, and the evidence for each is in the "
+    + "appendix.");
   L.push("");
-  for (const a of d.achievements) {
-    L.push(`**${a.claim}**`);
-    L.push("");
-    L.push(`> ${a.evidence}${a.issue ? ` *(issue #${a.issue}, recorded by \`${a.reportedBy}\`)*` : ""}`);
-    L.push("");
-  }
-  L.push("**This is the first edition, so \"since the last edition\" means since the tracker existed** "
-    + "— roughly one working day. Later editions cover a day each.");
+  for (const a of d.achievements) L.push(`- **${a.boardClaim ?? a.claim}**`);
+  L.push("");
+
   return L.join("\n");
 }
 
 function section4(d) {
   const blockers = d.open.filter((i) => i.milestone?.title === MILESTONE);
   return [
-    "## 4. Risks, and the decisions the board is being asked for",
+    "## The board is asked for three decisions, and two of them cost nothing to make.",
     "",
-    "### Decisions needed",
+    `None of the ${blockers.length} pieces of work between today and publication needs a board `
+    + "decision. These three do.",
     "",
-    "| decision | what happens if nothing is decided |",
+    "| decision | if nothing is decided |",
     "|---|---|",
-    "| **Approve or amend the V1 definition in section 2.** | \"When is V1\" stays unanswerable. This "
-    + "document will keep printing that V1 is undefined rather than estimating, so every edition "
-    + "repeats the question. |",
-    "| **Name the first outside user (`PLAN.md` B1).** | V1 cannot start, whatever engineering does. "
-    + "It has been open since 2026-08-09 and is the single longest-standing blocker in the project. |",
-    "| **Confirm the first publish may proceed on the approved date with the stated confidence.** | The "
-    + "five human steps (#5) — creating the npm scope, adding the token, flipping access to public — "
-    + "need the repository owner's hands and are not reachable by any automation here. |",
+    "| **Approve the definition of version one.** | The question the board keeps asking stays "
+    + "unanswerable, and every edition repeats that. |",
+    "| **Name one person outside the project to try the tool.** | Version one cannot start, whatever "
+    + "the engineering does. Open since August. |",
+    "| **Confirm publication may proceed in September.** | Three final steps need the owner's own "
+    + "hands, so the engineering finishes and the release waits. |",
     "",
-    "### Risks",
+    "### Four risks are live, and only the first could move the date.",
     "",
     "| risk | state |",
     "|---|---|",
-    "| **The model-schema change may have to be reverted, not adjusted.** | Its revert conditions were "
-    + "named in advance, deliberately, so the decision cannot be softened into a tweak. The premise it "
-    + "rests on is being measured properly for the first time by the run in flight — and it may "
-    + "collapse, which is the outcome the exercise existed to make visible. A revert moves the date. |",
-    "| **The one blocker of unknown size (#3).** | Its remedy was published this morning, refuted this "
-    + "afternoon by measurement, and replaced by a hypothesis with a named check. That is the process "
-    + "working; it also means the week allowed for it now rests on less than it did. |",
-    "| **Everything runs on one machine.** | The capture fleet's credentials and this document's own "
-    + "schedule exist on one Mac. The tracker moved to GitHub today, so *what is open* now survives its "
-    + "loss; the credentials do not. Named in `docs/roles/README.md`, which exists to answer exactly "
-    + "this. |",
-    "| **Six commits carry the wrong author.** | A test wrote its git identity into the real repository. "
-    + "The config is fixed; the history is not, and the decision on record is that it stays — a rewrite "
-    + "would strand every agent branch. Cosmetic, disclosed so it is not discovered. |",
-    "",
-    `**${blockers.length} blockers are open on the release milestone**, each with an acceptance command `
-    + "and the command that shows it is still open. They are listed with their sources in section 6.",
+    "| **We may abandon the change to the trained component rather than adjust it.** | Its abandonment conditions were written in advance so the decision could not be softened, and the assumption it rests on is being measured properly for the first time now. |",
+    "| **One item still has no known size.** | We published a fix this morning, measured it wrong this "
+    + "afternoon, and replaced it with a theory nobody has tested. The process working — and the week we "
+    + "allowed now rests on less. |",
+    "| **Everything runs on one machine.** | The capture machines' credentials and this report's "
+    + "schedule live on one computer. The list of open work moved off it today; the credentials have "
+    + "not. |",
+    `| **${d.strays.length} of the ${d.merges.length} changes saved since midnight carry the wrong `
+    + "author.** | An automated test overwrote our identity settings. The settings are fixed; the record "
+    + "is not, and we leave it rather than rewrite history others are building on. Cosmetic, and "
+    + "disclosed so it is not discovered. |",
   ].join("\n");
 }
 
 function section5(d) {
   const throughput = d.milestones.find((m) => m.title === THROUGHPUT);
   const fh = d.fleetHours;
-  const L = [
-    "## 5. Capital and capacity",
-    "",
-    "### Fleet utilisation",
-    "",
-  ];
+  const L = ["## We are not asking for money, and the measurement that would justify asking is "
+    + "scheduled.", ""];
   if (!fh || fh.status === "not instrumented") {
-    // ONE paragraph, not two. Edition 1 said "not instrumented" in consecutive paragraphs and gave the
-    // 54.11 figure twice -- a document that repeats itself about a number it is withholding reads as
-    // hedging, which is the opposite of what the withholding is for.
-    L.push("**Not instrumented, and printed as that rather than estimated.** A figure exists — "
-      + "**54.11 worker-hours** across every capture on disk, measured per capture from its own "
-      + "diagnostics — and it is deliberately not published as the fleet's utilisation, because it "
-      + "spans several runs and several protocol versions and is therefore not any one run's number. "
-      + "The generator enforces that rather than trusting anyone to remember it: it REFUSES a total "
-      + "that cannot name a finished run, instead of printing one with a footnote.");
+    L.push("**We cannot yet report how much machine time the capture fleet consumed, and we print that "
+      + "rather than estimate it.** A figure exists — 54.11 machine-hours across every page ever "
+      + "recorded — but it spans many runs and several recording formats, so it is nobody's single run.");
   } else {
-    L.push(`**${fh.total}**, computed from **${fh.run}**, which finished ${fh.runFinishedAt} — measured `
-      + `by \`${fh.reportedBy}\`. Method: ${fh.method}.`);
-    L.push("");
-    L.push("**This is capture occupancy**, not the fleet's cost: it excludes idle time between "
-      + "dispatches, provisioning, reboots and power.");
+    L.push(`**The capture machines consumed ${fh.total} on their most recent full run.** That counts `
+      + "only time spent actively reading a page: not waiting between pages, setup, restarts or "
+      + "electricity.");
   }
   L.push("");
-  L.push("### The recapture-speed plan");
+  L.push(`Re-reading every test page is the hidden cost behind most work we postpone, and we opened a `
+    + `${throughput?.open_issues ?? 5}-stage programme for it today, outside the release: nothing in it `
+    + "delays September. The appendix explains the cost and lists the stages.");
   L.push("");
-  L.push("A full corpus recapture is the unit of cost behind almost every decision this project defers "
-    + "— a cache-key change, a settings pin, following a browser version, a probe-ordering fix. It is "
-    + `now a milestone of its own${throughput ? ` (\`${THROUGHPUT}\`, ${throughput.open_issues} open)` : ""}`
-    + ", filed today, owned by the fleet driver, and deliberately **not** a release blocker.");
+  L.push("### We recommend buying nothing yet, and one number would change that.");
   L.push("");
-  L.push("| stage | what it decides |");
-  L.push("|---|---|");
-  L.push("| Explain the 3.9x | 12.4 s per capture is documented; ~48.7 s is measured. Until the phase "
-    + "table exists, nobody knows which part of that is irreducible screen-reader round-trips and which "
-    + "is waits we control — and only the second kind is buyable. |");
-  L.push("| The scaling shard | 49 cases at ten boxes and at five, alternating, cache off. **The "
-    + "falsifier is stated in advance:** if the per-capture median RISES at ten, something shared is "
-    + "contending and more machines are the wrong purchase. |");
-  L.push("| The target | derived from the phase table, never from a wish. |");
-  L.push("| The fixes | each accepted only by the gate that can tell *faster* from *captured less*. |");
-  L.push("| The hardware decision | with the curve and the post-fix cost attached. |");
-  L.push("");
-  L.push("### Purchase decision pending");
-  L.push("");
-  L.push("**More capture hardware. The current answer is NO, and the number that would change it is "
-    + "the per-capture median at ten boxes versus five.** If it is unchanged, machines buy throughput "
-    + "linearly and the purchase is arguable. If it rises, they do not, and this closes as a no with "
-    + "the curve as the reason. The last time this fleet's scaling was measured — on different "
-    + "hardware — throughput FELL as workers were added, and the cause was disk contention rather than "
-    + "anything more machines would fix.");
-  L.push("");
-  L.push("**One correction the board should carry**, because it is the figure most likely to be "
-    + "repeated: *twelve protocol bumps in 32 days* is a rate of BUMPS, not of recaptures. Measured "
-    + "against the captures on disk, five of those protocol versions have essentially no captures at "
-    + "all — most bumps never forced a full recapture, and batching is already being done deliberately. "
-    + "The true recapture rate is being measured and is expected to be several times lower.");
+  L.push("**The number is how long one page takes to record with ten machines running against five.** "
+    + "Unchanged, and machines buy speed in proportion. Higher, and they do not — which is what happened "
+    + "last time, on older hardware, where they competed for the same disk. We wrote that down in advance "
+    + "as the result that would disprove buying.");
   return L.join("\n");
 }
 
-function section6(d) {
+/** The source table: every figure the body states, with where it came from. */
+function sourceTable(d) {
   const rows = [];
   const push = (what, value, source) => rows.push(`| ${what} | ${value} | ${source} |`);
-  push("First publish, due", d.release?.due_on?.slice(0, 10) ?? "no date",
-    "the GitHub milestone; every move logged on it");
-  push("Blockers open on it", String(d.open.filter((i) => i.milestone?.title === MILESTONE).length),
-    "GitHub Issues API");
-  push("Issues open, all milestones", String(d.open.length), "GitHub Issues API");
-  push("Issues closed in this window", String(d.closed.length), "GitHub Issues API");
-  push("Merges to `main` in this window", String(d.merges.length),
-    `\`git log main --merges --since=${d.since}\` — the window is stated because two correct counts `
-    + "over different windows read as a disagreement");
-  push("Local `main` vs `origin/main`",
-    d.unpushed === null ? "could not be compared" : `${d.unpushed} commit(s) ahead`,
-    "`git rev-list --count origin/main..main`, checked rather than assumed");
-  push("Commits with the wrong author", String(d.strays.length),
-    "`git log --format=%ae`; cause diagnosed, history kept by decision");
-  push("Last gate result", d.latestGate ? `\`${d.latestGate.command}\`${d.gateIsFresh ? "" : " (STALE)"}`
-    : "**not reported**",
-    d.latestGate ? `run by \`${d.latestGate.reportedBy}\` at ${d.latestGate.at}, output recorded verbatim`
-      : "no gate output has been recorded; this document does not run gates itself, because a local "
-        + "corpus copy is only as fresh as its last sync");
-  push("Fleet hours", d.fleetHours?.status === "not instrumented" ? "**not instrumented**"
-    : `${d.fleetHours.total}`,
+  push("First public release, planned date", d.release?.due_on ? longDate(d.release.due_on) : "no date",
+    "the project's issue tracker, on the release milestone; every change of this date is logged against "
+    + "it (GitHub milestone `v0.1.0 — first publish`)");
+  push("Pieces of work blocking that release",
+    String(d.open.filter((i) => i.milestone?.title === MILESTONE).length),
+    "the project's issue tracker (GitHub Issues API)");
+  push("Open work items in total", String(d.open.length), "the project's issue tracker");
+  push("Work items closed in this period", String(d.closed.length), "the project's issue tracker");
+  push("Saved changes merged in this period", String(d.merges.length),
+    "the project's own version history, over the stated window — two correct counts over different "
+    + `windows read as a disagreement, so the window is named (\`git log main --merges --since=${d.since}\`)`);
+  push("Unpublished local changes",
+    d.unpushed === null ? "could not be compared" : `${d.unpushed} change(s)`,
+    "compared directly against the published copy, checked rather than assumed "
+    + "(`git rev-list --count origin/main..main`)");
+  push("Changes carrying the wrong author", String(d.strays.length),
+    `the project's own version history, over the SAME window as the merge count above (since `
+    + `${d.since}); the cause is diagnosed and the record is kept by decision`);
+  push("Most recent automated check result",
+    d.latestGate ? `${d.latestGate.command}${d.gateIsFresh ? "" : " — older than this report's window"}`
+      : "**not reported**",
+    d.latestGate
+      ? `run by the engineer who owns the machines at ${d.latestGate.at}, output recorded word for word`
+      : "no result has been recorded. This report does not run these checks itself: they read a library "
+        + "of recordings, and a local copy of that library is only as current as its last synchronisation "
+        + "— one measured here was 89 hours old and answered cleanly having examined a library that no "
+        + "longer existed");
+  push("Machine time consumed by the capture fleet",
+    d.fleetHours?.status === "not instrumented" ? "**not instrumented**" : String(d.fleetHours.total),
     d.fleetHours?.status === "not instrumented"
-      ? "printed rather than estimated; a total that cannot name a finished run is refused"
-      : `\`${d.fleetHours.run}\``);
-  push("V1 date", "**none — V1 is undefined**",
-    "`PLAN.md`, `README.md` and the backlog checked; a definition is proposed in section 2 for approval");
+      ? "printed rather than estimated. The report refuses a total that cannot name the finished run it "
+        + "came from, so no figure appears until one does"
+      : `measured from ${d.fleetHours.run}`);
+  push("Version one, planned date", "**none — version one is undefined**",
+    "the project's planning documents, all checked; a definition is proposed in section 2 for approval "
+    + "(`PLAN.md`, `README.md`, `docs/backlog.md`)");
 
-  return [
-    "## 6. The numbers, and where each came from",
+  return rows;
+}
+
+/** Why re-reading the library is expensive, and the programme opened for it. */
+function throughputBackground(L) {
+  L.push("### Why re-reading every test page is expensive, and the programme opened for it.");
+  L.push("");
+  L.push("The tool learns from several thousand recordings of a screen reader reading web pages. "
+    + "Changing anything that alters what those recordings contain means making them all again, which "
+    + "costs hours of machine time — and that is why a list of improvements sits deferred. The five "
+    + "stages are: explain a fourfold discrepancy between the 12.4 seconds our documentation claims per "
+    + "page and the 48.7 measured; measure what more machines actually give us, at ten against five, "
+    + "alternating; set a target from that measurement rather than from a wish; make the improvements, "
+    + "each accepted only by the check that can tell *faster* from *recorded less*; and decide on "
+    + "hardware with the numbers attached.");
+  L.push("");
+  L.push("**One figure to discard if the board has heard it: twelve format changes in thirty-two days "
+    + "is not twelve re-readings of the library.** Five of those versions produced almost no recordings "
+    + "at all, and grouping changes together is already done deliberately. We are measuring the true "
+    + "rate and expect it several times lower.");
+  L.push("");
+}
+
+function appendix(d) {
+  const L = [
+    "## Appendix: every figure above, and where it came from.",
     "",
-    "**Every figure on this page carries its source.** Where something is not measured it says *not "
-    + "instrumented* or *not reported*, and is never estimated to fill the row. That is the discipline "
-    + "the whole reporting rests on: this project's own record is a catalogue of correct values read "
-    + "from the wrong place, and today alone produced three more — a figure quoted from a commit "
-    + "message while the artefact sat on disk, a fixture value that became documentation, and a remedy "
-    + "inferred from a gate's wording without checking whether the mechanism existed. All three were "
-    + "caught by asking *where did this come from*, never by asking *is this right*.",
+    "**No number in this report is estimated.** Where something is not measured it says so, in those "
+    + "words. That discipline exists because this project's own record is a catalogue of correct values "
+    + "read from the wrong place, and today alone produced three more: a figure quoted from a summary "
+    + "note while the real measurement sat on disk, an example number invented for a test that was then "
+    + "copied into documentation, and a proposed fix inferred from an error message without checking "
+    + "whether the cause it named existed. All three were caught by asking where a number came from, "
+    + "never by asking whether it looked right.",
     "",
     "| | | source |",
     "|---|---|---|",
-    ...rows,
+    ...sourceTable(d),
     "",
-    `*Generated by \`npm run board:document\` from GitHub and git at ${new Date().toISOString()}. `
-    + "The daily GitHub edition is the data trail and shares this document's data layer, so the two "
-    + "cannot disagree.*",
-  ].join("\n");
+  ];
+  throughputBackground(L);
+  if (d.achievements.length > 0) {
+    L.push("### Evidence for each capability claimed in section 3.");
+    L.push("");
+    for (const a of d.achievements) {
+      L.push(`**${a.boardClaim ?? a.claim}**`);
+      L.push("");
+      L.push(`> ${a.evidence}`);
+      L.push("");
+    }
+  }
+  L.push(`*Generated from the project's issue tracker and version history at `
+    + `${new Date().toISOString()}. A daily engineering edition carrying the same figures is published `
+    + "alongside this document and shares its data source, so the two cannot disagree.*");
+  return L.join("\n");
 }
 
-export function document(d) {
-  const today = new Date().toISOString().slice(0, 10);
+export function document(d, summary) {
   return [
-    `# a11y-witness — board report, ${today}`,
+    `# a11y-witness — board report, ${longDate(new Date().toISOString())}`,
     "",
     "*a11y-witness drives a real screen reader through real navigation to assess the accessibility "
     + "failures that automated scanners structurally cannot reach. Nothing is published yet.*",
     "",
-    section1(d), "", section2(d), "", section3(d), "", section4(d), "", section5(d), "", section6(d),
+    ...(summary ? ["## Executive summary", "", summary.text, ""] : []),
+    section1(d), "", section2(d), "", section3(d), "", section4(d), "", section5(d), "", appendix(d),
   ].join("\n");
 }
 
 const PAGE_CSS = `
-  @page { size: A4; margin: 18mm 16mm 16mm; }
-  body { font: 10.5pt/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #16191d; }
+  /* TYPOGRAPHY IS WHERE THE TWO-PAGE BODY IS PAID FOR, not content.
+     The body reached 910 words with every repetition removed and all evidence moved to the appendix;
+     the next cut would have been a risk or a number, which the chairman's rules forbid. So the page is
+     set tighter instead: 14mm margins and 10pt/1.42 rather than 18mm and 10.5pt/1.5. Still comfortably
+     readable in print, and it buys roughly a third of a page. */
+  @page { size: A4; margin: 14mm 14mm 13mm; }
+  body { font: 10pt/1.42 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #16191d; }
   h1 { font-size: 20pt; margin: 0 0 2mm; letter-spacing: -0.01em; }
   h1 + p em, h1 + p { color: #5a6472; font-size: 9.5pt; margin: 0 0 6mm; }
-  h2 { font-size: 13pt; margin: 9mm 0 2mm; padding-top: 2mm; border-top: 1.5px solid #16191d;
+  h2 { font-size: 12.5pt; margin: 6.5mm 0 2mm; padding-top: 2mm; border-top: 1.5px solid #16191d;
        break-after: avoid; }
-  h3 { font-size: 11pt; margin: 5mm 0 1.5mm; break-after: avoid; }
-  p, li { margin: 0 0 2.5mm; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p, li { margin: 0 0 2mm; }
   ul, ol { margin: 0 0 3mm; padding-left: 5mm; }
   strong { font-weight: 650; }
   table { border-collapse: collapse; width: 100%; margin: 2mm 0 4mm; font-size: 9pt;
           break-inside: avoid; }
-  th { text-align: left; border-bottom: 1.2px solid #16191d; padding: 1.6mm 2mm; vertical-align: top; }
-  td { border-bottom: 0.4px solid #ccd2da; padding: 1.6mm 2mm; vertical-align: top; }
+  th { text-align: left; border-bottom: 1.2px solid #16191d; padding: 1.3mm 2mm; vertical-align: top; }
+  td { border-bottom: 0.4px solid #ccd2da; padding: 1.3mm 2mm; vertical-align: top; }
   code { font: 9pt/1.4 ui-monospace, "SF Mono", Menlo, monospace; background: #f1f3f6;
          padding: 0.3mm 1mm; border-radius: 2px; }
   pre { background: #f1f3f6; padding: 2.5mm 3mm; border-radius: 3px; overflow-x: auto;
@@ -341,6 +347,31 @@ const PAGE_CSS = `
 
 // NOTHING RUNS ON IMPORT -- see the note in `board-report.mjs`. `document()` stays exported above
 // so the renderer test can build a real document without rendering a PDF or touching GitHub.
+/** THE SUMMARY GATES THE EDITION, and a missing one is a MISSING EDITION rather than a summary-less
+ * document. A summary assembled from the sections below it is precisely what the chairman's third rule
+ * forbids, so there is no fallback to generate one -- the only way to publish is for a person to have
+ * written it. Returns the summary, or exits.
+ */
+function requireSummary(publishing) {
+  const today = new Date().toISOString().slice(0, 10);
+  const summary = summaryFor(today);
+  if (publishing && !summary) {
+    console.error(`REFUSING to render: no executive summary for ${today}.\n\n`
+      + `Write at most ${SUMMARY_WORDS} words in docs/board/summaries/${today}.md, answering three `
+      + "things: are we on the date, what changed since yesterday, what must the board decide today.\n"
+      + "It is written by hand, per edition, and is NOT assembled from the sections below it -- a "
+      + "machine-written summary is the thing the chairman's rules forbid.\n"
+      + "Nothing was written. A missing summary is a missing edition.");
+    process.exit(5);
+  }
+  if (summary && summary.words > SUMMARY_WORDS) {
+    console.error(`REFUSING to render: the summary for ${today} is ${summary.words} words, over the `
+      + `${SUMMARY_WORDS}-word cap. Cut it; that cap is what makes it a summary.`);
+    process.exit(5);
+  }
+  return summary;
+}
+
 function main() {
   refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release"],
     { entry: import.meta.url, command: "npm run board:document" });
@@ -348,7 +379,9 @@ function main() {
   const argv = process.argv.slice(2);
   const flagOf = (n) => argv.find((a) => a.startsWith(`${n}=`))?.split("=").slice(1).join("=");
 
-  const md = document(collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString()));
+  const summary = requireSummary(argv.includes("--pdf") || argv.includes("--release"));
+  const md = document(collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString()),
+    summary);
 
   if (!argv.includes("--pdf")) {
     process.stdout.write(md + "\n");
@@ -369,15 +402,25 @@ function main() {
         + "unreviewed. Stated here rather than left for a reader to discover.*"
       : md;
 
-    // NOT `runs/`. That directory is shared -- often a symlink to the corpus tree -- and a guard is
-    // landing that makes every `runs/` writer askable. A board PDF written every morning would be a writer
-    // nobody remembered when that guard was designed. Same directory as the launchd job's log, which is
-    // where a scheduled agent's output belongs on macOS anyway.
+    // WHERE THE CHAIRMAN LOOKS, which is the only requirement this path has.
+    //
+    // It was `~/Library/Logs/a11y-witness`, beside the scheduled job's log, on the reasoning that a
+    // LaunchAgent's output belongs there on macOS. That reasoning was about the LOG. A board document is
+    // not a log -- it is a deliverable a person opens, and a deliverable filed where its reader does not
+    // look has not been delivered. So: `~/Documents/a11y-witness-board-reports/`, one file per date. The
+    // log stays in `~/Library/Logs/a11y-witness/`, where the original reasoning does still hold.
+    //
+    // NOT in the repository, and deliberately: `runs/` is shared -- often a symlink to the corpus tree --
+    // and a guard is landing that makes every `runs/` writer askable, so a PDF written every morning
+    // would be a writer nobody remembered when that guard was designed.
     const outDir = flagOf("--out")
-      ?? path.join(process.env.HOME ?? ROOT, "Library", "Logs", "a11y-witness");
+      ?? path.join(process.env.HOME ?? ROOT, "Documents", "a11y-witness-board-reports");
     mkdirSync(outDir, { recursive: true });
     const stem = `a11y-witness-board-${new Date().toISOString().slice(0, 10)}`;
-    const html = path.join(outDir, `${stem}.html`);
+    // THE INTERMEDIATE HTML DOES NOT GO WHERE THE CHAIRMAN LOOKS. It is Chrome's input, not a
+    // deliverable, and "one file per date" means one file: a folder holding two files per day, one of
+    // which opens as unstyled markup, is a folder somebody has to learn to read past.
+    const html = path.join(mkdtempSync(path.join(tmpdir(), "board-")), `${stem}.html`);
     const pdf = path.join(outDir, `${stem}.pdf`);
     writeFileSync(html, `<!doctype html><meta charset="utf-8"><title>${stem}</title>`
       + `<style>${PAGE_CSS}</style>${toHtml(stamped)}`);
