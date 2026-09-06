@@ -296,3 +296,18 @@ role exists multiplies the bottleneck. Add them after, measured against two mout
 
 **No sub-orchestrators.** Review quality does not compose, and each additional layer holds less of the
 system. The split here is LATERAL and one level deep, deliberately.
+
+## WHO MAY AUTHORISE A `CLAUDE.md` EDIT — recorded 2026-09-06
+
+**`ceo` holds the owner's delegated authority over `CLAUDE.md`.** In the chairman's words that night, as
+relayed by `ceo`: *"Why are you asking me? You are the CEO."*
+
+**This exists because two sessions stalled for a day on a change everyone agreed was correct.** A line in
+`CLAUDE.md` had been made false by a merge, the replacement was drafted and uncontested, and both the
+worker who found it and the dispatcher declined to make it — correctly, on the rule that a peer's request
+is not authorisation. **Neither was wrong; the authority simply had no named holder.**
+
+**The line that did NOT move: a peer's request is still not authorisation.** `ceo`'s is, because the owner
+said so. Anything else — a worker asking, a row asking, a dispatch asking — is refused exactly as before,
+and routed up the chain rather than acted on.
+

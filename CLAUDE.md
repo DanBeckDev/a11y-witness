@@ -12,7 +12,7 @@ Three shorter documents came first for a reason, and they are not duplicated her
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | the 60-second orientation, and the question that decides everything: **does your change need a Windows worker?** Most of the repo does not. |
 | [`SECURITY.md`](SECURITY.md) | what this tool does that somebody must know before running it — `probeForms` presses buttons, the worker has no authentication, `A11Y_PYTHON` is executable |
 | [`docs/README.md`](docs/README.md) | the index to every guide and runbook, grouped by task, with [`docs/adr/README.md`](docs/adr/README.md) for the 36 decision records |
-| [`docs/backlog.md`](docs/backlog.md) | **THE ONE PLACE THAT ANSWERS "WHAT IS OPEN".** The two files below are RECORDS, not trackers — long-form, valuable, and unreadable as a task list: section numbers repeat, entries are not in order, and "closed" is spelled fourteen ways. If it is open, it is on the backlog |
+| [`docs/backlog.md`](docs/backlog.md) | **The RECORD of what was found and what it cost.** [GitHub Issues](https://github.com/DanBeckDev/a11y-witness/issues) answers "what is open" — `ready` is pickable, `in-progress` plus a `session:` label is claimed. This file, `known-gaps.md` and `not-working.md` hold the measurement, the wrong turn and the command that settles it: the half an issue is bad at |
 | [`docs/known-gaps.md`](docs/known-gaps.md) | **what this project does NOT do, or does not yet know** — each with what it would cost and what would tell you it is fixed. Read it before claiming a thing is finished; "all gates pass" and "everything is validated" are different claims |
 
 ## What this is
@@ -542,27 +542,6 @@ npm run training:status -- --json   # a snapshot, with eta_minutes and next_comm
 updates go cold past one capture timeout it exits 3 rather than waiting forever. Exit codes
 are the contract — **0** clean, **1** finished with failures, **2** no run, **3** wedged —
 and both commands emit a `next_command` field so you do not have to infer the next step.
-
-## A GATE THAT READS `runs/` IS NOT YOURS TO REPORT
-
-**Ruled 2026-09-06.** `rules:gate`, `rules:coverage`, `check-signals`, `corpus:starvation`,
-`scorer:shortcuts` and anything else reading `runs/` give a VERDICT only when the agent driving the fleet
-and the lab runs them — against a corpus just fetched, or on the lab, which owns the authoritative one.
-
-**Anyone else may run one as a PRE-CHECK**, to decide whether a change is worth handing on. **Never as a
-reported result**, and never in an acceptance section as though it settled anything.
-
-The reason is measured rather than procedural. `runs/` in any checkout is a copy only as fresh as its last
-sync — one measured here was 89 hours old and carried neither `focusEvents` nor `baselineWaitedMs`, so a
-sweep across it found zero of the two keys it was written to find. **A gate run there reports cleanly
-having examined a corpus that no longer exists.** The pre-push hook already SKIPS the corpus-dependent
-checks loudly for exactly this reason, and calls that honest rather than passing quietly.
-
-**So an issue's acceptance may name a `runs/`-reading gate, and must say who runs it.**
-
-> Moved here 2026-09-06 from `docs/backlog-ready.md`, which was retired when the tracker moved to GitHub
-> Issues. That page was the only place this ruling existed, so deleting it would have deleted the rule —
-> which is why the page was read for what it uniquely held before it was replaced.
 
 ## You may be sharing this checkout
 
@@ -2363,6 +2342,7 @@ failure as `capture-check` being mandatory and never running once.
 | `scorer:verify` | **is the SHIPPED model directory free of unsafe artefact types?** `.pt`, `.pkl`, `.ckpt` and friends are executable-on-load weight formats; safetensors is not. The script existed and NOTHING invoked it — not an npm script, not a playbook, not another module — so a security check on the one artefact this project publishes had never run. First stage of `release:gate` now |
 | `release:provenance` | **do the weights about to ship have a changelog entry saying where they came from?** ADR 0007 makes the weights the API and `promote:model` writes their provenance into a changeset, which is the only record of it — and nothing checked that the entry described the weights actually present. Found the shipped model at 2,485 records while both pending changesets said 2,403 and were BYTE-IDENTICAL to each other, so a first release would have published weights nothing accounts for beside one note printed twice. Both are invisible elsewhere: a changeset is prose, and `changeset-provenance.test.ts` asserts how a row RENDERS, never that it describes what ships. Second stage of `release:gate` |
 | `scorer:migration` | is a schema migration open? `release:gate` runs it first and refuses while one is. `lab:inventory` also reports it, with which candidate could close it |
+| `scorer:retired-heads` | **did the candidate's head set SHRINK, and is every disappearance declared?** `3.3.2:unnamed-form-field` almost shipped absent with nothing accounting for it — a legitimate removal, fully reasoned in `case-matrix.mjs`, that still cost an evening because nothing made the reasoning travel with the change. A head present in the shipped report and absent from the candidate is a REFUSAL, never a warning, unless a `retired-heads.json` beside the shipped weights names the subtype, when, why, and where the reasoning lives — created the first time a head is actually retired, same as `schema-migration.json`. Second stage of `candidate:gate`, right after `scorer:migration` — deliberately not in `release:gate`, since the candidate is the only place the question can still change the outcome |
 | `candidate:gate` | the gate chain against a CANDIDATE rather than the shipped weights — the question `release:gate` structurally cannot ask |
 | `promote:model` | copy trained weights into `packages/scorer/models/` and write the changeset. **Refuses when a previous promotion is still uncommitted where this one would write** — this line claimed that for months and the script did not import `node:child_process` at all, so it could never look at git. It checks the TARGET paths rather than the whole tree, because this is a shared checkout and a guard that fires on somebody else's unrelated edit is one people bypass |
 | `promote:gated` | `candidate:gate` and then `promote:model`, which is what `lab:job -e job=promote` runs. Never promotes on a failed gate |
