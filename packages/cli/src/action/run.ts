@@ -1,7 +1,7 @@
 // The Action's entry point: read a witness run's JSON, write the summary, decide the exit code.
 //
-//   tsx packages/cli/src/action/run.ts --result run.json [--fail-on never|any|blocker|serious|moderate|minor]
-//                         [--summary-out summary.md] [--marker a11y-witness]
+//   tsx packages/cli/src/action/run.ts --result=run.json [--fail-on=never|any|blocker|serious|moderate|minor]
+//                         [--summary-out=summary.md] [--marker=a11y-witness]
 //
 // Deliberately separate from `src/cli.ts`. The CLI's job is to capture and judge; this one's job is to
 // present that to GitHub and decide whether the check passes. Keeping them apart means the Action's
@@ -12,9 +12,12 @@ import { resolve } from "node:path";
 
 import { renderSummary, shouldFail, type FailOn, type RunResult } from "./summary.js";
 import { taskVerdictLabel } from "@a11y-witness/judge";
+import { flagValue } from "@a11y-witness/worker-fleet/cli-flags";
 
-const arg = (name: string, fallback?: string): string | undefined =>
-  process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
+// audit §9 "argv parsing": this was its own copy of the fifteen-file idiom. `flagValue` is the shared,
+// tested extraction; `?? fallback` stays here because defaulting is this call site's business, not the
+// extractor's.
+const arg = (name: string, fallback?: string): string | undefined => flagValue(process.argv, name) ?? fallback;
 
 const resultPath = arg("result");
 if (!resultPath) {
