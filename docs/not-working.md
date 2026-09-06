@@ -2014,3 +2014,57 @@ being watched.
 
 A second deny-list. Adding one to `repeat-capture.mjs` fixes today's symptom and guarantees the fourth
 drift — it is precisely what was done last time, and this entry is what that cost.
+
+## 26. A WRONG MECHANISM READS AS UNDERSTOOD, AND UNDERSTOOD IS WHAT STOPS INVESTIGATION
+
+Found 2026-09-06, in a row that had been read by at least three people and briefed from twice.
+
+### The instance
+
+`case-matrix.mjs`'s RULED OUT block explained why `installTargetMatch: "fallback"` on both variants was not
+the culprit for the defect under investigation. Its conclusion was right. Its **mechanism** was not:
+
+> *"a synthetic page is requested as `/bad.html` and lands on `/bad`, so `choosePageTarget`'s path
+> comparison misses on EVERY synthetic capture"*
+
+`samePath` normalises the extension, and has since 2026-08-25 — its own comment records the incident that
+added it, when `serve` resolving `/bad.html` to `/bad` rejected two correct captures and a whole run
+reported 0/3. One command settles it:
+
+```
+$ node -e "import {samePath} …"
+  MATCH  /focus-panel/bad.html  vs  /focus-panel/bad
+  differ /x.html  vs  /y
+```
+
+### Why this is not the stale-record defect, and is worse
+
+A STALE row reads as **done**. Somebody re-reading it may still check, because "done" invites the question
+*is it still true?*
+
+A row with a WRONG MECHANISM reads as **understood** — and understood is a closed question. Nobody re-runs
+the check, because the row already contains an explanation, and an explanation is what an investigation
+stops at. The row was cited as settled context in two separate briefs; both times the citation was
+accurate, and both times it pointed at a cause that could not produce the effect.
+
+**The cost is not the wrong sentence. It is the investigation that never happened**: the real cause of that
+`fallback` went unexamined for as long as a plausible one was written next to it, and is still unknown.
+
+### What to do instead
+
+- **A mechanism is a claim, and a claim in a record needs the command that shows it** — the same standard a
+  finding needs. `samePath`'s own comment has one; the row citing it did not.
+- **When a mechanism is refuted, keep the conclusion if it survives and REOPEN the cause explicitly.** The
+  corrected row says the fallback was not the culprit (still true) and that its cause is now unknown (newly
+  true). A row that is honestly unexplained is more useful than one that is confidently wrong, because only
+  the first gets looked at.
+- **Suspect a row hardest when you are about to build on it.** The two briefs that cited this one were the
+  moments the check was cheapest and most valuable, and neither ran it.
+
+### The sibling shape, one layer along
+
+The same week: `ls -ld node_modules/@a11y-witness/judge` answered *"is this a symlink"* when the question
+was *"to WHICH checkout"*, and a marker searching for `corpusReadable(` did not match `labCorpusReadable(`
+and so reported five just-fixed files as unguarded. **All three are a correct method against the wrong
+question, and all three read as a confident clean.** The tell is the same: an answer arrived without the
+question being restated.
