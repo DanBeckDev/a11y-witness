@@ -2381,10 +2381,26 @@ The same signal as this section's own original entry: the `N of M carry a census
 wrong direction, or a new finding appearing on a page where `submitNavigatedTheDocument` reads true — which
 would mean the widened check let a genuinely different document through despite both signals saying so.
 
-## 42. PARTIAL — 2.4.7 cannot see an F55 on whatever element held focus when the listener was installed
+## 42. CODE FIX LANDED, VERIFICATION PENDING RECAPTURE — 2.4.7 could not see an F55 on whatever element held focus when the listener was installed
 
 **Created by a fix, deliberately, 2026-09-06.** Recorded the same day as the change that caused it, because
 a limitation a commit introduces is the one most likely to be forgotten by the person who introduced it.
+
+**UPDATED 2026-09-06, `agent/focus-listener-before-focus`, two commits.** The exclusion below is REMOVED
+from the code — `installFocusEventListenerBeforeFirstFocus` (`capture-core.mjs`) now installs the listener
+before the capture's own first `anchorToTop()`, ahead of the sweep and every focus-walking probe, so
+`log[0]` is a real focusin the listener actually witnessed rather than a moment nobody was recording; the
+`i === 0` exception in `rules.ts`'s `focusLossEvidence` is deleted, not kept alongside. `npm test` is green
+including the three F55 shape regression tests (`rules.test.ts`), and the two changes are separate,
+independently revertible commits for exactly the reason the paragraph below once stated: this unit cannot
+capture, so the fleet recapture and the `log[0].type === "focusin"` check against fresh real-page evidence
+are still owed, by the orchestrator, before this section is CLOSED rather than merely fixed-in-source. If
+that check finds the listener fix did not take, the `rules.ts` deletion commit reverts alone and this
+section returns to PARTIAL with the trade restored — the two commits exist so that is possible without
+redoing the other.
+
+**The rest of this section is the ORIGINAL record of the trade being closed**, kept for the reasoning
+rather than rewritten, per this file's own practice of recording a correction in place.
 
 ### What is not covered
 
