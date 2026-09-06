@@ -77,6 +77,7 @@ import { protocolVerdict, servedProtocols } from "../../worker-fleet/src/protoco
 // that cannot exist there.
 import { workerSourceDir } from "../../nvda-worker/src/code-version.mjs";
 import { inventoryWorkerUrls } from "../../worker-fleet/src/fleet-env.mjs";
+import { requireControlPlaneHost } from "./control-plane-host.mjs";
 
 /**
  * `--serial=` and `--limit=` decide how many of twelve machines an operation touches at once, and
@@ -93,7 +94,8 @@ refuseUnknownFlags(
 /** How often to ask the control plane how its unit is doing. A poll INTERVAL, never a sleep-and-hope. */
 const FOLLOW_POLL_MS = 5_000;
 
-const CONTROL_PLANE = process.env.A11Y_CONTROL_HOST || "192.168.1.172";
+// No default: see control-plane-host.mjs -- this used to fall back to a real, specific LAN address (#83).
+const CONTROL_PLANE = process.env.A11Y_CONTROL_HOST;
 /** The playbooks, in THIS checkout — where a bootstrap's source file actually is. */
 const ANSIBLE_DIR = resolve(import.meta.dirname, "../ansible");
 const CONTROL_KEY = process.env.A11Y_PVE_KEY || `${process.env.HOME}/.ssh/a11y-pve_ed25519`;
@@ -455,6 +457,7 @@ try {
 }
 
 async function main() {
+  requireControlPlaneHost(); // throws before anything else if A11Y_CONTROL_HOST is unset -- see #83
   const { chosen, limitFlag, serialFlag, ref, allowEdgeDowngrade } = parseArgs();
   await guardProtocolChange(chosen);
 
@@ -463,6 +466,28 @@ async function main() {
   // the remote's resolved SHA against the branch NAME, which can never match, and refused a control plane
   // that was already correct.
   const expected = execFileSync("git", ["rev-parse", ref], { encoding: "utf8", env: sandboxGitEnv() }).trim();
+
+  // A SHA IS NOT A REF THIS CAN DEPLOY, AND THE COMMENT SAYING SO WAS NOT A GUARD.
+  //
+  // `deploy.yml` fast-forwards each guest with `git merge --ff-only origin/{{ a11y_git_ref }}`, so the
+  // ref must be something `origin/<ref>` resolves to. `localBranch()`'s comment has recorded that since
+  // the run it cost -- "this repo has already spent a run on `-e ref=<sha>` becoming an unresolvable
+  // `origin/<sha>`" -- and it guarded only the DEFAULT. Passing `--ref=<sha>` explicitly walks straight
+  // past it, and 2026-09-06 spent another run doing exactly that: the checkout SUCCEEDS, the merge fails
+  // with a git message naming neither the flag nor the reason, and the deploy is a stack trace.
+  //
+  // A fact recorded in a comment is a fact somebody has to remember.
+  if (/^[0-9a-f]{7,40}$/i.test(ref)) {
+    process.stderr.write([
+      `REFUSING: --ref=${ref} looks like a COMMIT.`,
+      "This deploys by fast-forwarding each guest to `origin/<ref>`, which a commit does not resolve to.",
+      "The checkout would succeed and the merge would fail on a message that names neither the flag nor",
+      "the reason.",
+      "  Pass a BRANCH name. To deploy one commit, push it as a branch first.",
+      "",
+    ].join("\n"));
+    process.exit(2);
+  }
 
   process.stdout.write(`\n  control plane: ${CONTROL_PLANE}   playbook: ${chosen}\n`
     + `  ref: ${ref} (${expected.slice(0, 12)})\n\n`);

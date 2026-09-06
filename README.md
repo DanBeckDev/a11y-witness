@@ -15,7 +15,7 @@ The findings it is *for* are the ones a rule scanner structurally cannot produce
 *Asserted* — the evidence decides it, so the tool states the criterion is not satisfied. A control that
 announced `collapsed`, was activated, and still announces `collapsed` has contradicted itself; there is no
 second reading. These come from the deterministic rule layer, which is exact on every criterion it owns with
-**zero false positives across 1,183 conformant records**, re-verified by `npm run rules:gate` on every push.
+**zero false positives across 1,405 conformant records**, re-verified by `npm run rules:gate` on every push.
 
 *Referred* — the evidence is suggestive and the judgement is a human's. Whether a link named "Details" is
 adequate depends on context WCAG itself says may be off-screen; the tool reports `cantTell` in ACT and EARL's
@@ -167,25 +167,9 @@ jobs:
 
 That is the whole thing. **No API key and no account** — `judge-backend` defaults to `local`, this
 project's own trained scorer, which ships in the repo and never sends your page anywhere. Findings appear as
-a PR comment; `fail-on` decides whether *findings* fail the build, and defaults to `never`. Read the known
-issue below before adding this to a pipeline you care about. `.github/workflows/action-smoke.yml` runs
-exactly this shape against two W3C pages on every push, as a consumer would — which is how the issue
-below is known.
-
-> **KNOWN ISSUE, 2026-09-06: this does not currently work on a real page, and no setting works around it.**
-> The scorer that ships in the repo and the code that loads it disagree about their schema, so a run does
-> all the real work — axe-core, then a full screen-reader capture — and then exits 1 at the judging step.
-> Tracked as [#4](https://github.com/DanBeckDev/a11y-witness/issues/4) — which is where this gets fixed and
-> where this paragraph gets deleted.
->
-> **You get nothing, not a partial result.** The axe-core layer genuinely runs and finds what it finds, but
-> the step fails before anything is written, so no PR comment is posted and no JSON is saved. `fail-on:
-> never` does not protect you: it governs whether findings fail the build, and this is the step itself
-> failing.
->
-> How this is known, so you can check whether it is still true rather than trusting this paragraph:
-> `gh run list --workflow=action-smoke.yml`. That workflow runs the snippet above on every push. Its last
-> green run was 2026-09-03; every run since has failed this same way.
+a PR comment; `fail-on` decides whether *findings* fail the build, and defaults to `never` so adding it
+cannot break your pipeline on day one. `.github/workflows/action-smoke.yml` runs exactly this shape
+against two W3C pages on every push, as a consumer would.
 
 **→ [Full getting-started guide](./docs/getting-started.md)** — including running it locally.
 

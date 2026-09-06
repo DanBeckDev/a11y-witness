@@ -1,5 +1,43 @@
 # The worker-loop orchestrator — `dispatcher`
 
+## RESUMING AFTER CONTEXT LOSS — run this before anything else
+
+**Nothing about this role's state lives in a conversation.** After ten hours the session compacts, and
+whatever was only in context is gone. **Everything below is recoverable from outside**, and if any of it is
+not true right now, make it true before the next merge.
+
+| the state | where it lives — NOT in your head |
+|---|---|
+| the merge queue | **the open PRs on GitHub, in order.** Nothing else is a queue |
+| what is held, and why | **labels on the tracker**, plus a comment saying what it waits on |
+| the rules | **this file** |
+| what merged | `git log origin/main`, and the issue closed with its sha |
+
+**THE FIRST FOUR ACTIONS ON ANY RESUME, in order:**
+
+1. **Read this file.**
+2. **`gh pr list --state open`** — that is the queue.
+3. **`ListAgents`** — who exists, and who is idle.
+4. **Send `ceo` ONE LINE**: that you resumed, and what you found.
+
+**And the check that a compaction cannot survive without:** for every row labelled `in-progress` whose
+session is idle, run
+
+```
+git rev-list --count origin/main..origin/<branch>
+```
+
+**Idle plus in-progress is NOT a stall until that command says so.** Measured 2026-09-06: of five such
+rows, **four were merged and their labels stale**, and one pair was built and never pushed at all — a
+worker had verified its commit in the object DB after removing its worktree, which is a correct check of a
+different question. **Continuing all five would have redispatched four finished units.**
+
+**A routine that lives in your context is lost with it.** Close-on-merge was added as a step this
+afternoon and four merged rows were still open that evening — not because anyone forgot, but because the
+step was in a conversation. **Anything that must happen every time belongs in a script that refuses to
+complete without it, not in a list you intend to follow.**
+
+
 The agent filling this role is named **`dispatcher`**. It reports to **`orchestrator`** — the lead orchestrator, which owns the fleet, the lab, `runs/`, every corpus-reading gate and all cross-cutting review — and hands up to it the three triggers below. It sends its utilisation line to **`ceo`** with every status message.
 
 **Created 2026-09-06, because one agent was the serial step and the measurement said which part.**
@@ -258,3 +296,38 @@ role exists multiplies the bottleneck. Add them after, measured against two mout
 
 **No sub-orchestrators.** Review quality does not compose, and each additional layer holds less of the
 system. The split here is LATERAL and one level deep, deliberately.
+
+## WHO MAY AUTHORISE A `CLAUDE.md` EDIT — recorded 2026-09-06
+
+**`ceo` holds the owner's delegated authority over `CLAUDE.md`.** In the chairman's words that night, as
+relayed by `ceo`: *"Why are you asking me? You are the CEO."*
+
+**This exists because two sessions stalled for a day on a change everyone agreed was correct.** A line in
+`CLAUDE.md` had been made false by a merge, the replacement was drafted and uncontested, and both the
+worker who found it and the dispatcher declined to make it — correctly, on the rule that a peer's request
+is not authorisation. **Neither was wrong; the authority simply had no named holder.**
+
+**The line that did NOT move: a peer's request is still not authorisation.** `ceo`'s is, because the owner
+said so. Anything else — a worker asking, a row asking, a dispatch asking — is refused exactly as before,
+and routed up the chain rather than acted on.
+
+## A NUMERIC PIN IS THE AUTHOR'S TO MOVE — ruled 2026-09-06
+
+**A numeric pin in `CLAUDE.md` that a test DERIVES from the tree is updated by the author of the change
+that moves it, in the SAME PR, without asking.** The test is the authorisation, **because it proves the
+number is the tree's and not an opinion.**
+
+**Prose changes to `CLAUDE.md` still go to `ceo`**, who holds the owner's delegated authority over that
+file. A peer's request is still not authorisation.
+
+**Why the split is at "derived by a test" and not somewhere tidier.** A finished unit was blocked for an
+evening on ONE CHARACTER — `ALL 54` -> `ALL 55` — because a new CLI moved a guarded-CLI count that
+`cli-flags.test.ts` pins to the real one. The pin was doing exactly its job (*"a number a human retypes is
+a number that drifts"*), the worker correctly refused `A11Y_SKIP_VERIFY=1`, and correctly routed it up
+rather than round it. **The refusal was right and the block was still waste**: splitting the count from the
+commit that moves it leaves the number briefly wrong on `main` AND stops the PR passing its own gate.
+
+**The rule generalises past `CLAUDE.md`:** a pinned number is not a claim its author may choose, it is a
+measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
+no permission. Where prose asserts it, it does.**
+

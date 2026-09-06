@@ -111,6 +111,31 @@ longer, because the time is a screen reader reading — it is not parallelisable
 large page can exhaust our capture budget, and if it does you will get a partial result that **says** it
 is partial rather than a short one that looks complete.
 
+## YOUR PAGE — the one section that is not written yet
+
+**Everything above is the path for the shape of page you have: one large marketing page, many images and
+links, a contact form, probably a consent banner. It is complete and you can follow it today.**
+
+This section is deliberately blank, and it is the only part of this page that is. It gets filled in when
+we have your URL, and it will hold three things nobody can write without it:
+
+- **The exact workflow file for your page**, with your URL and the `task` a visitor on it is actually
+  trying to do — not `Send an enquiry` as a placeholder, but the words that match a control on your page.
+- **Whether your page has a consent banner in the way**, checked before you spend the minutes. This is
+  the single thing most likely to waste the run, and it takes us one capture to answer.
+- **What your run actually produced, read alongside you** — which findings are assertions, which are
+  referrals, and which of the referrals were worth your attention. That last judgement is the one we are
+  asking you for, and it is easier to make with somebody who can point at the announcement each one rests
+  on.
+
+**Why it is empty rather than filled with an example.** A worked example against a site we chose would
+read as though the path had been walked, and it has not — not by anyone outside this project, which is
+the entire point of #38. **An empty section that says what goes in it is honest; a plausible example is
+not.**
+
+**Nothing above depends on this.** If you would rather just run it, the GitHub Actions route needs your
+URL and one line of `task`, and you will get a report.
+
 ## What we would like back
 
 Four questions, and short answers are better than considered ones:
@@ -135,8 +160,19 @@ polite yes.**
 **Does it send anything anywhere?** No. The tool talks to the page you point it at and the machine running
 it, and nothing else. No telemetry, no usage reporting, no call home, and no plan to add any.
 
-**How accurate is it?** On our own corpus of 1,398 conformant records the deterministic rules asserted no
-failures. That is a measurement of our corpus, not a claim about the web — which is exactly the gap your
-run helps close.
+**How accurate is it?**
+
+<!-- CLAIM:BEGIN -- checked by public-claim.test.ts against a gate result recorded in
+     docs/board/reported.json, exactly as the README's claim block is. This figure lived here as a
+     SECOND COPY for a while and went stale when the first one moved; that is why the markers exist. -->
+
+**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures, and on 84
+conformant real pages the same gate examined them and found them clean.** That real-page denominator
+excludes one page the gate cannot examine, which is listed with its reason.
+
+<!-- CLAIM:END -->
+
+Both are measurements of pages **we** chose, not a claim about the web — which is exactly the gap your run
+helps close. Your page is one we did not choose, which is the whole reason we are asking.
 
 **Is it a conformance certificate?** No. It is evidence about specific criteria on specific pages.

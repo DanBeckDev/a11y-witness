@@ -944,8 +944,8 @@ const submitNav = (from: string, to: string) => ({
 
 test("#30: a GET submit that only adds a query string did NOT navigate to another document", () => {
   const capture = submitNav(
-    "http://192.168.1.79:5050/focus-removed-on-receipt-order/bad",
-    "http://192.168.1.79:5050/focus-removed-on-receipt-order/bad?first=&second=&third=",
+    "http://203.0.113.79:5050/focus-removed-on-receipt-order/bad",
+    "http://203.0.113.79:5050/focus-removed-on-receipt-order/bad?first=&second=&third=",
   );
   assert.equal(submitNavigatedTheDocument(capture), false,
     "the form posted to itself; refusing the census of that page is the defect #30 describes");
@@ -955,20 +955,20 @@ test("#30: a submit that reaches a DIFFERENT PATH still counts as navigating awa
   // The direction that must not regress. If this ever returns false, the guard added this morning is gone
   // and a census taken on the destination page would be trusted as the origin page's.
   const capture = submitNav(
-    "http://192.168.1.79:5050/checkout/details",
-    "http://192.168.1.79:5050/checkout/confirmation?ref=A1",
+    "http://203.0.113.79:5050/checkout/details",
+    "http://203.0.113.79:5050/checkout/confirmation?ref=A1",
   );
   assert.equal(submitNavigatedTheDocument(capture), true);
 });
 
 test("#30: a submit that reaches another ORIGIN has left the document, however similar the path", () => {
-  const capture = submitNav("http://192.168.1.79:5050/search", "https://www.bing.com/search?q=x");
+  const capture = submitNav("http://203.0.113.79:5050/search", "https://www.bing.com/search?q=x");
   assert.equal(submitNavigatedTheDocument(capture), true,
     "same pathname, different host -- this is the wrong-page shape the URL guard exists to catch");
 });
 
 test("#30: identical from and to is not a navigation, and the query check does not invent one", () => {
-  const url = "http://192.168.1.79:5050/form/bad?first=";
+  const url = "http://203.0.113.79:5050/form/bad?first=";
   assert.equal(submitNavigatedTheDocument(submitNav(url, url)), false);
 });
 
