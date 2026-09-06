@@ -798,7 +798,8 @@ export function consentBanner(capture: CapturedAnnouncements): ConsentBanner {
 }
 
 /**
- * Was the CDP target a census mark came from ever confirmed to be the page this capture navigated to?
+ * Was the CDP target a census mark came from ever confirmed to be the page this capture navigated to? —
+ * and if not, WHY, in words rather than the bare token `fallback`.
  *
  * `docs/backlog.md`'s furniture-census row is the reason this exists: `bathingwaters.sepa.org.uk` and
  * `lbhf.gov.uk/council-tax` returned a byte-identical census because `choosePageTarget` took a Cookiebot
@@ -807,12 +808,25 @@ export function consentBanner(capture: CapturedAnnouncements): ConsentBanner {
  * this one's name, which every consumer of `census`/`dom` was trusting unconditionally.
  *
  * `targetMatch: "matched"` is the only outcome that PROVES the target: `choosePageTarget` confirmed its
- * path and query against the URL this capture navigated to. Both other outcomes need `candidates` to be
- * read at all — `targetMatch` alone conflates two situations that need opposite verdicts:
+ * path and query against the URL this capture navigated to.
  *
- *   candidates <= 1   nothing else this fallback COULD have picked; the only target is the right one
- *   candidates  > 1   a real second page-type target existed and neither one was confirmed -- the exact
- *                     shape of the bathingwaters/lbhf contamination
+ * **`"fallback"` is now ALWAYS suspect, regardless of `candidates`** — corrected 2026-09-06.
+ * `candidates <= 1` used to read as safe on the reasoning "nothing else this fallback COULD have picked;
+ * the only target is the right one". That held only while the one known benign cause of a `fallback` with
+ * a single candidate — a `.html`-extension or trailing-slash mismatch — was still open; `sameDocument`'s
+ * `samePath` normalises exactly that now, so a `fallback` that survives it is no longer a normalisation
+ * artefact. The surviving cause is the SAME single tab having navigated to a different real document mid-
+ * capture: `probeRouteChange` (2.4.2) activates a link to test it, and on two real GOV.UK Design System
+ * pages that link led to the site's own `/cookies` settings page — both post-navigation censuses read
+ * `fallback, candidates: 1` and were BYTE-IDENTICAL to each other despite the requested pages differing by
+ * 11 headings and 136 links. `candidates <= 1` describes that exactly as well as it describes safety, so it
+ * can no longer decide the question. Measured prevalence: 20 of 20 real pages sampled, 0 of 2,796 synthetic
+ * (`known-gaps.md` §40) — the synthetic corpus never exercises a route-change probe that lands off-page.
+ *
+ * `"no-expected-url"` is a genuinely different state: no comparison was even ATTEMPTED (a call outside an
+ * active capture, e.g. `/diagnostics`), so there is nothing here to have failed. `candidates` remains the
+ * deciding factor there — a real second page-type target with nothing to compare it against is still the
+ * bathingwaters/lbhf shape.
  *
  * `candidates` absent while `targetMatch` is present is a capture taken in the gap between the two
  * shipping — this function cannot vouch for it, so it reads the SAME as `> 1`: suspect. `targetMatch`
@@ -820,15 +834,52 @@ export function consentBanner(capture: CapturedAnnouncements): ConsentBanner {
  * this existed -- not suspect -- because there is nothing here to doubt it WITH; every historical capture
  * was already being trusted, and this field cannot retroactively accuse one it was never computed for.
  *
- * EXPORTED so `check-real-page-findings.ts`'s human-facing report can ask the identical question of the
- * RAW mark -- the one place that must see a suspect census even though `pageCensus`/`domCensus` correctly
- * hide its numbers. One rule, not two: a second copy here is exactly the "fact stated twice" shape this
- * repo keeps paying for.
+ * EXPORTED (both this and `censusSuspectReason`) so `check-real-page-findings.ts`'s human-facing report can
+ * ask the identical question of the RAW mark -- the one place that must see a suspect census even though
+ * `pageCensus`/`domCensus` correctly hide its numbers. One rule, not two: a second copy here is exactly the
+ * "fact stated twice" shape this repo keeps paying for.
  */
 export function censusTargetIsSuspect(record: { targetMatch?: unknown; candidates?: unknown }): boolean {
-  if (record.targetMatch === undefined) return false;
-  if (record.targetMatch === "matched") return false;
-  return typeof record.candidates !== "number" || record.candidates > 1;
+  return censusSuspectReason(record) !== null;
+}
+
+/**
+ * The `"fallback"` half of `censusSuspectReason`, split out purely to keep that function's complexity
+ * under gate -- it is not a second concept, it is the same one written out. `"fallback"` is ALWAYS
+ * suspect (see `censusTargetIsSuspect`'s header); this only decides which WORDS say so.
+ */
+function fallbackReason(
+  candidates: number | undefined, targetUrl: string | undefined, expectedUrl: string | undefined,
+): string {
+  const unconfirmed = candidates !== undefined && candidates > 1
+    ? ` (${candidates} candidates, none confirmed)` : "";
+  if (targetUrl && expectedUrl) return `landed on ${targetUrl}, not the requested ${expectedUrl}${unconfirmed}`;
+  return candidates !== undefined && candidates > 1
+    ? `${candidates} candidates existed and none was confirmed to be the requested page`
+    : "no CDP target could be confirmed as the requested page";
+}
+
+/**
+ * The REASON a census target is suspect, in words -- or `null` when it is not. See `censusTargetIsSuspect`,
+ * just above, for the full reasoning; this is the same decision, restated so a human reading a report is
+ * told what actually happened rather than the bare word `fallback`, which used to print as "a real second
+ * CDP target existed" even on a `candidates: 1` capture that had no second target at all.
+ */
+export function censusSuspectReason(record: {
+  targetMatch?: unknown; candidates?: unknown; targetUrl?: unknown; expectedUrl?: unknown;
+}): string | null {
+  if (record.targetMatch === undefined) return null; // predates the field -- trusted as before it existed
+  if (record.targetMatch === "matched") return null; // confirmed against the URL this capture navigated to
+  const candidates = typeof record.candidates === "number" ? record.candidates : undefined;
+  if (record.targetMatch === "fallback") {
+    const targetUrl = typeof record.targetUrl === "string" ? record.targetUrl : undefined;
+    const expectedUrl = typeof record.expectedUrl === "string" ? record.expectedUrl : undefined;
+    return fallbackReason(candidates, targetUrl, expectedUrl);
+  }
+  // "no-expected-url": no comparison was attempted, so `candidates` is the only information available.
+  return candidates === undefined || candidates > 1
+    ? `${candidates ?? "an unknown number of"} candidate(s) existed with nothing to compare them against`
+    : null;
 }
 
 export function pageCensus(capture: CapturedAnnouncements):
