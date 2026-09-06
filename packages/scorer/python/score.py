@@ -527,6 +527,36 @@ def score_records(records: list[dict[str, Any]], report: dict[str, Any], weights
     return {"records": scored, "predictedPositiveCounts": positives}
 
 
+
+# The four packages `action.yml` pins and keys its wheel cache on (architecture-audit.md, publish
+# blocker B2). NOT the weights and not `FEATURE_SCHEMA_VERSION` -- those already have a provenance
+# home (`training-report.json`, the safetensors metadata). This is the one version in the chain that
+# had none: a disputed finding has to be traceable to the RUNTIME it was scored under as well as to
+# the weights, the same principle `provenance.browserVersion` already applies to a capture.
+RUNTIME_PACKAGES = ("numpy", "onnxruntime", "safetensors", "transformers")
+
+
+def _runtime_versions() -> dict[str, str | None]:
+    """Installed versions of the scorer's own inference-runtime packages, read at SCORE time.
+
+    `None` rather than a raised exception when a package is absent -- `onnxruntime` and `transformers`
+    are absent only via `_torch_encode`'s fallback (no ONNX file in the encoder directory), which the
+    scorer must still be able to score under and report honestly about, not crash while trying to.
+    Read from the installed distribution's metadata rather than each module's own `__version__`: not
+    every package guarantees one (`onnxruntime` does; some do not), while `importlib.metadata` reads
+    what pip actually installed for every package uniformly.
+    """
+    from importlib import metadata
+
+    versions: dict[str, str | None] = {}
+    for name in RUNTIME_PACKAGES:
+        try:
+            versions[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            versions[name] = None
+    return versions
+
+
 def main() -> None:
     args = parse_args()
     training = feature_pipeline
@@ -541,6 +571,7 @@ def main() -> None:
         "artifact": artifact,
         "representation": report["representation"],
         "dataRecords": len(records),
+        "runtime": _runtime_versions(),
     }
     result.update(score_records(records, report, weights, training, args))
     encoded = json.dumps(result, indent=2) + "\n"

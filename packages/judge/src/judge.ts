@@ -184,6 +184,16 @@ export interface Judgment {
    * reference — `inSupport: null` there, because unknown must not read as safe.
    */
   novelty?: { nearestTrainingCosine?: number | null; inSupport?: boolean | null; floor?: number };
+
+  /**
+   * The scorer's own Python inference-runtime versions -- `numpy`, `onnxruntime`, `safetensors`,
+   * `transformers` -- each a version string or `null` when that package is absent. Publish blocker B2:
+   * `action.yml` pins these four and keys a wheel cache on them, and a disputed finding has to be
+   * traceable to the RUNTIME it was scored under as well as to the weights, the same principle
+   * `provenance.browserVersion` already applies to a capture. Local-scorer only: the LLM backends run no
+   * local inference runtime of this kind, so they omit it rather than report an empty or misleading block.
+   */
+  runtime?: Record<string, string | null>;
 }
 
 interface Candidate {

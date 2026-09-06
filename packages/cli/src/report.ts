@@ -202,6 +202,18 @@ function noveltyLine(verdict: Judgment): string[] {
     + `(nearest training similarity ${novelty.nearestTrainingCosine}, floor ${novelty.floor ?? "?"}).`];
 }
 
+/**
+ * The scorer's own Python inference-runtime versions, so a disputed finding is traceable to what it was
+ * scored under as well as to the weights (publish blocker B2). Silent when absent — an LLM backend, or a
+ * local-scorer artifact that predates this field.
+ */
+function runtimeLine(verdict: Judgment): string[] {
+  const runtime = verdict.runtime;
+  if (!runtime) return [];
+  const parts = Object.entries(runtime).map(([name, version]) => `${name} ${version ?? "absent"}`);
+  return [`Scorer runtime: ${parts.join(", ")}.`];
+}
+
 function findingsSection(verdict: Judgment, screenReader: string, announcements: number): string[] {
   const lines = [
     // Names what actually assessed the page rather than claiming "AI judge". The shipped default is
@@ -214,6 +226,7 @@ function findingsSection(verdict: Judgment, screenReader: string, announcements:
     verdictHeadline(verdict),
     verdict.summary,
     ...noveltyLine(verdict),
+    ...runtimeLine(verdict),
     `${verdict.findings.length} finding(s):`,
     // Stated once, above the list, rather than repeated per finding. Without it "INDICATOR" is jargon; with
     // it, a reader knows exactly which lines they can quote as a failure and which need a human.
