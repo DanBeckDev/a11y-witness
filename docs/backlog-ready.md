@@ -174,47 +174,23 @@ inherit an unrestored mode with nothing to catch it.
 
 ---
 
-### 3. 3.2.1's predicate fires on ANY title difference, not on a context change the user did not ask for
+**THE QUEUE IS EMPTY, and that is a real state rather than a broken page.** Every row seeded here has been
+addressed or refuted. The last one — 3.2.1's predicate firing on any title difference — was closed on
+2026-09-06 by `089cd15`, which took the second of the two closures that row offered: the limit is written
+into `criterion-coverage.ts`'s 3.2.1 note, checked against the criterion's own text, naming all four of
+WCAG's context-change triggers and stating that `contextChanged` reads only whether the title STRING
+differs, *"broader than any of the four"*. 3.2.2 carries the same note because the helper is shared.
+Verified by reading `packages/judge/src/criterion-coverage.ts` on `origin/main`, not from a commit message.
 
-- **Region:** `packages/judge/src/rules.ts` (the `contextChanged` predicate feeding "3.2.1 On Focus",
-  around line 552–596)
-- **Branch:** `agent/321-context-change-predicate`
-- **CLAUDE.md sections:** "A comment that names an ambiguity, above code that resolves it by assumption";
-  "3.3.3 ASSERTS a conformance failure and does not guard either of the criterion's two exceptions" (the
-  sibling criterion that already went through exactly this narrowing)
-- **Verified open** 2026-09-06: `docs/backlog.md`'s "OPEN — five rows..." section carries this row
-  un-struck-through, dated the same day: *"3.2.1's predicate read against the criterion's own text (the
-  `wcag-criterion-check` skill), and either narrowed or its limit written into
-  `criterion-coverage.ts`'s note"* is still listed as what would close it. Confirmed the fix this row
-  might be confused with — `known-gaps.md` §44's `reportedTitle`→`currentTitle`/`titleSourceVerdict`
-  change — is ALREADY MERGED (`grep -n titleSourceVerdict packages/nvda-worker/src/capture-probes.mjs`
-  finds it wired into all six call sites) and fixes a DIFFERENT problem: it makes `titleBefore`/`titleAfter`
-  read the real document title instead of "whatever NVDA said last." This row is the next question: even
-  reading the real title, is "the title changed" the right test for WCAG 3.2.1's "change of context", or
-  does it need narrowing the way 3.2.2/3.3.3 already were?
+**The row is DELETED rather than struck through, which is this page's rule and not `docs/backlog.md`'s.**
+The two pages differ deliberately and a guard enforces it: `backlog-ready.test.ts` treats every `###` as a
+ROW and requires a Region, a Branch, bounding sections and a runnable Acceptance, so a closed row left in
+place fails the suite — correctly, because this page is a PULL queue and anything on it is meant to be
+startable right now. `docs/backlog.md` is a RECORD and keeps its closures visible. Getting this wrong is
+how a queue fills with rows nobody can start.
 
-**What it is:** WCAG 3.2.1's own note: *"A change of content is not always a change of context ... unless
-they also change one of [focus, viewport, form submission, or navigation to a new page/window]."* The
-current predicate reads two title strings and asserts a difference is a context change. That is
-demonstrably too broad in at least one shape already measured on a real page (`known-gaps.md` §44's
-`design-system.service.gov.uk` capture, `titleAfter` reading a live region rather than a real title change
-— now fixed at the SOURCE, but the predicate itself was never re-examined against the criterion's actual
-exception list). Whether it needs narrowing, or whether the existing `mapping: "secondary"` (referral, not
-assertion) already makes the broad predicate an acceptable trade — the same argument that closed 3.2.2 and
-3.3.3 — is the open question.
-
-**Acceptance:** Run the `wcag-criterion-check` skill against 3.2.1's own text. Either narrow
-`contextChanged` to the criterion's actual triggers, or write the limit explicitly into
-`criterion-coverage.ts`'s 3.2.1 note (the same way the 4.1.2 settability gap and the 2.1.4 gap are already
-stated there) so the next reader does not have to re-derive it. **Not fleet-gated**, but `rules:gate`
-reads `runs/` for a verdict — per "A GATE THAT READS `runs/` IS NOT YOURS TO REPORT" above, it is not
-yours to run and report; a local run is a pre-check only, never the acceptance evidence:
-```
-npx tsx --test packages/judge/src/criterion-coverage.test.ts
-```
-Then request `rules:gate` through the dispatcher, who has the lead run it and return the number. Passing
-means: the test suite is green, and `rules:gate` reports the same or fewer 3.2.1 referrals on the
-1,183-conformant-record corpus with no new assertions.
+**A worker arriving here with nothing to pull should ask the dispatcher rather than assume the page is
+broken.** New rows come from [`docs/backlog.md`](./backlog.md), whose honest open count is single figures.
 
 ---
 
