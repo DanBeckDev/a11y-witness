@@ -6,8 +6,22 @@ name: lint
 # external state. (The discriminative-gate encoder is an optional dep, not installed here.)
 on:
   push:
-    branches: [main]
+    branches: [main, "agent/**", "lead/**"]
   pull_request:
+
+# Widened 2026-09-06 from `branches: [main]` -- before this, no CI ran on an agent/lead branch at all, so
+# the full suite had nowhere to go but the pushing laptop. Six agents pushing after every commit (chairman's
+# rule) multiplied that into the host running out of memory under concurrent `npm test` runs; this is the
+# other half of that fix, alongside the pre-push hook now running a FAST gate (lint/typecheck/touched-
+# package tests) on agent/lead pushes and leaving the full suite to CI. `main` pushes still run the pre-push
+# hook's full suite too, unchanged -- this workflow is what makes doing so on a branch unnecessary.
+#
+# `cancel-in-progress`, not merely a longer queue: Actions minutes are not the constraint here, but a queue
+# of stale runs against commits nobody cares about anymore is -- every push under the new policy supersedes
+# the previous one on the same branch within seconds.
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:

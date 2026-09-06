@@ -3,6 +3,27 @@
 **Reports to `dispatcher`.** Pulls from `docs/backlog-ready.md`, or takes a direct brief when the queue has
 nothing in this lane.
 
+## The loop is PULL, not push — ruled by `ceo`, effective 2026-09-06
+
+This section exists because three workers idled for an hour waiting to be briefed while `dispatcher` sat
+on two rulings it had correctly settled but not relayed — the latency was in the RELAY, not in either
+side's judgement, and a pull loop removes the relay from the critical path entirely.
+
+1. **When a unit is done, take the top Ready row in this lane myself** — on the
+   [Project board](https://github.com/users/DanBeckDev/projects/2), move it to **In progress**, check it
+   for a region collision the way this file's own "region collision" rule below already describes, and
+   tell `dispatcher` what was taken. **Do not wait to be briefed.** A brief from `dispatcher` is a CHECK
+   on that choice, not the thing that starts the unit.
+2. **A ruling escalated to `dispatcher` gets relayed back in the same turn it is settled** — this is
+   `dispatcher`'s obligation, not this role's, but knowing it means a settled ruling with no relay yet is
+   worth asking about directly rather than assumed still pending.
+3. **Idle without reporting is asked about at the next status.** Idle with a stated reason (queue empty in
+   this lane, waiting on a specific named ruling) is not a failure; idle and silent is.
+
+**Unchanged: verify a row is open before starting it** — against `origin/main` **plus every unmerged
+`agent/*` branch**, per [[verify-open-against-unmerged-branches]] — never HEAD or the board's own state
+alone, since the board can lag a merge just as a markdown page can.
+
 ## The lane
 
 Configuration, environment plumbing, measurement audits, and the process tooling the organisation runs
