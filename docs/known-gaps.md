@@ -2278,3 +2278,49 @@ because we are looking at another document" — which needs the capture to recor
 The count moving. It is printed by `rules:gate` on every run (`N of M record(s) carry ruleEvidence; K carry
 a census`), which is the only reason this was findable at all — the same argument as every other number in
 this file: state it, and a drift becomes visible instead of inferable.
+
+## 42. PARTIAL — 2.4.7 cannot see an F55 on whatever element held focus when the listener was installed
+
+**Created by a fix, deliberately, 2026-09-06.** Recorded the same day as the change that caused it, because
+a limitation a commit introduces is the one most likely to be forgotten by the person who introduced it.
+
+### What is not covered
+
+`focusLossEvidence` reads an ORPHANED focusout — one with no matching focusin — as F55. That is right
+everywhere except the log's FIRST event: the focus listener is installed after the page has loaded, so
+whatever already holds focus received it before anything was watching, and an ordinary Tab away from it
+produces a focusout with no focusin. `log[0]` is therefore excluded.
+
+**A genuine F55 on that same element is excluded with it.** The two are byte-identical in this log and
+nothing in the evidence separates them.
+
+### Why it is the right trade, with the numbers
+
+```
+37 of 37 conformant real pages reported for 2.4.7  ->  their ONLY orphan was log[0], every time
+9 of 9 corpus positives                            ->  log[0] is a focusin; orphans at index 2 and 9-23
+```
+
+So the exclusion costs nothing measurable and removes 37 accusations against pages whose publishers declare
+them conformant. One unobservable failure on one element against 37 wrong claims is not a close call. It is
+still a trade rather than a fix, which is why it is here and not only in the commit message.
+
+### What would close it
+
+Install the focus listener BEFORE the page has any focused element — before `openPage` commits, or on a
+`document.readyState` earlier than the probe currently runs at — so the log's first event is a focusin and
+`log[0]` stops being special. That is a capture-path change: it moves what the evidence CONTAINS, so it
+costs a recapture and `evidence:check` has to say whether it moved anything else.
+
+### What would tell you it is closed
+
+`log[0].type === "focusin"` on every capture carrying a focus-event log, and the `i === 0` exception
+deleted rather than kept alongside — with `rules:gate` still at 9/9 on `2.4.7:focus-removed-on-receipt` and
+`rules:real-pages` still reporting no new 2.4.7 finding on a conformant page.
+
+### What would tell you it got WORSE
+
+`capture-probes.mjs` cutting the focus log from the HEAD rather than the tail. It currently uses
+`slice(0, FOCUS_EVENT_LOG_DIAGNOSTIC_LIMIT)`, so the first event is always the first the listener saw. A
+head-drop would make `log[0]` an arbitrary event and the exception would start hiding real findings at
+unpredictable positions. That dependency is stated at the code too, not only here.
