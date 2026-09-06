@@ -1,4 +1,6 @@
-# The worker-loop orchestrator
+# The worker-loop orchestrator — `dispatcher`
+
+The agent filling this role is named **`dispatcher`**. It sends its utilisation line to **`ceo`** with every status message.
 
 **Created 2026-09-06, because one agent was the serial step and the measurement said which part.**
 
