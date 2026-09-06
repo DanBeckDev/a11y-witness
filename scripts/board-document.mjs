@@ -92,7 +92,7 @@ function section1(d) {
     + "cannot arrive as a bare new date.",
     "2. **This carries most of the weight:** the date assumes the one item of unknown size finishes "
     + "inside the week we allowed, and this afternoon that week began resting on less.",
-    "3. We have not padded it against the risk most likely to move it, which is stated below.",
+    "3. It is not padded against the risk most likely to move it, stated below.",
   ].join("\n");
 }
 
@@ -102,23 +102,21 @@ function section2() {
     "",
     "**Version one means one person outside this project runs the tool on an application they own and "
     + "says plainly whether the result was worth their time.** The board approved that definition on 6 "
-    + "September. **Version one has no date until that person is named**, and no amount of engineering "
-    + "capacity changes it — the board is introducing a candidate, and the date follows from who and "
-    + "when.",
+    + "September. **It has no date until that person is named** — the board is introducing a candidate, "
+    + "and the date follows from who and when.",
     "",
     "| stage | what decides it | when |",
     "|---|---|---|",
     "| The trained component is approved | Four checks pass, and a fifth stops objecting that one rule "
-    + "has never been shown to work on a real website | days |",
+    + "was never shown to work on a real website | days |",
     "| The real-website check reaches a verdict | A theory about two distrusted measurements is tested "
-    + "| the item of unknown size |",
+    + "| unknown |",
     "| The tool is published | A person creates the account, adds a credential, types the confirmation "
     + "| **20 September 2026** |",
     "| **Someone outside the project uses it** | **A person agrees to run it and reports back** | **not "
     + "schedulable from inside** |",
     "",
-    "**That last row is the honest answer to when version one arrives: it is a person we do not yet "
-    + "have, not an engineering estimate.**",
+    "**That last row is the honest answer: version one waits on a person we do not yet have.**",
   ].join("\n");
 }
 
@@ -154,7 +152,7 @@ function section4(d) {
     "| **Approve the definition of version one.** | The question the board keeps asking stays "
     + "unanswerable, and every edition repeats that. |",
     "| **Name one person outside the project to try the tool.** | Version one cannot start, whatever "
-    + "the engineering does. Open since August. |",
+    + "engineering does. Open since August. |",
     "| **Confirm publication may proceed in September.** | Three final steps need the owner's own "
     + "hands, so the engineering finishes and the release waits. |",
     "",
@@ -166,13 +164,11 @@ function section4(d) {
     "| **One item still has no known size.** | We published a fix this morning, measured it wrong this "
     + "afternoon, and replaced it with a theory nobody has tested. The process working — and the week we "
     + "allowed now rests on less. |",
-    "| **Everything runs on one machine.** | The capture machines' credentials and this report's "
-    + "schedule live on one computer. The list of open work moved off it today; the credentials have "
-    + "not. |",
+    "| **Everything runs on one machine.** | The capture machines' credentials live on one computer. "
+    + "The list of open work moved off it today; the credentials have not. |",
     `| **${d.strays.length} of the ${d.merges.length} changes saved since midnight carry the wrong `
-    + "author.** | An automated test overwrote our identity settings. The settings are fixed; the record "
-    + "is not, and we leave it rather than rewrite history others are building on. Cosmetic, and "
-    + "disclosed so it is not discovered. |",
+    + "author.** | An automated test overwrote our identity settings. They are fixed; the record is not, "
+    + "and we leave it rather than rewrite history others are building on. Cosmetic, disclosed. |",
   ].join("\n");
 }
 
@@ -183,8 +179,8 @@ function section5(d) {
     + "scheduled.", ""];
   if (!fh || fh.status === "not instrumented") {
     L.push("**We cannot yet report how much machine time the capture fleet consumed, and we print that "
-      + "rather than estimate it.** A figure exists — 54.11 machine-hours across every page ever "
-      + "recorded — but it spans many runs and several recording formats, so it is nobody's single run.");
+      + "rather than estimate it.** A figure exists but spans many runs and several recording formats, "
+      + "so it is nobody's single run.");
   } else {
     L.push(`**The capture machines consumed ${fh.total} on their most recent full run.** That counts `
       + "only time spent actively reading a page: not waiting between pages, setup, restarts or "
@@ -192,13 +188,17 @@ function section5(d) {
   }
   L.push("");
   L.push("**A capture takes about a minute at median on our last sample** — 56 captures across five "
-    + "machines, at older recording formats. **We have not established what it should cost on the current "
-    + "format**, and that baseline is the first stage of a programme opened today, outside the release: "
-    + "nothing in it delays September. The appendix explains the cost and lists the stages.");
+    + "machines, at older recording formats — and **we have not established what it should cost on the "
+    + "current format**. That baseline is the first stage of a programme opened today, outside the "
+    + "release: nothing in it delays September. The appendix lists its stages.");
+  L.push("");
+  L.push("**How long our engineering waits between finishing one piece of work and being given the next "
+    + "is not instrumented, and we print that rather than estimate it.** Recording started today; the "
+    + "figure appears once a week of it exists. The appendix says why the first design was wrong.");
   L.push("");
   L.push("### We recommend buying nothing yet, and one number would change that.");
   L.push("");
-  L.push("**The number is how long one page takes to record with ten machines running against five.** "
+  L.push("**The number is how long one page takes to record with ten machines against five.** "
     + "Unchanged, and machines buy speed in proportion. Higher, and they do not — which is what happened "
     + "last time, on older hardware, where they competed for the same disk.");
 
@@ -256,11 +256,24 @@ function throughputBackground(L) {
   L.push("The tool learns from several thousand recordings of a screen reader reading web pages. "
     + "Changing anything that alters what those recordings contain means making them all again, which "
     + "costs hours of machine time — and that is why a list of improvements sits deferred. The five "
-    + "stages are: establish what a page SHOULD cost to record on the current format; measure what more "
-    + "machines actually give us, at ten against five, "
-    + "alternating; set a target from that measurement rather than from a wish; make the improvements, "
-    + "each accepted only by the check that can tell *faster* from *recorded less*; and decide on "
-    + "hardware with the numbers attached.");
+    + "stages are: establish what a page should cost to record on the current format; measure what more "
+    + "machines actually give us; set a target from that; make the improvements; and decide on hardware "
+    + "with the numbers attached.");
+  L.push("");
+  L.push("### Why the capacity measure is not instrumented yet, and what the first design got wrong.");
+  L.push("");
+  L.push("The measure is the gap between a session finishing a piece of work and being given the next. "
+    + "The first design keyed it on who a row was assigned to — and **every session in this project "
+    + "operates as the same account**, of which there are two assignable and nine sessions. It could "
+    + "have recorded *assigned* and never *which*, accruing a week of data that could not answer the "
+    + "question it was collected for. It now keys on a per-session label instead, which carries "
+    + "attribution and timing in one mechanism.");
+  L.push("");
+  L.push("**One thing that will distort the first week, recorded now so it cannot be read as progress:** "
+    + "the rule for taking the next piece of work changed today, from taking it after reporting to "
+    + "taking it before. The measured gap becomes structurally smaller from that moment. A first week "
+    + "spanning the change will show an improvement that is a definition change rather than anyone "
+    + "waiting less.");
   L.push("");
   L.push("**WITHDRAWN: a figure this board was given yesterday.** Yesterday's edition said our own "
     + "documentation claimed 12.4 seconds to record a page while measurement showed 48.7 — a fourfold "
