@@ -1042,6 +1042,29 @@ into the shared `runs/` symlink twice. All further validation after noticing thi
 `compare_to_baseline()` directly with `tmp_path` fixtures, which is how it should have been done from the
 start. No corpus evidence was touched; the affected file is a disposable, regenerated-on-every-run report.
 
+## A STALE-BUT-SETTLED corpus fails checks for a reason unrelated to the change, 2026-09-06
+
+**Found while wiring the in-flight guard, and deliberately NOT fixed by it.** `evidence-fields.test.ts`
+fails here on `interaction.focusEvents` — *"compared but appears on no capture"* — because this laptop's
+`runs/` is ~89 hours old and predates the field. Verified pre-existing by restoring `origin/main`'s copy of
+the file and re-running: identical failure, 10 pass / 1 fail.
+
+**The insight is the OUTCOME-EQUIVALENCE, not that the corpus is old.** A stale-but-settled corpus produces
+exactly what the in-flight guard exists to prevent: a check goes red for a reason that has nothing to do
+with the change in front of you, the person re-runs it, it stays red, and they reach for
+`A11Y_SKIP_VERIFY=1` — which this project's own record says was done nine times in one evening. The guard
+correctly does not suppress it (a skip that fires always is a check that never runs), so it needs its own
+answer.
+
+Four states are now distinguished by `corpusReadable` (`corpus-settled.mjs`): absent, in-flight,
+present-but-a-stub, and settled. **This is the fifth**, and it sits inside `settled` — the corpus is not
+moving, it is simply older than the evidence shape the checks now expect.
+
+**Not costed, and the fix is a decision rather than code:** either the corpus gets refreshed (which is
+`orchestrator`'s, not a worker's), or the field-presence checks learn to say "this corpus predates the
+field" rather than "the field is compared but nothing carries it" — two different sentences that today are
+one. The second is the cheaper half and it is where the deception lives.
+
 ## How an item leaves this page
 
 Delete the row, and put the *lesson* in the record — `known-gaps.md` for something the project did not
