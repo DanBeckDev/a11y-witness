@@ -19,8 +19,8 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
+import { REPO } from "./repo-identity.mjs";
 
-const REPO = "DanBeckDev/a11y-witness";
 export const CLAIM_LABEL = "in-progress";
 
 /**
