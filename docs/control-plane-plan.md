@@ -158,7 +158,7 @@ executes, a real verdict returns — with the connection gone.**
 
 ```
 $ npm run lab:pipeline -- --pipeline=gates
-started as a11y-pipeline-gates on 192.168.1.172. It now outlives this terminal.
+started as a11y-pipeline-gates on <the control plane>. It now outlives this terminal.
 ...
 FAIL — 2 signal(s) do not discriminate        <- from check-signals, ON THE LAB
 ```
@@ -188,7 +188,7 @@ actually enforces it.
 
 ### And the direction of the key is what preserves the threat model
 
-Measured 2026-08-29 on CT 120: **no `node_modules`**, the fleet key present, and `192.168.1.79:22`
+Measured 2026-08-29 on CT 120: **no `node_modules`**, the fleet key present, and the lab's SSH port
 REACHABLE — it lacks a key, not a route.
 
 Give control a key **to the lab**, and:
@@ -211,7 +211,7 @@ Looking for what control was missing turned up what it should not have:
 
 ```
 /root/a11y-witness/node_modules   56M, 121 packages
-/root/.ssh/a11y-witness_ed25519   the fleet key
+/root/.ssh/<fleet key filename>   the fleet key
 ```
 
 **That is verbatim the configuration ADR 0012 exists to prevent** — *"the credential able to reconfigure
@@ -244,7 +244,7 @@ what it costs if it does.
 
 This item claimed three things still ran from the laptop: `fleet:deploy`,
 `fleet:provision`, and `lab:pipeline`'s sequencing. **Two of those were already correct.**
-`fleet-playbook.mjs` SSHes to `192.168.1.172` and runs `ansible-playbook` THERE — its header says so
+`fleet-playbook.mjs` SSHes to the control plane and runs `ansible-playbook` THERE — its header says so
 outright, *"typing `ansible-playbook` on the control plane — the hand-crank this file exists to remove"*.
 Written into the plan without checking, which is the failure this document is otherwise about.
 

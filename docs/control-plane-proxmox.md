@@ -126,7 +126,7 @@ reading the copy back.
 
 ## The key lives here now
 
-The bootstrap generates `~/.ssh/a11y-witness_ed25519` **on this box**, deliberately rather than copying
+The bootstrap generates `~/.ssh/<fleet key filename>` **on this box**, deliberately rather than copying
 one from a laptop. A fleet key on a Mac makes that Mac load-bearing again by a different route, which is
 the exact thing this move exists to stop.
 
@@ -134,11 +134,11 @@ Two ways it reaches a worker:
 
 ```bash
 # a box being built from scratch — served during the PXE install
-packages/worker-fleet/src/provisioning/bare-metal/serve-bootstrap.sh ~/.ssh/a11y-witness_ed25519.pub
+packages/worker-fleet/src/provisioning/bare-metal/serve-bootstrap.sh ~/.ssh/<fleet key filename>.pub
 
 # a box already running — needs a way in already, so this is for rotation
 cd packages/control/ansible
-ansible-playbook ssh-key.yml -l <host> -e a11y_operator_key="$(cat ~/.ssh/a11y-witness_ed25519.pub)"
+ansible-playbook ssh-key.yml -l <host> -e a11y_operator_key="$(cat ~/.ssh/<fleet key filename>.pub)"
 ```
 
 ## What does NOT move here

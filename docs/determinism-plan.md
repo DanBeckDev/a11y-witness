@@ -314,7 +314,7 @@ function of coverage, not merely accompanied by it.**
 
   **A guard for this already existed and structurally could not see it.** `BROWSER_ERROR_TITLE_RE` matches
   Chromium's error PHRASES, but Chromium titles a network-error page with the HOST — so an unserved
-  `http://192.168.1.15:3000/x` is titled `192.168.1.15` and matched nothing. A title is a proxy for the
+  `http://<worker-host>:3000/x` is titled `<worker-host>` and matched nothing. A title is a proxy for the
   status; the status is the status. Both are kept.
 
   Audited for false refusals before shipping: **89 of 89 real corpus sites return 200**, so it refuses
@@ -325,7 +325,7 @@ function of coverage, not merely accompanied by it.**
   one session — in `gate:probe-order` before it shipped, in a diagnostic script twenty minutes after fixing
   it there, and in a third script two hours after writing the commit message about it. Edge serves its own
   error page on a dead port, so two orders compare IDENTICAL and a gate reports PASS; an ad-hoc capture
-  returns `focusOrder: ["192.168.1.15, document, read only"]` and reads as a valid capture of a document.
+  returns `focusOrder: ["<worker-host>, document, read only"]` and reads as a valid capture of a document.
   The tool already refuses a page whose URL is not the one requested (`landedVerdict`), and that check does
   not fire here: the URL IS right, it is the page behind it that is missing.
 

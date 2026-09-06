@@ -166,7 +166,7 @@ until 2026-08-22 the only way to end one was `systemctl stop` over ssh, which is
 was written to close. It refuses a unit that is not running and names the state it found instead, because
 "it was already finished" and "I stopped your job" are different outcomes.
 
-This replaced `ssh root@<pve> 'pct exec 121 -- bash -lc "..."'`, which existed nowhere in the source tree —
+This replaced `ssh root@<pve> 'pct exec <container id> -- bash -lc "..."'`, which existed nowhere in the source tree —
 so the way this project's most expensive operations were started was untested and unreviewable. `command`
 with `argv:` never invokes a shell, which removes the quoting class that sent four capture shards at
 `--worker=http://:8765` for 29 minutes. **The lab is reached DIRECTLY at its own IP; there is no `pct exec`
@@ -2167,7 +2167,7 @@ nobody had pushed, an `ANSIBLE_EXIT=2` masked by `| tail`, and three jobs run fo
   pipeline that continues past a failed gate produces a number that looks exactly like a good one.
 - **It is a node script and not one Ansible playbook, and that was MEASURED.** The two halves are in
   different credential domains: the workers are reachable only from the control plane, and the lab needs the
-  `a11y-pve` key, which the control plane does not have — verified 2026-08-25, `192.168.1.79:22` is open
+  `a11y-pve` key, which the control plane does not have — verified 2026-08-25, the lab's SSH port is open
   from there and answers `Permission denied (publickey)`. Exactly one machine can drive both. Giving the
   control plane the lab key would make a single playbook possible and would put both halves of ADR 0012's
   split behind one credential.
