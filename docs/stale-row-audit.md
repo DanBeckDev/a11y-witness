@@ -13,12 +13,12 @@ a row and forming an opinion about it.
 | row | its own check, re-run | verdict |
 |---|---|---|
 | **#42** *Nothing has been installed from a published tarball* | `npm run gate:isolation` → **6/6 packages usable installed**, every subpath resolving, no undeclared dependency | **The work is DONE and passing.** Its acceptance is `release:gate:ci`, which stops at stage 3 on an unrelated blocker — see below. Labelled `ready`. |
-| **#4** *action-smoke red for 85 consecutive runs* | `gh run list --workflow=action-smoke.yml --limit 100` → **99 consecutive failures, 0 successes in 100 runs** | **LIVE, and understated.** The number moved the wrong way. The cause is not the action: the log reads `Captured 89 announcements` and then fails in the scorer — see below. |
+| **#4** *action-smoke red for 85 consecutive runs* | `gh run list --workflow=action-smoke.yml --limit 300` → **146 consecutive failures**; last success `2026-09-03T12:16:52Z` | **LIVE, and understated — by both earlier counts, including mine.** See *a count over a window reports the window* below. The cause is not the action: the log reads `Captured 89 announcements` and then fails in the scorer. |
 | **#30** *A GET form submit changes the URL, so the census refuses 18 records* | `grep submitOnlyAddedAQueryString packages/evidence/src/verify.ts` → defined at 985, consulted at 1005; `verify.test.ts` carries tests named `#30:` | **Code half DONE and tested.** Only the fleet measurement remains (`lab:job -e job=rules-real-pages` must show the 18 move). Labelled `ready`, which reads as buildable. |
 | **#51** *A 15 s wall-clock assertion cannot tell a hang from a loaded host* | `grep CONTROL_DEGRADED_MS\|controlSpawnMs\|timedOut packages/lab/src/packaging/no-worker-refusal.test.ts` → all three present | **DONE.** The test now measures a control spawn and separates host degradation from a hang. |
 | **#13** *The trainer rotates its one retained generation at STARTUP* | `grep rmtree/move packages/lab/scripts/train-screenreader-model.py` → still at lines 236-239 | **Premise TRUE, concern ANSWERED.** `train-rotation-safety.test.ts` pins the property that actually protects the generation (the report is written atomically and last, so a dying train never reaches the rotation branch). Restate; do not close. |
 | **#11** *`diagnose-false-positives.py` exits 0 on an empty corpus* | `grep 'return 0' packages/lab/scripts/diagnose-false-positives.py` → line 118, unconditional | **LIVE and accurate.** A deliberate non-fix, documented as such in `exit-code-contract.test.ts`'s `DOCUMENTED_PY`. The control case for this sweep: a row can stay open and stay right. |
-| **#52** *The `runs/` rule is in CLAUDE.md as a temporary home* | `grep 'A GATE THAT READS' CLAUDE.md` → present at 546, with a note recording it was moved there when `docs/backlog-ready.md` was retired | **Ambiguous, needs restating.** The rule has a home and the move is recorded. Whether CLAUDE.md IS the permanent home is a decision the row asks for and nobody has made. |
+| **#52** *The `runs/` rule is in CLAUDE.md as a temporary home* | the row's OWN open-check, re-run: `git ls-tree origin/main -- docs/roles/README.md` → **present**; `agent/roles-readme` **0 ahead of main** | **UNBLOCKED and actionable.** The row's "Blocked until `agent/roles-readme` merges" is the stale part. *(This corrects the first pass of this sweep, which called it "ambiguous, needs a decision" — that reading came from a label and a summary rather than from the row, which states its decision in its first paragraph. The row was not ambiguous; the sweep was careless, and re-running the row's own check is what fixed it.)* |
 | **#33** *The corpus is 85 pages from two publishers* | `REAL_PAGES` measured directly → **98 entries, 0 without a source, 50 distinct claim sources, 68 hosts** | **Premise REFUTED on its numbers; concern survives in a sharper form.** All 8 pages published as INACCESSIBLE are `w3.org` or ours, which `real-page-corpus.test.ts:181` already pins. The row sends someone to add publishers; what is missing is one page somebody else publishes as inaccessible. |
 
 ## THE FINDING: three publish-blockers, one root cause, and no row says so
@@ -51,6 +51,29 @@ names that dependency, and both read as independently pickable publish-blockers.
 the worker answered. A reader who takes "red for 85 consecutive runs" at face value goes looking for a
 broken action; the action works end to end and one artefact stamp is wrong.
 
+## A COUNT OVER A WINDOW REPORTS THE WINDOW, NOT THE STREAK — and it bit three times in one row
+
+#4 carried two numbers that disagreed with each other: the title said *85 consecutive* and the body said
+*114 success, 85 failure* over 200 runs. Those are a streak and a total, and over a 200-run window both
+were true at once — the newest 85 all red, the 114 greens all older.
+
+**The first sweep of this row then reported 99 consecutive over a 100-run window, and that was wrong the
+same way.** Over 300 runs, reaching back to 2026-08-28:
+
+```
+runs listed 300 · failure 176 · success 124
+CONSECUTIVE failures from newest: 146
+most recent SUCCESS: 2026-09-03T12:16:52Z   <- the day schema-migration.json records v18 -> v19 opening
+```
+
+A streak longer than the window is reported as the window. Three counts, three windows, three different
+answers, and the only one that means anything is the one whose window is provably longer than the streak
+it measures — which is why the number above is quoted with its window and its oldest run.
+
+**The DATE was right in every version and was the load-bearing fact all along.** `2026-09-03T12:16` is
+the migration opening. A date cannot be truncated by a window; a count can. Where both are available,
+the date is the one to quote.
+
 ## What actually makes a row go stale
 
 The hypothesis this sweep was given was that **a row records a mechanism as well as a symptom, and the
@@ -73,8 +96,14 @@ Read that way, the nine sort cleanly into four shapes, and only the first is §2
 
 1. **The mechanism rotted** (#12). A cited fact stopped being true and two copies corroborated each other.
    *Remedy: pin the citation with a test — done, in `gate-partial-corpus-contract.test.ts`.*
-2. **The work landed and nothing re-read the row** (#10, #27, #45, #51, #60). The premise was true, the fix
-   merged, the row stayed. *Remedy: re-run the open-check at merge, not at filing.*
+2. **The work landed and nothing re-read the row** (#10, #27, #45, #51, #52, #60). The premise was true,
+   the fix merged, the row stayed. *Remedy: re-run the open-check at merge, not at filing.*
+   **#52 is the cleanest specimen in the whole sweep**, because the row was right about everything
+   *including its own precondition*: it recorded "Blocked until `agent/roles-readme` merges" and an
+   open-check reading `(absent — still on agent/roles-readme, unmerged)`. Re-running that one command
+   returns `docs/roles/README.md`, and the branch is 0 commits ahead of main. Nothing rotted and nothing
+   was written carelessly — the precondition was met and the row was never asked again. It is also the
+   instance that shows the remedy is not "write better rows": the row could not have been written better.
 3. **The acceptance command cannot pass, for a reason outside the row** (#4, #42, and #10 in a second way —
    its acceptance path `packages/scorer/python/` collects zero tests and exits 5). A row whose falsifier is
    broken can never be closed by evidence, so it stays open on the strength of nobody checking.
