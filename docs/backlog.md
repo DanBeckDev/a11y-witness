@@ -64,6 +64,9 @@ finished, but by what CONSUMES what.**
 
 ### A — Nothing. The experiment this stage held was ALREADY RUN, in full.
 
+> **#105 reconciliation (2026-09-06): closed by the withdrawal below** — superseded by [known-gaps
+> §31](./known-gaps.md), which states the product finding this stage was looking for.
+
 **Withdrawn 2026-09-03, and the withdrawal is the useful part.** This stage said the live-region
 intermittency was unexplained and prescribed a speech-rate experiment. Both were wrong, and reading the
 record properly is what settled it.
@@ -87,6 +90,10 @@ that announces its own state reaches an NVDA user roughly one time in three.**
 
 ### B — Then ONE corpus change, and the batching argument is the same one stage 3 made
 
+> **#105 reconciliation (2026-09-06): closed** — all four rows below are resolved: 3.1.2 closed, the
+> `reportEmphasis` route refuted, the arrow-key probe already existed, and typing feedback is a measured
+> limit rather than missing work.
+
 **Four separate items all have the same first step: a corpus case that does not exist.** Each is §17's
 rule — *"a probe built now would produce evidence nothing could validate"* — and each, taken alone, costs
 its own capture round. Taken together they are one corpus change and one capture of the new cases.
@@ -103,6 +110,9 @@ got wrong** — it is on, nothing reads it, and it is now a backlog row of its o
 
 ### C — After that corpus is captured, because they read it
 
+> **#105 reconciliation (2026-09-06):** the feature-cross row below is already filed as #35; the
+> 4.1.3 row is closed, as its own strikethrough already states.
+
 - **Ten features read a `0` that means "nobody asked"** ([§11](./not-working.md)) — measured at 61.7% /
   56.1% / 65.3%. **BUILT 2026-09-03, verdict pending.** The encoding is committed and the schema migration
   is declared open; what is left is the retrain that lets its four gates say whether it helped, and that
@@ -117,6 +127,9 @@ got wrong** — it is on, nothing reads it, and it is now a backlog row of its o
   "Needs your hands" section's own 4.1.3 paragraph for the confirmed, current state.
 
 ### D — Independent of all of the above, and can be done whenever
+
+> **#105 reconciliation (2026-09-06):** the criteria audit below is closed, as its own strikethrough
+> already states; the split-pair row is already filed as #17.
 
 - ~~**Audit every criterion against its official text**~~ — **COMPLETE 2026-09-05. All 55.** The 17 that
   carry a claim were done 2026-09-04 (9 clean, 8 findings, each its own row above); the residue — 33
@@ -135,6 +148,9 @@ got wrong** — it is on, nothing reads it, and it is now a backlog row of its o
 
 ### Cannot be scheduled, and should not be given a rank
 
+> **#105 reconciliation (2026-09-06): closed** — the row's own strikethrough already says so
+> (known-gaps §37).
+
 - ~~**The 3.5-hour stall.**~~ **FIXED 2026-09-03** — [known-gaps §37](./known-gaps.md). This entry said
   it *"needs a recurrence to diagnose"* and that listing it as next *"would pretend it is actionable"*.
   That was wrong: the cause is one line's position in `runCapture`, readable without any recurrence at
@@ -142,6 +158,10 @@ got wrong** — it is on, nothing reads it, and it is now a backlog row of its o
 
 
 ### Before publish — FILE SIZE. Asked for by the repository owner 2026-09-05.
+
+> **#105 reconciliation (2026-09-06):** the `case-matrix.mjs` and `capture-core.mjs` splits below are
+> closed, as their own strikethroughs already state. The one live bullet — "some of the comment bulk
+> belongs in `docs/`" — was genuinely open and unfiled; **filed as #110.**
 
 **"I get very worried when I see that a file is 3,000 lines long. In my head a file should be a maximum
 of 300 lines."** Recorded here rather than acted on immediately, by agreement, and it sits BEFORE the
@@ -219,6 +239,9 @@ mid-flight makes its result uninterpretable, and `check-signals` would be compar
 moved underneath it.
 
 ### Last, for the reason known-gaps already gives
+
+> **#105 reconciliation (2026-09-06): already filed as #5** — the human publish-steps row already
+> carries this ordering constraint.
 
 - **npm publish.** *"A changeset describes weights, so it should describe the final ones."* Stage C
   produces new weights, so publishing before it means publishing a description that stops being true.
@@ -881,6 +904,12 @@ names an ambiguity, above code that resolves it by assumption", appearing in a t
 
 ### THE ONE THING BLOCKING A CONCLUSIVE `rules:real-pages`, and it is a named v19 revert condition
 
+> **#105 reconciliation (2026-09-06): closed** — v19 has since shipped (no
+> `packages/scorer/models/schema-migration.json` is open); this heading and the three nested below it,
+> inside the `<details>` block, are the record of that migration, per the block's own summary. The
+> split-pair item mentioned in "The two rows that unblock the moment it finishes" is separately already
+> filed as #17.
+
     24 capture(s) opened on a COOKIE/CONSENT overlay and NEVER REACHED A HEADING
     30 capture(s) have a census this run does not trust: a real second CDP target existed and none was
        confirmed to be the page navigated to
@@ -956,12 +985,18 @@ change being tested.
 
 ### The nine stages, and which of them is a gate
 
+> **#105 reconciliation (2026-09-06): closed** — see the reconciliation note on this `<details>` block's
+> opening heading above.
+
 `retrain` (generate → capture → check-signals → export → build-realism), `export-acceptance`,
 `grants-audit`\*, `applicability-audit`\*, `train`, `shortcuts`\*, `acceptance`\*, `promote`\*,
 `release-gate`\*. Starred stages are gates and the chain STOPS at the first one that fails, naming what
 did not run.
 
 ### What to read when it stops, in this order
+
+> **#105 reconciliation (2026-09-06): closed** — see the reconciliation note on this `<details>` block's
+> opening heading above.
 
 ```bash
 npm run lab:status -- -e job=everything     # systemd's view, the journal BOUNDED to this run, progress
@@ -981,6 +1016,9 @@ Do not hand-roll `journalctl`. Every one of this register's journal misreads cam
   v19 must clear precisely so the decision cannot be softened into a tweak.
 
 ### The two rows that unblock the moment it finishes
+
+> **#105 reconciliation (2026-09-06):** closed as part of the v19 record (see this `<details>` block's
+> opening heading above); the split-pair bullet below is separately already filed as #17.
 
 Both need the lab, and `run-job.yml` refuses any job while another runs — verified by trying, and it is
 right: *"a job that quietly runs four commits behind reports success for code you did not ask for."*
