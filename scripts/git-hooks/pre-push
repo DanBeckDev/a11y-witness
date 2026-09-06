@@ -52,6 +52,17 @@
 # about the wrong population, the exact class closed elsewhere today (docs/backlog.md). CI is the real gate
 # for a branch now; this hook is the fast, local first pass.
 #
+# ## UPDATE 2026-09-06: CI moved from the branch push to the branch's PR
+#
+# `lint.yml` (above) is retired, replaced by `.github/workflows/ci.yml`. Everything above this paragraph
+# is still literally true of the LOCAL hook -- the fast/full split, the scoping, the "empty means
+# everything" rule -- and none of it changed. What changed is WHERE the full suite the fast gate hands off
+# to actually runs: `ci.yml` triggers on `pull_request` and on `push: branches: [main]` only, never on an
+# `agent/**`/`lead/**` push directly. That is safe rather than a silent reduction because every unit's
+# workflow now ends with `gh pr create` immediately after pushing (the standing worker-loop flow) -- a
+# branch push with no PR yet open gets only this hook, same as before 2026-09-06; a branch push followed by
+# its PR gets this hook AND the full `ci.yml` run, on the PR rather than on the push event.
+#
 # `A11Y_TEST_CONCURRENCY=4` bounds a single suite's own tsx worker count regardless of how many other
 # suites are running elsewhere on this host -- set here, in the LOCAL hook, never in `package.json`'s
 # shared `test:ts` script, because CI runs on its own machine and capping it there only makes runs slower
@@ -129,7 +140,7 @@ if [ "$BRANCH" = "main" ]; then
   run "unit tests" env A11Y_TEST_CONCURRENCY=4 npm test
 else
   echo "pre-push: FAST gate ($BRANCH) -- lint, typecheck, and tests of the package(s) touched against"
-  echo "origin/main. The full suite runs in CI on this push: .github/workflows/lint.yml"
+  echo "origin/main. The full suite runs in CI on this branch's PR: .github/workflows/ci.yml"
   # A branch that breaks a package it never touched passes THIS gate and fails CI -- deliberate, not a
   # gap: see scripts/changed-packages.mjs's header for why a real cross-package dependency graph was not
   # built here.
