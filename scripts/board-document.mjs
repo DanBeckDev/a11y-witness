@@ -428,6 +428,81 @@ export function document(d, summary) {
   ].join("\n");
 }
 
+/**
+ * Sections one to five only: not the title, not the summary, not the appendix.
+ *
+ * EXPORTED, not restated — issue #88. `board-style.test.ts` had its own copy of exactly this slice, which
+ * is how the body-cap check could exist as a TEST but not as a REFUSAL: the generator itself had no way to
+ * ask "is my own output too long" without duplicating the boundary logic a second time. One copy now feeds
+ * both the test and `requireBodyWithinCap` below.
+ */
+export function bodyOnly(md) {
+  const start = md.indexOf("\n## ", md.indexOf("## Executive summary") + 1);
+  const from = start === -1 ? md.indexOf("\n## ") : start;
+  const to = md.indexOf("## Appendix");
+  return md.slice(from === -1 ? 0 : from, to === -1 ? undefined : to);
+}
+
+const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
+
+/** "2026-09-06", or the honest word for a missing one — never a guess. */
+const dateLabel = (at) => {
+  const parsed = at ? Date.parse(at) : NaN;
+  return Number.isNaN(parsed) ? "unknown date" : at.slice(0, 10);
+};
+
+const MAX_CLAIM_PREVIEW = 70;
+/** A claim, shortened for a refusal message that has to stay scannable, not published. */
+const preview = (text) =>
+  text.length > MAX_CLAIM_PREVIEW ? `${text.slice(0, MAX_CLAIM_PREVIEW - 1)}…` : text;
+
+/**
+ * THE BODY CAP MUST NAME THE TRADE, NOT JUST THE OVERFLOW — issue #88.
+ *
+ * `board-style.test.ts` already refused a body over `BODY_WORD_CAP`, but only as a TEST someone reads
+ * later — `main()` itself never checked, so the first person to actually HIT the cap was an agent at
+ * 07:50 with an edition to render, staring at a bare word count. The guard is right; what it left unsaid
+ * is what forced the deletion — new evidence displacing old evidence, invisibly, decided by whoever was
+ * in the most hurry rather than by anyone weighing which claim had stopped earning its place.
+ *
+ * So the refusal lists every achievement OLDEST FIRST, by its `at` timestamp, with the word count it
+ * costs the body (section 3's bullet only — the evidence itself lives in the appendix and is not part of
+ * this cap). Age is a fact read off the record, not a guess made under the same time pressure the
+ * original bug was about.
+ */
+/**
+ * The refusal MESSAGE, as a pure function of the data and the rendered document — or `null` when the body
+ * fits. Split from `requireBodyWithinCap` below purely so a test can assert on the TEXT without spawning
+ * the CLI or trapping `process.exit`.
+ */
+export function bodyCapRefusal(d, md) {
+  const words = wordCount(bodyOnly(md));
+  if (words <= BODY_WORD_CAP) return null;
+  const over = words - BODY_WORD_CAP;
+  const lines = [`board:document REFUSES — the body is ${words} words against a ${BODY_WORD_CAP} cap.`,
+    `Retiring or shortening ${over} word(s) worth of content would fit.`];
+  if (d.achievements.length === 0) {
+    lines.push("No achievements are recorded to retire, so the overflow is in the other sections' prose "
+      + "— cut repetition or move detail to the appendix.");
+  } else {
+    lines.push("The achievements, oldest first:");
+    const oldestFirst = [...d.achievements].sort((a, b) => Date.parse(a.at ?? 0) - Date.parse(b.at ?? 0));
+    oldestFirst.forEach((a, i) => {
+      const text = a.boardClaim ?? a.claim;
+      lines.push(`  [${i}] "${preview(text)}"   written ${dateLabel(a.at)}, ${wordCount(text)} words`);
+    });
+    lines.push("Retire one, or shorten the entry you are adding.");
+  }
+  return lines.join("\n");
+}
+
+function requireBodyWithinCap(d, md) {
+  const refusal = bodyCapRefusal(d, md);
+  if (!refusal) return;
+  console.error(refusal);
+  process.exit(5);
+}
+
 const PAGE_CSS = `
   /* TYPOGRAPHY IS WHERE THE TWO-PAGE BODY IS PAID FOR, not content.
      The body reached 910 words with every repetition removed and all evidence moved to the appendix;
@@ -494,8 +569,12 @@ function main() {
   const flagOf = (n) => argv.find((a) => a.startsWith(`${n}=`))?.split("=").slice(1).join("=");
 
   const summary = requireSummary(argv.includes("--pdf") || argv.includes("--release"));
-  const md = document(collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString()),
-    summary);
+  const d = collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString());
+  const md = document(d, summary);
+  // UNCONDITIONAL, unlike the summary check above: a body over the cap is wrong in the plain markdown
+  // preview too, not only when publishing, and catching it earlier is the whole point of issue #88 (the
+  // agent who hit this had already reached the render-a-PDF step before the cap said anything).
+  requireBodyWithinCap(d, md);
 
   if (!argv.includes("--pdf")) {
     process.stdout.write(md + "\n");
