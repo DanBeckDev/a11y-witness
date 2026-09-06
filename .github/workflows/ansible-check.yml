@@ -66,11 +66,16 @@ jobs:
         run: |
           status=0
           for playbook in packages/control/ansible/*.yml; do
-            # roles/, tasks/, group_vars/ and inventory.yml itself are not playbooks (no top-level `hosts:`)
-            # and --syntax-check on one of those fails for a reason that has nothing to do with this check.
+            # roles/, tasks/, group_vars/ and the two inventory files are not playbooks (no top-level
+            # `hosts:`) and --syntax-check on one of those fails for a reason that has nothing to do with
+            # this check.
             grep -q "^- hosts:\|^  hosts:" "$playbook" || continue
             echo "--- $playbook ---"
-            ansible-playbook -i packages/control/ansible/inventory.yml --syntax-check "$playbook" || status=1
+            # inventory.yml itself is gitignored (real addresses, restored from the secrets store at
+            # bring-up) and does not exist on this runner. inventory.example.yml is committed, kept in
+            # step with the real file's shape (see inventory-example-parity.test.ts), and is what this
+            # check actually validates against.
+            ansible-playbook -i packages/control/ansible/inventory.example.yml --syntax-check "$playbook" || status=1
           done
           exit $status
 
