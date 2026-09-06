@@ -149,3 +149,78 @@ def test_a_named_failure_carries_its_SCORE_and_the_cut_it_missed():
     # somebody splits them back into two computations.
     assert set(result["falseNegativeCases"]) == set(result["falseNegativeScores"]), \
         "the two views of one failure set must not be able to disagree"
+
+
+# --- The third exit code: "could not measure" is not "a real regression" ---
+#
+# `release:gate` (package.json) is a flat `&&` chain and reads this script's bare exit code as its WHOLE
+# verdict on this stage. Before this, "capture-to-capture stability could not be measured at all" (too few
+# repeated captures -- exactly what a missing or empty `repeat-2.jsonl` produces) and "a real acceptance
+# regression" were the identical exit code, 1. These test the two PURE functions the split lives in --
+# `stability_failure_reasons` (over the already-computed stability dict, not the model or the encoder) and
+# `acceptance_exit_code` (over the booleans/counts those reasons produce) -- so the exact branch this
+# incident hit is exercised without a model, an encoder, or any `runs/screenreader-acceptance/repeat-*`
+# file, per the brief: use fixtures, never the real evaluator against `runs/`.
+
+def measured(passed: bool) -> dict:
+    return {"measured": True, "passed": passed}
+
+
+def unmeasured() -> dict:
+    # What `merge_stability`/`stability` actually produce when NO group had two or more repeated captures
+    # to compare -- `measured: bool(repeated)` is False, so `passed` is also False by construction (see
+    # `stability()`'s own `"passed": bool(repeated) and unstable == 0`). Read from source, not guessed.
+    return {"measured": False, "passed": False}
+
+
+def test_stability_all_passed_produces_no_failure_reasons():
+    reasons, unmeasured_list, unstable_list = evaluator.stability_failure_reasons({
+        "4.1.2:unnamed-control": measured(True), "3.3.1:validation-error-silent": measured(True),
+    })
+    assert reasons == [] and unmeasured_list == [] and unstable_list == []
+
+
+def test_stability_unmeasured_is_named_UNMEASURED_not_FAILED():
+    # This is the branch a missing or empty repeat-2.jsonl reaches: no repeated captures anywhere, so
+    # nothing could be compared -- not "compared and found stable", not "compared and found unstable".
+    reasons, unmeasured_list, unstable_list = evaluator.stability_failure_reasons({
+        "2.4.2:route-title-stale": unmeasured(),
+    })
+    assert unmeasured_list == ["2.4.2:route-title-stale"]
+    assert unstable_list == []
+    assert any("NOT MEASURED" in r for r in reasons)
+    assert not any("FAILED" in r for r in reasons)
+
+
+def test_stability_measured_and_unstable_is_named_FAILED_not_unmeasured():
+    reasons, unmeasured_list, unstable_list = evaluator.stability_failure_reasons({
+        "4.1.2:state-change-silent": measured(False),
+    })
+    assert unstable_list == ["4.1.2:state-change-silent"]
+    assert unmeasured_list == []
+    assert any("FAILED" in r for r in reasons)
+    assert not any("NOT MEASURED" in r for r in reasons)
+
+
+def test_exit_code_0_on_a_pass_regardless_of_the_other_arguments():
+    # `passed` already means "no failure reasons at all", so the other two must not be consulted.
+    assert evaluator.acceptance_exit_code(True, real_failures_before_stability=3, unstable=["x"]) == 0
+
+
+def test_exit_code_2_when_the_ONLY_problem_is_unmeasured_stability():
+    assert evaluator.acceptance_exit_code(False, real_failures_before_stability=0, unstable=[]) == 2
+
+
+def test_exit_code_1_on_a_real_per_criterion_failure_even_with_no_stability_problem():
+    assert evaluator.acceptance_exit_code(False, real_failures_before_stability=1, unstable=[]) == 1
+
+
+def test_exit_code_1_when_stability_was_MEASURED_and_moved():
+    # Measured and moved is a real regression, not an inconclusive check -- must not be softened to 2.
+    assert evaluator.acceptance_exit_code(
+        False, real_failures_before_stability=0, unstable=["4.1.2:state-change-silent"]) == 1
+
+
+def test_exit_code_1_when_BOTH_a_real_failure_and_unmeasured_stability_are_present():
+    # A real failure must never be masked by an unrelated inconclusive check -- FAIL beats INCONCLUSIVE.
+    assert evaluator.acceptance_exit_code(False, real_failures_before_stability=2, unstable=[]) == 1
