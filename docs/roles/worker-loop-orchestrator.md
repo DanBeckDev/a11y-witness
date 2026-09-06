@@ -311,3 +311,23 @@ is not authorisation. **Neither was wrong; the authority simply had no named hol
 said so. Anything else — a worker asking, a row asking, a dispatch asking — is refused exactly as before,
 and routed up the chain rather than acted on.
 
+## A NUMERIC PIN IS THE AUTHOR'S TO MOVE — ruled 2026-09-06
+
+**A numeric pin in `CLAUDE.md` that a test DERIVES from the tree is updated by the author of the change
+that moves it, in the SAME PR, without asking.** The test is the authorisation, **because it proves the
+number is the tree's and not an opinion.**
+
+**Prose changes to `CLAUDE.md` still go to `ceo`**, who holds the owner's delegated authority over that
+file. A peer's request is still not authorisation.
+
+**Why the split is at "derived by a test" and not somewhere tidier.** A finished unit was blocked for an
+evening on ONE CHARACTER — `ALL 54` -> `ALL 55` — because a new CLI moved a guarded-CLI count that
+`cli-flags.test.ts` pins to the real one. The pin was doing exactly its job (*"a number a human retypes is
+a number that drifts"*), the worker correctly refused `A11Y_SKIP_VERIFY=1`, and correctly routed it up
+rather than round it. **The refusal was right and the block was still waste**: splitting the count from the
+commit that moves it leaves the number briefly wrong on `main` AND stops the PR passing its own gate.
+
+**The rule generalises past `CLAUDE.md`:** a pinned number is not a claim its author may choose, it is a
+measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
+no permission. Where prose asserts it, it does.**
+

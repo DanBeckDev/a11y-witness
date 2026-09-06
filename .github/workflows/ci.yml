@@ -1,0 +1,201 @@
+name: ci
+
+# ONE workflow for a PR, replacing three that used to run independently on the same commit:
+#
+#   - `lint.yml` had NO path filter at all and ran lint, typecheck, the full TS suite and the full Python
+#     suite on a one-line docs edit exactly as it did on a capture-path rewrite -- on BOTH `push` and
+#     `pull_request`, so every PR commit ran the whole thing twice.
+#   - `changeset-check.yml` re-derived "does this touch a published package" with its own inline `git diff`.
+#   - `ansible-check.yml` carried a THIRD, independent "did the fleet's Ansible layer change" `paths:` block.
+#
+# Three copies of "what changed", proven capable of drifting the moment a fourth question (docs) needed
+# asking too -- this repo's own most-repeated defect, aimed at its own CI. `scripts/ci-changed.mjs` is now
+# the one place that question is answered, and every job below is conditional on its output rather than
+# carrying its own `paths:` filter. `ci-changed.test.ts` pins the classification AND this file's own
+# trigger table, so a future "just add the tests to lint" (or the equivalent here) fails a unit test rather
+# than the PR budget.
+#
+# PUSH TRIGGERS ONLY MAIN, AND RUNS EVERYTHING UNCONDITIONALLY -- the same promise `lint.yml`'s own header
+# made ("the full suite runs in CI on this push"), carried forward rather than narrowed. A push straight to
+# `main` is already trusted with the full suite; a path-scoped merge run would silently narrow that promise
+# the day someone merges a multi-package change a scoped job was never asked to see all of.
+#
+# AGENT/** AND LEAD/** BRANCH PUSHES NO LONGER TRIGGER THIS WORKFLOW -- a deliberate change, not an
+# oversight. Every unit now ends with `gh pr create` (the standing worker-loop flow), so the PR's own
+# `pull_request` trigger is where a branch's full check now runs; a push with no PR yet gets only the local
+# pre-push hook's fast gate. See `scripts/git-hooks/pre-push`'s own header for the other half of this.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # THE FIRST JOB, and everything else is conditional on it. Always runs -- cheap, no build, one git diff
+  # (or none, on a push) -- so a skipped downstream job is a real decision rather than an artefact of this
+  # job itself having been skipped.
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      ts: ${{ steps.classify.outputs.ts }}
+      python: ${{ steps.classify.outputs.python }}
+      ansible: ${{ steps.classify.outputs.ansible }}
+      docs: ${{ steps.classify.outputs.docs }}
+      changeset: ${{ steps.classify.outputs.changeset }}
+      packages: ${{ steps.classify.outputs.packages }}
+    steps:
+      # FULL HISTORY. A shallow clone fails `git diff <base>...HEAD` with "no commits in common" --
+      # `changeset-check.yml`'s own comment already named this trap.
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - id: classify
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            node scripts/ci-changed.mjs --event=pull_request --base=origin/${{ github.base_ref }}
+          else
+            node scripts/ci-changed.mjs --event=push
+          fi
+
+  ts:
+    needs: changed
+    if: needs.changed.outputs.ts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      # --ignore-scripts: skip Playwright/Guidepup postinstall browser/AT setup, which lint, typecheck and
+      # the unit suite do not need (keeps this fast and Linux-safe) -- carried forward from `lint.yml`.
+      - run: npm ci --ignore-scripts
+      # Cross-package imports resolve to `dist` (every `exports` entry points there) -- CLAUDE.md's own
+      # rule: run the file runner on its own and it tests the LAST BUILD, which on a fresh checkout is no
+      # build at all.
+      - run: npm run build
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Unit tests -- touched packages on a PR, every package on a push to main
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            npm run test:ts
+          else
+            globs=()
+            for pkg in ${{ needs.changed.outputs.packages }}; do
+              globs+=("packages/$pkg/src/**/*.test.ts")
+            done
+            if [ "${#globs[@]}" -eq 0 ]; then
+              echo "ts=true but no package was implicated -- ci-changed.mjs's own rule is that this should"
+              echo "never happen (a root config or scripts/*.mjs change adds every package); failing loudly"
+              echo "rather than silently running nothing."
+              exit 1
+            fi
+            npx tsx --test "${globs[@]}"
+          fi
+      # MAIN ONLY. Coverage is a whole-repo threshold (`.c8rc.json`'s 78%), and `rules-check`/
+      # `scorer:verify`/`gate:isolation` are repo-wide invariants, not package-scoped ones -- none of them
+      # answer "did THIS PR's diff regress", they answer "is the repository as a whole still sound", which
+      # is what a merge to `main` is the moment to ask. Moved here from `lint.yml`'s unconditional list
+      # rather than dropped.
+      - name: Coverage, the rules fitness function, and packaging integrity
+        if: github.event_name == 'push'
+        run: |
+          npm run coverage
+          npm run rules-check
+          npm run scorer:verify
+          npm run gate:isolation
+
+  python:
+    needs: changed
+    if: needs.changed.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      # `requirements-ci.txt`, not `requirements.txt` -- the lab's full environment is torch + transformers
+      # + onnxruntime + huggingface-hub, and the test suite does not need most of it. See that file's own
+      # header for the measurement. Two tests DO need torch/onnxruntime and are marked
+      # `pytest.importorskip` for exactly that reason -- they run on the lab, not here.
+      - run: pip install -r requirements-ci.txt
+      # Same two flags as the root `test:python` script, deliberately: `spec_from_file_location` honours
+      # `__pycache__`, and a stale compile has decided a mutation check wrongly in this repo before.
+      - run: PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider packages/*/tests -q
+
+  ansible:
+    needs: changed
+    if: needs.changed.outputs.ansible == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      # `ansible-core`, not the full `ansible` metapackage -- the metapackage bundles hundreds of
+      # collections this fleet does not use.
+      - run: pip install ansible-core pyyaml
+      - name: Install the collections these playbooks import
+        run: ansible-galaxy collection install -r packages/control/ansible/requirements.yml
+      - name: Every playbook still parses
+        env:
+          ANSIBLE_CONFIG: packages/control/ansible/ansible.cfg
+        run: |
+          status=0
+          for playbook in packages/control/ansible/*.yml; do
+            # roles/, tasks/, group_vars/ and the two inventory files are not playbooks (no top-level
+            # `hosts:`) and --syntax-check on one of those fails for a reason unrelated to this check.
+            grep -q "^- hosts:\|^  hosts:" "$playbook" || continue
+            echo "--- $playbook ---"
+            ansible-playbook -i packages/control/ansible/inventory.example.yml --syntax-check "$playbook" || status=1
+          done
+          exit $status
+      - name: Every module invocation matches what the module actually documents
+        working-directory: packages/control/ansible
+        run: python3 check-modules.py
+
+  docs:
+    needs: changed
+    if: needs.changed.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      # The doc/tracker/board guards -- `backlog.test.ts`, `backlog-ready.test.ts`, `known-gaps-file-
+      # facts.test.ts`, `board-liveness.test.ts` and their siblings, all of which read `docs/*.md` content
+      # and would otherwise only ever run when `packages/lab/src/packaging/**` itself changes, never when
+      # the DOCUMENT it pins does. Running the whole directory rather than hand-picking a subset: it is
+      # already the repo's own home for "guard, not capture/fleet" tests (leak sweeps, worktree lifecycle,
+      # lab-job catalogue checks alongside the doc guards), so a hand-picked list would need its own
+      # discovery test to stay honest -- simpler to run the directory a docs change could plausibly affect.
+      - run: npx tsx --test "packages/lab/src/packaging/*.test.ts"
+
+  # PULL REQUESTS ONLY, never on push -- `changeset-check.yml`'s own original reasoning, carried forward
+  # unchanged: pushing straight to `main` is how this repo currently works, and blocking that would make
+  # the check something to be bypassed rather than obeyed.
+  changeset:
+    needs: changed
+    if: github.event_name == 'pull_request' && needs.changed.outputs.changeset == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: A consumer-visible change must say what it does to a consumer
+        run: |
+          if ! npx changeset status --since=origin/${{ github.base_ref }}; then
+            echo "::error::This PR changes a published package and carries no changeset."
+            echo "Run 'npm run changeset', pick the packages and bump levels, and write one sentence a"
+            echo "CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT follow"
+            echo "from the size of the diff, and for the scorer any retrain is a MAJOR."
+            echo "If the change genuinely cannot affect a consumer, 'npx changeset add --empty' records"
+            echo "that decision explicitly rather than leaving it to be inferred from silence."
+            exit 1
+          fi
