@@ -2630,8 +2630,44 @@ only as a diagnostic beside it. Then: the design-system capture's `titleAfter` r
 still see a genuine title change, and a fix that reads the wrong document — the census defect of §40 —
 would take them to zero while looking cleaner everywhere else.
 
+### THE PROBE WAS ALSO CORRUPTING THE CHANNEL NEXT TO IT — measured 2026-09-06 after the fix
+
+`evidence:check` on the fix alone, expecting movement only in title-reading families:
+
+```
+48 compared: 46 same, 0 drift, 2 changed
+  CHANGED  form-error-silent.good  interaction.postSubmitNames 63->59
+  CHANGED  form-error-silent.bad   interaction.postSubmitNames 63->59
+```
+
+No title family moved — `route-title-stale` is SAME, which is this entry's own named regression target. What
+moved is **four announcements that stopped being FRAGMENTED**:
+
+```
+before   "background detail for reference note 01, retained for records and reviewed each"
+         "year by the site team."
+after    "background detail for reference note 01, retained for records and reviewed each year by the site team."
+```
+
+Checked mechanically, not by eye: **4 of 4 gained entries are exactly two lost entries joined.** No text
+gained or lost; 63 → 59 because four phrases split across two `lastSpokenPhrase()` reads are now single
+entries.
+
+**`reportedTitle` did not merely READ the wrong thing — it pressed a key and consumed speech.**
+`nvda.perform(reportTitle)` followed by `waitForSpeechQuiet` sat in the middle of the post-submit sequence
+and cut long announcements in half. `postSubmitFields`/`postSubmitNames` is the evidence 3.3.1 and 4.1.3
+are decided from, and a fragmented phrase can defeat a match that spans the split — an error message cut in
+half is one a word-match may not find.
+
+**The general form, which is why this is recorded rather than just fixed:** a diagnostic that ACTS on the
+subject can damage a neighbouring measurement, and nothing in this project's design vocabulary had a name
+for that. A probe is scoped by what it READS; this one was scoped that way and its side effect reached
+past it. The sibling is §24, where two correct fixes combined into a defect — here one probe's side effect
+reached another probe's channel, and both were invisible to every check because each field, read alone,
+looked reasonable.
+
 ### What this does NOT change
 
-The 3.2.1 finding on that page stays in the baseline until the fix lands and the page is recaptured. It is
-a REFERRAL, not an accusation, and removing it now on the strength of an unfixed diagnosis would be
-accepting a baseline edit as a substitute for the work.
+The 3.2.1 finding on that page stays in the baseline until the page is recaptured. It is a REFERRAL, not an
+accusation, and removing it on the strength of a diagnosis rather than fresh evidence would be accepting a
+baseline edit as a substitute for the work.
