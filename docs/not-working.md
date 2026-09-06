@@ -1841,3 +1841,54 @@ Read individually against their stored captures, not diffed: four are the docume
 is a real unnamed graphic on ons.gov.uk inside a link with no name of its own. Every one carries
 `mapping: "secondary"`, so **ASSERTED-WRONGLY was 0** — the column that matters, and the one that collapsing
 with `referred` made meaningless for a day.
+
+## 23. ONE EXEMPTION, SEVEN SITES, SIX FOUND BY RUNNING IT — and the seventh was on the shipping path
+
+**Measured across one night, 2026-09-05/06.** `rule-ownership.json` gained `modelHead: false`, meaning the
+RULES decide a subtype outright and no head is ever fitted for it. It is one boolean. Threading it took
+seven changes, and only the first was found by design.
+
+| # | site | how it was found |
+|---|---|---|
+| 1 | `subtypes_by_criterion_for` — remove the subtype so no head is fitted | designed |
+| 2 | the trainer's must-be-present declaration check | designed |
+| 3 | `ownershipFailures` in `rules:score` | a gate failing |
+| 4 | `REAL_SUBTYPES` in `subtype-vocabulary.test.ts` | a test failing |
+| 5 | `rules:gate`'s coverage table | a gate failing |
+| 6 | the trainer's PER-CRITERION LOOP — `torch.stack([])` | **a train dying after the encoder pass**, having already rotated the previous release-eligible model aside |
+| 7 | `score.py`'s `verify_artifact` — `criterion 2.4.7 has no scorer heads` | **held-out acceptance refusing to LOAD the artefact** |
+
+### Why sites 6 and 7 existed at all, and it is not carelessness
+
+A criterion with NO subtypes had been **impossible** until this field existed. Both sites were correct
+against every artefact ever produced before it, and both read the newly-possible state as corruption. That
+is not a missed call site; it is a new state in a domain, and every consumer that enumerated the old states
+had to learn it.
+
+### The one that matters most
+
+**Site 7 is on the path that SHIPS.** A v19 artefact could not be loaded at all — `verify_artifact` is what
+the product calls, so this was not "the gate cannot grade it", it was "the model cannot be used". It was
+found because a gate ran, not because anyone reviewed the diff. Sites 1-5 are checks; 6 and 7 are the two
+that only a real run reaches, and 7 is the only one a USER would have hit.
+
+### What the remedy was, each time, and where it does not generalise
+
+`subtype-vocabulary.test.ts` records the right instinct — **redefine what "real subtype" means once,
+rather than exempt at each site** — and that closed sites 1-5. It could not reach 6 or 7, and the reason is
+worth having: those are not about VOCABULARY, they are about a LIST BECOMING EMPTY. A definition of "real
+subtype" says nothing about what `for criterion in criteria` does when the criterion has none.
+
+Both are now guarded, and both guards assert the PREMISE first —
+`test_criterion_with_no_head.py`'s opening assertion is that the real declarations actually DO empty a
+criterion, so the guard is live rather than passing over an impossible case. `test_headless_criterion_loads.py`
+pins both directions: a DECLARED headless criterion loads, an undeclared one still fails loudly, and the
+check is `is False` rather than truthiness because every pre-v19 artefact simply OMITS the field and a
+truthy test would accept those too.
+
+### The generalisation
+
+**When a change makes a previously impossible state possible, the call sites that need updating are the
+ones that ENUMERATE states — and they are found by running, not by grepping the new identifier.** Sites 6
+and 7 contain neither the string `modelHead` nor `rule-ownership`; nothing textual connects them to the
+change. What connects them is that both assumed a non-empty list.
