@@ -41,16 +41,30 @@
     # makes a name a job ignores answerable rather than silently dropped. A name absent from this list is
     # outside the interface and Ansible will discard it — there is no way to enumerate extra vars, so this
     # list is the boundary of what can be checked at all, and adding a parameter means adding it here.
-    lab_caller_params: [only, out, role, shard, model, worker, sample, subtype, feature]
-    # A parameter that reaches its command through a DERIVED FACT rather than by its own name. The
-    # derivation below reads the job's own command, and a command saying `{{ lab_named_worker }}` cannot
-    # say which parameter produced it — so the one indirection is declared, with its reason, rather than
-    # guessed at. `lab-job-params.test.ts` refuses a new `set_fact` guarded by `when: <param> is defined`
-    # that is not listed here, which is what stops this drifting from the tasks that build the facts.
+    lab_caller_params: [only, out, role, shard, model, worker, workers, sample, subtype, feature]
+    # A parameter that reaches its command through a DERIVED FACT rather than by its own name, mapped to
+    # the EXPRESSION it stands for. The derivation reads the job's own command, and a command saying
+    # `{{ lab_named_worker }}` cannot say which parameter produced it — so each indirection is declared,
+    # with its reason, rather than guessed at.
+    #
+    # THE VALUE IS AN EXPRESSION, NOT JUST A NAME, and that is what lets an alias be OPTIONAL. The
+    # derivation decides required-versus-optional by looking for `| default(...)` or `is defined`, so a
+    # bare name could only ever derive REQUIRED — which was true of the one alias here and would have been
+    # wrong for the next one.
+    #
+    # READ BY `lab-job.test.ts`, which derives its substitution table from THIS map. It carried its own
+    # hardcoded copy until 2026-09-06, and the comment here cited `lab-job-params.test.ts` as what kept
+    # the two in step — **a file that has never existed in this repository**. So the fact was stated twice,
+    # nothing compared the copies, and the sentence saying otherwise is what stopped anyone checking. One
+    # copy now, which is this repo's first remedy rather than its third.
     lab_param_aliases:
       # `-e worker=` is a NAME from the inventory and the command needs an ADDRESS. Turning one into the
       # other is the containment: an address cannot be supplied directly.
       lab_named_worker: worker
+      # `-e workers=` names WHICH boxes, and defaults to all of them. Same containment, same reason: the
+      # value is a list of inventory HOST NAMES (or a count), never addresses, so every address in the
+      # result is still built from the inventory and still passes the strict address assert below.
+      lab_selected_workers: workers | default('the whole fleet')
     # Every job this playbook can run. `timeout` becomes `RuntimeMaxSec`, so it is a real ceiling rather
     # than advice — set it above the slowest honest run, because a deadline that expires early turns "still
     # working" into "failed".
@@ -206,7 +220,11 @@
       # which is the difference between "captured 0 cases" and "you asked for a case that does not exist".
       capture-only:
         progress: runs/screenreader-dataset
-        params: {only: required}
+        # `workers` is OPTIONAL and defaults to the whole fleet, so every existing dispatch of this job is
+        # unchanged. It exists because the scaling shard (#22) alternates ten boxes and five, and this job
+        # took its list from `lab_fleet_workers` with no way to be told *use five* — so only the ten-box
+        # arm was dispatchable, and half a curve is not a slow measurement, it is a different one.
+        params: {only: required, workers: optional}
         # `:fresh` — GENERATE, then capture. It ran `training:capture` alone, so a case that did not yet
         # exist as a page could never be captured: `training:capture failed: No generated case matches`.
         # That defeats half of what this job is for. `--pipeline=verify` exists to prove a corpus change
@@ -230,7 +248,12 @@
         # the cache outright, "because those runs exist to test whether NVDA's output is still stable",
         # which is exactly what this one is for.
         argv: ["/usr/bin/npm", "run", "training:capture:fresh", "--", "--only={{ only }}", "--no-cache"]
-        setenv: ["A11Y_WORKERS={{ lab_fleet_workers }}"]
+        # `lab_selected_workers`, not `lab_fleet_workers` — the ONLY job that reads the selection today.
+        # Deliberately not applied to the other seven pooling jobs: a corpus recapture on a subset is a
+        # corpus captured on fewer boxes with nothing recording that, and this job is bounded to a handful
+        # of cases by `--only`, which is what makes a deliberately-smaller run meaningful here and a
+        # silent-partial-corpus hazard there.
+        setenv: ["A11Y_WORKERS={{ lab_selected_workers }}"]
         # Minutes, not hours: this exists precisely because it is small.
         timeout: 3600
       # `--require-complete` because THIS box owns the corpus. Here "no evidence for that case" is a real
@@ -959,6 +982,85 @@
         fail_msg: >-
           Refusing to run: A11Y_WORKERS would be {{ lab_fleet_workers | truncate(120) }}, which is not a
           plain comma-separated list of worker addresses. Something has overridden the inventory.
+
+    # HOW MANY BOXES, for the jobs that can be asked. `-e workers=` takes inventory HOST NAMES
+    # (`a11y-worker-2,a11y-worker-5`) or a COUNT (`5`); with neither, it is the whole fleet and this is
+    # `lab_fleet_workers` unchanged, so every existing job behaves exactly as before.
+    #
+    # NAMES, NEVER ADDRESSES, and that is the whole design rather than a preference. The assert above
+    # exists because extra vars have the highest precedence in Ansible, so `-e A11Y_WORKERS=...` is
+    # reachable even where it looks inventory-derived — and this env is read by a process running as root
+    # on the box holding the corpus. A caller-supplied ADDRESS list would be exactly the injection that
+    # assert makes inexpressible, arriving through a new door. A caller-supplied NAME is resolved through
+    # `hostvars` like every other, so the address still comes from the inventory and the result is put
+    # through the identical pattern assert below.
+    #
+    # A COUNT IS SUGAR AND IT REPORTS WHAT IT CHOSE. #74 asked for a count; `A11Y_WORKERS` is documented
+    # as the escape hatch meaning *you are managing them*, and which five boxes ran is part of what a
+    # scaling measurement has to state — a number whose population is unstated is the thing #21 is about.
+    # So a count selects the first N in inventory order and the run PRINTS the names, rather than leaving
+    # the selection implicit.
+    - name: Which workers this run may use
+      ansible.builtin.set_fact:
+        lab_selected_hosts: >-
+          {{ (workers is not defined) | ternary(
+               groups['a11y_workers'],
+               (workers | default('') | string is match('^[0-9]+$'))
+                 | ternary(groups['a11y_workers'][:workers | default(0) | int],
+                           workers | default('') | string | split(',') | map('trim') | select | list)) }}
+
+    # NAMED A BOX THAT IS NOT IN THE INVENTORY, or asked for more than exist. Both fail BY NAME rather
+    # than quietly running on fewer: "five boxes" and "the four that happened to resolve" are different
+    # measurements, and reporting the second as the first is this repo's wrong-population shape.
+    # ASKING FOR MORE BOXES THAN EXIST MUST REFUSE, NOT TRUNCATE — and this was found by RUNNING the
+    # expressions against a five-host fixture rather than by reading them. `[:n]` on a shorter list is
+    # silently the whole list, so `-e workers=99` on a ten-box fleet would have run on ten and reported
+    # success, which is the wrong-population shape this parameter exists to prevent: "the five-box arm"
+    # and "however many happened to be there" are different measurements and only one was asked for.
+    - name: Every named worker must be in the inventory, and the count must be one the fleet can meet
+      ansible.builtin.assert:
+        that:
+          - lab_selected_hosts | length > 0
+          - lab_selected_hosts | difference(groups['a11y_workers']) | length == 0
+          - (workers is not defined) or (workers | string is not match('^[0-9]+$'))
+            or (workers | int <= groups['a11y_workers'] | length)
+        fail_msg: >-
+          Refusing to run: -e workers={{ workers | default('(unset)') }} selects
+          {{ lab_selected_hosts | join(',') | default('nothing', true) }}.
+          {{ (lab_selected_hosts | length == 0) | ternary(
+               'That is no workers at all — a run on zero boxes is not a smaller measurement, it is none.',
+               (lab_selected_hosts | difference(groups['a11y_workers']) | length > 0) | ternary(
+                 'These are not in the inventory: '
+                   ~ (lab_selected_hosts | difference(groups['a11y_workers']) | join(', ')),
+                 'That is more boxes than the fleet has, and truncating silently would report a run on '
+                   ~ (groups['a11y_workers'] | length) ~ ' as the one you asked for.')) }}
+          The fleet is {{ groups['a11y_workers'] | join(', ') }}.
+
+    - name: Address the selected workers
+      ansible.builtin.set_fact:
+        lab_selected_workers: >-
+          {{ lab_selected_hosts
+             | map('extract', hostvars, 'ansible_host')
+             | map('regex_replace', '^(.*)$', 'http://\1:8765')
+             | join(',') }}
+
+    # THE SAME ASSERT, NOT A WEAKER ONE. A subset built from the inventory is still an address list going
+    # into a root process, and a selection path that skipped this check would be the one door left open.
+    - name: The selected address list must be exactly that, and nothing else
+      ansible.builtin.assert:
+        that:
+          - lab_selected_workers is match('^http://[0-9.]+:8765(,http://[0-9.]+:8765)*$')
+        fail_msg: >-
+          Refusing to run: A11Y_WORKERS would be {{ lab_selected_workers | truncate(120) }}, which is not
+          a plain comma-separated list of worker addresses. Something has overridden the inventory.
+
+    # STATE THE POPULATION, always — not only when a subset was asked for. A measurement that names its
+    # boxes on the runs where somebody remembered to ask is a measurement whose population is optional.
+    - name: Say which boxes this run will use
+      ansible.builtin.debug:
+        msg: >-
+          {{ lab_selected_hosts | length }} of {{ groups['a11y_workers'] | length }} worker(s):
+          {{ lab_selected_hosts | join(', ') }}
 
     - name: "Run {{ job }}"
       ansible.builtin.include_tasks: tasks/run-job.yml

@@ -111,8 +111,24 @@ export function captureBearingJobs(catalogueText) {
     throw new Error(`only found ${jobs.length} job(s) in lab-job.yml's catalogue; the indentation this scan `
       + "depends on changed, and this derivation is blind rather than the catalogue being small");
   }
+  // EITHER FACT, and the second one nearly slipped through as a silent REMOVAL of this check.
+  //
+  // This matched `lab_fleet_workers` alone until 2026-09-06. `capture-only` then began reading
+  // `lab_selected_workers` — the inventory-derived SUBSET that `-e workers=` selects (#74) — and the
+  // effect of that one-word change was to drop the job out of this set entirely, so the pre-dispatch
+  // fleet health check would have stopped running for it. Nothing about the job changed; it simply
+  // stopped being recognised.
+  //
+  // That is the exact hazard this derivation exists for, arriving from the direction it was not written
+  // for: it was built so a NEW job could not slip in unchecked, and the gap was an EXISTING job slipping
+  // out. `lab-job.test.ts` caught it by name, which is the whole argument for pinning the membership
+  // rather than trusting the regex.
+  //
+  // A job pooling over a SUBSET is still a job dispatching real captures across real boxes, so it needs
+  // the same check — over the boxes it will actually use, which is what `lab-job.mjs`'s caller now asks.
   return jobs
-    .filter(({ block }) => /setenv:\s*\[[^\]]*A11Y_WORKERS=\{\{\s*lab_fleet_workers\s*\}\}/.test(block))
+    .filter(({ block }) =>
+      /setenv:\s*\[[^\]]*A11Y_WORKERS=\{\{\s*lab_(fleet|selected)_workers\s*\}\}/.test(block))
     .map(({ name }) => name);
 }
 
