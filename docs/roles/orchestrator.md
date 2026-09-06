@@ -1,6 +1,7 @@
-# The orchestrator — fleet, lab, `runs/`, gates
+# `orchestrator` — fleet, lab, `runs/`, gates
 
-The counterpart to [`worker-loop-orchestrator.md`](worker-loop-orchestrator.md). That role owns the worker
+**Agent name: `orchestrator`.** Reports to `ceo`. The counterpart to
+[`worker-loop-orchestrator.md`](worker-loop-orchestrator.md) (`dispatcher`). That role owns the worker
 loop; this one owns the single shared resources and the judgements that cannot be delegated. Written down
 because it existed for weeks as an understanding between sessions, and an understanding held in two agents'
 heads is the fact-stated-twice defect one layer up.
