@@ -110,6 +110,18 @@ jobs:
       # rather than dropped.
       - name: Coverage, the rules fitness function, and packaging integrity
         if: github.event_name == 'push'
+        # GH_TOKEN, THE SAME ONE THE STEP ABOVE ALREADY SETS. `npm run coverage` runs the WHOLE suite
+        # under c8, so it reaches `board-style.test.ts` and `row-claim.test.ts`'s live `fetchLabels`
+        # exactly as `test:ts` does -- and without the token those five tests fail here while passing
+        # thirty lines up, in the same job, on the same commit. Measured on `main` at 830a7d4d: 2648 pass,
+        # 5 fail, all five network-dependent; reproduced locally by putting a `gh` that exits 127 on the
+        # PATH, which fails those four and no others.
+        #
+        # A REMEDY APPLIED AT ONE CALL SITE WHEN THE BEHAVIOUR REACHES SEVERAL -- this repository's most
+        # expensive recurring shape, here in the workflow that enforces it. Two steps in one job run the
+        # same tests; the env reached one.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           npm run coverage
           npm run rules-check
