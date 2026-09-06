@@ -28,15 +28,22 @@ export interface CapturedAnnouncements {
     stateChanges: { control: string; after: string }[];
     postSubmitFields?: string[];
     /**
-     * Present only when `currentPageUrl()` read a DIFFERENT value before and after submitting
-     * (`capture-probes.mjs:3082`). Read by `submitNavigatedTheDocument` (known-gaps §41) as ONE signal,
-     * not the only one — its ABSENCE conflates three states this project has already been burned reading
-     * as one: the submit genuinely did not navigate, `currentPageUrl()` returned falsy on either side, or
-     * the field-setting probe never ran at all. Measured on `w3.org/.../survey.html`'s real capture: this
-     * field is absent AND the submit demonstrably navigated (a different document title arrived, see
-     * `formChanges` below) — so absence here is not evidence of no navigation, only PRESENCE is.
+     * Set once `probeFormSubmit` runs (`capture-probes.mjs:3068`), never absent for that reason alone as
+     * of the fix below. `checked: false` means `currentPageUrl()` returned falsy on at least one side —
+     * we could not ask — a DIFFERENT fact from `navigated: false` (we asked, and it stayed on the same
+     * document). Read by `submitNavigatedTheDocument` (known-gaps §41) as ONE signal, not the only one.
+     *
+     * FIXED 2026-09-06 — this used to be `{ from: string; to: string }`, present only when
+     * `before !== after`, so its ABSENCE conflated three states this project had already been burned
+     * reading as one: the submit genuinely did not navigate, `currentPageUrl()` returned falsy on either
+     * side, or the probe never ran at all. Measured on `w3.org/.../survey.html`'s real capture: the old
+     * field was absent AND the submit demonstrably navigated (a different document title arrived, see
+     * `formChanges` below) — so absence there was not evidence of no navigation, only presence was.
+     * `submitNavigatedTheDocument` below still reads that OLD shape correctly for captures already on
+     * disk (a truthy value with no `checked` key means "navigated", exactly as it always did) — the
+     * corpus carries thousands of them and a recapture has not happened yet.
      */
-    navigatedOnSubmit?: { from: string; to: string };
+    navigatedOnSubmit?: { checked: boolean; navigated?: boolean; from?: string; to?: string };
     /**
      * `kind` is on the real wire (`capture-probes.mjs`'s `activateAndCaptureDelta`/`probeToggle`'s own
      * comment: "a NEW value ... additive on purpose") but not yet declared on `CaptureInteraction` in
@@ -854,15 +861,24 @@ export function consentBanner(capture: CapturedAnnouncements): ConsentBanner {
  * carried for survey.html — is the second, added because the first one goes silent exactly when a real
  * page's form ACTION points somewhere else. This is a heuristic on announced TEXT, not a wire fact: a
  * genuine error message that happened to end the same way would read as a navigation it was not, and an
- * unusual document announcement this grammar does not anticipate would read as none. Interim, by design —
- * the honest fix is `navigatedOnSubmit` recording a third state ("checked, could not tell") instead of
- * collapsing it into absence, which needs the worker to compute it and rides a future deploy.
+ * unusual document announcement this grammar does not anticipate would read as none. This heuristic is
+ * now the FALLBACK rather than the only signal for the ambiguous case — see the FIXED note above.
  *
  * So: `candidates <= 1` AND `!submitNavigatedTheDocument(capture)` together mean the mismatch predates
  * anything we did — a genuine site redirect (`tfl.gov.uk/modes/tube/`, TfL's own status-page redirect,
  * unaffected throughout: no `formState` means no submit could have run) or an extension/rewrite the
  * requested URL never had. `focus-removed-on-receipt-*`'s own GET-submit and survey.html's own submit both
  * set at least one of the two signals, so both stay suspect exactly as before.
+ *
+ * **FIXED 2026-09-06 — `navigatedOnSubmit` now records the third state directly, so this function no
+ * longer needs the text heuristic for a capture that CONFIRMS either answer.** The interim design a few
+ * paragraphs down predicted exactly this fix and kept the heuristic "for a capture whose own signal goes
+ * silent exactly when a real page's form ACTION points somewhere else" — that capture is now
+ * `checked: false`, and the heuristic still runs for it, and for every capture on disk that predates this
+ * fix. Kept as a permanent fallback, not removed: the corpus carries thousands of the old shape, a
+ * recapture has not happened yet, and `checked: false` will keep occurring on any future capture where
+ * `currentPageUrl()` genuinely fails on one side. Every consumer of `navigatedOnSubmit` in the tree was
+ * checked before this note was written, not assumed clean — see the commit message for the list.
  *
  * `"no-expected-url"` is a genuinely different state: no comparison was even ATTEMPTED (a call outside an
  * active capture, e.g. `/diagnostics`), so there is nothing here to have failed. `candidates` remains the
@@ -913,10 +929,23 @@ const DOCUMENT_ANNOUNCEMENT = /,\s*document$/i;
  * Did submitting a form navigate this capture to a different document, however we can tell? See
  * `censusTargetIsSuspect`'s header for the full history of why this needs two signals rather than one.
  *
+ * Reads BOTH shapes `navigatedOnSubmit` has ever had on the wire. The current shape carries `checked`;
+ * its absence means a capture taken before this fix, whose only spelling of "navigated" was the field's
+ * bare presence — `{ from, to }` with no `checked` key, present only when the submit actually moved the
+ * document. A `checked: true` verdict is trusted outright in EITHER direction, skipping the text
+ * heuristic entirely, because it is a direct reading rather than a guess about announced text; only
+ * `checked: false` (we could not ask) falls through to it, exactly as an old-shape absence always did.
+ *
  * @param capture a capture, unwrapped
  */
 export function submitNavigatedTheDocument(capture: CapturedAnnouncements): boolean {
-  if (capture.interaction?.navigatedOnSubmit) return true;
+  const nav = capture.interaction?.navigatedOnSubmit;
+  if (nav && typeof nav === "object" && "checked" in nav) {
+    if (nav.checked) return nav.navigated === true;
+    // checked: false -- could not ask; fall through to the heuristic below, same as an old-shape absence.
+  } else if (nav) {
+    return true; // pre-fix shape: presence always meant navigated.
+  }
   const formChanges = capture.interaction?.formChanges;
   if (!Array.isArray(formChanges)) return false;
   return formChanges.some((change) => change?.kind === "submit"
