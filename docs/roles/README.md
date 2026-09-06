@@ -135,6 +135,33 @@ decision belongs to whoever holds them today, not to this page.
 driver, rather than a rule everyone else follows, is what keeps `lab:job`'s refusal-not-queueing and
 `assertFleetRunsThisCheckout`'s one-commit invariant meaningful at all.
 
+## A GATE THAT READS `runs/` IS NOT YOURS TO REPORT
+
+**Ruled 2026-09-06.** `rules:gate`, `rules:coverage`, `check-signals`, `corpus:starvation`,
+`scorer:shortcuts` and anything else reading `runs/` give a VERDICT only when the agent driving the fleet
+and the lab runs them — against a corpus just fetched, or on the lab, which owns the authoritative one.
+
+**Anyone else may run one as a PRE-CHECK**, to decide whether a change is worth handing on. **Never as a
+reported result**, and never in an acceptance section as though it settled anything.
+
+The reason is measured rather than procedural. `runs/` in any checkout is a copy only as fresh as its last
+sync — one measured here was 89 hours old and carried neither `focusEvents` nor `baselineWaitedMs`, so a
+sweep across it found zero of the two keys it was written to find. **A gate run there reports cleanly
+having examined a corpus that no longer exists.** The pre-push hook already SKIPS the corpus-dependent
+checks loudly for exactly this reason, and calls that honest rather than passing quietly.
+
+**So an issue's acceptance may name a `runs/`-reading gate, and must say who runs it.**
+
+> **Its third home, and the moves are the record rather than churn.** It was written in
+> `docs/backlog-ready.md`, the pull queue, because that page's rows named these gates in their
+> acceptance. When the tracker moved to GitHub Issues that page was retired, and it was the ONLY
+> place the ruling existed — so it went to `CLAUDE.md` rather than being deleted with the page.
+> `CLAUDE.md` was a holding pen and said so: it is instruction for working ON the repository, and
+> this governs WHO MAY REPORT a result, which is role territory. It lives here now, beside the
+> resource ban it is a sibling of, and the `CLAUDE.md` copy is deleted in the same commit.
+> **One home, not two** — a rule stated twice is this repository's most-repeated defect, and
+> introducing one while tidying up after exactly that would be a poor trade.
+
 ## The contingency drill
 
 **The acceptance test for this whole page, and it is a command, not a judgement:** a fresh clone in a
