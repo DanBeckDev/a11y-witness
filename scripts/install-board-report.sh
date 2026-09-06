@@ -17,6 +17,28 @@ CHECK_PLIST="$HOME/Library/LaunchAgents/$CHECK.plist"
 LOG="$HOME/Library/Logs/a11y-witness/board-report.log"
 NODE_BIN="$(dirname "$(command -v node)")"
 
+# THE CHECKOUT MUST BE ON `main`, AND THE BRANCH IS PRINTED EITHER WAY.
+#
+# The scheduled job runs from this directory at whatever branch it is sitting on, so installing from a
+# feature branch schedules that branch's document. Measured 2026-09-06: the primary checkout was on a
+# feature branch when a merge landed, and an 08:00 run would have rendered from it -- publishing a
+# document whose form the board had rejected, automatically, the morning after they approved its
+# replacement.
+#
+# `GIT_*` is scrubbed for the same reason every git spawn in this pipeline is: a leaked `GIT_DIR` makes
+# this read a different repository's branch and answer confidently about the wrong tree.
+BRANCH="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+  git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
+if [ "$BRANCH" != "main" ]; then
+  echo "REFUSING to install: this checkout is on '$BRANCH', not main." >&2
+  echo "  $REPO" >&2
+  echo "The scheduled job renders from this directory at whatever branch it is on, so installing from" >&2
+  echo "'$BRANCH' schedules that branch's document. Check out main and run this again." >&2
+  echo "Nothing was installed." >&2
+  exit 2
+fi
+echo "checkout: $REPO is on $BRANCH"
+
 # THE MACHINE'S ZONE IS CHECKED, NOT ASSUMED. launchd's StartCalendarInterval is local time, and the
 # issue body promises 08:00 Europe/London. A report whose stated time and actual time disagree is exactly
 # the small untruth this pipeline exists to refuse, so it is stated loudly rather than left to be found.
