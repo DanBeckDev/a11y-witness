@@ -637,7 +637,7 @@ async function runWitness(
   } else {
     printReport({
       url, task, screenReader: cap.screenReader, announcements: cap.transcript.length,
-      verdict, axe: ruleFindings, conformance, outcomes,
+      verdict, axe: ruleFindings, conformance, outcomes, environment: cap.environment,
     });
   }
 }
@@ -713,6 +713,11 @@ function printJson(
   console.log(JSON.stringify({
     url, task, screenReader: cap.screenReader, transcript: cap.transcript,
     structure: cap.structure, interaction: cap.interaction,
+    // The RUNNING capture's own environment (screenReaderVersion, guidepupVersion, browserVersion, ...),
+    // never a pin or an installer manifest — publish blocker B4. A disputed finding has to be traceable
+    // to the NVDA build and client that actually produced it, the same principle the scorer's own
+    // `verdict.runtime` block applies to the inference side.
+    environment: cap.environment ?? null,
     ruleBased: ruleFindings, verdict: layered,
     // False when the capture could not be confirmed to have read the requested page. Findings from an
     // unverified capture may describe browser chrome, so a consumer must be able to refuse them.
