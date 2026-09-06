@@ -1892,3 +1892,65 @@ truthy test would accept those too.
 ones that ENUMERATE states — and they are found by running, not by grepping the new identifier.** Sites 6
 and 7 contain neither the string `modelHead` nor `rule-ownership`; nothing textual connects them to the
 change. What connects them is that both assumed a non-empty list.
+
+## 24. TWO CORRECT FIXES THAT COMBINE INTO A DEFECT, and nothing textual connects them
+
+**Caught before capture, 2026-09-06, by one reviewer holding both branches.** Neither peer could have seen
+it from their own worktree, and neither was wrong.
+
+### The two fixes
+
+- **§43** (`agent/focus-reveal-start-position`): `probeFocusReveal` starts its Tab walk from wherever the
+  previous probe left DOM focus, so `revealed: false` meant "nothing revealed FROM HERE". The fix blurs
+  `document.activeElement` first, so the walk starts at the first tabbable element.
+- **§42** (`agent/focus-listener-before-focus`): the focus-event listener installed too late to witness
+  whatever already held focus, so the log's first event was an unmatched `focusout` and 2.4.7's F55 rule
+  had to special-case `i === 0`. The fix installs the listener right after `waitForDocument` — before the
+  sweep and every focus-touching probe — and DELETES the special case.
+
+Both correct. Both mutation-checked. Both green on the full suite.
+
+### What they do together
+
+**A `blur()` with nothing receiving focus afterwards emits an orphaned `focusout` — byte-for-byte the F55
+signature.** With the listener now live from document load and the `i === 0` exception deleted, our own
+diagnostic blur can be reported as a WCAG 2.4.7 conformance failure against a page that does nothing wrong.
+Worse than the 37 false positives §42 was closing, because this one is manufactured by our own probe and is
+indistinguishable, in the evidence, from a page defect.
+
+### Why the log cannot solve it
+
+`focusLandedOnADifferentControl` clears only a COMPLETED receipt, deliberately: an orphaned focusout
+followed shortly by an unrelated focusin is exactly what a genuine script strip looks like — it is
+`focus-removed-on-receipt-order.bad`'s own shape. No cleverer read of the log separates our blur from a
+real one. It needs a marker or an omission, not a better predicate.
+
+### How narrow it actually is, which is the useful half
+
+Measured by reading the install point rather than reasoning from the general case: any focus caused by a
+witnessed action already has a prior focusin in the log, and `focusLossEvidence`'s "ordinary hold" branch
+(`heldMs >= FOCUS_SCRIPT_WINDOW_MS`) clears it, because it was held from an earlier probe until now. The
+genuine danger is one shape: **a page `autofocus` surviving untouched from page load to the start of
+`probeFocusReveal`** — a login or search field on a page whose sweep never touches it.
+
+### The remedy, and why it is an OMISSION rather than a MARKER
+
+Make the diagnostic blur never enter the log: `INSTALL_FOCUS_EVENT_LOG_EXPRESSION` already stores its
+handlers as `window.__a11yFocusIn`/`__a11yFocusOut` so they can be detached and reattached — which
+`collectFocusEventLog` already does on teardown — so the blur brackets itself with `removeEventListener`
+and `addEventListener` inside the same page-side expression.
+
+A marker would have worked and is worse: it adds semantics for `focusLossEvidence` to interpret and for a
+future reorder to get wrong. **The bracket travels with the blur** rather than depending on where it sits
+in the sequence, and §43 exists precisely because the probe order was load-bearing by accident. A fix that
+reintroduced an ordering dependency to protect an ordering fix would be circular.
+
+### The generalisation, and it is §23's arriving somewhere new four hours later
+
+**Nothing textual connects the three files.** The blur is in `browser-session.mjs`; the rule that misreads
+it is in `rules.ts`; what makes them meet is an install point in `capture-core.mjs`. Grep for any
+identifier in one and you reach neither of the others. §23 said it about a previously-impossible state
+becoming possible: *the sites needing updating are the ones that ENUMERATE states, and they contain none of
+the new identifier's text.* Here it is two independent changes each valid alone, where the connection is a
+runtime ORDERING rather than a call graph — and the only thing that saw it was one reader holding both
+diffs at once. Review does not compose: a sub-reviewer given either branch would have approved it.
