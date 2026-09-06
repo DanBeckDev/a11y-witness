@@ -341,6 +341,8 @@ export type DomCensus = NonNullable<ReturnType<typeof domCensus>>;
  * type at all. Widening one of three is how the next reader gets a field the writer already sends.
  */
 export interface OracleCounts {
+  /** Media the PAGE declares, read from the DOM. Absent means the probe never ran, never "no media". */
+  media?: { tag: string; autoplay: boolean; muted: boolean; controls: boolean; loop: boolean }[];
   /** Per-type: whether the sweep announced everything the page exposes. `unknown` is a real answer. */
   completeness?: Record<string, Completeness>;
   census?: PageCensus;
@@ -363,6 +365,22 @@ export function oracleCounts(capture: CapturedAnnouncements): OracleCounts {
     truncated: truncatedAnnouncements(capture),
     supports: captureSupports(capture),
     banner: consentBanner(capture),
+    // MEDIA, and its absence is why `1.4.2:autoplay-uncontrollable` caught 0 of its own 7 records.
+    //
+    // The rule reads `input.media` — `autoplay` and `muted` are DOM attributes with no accessibility-tree
+    // equivalent, so it is the one rule that must read the DOM. `FORBIDDEN_INPUT_KEYS` excludes `dom` from
+    // the model's `input` (correctly), and `ruleEvidence` is the SIBLING channel built precisely so a rule
+    // may use evidence the model never sees. It carried the census and not this, so the field never
+    // reached an exported record and the rule could not fire in `rules:gate` at all.
+    //
+    // Measured 2026-09-06 on the first corpus to contain the cases:
+    //   RULES: 1.4.2:autoplay-uncontrollable is rule-decided on 7 record(s) and caught only 0
+    //
+    // This is the 1.3.1 census defect one field along — "a gate that does not exercise what ships is not a
+    // gate" — and the same remedy, for the same reason. PASSED THROUGH rather than recomputed, so absent
+    // stays absent: the rule's own comment notes that captures predating the probe have no `media`, and
+    // treating that as "no autoplaying audio" would assert on a question nobody asked.
+    media: (capture as { media?: OracleCounts["media"] }).media,
   };
 }
 
