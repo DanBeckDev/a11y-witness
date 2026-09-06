@@ -166,9 +166,7 @@ it, and nothing else. No telemetry, no usage reporting, no call home, and no pla
      docs/board/reported.json, exactly as the README's claim block is. This figure lived here as a
      SECOND COPY for a while and went stale when the first one moved; that is why the markers exist. -->
 
-**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures, and on 84
-conformant real pages the same gate examined them and found them clean.** That real-page denominator
-excludes one page the gate cannot examine, which is listed with its reason.
+**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures.** The real-page figure is under re-measurement since 2026-09-06 and this page states none: a refreshed baseline produced four findings on pages an older baseline had passed, and until each is established as an assertion or a referral there is no honest number to give.
 
 <!-- CLAIM:END -->
 
