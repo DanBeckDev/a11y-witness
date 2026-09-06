@@ -12,6 +12,28 @@ name: action-smoke
 
 on:
   push:
+    # PATH-FILTERED, AND THE FILTER WAS INCOMPLETE — corrected 2026-09-06 by
+    # `workflow-path-coverage.test.ts` on its first run.
+    #
+    # The list named the packages the action obviously involves and stopped at the ones it names directly.
+    # But `@a11y-witness/cli` — the thing this workflow runs — depends on `evidence`, `judge`, `scorer` AND
+    # `worker-fleet`, and `judge` and `scorer` each depend on `evidence` again. So a change to the
+    # announcement grammar or the verify predicates in `packages/evidence/src` changes what a consumer's
+    # report SAYS, and did not run this smoke test. That is the `capture-regression.yml` defect exactly —
+    # *"filtered to packages/lab/src/capture/**, so it did not fire for packages/lab/src/training/**, which
+    # is exactly where the guard bug lived"* — in a second workflow, found by a guard rather than by an
+    # incident. `evidence` and `worker-fleet` are now named.
+    #
+    # WHAT IS STILL EXCLUDED, AND WHY THAT IS SAFE: `lab`, `control`, `nvda-speech`, `scripts/` and
+    # `docs/`. None is a dependency of `cli` (`internalDependencies` in `scripts/isolation-gate.mjs`
+    # computes the same closure for the packing gate), and none ships in the action: `lab` and `control`
+    # are `private: true`, `nvda-speech` is a standalone port, and `scripts/` holds repo tooling a consumer
+    # never installs. A change to any of them cannot alter what `uses: ./` does.
+    #
+    # `lint.yml` carries no path filter at all and runs the whole suite on every push, so nothing here is
+    # unreachable today — that backstop is what makes these exclusions cheap, and
+    # `workflow-path-coverage.test.ts` asserts it still exists rather than leaving it as a thing everyone
+    # assumes.
     paths:
       - "action.yml"
       - ".github/workflows/action-smoke.yml"
@@ -19,6 +41,8 @@ on:
       - "packages/judge/**"
       - "packages/scorer/**"
       - "packages/nvda-worker/**"
+      - "packages/evidence/**"      # cli, judge and scorer all depend on it — see above
+      - "packages/worker-fleet/**"  # cli depends on it
       - "package.json"
   workflow_dispatch:
 
