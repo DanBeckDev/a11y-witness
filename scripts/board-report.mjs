@@ -26,8 +26,23 @@ const MILESTONE = "v0.1.0 — first publish";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HOURS_MS = 3600_000;
 
-refuseUnknownFlags(["--post", "--issue", "--since"],
+refuseUnknownFlags(["--post", "--issue", "--since", "--allow-dirty-read-set"],
   { entry: import.meta.url, command: "npm run board:report" });
+
+/** THE FILES THE REPORT READS OUT OF THE WORKING TREE, and the only dirt that can change an edition.
+ *
+ * Deliberately NOT "refuse if `git status` is non-empty". This is a shared checkout with several agents
+ * working in it at once, so a guard that fires on somebody else's unrelated edit is one people disable
+ * within a day — the same reason `promote:model` checks its TARGET paths rather than the whole tree.
+ * Everything else the report reads is a ref (`git log main`, `origin/main..main`) or the GitHub API, and
+ * neither is affected by an uncommitted file.
+ *
+ * The check is against `main`, not merely against HEAD, because the scheduled job runs from whatever
+ * branch this checkout happens to be sitting on. A peer's branch is not dirty and would still supply a
+ * `reported.json` nobody reviewed. "Uncommitted" and "committed on another branch" are different states
+ * and both change what gets published, so both refuse.
+ */
+const READ_SET = ["docs/board/reported.json", "scripts/board-report.mjs"];
 
 const argv = process.argv.slice(2);
 const flag = (name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
@@ -247,18 +262,49 @@ function render({ since, sinceLabel }) {
   return L.join("\n");
 }
 
+/** Refuse to publish an edition assembled from a read set that is not `main`'s.
+ *
+ * Refusing rather than posting a partial edition, and SAYING SO in the log: a board report that silently
+ * quotes an unreviewed gate entry is worse than a missing one, because a missing edition is visible and a
+ * wrong number is not. Returns the reason, or null when it is safe.
+ */
+function readSetIsNotMain() {
+  const uncommitted = git(["status", "--porcelain", "--", ...READ_SET]);
+  const offMain = git(["diff", "--name-only", "main", "--", ...READ_SET]);
+  if (!uncommitted && !offMain) return null;
+  const lines = [];
+  if (uncommitted) lines.push(`uncommitted changes:\n${uncommitted}`);
+  if (offMain) lines.push(`differs from \`main\` (this checkout is on `
+    + `\`${git(["rev-parse", "--abbrev-ref", "HEAD"])}\`):\n${offMain}`);
+  return lines.join("\n");
+}
+
 const since = flag("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString();
 const body = render({ since, sinceLabel: `commits and closures since ${since}` });
 
 if (!post) {
   process.stdout.write(body + "\n");
 } else {
+  const dirt = argv.includes("--allow-dirty-read-set") ? null : readSetIsNotMain();
+  if (dirt) {
+    console.error("REFUSING to post: the files this report reads out of the working tree are not "
+      + "`main`'s, so the edition would quote something nobody has reviewed.\n\n" + dirt
+      + "\n\nThe report was NOT posted and no partial edition was published. Commit and merge the read "
+      + "set, or pass --allow-dirty-read-set, which posts and says so in the edition itself.\n"
+      + "Read set: " + READ_SET.join(", "));
+    process.exit(3);
+  }
   const issue = flag("--issue");
   if (!issue) {
     console.error("--post needs --issue=<number>, the board-report issue to comment on. Refusing rather "
       + "than opening a new issue per report: a report per issue is how a board stops being read.");
     process.exit(2);
   }
-  gh(["issue", "comment", issue, "--repo", REPO, "--body", body]);
+  const published = argv.includes("--allow-dirty-read-set") && readSetIsNotMain()
+    ? body + "\n\n---\n\n**Posted with `--allow-dirty-read-set`.** The files this edition reads out of "
+      + "the working tree are not `main`'s, so the gate line and the fleet-hours line above may quote "
+      + "something unreviewed. Stated here rather than left for a reader to discover."
+    : body;
+  gh(["issue", "comment", issue, "--repo", REPO, "--body", published]);
   process.stdout.write(`posted to https://github.com/${REPO}/issues/${issue}\n`);
 }
