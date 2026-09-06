@@ -25,6 +25,27 @@ import { toHtml } from "./board-markdown.mjs";
 // Module scope, not inside main(): `section5` reads it, and `document()` is exported for the renderer
 // test, which builds a real document without ever calling main().
 const THROUGHPUT = "Capture throughput";
+
+/** How many WCAG criteria the tool claims what about, COUNTED FROM THE SOURCE OF TRUTH.
+ *
+ * Read out of `criterion-coverage.ts` at render time rather than typed, for the reason every other number
+ * in this document is: a coverage claim that a person maintains by hand drifts from the code the first
+ * time a criterion moves, and the drift is invisible -- both numbers look like numbers.
+ *
+ * It is a text count rather than an import on purpose. Importing the package would resolve through
+ * `node_modules` to whichever checkout that symlink points at, which in a worktree is NOT this one -- the
+ * defect that cost an hour on 2026-09-06. Reading the file beside us cannot do that.
+ */
+function criteriaCounts(root = ROOT) {
+  const file = path.join(root, "packages/judge/src/criterion-coverage.ts");
+  if (!existsSync(file)) return null;
+  const text = readFileSync(file, "utf8");
+  const count = (status) => (text.match(new RegExp(`status: "${status}"`, "g")) ?? []).length;
+  const assessed = count("assessed");
+  const partial = count("partial");
+  return assessed && partial ? { assessed, partial, reachable: count("reachable") } : null;
+}
+
 const SUMMARY_WORDS = 120;
 // TWO PAGES OF BODY, and the number is MEASURED rather than chosen.
 //
@@ -101,9 +122,8 @@ function section2() {
     "## Version one has no date until the outside user is named.",
     "",
     "**Version one means one person outside this project runs the tool on an application they own and "
-    + "says whether it was worth their time**, approved by the board on 6 September. **That person now "
-    + "exists and is waiting for first publish**, so the date is theirs: however long they take to form "
-    + "a view once they have something to run.",
+    + "says whether it was worth their time**, approved by the board on 6 September. **That person exists "
+    + "and is waiting for first publish**, so the date is theirs: however long they take to form a view.",
     "",
     "| stage | what decides it | when |",
     "|---|---|---|",
@@ -156,6 +176,11 @@ function section4(d) {
     "| **Confirm publication may proceed in September.** | Three final steps need the owner's hands, so "
     + "the engineering finishes and the release waits. |",
     "",
+    "**We have withdrawn a claim.** The tool said it could assess one rule — content appearing on hover "
+    + "or focus — and on a real user's path it cannot, because that failure conceals itself. **The check "
+    + "now refuses to answer rather than answering \"nothing appeared\"**, and restoring the claim needs "
+    + "a real website to trigger it. The appendix says how it hid.",
+    "",
     "### Four risks are live, and only the first could move the date.",
     "",
     "| risk | state |",
@@ -166,9 +191,6 @@ function section4(d) {
     + "allowed now rests on less. |",
     "| **Everything runs on one machine.** | The capture machines' credentials live on one computer. "
     + "The list of open work moved off it today; the credentials have not. |",
-    `| **${d.strays.length} of the ${d.merges.length} changes saved since midnight carry the wrong `
-    + "author.** | An automated test overwrote our identity settings. They are fixed; the record is not, "
-    + "and we leave it rather than rewrite history others are building on. Cosmetic, disclosed. |",
   ].join("\n");
 }
 
@@ -178,9 +200,8 @@ function section5(d) {
   const L = ["## We are not asking for money, and the measurement that would justify asking is "
     + "scheduled.", ""];
   if (!fh || fh.status === "not instrumented") {
-    L.push("**We cannot yet report how much machine time the capture fleet consumed, and we print that "
-      + "rather than estimate it.** A figure exists but spans many runs and formats, so it is nobody's "
-      + "single run.");
+    L.push("**Machine time consumed by the capture fleet is not instrumented**, and the appendix says "
+      + "so rather than estimating it.");
   } else {
     L.push(`**The capture machines consumed ${fh.total} on their most recent full run.** That counts `
       + "only time spent actively reading a page: not waiting between pages, setup, restarts or "
@@ -194,9 +215,9 @@ function section5(d) {
   L.push("");
   L.push("**The architect's two findings are planned in; the appendix says what was done with each.**");
   L.push("");
-  L.push("**The product has a name and a home: a11ign, at a11ign.com.** The board has also decided it "
-    + "is an all-in-one accessibility tool rather than a screen-reader one, so its parts are renamed "
-    + "around that **before** publication rather than after. The appendix says what that costs.");
+  L.push("**The product has a name and a home: a11ign, at a11ign.com**, and the board has decided it is "
+    + "an all-in-one accessibility tool rather than a screen-reader one — so its parts are renamed "
+    + "around that **before** publication. The appendix says what that costs.");
   L.push("");
   L.push("### We recommend buying nothing yet, and one number would change that.");
   L.push("");
@@ -253,6 +274,36 @@ function sourceTable(d) {
 
 /** What the rename costs, and why the naming rule is more than a coat of paint. */
 function renameBackground(L) {
+  const counts = criteriaCounts();
+  if (counts) {
+    L.push("### What the tool claims about how many accessibility rules, and the one it withdrew.");
+    L.push("");
+    L.push(`Counted from the source rather than maintained by hand: **${counts.assessed} rules it `
+      + `assesses**, **${counts.partial} it assesses in part**, and **${counts.reachable} it could reach `
+      + "and does not yet.**");
+    L.push("");
+    L.push("**One moved today, from the middle column to the last.** 1.4.13, content on hover or focus, "
+      + "was claimed in part and is now only reachable — so the count of rules we claim anything about "
+      + `falls from ${counts.assessed + counts.partial + 1} to ${counts.assessed + counts.partial}. `
+      + "**The number of rules fully assessed is unchanged**, because this one was never in that column.");
+    L.push("");
+    L.push("**The failure concealed itself, which is why it survived.** A page that fails this rule keeps "
+      + "its panel open, so by the time the check looked, the thing it was looking for had already "
+      + "happened — it compared a changed page against a changed page and saw no change. **On a page "
+      + "that passes, the same check is correct.** So it read as working for as long as it was only ever "
+      + "asked about pages that pass.");
+    L.push("");
+  }
+
+  L.push("### Commit authorship, disclosed rather than listed as a risk.");
+  L.push("");
+  L.push("An automated test overwrote our identity settings, so some saved changes carry the wrong "
+    + "author's name — the count and its window are in the table above. **The settings are fixed; the "
+    + "record is not**, and we leave it rather than rewrite history other people are building on. It is "
+    + "here rather than among the risks because it changes no decision: it is disclosed so that nobody "
+    + "discovers it and wonders what else was not mentioned.");
+  L.push("");
+
   L.push("### The rename, and what it costs to do it before publication rather than after.");
   L.push("");
   L.push("Three hundred and fifty-two files in the project mention the old name, and every one of the "
