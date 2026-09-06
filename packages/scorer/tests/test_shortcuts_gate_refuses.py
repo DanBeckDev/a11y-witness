@@ -132,6 +132,49 @@ def test_a_rule_decided_head_says_the_veto_cannot_reach_a_user(tmp_path):
     assert "cannot reach a user" in output, f"the reader must be told which question to ask: {output}"
 
 
+def test_a_subtype_that_lost_all_its_positives_blocks_as_LOST_COVERAGE(tmp_path):
+    # The gap this file's own header did not have a name for until now: `audit()` used to SKIP a subtype
+    # silently when `positives` was empty, so a corpus that lost a subtype's only evidence between one run
+    # and the next simply vanished from `rows` -- and `compare_to_baseline` only ever asked "is this row
+    # worse than the baseline", never "did a baseline row disappear". `audit()` now emits an explicit
+    # `positives: 0` row instead of omitting it, which is what lets this test call `compare_to_baseline`
+    # directly with a shape `audit()` would actually produce.
+    base = baseline_file(tmp_path, [row("2.4.2:route-title-stale", 1, positives=25)])
+    code, output = run([row("2.4.2:route-title-stale", 0, positives=0)], base)
+    assert code != 0, "a subtype with zero positives cannot be vouched for, whatever its vetoes read"
+    assert "LOST COVERAGE" in output
+    assert "25 positive(s) at baseline, 0 now" in output, f"the shortfall must be named, not just flagged: {output}"
+    assert "REGRESSION" not in output, "0 vetoes is not a smaller number of vetoes, it is no evidence at all"
+    assert "UNAUDITED" not in output, "this subtype WAS audited before -- it did not newly come into scope"
+
+
+def test_a_never_audited_subtype_with_zero_positives_is_UNAUDITED_not_LOST_COVERAGE(tmp_path):
+    # The adversarial direction the fix above must not get wrong: a subtype with NO baseline entry at all
+    # (never audited) that also happens to have zero positives right now is a brand-new, thin head -- not
+    # coverage that was LOST, since there is no prior positives count to have lost it FROM. A version of
+    # the fix that checked only `row["positives"] == 0` without first confirming a baseline entry existed
+    # would either crash reading `was["positives"]` on a `None`, or silently misclassify this as coverage
+    # loss -- caught here rather than by mutation alone, since neither existing test exercised the case.
+    base = baseline_file(tmp_path, [row("2.4.4:regex", 1)])
+    code, output = run([row("2.4.4:regex", 1), row("9.9.9:brand-new", 0, positives=0)], base)
+    assert code != 0
+    assert "UNAUDITED" in output
+    assert "9.9.9:brand-new" in output
+    assert "LOST COVERAGE" not in output, (
+        f"never having been audited is not the same as having lost coverage: {output}"
+    )
+
+
+def test_a_subtype_with_positives_both_sides_is_judged_normally_despite_the_new_check(tmp_path):
+    # The control for the fix above: an ordinary comparison (positives present on both sides) must not be
+    # swept into LOST COVERAGE just because the new check runs first.
+    base = baseline_file(tmp_path, [row("2.4.4:regex", 1)])
+    code, output = run([row("2.4.4:regex", 4)], base)
+    assert code != 0
+    assert "REGRESSION" in output
+    assert "LOST COVERAGE" not in output
+
+
 def test_no_baseline_at_all_is_not_a_refusal(tmp_path):
     # The first run has nothing to compare against. Blocking here would make the gate unbootstrappable.
     code, output = run([row("2.4.4:regex", 3)], tmp_path / "does-not-exist.json")
