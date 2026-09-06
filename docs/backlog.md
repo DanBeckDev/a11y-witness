@@ -792,10 +792,50 @@ What remains is corpus work, not capability: a per-page forms config in `real-pa
 
 ---
 
-## The next action — and as of 2026-09-05 17:30 it is RUNNING, so the action is to read its verdict
+## The next action — REWRITTEN 2026-09-06 05:20, because the chain below RAN and this section outlived it
 
-**`npm run lab:job -- -e job=everything -e ref=main` was dispatched at 17:29 on `ea03f8e`.** Everything
-below is what it is doing and what to read when it stops; nothing here needs starting.
+**The `everything` chain of 2026-09-05 17:29 is history. Everything under the fold below is kept as the
+record of what it was for; it is no longer an instruction.** What is true now:
+
+| | |
+|---|---|
+| the recapture | **DONE, twice.** 39 of 39 real pages, 0 failed, both times — once at `4d8a75a` and again at `3439b04` after the census-identity fix |
+| `rules:gate` | **PASS — 20 of 20 rule-owned subtypes, 1,398 conformant records, 0 false positives**, with `2.4.7:focus-removed-on-receipt` at **9/9 EXACT**. That is the first run where 9/9 is a real number: the `alsoFails` label only reached the exporter on 2026-09-06 |
+| `rules:real-pages` | **42 new findings → 5 → 0.** The 42 were read individually, not diffed; 37 were one defect (see below). The 5 that survived were read one at a time and every one is `mapping: "secondary"` → `cantTell`. **ASSERTED-WRONGLY: 0** — the column that matters, and the one collapsing it with `referred` made meaningless for a day |
+| the baseline | **REBUILT from evidence read individually**, 10 findings → 13 over the same 85 pages. Two 2.4.3 findings LEFT, both the wrong-document census: the fix landing, not a rule going quiet |
+| v19 | premise re-derived on the recaptured corpus; the postSubmit pair is **withdrawn in code**, v19 is the `formChanges` pair alone. `shippedSchema` is still v18: nothing is promoted |
+
+**THE 37, because it is the most useful thing found tonight.** 2.4.7's F55 predicate treated an ORPHANED
+focusout — one with no matching focusin — as a script strip, unconditionally, and its comment argued the
+case. The log's FIRST event is the listener's start boundary: whatever already held focus when the listener
+was installed necessarily has no focusin in the log, so an ordinary Tab opens every real page's log looking
+exactly like F55. Measured before the fix was written, in both directions:
+
+    37 of 37 conformant real pages  -> exactly ONE orphan each, and it was log[0], every time
+    9 of 9 corpus positives         -> log[0] is a FOCUSIN; their orphans sit at index 2 and again at 9-23
+
+So recall paid nothing. A TEST asserted the opposite and had **named the mechanism in its own comment**
+before concluding against it — "before this log was installed" — which is this repo's "a comment that
+names an ambiguity, above code that resolves it by assumption", appearing in a test rather than in a probe.
+
+### THE ONE THING BLOCKING A CONCLUSIVE `rules:real-pages`, and it is a named v19 revert condition
+
+    24 capture(s) opened on a COOKIE/CONSENT overlay and NEVER REACHED A HEADING
+    30 capture(s) have a census this run does not trust: a real second CDP target existed and none was
+       confirmed to be the page navigated to
+    INCONCLUSIVE — only 31 of 85 were examined, so this says nothing about the rest
+
+Both refusals are CORRECT and are why there is no corpus of wrong answers. Both are the tool, not the
+pages. The second is now investigable rather than merely alarming: `candidates: 2` was a count with no
+identity — `graphicUnnamed`'s defect one field along — and `choosePageTarget` records `candidateUrls`
+as of `3439b04`, deployed, with the recapture that reads them running. The three plausible second targets
+(a consent vendor's iframe promoted to a page target, an `about:blank` the `--app` window left, the real
+page under a URL it normalised) need three different remedies, which is why the count alone could not
+start the work.
+
+<details><summary>The 2026-09-05 chain, kept as the record of why v19 was opened and what it had to clear</summary>
+
+**`npm run lab:job -- -e job=everything -e ref=main` was dispatched at 17:29 on `ea03f8e`.**
 
 > ### THE NUMBER THAT JUSTIFIES v19 RESTS ALMOST ENTIRELY ON AN INFERENCE — measured 2026-09-05, 23:5x
 >
@@ -891,6 +931,8 @@ right: *"a job that quietly runs four commits behind reports success for code yo
   the lab's disk within minutes and cannot be read until the run ends. The answer being on disk and the
   answer being readable are different things. `timedOut` is now on the mark, so the next occurrence states
   which failure it was instead of inviting arithmetic on `ms`.
+
+</details>
 
 ## How an item leaves this page
 
