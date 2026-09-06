@@ -6,9 +6,19 @@
 // operator's `brew install`. The subset below is what one generator emits, it is written by that
 // generator, and it is pinned by tests.
 //
-// If you add syntax to the document, add it here and to `board-markdown.test.mjs`. Anything unhandled
+// If you add syntax to the document, add it here and to `board-markdown.test.ts`. Anything unhandled
 // passes through as literal text rather than being silently dropped -- a missing sentence in a board
 // document is the failure mode to avoid, and a stray asterisk is visible where an absence is not.
+//
+// THAT SENTENCE WAS A CLAIM AND NOT A PROPERTY UNTIL 2026-09-06, AND IT COST TWO PARAGRAPHS OF EDITION 1.
+// The paragraph fallback decided "this line starts a new block" from the character class `^[#>|`-]`, so
+// any paragraph beginning with inline code -- `` `fleet:hours`, built and measured... `` -- was refused by
+// the paragraph branch, claimed by no other branch, and DISCARDED by a bare `i++`. Two board achievements
+// rendered as headings with no body, on the one page that promises every claim carries its evidence. A
+// backtick only starts a block when it is a fence and a dash only when it is a rule or a bullet, so the
+// class was answering a question it could not answer. It is now `startsBlock()`, the SAME predicates the
+// branches themselves use, and the fallback is unconditional: a line no branch claimed IS a paragraph.
+// Found by the CEO reading the rendered PDF, not by the converter, which is the point of the test below.
 const escape = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // The code placeholder is deliberately not a bare number in spaces: ` 0 ` occurs in ordinary prose, and a
@@ -26,6 +36,13 @@ export function inline(text) {
 }
 
 const cells = (row) => row.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+
+/** Does this line BEGIN a block? Asked with the same predicates the branches use, never by first
+ * character -- see the note at the top of this file for what guessing cost. */
+const startsBlock = (line, next = "") => /^```/.test(line) || /^\s*$/.test(line)
+  || /^---+\s*$/.test(line) || /^#{1,4}\s+/.test(line) || /^>\s?/.test(line)
+  || /^\s*[-*]\s+/.test(line) || /^\s*\d+\.\s+/.test(line)
+  || (/^\|/.test(line) && /^\|[\s:|-]+\|?\s*$/.test(next));
 
 export function toHtml(md) {
   const lines = md.split("\n");
@@ -89,11 +106,12 @@ export function toHtml(md) {
       continue;
     }
 
-    const para = [];
-    for (; i < lines.length && !/^\s*$/.test(lines[i]) && !/^[#>|`-]/.test(lines[i])
-           && !/^\s*\d+\.\s+/.test(lines[i]); i++) para.push(lines[i]);
-    if (para.length) out.push(`<p>${inline(para.join(" "))}</p>`);
-    else i++;
+    // UNCONDITIONAL. Every branch above has declined this line, so it is a paragraph -- the first line
+    // is taken without asking, and only the CONTINUATION is guarded. A fallback that can decline is a
+    // fallback that can delete.
+    const para = [lines[i++]];
+    for (; i < lines.length && !startsBlock(lines[i], lines[i + 1] ?? ""); i++) para.push(lines[i]);
+    out.push(`<p>${inline(para.join(" "))}</p>`);
   }
   return out.join("\n");
 }
