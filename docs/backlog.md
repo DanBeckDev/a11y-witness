@@ -1129,7 +1129,7 @@ moving, it is simply older than the evidence shape the checks now expect.
 field" rather than "the field is compared but nothing carries it" — two different sentences that today are
 one. The second is the cheaper half and it is where the deception lives.
 
-## OPEN, small — `capture:check` has no lab-side equivalent
+## ~~OPEN, small — `capture:check` has no lab-side equivalent~~ — CLOSED 2026-09-06
 
 `architecture-audit.md` §7.2 named three things `capture-regression.yml`'s path filter could never fire
 on: changes to `deploy.yml`, `fleet-env.mjs`, or `worker-http.mjs`. Checked at HEAD, not carried forward
@@ -1142,11 +1142,38 @@ names the exact incident that forced it (`capture-client.mjs` changed the same d
 never touches fleet deployment machinery at all, so the original finding conflated two different
 capture-testing surfaces rather than naming a real gap in this one.
 
-**What remains genuinely open, and appears nowhere else:** no lab job runs `capture:check`'s equivalent
-against the real fleet — `lab-job.yml` has no such job (`grep -n "capture-check\|capture_check"
-packages/control/ansible/lab-job.yml` → nothing). Small and standing, not urgent: `gate:stability`,
-`evidence:check` and a real-page capture run already catch most of what a fleet-side `capture:check` would,
-and this is the one piece none of them names explicitly.
+~~**What remains genuinely open:** no lab job runs `capture:check`'s equivalent against the real fleet.~~ **CLOSED 2026-09-06** — `lab-job.yml` now has a `capture-check` job. `npm run lab:job -- -e
+job=capture-check -e worker=http://<box>:8765`.
+
+**Classified as a DIAGNOSTIC, and that is the load-bearing decision rather than the job itself.** It takes
+ONE named worker via `--worker=` instead of reading `lab_fleet_workers`, so `captureBearingJobs` does not
+see it and the fleet-staleness pre-check does not gate it — `worker-code-check.test.ts`'s own rule is that
+a diagnostic must NEVER be the thing that takes the pool offline. A stale worker here costs one wrong
+verdict; a stale worker on a corpus writer costs 2,122 captures indistinguishable from current ones.
+
+`worker` is REQUIRED rather than defaulted, because `capture-check.mjs`'s own header records that a
+mistyped `--worker=` falls back to IN-PROCESS mode — which on the lab is not a weaker test but a
+meaningless one, since the lab has no NVDA. A default would make that fallback reachable by omission.
+`exitMeanings` declared for 1 (the capture layer REGRESSED — read which assertion, do not re-run and hope)
+and 2 (could not run at all — never read as "the capture layer is fine"). **Two properties mutation-checked, and getting there is the more useful record.** Declaring `params: {}`
+while the argv uses `{{ worker }}` fails; handing in a raw `--worker=` instead of resolving it fails. Both
+against `packages/worker-fleet/src/lab-job.test.ts` — **there are TWO files of that name**, and my first
+mutation check ran the `packages/control` one, which tests dispatch behaviour and knows nothing about the
+catalogue's params. It reported a clean 15/15 against a mutation that should have failed, and I nearly
+recorded the guard as verified on the strength of it. **That is instance 10 of this file's own
+wrong-population shape, committed within the hour of documenting nine.**
+
+**And the guard caught a real design error rather than a typo.** The first draft built the URL from the raw
+`worker` param, and `lab-job.test.ts` refused it: *no job can be handed a worker URL — a worker is always
+resolved from the inventory*, because `--worker=http://:8765` once ran four capture shards against nothing
+for 29 minutes. Resolving a NAME through `hostvars[]` makes a malformed address INEXPRESSIBLE rather than
+merely rejected. Spelled out inline rather than reusing `lab_named_worker`, because `capture-check.mjs`
+reads only the FLAG and never `A11Y_WORKER` — the `setenv` form the `stability` job uses would have
+resolved correctly and then been ignored, which is worse than not resolving at all.
+
+**The irony worth recording:** this check was documented as MANDATORY after any change to
+`capture-core.mjs` and had never run once, because running it needed a laptop with a route to a worker. The
+one check written for the least testable code in this repo was the one nobody could dispatch.
 
 ## OPEN — "a check that answers correctly about the wrong population", **NINE** instances, named by `ceo`
 
