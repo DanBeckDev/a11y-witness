@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   captureDoubt, captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle,
   captureRanRequestedProbes, probeStates, sweepCompleteness, captureReachedThePage, domCensus, pageCensus,
-  censusTargetIsSuspect, censusSuspectReason,
+  censusTargetIsSuspect, censusSuspectReason, submitNavigatedTheDocument,
 } from "./verify.js";
 import type { CapturedAnnouncements } from "./verify.js";
 
@@ -682,12 +682,13 @@ test("a fallback with only ONE candidate and no submit-caused navigation is TRUS
   assert.equal(census?.heading, 12);
 });
 
-test("...but the identical shape stays suspect when OUR OWN submit explains the mismatch", () => {
+test("...but the identical shape stays suspect when navigatedOnSubmit says our own submit explains it", () => {
   // The risk `candidates <= 1` alone cannot rule out, and the reason this section is not a blanket
   // reversion: a GET form submit that changes the URL (known-gaps §41's own population,
   // `focus-removed-on-receipt-*`) is exactly as single-candidate as a genuine redirect, and trusting it
   // would be trusting a different document -- the very objection §41 was opened for. `navigatedOnSubmit`
-  // present is the discriminator that keeps this case refused while the one above is not.
+  // present is ONE of the two discriminators that keep this case refused while the one above is not; see
+  // the fixture below for the OTHER, for the case where this field is unhelpfully absent.
   const census = pageCensus({
     diagnostics: [
       { event: "structureCensus", heading: 12, link: 40, targetMatch: "fallback", candidates: 1 },
@@ -695,6 +696,75 @@ test("...but the identical shape stays suspect when OUR OWN submit explains the 
     interaction: { controls: [], stateChanges: [], navigatedOnSubmit: { from: "a", to: "b" } },
   } as never);
   assert.equal(census, null);
+});
+
+test("REAL PAGE SHAPE: w3.org/WAI/demos/bad/after/survey.html, verbatim -- the case that broke the first attempt", () => {
+  // The design first shipped trusting an ABSENT `navigatedOnSubmit` outright, and this page's real capture
+  // refuted that within a day: `capture-probes.mjs:3082` sets `navigatedOnSubmit` only when
+  // `before && after && before !== after`, and here it is null despite the submit demonstrably navigating
+  // -- `postSubmitFields: 15` proves the re-scan ran, and `formChanges[0].after` names a different
+  // document's title outright. Verbatim from the stored capture's marks (trimmed to what decides this):
+  //
+  //   atMs    154   browserReused    url: .../survey.html
+  //   atMs    178   pageServed       requested .../survey.html, status 200
+  //   atMs 191443   focusEventLog    installTargetMatch: "matched", installTargetUrl: .../survey.html
+  //   atMs 302934   structureCensus  targetMatch: "fallback", targetUrl: .../survey.php
+  //
+  // At 191s the document was still `.html` and CONFIRMED matched; by 303s it is `.php`, and the only thing
+  // between them is the form probe. `candidates` was not part of the excerpted marks; 1 is used here
+  // because it is the HARD case -- a `candidates > 1` fallback was already suspect under the old rule, so
+  // only `candidates <= 1` actually exercises whether the two navigation signals catch what
+  // `navigatedOnSubmit` alone missed.
+  const census = pageCensus({
+    diagnostics: [
+      { event: "structureCensus", heading: 8, link: 3, targetMatch: "fallback", candidates: 1,
+        targetUrl: "https://www.w3.org/WAI/demos/bad/after/survey.php",
+        expectedUrl: "https://www.w3.org/WAI/demos/bad/after/survey.html" },
+    ],
+    interaction: {
+      controls: [], stateChanges: [], postSubmitFields: new Array(15).fill("field"),
+      formChanges: [{ control: "submit, button", kind: "submit",
+        after: "Citylights Survey - Submission Failed Accessible Survey Page, document" }],
+      // navigatedOnSubmit ABSENT is the point of this fixture, not an omission.
+    },
+  } as never);
+  assert.equal(census, null,
+    "the formChanges document-title signal must catch what navigatedOnSubmit's ambiguous absence could not");
+});
+
+test("submitNavigatedTheDocument: an ordinary error message does not read as a navigation", () => {
+  // The heuristic's own false-positive risk, stated and checked: an error message ending in a word this
+  // grammar could mistake for the document role would over-fire. "document" itself is not that common a
+  // last word in a validation message, but the boundary is worth pinning so nobody widens the regex later
+  // without noticing what it would catch.
+  assert.equal(submitNavigatedTheDocument({
+    transcript: [], interaction: { controls: [], stateChanges: [],
+      formChanges: [{ control: "submit, button", kind: "submit", after: "Error: name is required" }] },
+  } as CapturedAnnouncements), false);
+});
+
+test("submitNavigatedTheDocument: a non-submit activation's document-shaped delta does not count", () => {
+  // Only a "submit" formChange is evidence of OUR OWN submit navigating -- a disclosure or toggle that
+  // happens to leave a document-role announcement behind (an unrelated capture in-flight, the
+  // `activateAndCaptureDelta` race its own header names) must not be read as a submit-caused redirect.
+  assert.equal(submitNavigatedTheDocument({
+    transcript: [], interaction: { controls: [], stateChanges: [],
+      formChanges: [{ control: "Show details, button", kind: "toggle", after: "Energy results, document" }] },
+  } as CapturedAnnouncements), false);
+});
+
+test("submitNavigatedTheDocument: navigatedOnSubmit present is sufficient on its own", () => {
+  assert.equal(submitNavigatedTheDocument({
+    transcript: [], interaction: { controls: [], stateChanges: [],
+      navigatedOnSubmit: { from: "https://example.test/a", to: "https://example.test/b" } },
+  } as CapturedAnnouncements), true);
+});
+
+test("submitNavigatedTheDocument: neither signal present means false, not absence-as-unknown", () => {
+  assert.equal(submitNavigatedTheDocument({ transcript: [] } as CapturedAnnouncements), false);
+  assert.equal(submitNavigatedTheDocument({
+    transcript: [], interaction: { controls: [], stateChanges: [] },
+  } as CapturedAnnouncements), false);
 });
 
 test("a fallback with SEVERAL candidates stays suspect regardless of navigatedOnSubmit", () => {
@@ -733,13 +803,13 @@ test("targetMatch present with candidates missing is read as suspect, not as tru
 test("censusSuspectReason names the actual URL, not the bare word fallback", () => {
   // The CEO's standing requirement, and the reason `censusLine` (check-real-page-findings.ts) used to
   // print a WRONG explanation -- "a real second CDP target existed" -- on a capture that had exactly one.
-  // `navigatedOnSubmit` present, so this exercises the wording on a case that stays suspect either way --
-  // the case below covers the newly-trusted shape, and this one is not it.
+  // submitNavigated: true, so this exercises the wording on a case that stays suspect either way -- the
+  // case below covers the newly-trusted shape, and this one is not it.
   const reason = censusSuspectReason({
     targetMatch: "fallback", candidates: 1,
     targetUrl: "https://design-system.service.gov.uk/cookies",
     expectedUrl: "https://design-system.service.gov.uk/components/details/",
-  }, { from: "a", to: "b" });
+  }, true);
   assert.match(reason ?? "", /cookies/);
   assert.match(reason ?? "", /components\/details/);
   assert.doesNotMatch(reason ?? "", /second CDP target/,
@@ -749,8 +819,8 @@ test("censusSuspectReason names the actual URL, not the bare word fallback", () 
 test("censusSuspectReason falls back to a candidate count when no URL was recorded", () => {
   // Historical captures predate `targetUrl`/`expectedUrl` (added alongside the fix this test's sibling
   // describes) -- the reason must still say SOMETHING true rather than crash on the missing fields.
-  // candidates: 2 keeps this suspect regardless of navigatedOnSubmit, so `undefined` changes nothing here.
-  const reason = censusSuspectReason({ targetMatch: "fallback", candidates: 2 }, undefined);
+  // candidates: 2 keeps this suspect regardless of submitNavigated, so `false` changes nothing here.
+  const reason = censusSuspectReason({ targetMatch: "fallback", candidates: 2 }, false);
   assert.match(reason ?? "", /2 candidates/);
 });
 
@@ -763,12 +833,12 @@ test("censusSuspectReason and censusTargetIsSuspect can never disagree -- one is
     { targetMatch: "no-expected-url", candidates: 2 },
     { targetMatch: undefined, candidates: undefined },
   ];
-  // The SAME navigatedOnSubmit value passed to both calls each iteration -- this test's whole point is
+  // The SAME submitNavigated value passed to both calls each iteration -- this test's whole point is
   // that the two functions agree with EACH OTHER given identical inputs, not what a specific input decides.
   for (const record of cases) {
-    for (const navigatedOnSubmit of [undefined, { from: "a", to: "b" }]) {
-      assert.equal(censusTargetIsSuspect(record, navigatedOnSubmit), censusSuspectReason(record, navigatedOnSubmit) !== null,
-        `disagreement on ${JSON.stringify(record)} with navigatedOnSubmit=${JSON.stringify(navigatedOnSubmit)}`);
+    for (const submitNavigated of [false, true]) {
+      assert.equal(censusTargetIsSuspect(record, submitNavigated), censusSuspectReason(record, submitNavigated) !== null,
+        `disagreement on ${JSON.stringify(record)} with submitNavigated=${submitNavigated}`);
     }
   }
 });
