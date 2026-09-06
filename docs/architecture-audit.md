@@ -1,5 +1,35 @@
 # Architecture audit
 
+> **FROZEN 2026-09-06. This document is a RECORD, not a tracker — read it for the reasoning and the
+> measurements, never for "is X still open".** For that question there is exactly one place:
+> [`docs/backlog.md`](./backlog.md). This matches the convention already established for `known-gaps.md`
+> and `not-working.md`, which say the same thing about themselves in `docs/README.md`'s own routing table.
+>
+> **Why, decided rather than assumed:** this document was updated three times in one night trying to stay
+> current (2026-09-02/03, 2026-09-05, and a 2026-09-06 re-triage, §15) and went stale within the hour on
+> at least two rows *each time a re-triage was written* — §15's own "still open" line for §9's raw-`fetch`
+> and Windows-trimming rows was written at `acbb0be` (2026-09-05 23:40:39), and the fix that closed BOTH
+> had already landed 57 minutes earlier at `d7c1870` (2026-09-06 00:37:51, if read the other way: the fix
+> came 57 minutes AFTER this document's snapshot time but the document was not re-checked before its
+> "still open" line was written the next day). Three independent sessions tonight each found rows in this
+> document, or in `docs/backlog.md`'s transcription of it, that were already closed by the time they were
+> assigned — not because nobody was maintaining it, but because a structural snapshot of a repository this
+> size, updated by hand, cannot stay ahead of 50–98 commits a day. `docs/backlog.md` already solves this
+> for `known-gaps.md`/`not-working.md` by being the ONE place status lives, re-verified at HEAD immediately
+> before a row is assigned rather than trusted from whenever it was last written — see that file's own
+> "architecture audit" section, which re-checks every row it transcribes and has already caught this
+> document's §15 stating outright wrong things (the `deploy-worker.mjs:132` raw-fetch site and the
+> Windows-trimming duplication are BOTH closed; §15 and one pass of `backlog.md` both said otherwise).
+>
+> **What this means concretely:** every "still open" / "confirmed still open" / "unchanged" phrase below
+> describes the state AS OF the date attached to the section that contains it (2026-09-02/03 for §§1–13,
+> 2026-09-05 for §14, 2026-09-06 for §15) — not the state now. The structural analysis, the measurements,
+> and the recommendations remain valid evidence and are not being retracted; only their currency as a
+> status claim is. A finding closed after a section's date is corrected in `docs/backlog.md`, not by
+> editing the row here — a decision record that quietly rewrites itself cannot tell a future reader which
+> arguments were already tried, the same reason ADRs record a later correction as a dated addendum instead
+> of an edit.
+
 An outside-in structural review of the repository at `dba4278` (main), carried out 2026-09-02/03. It asks
 whether the boundaries the ADRs drew are the boundaries the code has, whether the contracts between the
 parts have a single owner, and whether the verification machinery can see the failures that matter. It does
