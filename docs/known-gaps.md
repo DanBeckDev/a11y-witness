@@ -2279,6 +2279,77 @@ The count moving. It is printed by `rules:gate` on every run (`N of M record(s) 
 a census`), which is the only reason this was findable at all — the same argument as every other number in
 this file: state it, and a drift becomes visible instead of inferable.
 
+### THE DESIGN, worked through all three cases — 2026-09-06, and it turned out to need no worker change
+
+The `rules:real-pages` gate found two more captures with the identical *shape* — `targetMatch: "fallback"`
+— for a different *reason*: `tfl.gov.uk/modes/tube/` redirected to
+`tube-dlr-overground/status/#windrush`, and `w3.org/WAI/demos/bad/after/survey.html` landed on
+`survey.php`. Both read as a suspect census today, for the same reason this section's population does.
+The tension is real: a redirect means we are on the page a user would have got, and refusing its census
+loses evidence for nothing — but a query string (this section) is exactly how a search results page
+differs from a search form, and widening the match on the strength of "it looks like the same URL" alone
+already burned this project once (see the history in `verify.test.ts`'s
+`"a fallback with only ONE candidate is now ALSO suspect"`: `candidates <= 1` used to mean safe, until
+`probeRouteChange` — the 2.4.2 link-follow probe — left the SAME tab on a shared `/cookies` page and the
+resulting census was trusted as the ORIGINAL page's numbers, 20 of 20 sampled real pages).
+
+**The discriminator: did our OWN probe navigate before the one census read that matters, or not.**
+`navigateByStructure` (`capture-probes.mjs`) already sequences this and says so in its own comment —
+census is `// TAKEN HERE — before probeRouteChange, the only probe below that can leave the page under
+measurement` (line ~522). Read forward from the top of that function: the sweep and focus probes run
+first (browse-mode quick-navigation and Tab; neither moves the document), then a configured or
+opportunistic form submit (`runConfiguredForm` / `operateControl`'s `"submit"` case, `probeFormSubmit`),
+**then the one `structureCensus` diagnostic mark is written**, and only after that does `probeRouteChange`
+run. So by construction, the ONE census mark `pageCensus`/`rawTargetMatch` ever read (both take the
+*first* `structureCensus` entry in `diagnostics`, and there is exactly one writer of that event) can never
+reflect `probeRouteChange`'s navigation — the §40/verify.test.ts fix already closed that path by
+reordering, before this was even found. The only thing capable of moving the page before this census is a
+form submit, and `probeFormSubmit` already records it: `interaction.navigatedOnSubmit = {from, to}`,
+*"present only when submitting NAVIGATED the browser"*.
+
+So: **a fallback census is trustworthy exactly when `candidates <= 1` (no real target ambiguity to resolve)
+AND `interaction.navigatedOnSubmit` is absent (nothing our own submit did explains the mismatch).** Both
+conditions are already on the wire, on captures already taken — this needs no new worker-side field.
+
+**Worked through all three:**
+
+| case | `formState`/submit configured? | `navigatedOnSubmit` at census time | verdict |
+|---|---|---|---|
+| `focus-removed-on-receipt-*` (this section, §41) | yes — GET submit is the defect under test | present (submit changed the URL) | **stays suspect** — correctly unchanged. The census read is genuinely post-submit; trusting it would be trusting a different document, which is this section's own original objection |
+| `tfl.gov.uk/modes/tube/` | no `formState` in its corpus entry, and no probe before the census can navigate | necessarily absent (nothing could have set it) | **becomes trusted**, PROVIDED `candidates <= 1` — independently corroborated: this page is ALSO consent-blocked (focus confined to the banner ring), so nothing could have reached and activated a real control either |
+| `w3.org/.../survey.html` | **yes** — `formState: {state: "error", ...}` is configured for this exact page | **unconfirmed without the real capture** — if the `.php` landing is a consequence of ITS OWN submit (e.g. the form's own `action="survey.php"`), `navigatedOnSubmit` will be present and this stays suspect, matching §41 exactly, not newly trusted | **check before implementing further; the design's answer is correct either way, but which answer it gives for this one page is not yet known** |
+
+**The residual gap, found while tracing this, not fixed by it:** `probeFormSubmit` is the only activation
+that records whether it navigated. `probeTaskButton` and `probeToggle` (the other two things
+`operateControl` can activate before the census line) do not — a task-matching button styled as a link
+could in principle navigate the page and leave no record, same shape as the fixed defect one call site
+over. Neither real case above appears to trigger it (no `task` override on either corpus entry, and a
+toggle is an ARIA state change, not a document navigation), so it is not blocking this fix, but the same
+before/after-URL check `probeFormSubmit` already has (`capture-probes.mjs` ~line 3079) should be added to
+`probeTaskButton` too — a worker-file change, deliberately NOT made in this unit.
+
+**The cost, and why it is smaller than assigned:** this fix needs **no change to
+`packages/nvda-worker/src/`** at all. `sameDocument`/`choosePageTarget` (`browser-session.mjs`) already
+compute and record exactly what is needed (`targetMatch`, `candidates`) on every capture already taken;
+`navigatedOnSubmit` has been on the wire since architecture-audit.md §5 landed. The actual fix is a purely
+host-side INTERPRETATION change — widening `censusSuspectReason`/`censusTargetIsSuspect`
+(`packages/evidence/src/verify.ts`) to take the capture's `interaction.navigatedOnSubmit` alongside the
+census mark's own fields — so it is verifiable against the EXISTING corpus on disk with no recapture, and
+carries none of the ten-machines-stale risk a worker change would.
+
+### What would tell you it is fixed
+
+`rules:real-pages` reports `85 of 85` examined (not 83), with `tfl.gov.uk` no longer in `suspectCensus`,
+`survey.html` either also out of it (if its redirect is not submit-caused) or still correctly in it
+(if it is — see the table above), and `focus-removed-on-receipt-*`'s 9 captures unchanged. `rules:gate`'s
+`census.heading === 0 on 29` must not move, and no new finding may appear on a conformant record.
+
+### What would tell you it got WORSE
+
+The same signal as this section's own original entry: the `N of M carry a census` count moving in the
+wrong direction, or a new finding appearing on a page that carries `navigatedOnSubmit` — which would mean
+the widened check let a genuinely different document through.
+
 ## 42. PARTIAL — 2.4.7 cannot see an F55 on whatever element held focus when the listener was installed
 
 **Created by a fix, deliberately, 2026-09-06.** Recorded the same day as the change that caused it, because
