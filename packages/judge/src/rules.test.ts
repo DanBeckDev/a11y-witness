@@ -773,36 +773,47 @@ test("more than one control can exhibit F55 in the same capture, and both are re
   assert.deepEqual(found.map((f) => f.evidence.split(" (")[0]), ["Coupon", "Gift card"]);
 });
 
-test("THE LOG'S FIRST EVENT IS THE LISTENER'S START BOUNDARY, never F55 -- measured, not reasoned", () => {
-  // THIS TEST ASSERTED THE OPPOSITE UNTIL 2026-09-06, and the reversal is the useful part.
+test("THE LOG'S FIRST EVENT IS F55 LIKE ANY OTHER, once more -- the capture-side fix removed the ambiguity", () => {
+  // THIS TEST HAS ASSERTED BOTH ANSWERS, and the history is the useful part.
   //
-  // It read "a lone focusout with nothing preceding it at all is still F55 -- it is orphaned by
-  // definition", and its comment NAMED the true mechanism before concluding against it: "`anchorToTop`'s
-  // own Escape/Ctrl+Home can blur whatever a PRIOR probe left focused, BEFORE THIS LOG WAS INSTALLED". It
-  // then called that indistinguishable from a genuine orphan and resolved the ambiguity by assumption --
-  // this repo's "a comment that names an ambiguity, above code that resolves it by assumption", in a test.
+  // ORIGINALLY (before 2026-09-06) it read "a lone focusout with nothing preceding it at all is still
+  // F55 -- it is orphaned by definition", correctly, because nothing about a genuine orphan changes at
+  // index 0.
   //
-  // The first recaptured real-page run settled it. 2.4.7 fired on 37 conformant real pages, and reading
-  // every one of their stored logs individually rather than diffing the count:
+  // THEN (2026-09-06, `known-gaps.md` §42) it flipped to "never F55", when the first real-page recapture
+  // showed 37 conformant pages carrying exactly this shape at `log[0]` and none of them were script
+  // strips: the listener installed immediately before `probeFocusOrder`, well after the sweep,
+  // `probeFocusContext` and `probeFocusReveal` could already have moved real focus, so whatever was
+  // focused by then was blurred with nobody watching. That version's own comment named the ambiguity
+  // ("indistinguishable from a genuine orphan") and resolved it by EXCLUSION rather than by removing the
+  // cause -- a trade, recorded as a PARTIAL rather than a fix.
   //
-  //   37 of 37 real pages   -> exactly ONE orphan each, and it was log[0], every time
-  //   9 of 9 corpus positives -> log[0] is a FOCUSIN; their orphans sit at index 2 and again at 9-23
-  //
-  // So it is not indistinguishable at all, and the discriminator is not a heuristic about where orphans
-  // tend to fall: by index 1 the listener was demonstrably watching, so a missing focusin THERE is a real
-  // absence rather than a moment nobody was recording. The nine keep firing (see the test above); the 37
-  // stop. Recall paid nothing.
+  // NOW it is back to the original answer, and for a different reason than the original had: the capture
+  // side no longer produces this ambiguity at all. `installFocusEventListenerBeforeFirstFocus`
+  // (`capture-core.mjs`) installs the listener before the sweep and every focus-walking probe, so
+  // `log[0]` is always a real focusin the listener witnessed. An orphaned focusout at index 0 is
+  // therefore exactly as diagnostic as one anywhere else in the log, and the exception in
+  // `focusLossEvidence` that read otherwise is deleted, not kept alongside the fix.
   const log = [{ type: "focusout", id: 0, name: "Whatever held focus when the listener installed", atMs: 5 }];
-  assert.deepEqual(focusFindings(log), [],
-    "the element that already held focus when the listener was installed necessarily has no focusin in "
-    + "this log -- its receipt happened before anything was recording, which is not evidence of a strip");
+  const found = focusFindings(log);
+  assert.equal(found.length, 1, "an orphan at index 0 is F55 -- the listener now starts before any focus "
+    + "exists, so there is no earlier moment for this receipt to have happened unwatched");
+  assert.match(found[0].evidence, /Whatever held focus when the listener installed/);
 });
 
-test("REAL PAGE SHAPE: an opening orphan followed by an ordinary Tab walk reports nothing", () => {
-  // www.nhs.uk/service-search/find-a-gp, verbatim from its stored log (first five events). Every one of
-  // the 37 conformant real pages has this shape: log[0] is a focusout for whatever the browser focused
-  // before the listener existed, and the very next focusin is the probe's own first Tab at the SAME
-  // millisecond -- which is what an ordinary transition looks like, not a script strip.
+test("PRE-FIX REAL-PAGE SHAPE (nhs.uk): kept as a regression fixture, and it now correctly fires", () => {
+  // www.nhs.uk/service-search/find-a-gp, verbatim from its stored log (first five events), captured BEFORE
+  // the listener-install fix landed. This is the exact shape that produced 37 false positives and is the
+  // reason the `i === 0` exception existed at all -- kept here, unmodified, as the regression fixture
+  // `not-working.md` §22 names.
+  //
+  // IT NOW FINDS A POSITIVE, AND THAT IS CORRECT FOR THIS FIXTURE, NOT A REGRESSION. This log is evidence
+  // of the OLD bug (the listener starting after `id 0` already held focus), and the rule cannot tell that
+  // apart from a genuine strip -- nothing in a `focusin`/`focusout` log records when the LISTENER itself
+  // started. The capture-side fix means a FRESH capture of this same page will not produce this shape any
+  // more (`id 0`'s receipt will be in the log, because the listener will have been watching for it), so
+  // this fixture is not a claim about what nhs.uk looks like today -- it is a permanent record of what the
+  // old bug's evidence looked like, kept so nobody has to re-derive it by re-reading a stale capture.
   const log = [
     { type: "focusout", id: 0, name: "A", atMs: 3171 },
     { type: "focusin", id: 1, name: "nhsuk-cookie-banner__link_accept_analytics", atMs: 3171 },
@@ -810,8 +821,11 @@ test("REAL PAGE SHAPE: an opening orphan followed by an ordinary Tab walk report
     { type: "focusin", id: 2, name: "nhsuk-cookie-banner__link_accept", atMs: 4663 },
     { type: "focusout", id: 2, name: "nhsuk-cookie-banner__link_accept", atMs: 5298 },
   ];
-  assert.deepEqual(focusFindings(log), [],
-    "a conformant real page must not be accused because the log had to start somewhere");
+  const found = focusFindings(log);
+  assert.equal(found.length, 1,
+    "the pre-fix shape is genuinely indistinguishable from a strip in the log alone -- the fix is that a "
+    + "fresh capture cannot produce this shape any more, not that this exact log reads differently");
+  assert.match(found[0].evidence, /^A \(id 0\)/);
 });
 
 test("CORPUS POSITIVE SHAPE: the same orphan one index later IS F55, so the fix cannot go deaf", () => {
