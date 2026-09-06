@@ -2659,6 +2659,32 @@ and cut long announcements in half. `postSubmitFields`/`postSubmitNames` is the 
 are decided from, and a fragmented phrase can defeat a match that spans the split — an error message cut in
 half is one a word-match may not find.
 
+> ### THE ATTRIBUTION ABOVE WAS REFUTED BY THE NEXT RUN — corrected 2026-09-06, same day
+>
+> Everything above the line is what one run showed and it is accurately described. **The CAUSE is not.**
+>
+> `evidence:check` run 2 (the settings pin merged, nothing else) reported `47 same, 1 changed` — and the
+> changed case was `icon-button-unnamed.good  postSubmitNames 53->49`, with `form-error-silent.good` and
+> `.bad` now **SAME**. The cache did not move between runs, so the FRESH capture of `form-error-silent`
+> produced JOINED text in run 1 and SPLIT text in run 2, on the same page.
+>
+> So the de-fragmentation is not a property of this fix. Two readings fit the data equally and neither can
+> be settled by another single run: either `postSubmitNames` fragmentation is **INTERMITTENT** and each run
+> catches whichever case happens to split, or the **PIN re-fragmented it** (`autoLanguageSwitching` changes
+> what NVDA says at language boundaries, which could shift speech timing).
+>
+> **How the wrong claim was made, because the shape recurs.** "4 of 4 gained entries are exactly two lost
+> entries joined" was checked mechanically and is true — and it measures the SHAPE of the change, not its
+> CAUSE. One run, one plausible mechanism, reported as established. The project's own test — *was that
+> measured or inferred?* — applied to a peer's number every time and not to this one.
+>
+> **The consequence is bigger than the attribution.** If `postSubmitNames` is unstable capture to capture,
+> a recapture bakes whichever way each case landed into the corpus, and that channel is the evidence 3.3.1
+> and 4.1.3 are decided from. `gate:stability` is the tool for exactly this question — it exists because
+> the corpus once carried a nondeterministic artefact for weeks with every count-based check green — and
+> its own recorded trap applies: `--probe-forms` with no `--task` activates nothing, so it would compare an
+> empty field five times and report it stable.
+
 **The general form, which is why this is recorded rather than just fixed:** a diagnostic that ACTS on the
 subject can damage a neighbouring measurement, and nothing in this project's design vocabulary had a name
 for that. A probe is scoped by what it READS; this one was scoped that way and its side effect reached
