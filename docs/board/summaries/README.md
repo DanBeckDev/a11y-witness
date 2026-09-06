@@ -10,6 +10,17 @@
 an edition with no summary dated for that day, and the scheduled job records that refusal rather than
 publishing a document without one. A missing summary is a missing edition.
 
+## The dateline is for when nobody is there, not a licence
+
+A summary written the evening before is a **forecast**, and it says so in its own first line. **If you are
+running before 08:00, re-read the overnight outcome and rewrite the file if it changed the answer.** The
+dateline exists for the mornings when nobody is awake to do that; it is not an excuse for a summary that
+was overtaken and left standing.
+
+The test is whether the sections below it would contradict it. The sections are read at render time and
+the summary is not, so they are the thing that moves — a summary the document disagrees with is worse than
+a summary written late.
+
 **Do NOT restate a number the document computes.** The summary is written by hand, minutes or hours
 before the edition renders, and the document's counts are read at render time — so a count typed here goes
 stale in between. It happened on the first day: the summary said *eight pieces of work remain* and the
