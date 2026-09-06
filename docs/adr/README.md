@@ -45,6 +45,7 @@ you which arguments have already been tried.
 | [0031](./0031-the-worker-ships-plain-mjs-with-no-build-step.md) | The capture worker ships as plain, unbuilt `.mjs`; the control plane compiles from `.ts` | accepted |
 | [0032](./0032-the-scorer-runs-as-a-subprocess-in-a-python-venv.md) | The trained scorer runs as a Python subprocess, chosen by `A11Y_PYTHON`, not in-process JS | accepted |
 | [0033](./0033-guidepup-exact-pin-is-evidence-not-dependency-hygiene.md) | guidepup is pinned to an exact version because its version is evidence, not a dependency choice | accepted |
+| [0034](./0034-the-speech-channel-is-a-socket-forced-to-fail-loud.md) | The speech channel is a raw TLS socket, and recovery forces it to fail loud rather than restarting NVDA | accepted |
 
 ## If you read only one
 
