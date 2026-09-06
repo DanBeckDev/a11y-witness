@@ -49,6 +49,17 @@ question "did this change what we capture" is answered by the gate. If it report
 **A held branch costs minutes; a merged interaction costs a corpus.** Anything touching
 `packages/nvda-worker/src` waits for a running capture to finish.
 
+**A REPRODUCTION CARRIES THREE FIELDS: what you ran, what it said, AND AS OF WHICH COMMIT.** Added
+2026-09-06 after the most expensive version of this role's recurring defect. A gate reported 80 false
+findings; I read the rule in my worktree, found the guard that would have prevented them, and reported the
+proposed mechanism refuted. The guard had been added **43 minutes after the gate ran** — `git merge-base
+--is-ancestor <fix> <what-the-lab-ran>` said NO. My reproduction was real, ran cleanly, and was
+meaningless: fixed code against a capture the broken code had scored. It made me retract something true.
+
+The population you get wrong is not always a directory or a machine. **It can be a version**, and a version
+is invisible in the output unless the output says so. Every lab job prints `<job> at <commit>`; read it,
+and quote it beside any number derived from that run.
+
 **Ask HOW a number was obtained, not whether it is right.** Applied to peers, to tools, and hardest to this
 role's own output. Four wrong answers on 2026-09-06 were each a correct method against the wrong
 population: a stale git ref, a stale corpus copy, another run's progress file, and another checkout's
