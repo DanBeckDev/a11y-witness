@@ -420,6 +420,30 @@ today's fixes are that pattern applied where it was missing.
 
 ## Open defects
 
+**THE RECAPTURE LIST FOR THE TWO WORKER FIXES — derived and verified 2026-09-06, so it is not re-derived
+under time pressure.** The 2.4.7 predicate and the census-before-navigation fix both change what a capture
+STORES, so the affected cases must be recaptured before any gate can see the difference. Computed from the
+authoritative export by running `ruleFindings` over all 2,796 records and taking the union of: records
+where 2.4.7 fires, the `focus-removed-on-receipt` positives, and records that navigated AND carry a census.
+
+**44 case ids across 10 families** — and 19 (the 2.4.7 set) + 25 (the census set) = 44, which is the
+arithmetic already agreed. **Verified that the ten family prefixes cover EXACTLY those 44: 0 missed, 0
+extra.** That check matters because `route-title-stale` is also a string prefix of `-catalogue`, `-claim`
+and `-enrolment`, which is why all four are listed separately — a trailing `+` means the base case and its
+`+also-`/`+with-` variants, never everything sharing the prefix.
+
+```
+npm run lab:pipeline -- --pipeline=verify --no-cache --only=\
+  focus-removed-on-receipt-booking+,focus-removed-on-receipt-claim+,focus-removed-on-receipt-order+,\
+  image-missing-alt-behind-consent+,keyboard-trap-modal-cycle+,keyboard-trap-modal-escape+,\
+  route-title-stale+,route-title-stale-catalogue+,route-title-stale-claim+,route-title-stale-enrolment+
+```
+
+`--no-cache` because the PAGES have not changed — `workerCode` is deliberately outside the cache key, so
+a cached capture would be served unchanged and the fix would be invisible. `--pipeline=verify` deploys the
+fleet first, which is the one deploy both worker fixes share.
+
+
 | | what would tell you it is fixed | detail |
 |---|---|---|
 | **MEASURED 2026-09-06: fixing 2.4.7 ALONE takes `rules:gate` to zero, and nothing else lurks.** Ran `ruleFindings` over all 1,398 conformant records in the authoritative export and grouped every finding by criterion. **The only criterion producing ANY finding on a conformant record is 2.4.7 — 20 findings across 10 records. Zero from the other fourteen.** So the headline claim holds exactly as stated for every declared rule, and the single blocker is one undeclared one. | Nothing to do — this is the measurement that says the 2.4.7 unit is sufficient rather than merely necessary. | Worth having BEFORE the fix, because "10 conformant records failed" leaves open whether one fix closes it or whether more surface once the loudest is silenced. It closes it. |
