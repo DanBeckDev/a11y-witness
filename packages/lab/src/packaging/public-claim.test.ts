@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -32,7 +32,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.
  * fact-stated-twice shape landing on the one number a stranger reads before deciding to trust the tool.
  *
  * So the list is the guard. Adding a public claim without adding it here is the only way back in. */
-const CLAIM_FILES = ["README.md", "docs/try-it.md"] as const;
+const CLAIM_FILES = ["README.md", "docs/try-it.md", "docs/github-action.md"] as const;
 
 function claimBlockIn(file: string): string {
   const text = readFileSync(path.join(REPO, file), "utf8");
@@ -54,7 +54,14 @@ function recordedGateOutput(): string {
 
 /** Figures a reader would act on. Years and version-like tokens are not claims about measurement. */
 function figuresIn(text: string): string[] {
-  const body = text.replace(/<!--[\s\S]*?-->/g, " ");            // the marker comments are not the claim
+  const body = text
+    .replace(/<!--[\s\S]*?-->/g, " ")                              // the marker comments are not the claim
+    // AN ISO DATE IS NOT A MEASUREMENT, and it took a withdrawal to notice. `2026-09-06` was read as the
+    // figures 09 and 06 and demanded of the gate output, so the sentence "under re-measurement since
+    // <date>" could not be written at all -- the guard blocking the one honest thing to say when a
+    // figure is withdrawn. Same reasoning as the year filter below: a date is a claim about WHEN, never
+    // about what was measured.
+    .replace(/\b\d{4}-\d{2}-\d{2}\b/g, " ");
   return [...new Set((body.match(/\b\d[\d,]*\b/g) ?? [])
     .filter((n) => !/^(19|20)\d\d$/.test(n.replace(/,/g, ""))))];
 }
@@ -100,23 +107,58 @@ test("every population the claim mentions carries the denominator it was measure
 
 function assertDenominators(claim: string, file: string): void {
   assert.ok(claim.length > 0, `${file} has an empty claim block`);
-  // `\s+` rather than a literal space: README.md hard-wraps, so a figure and the population it counts
-  // are routinely split across a line break. A literal space passed on the corpus figure and failed on
-  // the real-page one purely because of where the line happened to end -- which would have read as the
-  // claim missing its denominator when the denominator was there.
-  // PINNED AS A SHAPE, NEVER AS A LITERAL. This read `/1,398 conformant records/`, so the moment the
-  // corpus grew the guard did not merely fail to notice -- it REQUIRED the stale number, and updating
-  // the claim to the measured 1,405 would have failed the test protecting the claim. A test that pins a
-  // figure it does not source is a test that enforces staleness.
-  assert.match(claim, /[\d,]+\s+conformant records/,
-    "the corpus figure and its denominator are the substance of the claim");
-  assert.match(claim, /[\d,]+\s+conformant real pages/,
-    "the real-page claim needs its denominator for the same reason the corpus one does — 'clean on real "
-    + "pages' without a count is the unbounded phrase this file already forbids, one population along");
-  // The claim used to have to say "being re-measured", because the real-page figure had no gate behind
-  // it. It has one now, so requiring that phrase would force the claim to disclaim a measurement it
-  // actually has. What survives is the rule underneath it, and it is the assertion above: every
-  // population the claim mentions carries the denominator it was measured on.
+
+  // A BLOCK MAY CLAIM NOTHING, and that is the one alternative to stating the denominators. This file's
+  // own header already blesses it: *"where no gate has printed a figure yet, the claim says the figure is
+  // being re-measured -- that is not a placeholder to be tidied away later, it is the honest state."*
+  //
+  // `docs/github-action.md` is why it needed saying in code. It carried "zero false positives across
+  // 1,034 conformant records" while the README said 1,183 and the guarded claim said 1,405 -- three
+  // documents, one measurement, and only 1,405 in a recorded gate. Requiring denominators there would
+  // have forced a number to be PICKED, which is a judgement about what the page claims and not a
+  // mechanism.
+  //
+  // NOT ABUSABLE, because the escape is conditional on claiming nothing: a block that says it is being
+  // re-measured must carry NO figure at all. "Being re-measured, and by the way it was 1,034" is the
+  // stale claim wearing the honest sentence, so it is refused by the same check.
+  if (/being re-measured/i.test(claim)) {
+    assert.deepEqual(figuresIn(claim), [],
+      `${file} says its figure is being re-measured AND states one. That is the stale claim wearing the `
+      + "honest sentence: either give the denominators, or claim nothing until a recorded gate prints "
+      + "one.");
+    return;
+  }
+  // A POPULATION IS WITHDRAWN INDEPENDENTLY, not the whole block. On 2026-09-06 a refreshed baseline
+  // produced findings on real pages an older baseline had passed, so the REAL-PAGE figure had to be
+  // withdrawn while the CORPUS figure was untouched and still correct. The block-level escape above
+  // could not express that: it is all-or-nothing, so honouring it would have withdrawn a good claim to
+  // withdraw a bad one, and keeping the block would have gone on publishing a figure under
+  // investigation.
+  //
+  // So each population states its figure OR says it is under re-measurement WITH A DATE. The date is
+  // the load-bearing part: "under re-measurement" with no date is how a withdrawal becomes permanent
+  // furniture, and this repo has paid for exactly that shape more than once.
+  //
+  // `\s+` rather than a literal space throughout: these files hard-wrap, so a figure and the population
+  // it counts are routinely split across a line break. A literal space passed on the corpus figure and
+  // failed on the real-page one purely because of where the line happened to end.
+  const POPULATIONS = [
+    { what: "the corpus", figure: /[\d,]+\s+conformant\s+records/ },
+    { what: "real pages", figure: /[\d,]+\s+conformant\s+real\s+pages/ },
+  ] as const;
+  const withdrawn = /under\s+re-measurement\s+since\s+\d{4}-\d{2}-\d{2}/i.test(claim);
+
+  for (const { what, figure } of POPULATIONS) {
+    if (figure.test(claim)) continue;
+    assert.ok(withdrawn,
+      `${file}'s claim states no figure for ${what} and does not say it is under re-measurement with a `
+      + "date. A population is either measured and stated, or withdrawn and dated — silence about one "
+      + "reads to a stranger as a claim not made, and this project has had both of those be wrong.");
+  }
+  // PINNED AS A SHAPE, NEVER AS A LITERAL. The corpus assertion once read `/1,398 conformant records/`,
+  // so the moment the corpus grew the guard did not merely fail to notice -- it REQUIRED the stale
+  // number, and updating the claim to the measured 1,405 would have failed the test protecting the
+  // claim. A test that pins a figure it does not source is a test that enforces staleness.
 }
 
 test("the claim block is reachable from the README a stranger opens", () => {
@@ -260,3 +302,34 @@ test("PROOF: prose with a number and no outcome is NOT matched, or the guard get
   assert.ok(OUTCOME.test("zero false positives across 1,183 conformant records"),
     "and the sentence this row is about must still match, or the guard covers nothing");
 });
+
+test("every file carrying a CLAIM block is IN the list, so one cannot be added unguarded", () => {
+  // "So the list is the guard" -- this file's own header, and the acknowledged hole in it: a new public
+  // claim is protected only if somebody remembers to add its file here. That is a rule a human has to
+  // remember, which this repo's own doctrine says does not happen.
+  //
+  // DERIVED, in the direction that matters. Adding a CLAIM block and not listing the file now fails;
+  // removing a file from the list AND deleting its block stays possible, because that is a deliberate act
+  // rather than an omission. `docs/` is the whole surface a stranger is sent to, plus the README.
+  const roots = ["README.md", ...walkDocs()];
+  const carrying = roots.filter((file) =>
+    readFileSync(path.join(REPO, file), "utf8").includes("<!-- CLAIM:BEGIN"));
+  assert.ok(carrying.length >= 3,
+    `only ${carrying.length} file(s) carry a CLAIM block; the scan is broken, not the claims withdrawn`);
+
+  const unlisted = carrying.filter((file) => !(CLAIM_FILES as readonly string[]).includes(file));
+  assert.deepEqual(unlisted, [],
+    "these files carry a CLAIM:BEGIN block and are not in CLAIM_FILES, so nothing checks their figures:\n"
+    + unlisted.map((f) => `  ${f}`).join("\n")
+    + "\n\nA claim block that nothing reads is worse than none: it looks guarded.");
+});
+
+/** Every markdown file under `docs/`, which with the README is the surface a stranger is sent to. */
+function walkDocs(dir = "docs"): string[] {
+  return readdirSync(path.join(REPO, dir), { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name === "node_modules") return [];
+    const rel = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) return walkDocs(rel);
+    return entry.name.endsWith(".md") ? [rel] : [];
+  });
+}
