@@ -26,6 +26,7 @@ import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "@a11y-witness/judge/layers";
 import { reportLines, type Report } from "./report.js";
+import { formatFaultMessage } from "./fault-remediation.js";
 import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11y-witness/worker-fleet";
 import { CAPTURE_CLIENT_TIMEOUT_MS, requestJson } from "@a11y-witness/worker-fleet/worker-http";
 import { captureTolerantly } from "@a11y-witness/worker-fleet/capture-client";
@@ -885,7 +886,7 @@ function describeWorkerError(status: number, body: unknown): string {
       + `--worker (or A11Y_WORKER) at a different one.`;
   }
   if (parsed.fault) {
-    return `The worker's capture failed: ${parsed.error ?? "no message given"} (fault: ${parsed.fault}).`;
+    return formatFaultMessage(parsed.fault, parsed.error);
   }
   if (parsed.error) {
     return `The worker returned an error (HTTP ${status}): ${parsed.error}`;
