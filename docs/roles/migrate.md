@@ -13,7 +13,7 @@ while a capture is running.
 | **Claude Code's own memory for each agent** | `~/.claude/projects/-Users-<user>-Documents-repos-personal-a11y-witness/` on this Mac | the equivalent path under `~/.claude/projects/` on the new machine | see "The project-key rename" below — this is the one step that is NOT a plain copy |
 | The fleet SSH key, the lab's `a11y-pve` key | this Mac's filesystem | the new machine's filesystem | out of band, by whoever holds them today — see `packages/control/ansible/README.md`'s "Issuing a new operator's credentials", and note that MOVING a key to a new machine is not the same operation as issuing a new one: prefer generating a fresh keypair for the new machine and revoking the old, per that section's step 4, unless the old machine is being destroyed in the same act as the move |
 | The authoritative training/real-page corpus | `a11y-lab` (CT 121) | unchanged — the lab is a separate host from whichever Mac is the control plane | nothing to migrate here UNLESS the lab itself is also moving, which this runbook does not cover |
-| The daily board report's schedule | a launchd agent on this Mac (`bash scripts/install-board-report.sh`) | a launchd agent (macOS) or the systemd variant (Linux) on the new machine | see "The board report job" below |
+| The daily board report's schedule | a launchd agent on this Mac (`bash scripts/install-board-report.sh`) | GitHub Actions, per `ceo`'s ruling — see "The board report job" below | nothing to migrate once the Action lands; kept as a row here until it does |
 | `docs/board/reported.json` | tracked in the repo | tracked in the repo | moves automatically with `git clone` — nothing to do |
 | `runs/` in the primary checkout | this Mac's local copy | re-synced on the new machine | `runs/` is gitignored and a LOCAL COPY everywhere, including the primary checkout today — the new machine starts with none and that is normal; `npm run lab:inventory` says how stale a copy is once one exists. The authoritative corpus never moved (see row above) |
 
@@ -86,23 +86,22 @@ drill can safely rehearse without a second machine already in place.
 
 ## The board report job — the systemd variant
 
-`docs/roles/README.md`'s state table already records the deliberate reason the daily board report is a
-**launchd** agent and not a GitHub Actions runner: a runner sees only `origin/main`, and the report's own
-push-state line exists specifically to catch a merged-but-unpushed hold, which a runner would report as
-clean every time whether or not it was true.
+**RESOLVED by `ceo`, reversing this file's own earlier position.** This section used to record a real
+disagreement between `docs/roles/README.md`'s table (launchd, deliberately, because a GitHub Actions
+runner sees only `origin/main` and cannot catch a merged-but-unpushed hold) and
+`docs/roles/memory/org-shape-second-orchestrator.md`'s recorded board decision that the report moves to
+GitHub Actions once push-everything is enforced. `ceo` ruled for the second: **"push-everything means
+nothing is unpushed, so the runner sees everything"** — the runner's blind spot was the local-checkout
+gap, and that gap is what the push-per-commit rule closes. `docs/roles/README.md` carries the ruling and
+its reasoning now; this file no longer defers it.
 
-**A found disagreement, flagged rather than resolved here.** `docs/roles/memory/org-shape-second-orchestrator.md`
-records a board decision from the same day — *"Push-everything is the rule: no work exists only on this
-machine; the daily report runs in GitHub Actions, no local job"* — which is the opposite conclusion, and
-its own stated premise (nothing exists only locally, once push-per-commit is actually enforced) directly
-undercuts the reasoning in `docs/roles/README.md`'s table. **This file does not resolve that disagreement
-silently.** Told to `dispatcher`/`ceo` rather than picked one way in this commit — see the message
-accompanying this unit's report.
-
-Until that is resolved, this section describes the **systemd equivalent of the existing launchd job**, for
-a new control-plane machine that is Linux rather than macOS — needed regardless of which side of the
-GitHub-Actions question wins, since a local job needs a local scheduler on whatever machine ends up running
-it:
+**What that means for THIS section.** A GitHub Actions runner needs no scheduler on any control-plane
+machine at all — it is Linux and always-on by construction, which is a stronger answer than "the systemd
+equivalent of the launchd job" ever was. The systemd recipe below is kept anyway, for the case the ruling
+does not cover: **a job that has no GitHub-hosted equivalent** (nothing here does yet, but the migration
+runbook should not assume that stays true), or a control-plane machine that needs to run something
+locally regardless of where the corpus lives. Read it as the general "how to schedule a job on this
+machine's successor" reference, not as the board report's own answer anymore.
 
 ```ini
 # /etc/systemd/system/a11y-witness-board-report.service
