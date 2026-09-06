@@ -27,8 +27,11 @@ import { sandboxGitEnv } from "./git-env.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { REPO } from "./repo-identity.mjs";
 
-export const REPO = "DanBeckDev/a11y-witness";
+// RE-EXPORTED, not restated -- issue #92. Five other modules import `REPO` from here, so it stays exported
+// at this path; `repo-identity.mjs` is the single declared value now, and this is one of its callers.
+export { REPO };
 export const MILESTONE = "v0.1.0 — first publish";
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const HOURS_MS = 3600_000;
