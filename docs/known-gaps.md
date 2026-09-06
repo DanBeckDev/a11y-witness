@@ -2483,3 +2483,37 @@ capture's `revealedAt` is unchanged — so the fix reached the product path with
 `revealed: false` appearing on the corpus path too. That would mean the fix moved the starting position
 rather than removing the dependence on it, and the 15 positives would need relabelling rather than
 recapturing.
+
+### BOTH HALVES BUILT, NEITHER VERIFIED — 2026-09-06, `agent/focus-reveal-start-position`
+
+Part 1 (record the starting control) and part 2 (reach the revealing control regardless of where the
+previous probe left focus) are both in `capture-probes.mjs`, and part 2 turned out achievable without
+touching the mechanism §42/CLAUDE.md warn about.
+
+**The two mechanisms are different, and that is what makes part 2 safe.** `anchorToTop` (`Control+End`)
+resets NVDA's quick-navigation CARET — a separate piece of state from DOM FOCUS, which `Tab` actually
+depends on. `Control+Home` was tried on the caret and made `gate:probe-order` worse, because quick
+navigation can never reach the element the caret is on. DOM focus has no such defect:
+`resetFocusToDocumentStart` (`browser-session.mjs`) calls `document.activeElement.blur()`, which produces
+the identical `focusout` a real Tab-away would, and the native behaviour when nothing is focused
+(`activeElement === document.body`) is to start the next Tab at the first tabbable element — the property
+this probe needs and the caret anchor cannot give it.
+
+`probeFocusReveal` now reads the focused control BEFORE the reset (`startedFrom` — where the PREVIOUS
+probe left focus, the fact §43's table shows differing between the two paths), calls the reset, and
+records what it achieved (`focusReset: {applied, why}` — `capture-pure.mjs`'s `focusResetOutcome`, three
+outcomes: a control was blurred, nothing needed blurring, or the reset script never ran at all, kept
+apart from each other rather than collapsed). Both fields land on the `focusReveal` mark whether or not
+anything was found, so `revealed: false` can now always be read alongside where the walk started and
+whether the reset is confirmed to have run.
+
+**Provably correct offline; NOT YET PROVEN against real NVDA.** `focusResetOutcome` is pure and
+mutation-checked (each branch — the suspect-target guard, the null/undefined-vs-false distinction —
+breaks its own dedicated test and only that test when removed). But nothing here can prove that
+`document.activeElement.blur()` actually leaves NVDA's own Tab order at the first stop, or that it does
+not perturb something else the walk depends on — that needs a real capture. Filed with the acceptance
+criterion this section already names: `revealed: true` on the fixture's bad half and `revealed: false` on
+the good half through the real-page path, with the corpus capture's `revealedAt` unchanged. Still queued
+behind the same recapture window as §42 and `navigatedOnSubmit`'s third state; this one is independent of
+both (it touches only `probeFocusReveal`/`walkToReveal`, not the focus-event-log listener path or the
+form-submit `navigatedOnSubmit` logic) and is revertible alone.
