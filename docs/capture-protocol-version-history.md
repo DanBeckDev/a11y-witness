@@ -194,3 +194,47 @@ The MEANING changes, which is what makes this a bump rather than an additive fie
 itself on focus now produces evidence it could not produce before, and two captures of one page must never
 disagree about whether that question was asked. `observed.focusContext` appears on every capture taken from
 here, and `undefined` on every one before — the split the key exists to prevent.
+
+## 14 → 15 (2026-09-05): three evidence channels shipped and the cache could not see them
+
+**Written retrospectively on 2026-09-06, because 15 shipped with no entry here at all** — the constant
+moved and this file stopped at 14. Recovered from `5aecbec` rather than from memory. A changelog with a
+hole in it is worse than a short one: a reader checking whether a shape changed under 15 would have found
+nothing and concluded nothing changed.
+
+`focusEvents`, `focusReveal` and the census/focus `candidates` field were all new fields a RULE reads —
+this constant's own stated trigger — and none of them bumped it. `workerCode` is deliberately outside the
+cache key, correctly, so every case whose PAGE had not changed was served its pre-probe capture.
+
+**It presented as partly working, which is the worst way.** A case with no cache entry captures fresh, so
+1.4.13's cases — added the same day — got the new probe and its rule fired 15 times, while the older 2.4.7
+F55 cases came from cache and their rule reported `NEVER FIRED ANYWHERE`. A probe that reaches only the
+cases nobody had captured before is indistinguishable from a probe that works.
+
+## 15 → 16 (2026-09-06): four shape changes landed under 15, so 15 names more than one shape
+
+The bump is a DISCRIMINATOR here rather than a lever. Everything below already forces a full recapture by
+another route — `screenReaderSettings` joined the same bundle and is itself in `environmentKey` — so the
+recapture is bought either way. What a bump buys that nothing else does is that a capture's own stamp says
+which shape it is. Without it, `15` names captures from before tonight and after it, and `corpus:snapshot`
+exists precisely so an old corpus can come back.
+
+- **`navigatedOnSubmit` gained a `checked` discriminant.** It is `{checked, navigated, from, to}` now.
+  Previously its ABSENCE conflated "the submit did not navigate", "`currentPageUrl()` could not be read"
+  and "the probe never ran". Measured on `w3.org/WAI/demos/bad/after/survey.html`: the submit DID navigate
+  and the field was null anyway. This is the one that most deserves the bump on the old rule too — a
+  load-bearing field's PRESENCE stopped meaning what it meant.
+- **The focus-event listener installs from document load** (`known-gaps.md` §42), so a log now witnesses
+  what already held focus. `log[0]` was previously an unmatched `focusout` on most captures, and 2.4.7's
+  F55 rule carried an `i === 0` exception for it, now deleted. Two captures of one page must never
+  disagree about whether the first event was witnessed.
+- **`focusReveal` carries `startedFrom` and `focusReset`** (§43). `probeFocusReveal` walked from wherever
+  the previous probe left DOM focus, so `revealed: false` meant "nothing found FROM HERE"; it now blurs
+  first and records where it started. The same page produced `revealed: true` on one path and `false` on
+  the other before this.
+- **The census carries `candidateUrls`** when the CDP target choice was ambiguous. `candidates: 2` was a
+  count with no identity, and 30 real-page censuses were refused on it with no way to say which other
+  document was on offer.
+
+Deployed with `--allow-protocol-change` stated deliberately. The deploy refusal that guards this constant
+is doing its job: it exists so a bump is never shipped as a side effect of an unrelated change.
