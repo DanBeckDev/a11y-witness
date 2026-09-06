@@ -2537,6 +2537,50 @@ discipline as `blurred`: suppressed / nothing installed to suppress / reset neve
 mutation-checked offline, but whether `removeEventListener`/`addEventListener` actually bracket the real
 DOM event on a live page is a fleet question. Bundled into the same recapture window as `§42` and `§43`.
 
+### THE REMAINING BOUND, STATED RATHER THAN CLOSED — 2026-09-06
+
+Installing the listener before the capture's own first `anchorToTop()` closed the case above. **It did not
+make the log able to see a focus that fired before the listener existed**, and it cannot: a DOM listener
+cannot observe an event dispatched before it was attached.
+
+**So an `autofocus` that fires at page load is invisible to this log — which is precisely the F55 shape it
+exists to catch.** A page that focuses a control on load and a script that strips that focus produce
+`focusin`/`focusout` before any capture code runs, and the log opens on a page where it has already
+happened. Nothing downstream can distinguish that from a page that never focused anything: `focusEvents`
+reports what it saw, and what it saw is an empty prefix.
+
+**IT IS CLOSABLE, AND IT IS DELIBERATELY NOT CLOSED.** CDP's `Page.addScriptToEvaluateOnNewDocument`
+injects before any page script runs on every new document, which would attach the listener ahead of the
+page's own load handlers. It is not used anywhere in `packages/nvda-worker/src/` today. The reason for not
+reaching for it is not surface area, it is **falsifiability**:
+
+> An always-injected script is UNFALSIFIABLE FROM INSIDE THE CORPUS. If the injection changes anything a
+> page does — timing, a script the page's own code can observe, first paint — **every capture carries the
+> change and there is no control group left to detect it with.**
+
+The only corpus that could answer it is one captured WITHOUT the injection, which is the corpus being
+written on the fleet right now. Closing this blind spot by a method whose own side effects could not then
+be measured trades a known, bounded gap for an unbounded and undetectable one.
+
+### THE CONDITION FOR EVER CLOSING IT, written down rather than left to judgement
+
+Not "later", and not "when someone has time". Close it only when all three hold:
+
+1. It is bundled with a **`CAPTURE_PROTOCOL_VERSION` bump** — the injection changes what the evidence can
+   contain, which is a protocol decision and not a fix, and the bump is what forces the recapture that
+   makes the new evidence comparable with itself.
+2. **`evidence:check` runs against the PRE-INJECTION corpus as the control**, while that corpus is still
+   the reference. This is the part with an expiry date: once the reference corpus is itself post-injection,
+   the control no longer exists and the question becomes permanently unanswerable.
+3. The prediction is stated first, so the check has something to FAIL rather than only a verdict —
+   **new leading events in the focus log on autofocus pages is the confirmation; a move in `transcript`,
+   the structure sweeps or `formChanges` is the falsifier**, since injection-before-page-scripts should not
+   touch what NVDA announces about the document.
+
+**What this costs while it stays open:** F55 on a control focused at load is undetectable, and reads as a
+page with no focus activity. The size is unmeasured — it needs a corpus query nobody has run, and the
+honest statement is that nobody knows how many real pages autofocus a control that a script then strips.
+
 ## 43. 1.4.13's PROBE FINDS THE PANEL ONLY FROM ONE STARTING POSITION, and the corpus path happens to start there
 
 **Found 2026-09-06 by a fixture doing its job — by FAILING.** `rules:coverage` refused a promotion because
