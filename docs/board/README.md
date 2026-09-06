@@ -7,8 +7,9 @@ bash scripts/install-board-report.sh
 ```
 
 It installs a launchd agent that posts an edition to [issue #20](https://github.com/DanBeckDev/a11y-witness/issues/20)
-at **08:00 Europe/London**, logs to `~/Library/Logs/a11y-witness/board-report.log`, and **proves the job is
-registered** with `launchctl print` rather than trusting `bootstrap`'s exit code — a verification that shares
+at **08:00 Europe/London**, writes the PDF to **`~/Documents/a11y-witness-board-reports/`** — one file
+per date, where the chairman looks — logs to `~/Library/Logs/a11y-witness/board-report.log`, and
+**proves the job is registered** with `launchctl print` rather than trusting `bootstrap`'s exit code — a verification that shares
 a failure mode with the action verifies nothing. Idempotent; re-running is how you pick up a moved checkout.
 
 It **checks the machine's timezone rather than assuming it**, because `StartCalendarInterval` is local time
@@ -44,6 +45,20 @@ For the board tooling this is currently harmless: the scripts here import only `
 `worker-fleet`, which this work never changes, and the tests reach the scripts by relative path. **It
 stops being harmless the moment this work touches a package's source**, and then the worktree needs its
 own install rather than the symlink.
+
+## Where the document goes, and why not beside the log
+
+**`~/Documents/a11y-witness-board-reports/<date>.pdf`, one file per date.** The GitHub Release draft is
+the second copy.
+
+It was written beside the scheduled job's log for a while, on the reasoning that a LaunchAgent's output
+belongs in `~/Library/Logs` on macOS. **That reasoning was about the log.** A board document is not a log:
+it is a deliverable a person opens, and a deliverable filed where its reader does not look has not been
+delivered. The log stays there, where the original reasoning does hold.
+
+**The intermediate HTML is written to a temporary directory, not to that folder.** It is Chrome's input
+rather than a deliverable, and *one file per date* means one file — a folder holding two files a day, one
+of which opens as unstyled markup, is a folder somebody has to learn to read past.
 
 ## Why it cannot run on a GitHub runner
 
