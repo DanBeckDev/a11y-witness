@@ -42,5 +42,19 @@
       "at": "2026-09-06T12:00:00Z",
       "boardClaim": "We found and fixed two recording faults that would have silently measured the wrong web page."
     }
-  ]
+  ],
+  "capacity": {
+    "status": "not instrumented",
+    "note": "Engineering capacity waiting for its next assignment is not yet instrumented and will print as those words until a week of data exists. It is derived from LABEL EVENTS, which are timestamped: a `session:*` label and `in-progress` are applied together when a row is briefed, so the gap between one session's `in-progress` being removed and that same session's next `in-progress` being added is the measure.",
+    "//": "WHY NOT THE ASSIGNEE, which was the first design: this repository has TWO assignable accounts and NINE sessions -- every agent operates as the same GitHub user. The assignee can record assigned-versus-unassigned and cannot record WHICH session, so a week of it would have answered correctly about the wrong thing. Caught by dispatcher before the first day of data rather than after the first week. A per-session LABEL carries attribution and timing in one mechanism, which also removes the second source of truth the first design needed.",
+    "definitionChanges": [
+      {
+        "at": "2026-09-06T~21:00Z",
+        "what": "The worker rule changed from pull-AFTER-report to pull-BEFORE-report: a finishing session now takes its next row and reports both in one message.",
+        "effect": "The measured gap becomes structurally small from this point. A series spanning this change will show an improvement that is a DEFINITION CHANGE, not a change in how long anyone waited. Any chart or figure crossing it must mark it.",
+        "reportedBy": "dispatcher"
+      }
+    ]
+  },
+  "capacity_//": "SECTION 5 PRINTS THIS. An entry with `status: not instrumented` prints those words; a real total must name the window it covers AND carry any definitionChanges that fall inside it -- a measure whose definition moved mid-series is two measures wearing one name, which is this project's most-repeated defect with a clock attached."
 }
