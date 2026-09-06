@@ -1042,6 +1042,61 @@ into the shared `runs/` symlink twice. All further validation after noticing thi
 `compare_to_baseline()` directly with `tmp_path` fixtures, which is how it should have been done from the
 start. No corpus evidence was touched; the affected file is a disposable, regenerated-on-every-run report.
 
+## A leaked GIT_DIR forged 15 commits into this repo, 2026-09-06 — closed same day
+
+Closing "nothing installs the git hooks" made the pre-push hook run `npm test` for the first time with
+`GIT_DIR` set — git exports it into every hook environment. A test that spawned git with `cwd` alone and
+an inherited `env` then operated on THIS repository instead of its own throwaway one: `core.bare` flipped
+to `true` twice, stray `base`/`init` commits landed with `a.txt`/`b.txt`, and
+`pre-commit-hook.test.ts:42`'s `git config user.name "Pre-Commit Hook Test"` was written into the real
+repo and reused as author on 15 commits across all refs — six of them real work already on
+`origin/main`, this unit's own acceptance-exit-code fix among them. **A closed row created the
+exposure.** History was kept rather than rewritten (`ceo`'s ruling: rewriting a branch several agents
+held would trade a cosmetic defect for a real one); identity was unset back to `Dan Beck` and
+`core.bare` back to `false` by hand.
+
+**CLOSED.** Three independent defences, none of them alone sufficient:
+
+1. `scripts/git-env.mjs` (`sandboxGitEnv`) strips every `GIT_*` key by PREFIX, not by a name list, before
+   a caller adds back what it wants. Applied to every production git spawn found reaching outside a
+   throwaway repo with an inherited env: `install-git-hooks.mjs`, `code-drift.mjs` (`workerSourceDirty` —
+   a redirected `git status` would read a dirty worker checkout as clean), `check-worker-code.mjs` and
+   `deploy-worker.mjs` (the `CAPTURE_PROTOCOL_VERSION` guard), `promote-model.mjs`, `fleet-playbook.mjs`,
+   `lab-pipeline.mjs`. `@a11y-witness/worker-fleet` ships `check-worker-code.mjs`/`deploy-worker.mjs` as
+   `bin` entries, so `packages/worker-fleet/src/git-safe-env.mjs` is a deliberate, disclosed duplicate
+   (the repo-root `scripts/` does not exist in a published tarball), pinned equal to the original by
+   `git-safe-env.test.ts`.
+2. Identity is set PER COMMAND (`git -c user.name=… -c user.email=… commit`) rather than via
+   `git config user.name`, which writes to whatever `GIT_DIR` names regardless of how complete the env
+   strip is — the mechanism that produced the forged author. `scripts/test-support/git-sandbox.ts`'s
+   `GitSandbox.commit()` is the only sanctioned way to attach identity in a test and never writes config.
+   `withGitSandbox` additionally fingerprints a target repo's HEAD/identity/`core.bare` before and after
+   and throws if any moved — shown to fire under a SIMULATED HOOK ENVIRONMENT (`GIT_DIR` set) against a
+   decoy repo, never the real one, in `git-sandbox.test.ts`.
+3. All eleven git-shelling tests found (worker-fleet: `protocol-guard`, `lab-job`; lab:
+   `referenced-scripts`, `packaging/backlog-ready`, `packaging/pre-commit-hook`,
+   `packaging/action-reference`, `packaging/promotion-refuses-dirty`, `gates/verdict-adoption`; judge:
+   `criteria-counts-are-not-spelled-out`, `rule-oracles`; control: `lab-reset-removal`) migrated.
+   `packages/lab/src/packaging/git-spawn-classification.test.ts` DISCOVERS every git-spawning file across
+   the whole repo, test or production (~18 at the time this was written — a floor, not a pin), by scanning
+   comment-stripped tracked source for `<identifier>("git", ...)` — not anchored to `execFileSync`/
+   `spawnSync` by name, since `install-git-hooks.mjs` calls git through an injected `run` seam — plus
+   anything using `withGitSandbox`, since three of the eleven no longer contain a literal git call at all
+   after migrating (the exact gap this test had on its own first run: those three were briefly invisible
+   until `withGitSandbox` usage was added as a second discovery criterion — "a classification is only as
+   good as the population the walk can actually see", the same shape as the `evidence-fields.test.ts`
+   coverage hole found in parallel this session). Verified live: staging a real, unclassified twelfth
+   git-spawning file makes this test fail by name. `scripts/git-hooks/pre-push` also now scrubs every
+   `GIT_*` variable from its own environment before running `npm test`, belt and braces, so a future test
+   that bypasses the helper entirely still cannot reach this repository through an inherited `GIT_DIR`.
+
+**Two claims checked rather than assumed, and both came back different from how they were framed:**
+`release:gate`'s flat `&&` chain (a separate, earlier row this session) needed no restructuring for a
+third exit code — `sh -c 'exit 2'`, a single `npm run <script exiting 2>`, and a two-stage `npm run X &&
+npm run Y` chain matching `release:gate`'s exact shape all correctly propagate a non-1 exit code
+untouched; and `candidate:gate` does not share that exposure, since `promote-model.mjs` reads
+`acceptance-report.json`'s `passed`/`failureReasons` fields directly rather than any exit code.
+
 ## How an item leaves this page
 
 Delete the row, and put the *lesson* in the record — `known-gaps.md` for something the project did not
