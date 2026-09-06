@@ -127,6 +127,16 @@ ambiguous between three things: the dispatched job's own INCONCLUSIVE (if it hap
 the dispatched job's own unrelated meaning of 2 (a usage error, in most of the scripts above), or the
 dispatch itself dying before the job could answer at all.
 
+### `packages/lab/src/dataset-paths.mjs` (shared infrastructure, not a gate of its own)
+
+`refuseIfRunsReadonly` calls `process.exit(3)` when `A11Y_RUNS_READONLY=1` is set and the path it is given
+resolves under `runsRoot()` — the guard added so a peer can ask any of the 16 scripts that write into
+`runs/` "would this touch the corpus?" without reading its source. Not a gate and has no `main` of its own:
+every one of its callers (`emit-grants-map.mjs`, `build-realism-tier.mjs`, `capture-real-pages.mjs`, and
+the rest of `runs-write-guard.test.ts`'s discovered population) inherits 3 directly, the identical shape
+`code-drift.mjs` uses for its own unrelated 3 below — a THIRD distinct meaning for exit code 3 in this
+table, after `promote-model.mjs`'s dirty-tree refusal and `deploy-worker.mjs`'s protocol-version refusal.
+
 ### `packages/worker-fleet/src/cli-flags.mjs` (shared infrastructure, not a gate of its own)
 
 `refuseUnknownFlags` calls `process.exit(2)` directly when a caller passes a flag none of `GUARDED`'s ~30
@@ -177,11 +187,12 @@ large majority — `evidence-check.mjs`, `capture-fixtures.mjs`, `explain-captur
 (`check-signals.mjs`), a precondition with no data at all (`corpus-snapshot.mjs`, `calibrate-abstention.mjs`,
 `build-realism-tier.mjs`), and a killed dispatch (`dispatch.mjs`).
 
-**3** — confirmed FOUR distinct meanings: a `CAPTURE_PROTOCOL_VERSION` refusal (`fleet-playbook.mjs`,
+**3** — confirmed FIVE distinct meanings: a `CAPTURE_PROTOCOL_VERSION` refusal (`fleet-playbook.mjs`,
 `deploy-worker.mjs`), an uncommitted git tree blocking promotion (`promote-model.mjs`), "measured nothing,
-the fault could not occur" (`page-identity-rate.mjs`), and "no run recorded" (`lab-pipeline.mjs`) — plus
-`code-drift.mjs`'s shared "empty pool or real drift" precondition, which several worker-fleet scripts
-inherit.
+the fault could not occur" (`page-identity-rate.mjs`), "no run recorded" (`lab-pipeline.mjs`), and
+`A11Y_RUNS_READONLY=1` refusing a write into `runs/` (`dataset-paths.mjs`'s `refuseIfRunsReadonly`,
+inherited by every one of its 16 callers) — plus `code-drift.mjs`'s shared "empty pool or real drift"
+precondition, which several worker-fleet scripts inherit.
 
 **4** — one confirmed meaning in this table, and it is the dangerous one: `fleet-playbook.mjs`'s
 `followUnit` giving up on watching a still-running unit.
