@@ -1,0 +1,67 @@
+name: Board summary check
+
+# 21:00: is tomorrow's hand-written executive summary committed?
+#
+# The morning job refuses an edition with no summary for that day, which is correct. A refusal at 08:00 is
+# a missing edition discovered at 08:00, by nobody. This fires eleven hours earlier and comments once on
+# the report issue, while a person is still awake to write it.
+#
+# IT GENERATES NO SUMMARY TEXT. The moment it did it would BE the machine-written summary the gate exists
+# to prevent, arriving through the warning instead of through the document.
+on:
+  schedule:
+    # Both, gated on London's actual hour -- see board-report.yml for the full reasoning.
+    - cron: "0 20 * * *"
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # 21:00 LONDON, YEAR ROUND. GitHub schedules in UTC only, so a single cron is the right hour
+      # for half the year and an hour out for the other half. Both are scheduled and every step below is
+      # gated on London's actual clock: the stated hour is then true in summer and in winter, rather than
+      # true in summer and quietly wrong from October.
+      #
+      # A stated time that is wrong for half the year is exactly the small untruth this pipeline refuses
+      # everywhere else. The wrong-half run exits SUCCESSFULLY and says so in its log -- a failed run
+      # would put a red mark on the repository every day for behaving correctly, which is how a signal
+      # gets ignored.
+      - id: hour
+        name: Is it 21:00 in London?
+        run: |
+          LONDON=$(TZ=Europe/London date +%H)
+          echo "london=$LONDON" >> "$GITHUB_OUTPUT"
+          if [ "$LONDON" = "21" ]; then
+            echo "London reads $LONDON:00 - this is the 21:00 run."
+          else
+            echo "London reads $LONDON:00, not 21:00 - the other half of the year's pair."
+            echo "Doing nothing, successfully."
+          fi
+
+      - name: Check out main
+        if: steps.hour.outputs.london == '21'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up node
+        if: steps.hour.outputs.london == '21'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        if: steps.hour.outputs.london == '21'
+        run: npm ci
+
+      - name: Is tomorrow's summary committed?
+        if: steps.hour.outputs.london == '21'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/board-summary-check.mjs --post

@@ -1,50 +1,49 @@
 # The daily board report
 
-**One command to bring it up on a new control-plane machine:**
+**The report is published by GitHub Actions, not from anyone's machine.**
+
+| workflow | when | what it does |
+|---|---|---|
+| `board-report.yml` | 07:00 UTC daily | posts the engineering edition to the report issue and the PDF to a draft Release |
+| `board-summary-check.yml` | 20:00 UTC daily | comments once if tomorrow's executive summary is not committed. It writes no summary text |
+
+**The stated hour is true year round, and it costs two crons to be so.** GitHub schedules in UTC only, so
+one cron is the right London hour for half the year and an hour out for the other half. **Both are
+scheduled and every working step is gated on London's actual clock**, so exactly one of the pair acts on
+any given day. The off-hour run does nothing, says so in its log, and **exits successfully** — a job that
+failed daily for behaving correctly would put a red mark on the repository every morning, and a signal
+that is red every day is a signal nobody reads.
+
+A stated time that is wrong for half the year is the same small untruth this pipeline refuses everywhere
+else. `board-schedule.test.ts` pins the pair and the gate together, because they are two facts that must
+agree: move the publish time and it is the second one you forget, and the failure is silent — the job
+simply never runs.
 
 ```bash
-bash scripts/install-board-report.sh
+bash scripts/fetch-board-report.sh            # today's PDF into ~/Documents/a11y-witness-board-reports/
+bash scripts/fetch-board-report.sh 2026-09-06 # a given date
 ```
 
-It installs a launchd agent that posts an edition to [issue #20](https://github.com/DanBeckDev/a11y-witness/issues/20)
-at **08:00 Europe/London**, writes the PDF to **`~/Documents/a11y-witness-board-reports/`** — one file
-per date, where the chairman looks — logs to `~/Library/Logs/a11y-witness/board-report.log`, and
-**proves the job is registered** with `launchctl print` rather than trusting `bootstrap`'s exit code — a verification that shares
-a failure mode with the action verifies nothing. Idempotent; re-running is how you pick up a moved checkout.
+That fetch is a **convenience, not a dependency**. The Release draft is the delivery; the folder is
+somewhere a person can double-click. A day nobody runs it is a day the document still exists.
 
-It **checks the machine's timezone rather than assuming it**, because `StartCalendarInterval` is local time
-and issue #20's body promises Europe/London. A report whose stated time and actual time disagree is the kind
-of small untruth this whole pipeline exists to refuse.
+## THE LAUNCHD JOB IS RETIRED, and the reason it existed is worth keeping
 
-## Working on this: a worktree, and what its `node_modules` symlink actually means
+It ran on one Mac, and the argument for that was **not** convenience: the report's merge count and
+push-state lines exist to catch work committed locally and never pushed, and a GitHub runner only ever
+sees `origin/main`. A scheduled report confidently wrong about the thing it was built to see is worse
+than a manual one.
 
-**Nothing is edited or checked out in the primary checkout.** That is a fleet rule rather than tidiness:
-the primary is what the fleet's code hash is computed from and what every other worktree resolves its
-dependencies through, so a feature branch sitting there silently changes what every capture worker builds
-against.
+**The chairman's ruling that everything is pushed removes the premise.** GitHub is then the complete
+record, and the schedule stops living on a single machine nobody else can see, restart or inherit — which
+was a real single point of failure, and one this project had already written down under a different
+heading.
 
-```bash
-git worktree add ../a11y-wt-board <branch>
-cd ../a11y-wt-board && ln -s ../a11y-witness/runs runs && ln -s ../a11y-witness/node_modules node_modules
-```
-
-**Sharing `node_modules` is normal here and it has a consequence worth knowing before it costs you an
-hour.** Every `@a11y-witness/*` import then resolves through the PRIMARY's packages, so you read the
-primary's `dist`, not yours. Building in your worktree changes nothing a cross-package tool sees. That
-cost the fleet driver most of an hour on 2026-09-06, convinced a generator was broken when it was
-faithfully emitting two-hour-old code.
-
-**Ask where it resolves, not whether the symlink exists** — checking that a symlink is a symlink is the
-mistake that hid it:
-
-```bash
-node -e "console.log(require.resolve('@a11y-witness/judge'))"
-```
-
-For the board tooling this is currently harmless: the scripts here import only `cli-flags` from
-`worker-fleet`, which this work never changes, and the tests reach the scripts by relative path. **It
-stops being harmless the moment this work touches a package's source**, and then the worktree needs its
-own install rather than the symlink.
+**What the ruling costs, stated rather than absorbed:** this workflow *cannot* detect an unpushed local
+branch, so it cannot report one. The push-state line now records the rule rather than proving it, and
+says so in the edition itself. The dispatcher's own branch count is what would contradict it, and a
+branch found unpushed appears in the report as an exception. **An absent check must not read as a clean
+one.**
 
 ## Where the document goes, and why not beside the log
 
