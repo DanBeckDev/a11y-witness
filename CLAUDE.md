@@ -2105,9 +2105,34 @@ round-robin with medians and IQRs, and it refuses to declare a difference the sa
 Use it instead of reading two `bench-capture` printouts — that is how a 2x difference got attributed to
 the wrong phase for hours.
 
-**Backing up the corpus:** `npm run corpus:snapshot`. `runs/` is gitignored, so 2,122 captures worth
-hours of worker time exist in one place. It writes a timestamped archive; syncing it somewhere durable
-is deliberately your call.
+**Backing up the corpus — THREE STEPS, and each verifies the one before by reading it back.** `runs/` is
+gitignored, so thousands of captures and 54 measured worker-hours exist in one place, and they are NOT
+reproducible: `browserVersion` is a cache key precisely because Edge announces differently across
+releases, so evidence taken under Edge 151 cannot be recreated now 152 ships.
+
+```bash
+npm run lab:job -- -e job=corpus-snapshot        # archive ON THE LAB, beside the corpus
+npm run lab:fetch -- -e artifact=corpus-archive  # bring the newest one to the control plane
+npm run corpus:release -- --archive=runs/fetched/<name>.tar.gz   # upload, then DOWNLOAD IT BACK
+npm run corpus:release -- --verify=corpus-<stamp>               # is an old release still restorable
+```
+
+**The transport is two hops because of CREDENTIALS.** The lab is the machine the corpus lives on, so a
+GitHub token there sits next to the thing it protects — and surviving the loss of that machine is the
+whole point. The token stays on the control plane, which already has one, and the archive travels.
+
+**Every step distrusts the one before, and each caught something real.** `corpus:snapshot` lists its own
+archive with `tar -tzf` and refuses on a shortfall, because `tar` exits 0 on a short archive — a 417 MB
+snapshot once extracted to 4,959 of 5,445 JSON files with no error anywhere. `corpus:release` downloads
+the asset back over the public API rather than trusting `gh release upload`'s exit code, because the API
+accepting bytes is not the asset being complete and readable a month from now, which is the only property
+a backup has. **A verification sharing a failure mode with the action verifies nothing** — the same rule
+as checking `/health.code` over HTTP rather than through the deploy channel.
+
+`corpus:backup` remains for an `rsync`/mounted-volume destination via `A11Y_CORPUS_REMOTE`, with
+`corpus-backup-verify` as its read-back. It **exits non-zero with no destination configured** rather than
+writing a local archive and reporting success: a backup tool that claims success while leaving one copy on
+one disk converts a known risk into an assumed safety.
 
 ## Housekeeping is automated — do not do it by hand
 
