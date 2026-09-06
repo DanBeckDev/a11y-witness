@@ -2481,6 +2481,16 @@ Verification is layered; pick the layers your change touches:
   firing, because the mutation was in source and the test was reading `dist`. That reads as "my test is
   weak" and is really "my test is old" — the same stale-`dist` shape as `rules:gate` scoring a rule the
   compiled bundle did not contain, arriving through the test runner instead of through a gate.
+- **RESTORE FROM A COPY, NEVER `git checkout --`. Three times in one night, 2026-09-06.** Mutation
+  checking means editing a file you are about to restore, and `git checkout -- <file>` restores it to
+  HEAD — which silently discards every UNCOMMITTED change in that file, not just the mutation. Twice in
+  one session it destroyed a feature mid-build (`capture-status.mjs`'s whole `--since` implementation,
+  rebuilt from saved patches; then `lab-job.yml`'s progress declarations); a peer session hit it the same
+  night on a branch with no prior commit to fall back to, so there was nothing to recover from at all.
+  `cp <file> /tmp/x && <mutate> && <run> && cp /tmp/x <file>` costs one command and cannot do this.
+  CLAUDE.md already records `git checkout --` as "the command that once destroyed release-eligible
+  weights in this repo" and `lab:reset` exists to avoid it — the mutation-check workflow is the same
+  hazard reached by a different door, and it is the workflow this project relies on most.
 - **The same defect exists in PYTHON, and it decided a mutation check wrongly on 2026-09-03.**
   `importlib.util.spec_from_file_location` honours `__pycache__`, so pytest and a bare `python -c` both
   executed a STALE COMPILE of `audit-scorer-shortcuts.py`. The visible symptoms were a comprehension
