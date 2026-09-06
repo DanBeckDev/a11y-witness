@@ -355,7 +355,15 @@ A11Y_WORKERS=url1,url2 npm run training:capture     # explicit pool: yours to ma
 
 `A11Y_WORKERS` is the escape hatch, not the normal path: naming workers means you are managing
 them, so nothing is started or stopped for you. `--after stop|pause|leave` overrides the
-restore behaviour.
+restore behaviour; `A11Y_VM_AFTER` is the same choice as an env var, for a caller that cannot pass a
+flag (a lab job, a scheduled task). Same three values, same default (`restore`), and the CLI reads
+whichever is set — set the flag when you are typing the command yourself, the env var when something
+else is invoking it for you.
+
+`A11Y_LOCAL_VM=0` skips the local-UTM-VM fallback entirely: with no explicit worker and no
+`inventory.yml` entry, `leaseWorker` normally probes for a local VM before giving up and guessing
+`http://localhost:8765`. Setting this to `0` goes straight to the guess, skipping the UTM detection
+work (and its side effects) for anyone who does not use the local VM setup at all.
 
 ### UPDATE: three workers now scale, and the negative-scaling section below is out of date
 
@@ -627,6 +635,14 @@ its top-level windows `Chrome_WidgetWin_1` whatever the branding — the code th
 unchanged. And `pointer.mjs`'s park is browser-agnostic, so Chrome inherits the real magnifier remedy even
 though it has no such feature to disable.
 
+**`A11Y_POINTER_AT="x,y"` deliberately mis-parks the pointer, to reproduce that Magnifier fault on
+demand rather than waiting for it to recur on its own.** This project's own rule is that a guard never
+shown to fail is not a verified guard — this is how the guard against the pointer sitting over content
+gets exercised. An unparseable or malformed value falls back to the safe park point rather than failing
+the capture, and the diagnostic mark records the coordinates actually used, so a typo in the value shows
+up as `(0,0)` in the mark rather than as silence. Negative values are allowed, for a second display
+sitting left of or above the primary. Dev/diagnostic only — no production capture needs this set.
+
 **Firefox does not fit a preset.** No CDP, so the structural census, `bringPageToFront` and window reuse all
 have no equivalent — it needs a separate capture backend, not another entry in this map. See ADR 0001.
 
@@ -670,6 +686,11 @@ NVDA and Edge versions, **the Windows build and architecture**, the provisioning
   revision changes every key it produces and invalidates its cache — the behaviour you want, and
   unit-tested. Re-provision the pool together rather than one at a time so two differently prepared
   guests cannot silently share an `"unstamped"` key.
+- **`RUNS_ROOT` / `A11Y_RUNS_ROOT` move where `runs/` itself resolves to** (`packages/lab/src/dataset-paths.mjs`
+  is the one place that reads them; every dataset path — the corpus, exports, models — is built on top of
+  its `runsRoot()`). Both names are honoured, because both were already in use before either script read
+  the other's spelling; set either when `runs/` needs to point somewhere other than `<repo>/runs`, most
+  commonly a machine where it is mounted or symlinked from a different path than this checkout's default.
 ### A cache key that was MEMOISED, and lied for five days
 
 **Edge updates itself under a running worker, and `browserVersion` did not notice.** The worker read it
@@ -2005,6 +2026,12 @@ curl -s http://<guest-ip>:8765/diagnostics | jq .
   on every start, so a session that went mute only exists in the old file
 - `disk`, `serverLog`
 
+`GUIDEPUP_SCREEN_READERS_PATH` is guidepup's own env var (not this project's `A11Y_*` convention), read
+by the worker to find NVDA on disk. It defaults to `%LOCALAPPDATA%\guidepup`, which is where guidepup
+installs NVDA on a guest it provisioned itself. Set it if a guest's NVDA lives somewhere else — a
+custom Windows image, or a portable install — and `nvdaRoot` in `/diagnostics` reports what the worker
+is actually looking under, so a missing-NVDA symptom there is a real place to start.
+
 `/health` stays cheap because it is polled; `/diagnostics` walks directories and shells out, so it is
 on-demand only.
 
@@ -2072,6 +2099,23 @@ Anything a human has to remember is something that does not happen. What runs it
   capture always stops it. Nothing may restart it while a worker is *idle* (see above for why).
 - **Edge** — `captureWithNvda`'s `finally` closes it unconditionally, which is what stopped failed
   captures leaking eight orphaned processes onto a 4 GB guest.
+
+**Three env vars govern where the page server lives and where a worker fetches from it, all with
+sensible defaults you will not need to touch unless something is already using port 5050 or 8765:**
+
+- `A11Y_PORT` — the port a `nvda-worker` instance itself listens on. Defaults to `8765`. Set it when
+  running more than one worker process on the same host (each needs its own port), or when 8765 is
+  already taken.
+- `DATASET_PAGES_PORT` — the port the local page server (above) listens on and the port a worker is
+  told to fetch dataset pages from. Defaults to `5050`. Set it alongside `A11Y_PORT` for the same
+  reason: more than one concurrent run on one host, or a port collision.
+- `DATASET_BASE_URL` — overrides the computed page-server URL outright, full origin and all
+  (`http://host:port`, no trailing slash). `hostPagesBase()` normally works this out itself: a real LAN
+  address for a remote fleet worker (a worker cannot reach `localhost` — that resolves to *itself*, not
+  the host serving pages) and a plain `localhost` when the worker and the page server are the same
+  machine. Set this when that computation is wrong for your network — no interface shares the worker's
+  subnet, or you are tunnelling through something the address guess cannot see — and `hostPagesBase`
+  says so in its own error when it cannot work it out and this is unset.
 
 `npm run doctor` reports what it cannot fix: strays on the pages port, a VM running but not
 answering, a run left mid-flight. It is read-only by design — it never kills anything — so the one
@@ -2566,6 +2610,14 @@ Verification is layered; pick the layers your change touches:
   > gate that does not exercise what ships is not a gate. Flipping it immediately surfaced two real
   > defects invisible to an LLM that only reads transcripts: a starved scorer asserting on seven
   > conformant fixtures, and a crash on an out-of-scope (VoiceOver) capture.
+  >
+  > **`JUDGE_BACKEND=openai`** talks plain `/v1/chat/completions` over `fetch` — no SDK — so it works
+  > against hosted OpenAI, Anthropic's OpenAI-compatible endpoint, and a local server (Ollama, LM
+  > Studio, vLLM, llama.cpp) alike. `JUDGE_STRUCTURED` defaults **on**: the backend sends a JSON schema
+  > as `response_format` so the server grammar-constrains its output, which is what eliminates the
+  > malformed/empty-JSON failures a small local model otherwise produces. Set `JUDGE_STRUCTURED=off` if
+  > a server rejects `response_format` outright. See `packages/cli/README.md` for the consumer-facing
+  > version of this — `OPENAI_API_KEY` / `JUDGE_API_KEY`, `JUDGE_BASE_URL`, `JUDGE_MODEL`.
 - Don't manually `taskkill nvda.exe` — let Guidepup own NVDA's lifecycle, or the speech-capture channel destabilises. Killing the worker with `Stop-Process` orphans its NVDA (still holding port 6837); the next cold start recovers, but expect to see it.
 - The worker keeps NVDA alive between captures (recycled every 25). `A11Y_REUSE_NVDA=0` reverts to a fresh NVDA per capture — the first thing to try if captures drift as a run progresses.
 - The guest is provisioned as an **appliance**: Windows Update may install but not reboot, and Edge's background mode, startup boost and auto-updater are off. It used to reboot itself mid-run and leak Edge processes.
