@@ -2381,6 +2381,78 @@ The same signal as this section's own original entry: the `N of M carry a census
 wrong direction, or a new finding appearing on a page where `submitNavigatedTheDocument` reads true — which
 would mean the widened check let a genuinely different document through despite both signals saying so.
 
+### CHECKED 2026-09-06, second pass (`agent/census-suspect-scope`) — the population, and a corpus artefact that disagrees with it
+
+Asked to settle whether 18 is the right count and the right population. **Could not settle it against a
+live corpus** — this worktree's `runs/` is a stale local copy (see below), and this unit is banned from
+`lab:*`/`fleet:*`, so a fresh `rules:gate` run was not available. What follows is a code-level proof
+instead, plus an honest flag of where it stops.
+
+**The population, read from the case definitions rather than counted from captures.** `case-matrix.mjs`
+defines exactly three `focus-removed-on-receipt-*` pages (`order`, `claim`, `booking`, lines 3897-3987) and
+six more exist only as `+also-*` accompanying-defect combinations of those three (confirmed against
+`runs/fetched/candidate.dataset-export.jsonl`'s 18 matching `provenance.caseId`s — see below for why that
+file is cited as a listing and not as evidence of the census itself). Nine case identities. Every one is
+generated as a `good`/`bad` **pair**, so nine cases produce eighteen records — not nine cases hiding a
+second, unexplained population of nine. The two variants' `<form>` markup is **byte-identical except for
+the `onfocus` handler that is the case's own defect** (line 3906-3914): no `method` attribute (HTML
+defaults to GET), no `onsubmit`, no `preventDefault` on either side. `probeForms: true` is declared once,
+above both. So the GET-reload-with-query-string this section describes fires on **both** variants of all
+nine cases, not on a `bad`-only subset — eighteen is not "nine captures, doubled by a second cause", it is
+nine cases correctly producing two suspect records each. The original entry's own phrase, "the nine
+`focus-removed-on-receipt-*` captures", undercounted by exactly the good/bad factor; it was describing nine
+*cases*, not nine *records*. Compared this form against every other form in `case-matrix.mjs` reachable by
+`probeForms` for the same defect: all the ones sharing this shape (`form-error-silent` and the
+`errorVariant`/`errorRemedyVariant` factories) call `event.preventDefault()` in an `onsubmit` — one of them
+inline on the element specifically *because* a deferred `<script>`-attached listener had previously lost
+the race and let the probe submit and navigate before it attached (case-matrix.mjs:992-994, "observed in
+both calibration and bulk fixtures"). `focus-removed-on-receipt`'s form has no such guard at all, on either
+variant, so nothing about it is fragile or intermittent — it navigates every time, which is a stronger and
+simpler explanation than the race above.
+
+**A fetched corpus artefact contradicts this, and is flagged rather than trusted.**
+`runs/fetched/candidate.dataset-export.jsonl` (2,796 records, matching the total this section cites) is the
+only local file with the right count, but all 18 `focus-removed-on-receipt-*` records in it carry a fully
+populated, non-suspect `ruleEvidence.census` — not the refused/absent census this section's own design
+predicts for them. `rules-gate.log` alongside it (same directory, generated 45 minutes later) reports `2796
+of 2796 record(s) carry ruleEvidence; 2778 carry a census` against a *different* file
+(`/opt/a11y/runs/screenreader-dataset/screenreader-evidence.jsonl`, on the lab, not present here) — the two
+artefacts disagree, and there is no way from this worktree to tell whether `candidate.dataset-export.jsonl`
+predates the interpretation fix, predates a case-manifest change (`export.log` in the same directory records
+a *separate*, later, failed re-export naming these exact case IDs over an unrelated `alsoFails` mismatch —
+worth someone's attention on its own), or is simply the wrong artefact to compare. **This needs a fresh
+`rules:gate` run on the lab to resolve — flagging it rather than picking one number to believe.** The
+worktree's own `runs/screenreader-dataset/screenreader-evidence.jsonl` is a third, older export (1,868
+records, no `ruleEvidence` field at all) and settles nothing either.
+
+**Question 2, downstream readers, checked against current source:**
+- `addMissingHeadings` (1.3.1) and `addUnnamedGraphics` (1.1.1, the census-based rule) both read
+  `input.census?.<field>` with an `undefined`-safe guard (`rules.ts:1358-1366`, `:1394-1402`) — an absent
+  census produces no finding on either, exactly as this section claims.
+- `crossCheckStructure` (`capture-pure.mjs:423`) reads a **different oracle entirely** — NVDA's own
+  Elements List, compared against the sweep, computed worker-side at capture time. It never reads
+  `pageCensus`/`domCensus`/`targetMatch` and is not reachable through this bug at all.
+- `criteriaAssessableFrom`/`channelsPresent` (`criterion-coverage.ts`) have **no production call site** —
+  grepped for `criteriaAssessableFrom(` across the tree; every hit outside its own file and its test is a
+  comment. It is currently dormant, so nothing downstream can lose more than it looks *today*. It does carry
+  a latent inconsistency worth naming for whoever wires it up: `channelsPresent` marks the `structureCensus`
+  channel present whenever a `structureCensus`-event diagnostic mark exists at all (line 722-724), which
+  says nothing about whether `censusTargetIsSuspect` would refuse it — so a criterion gated on that channel
+  would read "assessable" on a suspect capture the actual rule stays silent on. Harmless right now because
+  the only criterion declaring that channel (`2.5.3`) has `status: "reachable"`, not `"assessed"` — no rule
+  reads it yet.
+
+**Question 3: already answered and already built, by other work landed since this unit was assigned.**
+`submitNavigatedTheDocument` and the widened `censusTargetIsSuspect`/`censusSuspectReason` (both in
+`verify.ts`) are the fix "THE DESIGN" above describes, and it is in this tree now — a host-side
+interpretation change only, no file under `packages/nvda-worker/src/` touched, matching the design's own
+cost claim. `packages/evidence/src/verify.test.ts` passes 75/75, including the exact `survey.html` and
+`tfl.gov.uk` fixture shapes quoted above. The design's own predicted outcome for **this section's**
+population is "stays suspect, correctly unchanged" for all nine cases — consistent with the case-markup
+proof above, and NOT a claim that the fix reduces 18. There is nothing left to decide or build for this
+section; the open item is verifying the actual corpus count on the lab, which is outside this unit's
+resource bounds.
+
 ## 42. CODE FIX LANDED, VERIFICATION PENDING RECAPTURE — 2.4.7 could not see an F55 on whatever element held focus when the listener was installed
 
 **Created by a fix, deliberately, 2026-09-06.** Recorded the same day as the change that caused it, because
