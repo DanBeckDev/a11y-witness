@@ -70,9 +70,16 @@ test("the criteria a rule ACTUALLY emitted on real evidence stay inside the list
     census: { heading: 1, link: 1, graphic: 2, graphicUnnamed: 1 },
   } as never);
   assert.ok(findings.length > 0, "the fixture must actually produce findings, or this asserts nothing");
+  const covered = new Set(assessedCriteria());
   for (const finding of findings) {
     const num = criterionNumber(finding.wcag);
-    assert.ok((SCORED_CRITERIA as readonly string[]).includes(num),
-      `a rule emitted ${num}, which is outside the declared coverage`);
+    // AGAINST THE UNION, exactly as this test's own comment above says the invariant became when 1.4.2
+    // arrived. THE FIRST HALF WAS UPDATED AND THIS HALF WAS NOT — it kept checking `SCORED_CRITERIA`, and
+    // passed for two weeks only because no rule in the fixture emitted a rule-only criterion. It fired
+    // the moment 3.3.2 became rule-only in v19, which is a correct state and read as a failure. A remedy
+    // applied to one of two call sites, in the file whose subject is a claim going stale silently.
+    assert.ok(covered.has(num),
+      `a rule emitted ${num}, which is outside assessedCriteria() -- the report would carry a finding `
+      + "for a criterion it simultaneously describes as unassessed");
   }
 });
