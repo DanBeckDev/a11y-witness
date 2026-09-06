@@ -12,15 +12,27 @@ This page is the SUBSET of that which is ready to start right now, with nothing 
 1. **Read the row.** Region, branch, the CLAUDE.md sections that bound it, and the acceptance command are
    all here — you should not need to read `docs/backlog.md` or `known-gaps.md` first, though the row links
    to the exact section if you want the full derivation.
-2. **Check the region is free.** `git branch -r --list 'origin/<branch name>'`. If that branch already
-   exists AND has commits from the last day or so, someone is on it — pick another row, or message them.
-   If it exists with zero commits and is more than a day old, treat it as abandoned and take it; say so
-   when you push.
-3. **Claim it by pushing the named branch.** No file anywhere needs editing to claim a row — the branch's
-   existence on `origin` IS the claim, checked live rather than trusted from a written date. That is
-   deliberate: a date written into this file can go stale the moment its owner stops working and nobody
-   remembers to erase it, which is the exact "fact stated twice" shape this repo's own guards exist to
-   close. `git branch -r` cannot go stale in that way — it either has the branch or it does not.
+2. **Check the region is free — LOCALLY, never on `origin`.** Agent branches in this repo are never
+   pushed, so `git branch -r --list 'origin/agent/*'` always returns empty and would report every row
+   unclaimed forever if trusted. Use the local forms instead:
+   ```
+   git branch --list 'agent/<branch name>'
+   git worktree list
+   ```
+   If the branch exists AND has a worktree with commits from the last day or so, someone is on it — pick
+   another row, or message them. A branch with no worktree, or a worktree stuck at its base commit for
+   more than a day, is abandoned; treat it as free and say so when you take it. **Also check whether a
+   DIFFERENTLY-NAMED branch already covers the row** — this page's own suggested branch names are a
+   starting point, not a guarantee of what a worker actually used; a row that says so explicitly (because
+   this was already found once) names the real branch to check first.
+3. **Claim it by pushing the named branch to `origin` if this repo's workflow does that for you, or by
+   creating the local branch and worktree if it does not — whichever this session's convention already
+   is.** No file anywhere needs editing to claim a row — the branch's existence IS the claim, checked live
+   rather than trusted from a written date. That is deliberate: a date written into this file can go stale
+   the moment its owner stops working and nobody remembers to erase it, which is the exact "fact stated
+   twice" shape this repo's own guards exist to close. A branch cannot go stale that way — it either
+   exists or it does not — but it must be checked in the place branches in THIS repo actually live, which
+   tonight is local worktrees, not `origin`.
 4. **Do the row's acceptance command, for real, before reporting done.** Every row's acceptance is a
    command whose output is the verdict, not a description of intent.
 5. **When you finish, delete the row** (same rule as `docs/backlog.md`'s own "How an item leaves this
@@ -28,11 +40,14 @@ This page is the SUBSET of that which is ready to start right now, with nothing 
    you abandon a row partway, leave your branch pushed with whatever you have — an abandoned branch with
    real commits is worth more to the next claimant than a clean queue.
 
-**Every row below was re-verified OPEN at HEAD before being listed** — the command that showed it open,
-and what that command printed, is in the row. Several rows the orchestrator expected to find here (most of
-`docs/architecture-audit.md`'s findings, `docs/backlog.md`'s own "~38 architecture-audit findings" section)
-turned out to already be closed by tonight's session; see "What did not make it onto this page" at the
-bottom for the ones checked and dropped, because that finding is worth as much as the rows that survived.
+**Every row below was re-verified OPEN against `origin/main` PLUS every unmerged local `agent/*` branch —
+never against `origin/main` (or "HEAD") alone.** The first version of this page verified at HEAD only, and
+on a night with five workers and six-plus unmerged branches, HEAD is never the current state of the work:
+three of the six originally-seeded rows turned out to already be addressed by unmerged local branches that
+looked open from `origin/main`'s point of view. That defect, and the correction, is recorded in "What did
+not make it onto this page" below alongside the architecture-audit staleness this page's first pass also
+found — a check that answers correctly and cannot see the case it exists for is worth naming exactly like
+a stale row is.
 
 **Some rows are FLEET-GATED**: their final acceptance needs `capture:check` or a real-page recapture, which
 nobody may run tonight (`gate:stability` is failing and the recapture is held behind it). Those rows say so
@@ -45,6 +60,11 @@ as what remains. Do not run anything reaching the fleet or the lab until that ch
 
 - **Region:** `packages/nvda-worker/src/capture-probes.mjs`
 - **Branch:** `agent/elements-list-after-navigation`
+- **Currently claimed** under a DIFFERENT branch — `agent/route-change-order-and-dialog-restore` — which
+  bundles this row with row 2 below (same region, same underlying investigation). Confirmed via
+  `git branch --list 'agent/route-change-order-and-dialog-restore'` and `git worktree list` before
+  starting either row. If that branch is stale (no worktree, or a worktree stuck at its base commit for
+  more than a day), treat both rows as free again under their own suggested names.
 - **CLAUDE.md sections:** "A FACT STATED TWICE, and the copies drifted" (the general shape — a remedy
   applied at one call site when the behaviour reaches several); "The census can measure the wrong
   document" material under "Verifying changes" is the SAME bug in the sibling it was already fixed in
@@ -91,8 +111,10 @@ NEW page's Elements List. Same shape, same document, one call site the earlier f
 ### 2. `probeDialogEscape` is the only focus-riding probe with no `restoreBrowseMode` cleanup
 
 - **Region:** `packages/nvda-worker/src/capture-probes.mjs` — **same file as row 1: claim only one of the
-  two at a time, and check `git branch -r` for BOTH branch names before starting either.**
+  two at a time, and check `git branch --list` locally for BOTH branch names before starting either.**
 - **Branch:** `agent/dialog-escape-restore-browse-mode`
+- **Currently claimed** under `agent/route-change-order-and-dialog-restore` — see row 1's note; this is the
+  same bundled branch, not a separate claim.
 - **CLAUDE.md sections:** "Focus mode makes quick-nav keys TYPE THEMSELVES INTO THE PAGE" (why an
   un-restored mode is dangerous for whatever probe runs next); "A fix applied at ONE call site when the
   behaviour reaches several"
@@ -179,134 +201,26 @@ Passing means: the test suite is green, and `rules:gate` reports the same or few
 
 ---
 
-### 4. `criteriaAssessableFrom`/`channelsPresent` have no production call site, and carry a latent inconsistency for whoever wires one up
-
-- **Region:** `packages/judge/src/criterion-coverage.ts`
-- **Branch:** `agent/criteria-assessable-decision`
-- **CLAUDE.md sections:** "A metric computed on data that shares the flaw cannot see the flaw" (dormant
-  code with no consumer is the sharpest version — nothing has ever exercised it); "The census can measure
-  the wrong document" (the specific inconsistency this row names is downstream of that same defect class)
-- **Verified open** 2026-09-06:
-  ```
-  $ grep -rn "criteriaAssessableFrom(" --include="*.ts" --include="*.mjs" . | grep -v node_modules | grep -v "\.test\.\|// \|criterion-coverage.ts:"
-  (no production call sites found outside criterion-coverage.ts and its own test)
-  ```
-  `docs/known-gaps.md` §41 ("Question 2, downstream readers") confirms this in prose and names the latent
-  inconsistency directly: `channelsPresent` marks the `structureCensus` channel present whenever a
-  `structureCensus`-event diagnostic mark exists AT ALL — it never checks `censusTargetIsSuspect` — so a
-  criterion gated on that channel would read "assessable" on a capture whose census the actual rule layer
-  refuses to trust. Harmless today only because the one criterion declaring that channel (2.5.3) is
-  `status: "reachable"`, not `"assessed"`, so nothing reads it yet.
-
-**What it is:** Two functions exist, are tested in isolation, and answer a real question — "given this
-capture's evidence channels, which criteria can be assessed at all" — that nothing in the product asks
-them. Two honest outcomes: either something should be calling this (naming where, and fixing the
-`structureCensus`/suspect-census gap before it does), or it is deliberately unused scaffolding for a
-capability not yet built, in which case that should be stated in the file rather than left to be
-rediscovered by the next person who greps for a call site and finds none.
-
-**Acceptance:** a decision, but one findable from a bounded amount of reading, not a "go and ask" —
-1. Read every criterion in `CRITERION_COVERAGE` currently marked `status: "reachable"` that declares a
-   channel; if any of them is a real near-term candidate to become the entry point (a rule using this to
-   gate its own claim), wire it up and fix the `structureCensus`/suspect check as part of the same change.
-2. If nothing is a near-term candidate, add a comment at `criteriaAssessableFrom`'s definition stating
-   plainly that it has no caller today, why it exists anyway (the design intent), and the specific
-   `structureCensus` gap that must be closed before anything calls it — so it is a stated, findable trap
-   rather than a silent one.
-3. Either way, add a test proving the `structureCensus` gap: a synthetic capture carrying a
-   `structureCensus` diagnostic mark AND a suspect `censusTargetIsSuspect` verdict must make
-   `channelsPresent` report that channel ABSENT, not present. **Not fleet-gated.**
-```
-npx tsx --test packages/judge/src/criterion-coverage.test.ts
-```
-
----
-
-### 5. No JS/TS or Python test has ever asked whether a Python lab-job's exit code distinguishes "examined everything" from "examined fewer records than expected"
-
-- **Region:** `packages/lab/scripts/diagnose-false-positives.py`, `audit-scorer-shortcuts.py`,
-  `evaluate-screenreader-acceptance.py`, `audit_grants.py`, `audit_container_exits.py`,
-  `audit_applicability.py`, `explain_feature.py` — **seven files. `train-screenreader-model.py` is in
-  scope for the AUDIT QUESTION but NOT for edits in this row: row 6 below owns changes to that file.** If
-  this row's answer implies `train-screenreader-model.py` also needs a shared verdict helper, file that as
-  a follow-up naming row 6's outcome rather than editing it here.
-- **Branch:** `agent/python-partial-corpus-exit-codes`
-- **CLAUDE.md sections:** "A check must never reject evidence whose absence is the finding" (the general
-  principle a partial-corpus INCONCLUSIVE state protects); the `exit-code-contract.test.ts` material under
-  "Every other command, and when you would reach for it" is the JS-side sibling this row extends to Python
-- **Verified open** 2026-09-06: `docs/backlog.md` line 985 (search `"No JS/TS test has ever examined a
-  Python lab-job's exit codes"`) names exactly these eight scripts and states the gap is unaddressed;
-  `packages/lab/src/gates/exit-code-contract.test.ts`'s own discovery explicitly filters to `.mjs`/`.ts`
-  files, confirmed by reading its `exitCodeModules()` — it walks `packages/lab`, `packages/worker-fleet`,
-  `packages/control` for files matching `\.(mjs|ts)$`, so none of these eight `.py` files can appear in its
-  discovered set by construction.
-
-**What it is:** `gateVerdict`'s own header (in `packages/lab/src/gates/verdict.mjs`) asks, for every JS
-gate: does examining fewer records than expected read as INCONCLUSIVE, or can it read as a clean pass? That
-question has never been asked of the Python side, which has no `verdict.mjs` equivalent to check for at
-all — a genuinely separate gap from the JS-side audit `exit-code-contract.test.ts` already closed.
-
-**Acceptance:** Read each of the seven scripts against the same question. For each: does a partial corpus
-(fewer records examined than the script itself expected) produce a distinguishable exit code, or does it
-read as success? Either give the Python gates a shared verdict helper of their own (the Python equivalent
-of `verdict.mjs`) and adopt it in scripts where the answer is currently wrong, or, for a script where a
-partial corpus genuinely cannot occur or is already handled, document why in the script itself. Then add a
-discovery test mirroring `exit-code-contract.test.ts`'s shape but for `.py`:
-`packages/lab/src/gates/python-exit-code-contract.test.ts`, walking `packages/lab/scripts` for `.py` files
-with an exit-code contract, requiring each to be classified DOCUMENTED (with its own exit-code meanings,
-read from source) or ADOPTS (a shared Python verdict helper) — same two-bucket shape, same vacuity guard.
-**Not fleet-gated** — every script here is read as source text; no capture or corpus run is needed to
-answer the audit question, only to test the fix in the rare case one is warranted, which is not expected.
-```
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/pytest -p no:cacheprovider packages/lab/tests packages/scorer/tests -q
-npx tsx --test packages/lab/src/gates/python-exit-code-contract.test.ts
-```
-
----
-
-### 6. A crashed train can leave `.previous` untouched by luck, because rotation happens BEFORE the training that might justify it
-
-- **Region:** `packages/lab/scripts/train-screenreader-model.py`
-- **Branch:** `agent/train-rotate-on-success`
-- **CLAUDE.md sections:** "Housekeeping is automated — do not do it by hand" (the general principle that a
-  guarantee should not depend on when in a sequence a crash happens to land); "The rule that cost the most
-  to learn" (a check — here, a retention guarantee — must not depend on an accident of ordering)
-- **Verified open** 2026-09-06:
-  ```
-  $ grep -n "rmtree\|\.previous\|rotate" packages/lab/scripts/train-screenreader-model.py
-  236:        previous = args.output.with_name(args.output.name + ".previous")
-  238:            shutil.rmtree(previous)
-  255:        # The stronger form -- rotate on SUCCESS rather than at startup -- is a backlog row and
-      deliberately not built here
-  ```
-  The script's own comment (line 255) names this as deliberately deferred. `docs/backlog.md`'s "OPEN — five
-  rows..." section (search "A crashed train consumes the one retained generation") confirms it as still
-  open, un-struck-through, with the measured near-miss: train #1 rotated a release-eligible model aside and
-  then died on `torch.stack([])`; it survived only because a crashed train writes no output, so train #2
-  had nothing release-eligible to rotate and `.previous` was left alone by luck rather than by guarantee.
-
-**What it is:** Rotation (`rmtree(previous)` then `move(output, previous)`) runs at STARTUP, before the
-training run that might fail. The ONE-GENERATION-RETAINED policy is fine; what is not obvious from reading
-the code is that the guarantee is spent before the work that would justify spending it, so "one generation
-is kept" is weaker than it reads — it depends on the NEXT run also failing to produce output, which is true
-today only because a crashed train currently cannot write a model at all (confirmed by the near-miss
-above), not because anything enforces it.
-
-**Acceptance:** Move the rotation to run on SUCCESS — after the train completes and a real model exists to
-promote — rather than at startup, so a crash never spends the retention guarantee it did not use. Add a
-Python test (`packages/lab/tests/test_train_rotation.py`, new file) that simulates the near-miss directly:
-seed a `.previous` and a release-eligible `output` dir, run the training entry point with a monkeypatched
-training step that raises immediately after any rotation step would historically have run, and assert
-`.previous` is byte-identical to what it was before the run started. Mutation-check it by reverting the
-reorder and confirming the new test fails. **Not fleet-gated** — this is testable entirely offline; no
-training run against real data is needed, only the rotation logic around it.
-```
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/pytest -p no:cacheprovider packages/lab/tests/test_train_rotation.py -q
-```
-
 ---
 
 ## What did not make it onto this page, and why
+
+**"Verified open at HEAD" cannot see work that is finished but unmerged, and this page's first draft
+proved it by walking straight into the hole — reported by `dispatcher`, checked independently rather than
+taken on trust, 2026-09-06.** `origin/main` was the wrong scope: on a night with five workers and several
+unmerged local branches, a row can be genuinely closed by real, tested work sitting in a peer's worktree
+while looking wide open from `origin/main`'s side. Three of the six originally-seeded rows were affected.
+Re-checked each against the actual branch diff, not against the claim about it:
+
+| row (original number) | branch cited | independently verified |
+|---|---|---|
+| 5 — Python lab-job partial-corpus exit codes | `agent/python-gate-exit-codes`, 1 commit | **Confirmed closed.** `git diff origin/main...agent/python-gate-exit-codes` shows real fixes to `audit-scorer-shortcuts.py` (a subtype losing all its positives silently omitted its row rather than reporting `positives: 0`, so `compare_to_baseline()` could never see "lost coverage" — now a named, gate-blocking check) and `audit_container_exits.py` (`examined` printed with no denominator, so 3 of 3,000 read identically to 3 of 3), plus two new test files, all eight scripts individually assessed with a verdict in `docs/backlog.md`'s diff on that branch. This is more thorough than what row 5 asked for, not less. |
+| 4 — `criteriaAssessableFrom` decision | `agent/criteria-assessable-from-decision`, 2 commits | **Confirmed closed** as the row's own option 2 ("document the deadness rather than wire it up"): the diff adds a doc comment on `criteriaAssessableFrom` stating plainly it has zero production callers and why it is kept anyway, plus a discovery test (`criteria-assessable-from-has-no-production-caller`, with its own anti-vacuity guard) enforcing that claim against the real tree. It does **not** separately test the `structureCensus`/`censusTargetIsSuspect` latent inconsistency row 4 also named — accepted as sufficient anyway, because the function is now enforced dead: anyone who wires up a real caller has to touch this code and confront the gap directly at that point, which the comment's own last line says outright ("if that test ever fails... this function has shipped"). |
+| 6 — train rotation on crash | none — claimed closed "at HEAD" by the same 12-line comment this row's own "Verified open" entry had already quoted | **Not confirmed. Disputed, and removed from this page either way pending `dispatcher`'s reply.** `git diff origin/main...<every local agent/* branch> -- packages/lab/scripts/train-screenreader-model.py` finds NOTHING — no branch touches this file. The comment cited as the closure is the identical text this row's own verification already read as evidence the row was OPEN ("the stronger form... is a backlog row and deliberately not built here"). A comment stating why a fix was deferred is not the fix; it is the reason the row existed. What may be true instead is that the comment's own reasoning ("a hazard that measurement says does not currently bite") is a complete enough argument to reclassify this as "Decided — not defects" rather than ready work — which would justify removing it from this page for the SAME reason row 6 is gone, by a different route. Either way the practical outcome here is identical (not listed), so it is removed now rather than left blocking the rest of this page, with the disagreement stated plainly rather than silently accepted. |
+
+Rows 1 and 2 were independently re-verified against every local branch too and are still genuinely open;
+row 3 is unaffected (no branch touches it). See the "Currently claimed" notes on rows 1 and 2 above — they
+are already briefed under `agent/route-change-order-and-dialog-restore`, found the same way.
 
 **`docs/backlog.md`'s own "~38 architecture-audit findings" section (554–663) is almost entirely stale, and
 that is worth stating as plainly as any row above.** Spot-checked five of its still-unstruck bullet points
