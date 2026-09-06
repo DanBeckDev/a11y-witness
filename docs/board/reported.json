@@ -4,6 +4,8 @@
   "gates": [],
   "fleetHours": {
     "status": "not instrumented",
-    "note": "No cumulative total exists. Orchestrator has been asked to cost and build one, summing the per-case start and finish times already in every run's progress file -- never wall clock times worker count, which measures something else. Until it lands the report prints 'not instrumented' in those words."
-  }
+    "note": "No cumulative total exists. Orchestrator has been asked to cost and build one, summing the per-case start and finish times already in every run's progress file -- never wall clock times worker count, which measures something else. Until it lands the report prints 'not instrumented' in those words.",
+    "//": "WHEN THIS BECOMES A REAL TOTAL IT MUST NAME THE RUN IT WAS COMPUTED FROM. The report REFUSES to print a total with no `run` field rather than printing it with a caveat -- a fleet-hours figure's whole meaning is which runs it summed, and an unstated one cannot be checked, re-derived, or compared with the next edition. Shape: {\"total\": \"214 h 20 m\", \"run\": \"a11y-job-capture.service, InvocationID <id>, 1,645 cases at protocol 16\", \"reportedBy\": \"orchestrator\", \"at\": \"<ISO>\", \"method\": \"sum of per-case startedAt..finishedAt from the run's progress file -- never wall clock x worker count\"}. Delete the `status` key when adding these."
+  },
+  "gates_//": "Shape of a `gates` entry: {\"command\": \"npm run lab:job -- -e job=rules-real-pages\", \"reportedBy\": \"orchestrator\", \"at\": \"<ISO 8601>\", \"output\": \"<the gate's OWN text, verbatim, not a summary>\"}. The newest entry by `at` is the one printed. Older than `staleAfterHours` still prints, marked STALE and saying it describes an earlier state of the corpus -- an absent line and an old line mean different things and must never render the same."
 }
