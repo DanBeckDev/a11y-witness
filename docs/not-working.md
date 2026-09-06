@@ -2061,6 +2061,24 @@ accurate, and both times it pointed at a cause that could not produce the effect
 - **Suspect a row hardest when you are about to build on it.** The two briefs that cited this one were the
   moments the check was cheapest and most valuable, and neither ran it.
 
+### THE CLASS, with its best instances — four arrivals in one day, 2026-09-06
+
+The `.html` row above is the FOUNDING instance because it is what made anyone look. It is not the
+strongest. These three are, and two of them are stronger for the same reason: **they are right about the
+OUTCOME and wrong about WHY**, which is the version that survives review, because nothing in the outcome
+contradicts the explanation.
+
+| the record said | what was true |
+|---|---|
+| **the `.html` path comparison** misses on every synthetic capture, so the fallback is explained | `samePath` has normalised the extension since 2026-08-25. The conclusion held; the cause was never examined and is still unknown |
+| **a dying train leaves a partially-rotated `training-report.json`** (`orchestrator`) | right that the outcome is a bad report; wrong that rotation is why. The file is written ATOMICALLY, so a dying train leaves no readable report at all and **the rotation branch is never reached** |
+| **"this is the exact hang this test exists to catch"** (#51's own failure message) | the assertion cannot distinguish the hang it was written for from a host too loaded to answer inside a 15-second wall-clock bound. It asserted a cause it has no way to tell apart |
+| **`no-worker-refusal` is flaky under load** | it is not occasional, it is load-DEPENDENT: it passes alone, twice, and fails inside the full suite. It blocked two pushes and passed on retry both times — **the shape that teaches retry-rather-than-read** |
+
+**The fourth is the most expensive of the four**, and not because it is the biggest: a wrong mechanism that
+also produces a WORKING RETRY trains everyone who meets it to re-run rather than read. `orchestrator`
+recorded that it considered the skip flag and did not use it, which is the behaviour the class argues for.
+
 ### The sibling shape, one layer along
 
 The same week: `ls -ld node_modules/@a11y-witness/judge` answered *"is this a symlink"* when the question
