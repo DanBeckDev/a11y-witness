@@ -10,6 +10,7 @@
     "board:summary-check": "node scripts/board-summary-check.mjs",
     "board:document": "node scripts/board-document.mjs",
     "board:report": "node scripts/board-report.mjs",
+    "jobs:check": "node scripts/check-scheduled-jobs.mjs",
     "spike": "tsx packages/lab/src/harnesses/run-spike.ts",
     "witness": "A11Y_PYTHON=.venv/bin/python tsx packages/cli/src/cli.ts",
     "worker": "node packages/nvda-worker/src/server.mjs",
