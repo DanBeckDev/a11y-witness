@@ -77,3 +77,10 @@ coverage/
 # a pull is the exact fault that left the lab 17 commits behind for days.
 provision-revision.txt
 provision-commit.txt
+
+# The real fleet inventory: real addresses, in a public repo. Posture change, ceo-ruled 2026-09-06 (#54).
+# `inventory.example.yml` is the committed, syntax-checkable stand-in — same worker names and group
+# structure, placeholder addresses — and the real file is restored from the secrets store at bring-up on
+# the control plane. `inventory-example-parity.test.ts` keeps the two in shape-sync whenever the real file
+# is present locally; it skips honestly when it is not, which is the expected state everywhere else.
+packages/control/ansible/inventory.yml
