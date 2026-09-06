@@ -80,7 +80,9 @@ export interface CriterionOutcome {
 // sweep, so no sweep can truncate them and there is no completeness caveat to raise.
 // 1.4.13 joined on 2026-09-05. Its evidence is `focusRevealVerdict`'s own verdict -- three censuses and
 // two focus reads the worker already computed -- not a quick-nav sweep, so the same reasoning applies.
-export const NOT_SWEEP_DERIVED: readonly string[] = ["1.4.2", "3.2.1", "3.2.2", "3.3.3", "1.4.13"];
+// 1.3.5 joined 1.4.2 on 2026-09-06 (issue #79): its evidence is `formInputs`, one DOM query for the
+// `autocomplete` attribute that either ran or did not -- no quick-nav sweep, so no completeness caveat.
+export const NOT_SWEEP_DERIVED: readonly string[] = ["1.4.2", "1.3.5", "3.2.1", "3.2.2", "3.3.3", "1.4.13"];
 
 const SWEEPS_FEEDING: Record<string, readonly string[]> = {
   "1.1.1": ["graphic"],

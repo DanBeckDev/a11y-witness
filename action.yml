@@ -34,11 +34,12 @@ inputs:
     description: >-
       local | anthropic | openai. Defaults to `local`: this project's own trained scorer, which ships in
       the repo (27 KB of heads over an 87 MB encoder fetched at setup). No key, no account, no data
-      leaving the runner. Nineteen criteria can produce a finding, and the number that matters more on a
-      REAL page is still TWELVE: the deterministic rules cover 1.1.1, 1.3.1, 1.4.2, 1.4.13, 2.1.1, 2.1.2,
-      2.4.1, 2.4.2, 2.4.3, 2.4.4, 2.4.7, 3.2.1, 3.2.2, 3.3.2, 3.3.3 and 4.1.2 and always run — except 3.3.3, 3.2.1 and
-      3.2.2, which read OPT-IN probes that press or type, so on a page you do not own they cannot fire in
-      either direction. Seven of those twelve (2.1.1, 2.4.1, 2.4.2, 2.4.3, 2.4.7,
+      leaving the runner. Twenty criteria can produce a finding, and the number that matters more on a
+      REAL page is still TWELVE: the deterministic rules cover 1.1.1, 1.3.1, 1.3.5, 1.4.2, 1.4.13, 2.1.1,
+      2.1.2, 2.4.1, 2.4.2, 2.4.3, 2.4.4, 2.4.7, 3.2.1, 3.2.2, 3.3.2, 3.3.3 and 4.1.2 and always run — except
+      3.3.3, 3.2.1 and 3.2.2, which read OPT-IN probes that press or type, so on a page you do not own they
+      cannot fire in either direction, and except 1.3.5, which has no capture evidence source at all yet
+      (see criterion-coverage.ts). Seven of those twelve (2.1.1, 2.4.1, 2.4.2, 2.4.3, 2.4.7,
       3.3.2, 4.1.2) cover one failure mode of several — `criterion-coverage.ts` records which mode and
       why the rest are out. The other three (2.4.6, 3.3.1, 4.1.3) come only from the trained scorer,
       which ABSTAINS on pages unlike its training data, and those come back `cantTell` — unchecked,

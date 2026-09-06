@@ -343,6 +343,12 @@ export type DomCensus = NonNullable<ReturnType<typeof domCensus>>;
 export interface OracleCounts {
   /** Media the PAGE declares, read from the DOM. Absent means the probe never ran, never "no media". */
   media?: { tag: string; autoplay: boolean; muted: boolean; controls: boolean; loop: boolean }[];
+  /**
+   * Form controls' `autocomplete` attribute, read from the DOM — 1.3.5 Identify Input Purpose. Absent
+   * means the probe never ran, never "no form inputs", matching `media`'s own contract. No worker census
+   * populates this yet; see `RuleInput.formInputs`'s own comment (`packages/judge/src/rules.ts`).
+   */
+  formInputs?: { tag: string; type: string | null; autocomplete: string | null }[];
   /** Per-type: whether the sweep announced everything the page exposes. `unknown` is a real answer. */
   completeness?: Record<string, Completeness>;
   census?: PageCensus;
@@ -381,6 +387,12 @@ export function oracleCounts(capture: CapturedAnnouncements): OracleCounts {
     // stays absent: the rule's own comment notes that captures predating the probe have no `media`, and
     // treating that as "no autoplaying audio" would assert on a question nobody asked.
     media: (capture as { media?: OracleCounts["media"] }).media,
+    // FORM INPUTS, for the identical reason MEDIA is passed through above -- issue #79's
+    // `addUnidentifiedInputPurpose` reads `input.formInputs`, `autocomplete` is a DOM attribute with no
+    // accessibility-tree equivalent, and `ruleEvidence` is the sibling channel a rule may use that the
+    // model never sees. No worker census populates `capture.formInputs` yet; passed through so absence
+    // stays absence when one does, rather than needing this function edited again.
+    formInputs: (capture as { formInputs?: OracleCounts["formInputs"] }).formInputs,
   };
 }
 

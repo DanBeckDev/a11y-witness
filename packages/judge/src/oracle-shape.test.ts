@@ -43,13 +43,16 @@ test("every key oracleCounts returns is declared on RuleInput", () => {
   // Compile-time: naming each key on a RuleInput proves it is declared. A key absent from the interface
   // makes this object literal a type error, which is the assertion — `tsc` is the test here.
   const readable: Required<Pick<RuleInput,
-    "census" | "dom" | "probes" | "completeness" | "truncated" | "media">> = {
+    "census" | "dom" | "probes" | "completeness" | "truncated" | "media" | "formInputs">> = {
       census: {}, dom: {} as never, probes: {} as never, completeness: {}, truncated: [],
       // `media` joined the oracle set with 1.4.2 (`ruleEvidence carries media`), and this list is the
       // half that does not derive itself -- so the guard fired by NAME on the merge rather than at the
       // commit, which is the guard working. Declared on `RuleInput` at its own definition; naming it
       // here is what proves that, since `tsc` is the assertion.
       media: [],
+      // `formInputs` joined with 1.3.5 (issue #79), same shape as `media` just above -- named here for
+      // the identical reason, even though no worker census populates it on any capture yet.
+      formInputs: [],
     };
   const declared = new Set(Object.keys(readable));
   const unreadable = produced.filter((key) => !declared.has(key)

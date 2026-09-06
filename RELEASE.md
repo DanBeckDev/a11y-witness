@@ -132,7 +132,7 @@ findings.
 
 ## Known limitations, stated plainly
 
-- **On a real page, eleven criteria are actually assessed — six of them partially.** Nineteen in total can
+- **On a real page, eleven criteria are actually assessed — six of them partially.** Twenty in total can
   produce a finding, but four (2.4.6, 3.3.1, 3.3.2, 4.1.3) come only from the trained scorer, which abstains
   on pages unlike its training data — which today is still many real pages. A fifth, 3.3.3, is decided by a
   rule and still cannot fire on a page you do not own: it reads the form probe, which is deliberately off
@@ -148,7 +148,10 @@ findings.
   - **Rule-decided but not yet turned on for real pages: 1.4.13** — content revealed on focus that Escape
     does not dismiss. Rule-decided and reads no probe a consent boundary would gate; it simply has not been
     enabled for real-page captures, which is an open gap rather than a decision, unlike the three above.
-  - **Partially: 2.1.1, 2.4.1, 2.4.2, 2.4.3, 2.4.7, 3.3.2, 4.1.2** — each covers one failure mode of several, and
+  - **Rule-decided but with no capture evidence source AT ALL yet: 1.3.5** — an `autocomplete` attribute
+    that does not identify a real input purpose. DOM-only like 1.4.2, needing no probe, but no worker
+    census reads the attribute yet on any capture, corpus or real; see `criterion-coverage.ts`.
+  - **Partially: 1.3.5, 2.1.1, 2.4.1, 2.4.2, 2.4.3, 2.4.7, 3.3.2, 4.1.2** — each covers one failure mode of several, and
     `criterion-coverage.ts` records which mode and why the others are out. Three of them (2.4.1, 2.4.2,
     2.4.3, added 2026-08-22) are failures a static analyser structurally cannot reach: a skip link that is
     present and inert, a route that changes without the title changing, and a tab order that contradicts the
