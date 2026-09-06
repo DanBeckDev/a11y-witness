@@ -63,6 +63,13 @@ export interface ScoredRecord {
 
 interface ScorerOutput {
   records: ScoredRecord[];
+  /**
+   * The scorer's own Python inference-runtime versions (publish blocker B2) -- `numpy`, `onnxruntime`,
+   * `safetensors`, `transformers`, each a version string or `null` when that package is absent
+   * (`_torch_encode`'s fallback path, no ONNX file in the encoder directory). Optional so an older
+   * scorer artifact that predates this field still loads.
+   */
+  runtime?: Record<string, string | null>;
 }
 
 /** The evidence a capture must actually contain before a criterion may be reported. */
@@ -582,6 +589,10 @@ export async function judgeLocally(capture: CaptureEvidence & { task?: string })
           score: record.scores[criterion] ?? 0,
           reason: "the page is outside the distribution this scorer was validated on",
         })),
+        // Scoring ran far enough to compute novelty before declining, so the runtime it ran under is
+        // exactly as reportable here as on the path that goes on to score. Absent only for an artifact
+        // that predates this field, same as everywhere else it appears.
+        ...(scored.runtime ? { runtime: scored.runtime } : {}),
       };
     }
   // `record.ruleOwned` was parsed from the scorer output, documented as preventing "the worst error
@@ -593,6 +604,9 @@ export async function judgeLocally(capture: CaptureEvidence & { task?: string })
     // Carried whether or not it declined. See `Judgment.novelty`: reported only on abstention, it made
     // "scored at the edge of the distribution" and "scored comfortably inside it" the same output.
     ...(record.novelty ? { novelty: record.novelty } : {}),
+    // Publish blocker B2: a disputed finding has to be traceable to the RUNTIME it was scored under, not
+    // only to the weights -- the same principle `provenance.browserVersion` applies to a capture.
+    ...(scored.runtime ? { runtime: scored.runtime } : {}),
     // Not inferred. This layer scores WCAG criteria and has no head for "could someone finish the task",
     // so claiming an answer would be inventing one. A blocking failure is the closest honest signal.
     taskCompletable: !findings.some((f) => f.severity === "blocker"),
