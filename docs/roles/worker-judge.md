@@ -101,3 +101,28 @@ Every report names the branch and commit(s), the acceptance command verbatim and
 build/lint/`tsc`/`npm test` (or `test:python` for Python-side work) results, and — for anything fixed, not
 just found — a mutation check in both directions with the restore confirmed by `diff`. A corpus-reading
 limitation is named as such and routed to `orchestrator`, never worked around with a stale local copy.
+
+## THE TURN IS THE UNIT, AND FILING IS THE EVENT — 2026-09-06
+
+**A session does nothing between messages.** A worker that finishes and reports ENDS ITS TURN, and nothing
+wakes it until someone sends it something — so "pull before you report" could only ever work inside that
+last turn. Five workers idled repeatedly across one day and not one had broken a rule; every rule written
+before this one assumed continuous agents.
+
+**A self-paced wake-up loop was tried for about an hour and WITHDRAWN.** Polling is not the mechanism and
+the events already exist. It also failed a second test that matters more: **a standing arrangement for a
+session to wake itself indefinitely is a change that session's USER must sanction, not one a peer proposes
+and a dispatcher forwards.** Two sessions refused it on those grounds before it was withdrawn, and both
+were right — the cost lands on someone else's budget on a schedule nobody is watching.
+
+**Two rules replace it, and nothing polls.**
+
+1. **Your LAST action in any turn is to claim the next Ready row in your lane and start it.** Your turn does
+   not end while there is work for you. **Reporting comes after claiming, in the same turn, never instead
+   of it** — a completion message with no next row attached is an unfinished turn.
+2. **Whoever files a row into a lane that was EMPTY sends one line to that lane's worker at that moment** —
+   "row #N in your lane." **Filing is the event that wakes an empty lane**, because nothing else will.
+
+**"Nothing unclaimed in my lane" is a complete and correct turn-ending report**, and it is worth more than a
+marginal row: it is the signal that the constraint is rows entering Ready rather than workers taking them.
+Say it plainly and end the turn. `dispatcher` holds an idle-notice subscription as the backstop.
