@@ -90,8 +90,12 @@ from a read that was true when taken and stale when quoted, on the day this file
 - **Ask every worker to commit incrementally.** A worker with nothing committed is invisible —
   `git rev-list --count main..<branch>` reads 0, and it cannot tell "not started" from "not committed",
   which produced a wrong escalation and a wrong "stalled" diagnosis on consecutive days.
-- **Ask every worker to check `git branch -r --list 'origin/agent/*'` before starting.** Two workers did
-  one unit because a branch name collided.
+- **Ask every worker to check `git branch --list 'agent/*'` and `git worktree list` before starting** —
+  LOCAL, not `origin/`. Two workers did one unit because a branch name collided, and the check I first
+  wrote into every brief was `git branch -r --list 'origin/agent/*'`, which returns EMPTY: agent branches
+  in this repo are never pushed. **A guard that always answers "clear" is worse than no guard**, because
+  it is cited as having been run. Found by `dispatcher` on its first hour, reading the brief rather than
+  obeying it.
 - **Ask for the disagreement explicitly.** Peers pushed back correctly on the majority of specs that were
   wrong, including refusing an abstraction the lead half-implied.
 - **A refutation is a good result.** Six units in one night ended as refutations and every one saved work.
