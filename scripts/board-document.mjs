@@ -25,7 +25,6 @@ import { toHtml } from "./board-markdown.mjs";
 
 // Module scope, not inside main(): `section5` reads it, and `document()` is exported for the renderer
 // test, which builds a real document without ever calling main().
-const THROUGHPUT = "Capture throughput";
 
 /** How many WCAG criteria the tool claims what about, COUNTED FROM THE SOURCE OF TRUTH.
  *
@@ -247,7 +246,6 @@ function numberWord(n) {
 }
 
 function section5(d) {
-  const throughput = d.milestones.find((m) => m.title === THROUGHPUT);
   const fh = d.fleetHours;
   // THE HEADING COMES FROM THE SAME SOURCE AS THE BODY, and the CLAIM comes before the caveats.
   //
