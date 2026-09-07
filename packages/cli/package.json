@@ -1,7 +1,7 @@
 {
-  "name": "a11y-witness",
+  "name": "a11ign",
   "version": "0.1.0",
-  "description": "Drives a real screen reader through a real page and reports the WCAG 2.2 AA failures a rule scanner cannot see \u2014 alongside axe, never instead of it.",
+  "description": "Drives a real screen reader through a real page and reports the WCAG 2.2 AA failures a rule scanner cannot see — alongside axe, never instead of it.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "exports": {
@@ -12,7 +12,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "a11y-witness": "./dist/cli.js"
+    "a11ign": "./dist/cli.js"
   },
   "files": [
     "dist",
@@ -20,10 +20,10 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@a11y-witness/evidence": "0.1.0",
-    "@a11y-witness/judge": "0.1.0",
-    "@a11y-witness/scorer": "0.1.0",
-    "@a11y-witness/worker-fleet": "0.1.0",
+    "@a11ign/evidence": "0.1.0",
+    "@a11ign/judge": "0.1.0",
+    "@a11ign/scorer": "0.1.0",
+    "@a11ign/worker-fleet": "0.1.0",
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
@@ -45,9 +45,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/DanBeckDev/a11y-witness.git",
+    "url": "git+https://github.com/a11ign/a11ign.git",
     "directory": "packages/cli"
   },
+  "homepage": "https://a11ign.com",
   "keywords": [
     "accessibility",
     "a11y",

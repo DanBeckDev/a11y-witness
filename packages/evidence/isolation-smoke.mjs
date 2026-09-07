@@ -8,12 +8,12 @@
 // and it is invisible to a workspace install.
 import assert from "node:assert/strict";
 
-import { captureReachedThePage, captureDoubt, pageCensus } from "@a11y-witness/evidence/verify";
-import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
+import { captureReachedThePage, captureDoubt, pageCensus } from "@a11ign/evidence/verify";
+import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 
 // The `.` subpath is types only, so at runtime it is an empty module. Importing it still proves the subpath
 // resolves and that `dist/index.js` was actually shipped — `files` allow-lists drop assets silently.
-await import("@a11y-witness/evidence");
+await import("@a11ign/evidence");
 
 // The README's first example, verbatim in shape: the browser's census is the oracle, and the screen reader's
 // reach is what is judged against it.
@@ -49,4 +49,4 @@ assert.ok(WCAG_22_AA.every((c) => c.num && c.name && c.level && c.since),
   "every criterion needs num, name, level and since");
 assert.ok(WCAG_22_AA.some((c) => c.num === "1.1.1" && c.level === "A"), "1.1.1 Non-text Content should be present");
 
-console.log(`@a11y-witness/evidence works when installed: ${WCAG_22_AA.length} criteria, 3 subpaths resolve`);
+console.log(`@a11ign/evidence works when installed: ${WCAG_22_AA.length} criteria, 3 subpaths resolve`);

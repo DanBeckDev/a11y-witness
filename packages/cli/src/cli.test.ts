@@ -9,12 +9,12 @@
  *
  * Skips honestly when the corpus is absent, as `verify.corpus.test.ts` does — CI cannot see `runs/`.
  *
- * REPO-ROOT AND CAPTURES-PATH COMPUTED HERE, NOT IMPORTED FROM `@a11y-witness/lab` -- #199, chairman's
- * ruling. This file used to import `datasetRoot`/`captureRoot` straight from `@a11y-witness/lab/src/
- * dataset-paths.mjs`, which made `a11y-witness` (published, consumer-facing) depend on `lab` (private,
+ * REPO-ROOT AND CAPTURES-PATH COMPUTED HERE, NOT IMPORTED FROM `@a11ign/lab` -- #199, chairman's
+ * ruling. This file used to import `datasetRoot`/`captureRoot` straight from `@a11ign/lab/src/
+ * dataset-paths.mjs`, which made `a11ign` (published, consumer-facing) depend on `lab` (private,
  * never published) -- a real boundary defect (ADR 0004), not merely a CI-scoping inconvenience: `lab`
  * ALSO depends on `cli` (`public-api.test.ts` imports the published package to verify its surface), so the
- * two depended on each other. `@a11y-witness/evidence` was considered as a shared home and rejected: ADR
+ * two depended on each other. `@a11ign/evidence` was considered as a shared home and rejected: ADR
  * 0004 states its contract explicitly -- "all contract, no I/O. Deliberately no `node:fs`, no
  * `process.env`" -- and every function this file needs reads `process.env` overrides. So this follows the
  * EXACT pattern `worker-fleet`'s `doctor.mjs`/`compare-workers.mjs`, `nvda-worker`'s
@@ -31,7 +31,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { AddressInfo } from "node:net";
-import { stripComments } from "@a11y-witness/evidence/source-text";
+import { stripComments } from "@a11ign/evidence/source-text";
 
 import {
   applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, describeWorkerError,
@@ -154,7 +154,7 @@ test("A FAILED AXE SCAN IS NOT '0 violations' — pageContext decides nullness",
  *
  * `captureViaWorker` used to POST synchronously with no `captureId`, so a response lost in transit meant
  * the page was reported as never examined even when the worker had already finished it. It now goes
- * through `captureTolerantly` (`@a11y-witness/worker-fleet/capture-client`), the same client every lab
+ * through `captureTolerantly` (`@a11ign/worker-fleet/capture-client`), the same client every lab
  * capture already uses, which mints its own id and reconciles a lost acknowledgement or poll by asking
  * about that SAME id before ever giving up. Reproduced against a loopback worker exactly like
  * `capture-async.test.ts` does, at the real function this package calls rather than at a lower-level

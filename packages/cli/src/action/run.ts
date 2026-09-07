@@ -1,7 +1,7 @@
 // The Action's entry point: read a witness run's JSON, write the summary, decide the exit code.
 //
 //   tsx packages/cli/src/action/run.ts --result=run.json [--fail-on=never|any|blocker|serious|moderate|minor]
-//                         [--summary-out=summary.md] [--marker=a11y-witness]
+//                         [--summary-out=summary.md] [--marker=a11ign]
 //
 // Deliberately separate from `src/cli.ts`. The CLI's job is to capture and judge; this one's job is to
 // present that to GitHub and decide whether the check passes. Keeping them apart means the Action's
@@ -12,8 +12,8 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { renderSummary, shouldFail, type FailOn, type RunResult } from "./summary.js";
-import { taskVerdictLabel } from "@a11y-witness/judge";
-import { flagValue } from "@a11y-witness/worker-fleet/cli-flags";
+import { taskVerdictLabel } from "@a11ign/judge";
+import { flagValue } from "@a11ign/worker-fleet/cli-flags";
 
 // audit §9 "argv parsing": this was its own copy of the fifteen-file idiom. `flagValue` is the shared,
 // tested extraction; `?? fallback` stays here because defaulting is this call site's business, not the
@@ -42,7 +42,7 @@ function main(): void {
   }
 
   const failOn = (arg("fail-on", "never") as FailOn);
-  const marker = arg("marker", "a11y-witness");
+  const marker = arg("marker", "a11ign");
 
   let result: RunResult;
   try {
@@ -51,12 +51,12 @@ function main(): void {
     // A capture that never produced JSON is an infrastructure failure, not a clean page. Failing loudly
     // here is the difference between "your page is fine" and "we did not manage to look at it" — the
     // distinction this whole project is built around.
-    process.stderr.write(`a11y-witness: could not read the run result at ${resultPath}: ${(error as Error).message}\n`);
+    process.stderr.write(`a11ign: could not read the run result at ${resultPath}: ${(error as Error).message}\n`);
     process.exit(2);
   }
 
   if (!result?.verdict || !Array.isArray(result.verdict.findings)) {
-    process.stderr.write("a11y-witness: the run result has no verdict — the judge did not complete, so nothing was assessed.\n");
+    process.stderr.write("a11ign: the run result has no verdict — the judge did not complete, so nothing was assessed.\n");
     process.exit(2);
   }
 
@@ -82,7 +82,7 @@ function main(): void {
   // The summary has already been written above, so this only decides the exit code. Writing it again here
   // appended it TWICE to $GITHUB_STEP_SUMMARY, which is append-only.
   if (unverified) {
-    process.stderr.write("a11y-witness: the capture could not be confirmed to have read the requested page; "
+    process.stderr.write("a11ign: the capture could not be confirmed to have read the requested page; "
       + "reporting no findings. This is a failed measurement, not a clean page.\n");
     process.exit(2);
   }
@@ -94,7 +94,7 @@ function main(): void {
   } catch (error) {
     // An unrecognised `fail-on` is a workflow typo, and the dangerous outcome is treating it as "never":
     // the check goes green and nobody looks again. Refuse instead.
-    process.stderr.write(`a11y-witness: ${(error as Error).message}. Use never|any|blocker|serious|moderate|minor.\n`);
+    process.stderr.write(`a11ign: ${(error as Error).message}. Use never|any|blocker|serious|moderate|minor.\n`);
     process.exit(2);
   }
 
@@ -103,10 +103,10 @@ function main(): void {
     return acc;
   }, {});
   const breakdown = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ") || "none";
-  process.stderr.write(`a11y-witness: ${findings.length} finding(s) (${breakdown}); fail-on=${failOn}\n`);
+  process.stderr.write(`a11ign: ${findings.length} finding(s) (${breakdown}); fail-on=${failOn}\n`);
 
   if (fail) {
-    process.stderr.write(`a11y-witness: failing the check — findings met the ${failOn} threshold.\n`);
+    process.stderr.write(`a11ign: failing the check — findings met the ${failOn} threshold.\n`);
     process.exit(1);
   }
 }

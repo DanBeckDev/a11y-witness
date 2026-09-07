@@ -37,7 +37,7 @@ UNSAFE_SUFFIXES = {".bin", ".ckpt", ".h5", ".msgpack", ".ot", ".pickle", ".pkl",
 
 
 # Resolved from THIS FILE, never the process cwd. The default used to be the relative path
-# `models/encoders/all-MiniLM-L6-v2`, which meant `a11y-scorer-fetch-encoder` downloaded 87 MB into whatever
+# `models/encoders/all-MiniLM-L6-v2`, which meant `a11ign-scorer-fetch-encoder` downloaded 87 MB into whatever
 # directory the consumer happened to be standing in — and the scorer, which resolves the encoder from the
 # package, then reported it missing. Same defect class M0 found in `local-judge.ts`.
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -82,7 +82,7 @@ def main() -> None:
     )
     assert_safe_files(args.output)
     manifest = {
-        "schema": "a11y-witness/local-encoder",
+        "schema": "a11ign/local-encoder",
         "repository": REPO_ID,
         "revision": REVISION,
         "license": "Apache-2.0",

@@ -25,7 +25,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 export const SHIPPED_REPORT = "packages/scorer/models/screenreader-scorer/training-report.json";
 export const CANDIDATE_REPORT = "runs/model-candidate/training-report.json";

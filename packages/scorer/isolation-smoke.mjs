@@ -11,7 +11,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { chdir } from "node:process";
 
-import { scorerPaths, encoderPresent, scorerProvenance } from "@a11y-witness/scorer";
+import { scorerPaths, encoderPresent, scorerProvenance } from "@a11ign/scorer";
 
 // Resolve from a different cwd than the one we were started in. The M0 defect was a scorer resolved as
 // `".venv/bin/python"` and `"scripts/score-screenreader-model.py"` — correct only when the cwd happened to be
@@ -43,7 +43,7 @@ const shippedEncoder = existsSync(paths.encoderDir) && readdirSync(paths.encoder
 assert.equal(shippedEncoder, false, `the 87 MB encoder was shipped in the tarball: ${paths.encoderDir}`);
 
 // So `encoderPresent()` must be FALSE on a fresh install, and that is correct rather than broken: it is the
-// signal to run `a11y-scorer-fetch-encoder`. Reporting it as a failure would be a check rejecting evidence
+// signal to run `a11ign-scorer-fetch-encoder`. Reporting it as a failure would be a check rejecting evidence
 // whose absence is the finding.
 assert.equal(encoderPresent(), false, "a fresh install has no encoder yet");
 
@@ -56,12 +56,12 @@ assert.ok(typeof provenance.featureSchema === "string",
 assert.match(provenance.featureSchema, /^screenreader-/, "the schema name should identify this feature pipeline");
 assert.equal(typeof provenance.releaseEligible, "boolean");
 
-// The bin npm links as `a11y-scorer-fetch-encoder`. Derived from a path the API already gave us, because the
+// The bin npm links as `a11ign-scorer-fetch-encoder`. Derived from a path the API already gave us, because the
 // smoke test runs in the CONSUMER's directory and has no relative route into the package.
 const binWrapper = join(paths.scoreScript, "..", "..", "bin", "fetch-encoder.mjs");
 assert.ok(existsSync(binWrapper), `the bin wrapper is missing from the tarball: ${binWrapper}`);
 
 console.log(
-  `@a11y-witness/scorer works when installed: schema ${provenance.featureSchema}, `
+  `@a11ign/scorer works when installed: schema ${provenance.featureSchema}, `
   + `releaseEligible=${provenance.releaseEligible}, encoder absent as designed`,
 );

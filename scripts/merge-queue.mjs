@@ -42,7 +42,7 @@ import { pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { gitCommonDir } from "./merge-guard.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 /** @param {string[]} args */
 function gh(args) {
