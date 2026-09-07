@@ -12,12 +12,14 @@ name: auto-arm
 #
 # `main`'s branch protection runs with `strict=false` (#277): GitHub completes a merge the instant `gate`
 # is green for the head IT HAS RECORDED, with no requirement that the head still contains `main`'s current
-# tip. Three real defects fired on 2026-09-07 that a bare version of this workflow would have let through
-# -- #195 (GitHub's recorded head disagreed with the branch's real tip), #278 (would have discarded a row
-# `worker-audit` held mid-work). `ci.yml`'s `mergeSafety` job (`scripts/merge-guard.mjs --ci-gate`) is now
-# part of the required `gate` context and refuses exactly those two shapes (#294, #262) -- see that job's
-# own comment for why it is architecturally safe to run mid-workflow where `merge-guard.mjs`'s human-facing
-# check-run inspection is not. So arming here is safe BY CONSTRUCTION: GitHub cannot complete a merge this
+# tip. #195 (GitHub's recorded head disagreed with the branch's real tip) is exactly the defect a bare
+# version of this workflow would have let through. `ci.yml`'s `mergeSafety` job
+# (`scripts/merge-guard.mjs --ci-gate`) is now part of the required `gate` context and refuses that shape
+# (#294) -- see that job's own comment for why it is architecturally safe to run mid-workflow where
+# `merge-guard.mjs`'s human-facing check-run inspection is not, and why it deliberately does NOT also
+# check ancestry (#182) or closing-claim (#262): both refuse the NORMAL case when CI, which has no way to
+# know who is asking or that the queue moves faster than any one branch stays current, asks them. So
+# arming here is safe BY CONSTRUCTION for the one thing CI can answer: GitHub cannot complete a merge this
 # workflow arms without `gate` -- and therefore `mergeSafety` -- reporting green for the real, current head.
 #
 # ## Why `opened` and `ready_for_review`, not `synchronize`
