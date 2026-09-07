@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Use GitHub's **[private vulnerability reporting](https://github.com/DanBeckDev/a11y-witness/security/advisories/new)**
+Use GitHub's **[private vulnerability reporting](https://github.com/a11ign/a11ign/security/advisories/new)**
 on this repository. Please do not open a public issue for anything exploitable.
 
 There is no SLA. This is a small project with one maintainer, and saying so is more useful than promising a
@@ -10,7 +10,7 @@ response time nobody is on call to meet.
 
 ## What this tool does that you should know about before running it
 
-a11y-witness drives a real browser and a real screen reader against a page you name. Three of its behaviours
+a11ign drives a real browser and a real screen reader against a page you name. Three of its behaviours
 are worth understanding before you point it at something.
 
 ### It operates controls on the page, and one probe presses buttons

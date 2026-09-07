@@ -48,10 +48,76 @@ import { existsSync } from "node:fs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { REPO, ROOT, gh } from "./board-data.mjs";
 
 const ISSUE = "20";
+const REPORT_WORKFLOW = "board-report.yml";
+
+/**
+ * HAS THE SCHEDULE EVER FIRED, EVEN ONCE? — a SEPARATE, narrower question from everything above (#272).
+ *
+ * This file's own header argues against `gh run list` as the measure of a healthy edition, and that
+ * argument stands: a run existing says nothing about whether it published, because the wrong half of
+ * every day's cron pair exits successfully having done nothing. But #272 was not that -- `board-report.yml`
+ * had ZERO runs of any kind beyond one hand dispatch, on EITHER of its two daily crons, the day after it
+ * was added. The comment/summary inference above is blind to exactly this case: with no edition ever
+ * published, `missedDays` only looks back `STALE_AFTER_DAYS`, and for a workflow under a day old that
+ * window can span nothing but "too new to have a summary yet" -- which reads as ALIVE, not as evidence.
+ *
+ * So this asks GitHub directly whether the SCHEDULE TRIGGER has ever activated at all, independent of
+ * what any run then did. `GRACE_HOURS` gives both daily windows (BST and GMT) a fair chance before
+ * silence is read as death, rather than as the workflow simply not having reached its first window yet.
+ */
+const GRACE_HOURS = 36;
+
+/**
+ * When a workflow was first registered with GitHub, or `null` if the lookup failed.
+ *
+ * @param {string} workflowFile
+ * @returns {string | null}
+ */
+export function workflowCreatedAt(workflowFile) {
+  try {
+    return JSON.parse(gh(["api", `repos/${REPO}/actions/workflows/${workflowFile}`])).created_at ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every recorded run's `event` field for a workflow. `null` when the lookup itself failed -- never an
+ * empty array standing in for it, which would read identically to "genuinely zero runs" and turn a
+ * network blip into a false "the schedule has never fired".
+ *
+ * @param {string} workflowFile
+ * @returns {string[] | null}
+ */
+export function workflowRunEvents(workflowFile) {
+  try {
+    return JSON.parse(gh(["run", "list", "--repo", REPO, "--workflow", workflowFile,
+      "--json", "event", "--limit", "100"])).map((/** @type {{ event: string }} */ r) => r.event);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pure: given a workflow's recorded run events and how long it has existed, has its SCHEDULE genuinely
+ * never fired? `null` -- too new to judge, or a lookup failed -- is deliberately distinct from both other
+ * answers: a workflow added an hour ago having no scheduled run yet is not evidence of anything, and a
+ * failed lookup must never be read as either "fine" or "dead".
+ *
+ * @param {{ events: string[] | null, createdAt: string | null, now: Date, graceHours?: number }} args
+ * @returns {boolean | null}
+ */
+export function scheduleNeverFired({ events, createdAt, now, graceHours = GRACE_HOURS }) {
+  if (events === null || createdAt === null) return null;
+  if (events.includes("schedule")) return false;
+  const hoursSinceCreated = (now.getTime() - Date.parse(createdAt)) / 3_600_000;
+  if (hoursSinceCreated < graceHours) return null;
+  return true;
+}
 
 /**
  * How many days without an edition before this is a finding rather than a gap.
@@ -181,6 +247,24 @@ function main() {
     { entry: import.meta.url, command: "npm run board:liveness" });
   const argv = process.argv.slice(2);
   const issue = argv.find((a) => a.startsWith("--issue="))?.split("=")[1] ?? ISSUE;
+
+  // GROUND TRUTH FIRST (#272): has the schedule ever fired at all? The comment/summary inference below is
+  // blind to a workflow too young to have accumulated evidence in its own trailing window -- this asks
+  // GitHub directly instead of inferring, and only when it has a DEFINITE answer does it short-circuit.
+  const neverFired = scheduleNeverFired({
+    events: workflowRunEvents(REPORT_WORKFLOW), createdAt: workflowCreatedAt(REPORT_WORKFLOW), now: new Date(),
+  });
+  if (neverFired === true) {
+    const verdict = { code: EXIT.STOPPED,
+      headline: `${REPORT_WORKFLOW}'s schedule has NEVER fired, on either daily cron`,
+      detail: `Checked directly against GitHub's own run history (\`gh run list --workflow=${REPORT_WORKFLOW} `
+        + `--json event\`), not inferred from editions -- a workflow this young has no comment/summary `
+        + "trail to read yet, which is exactly the case the inference below cannot see. "
+        + `https://github.com/${REPO}/issues/272 has the investigation.` };
+    console.error(`${verdict.headline}\n  ${verdict.detail}`);
+    if (argv.includes("--post")) postOnce(issue, verdict);
+    process.exit(EXIT.STOPPED);
+  }
 
   const bodies = commentBodies(issue);
   if (bodies === null) {

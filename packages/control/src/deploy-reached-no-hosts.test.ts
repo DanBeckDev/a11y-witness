@@ -23,7 +23,7 @@ const ANSIBLE = join(import.meta.dirname, "../ansible");
 
 test("the real log that exited 0 is refused, and names the inventory it could not parse", () => {
   const real = [
-    "[WARNING]: Unable to parse /root/a11y-witness/packages/control/ansible/inventory.yml as an inventory source",
+    "[WARNING]: Unable to parse /root/a11ign/packages/control/ansible/inventory.yml as an inventory source",
     "[WARNING]: No inventory was parsed, only implicit localhost is available",
     "[WARNING]: Could not match supplied host pattern, ignoring: a11y_workers",
     "PLAY [Deploy the worker code to the fleet]",
@@ -75,6 +75,11 @@ const DISPATCHED_ELSEWHERE: Record<string, string> = {
   "collect-logs.yml":
     "ORPHAN — no npm script runs it and no wrapper names it, so it cannot be dispatched at all. Wire it up "
     + "or delete it; that is a backlog row, not something to fix by widening this test.",
+  "update-origin-remote.yml":
+    "#325's scripted fleet-remote change for the org transfer -- a deliberate ONE-TIME operation run by "
+    + "hand on transfer day, never through the routine deploy wrapper. Wiring it into `fleet-playbook.mjs` "
+    + "would make an org-move-only command reachable from the same surface as every ordinary deploy, "
+    + "which is exactly the wrong affordance for something that must never run twice by accident.",
 };
 
 test("every a11y_workers playbook is dispatched by the wrapper (and so refuses) or is declared elsewhere", () => {

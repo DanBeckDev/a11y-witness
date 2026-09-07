@@ -13,7 +13,7 @@ the one #132 is about.** Both apply here, to different files:
 | a file npm never packs (a `.test.ts`) | `jsdoc-attachment.test.ts` — the new guard |
 | a packed file, comments only | the eight `.mjs` and one `.ts` source files |
 
-**Measured rather than asserted, because that is the whole claim.** `@a11y-witness/nvda-worker` ships its
+**Measured rather than asserted, because that is the whole claim.** `@a11ign/nvda-worker` ships its
 sources, so `diagnostics.mjs`, `capture-setup.mjs`, `capture-pure.mjs`, `capture-probes.mjs` and
 `browser-session.mjs` are all in the tarball (36 files packed, each confirmed present) — a consumer receives
 different bytes. What they do not receive is different behaviour. Stripping block comments and `//` lines
@@ -32,7 +32,7 @@ packages/nvda-worker/src/capture-setup.mjs         executable-text identical: tr
 packages/nvda-worker/src/diagnostics.mjs           executable-text identical: true
 ```
 
-The new guard is a `.test.ts`, and `@a11y-witness/worker-fleet` packs 133 files of which **zero** are
+The new guard is a `.test.ts`, and `@a11ign/worker-fleet` packs 133 files of which **zero** are
 `.test.ts` — so that one is #132's category and the gate should not have fired on it at all.
 
 One caveat this entry should carry rather than hide: **a JSDoc `@param` is a comment to a reader and a TYPE

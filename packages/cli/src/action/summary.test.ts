@@ -115,8 +115,8 @@ test("pipes and newlines in a finding cannot break the table", () => {
 });
 
 test("the marker is emitted so a PR comment can be UPDATED rather than duplicated", () => {
-  const out = renderSummary(result(), { marker: "a11y-witness" });
-  assert.ok(out.startsWith("<!-- a11y-witness -->"), "the marker must be findable at the top");
+  const out = renderSummary(result(), { marker: "a11ign" });
+  assert.ok(out.startsWith("<!-- a11ign -->"), "the marker must be findable at the top");
   assert.doesNotMatch(renderSummary(result()), /<!--/, "and absent when not asked for");
 });
 

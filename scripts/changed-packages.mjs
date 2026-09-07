@@ -26,6 +26,16 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { sandboxGitEnv } from "./git-env.mjs";
+// RELATIVE, NOT `@a11ign/worker-fleet/cli-flags`, for the reason `ci-changed.mjs` already records
+// above its own copy of this import: `ci.yml`'s `changed` job runs `checkout` and `setup-node` and NO
+// `npm ci`, because its whole job is to decide whether anything else installs or builds at all. This file
+// is imported by that script, so a package specifier here dies before the workflow starts —
+// `ERR_MODULE_NOT_FOUND: Cannot find package '@a11ign/worker-fleet'`, measured on #238's first run.
+//
+// Guarding this file (#164) is what surfaced it: the census had never walked `scripts/`, so nothing had
+// ever asked whether these two could import the guard at all. The answer is yes, by the path that does
+// not need `node_modules` — the file is plain JS, so importing straight from `src` costs nothing.
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
@@ -70,5 +80,7 @@ export function changedPackagesAgainstOrigin() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
+  // Guarded per #164: takes no flags; `--name-only` is passed onward to git.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/changed-packages.mjs" });
   process.stdout.write(changedPackagesAgainstOrigin().join(" "));
 }

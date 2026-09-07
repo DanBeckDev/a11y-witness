@@ -42,6 +42,7 @@ import { pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { gitCommonDir } from "./merge-guard.mjs";
 import { REPO } from "./repo-identity.mjs";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 /** @param {string[]} args */
 function gh(args) {
@@ -215,6 +216,8 @@ function mergeAndCheckOrphans(pr) {
 }
 
 function main() {
+  // Guarded per #164: reads --merge; --json/--state go to gh.
+  refuseUnknownFlags(["--merge"], { entry: import.meta.url, command: "node scripts/merge-queue.mjs" });
   const wanted = wantedPrNumber(process.argv);
 
   let raw = "";
