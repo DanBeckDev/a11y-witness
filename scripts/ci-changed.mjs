@@ -14,12 +14,13 @@
 // CLI wrapper is the only impure part: it reads `git diff --name-only` against the PR's base and every
 // package's `package.json` to build the dependency graph.
 //
-// PULL_REQUEST ONLY, DELIBERATELY -- chairman's direction, 2026-09-06. This file used to also support
-// `--event=push`, unconditionally reporting every category true for a push straight to `main`; `ci.yml`
-// no longer HAS a push trigger at all (a check that runs after a merge cannot stop it), so that mode had
-// no caller left and was removed rather than kept as an unused, untested escape hatch. Every check now
-// runs on the PR, before the merge; branch protection (checks green AND up to date with `main`) is what
-// makes the tested commit the one that lands.
+// PULL_REQUEST AND MERGE_GROUP ONLY, DELIBERATELY -- chairman's direction, 2026-09-06, widened for #156.
+// This file used to also support `--event=push`, unconditionally reporting every category true for a push
+// straight to `main`; `ci.yml` no longer HAS a push trigger at all (a check that runs after a merge cannot
+// stop it), so that mode had no caller left and was removed rather than kept as an unused, untested escape
+// hatch. Every check now runs before the merge -- on the PR itself, or on the merge-group ref a queued PR
+// is tested against -- and branch protection (checks green AND up to date with `main`) is what makes the
+// tested commit the one that lands.
 //
 // `testPackages` (touched + every workspace DEPENDENT, transitively) IS THE POINT OF THIS FILE'S SECOND
 // PASS -- 2026-09-06, chairman's follow-up measuring `ci/ts` at 269s on a one-package PR. `packages`
@@ -265,10 +266,12 @@ async function main() {
   // `--event` stays a required, explicit flag rather than being dropped outright: a caller that types
   // `--event=push` today gets a clear refusal naming why, instead of silently falling through some
   // default — the same "an ignored flag runs the default and reports success" defect `cli-flags.mjs`
-  // exists to prevent, one value along.
+  // exists to prevent, one value along. `merge_group` added for #156; the value itself is not otherwise
+  // read below -- it exists only so a mistyped or reverted trigger is refused here rather than silently
+  // classifying under the wrong event's assumptions.
   const event = flagValue(process.argv, "event");
-  if (event !== "pull_request") {
-    console.error(`ci-changed: --event must be "pull_request", got ${JSON.stringify(event)}. `
+  if (event !== "pull_request" && event !== "merge_group") {
+    console.error(`ci-changed: --event must be "pull_request" or "merge_group", got ${JSON.stringify(event)}. `
       + "--event=push was removed: ci.yml has no push trigger left to call it from.");
     process.exit(2);
   }
@@ -277,8 +280,17 @@ async function main() {
   const packages = knownPackages(repoRoot);
 
   const base = flagValue(process.argv, "base");
-  if (!base) {
-    console.error("ci-changed: --base=<ref> is required for --event=pull_request");
+  // A bare "origin/" (nothing after the prefix) is what an UNHANDLED empty `github.base_ref` produces on
+  // a merge_group event -- see ci.yml's own comment on the `base` step for the shape trap this guards
+  // against. Verified rather than assumed: passing that straight to `git diff` does NOT reach the
+  // "returned nothing" refusal below at all -- `git diff origin/...HEAD` is a `fatal: ambiguous argument`,
+  // an uncaught crash with a raw git error, not this script's own clear message. Caught here so the
+  // failure names its own cause even if the workflow's base derivation ever regresses.
+  if (!base || base.endsWith("/")) {
+    console.error(`ci-changed: --base=${JSON.stringify(base)} is empty or a bare prefix with nothing after `
+      + "it -- required for both --event values. On merge_group this is what an unhandled empty "
+      + "github.base_ref looks like once \"origin/\" has been prepended to it; check the workflow's base "
+      + "derivation before assuming this script is at fault.");
     process.exit(2);
   }
   // Three dots: the PULL REQUEST's own diff, against the merge base rather than the base branch's tip —
