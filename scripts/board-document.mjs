@@ -573,7 +573,10 @@ function requireSummary(publishing) {
 function refuseIfTheWorldMoved(achievements) {
   const cited = achievements.map((a) => a.issue).filter((n) => n !== undefined);
   if (!cited.length) return;
-  const issueState = Object.fromEntries(issues().map((i) => [String(i.number), i.state]));
+  // CLOSED-AT, not just CLOSED. The refusal is 'nobody has looked since it moved', so the moment it
+  // moved is part of the question -- see `achievementsWhoseWorldMoved`.
+  const issueState = Object.fromEntries(
+    issues().map((i) => [String(i.number), { state: i.state, closedAt: i.closedAt ?? null }]));
   const moved = achievementsWhoseWorldMoved({ achievements, issueState });
   if (!moved.length) return;
 
