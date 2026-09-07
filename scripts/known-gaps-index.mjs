@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * `docs/known-gaps.md` sends every agent there to check what this project cannot do "before claiming a
  * thing is finished" — the moment they are least likely to read 450 lines of closed history first. 31 of
@@ -24,9 +25,16 @@ export const CLOSED_PATTERN = /DONE|CLOSED|STALE|MOVED|WRONG|RESOLVED|REFUTED/;
 export const INDEX_START = "<!-- known-gaps-index:start -->";
 export const INDEX_END = "<!-- known-gaps-index:end -->";
 
-/** Every `## ` heading in the file, in order. A heading with no leading "N. " is a META section (the
- *  ordering note, the pattern note) rather than a numbered gap, and is never a candidate for the index. */
+/** @typedef {{ lineNumber: number, raw: string, number: number | null, title: string }} Heading */
+/** @typedef {Heading & { anchor: string }} AnchoredHeading */
+
+/**
+ * Every `## ` heading in the file, in order. A heading with no leading "N. " is a META section (the
+ * ordering note, the pattern note) rather than a numbered gap, and is never a candidate for the index.
+ * @param {string} text
+ */
 export function parseHeadings(text) {
+  /** @type {Heading[]} */
   const headings = [];
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -44,6 +52,7 @@ export function parseHeadings(text) {
   return headings;
 }
 
+/** @param {Heading} heading */
 export function isClosed(heading) {
   return CLOSED_PATTERN.test(heading.raw);
 }
@@ -53,6 +62,7 @@ export function isClosed(heading) {
  * turn runs of whitespace into single hyphens, and disambiguate repeats the same way GitHub does (`-1`,
  * `-2`, ...). Good enough for a reader to click through; this is a navigation aid, not re-implementing
  * GitHub's renderer, so it is not asserted against GitHub's own output anywhere.
+ * @param {string} raw
  */
 export function slugify(raw) {
   const stripped = raw
@@ -67,10 +77,14 @@ export function slugify(raw) {
     .replace(/\s+/g, "-");
 }
 
-/** Anchors are assigned across ALL headings in document order, because that is the scope GitHub
- *  disambiguates within — an open section's anchor can be shifted by an unrelated closed one sharing its
- *  slug. */
+/**
+ * Anchors are assigned across ALL headings in document order, because that is the scope GitHub
+ * disambiguates within — an open section's anchor can be shifted by an unrelated closed one sharing its
+ * slug.
+ * @param {Heading[]} headings
+ */
 function withAnchors(headings) {
+  /** @type {Map<string, number>} */
   const seen = new Map();
   return headings.map((heading) => {
     const slug = slugify(heading.raw);
@@ -80,14 +94,17 @@ function withAnchors(headings) {
   });
 }
 
+/** @param {string} text */
 export function openSections(text) {
   return withAnchors(parseHeadings(text)).filter((h) => h.number !== null && !isClosed(h));
 }
 
+/** @param {string} title */
 function cleanTitle(title) {
   return title.replace(/~~/g, "").replace(/\*\*/g, "").replace(/`/g, "").trim();
 }
 
+/** @param {string} text */
 export function buildIndexBlock(text) {
   const open = openSections(text);
   const lines = [
@@ -100,6 +117,7 @@ export function buildIndexBlock(text) {
   return lines.join("\n");
 }
 
+/** @param {string} text */
 export function currentIndexBlock(text) {
   const start = text.indexOf(INDEX_START);
   const end = text.indexOf(INDEX_END);
@@ -107,7 +125,10 @@ export function currentIndexBlock(text) {
   return text.slice(start, end + INDEX_END.length);
 }
 
-/** Replaces an existing index block in place, or inserts a fresh one before the file's first heading. */
+/**
+ * Replaces an existing index block in place, or inserts a fresh one before the file's first heading.
+ * @param {string} text
+ */
 export function applyIndexBlock(text) {
   const block = buildIndexBlock(text);
   const existing = currentIndexBlock(text);
