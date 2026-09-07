@@ -1,11 +1,11 @@
 import { judgeBackend } from "./index.js";
-import type { CaptureStructure } from "@a11y-witness/evidence";
-import type { OracleCounts } from "@a11y-witness/evidence/verify";
+import type { CaptureStructure } from "@a11ign/evidence";
+import type { OracleCounts } from "@a11ign/evidence/verify";
 import { spawn } from "node:child_process";
 import { writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
+import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 import { judgeLocally } from "./local-judge.js";
 import { ruleFindings } from "./rules.js";
 import type { RuleInput } from "./rules.js";
@@ -473,7 +473,7 @@ function ask(label: string, prompt: string, schema?: unknown): Promise<string> {
 
 /** Codex backend (default): the local codex login, no metered API cost. */
 async function askCodex(label: string, prompt: string): Promise<string> {
-  const promptFile = join(tmpdir(), `a11y-witness-${label}-${Date.now()}.txt`);
+  const promptFile = join(tmpdir(), `a11ign-${label}-${Date.now()}.txt`);
   await writeFile(promptFile, prompt, "utf8");
   try {
     return await runCodex(promptFile);

@@ -1,5 +1,5 @@
 ---
-"a11y-witness": patch
+"a11ign": patch
 ---
 
 The human-readable report now says `asserted` and `referred` where it previously said `FAILED` and

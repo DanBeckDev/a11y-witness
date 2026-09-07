@@ -4,7 +4,7 @@
 Documentation only — six closed capture-probe diagnoses moved out of `capture-probes.mjs` into
 `docs/capture-probe-incidents.md`. No consumer-visible change.
 
-**Empty deliberately, and the reason is NOT the one that applies to a test file.** `@a11y-witness/nvda-worker`
+**Empty deliberately, and the reason is NOT the one that applies to a test file.** `@a11ign/nvda-worker`
 ships its sources (`files` is `["src", "!src/**/*.test.ts", ...]`), so `src/capture-probes.mjs` **is** in the
 tarball — measured, 36 files packed and that one among them. A consumer therefore receives different bytes.
 What they do not receive is different behaviour: the diff is **15 insertions and 32 deletions, and zero of

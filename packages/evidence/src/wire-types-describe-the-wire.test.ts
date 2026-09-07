@@ -1,7 +1,7 @@
 /**
  * THE PUBLISHED WIRE TYPES MUST DESCRIBE WHAT A CAPTURE ACTUALLY CARRIES.
  *
- * `@a11y-witness/evidence`'s `.` subpath is types only — it IS the published description of a capture, and
+ * `@a11ign/evidence`'s `.` subpath is types only — it IS the published description of a capture, and
  * `public-api.test.ts` pins that the subpath resolves. Until 2026-08-29 `CaptureStructure` declared three
  * fields (`headings`, `landmarks`, `formFields`) while every real capture carries SEVEN, and
  * `CaptureInteraction` omitted `focusOrder` entirely. A consumer typing against them would have concluded
@@ -121,7 +121,7 @@ test("THE EMITTED LISTS MATCH A REAL CAPTURE, not just each other", () => {
 
 /**
  * CAPTURE-CORE.MJS'S OWN JSDoc COPY, PINNED — architecture-audit.md §5, items 1/2, the second of the two
- * permanent exceptions to "one owner". `capture-core.mjs` cannot import `@a11y-witness/evidence`: it is
+ * permanent exceptions to "one owner". `capture-core.mjs` cannot import `@a11ign/evidence`: it is
  * reachable from every PORTABLE_TREE, and its own `CapturedStructure`/`CapturedInteraction`/`Capture`
  * JSDoc typedefs are what `structure-declarations.test.ts` explicitly does not check — that file's own
  * `sources()` scans `.ts` only (`if (!entry.name.endsWith(".ts")) continue`), so a `.mjs` copy drifting
@@ -172,10 +172,10 @@ test("capture-core.mjs's own JSDoc typedefs cannot find every hop, or this test 
 test("CapturedStructure and CapturedInteraction match the published type EXACTLY", () => {
   const source = readFileSync(CAPTURE_CORE_PATH, "utf8");
   assert.deepEqual(typedefFields(source, "CapturedStructure"), [...EMITTED_STRUCTURE].sort(),
-    "capture-core.mjs's CapturedStructure typedef and @a11y-witness/evidence's CaptureStructure have "
+    "capture-core.mjs's CapturedStructure typedef and @a11ign/evidence's CaptureStructure have "
     + "drifted — they pass through server.mjs unchanged and must name the same fields");
   assert.deepEqual(typedefFields(source, "CapturedInteraction"), [...EMITTED_INTERACTION].sort(),
-    "capture-core.mjs's CapturedInteraction typedef and @a11y-witness/evidence's CaptureInteraction have "
+    "capture-core.mjs's CapturedInteraction typedef and @a11ign/evidence's CaptureInteraction have "
     + "drifted — they pass through server.mjs unchanged and must name the same fields");
 });
 
@@ -184,6 +184,6 @@ test("Capture is a SUBSET of the published CaptureResult — server.mjs adds tas
   const captureFields = typedefFields(source, "Capture");
   const undeclared = captureFields.filter((field) => !EMITTED_RESULT.includes(field));
   assert.deepEqual(undeclared, [],
-    "capture-core.mjs's Capture typedef carries a field @a11y-witness/evidence's CaptureResult does not "
+    "capture-core.mjs's Capture typedef carries a field @a11ign/evidence's CaptureResult does not "
     + `name: ${undeclared.join(", ")}`);
 });

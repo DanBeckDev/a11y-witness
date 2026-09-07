@@ -63,7 +63,7 @@ current split (`packages/README.md`'s M1–M8 table plus the three private packa
 | `nvda-worker` | `@a11ign/screenreader-worker` | drives NVDA specifically; its HTTP contract and `CAPTURE_PROTOCOL_VERSION` are about screen-reader evidence, not evidence in general |
 | `worker-fleet` | `@a11ign/screenreader-fleet` | lease/health/capacity for the NVDA fleet; touches no other layer's infrastructure (its own README already says so) |
 | `nvda-speech` (private) | `@a11ign/screenreader-speech` | NVDA's announcement grammar, GPL because derived from NVDA — named for publication even while it stays private, so it does not need renaming twice |
-| `a11y-witness` (the CLI) | **`a11ign`**, unscoped | see below — the one name the issue itself flagged as inconsistent |
+| `a11ign` (the CLI) | **`a11ign`**, unscoped | see below — the one name the issue itself flagged as inconsistent |
 | `control` (private) | unchanged | internal control-plane orchestration, never published — the naming rule governs published names, not internal-only ones |
 | `lab` (private) | unchanged | internal corpus/training pipeline, never published — same reason |
 
@@ -73,7 +73,7 @@ this repository publishes.
 ### The CLI: unscoped, and it becomes the product's own name
 
 **`@a11ign/cli` is wrong, and it is wrong for the reason `packages/README.md` already gives for the current
-name**: *"unscoped so `npx a11y-witness` needs no wrapper."* Scoping the CLI makes the entry point
+name**: *"unscoped so `npx a11ign` needs no wrapper."* Scoping the CLI makes the entry point
 `npx @a11ign/cli`, directly contradicting the rename's own decision that *"the command-line binary is
 `a11ign`"* — and the first command in a stranger's two-hour path is `npx a11ign`, not a scoped package name.
 
@@ -88,7 +88,7 @@ with its own stated principle, and the principle wins.
 none of that is this ADR's "layer".** That module's layer is Ashley Firth's Perceive → Navigate → Interact
 waterfall, a way of ORDERING findings for display; this ADR's layer is a SOURCE of evidence. They are
 unrelated concepts sharing one English word, and `report.ts` imports both into the same file (`layerOf`,
-`orderByLayer`, `LAYER_LABEL` from `@a11y-witness/judge/layers` at the top, `"-- Rule-based layer (axe-core)
+`orderByLayer`, `LAYER_LABEL` from `@a11ign/judge/layers` at the top, `"-- Rule-based layer (axe-core)
 ..."` a few lines below) — a reader already has to hold both senses apart with nothing marking which is
 which.
 

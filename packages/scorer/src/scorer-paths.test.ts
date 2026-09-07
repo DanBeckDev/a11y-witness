@@ -43,7 +43,7 @@ test("the shipped artefacts exist, and the weights are not a placeholder", () =>
 });
 
 test("the encoder is NOT shipped, and saying so is correct rather than broken", () => {
-  // 87 MB, fetched on demand. `encoderPresent()` is the signal to run `a11y-scorer-fetch-encoder`, so reporting
+  // 87 MB, fetched on demand. `encoderPresent()` is the signal to run `a11ign-scorer-fetch-encoder`, so reporting
   // its absence as a failure would be a check rejecting evidence whose absence is the finding.
   const { encoderDir } = scorerPaths();
   assert.equal(typeof encoderPresent(), "boolean");

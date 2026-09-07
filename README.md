@@ -1,14 +1,19 @@
-# a11y-witness
+# a11ign
 
-[![lint](https://github.com/DanBeckDev/a11y-witness/actions/workflows/lint.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/lint.yml)
-[![capture-regression](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml)
+**[a11ign.com](https://a11ign.com)**
+
+*(formerly a11y-witness — renamed 2026-09-07, before the transfer to the `a11ign` organisation; see #66.
+Nothing had been published under the old name, so this is a rename, not a migration.)*
+
+[![lint](https://github.com/a11ign/a11ign/actions/workflows/lint.yml/badge.svg)](https://github.com/a11ign/a11ign/actions/workflows/lint.yml)
+[![capture-regression](https://github.com/a11ign/a11ign/actions/workflows/capture-regression.yml/badge.svg)](https://github.com/a11ign/a11ign/actions/workflows/capture-regression.yml)
 [![licence: AGPL-3.0-or-later](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](./LICENSE)
 
-**a11y-witness drives a real screen reader (NVDA) through a web page and reports the barriers a screen-reader user would hit.** Every finding cites a WCAG criterion and quotes the announcement it rests on, so you can check it yourself.
+**a11ign drives a real screen reader (NVDA) through a web page and reports the barriers a screen-reader user would hit.** Every finding cites a WCAG criterion and quotes the announcement it rests on, so you can check it yourself.
 
 > **Which path is yours? If you have no Windows machine, start with the [GitHub Action](#quickstart) —
 > it needs none.** If you have one, or don't mind building a VM, the [local path](#quickstart) is likely
-> yours instead. (`npx a11y-witness` is not published yet — see
+> yours instead. (`npx a11ign` is not published yet — see
 > [`packages/cli/README.md`](./packages/cli/README.md) for why and what to use instead.) This is the one
 > decision every other doc in this repo defers to.
 
@@ -57,7 +62,7 @@ trying to make sure nobody has to hunt for where to apply it.
 A real run against `https://example.com`:
 
 ```
-a11y-witness report
+a11ign report
 ===================
 URL:   https://example.com
 Task:  Read and understand this page
@@ -331,7 +336,7 @@ A monorepo: everything a consumer installs is under `packages/`, one directory p
 
 ```
 packages/
-  cli/            the `witness` pipeline — capture -> axe -> judge -> report. Published as `a11y-witness`
+  cli/            the `witness` pipeline — capture -> axe -> judge -> report. Published as `a11ign`
   control/        PRIVATE. Ansible job control for the lab and the bare-metal fleet (ADR 0012)
   judge/          the deterministic WCAG rules, criterion coverage, and experience-layer ordering
   scorer/         the trained heads, the feature contract, and the Python scoring program

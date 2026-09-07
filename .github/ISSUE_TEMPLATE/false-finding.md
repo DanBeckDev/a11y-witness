@@ -22,7 +22,7 @@ rules here have had their scope corrected by exactly that.
 **The page.** A URL if it is public. If not, the smallest HTML that reproduces it is far more useful than a
 description.
 
-**Command and versions.** The exact command, plus `npx a11y-witness --version` and, if you ran a worker,
+**Command and versions.** The exact command, plus `npx a11ign --version` and, if you ran a worker,
 its `/health` output.
 
 ---
