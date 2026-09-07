@@ -337,9 +337,16 @@ function assessWorktree(repoRoot, entry, { run, now }) {
   return { merge, workingTreeClean, contentMerged, recentlyActive };
 }
 
-/** Which `PruneReport` bucket a `classify` verdict other than `"remove"` lands in. */
+/**
+ * Which `PruneReport` bucket a `classify` verdict other than `"remove"` lands in. `standing` is included
+ * for completeness against `classify`'s own declared return type, even though the `isStandingBranch`
+ * check above already intercepts that case before `classify` is ever asked.
+ * @type {Record<"dirty" | "standing" | "cherry-picked" | "inconclusive" | "active",
+ *   "dirty" | "standing" | "cherryPicked" | "inconclusive" | "active">}
+ */
 const VERDICT_BUCKET = {
   active: "active", "cherry-picked": "cherryPicked", inconclusive: "inconclusive", dirty: "dirty",
+  standing: "standing",
 };
 
 /**
