@@ -1,0 +1,53 @@
+name: Workflow run liveness
+
+# DID CI ACTUALLY RUN BEFORE THIS COMMIT REACHED main? — #118, sibling of `board-liveness.yml` and
+# `npm-token-liveness.yml`.
+#
+# Three guards already prove CI is correctly CONFIGURED. Nothing asked whether a run any of that
+# machinery expected actually HAPPENED, and on 2026-09-06 that gap was silent and real: two commits
+# reached `main` outside their PR, `ci.yml` arrived and `lint.yml` (retired the same day) went, and every
+# one of those three guards stayed green throughout. `scripts/workflow-run-liveness.mjs` reads the check
+# RUNS for the pull request that produced a commit, never `mergeStateStatus`, for the identical reason
+# `merge-guard.mjs` (#161) does — a required context that never ran is not a failing check, it is NO
+# check, and `mergeStateStatus` cannot tell the two apart.
+#
+# ## Why this is NOT on a schedule, and it is the whole design
+#
+# A watchdog that is itself scheduled has the disease it is watching for: GitHub disables a scheduled
+# workflow after 60 days without repository activity, silently, producing no run, no log and no red mark
+# — the exact failure `board-liveness.yml` was built to stop reaching this repo a second time.
+#
+# `push` cannot be disabled by inactivity, because a push IS the activity — and a push to `main` is
+# exactly the moment a commit that might have bypassed its PR's checks has just landed.
+#
+# ## This cannot fail the push it is reporting on
+#
+# `continue-on-error: true`, for the same reason `npm-token-liveness.yml` uses it: this job's finding is
+# about a COMMIT THAT ALREADY MERGED, not about anything the person who just pushed could have prevented.
+# Failing the push would put a red mark against an unrelated merge for a gap that opened before it.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-run-liveness-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Was the pull request that produced this commit actually tested?
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/workflow-run-liveness.mjs --sha=${{ github.sha }}
