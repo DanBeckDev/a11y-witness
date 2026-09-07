@@ -1,5 +1,5 @@
 {
-  "name": "@a11y-witness/judge",
+  "name": "@a11ign/judge",
   "version": "0.1.0",
   "description": "Judges a screen-reader capture against WCAG 2.2 AA: the trained local scorer by default, the deterministic absence rules, and the experience-layer ordering.",
   "license": "AGPL-3.0-or-later",
@@ -40,10 +40,10 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@a11y-witness/evidence": "0.1.0"
+    "@a11ign/evidence": "0.1.0"
   },
   "peerDependencies": {
-    "@a11y-witness/scorer": "0.1.0",
+    "@a11ign/scorer": "0.1.0",
     "@anthropic-ai/sdk": "^0.106.0",
     "@huggingface/transformers": ">=3.0.0"
   },
@@ -67,9 +67,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/DanBeckDev/a11y-witness.git",
+    "url": "git+https://github.com/a11ign/a11ign.git",
     "directory": "packages/judge"
   },
+  "homepage": "https://a11ign.com",
   "keywords": [
     "accessibility",
     "a11y",

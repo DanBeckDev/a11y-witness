@@ -58,7 +58,7 @@ release input.
 
 Two packages need this spelled out or their versions will lie.
 
-**`@a11y-witness/scorer` — the weights are the API.**
+**`@a11ign/scorer` — the weights are the API.**
 - **major**: any retrain, any threshold change, any encoder swap. A consumer's
   build goes from passing to failing with no code change; that is breaking, whatever
   the diff looks like.
@@ -68,7 +68,7 @@ Two packages need this spelled out or their versions will lie.
   thresholds) in the changelog entry, because "which model scored this" is the
   question a disputed finding turns on.
 
-**`@a11y-witness/nvda-worker` — the wire protocol versions separately.**
+**`@a11ign/nvda-worker` — the wire protocol versions separately.**
 `CAPTURE_PROTOCOL_VERSION` is a capture-cache key: bumping it invalidates 2,122
 cached captures. Package semver is a consumer-facing compatibility claim. They must
 not be the same number, in either direction — a package major must not force a
@@ -80,7 +80,7 @@ recapture, and a protocol bump must not wait for a major. Rules:
 - `npm run evidence:check` reporting SAME is what makes a worker change a patch.
   That tool is now load-bearing for versioning, not just for cache economics.
 
-**`@a11y-witness/evidence`** carries the strictest promise: additive only, for a
+**`@a11ign/evidence`** carries the strictest promise: additive only, for a
 long time. Removing a subpath from `"exports"`, or narrowing a predicate's
 behaviour, majors every downstream package.
 
@@ -92,7 +92,7 @@ behaviour, majors every downstream package.
 2. Merge to `main`. The Changesets action opens or updates a single "Version
    Packages" PR holding every pending bump and changelog edit.
 3. Merging that PR publishes to npm from CI with `--provenance` and pushes
-   per-package git tags (`@a11y-witness/judge@1.2.0`).
+   per-package git tags (`@a11ign/judge@1.2.0`).
 4. `0.x` for every package until M9. **This is deliberate**: `0.x` means breaking
    changes are cheap, so a boundary that turns out wrong can be corrected without a
    major-version apology. Publishing `1.0.0` before an external consumer has used
@@ -132,8 +132,8 @@ check all over again.
 
 ### 5. How a consumer pins and upgrades
 
-- **Pin** with a caret on the CLI (`a11y-witness@^1`) and **exactly** on the
-  scorer (`@a11y-witness/scorer@1.4.0`), because a caret on the scorer is a caret on
+- **Pin** with a caret on the CLI (`a11ign@^1`) and **exactly** on the
+  scorer (`@a11ign/scorer@1.4.0`), because a caret on the scorer is a caret on
   the findings. Documented in each README, with the reasoning, because a consumer
   who does not know the weights are the API will pin the wrong way.
 - **Upgrade** by reading the scorer changelog first: it is the only package whose
@@ -173,7 +173,7 @@ check all over again.
 
 ## Residual risks
 
-1. The isolation gate cannot pass for `@a11y-witness/scorer` until
+1. The isolation gate cannot pass for `@a11ign/scorer` until
    `scripts/score-screenreader-model.py` is restored to `main` (ADR 0004, risk 1).
 2. It needs a Python environment and an 87 MB encoder fetch for the scorer and
    judge cases, which makes that gate slow and network-dependent. It may have to be

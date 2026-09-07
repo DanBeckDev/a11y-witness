@@ -18,7 +18,7 @@
 // generating and the publishing are separate acts and a bad report can be seen before it is posted.
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import {
   REPO, MILESTONE, HOURS_MS, READ_SET,
   gh, git, issues, milestone, mergeState, misAuthored, reported, daysUntil, readSetIsNotMain, countable} from "./board-data.mjs";

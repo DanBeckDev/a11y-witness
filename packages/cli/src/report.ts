@@ -9,13 +9,13 @@
  * pattern: the interesting half becomes a pure function, and the half that touches the world becomes
  * too small to hold a bug.
  */
-import type { Judgment } from "@a11y-witness/judge";
-import { taskVerdictLabel, judgeBackend } from "@a11y-witness/judge";
+import type { Judgment } from "@a11ign/judge";
+import { taskVerdictLabel, judgeBackend } from "@a11ign/judge";
 import type { AxeFinding } from "./scan/axe.js";
-import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11y-witness/judge/layers";
+import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11ign/judge/layers";
 import { notAConformanceClaim, type ConformanceRequirement }
-  from "@a11y-witness/evidence/conformance";
-import { outcomeTally, type CriterionOutcome } from "@a11y-witness/judge/outcomes";
+  from "@a11ign/evidence/conformance";
+import { outcomeTally, type CriterionOutcome } from "@a11ign/judge/outcomes";
 
 /** How much offending markup to quote as evidence. Enough to recognise the element, not the page. */
 const EVIDENCE_CHARS = 100;
@@ -338,7 +338,7 @@ export function reportLines(
 ): string[] {
   return [
     "",
-    "a11y-witness report",
+    "a11ign report",
     "===================",
     `URL:   ${url}`,
     `Task:  ${task}`,

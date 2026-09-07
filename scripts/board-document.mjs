@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS, issues, outOfRelease, unclassified, achievementsWhoseWorldMoved,
   realPageCaptureAge } from "./board-data.mjs";
 import { toHtml } from "./board-markdown.mjs";
@@ -565,9 +565,9 @@ function appendix(d) {
 
 export function document(d, summary) {
   return [
-    `# a11y-witness — board report, ${longDate(new Date().toISOString())}`,
+    `# a11ign — board report, ${longDate(new Date().toISOString())}`,
     "",
-    "*a11y-witness drives a real screen reader through real navigation to assess the accessibility "
+    "*a11ign drives a real screen reader through real navigation to assess the accessibility "
     + "failures that automated scanners structurally cannot reach. Nothing is published yet.*",
     "",
     ...(summary ? ["## Executive summary", "", summary.text, ""] : []),
@@ -838,19 +838,19 @@ function main() {
 
     // WHERE THE CHAIRMAN LOOKS, which is the only requirement this path has.
     //
-    // It was `~/Library/Logs/a11y-witness`, beside the scheduled job's log, on the reasoning that a
+    // It was `~/Library/Logs/a11ign`, beside the scheduled job's log, on the reasoning that a
     // LaunchAgent's output belongs there on macOS. That reasoning was about the LOG. A board document is
     // not a log -- it is a deliverable a person opens, and a deliverable filed where its reader does not
-    // look has not been delivered. So: `~/Documents/a11y-witness-board-reports/`, one file per date. The
-    // log stays in `~/Library/Logs/a11y-witness/`, where the original reasoning does still hold.
+    // look has not been delivered. So: `~/Documents/a11ign-board-reports/`, one file per date. The
+    // log stays in `~/Library/Logs/a11ign/`, where the original reasoning does still hold.
     //
     // NOT in the repository, and deliberately: `runs/` is shared -- often a symlink to the corpus tree --
     // and a guard is landing that makes every `runs/` writer askable, so a PDF written every morning
     // would be a writer nobody remembered when that guard was designed.
     const outDir = flagOf("--out")
-      ?? path.join(process.env.HOME ?? ROOT, "Documents", "a11y-witness-board-reports");
+      ?? path.join(process.env.HOME ?? ROOT, "Documents", "a11ign-board-reports");
     mkdirSync(outDir, { recursive: true });
-    const stem = `a11y-witness-board-${new Date().toISOString().slice(0, 10)}`;
+    const stem = `a11ign-board-${new Date().toISOString().slice(0, 10)}`;
     // THE INTERMEDIATE HTML DOES NOT GO WHERE THE CHAIRMAN LOOKS. It is Chrome's input, not a
     // deliverable, and "one file per date" means one file: a folder holding two files per day, one of
     // which opens as unstyled markup, is a folder somebody has to learn to read past.

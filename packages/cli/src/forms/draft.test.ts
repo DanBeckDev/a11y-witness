@@ -122,7 +122,7 @@ test("a phrase the GRAMMAR cannot read is not reported as a page defect", () => 
 
   assert.deepEqual(draft.unnamed, [], "a phrase we could not parse must NOT be reported as unnamed");
   assert.deepEqual(draft.unparsed, [{ position: 2, announced }]);
-  assert.match(draft.yaml, /NOT UNDERSTOOD by a11y-witness/);
+  assert.match(draft.yaml, /NOT UNDERSTOOD by a11ign/);
   assert.match(draft.yaml, /gap in THIS TOOL's announcement grammar, not a finding about your page/);
   assert.doesNotMatch(draft.yaml, /UNNAMED FIELD, 2 /);
 });
