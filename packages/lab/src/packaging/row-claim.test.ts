@@ -8,6 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { claimStatus, decideClaim, fetchLabels, claimRow, dispatchRow, declineRow, CLAIM_LABEL, STARTED_LABEL }
   from "../../../../scripts/row-claim.mjs";
+import { READY_LABEL } from "../../../../scripts/ready-label-audit.mjs";
 
 // --- claimStatus: pure, no I/O ---
 
@@ -168,11 +169,19 @@ test("MUTATION: a race detected on the RE-READ is backed off, not reported as a 
   const result = claimRow(55, "worker-contracts", { run });
   assert.equal(result.claimed, false);
   assert.match((result as { reason: string }).reason, /lost a race to worker-judge/);
-  const removeCall = calls.find((a) => a.includes("--remove-label"));
+  // The FIRST edit call is the forward write, which also removes `ready` (see the `ready`-removal test
+  // below) -- and its `--add-label session:worker-contracts` would satisfy a plain `.includes()` check
+  // just as well as the back-off call's `--remove-label session:worker-contracts` does, so identify the
+  // back-off call by the ADJACENT PAIR, never by mere membership.
+  const removedLabels = (args: string[]) => args
+    .map((a, i) => (a === "--remove-label" ? args[i + 1] : null))
+    .filter((l): l is string => l !== null);
+  const removeCall = calls.find((a) => removedLabels(a).includes("session:worker-contracts"));
   assert.ok(removeCall, "must back off by removing its OWN session label");
-  assert.ok(removeCall!.includes("session:worker-contracts"));
-  assert.ok(!removeCall!.includes(CLAIM_LABEL), "must never remove in-progress -- the other session needs it");
-  assert.ok(!removeCall!.includes("session:worker-judge"), "must never remove a label that is not its own");
+  assert.ok(!removedLabels(removeCall!).includes(CLAIM_LABEL),
+    "must never remove in-progress -- the other session needs it");
+  assert.ok(!removedLabels(removeCall!).includes("session:worker-judge"),
+    "must never remove a label that is not its own");
 });
 
 // --- dispatchRow: #176's fix -- mark taken at dispatch, before anyone has started ---
@@ -230,6 +239,25 @@ test("claimRow (start) additionally writes STARTED_LABEL, transitioning dispatch
   assert.deepEqual(result, { claimed: true });
   const editCall = calls.find((a) => a[1] === "edit");
   assert.ok(editCall!.includes(STARTED_LABEL), "claim/start must mark started");
+});
+
+test("MUTATION: dispatching a `ready` row removes `ready` -- #197's review finding, caught before merge", () => {
+  const calls: string[][] = [];
+  const run = (cmd: string, args: string[]) => {
+    calls.push(args);
+    if (args[1] === "view") {
+      return JSON.stringify({ number: 176, title: "A row",
+        labels: [{ name: READY_LABEL }, { name: CLAIM_LABEL }, { name: "session:worker-contracts" }] });
+    }
+    return "";
+  };
+  dispatchRow(176, "worker-contracts", { run });
+  const editCall = calls.find((a) => a[1] === "edit");
+  assert.ok(editCall, "must have written the dispatch");
+  const removeIndex = editCall!.indexOf("--remove-label");
+  assert.ok(removeIndex !== -1 && editCall![removeIndex + 1] === READY_LABEL,
+    `dispatching must remove \`ready\` in the same call, so a row is never both pickable and taken -- `
+    + `got: ${JSON.stringify(editCall)}`);
 });
 
 // --- declineRow: give a row back, #176's second acceptance case ---
