@@ -48,6 +48,7 @@
 //   2  a lookup failed. INCONCLUSIVE, never "fine".
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { sandboxGitEnv } from "./git-env.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -111,7 +112,8 @@ export function mergeTreeConflict(base, headSha, runGit) {
 /** @param {string[]} args */
 function runGitForReal(args) {
   try {
-    const stdout = execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const stdout = execFileSync("git", args,
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: sandboxGitEnv() });
     return { status: 0, stdout };
   } catch (cause) {
     const err = /** @type {{ status?: number, stdout?: string }} */ (cause);
@@ -143,7 +145,8 @@ function main() {
   // Fetch every branch tip once, up front -- `actions/checkout@v4` only brings the triggering PR's own
   // head, and `git merge-tree` needs every OTHER open PR's head object present locally too.
   try {
-    execFileSync("git", ["fetch", "origin", "--quiet", "+refs/heads/*:refs/remotes/origin/*"], { stdio: "pipe" });
+    execFileSync("git", ["fetch", "origin", "--quiet", "+refs/heads/*:refs/remotes/origin/*"],
+      { stdio: "pipe", env: sandboxGitEnv() });
   } catch (cause) {
     console.error(`CANNOT ASK: fetching branch tips failed -- ${cause instanceof Error ? cause.message : cause}`);
     process.exit(EXIT.CANNOT_ASK);
