@@ -26,6 +26,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
@@ -60,5 +61,7 @@ export function changedPackagesAgainstOrigin() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
+  // Guarded per #164: takes no flags; `--name-only` is passed onward to git.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/changed-packages.mjs" });
   process.stdout.write(changedPackagesAgainstOrigin().join(" "));
 }
