@@ -227,13 +227,14 @@ scanners and other tools — a division of labour, not a blind spot:
 > of its two listed failures and is not a pixel question at all.
 >
 > **So this section no longer restates the list.** It is generated from
-> `criterion-coverage.ts` into [`coverage.md`](./coverage.md), with a per-criterion
-> reason and a test that fails when the two disagree — which is the only form of
-> this claim that cannot rot. A prose copy of a machine-readable fact is the defect
-> this repo records most often, and it had one here.
+> `criterion-coverage.ts` into `coverage.md` (`npm run docs:coverage` — deliberately
+> not committed, issue #158, so it is not a link here), with a per-criterion reason
+> and a test that fails when the generator produces nothing real — which is the only
+> form of this claim that cannot rot. A prose copy of a machine-readable fact is the
+> defect this repo records most often, and it had one here.
 
-**[`docs/coverage.md`](./coverage.md) is the answer**, all 55 criteria with the
-reason for each. The families that are out of scope, and why:
+**`docs/coverage.md` is the answer** (`npm run docs:coverage`), all 55 criteria with
+the reason for each. The families that are out of scope, and why:
 
 - **Visual / sensory** — contrast, use of colour, text spacing, reflow, target
   size. Properties of rendered output; no assistive-technology signal exists.
