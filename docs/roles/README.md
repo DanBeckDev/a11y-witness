@@ -10,8 +10,18 @@
 ## THE HIERARCHY
 
 The chairman speaks to `ceo` and to nobody else. `ceo` decides and reports to the chairman. `orchestrator`
-(fleet, lab, gates, cross-cutting review), `dispatcher` (worker loop, PR review and merge) and
-`product-manager` (tracker, milestone, board document) report to `ceo`. Workers report to `dispatcher`.
+(fleet, lab, gates, and **code owner** for `packages/nvda-worker`, cache keys, `packages/scorer/models` and
+the gates — the only paths where a person's approval is required), `dispatcher` (**the pipeline**:
+workflows, trunk health, the Ready queue and briefing) and `product-manager` (tracker, milestone, board
+document) report to `ceo`. Workers report to `dispatcher`.
+
+**THE PIPELINE DECIDES WHAT MERGES, NOT A PERSON.** A worker owns their PR from open to merge; auto-merge
+is enabled by workflow, `acceptance` runs the PR's own stated command and mutation check, and a push to
+`main` that fails `gate` is reverted automatically. **`dispatcher` is not the merge step and does not arm
+PRs.** The `reviewer` role retired 2026-09-07, when `ceo` moved auto-arm and auto-revert ahead of the
+`acceptance` job in the rollout order — `dispatcher` absorbs its first-pass-review drain until `acceptance`
+lands.
+
 Nobody messages the chairman; a question only the chairman can answer goes up the chain to `ceo`, who asks.
 An idle notice, a status line, a finding, a refusal: each goes to the agent above you, not sideways and not
 up two levels, unless `ceo` has asked you directly, in which case you answer `ceo` and copy your reporting
@@ -35,7 +45,7 @@ where state actually lives, and the enforcement that keeps the set complete.
 |---|---|---|---|
 | Chief | `ceo` | [`ceo.md`](./ceo.md) | — |
 | Fleet/lab driver ("the lead") | `orchestrator` | [`orchestrator.md`](./orchestrator.md) | `ceo` |
-| Worker-loop dispatcher | `dispatcher` | [`worker-loop-orchestrator.md`](./worker-loop-orchestrator.md) | `orchestrator` (utilisation line to `ceo`) |
+| Pipeline owner | `dispatcher` | [`worker-loop-orchestrator.md`](./worker-loop-orchestrator.md) | `ceo` |
 | Product loop | `product-manager` | [`product-manager.md`](./product-manager.md) | `ceo` |
 | Worker | `worker-audit` | [`worker-audit.md`](./worker-audit.md) | `dispatcher` |
 | Worker | `worker-capture` | [`worker-capture.md`](./worker-capture.md) | `dispatcher` |

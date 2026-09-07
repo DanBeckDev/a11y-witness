@@ -567,6 +567,50 @@ test("2.4.2 MAKES NO CLAIM when the probe could not read a heading", () => {
     "an unread heading is 'cannot say', never 'the page moved to null'");
 });
 
+/**
+ * #253: "the first heading changed" is a proxy for "the document moved", and three ordinary page shapes
+ * defeat it identically — a consent overlay switching panels, a link opening a new tab, and a modal
+ * opening. These two narrow on evidence NVDA itself provides (the link's own announcement; a `dialog`
+ * container role), never on inferring a page shape from its content.
+ */
+test("#253: a link announced as opening elsewhere is not evidence THIS document navigated", () => {
+  const route = (control: string) => ({
+    transcript: ["Home, document"], structure: {},
+    interaction: { routeChange: { control, navigated: true,
+      titleBefore: "Home", titleAfter: "Home", headingBefore: "Welcome", headingAfter: "Latest news" } },
+  } as never);
+  assert.equal(ruleFindings(route("Cookie policy, opens in a new window, link"))
+    .filter((f) => f.wcag.startsWith("2.4.2")).length, 0,
+    "a link that tells the user it leaves this document cannot be evidence this document navigated");
+  assert.equal(ruleFindings(route("Cookie policy, opens in a new tab, link"))
+    .filter((f) => f.wcag.startsWith("2.4.2")).length, 0, "the tab wording must be caught too");
+  assert.equal(ruleFindings(route("Latest news, link"))
+    .filter((f) => f.wcag.startsWith("2.4.2")).length, 1,
+    "an ordinary link must still be asserted -- this is a narrowing, not a mute");
+});
+
+test("#253: a heading inside a dialog container is not evidence the DOCUMENT navigated", () => {
+  const route = (headingBefore: string, headingAfter: string) => ({
+    transcript: ["Home, document"], structure: {},
+    interaction: { routeChange: { control: "Manage cookies, link", navigated: true,
+      titleBefore: "Home", titleAfter: "Home", headingBefore, headingAfter } },
+  } as never);
+  // A modal just opened: only the AFTER heading carries the container.
+  assert.equal(ruleFindings(route("Welcome", "dialog, Manage your cookie preferences, heading, level 1"))
+    .filter((f) => f.wcag.startsWith("2.4.2")).length, 0,
+    "a heading that just opened inside a dialog is the modal shape, not a route change");
+  // A consent overlay switching PANELS: both headings carry the same container, but differ from each
+  // other, so the existing headingBefore === headingAfter guard cannot catch this one.
+  assert.equal(ruleFindings(route(
+    "dialog, Consent, step 1 of 2, heading, level 1", "dialog, Consent, step 2 of 2, heading, level 1"))
+    .filter((f) => f.wcag.startsWith("2.4.2")).length, 0,
+    "two different panels of the SAME dialog is not a document navigation");
+  // A genuine route change, no dialog involved, must still be asserted.
+  assert.equal(ruleFindings(route("Welcome", "Latest news"))
+    .filter((f) => f.wcag.startsWith("2.4.2")).length, 1,
+    "an ordinary heading change must still be asserted -- this is a narrowing, not a mute");
+});
+
 test("the 2.4.3 suppression counts a `section` container, which is what Edge 152 calls an unnamed form", () => {
   // THE REGRESSION A BROWSER UPGRADE WOULD HAVE CAUSED. `w3c/html-aria#423` made the `form` role
   // conditional on an accessible name, so Edge 152 announces an unnamed <form> as "section". This counter
