@@ -37,6 +37,14 @@ afternoon and four merged rows were still open that evening — not because anyo
 step was in a conversation. **Anything that must happen every time belongs in a script that refuses to
 complete without it, not in a list you intend to follow.**
 
+**And a finished branch with no PR is invisible to every check above, on purpose (#247).** The `in-progress`
+staleness check above asks about rows THIS role already knows are claimed; it says nothing about a branch
+pushed and then never proposed at all — `agent/ssh-key-defaults` carried a finished security fix for
+**eleven hours** with no PR, no CI run, and no merge path, found only because a human happened to read a
+branch list. `npm run branches:stranded` is the standing answer: run it alongside the resume checklist
+above, and treat what it names as CANDIDATES needing a look, not an automatic dispatch — see the script's
+own header for why a rebase can produce the identical shape without being stranded.
+
 
 The agent filling this role is named **`dispatcher`**. It reports to **`orchestrator`** — the lead orchestrator, which owns the fleet, the lab, `runs/`, every corpus-reading gate and all cross-cutting review — and hands up to it the three triggers below. It sends its utilisation line to **`ceo`** with every status message.
 
