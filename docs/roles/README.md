@@ -146,6 +146,72 @@ decision belongs to whoever holds them today, not to this page.
 driver, rather than a rule everyone else follows, is what keeps `lab:job`'s refusal-not-queueing and
 `assertFleetRunsThisCheckout`'s one-commit invariant meaningful at all.
 
+## THE BRANCH AND PR RULES — ruled 2026-09-07, because the conflicts had a cause
+
+**The chairman saw too many merge conflicts. They were not carelessness, and part of the cause was
+mechanical: squash merging meeting stacked branches.** A child branch cut from a parent branch has the
+parent's commits in its history; squashing the parent onto `main` produces a NEW commit with a new sha, so
+git no longer recognises the child's copies as applied and offers every one of them back as a conflict.
+Nobody did anything wrong and the merge was still a mess.
+
+Four rules, and each one names the failure it removes rather than the tidiness it buys.
+
+- **A PR is against `main` only. A dependent one WAITS.** No stacked PRs.
+- **Where a stack is genuinely unavoidable, it merges by REBASE, never squash**, so the child's commits are
+  recognised as already applied.
+- **Branches are short-lived: cut from current `main`, merged the same day.** A branch that lives a week
+  accumulates conflicts against work it never saw.
+- **Generated files are regenerated and CHECKED in CI, never committed in a PR.** `docs/coverage.md` is the
+  first of them. Two branches that each change a criterion both regenerate it, both commit it, and the
+  second to merge conflicts in a file neither author wrote a line of — so resolving it is not review, it is
+  guesswork with a merge marker in it.
+
+### A stacked PR runs NO CI, and reads `CLEAN`
+
+**Measured tonight on #148, and this is the half that makes stacking dangerous rather than merely
+awkward.** Its base was `lead/real-page-outcome-is-stated` — another open PR's branch — not `main`:
+
+```
+#148  lead/gate-ages-what-it-scored -> lead/real-page-outcome-is-stated
+```
+
+Three consequences follow, and all three are silent:
+
+- `ci.yml` is `on: pull_request: branches: [main]`, so **a PR into a non-`main` base triggers nothing.**
+  `gh run list --branch lead/gate-ages-what-it-scored` returned no runs at all, ever.
+- Branch protection covers `main`, so the PR is **protected by nothing**.
+- It therefore reads **`CLEAN/MERGEABLE`** — and that is CORRECT, which is exactly what makes it dangerous.
+  182 unexercised insertions presented as the greenest PR on the board.
+
+**`mergeStateStatus` cannot tell you the difference between "every required check passed" and "no check
+ran".** A required context that never ran is not a failing check; it is no check. **Read the check-run
+list, not the merge state** — an empty list is the tell, and it looks like success.
+
+### A conflicting PR runs no CURRENT CI, and that is a different fault wearing the same face
+
+**#137, the same night.** A PR that conflicts with its base has no merge ref for GitHub to check out, so
+nothing can run against current `main`. **Resolve the conflict and the first run happens by itself**; do
+not go looking for a broken workflow.
+
+**But the branch was NOT runless, and the distinction matters more than the rule.** This section first
+said #137 had zero runs ever, on the strength of a `gh run list --limit 25 | grep` that simply did not
+reach far enough back. `gh run list --branch lead/real-page-outcome-is-stated` returns three: one failed,
+one cancelled, both from before the rebase. Corrected by `orchestrator` within the hour.
+
+So the two PRs were never the same fault:
+
+| | what the check-run list said | what it meant |
+|---|---|---|
+| #148, stacked | **empty** — no run has ever existed | nothing has tested this, and it reads `CLEAN` |
+| #137, conflicting | **runs, with conclusions** | real results, against a base that has since moved |
+
+**"No runs at all" and "runs against a base that has since moved" send a reader to different places**, and
+a bounded listing will turn the second into the first if you let it. Ask the authoritative source and let
+it tell you what it is bounded to — `--branch`, not a grep over the last twenty-five.
+
+**Nothing `lead/*` or `agent/*` merges without a run against current `main`.** That is the rule the facts
+above exist to make enforceable, and the words "against current `main`" are the load-bearing half.
+
 ## The contingency drill
 
 **The acceptance test for this whole page, and it is a command, not a judgement:** a fresh clone in a
