@@ -59,6 +59,7 @@
     "training:train": "node packages/lab/scripts/build-realism-tier.mjs --out=runs/screenreader-dataset/with-realism.jsonl && .venv/bin/python packages/lab/scripts/train-screenreader-model.py --data runs/screenreader-dataset/with-realism.jsonl --output runs/model-candidate",
     "training:train-baseline": ".venv/bin/python packages/lab/scripts/train-screenreader-model.py --output runs/model-baseline",
     "doctor": "node packages/worker-fleet/src/doctor.mjs",
+    "primary:mark": "node scripts/mark-primary-checkout.mjs",
     "worker:code": "node packages/worker-fleet/src/check-worker-code.mjs",
     "worker:deploy": "node packages/worker-fleet/src/deploy-worker.mjs",
     "worker:compare": "node packages/worker-fleet/src/compare-workers.mjs",
