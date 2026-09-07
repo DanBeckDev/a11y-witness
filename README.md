@@ -6,6 +6,12 @@
 
 **a11y-witness drives a real screen reader (NVDA) through a web page and reports the barriers a screen-reader user would hit.** Every finding cites a WCAG criterion and quotes the announcement it rests on, so you can check it yourself.
 
+> **Which path is yours? If you have no Windows machine, start with the [GitHub Action](#quickstart) —
+> it needs none.** If you have one, or don't mind building a VM, the [local path](#quickstart) is likely
+> yours instead. (`npx a11y-witness` is not published yet — see
+> [`packages/cli/README.md`](./packages/cli/README.md) for why and what to use instead.) This is the one
+> decision every other doc in this repo defers to.
+
 The findings it is *for* are the ones a rule scanner structurally cannot produce, because they need a screen reader and an interaction — not markup analysis:
 
 > axe tells you an ARIA attribute is wrong. This tells you your form rejects input and **never announces why**, or your filter updates results and **says nothing**.

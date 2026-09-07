@@ -8,10 +8,11 @@
 // third `paths:` block. Three copies of "what changed", and nothing kept them agreeing — this repo's own
 // most-repeated defect, aimed at its own CI.
 //
-// `classify` is PURE — a file list in, five booleans and a package list out — so the categories are
-// testable without a checkout, a diff, or a runner, and a category that stops matching anything is a red
-// unit test rather than a silent CI budget regression. The CLI wrapper is the only impure part: it reads
-// `git diff --name-only` against the PR's base.
+// `classify` is PURE — a file list, a package list and a dependency graph in, a handful of booleans and
+// two package lists out — so the categories are testable without a checkout, a diff, or a runner, and a
+// category that stops matching anything is a red unit test rather than a silent CI budget regression. The
+// CLI wrapper is the only impure part: it reads `git diff --name-only` against the PR's base and every
+// package's `package.json` to build the dependency graph.
 //
 // PULL_REQUEST AND MERGE_GROUP ONLY, DELIBERATELY -- chairman's direction, 2026-09-06, widened for #156.
 // This file used to also support `--event=push`, unconditionally reporting every category true for a push
@@ -20,6 +21,15 @@
 // hatch. Every check now runs before the merge -- on the PR itself, or on the merge-group ref a queued PR
 // is tested against -- and branch protection (checks green AND up to date with `main`) is what makes the
 // tested commit the one that lands.
+//
+// `testPackages` (touched + every workspace DEPENDENT, transitively) IS THE POINT OF THIS FILE'S SECOND
+// PASS -- 2026-09-06, chairman's follow-up measuring `ci/ts` at 269s on a one-package PR. `packages`
+// alone (a PR's directly touched packages) would test the changed code but not its consumers -- a
+// contract change under `packages/evidence` breaking `packages/judge`'s use of it would pass a scoped run
+// that only ever looked at `evidence`. `testPackages` is the transitive closure of dependents, computed
+// from the real `@a11y-witness/*` `dependencies`/`devDependencies` in every package's own `package.json`
+// -- never a hand-written map, for this file's own stated reason: three independent hand-written copies
+// of "what changed" is the defect this file exists to end.
 import { execFileSync } from "node:child_process";
 import { readFileSync, appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -34,6 +44,12 @@ import { sandboxGitEnv } from "./git-env.mjs";
 // rename, a deletion, a file directly under `packages/` with no subdirectory). Writing a second copy of
 // `/^packages\/([^/]+)\//` here would be the exact defect this file's own header names.
 import { changedPackages } from "./changed-packages.mjs";
+// REUSED FOR REAL THIS TIME. The comment on `packedFiles` below has claimed this reuse since #132 while
+// the function beneath it carried its own, second `npm pack --dry-run --json` call -- two derivations of
+// "what does a package actually ship" guarding the identical promise, the exact fact-stated-twice shape
+// this file's own header opens with. `isolation-gate.mjs` is this repo's other, older answer to the same
+// question (does a consumer's install actually work), so it is the one authority now.
+import { packedFiles as packedFilesForDir } from "./isolation-gate.mjs";
 
 /** Every top-level package directory this repo has, read once rather than hardcoded twice. */
 export function knownPackages(repoRoot) {
@@ -49,9 +65,74 @@ export function knownPackages(repoRoot) {
   return execFileSync("git", ["ls-files", "packages"], { cwd: repoRoot, env: sandboxGitEnv(), encoding: "utf8" })
     .split("\n")
     .filter(Boolean)
+    // A file tracked directly under `packages/` (`packages/README.md`) has only two path segments and is
+    // not a package -- pre-existing and harmless as long as nothing tried to read `packages/<name>/
+    // package.json` for every returned "name". `readWorkspaceDependencyGraph` is the first thing that
+    // does, and crashed on exactly this (`ENOTDIR: not a directory, open './packages/README.md/
+    // package.json'`) the first time it ran against the real repo. A real package always has at least
+    // one file NESTED under its directory, so three-or-more segments is what distinguishes it.
+    .filter((f) => f.split("/").length > 2)
     .map((f) => f.split("/")[1])
     .filter((name, index, all) => name && all.indexOf(name) === index)
     .sort();
+}
+
+/**
+ * Every package directory's own workspace dependencies, as directory names -- not by convention (e.g.
+ * assuming `@a11y-witness/<dir>`), because `packages/cli`'s own `package.json` name is the UNSCOPED
+ * `"a11y-witness"`, and `packages/lab` genuinely depends on it. Each directory's real declared `name` is
+ * read and used as the lookup key, so a future package with an unconventional name is still resolved
+ * correctly rather than silently dropped from the graph.
+ *
+ * @param {string} repoRoot
+ * @param {string[]} allPackages every package directory name
+ * @returns {Record<string, string[]>} directory name -> the directory names of its workspace dependencies
+ */
+export function readWorkspaceDependencyGraph(repoRoot, allPackages) {
+  const nameToDir = {};
+  const manifests = {};
+  for (const dir of allPackages) {
+    const manifest = JSON.parse(readFileSync(`${repoRoot}/packages/${dir}/package.json`, "utf8"));
+    nameToDir[manifest.name] = dir;
+    manifests[dir] = manifest;
+  }
+  const graph = {};
+  for (const dir of allPackages) {
+    const deps = Object.keys({ ...manifests[dir].dependencies, ...manifests[dir].devDependencies });
+    // `.filter(Boolean)`: a dependency outside this workspace (`@guidepup/guidepup`, `typescript`, ...)
+    // has no entry in `nameToDir` and resolves to `undefined` -- not every declared dependency is a
+    // workspace package, and only workspace packages belong in this graph.
+    graph[dir] = deps.map((name) => nameToDir[name]).filter(Boolean);
+  }
+  return graph;
+}
+
+/**
+ * The transitive closure of `changed` plus every package that depends on one, directly or through
+ * another dependent -- e.g. `evidence` changing must also test `judge` (depends on `evidence`) AND `lab`
+ * (depends on `judge`), not just the packages that import `evidence` directly.
+ *
+ * @param {string[]} changed
+ * @param {Record<string, string[]>} dependencyGraph from `readWorkspaceDependencyGraph`
+ * @returns {string[]} sorted, deduplicated
+ */
+export function dependentsOf(changed, dependencyGraph) {
+  const reverse = {};
+  for (const [pkg, deps] of Object.entries(dependencyGraph)) {
+    for (const dep of deps) (reverse[dep] ??= new Set()).add(pkg);
+  }
+  const result = new Set(changed);
+  const queue = [...changed];
+  while (queue.length > 0) {
+    const pkg = queue.pop();
+    for (const dependent of reverse[pkg] ?? []) {
+      if (!result.has(dependent)) {
+        result.add(dependent);
+        queue.push(dependent);
+      }
+    }
+  }
+  return [...result].sort();
 }
 
 /** Root-level files a change to which must be treated as "every TS/JS package changed". */
@@ -60,16 +141,192 @@ const ROOT_TS_FILES = new Set([
   ".eslintrc.json", ".eslintrc.cjs", "eslint.config.js", "eslint.config.mjs",
 ]);
 
-const DOC_ROOT_FILES = new Set(["README.md", "CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md", "PLAN.md"]);
+// Exported: `scripts/board-only-check.mjs` needs the identical set to decide "is this a doc-touching
+// file", so the pre-push hook's board-only fast path asks the exact question `classify` does.
+export const DOC_ROOT_FILES = new Set(["README.md", "CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md", "PLAN.md"]);
+
+/**
+ * Is every one of these doc-touching files a BOARD file -- `docs/board/summaries/*.md` or
+ * `docs/board/reported.json` -- the first named instance of "narrower than the general docs case", per
+ * chairman's direction, 2026-09-06, the product manager's single largest recurring cost that night.
+ * `docs/board/summaries/*.md` and `docs/board/reported.json` are edited far more often than anything else
+ * under `docs/`, and every such edit used to pay the full `docs` job (a build, then the whole
+ * `packages/lab/src/packaging/` directory) for a change no rule outside the board guards could possibly
+ * react to. Exported separately from `classify` so the pre-push hook's board-only fast path can ask the
+ * identical question `ci.yml`'s `board` job asks, rather than a second copy of the same two regexes.
+ *
+ * @param {string[]} docsFiles every file already known to be doc-touching (`f.startsWith("docs/")` or a
+ *   `DOC_ROOT_FILES` member) -- callers filter first, since an EMPTY list is not "board-only", it is "no
+ *   doc changed at all", and those are different questions with different callers.
+ */
+export function boardOnly(docsFiles) {
+  return docsFiles.length > 0 && docsFiles.every((f) =>
+    f === "docs/board/reported.json" || /^docs\/board\/summaries\/.*\.md$/.test(f));
+}
+
+/**
+ * What `npm pack --dry-run` actually ships for one package, as a `Set` of paths relative to the package
+ * root. `classify` accepts an injected replacement (`getPackedFiles`) so its own tests never shell out to
+ * npm; this is only the REAL one, kept at this `(repoRoot, pkgName)` shape so every existing caller and
+ * test here is unaffected by where the underlying npm call actually lives.
+ *
+ * @param {string} repoRoot
+ * @param {string} pkgName
+ * @returns {Set<string>}
+ */
+export function packedFiles(repoRoot, pkgName) {
+  return packedFilesForDir(`${repoRoot}/packages/${pkgName}`);
+}
+
+/**
+ * A changed file's own path, plus its BUILT counterpart's — `src/foo.ts` also produces `dist/foo.js` and
+ * `dist/foo.d.ts` for a package that ships `dist` (every `tsc --build` package here uses `rootDir: src`,
+ * `outDir: dist`, one file in, the same relative name out). Checking BOTH against the packed manifest is
+ * what tells a real source change from a test file without ever naming `*.test.ts` here: every package's
+ * own `tsconfig.json` already excludes test files from the build ("exclude": src/**\/*.test.ts), so
+ * a test file's built counterpart simply never exists to be packed — the same fact `npm pack` already
+ * knows, read once rather than re-encoded as a second, driftable pattern.
+ *
+ * A package that ships `src` RAW (no build step -- `nvda-worker`, and `worker-fleet`'s
+ * `src/local-worker`/`src/provisioning`) needs no mapping at all: the file's own path is already a
+ * candidate, and its `files` field either lists that literal path or does not.
+ *
+ * @param {string} relPath path relative to the package root
+ * @returns {string[]}
+ */
+export function candidatePackedPaths(relPath) {
+  const candidates = [relPath];
+  const tsMatch = /^src\/(.*)\.tsx?$/.exec(relPath);
+  if (tsMatch) candidates.push(`dist/${tsMatch[1]}.js`, `dist/${tsMatch[1]}.d.ts`);
+  return candidates;
+}
+
+/** Whether `packages/<pkgName>` is ever published — a `private: true` package has no changeset question. */
+function isPublished(repoRoot, pkgName) {
+  return !JSON.parse(readFileSync(`${repoRoot}/packages/${pkgName}/package.json`, "utf8")).private;
+}
+
+/**
+ * A `getPackedFiles` stand-in that answers "packed" for EVERY candidate path, unconditionally. Used only
+ * by the `changed` job, which runs before `npm ci` and so cannot safely call the real `npm pack` --
+ * `orchestrator` reproduced `classify()` crashing there on every PR touching a published package, once
+ * `packedFiles` stopped being an inert, never-actually-called comment and started being the real call
+ * this file's own header always claimed it was.
+ *
+ * SAFE BECAUSE IT IS ONLY EVER TOO EAGER, never too quiet: `classify()`'s `changeset` output computed this
+ * way is a strict SUPERSET of the precise answer -- exactly `changed` file under `packages/<published>/`,
+ * the same shape `changeset-check.yml`'s old regex used before #132. That is fine for what this output
+ * actually decides here: whether the `changeset` job (which has `npm ci`, and re-derives the PRECISE
+ * answer with the real `packedFiles` before enforcing anything) runs at all. A false positive here costs
+ * one job invocation that then finds nothing to enforce; a false negative would skip the real check
+ * entirely, which is why this never goes the other way.
+ *
+ * @param {string} repoRoot unused -- present only to match `getPackedFiles`'s real shape
+ * @param {string} pkgName unused -- present only to match `getPackedFiles`'s real shape
+ * @returns {Set<string>} answers `.has(anything)` true, without ever running the real `npm pack`
+ */
+function everythingIsPacked(repoRoot, pkgName) {
+  void repoRoot; void pkgName;
+  return /** @type {Set<string>} */ ({ has: () => true });
+}
+
+/**
+ * Every literal path a test declares via the `file: "<path>"` SITES convention, mapped to the package
+ * whose `ts`-job glob (`packages/<pkg>/src/**\/*.test.ts`) covers the test file making the claim — issue
+ * #283, found when a board-only diff routed to the narrower `board` job (`board-*.test.ts` +
+ * `public-claim.test.ts`) and skipped `repo-identity-consolidated.test.ts`, which sits in the same
+ * directory but is not a board test. `classify` folds this map's matched package(s) into `packages` WHEN
+ * `board` fires — see the comment at that call site for why the fold is gated rather than unconditional:
+ * this map itself is not, because the same handful of literals (README.md, CLAUDE.md, ...) are also named
+ * by OTHER, non-board packaging tests, and folding those in for every diff that touches them would re-run
+ * the same tests under both `docs` and `ts` for nothing.
+ *
+ * SCOPED TO THE `file:`-KEYED CONVENTION this repo already uses for exactly this class of check
+ * (`repo-identity-consolidated.test.ts`, `tracked-source-leak-guard.test.ts`, `fetch-wrapper-coverage.
+ * test.ts`, `backlog-file-facts.test.ts` …) rather than a repo-wide scrape of every string literal —
+ * CLAUDE.md's own caution about static derivation applies here too ("a regex reports ZERO flags" for a
+ * CLI that builds its list from a variable): a looser pattern would answer a noisier question, and this
+ * one is the idiom the repo already commits to as a deliberate, reviewed claim about ONE file. NOTE FOR
+ * ANYONE EDITING COMMENTS NEAR THIS FUNCTION: this regex reads SOURCE TEXT and cannot tell documentation
+ * of the convention from a real use of it — writing out an example as `file: "<some path>"` inside a
+ * comment adds a phantom entry to the derived map (harmless, since `<some path>` never appears in a real
+ * diff, but sloppy and worth avoiding; caught once already in this function's own test file).
+ *
+ * @param {string} repoRoot
+ * @returns {Map<string, Set<string>>} literal path -> package name(s) whose ts-job glob covers a test
+ *   naming it
+ */
+export function testDependencyMap(repoRoot) {
+  const testFiles = execFileSync("git", ["ls-files", "packages"], { cwd: repoRoot, env: sandboxGitEnv(), encoding: "utf8" })
+    .split("\n")
+    .filter((f) => /\/src\/.*\.test\.ts$/.test(f));
+  const map = new Map();
+  for (const testFile of testFiles) {
+    const pkgMatch = /^packages\/([^/]+)\//.exec(testFile);
+    if (!pkgMatch) continue;
+    const text = readFileSync(`${repoRoot}/${testFile}`, "utf8");
+    for (const m of text.matchAll(/\bfile:\s*["']([^"']+)["']/g)) {
+      if (!map.has(m[1])) map.set(m[1], new Set());
+      map.get(m[1]).add(pkgMatch[1]);
+    }
+  }
+  return map;
+}
+
+/**
+ * Adds, IN PLACE, every package a NAMED TEST implicates for this file list — gated on `board`, per
+ * `testDependencyMap`'s own comment on why the fold must not apply unconditionally. Extracted to its own
+ * function so `classify` counts this as one call rather than the `if` plus two nested `for`s ESLint's
+ * `complexity` rule would otherwise charge it for directly — CLAUDE.md's own remedy for this exact shape:
+ * move the branching into a helper called through one line, rather than splitting it across two guards at
+ * the call site (which measured WORSE, not better, the last time this file's own `rules.ts` sibling tried
+ * it).
+ *
+ * @param {Set<string>} tsPackages mutated in place
+ * @param {{ files: string[], board: boolean,
+ *   getTestDependencyMap: (repoRoot: string) => Map<string, Set<string>>, repoRoot: string }} ctx
+ */
+function foldTestNamedPackages(tsPackages, { files, board, getTestDependencyMap, repoRoot }) {
+  if (!board) return;
+  const testDeps = getTestDependencyMap(repoRoot);
+  for (const f of files) {
+    for (const pkg of testDeps.get(f) ?? []) tsPackages.add(pkg);
+  }
+}
+
+/**
+ * Which `ci.yml` jobs must run for this file list — a thin wrapper around `classify` itself, so this
+ * answer and `classify`'s can never disagree about the same diff (the fact-stated-twice shape this file's
+ * own header opens with, applied to itself). Exists so the #283 acceptance check can ask the CLASS
+ * question standalone, with no diff or checkout: does `docs/board/reported.json` alone route to `ts`.
+ *
+ * @param {string[]} files
+ * @param {string} [repoRoot]
+ * @returns {string[]} the job names `classify` set true for this file list
+ */
+export function jobsFor(files, repoRoot = process.cwd()) {
+  const result = classify(files, knownPackages(repoRoot), {}, { repoRoot });
+  return ["ts", "python", "ansible", "docs", "board", "changeset", "rulesFitness"].filter((job) => result[job]);
+}
 
 /**
  * Classify a list of repo-relative changed paths into which `ci.yml` jobs must run.
  *
  * @param {string[]} files
  * @param {string[]} allPackages every package directory name, for the "a root config file changed" case
- * @returns {{ ts: boolean, python: boolean, ansible: boolean, docs: boolean, changeset: boolean, packages: string[] }}
+ * @param {Record<string, string[]>} [dependencyGraph] from `readWorkspaceDependencyGraph`; defaults to
+ *   empty, so `testPackages` degrades to exactly `packages` when no graph is supplied (every existing
+ *   call site that predates `testPackages` keeps working unchanged)
+ * @param {{ repoRoot?: string, getPackedFiles?: (repoRoot: string, pkgName: string) => Set<string>,
+ *   getTestDependencyMap?: (repoRoot: string) => Map<string, Set<string>> }} [deps]
+ *   `repoRoot` defaults to `process.cwd()`, `getPackedFiles` to the real `packedFiles` above,
+ *   `getTestDependencyMap` to the real `testDependencyMap` above — all three injectable so `classify`
+ *   itself stays testable without touching disk or git per call.
+ * @returns {{ ts: boolean, python: boolean, ansible: boolean, docs: boolean, board: boolean,
+ *   changeset: boolean, rulesFitness: boolean, packages: string[], testPackages: string[] }}
  */
-export function classify(files, allPackages) {
+export function classify(files, allPackages, dependencyGraph = {},
+  { repoRoot = process.cwd(), getPackedFiles = packedFiles, getTestDependencyMap = testDependencyMap } = {}) {
   const rootTsChanged = files.some((f) => ROOT_TS_FILES.has(f));
   // BLUNT ON PURPOSE, matching `changedPackages`'s own stated philosophy: any file under `packages/<name>/`
   // — not only `.ts`/`.mjs`/`.json` under `src`/`bin` — marks that package touched. A second, narrower
@@ -95,13 +352,46 @@ export function classify(files, allPackages) {
 
   const ansible = files.some((f) => f.startsWith("packages/control/ansible/"));
 
-  const docs = files.some((f) => f.startsWith("docs/") || DOC_ROOT_FILES.has(f));
+  const docsFiles = files.filter((f) => f.startsWith("docs/") || DOC_ROOT_FILES.has(f));
+  // `board` is true, and `docs` FALSE, only when EVERY doc-touching file in the diff is a board file --
+  // see `boardOnly`'s own doc comment for why. Mixing in any other doc means the ordinary, wider `docs`
+  // job runs instead, because this file's own rule is "narrower than usual needs its own argument", and a
+  // mixed diff has not made that argument.
+  const board = docsFiles.length > 0 && boardOnly(docsFiles);
+  const docs = docsFiles.length > 0 && !board;
 
-  // The exact regex `changeset-check.yml` used before this file existed — kept identical rather than
-  // "improved", because the set of published packages IS the decision and re-deriving it independently is
-  // how the two copies would drift.
-  const changeset = files.some((f) =>
-    /^packages\/(cli|judge|scorer|evidence|nvda-worker|worker-fleet)\/(src|python|models|bin)\//.test(f));
+  // #283: `board`'s glob is a strict subset of `docs`'s over the same directory -- see
+  // `foldTestNamedPackages`'s own comment for why that makes this the one place a file can be classified
+  // without running a test that names it, and why the fold is gated on `board` rather than unconditional.
+  foldTestNamedPackages(tsPackages, { files, board, getTestDependencyMap, repoRoot });
+
+  // ISSUE #132: the regex `changeset-check.yml` used before this file existed asked "is this file UNDER
+  // a published package's src/python/models/bin", which answers a different question than the one the
+  // gate means -- "CAN this file reach a consumer". `packages/worker-fleet/src/lab-job.test.ts` matched
+  // that regex and blocked a real PR, measured: `npm pack --dry-run --json` on `worker-fleet` ships 153
+  // files and that is not one of them. Derived from what npm actually packs instead, per-package, memoised
+  // so a PR touching several files in one package still calls `npm pack` once for it.
+  const packedCache = new Map();
+  const changeset = files.some((f) => {
+    const match = /^packages\/([^/]+)\/(.*)$/.exec(f);
+    if (!match) return false;
+    const [, pkgName, relPath] = match;
+    if (!allPackages.includes(pkgName) || !isPublished(repoRoot, pkgName)) return false;
+    if (!packedCache.has(pkgName)) packedCache.set(pkgName, getPackedFiles(repoRoot, pkgName));
+    const packed = packedCache.get(pkgName);
+    return candidatePackedPaths(relPath).some((p) => packed.has(p));
+  });
+
+  // NARROW ON PURPOSE, unlike every other category above -- chairman's direction, 2026-09-06. Coverage
+  // and `gate:isolation` left the PR path entirely (release-time and nightly instead; see `ci.yml`'s and
+  // `coverage.yml`'s own headers), and the rules fitness gate (`npm run rules-check`) is the one PR-time
+  // check remaining that measures something repo-wide rather than a single package's own behaviour. It
+  // reads fixtures scored against `packages/judge`'s rule engine over `packages/evidence`'s announcement
+  // grammar, so those two are the only paths that can move its answer -- unlike `ts`, a root config or
+  // `scripts/*.mjs` change does NOT imply this needs to re-run.
+  const rulesFitness = files.some((f) => f.startsWith("packages/judge/") || f.startsWith("packages/evidence/"));
+
+  const packages = [...tsPackages].sort();
 
   return {
     // `packages` (any file under a package dir) OR `scripts/*.mjs` OR a root config file -- the last two
@@ -111,8 +401,14 @@ export function classify(files, allPackages) {
     python,
     ansible,
     docs,
+    board,
     changeset,
-    packages: [...tsPackages].sort(),
+    rulesFitness,
+    packages,
+    // The transitive closure of dependents -- see `dependentsOf`'s own doc comment. When `packages` is
+    // every known package already (a root config or scripts/*.mjs change), the closure is a no-op: every
+    // dependent of every package is still every package.
+    testPackages: dependentsOf(packages, dependencyGraph),
   };
 }
 
@@ -123,8 +419,11 @@ function writeOutputs(result) {
     `python=${result.python}`,
     `ansible=${result.ansible}`,
     `docs=${result.docs}`,
+    `board=${result.board}`,
     `changeset=${result.changeset}`,
+    `rulesFitness=${result.rulesFitness}`,
     `packages=${result.packages.join(" ")}`,
+    `testPackages=${result.testPackages.join(" ")}`,
   ];
   if (!outFile) {
     // Not inside a GitHub Actions job — print rather than fail, so this is also runnable by hand.
@@ -135,7 +434,12 @@ function writeOutputs(result) {
 }
 
 async function main() {
-  const KNOWN_FLAGS = ["--event", "--base", "--repo"];
+  // --precise: the `changeset` job passes this AFTER its own `npm ci`, to get the real, `npm pack`-backed
+  // answer -- see `everythingIsPacked`'s own comment for why the `changed` job (no install at all) must
+  // never take this path. Its ABSENCE is not "changeset: false"; it is "changeset: true whenever a
+  // published package changed at all", a deliberate over-approximation that only decides whether the
+  // `changeset` job runs, never whether anything is actually enforced.
+  const KNOWN_FLAGS = ["--event", "--base", "--repo", "--precise"];
   refuseUnknownFlags(KNOWN_FLAGS, { entry: import.meta.url, command: "ci-changed" });
 
   // `--event` stays a required, explicit flag rather than being dropped outright: a caller that types
@@ -183,7 +487,10 @@ async function main() {
     process.exit(2);
   }
 
-  writeOutputs(classify(files, packages));
+  const dependencyGraph = readWorkspaceDependencyGraph(repoRoot, packages);
+  const precise = process.argv.includes("--precise");
+  writeOutputs(classify(files, packages, dependencyGraph,
+    { repoRoot, getPackedFiles: precise ? packedFiles : everythingIsPacked }));
 }
 
 // Only when invoked directly — importing `classify` for a test must not trigger a git subprocess.

@@ -29,11 +29,34 @@ name: ci
 # multiplying the "a required check with no run blocks merge forever" exposure `gate` exists to remove. And
 # enabling the merge queue itself (a ruleset) is `ceo`'s to authorise, not a code change at all.
 #
-# THE FULL SUITE RUNS ON THE PR ITSELF, not on a separate main-only pass -- coverage, the rules fitness
-# function, `scorer:verify` and `gate:isolation` (below, in the `ts` job) used to be gated to
-# `github.event_name == 'push'`; with no push trigger left they simply run whenever `ts` runs, i.e.
-# whenever any package source changed. Four minutes on a one-package PR is the new, wider budget that
-# buys -- up from three, and worth it: it is the only place left these checks can run at all.
+# THE `ts` JOB IS SCOPED TO CHANGED PACKAGES AND THEIR DEPENDENTS, NOT THE WHOLE REPO -- chairman's
+# follow-up, 2026-09-06, measuring `ci/ts` at 269s on a one-package PR (unit tests 84s, then a 154s step
+# running coverage/rules-check/scorer:verify/gate:isolation over the ENTIRE repository regardless of what
+# the PR actually touched). Budget dropped from four minutes to sixty seconds the same day. Two changes:
+#
+#   - Coverage (`.c8rc.json`'s whole-repo 78% threshold) and `gate:isolation` (every package's tarball is
+#     installable) left the PR job entirely -- see `release.yml` (gate:isolation, via `release:gate:ci`,
+#     already there) and `coverage.yml` (new: nightly schedule + release-time, threshold intact). Neither
+#     answers "did THIS PR's diff regress"; both answer "is the repository as a whole still sound", which
+#     does not need re-asking on every commit of every PR.
+#   - The rules fitness gate (`npm run rules-check`) is now its own job below, `rulesFitness`, gated on
+#     `packages/judge` or `packages/evidence` having changed -- the only two paths that can move its
+#     answer, per `ci-changed.mjs`'s `rulesFitness` category.
+#
+# Unit tests run over `testPackages` (touched packages PLUS every workspace DEPENDENT, transitively,
+# computed from real `package.json` dependencies -- see `ci-changed.mjs`'s own header), never `packages`
+# alone and never the whole suite. A contract change under `packages/evidence` still tests `packages/judge`
+# and everything downstream of it; an unrelated package's PR does not pay for packages it cannot affect.
+#
+# #212 MEASURED THE 60S BUDGET ON A GENUINE LEAF CASE (`packages/lab`, zero dependents post-#206) AND FOUND
+# ~90S, NOT 60S -- two independent CI runs, step-by-step: checkout+setup-node+cache+npm-ci 7s (npm ci fully
+# SKIPPED on the cache hit -- caching already works), build 5s, lint+typecheck 15s (whole-repo, not scoped
+# to `testPackages` -- real, but small), and "Unit tests of the touched package(s) and their workspace
+# dependents" 56s -- ~66% of the step total, on BOTH runs. That is `lab`'s own suite (199 test files, ~1,305
+# `test()` calls, this repo's largest package by test count), not unscoped CI -- `testPackages` resolved to
+# `["lab"]` only. Disposition: accept it. A PR touching `lab` has a measured, understood floor around
+# 85-90s from `lab`'s own suite size; the 60s budget holds for an ordinary single/few-package PR elsewhere.
+# Not a target missed -- a cost named rather than chased.
 #
 # AGENT/** AND LEAD/** BRANCH PUSHES DO NOT TRIGGER THIS WORKFLOW EITHER, same as before -- every unit ends
 # with `gh pr create` (the standing worker-loop flow), so the PR's own `pull_request` trigger is where a
@@ -77,8 +100,15 @@ jobs:
       python: ${{ steps.classify.outputs.python }}
       ansible: ${{ steps.classify.outputs.ansible }}
       docs: ${{ steps.classify.outputs.docs }}
+      board: ${{ steps.classify.outputs.board }}
       changeset: ${{ steps.classify.outputs.changeset }}
+      rulesFitness: ${{ steps.classify.outputs.rulesFitness }}
       packages: ${{ steps.classify.outputs.packages }}
+      testPackages: ${{ steps.classify.outputs.testPackages }}
+      # EXPOSED so `changeset` (below) does not re-derive it and risk the merge_group trap this step's own
+      # comment names -- a second, independent `github.base_ref` read in a different job is exactly the
+      # shape that drifted once already (#156).
+      base: ${{ steps.base.outputs.ref }}
     steps:
       # FULL HISTORY. A shallow clone fails `git diff <base>...HEAD` with "no commits in common" --
       # `changeset-check.yml`'s own comment already named this trap.
@@ -116,9 +146,20 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
+      # CACHE node_modules ITSELF, KEYED ON THE LOCKFILE -- `setup-node`'s own `cache: npm` above caches
+      # the npm DOWNLOAD cache, not the installed tree, so `npm ci` still re-links everything on every run.
+      # On a cache hit this skips `npm ci` outright; on a miss it runs it once and the next PR touching an
+      # unchanged lockfile hits. Keyed on `package-lock.json`'s hash because that is the only thing that
+      # can make a previously-installed `node_modules` wrong.
+      - uses: actions/cache@v4
+        id: node-modules-cache
+        with:
+          path: node_modules
+          key: node-modules-${{ hashFiles('package-lock.json') }}
       # --ignore-scripts: skip Playwright/Guidepup postinstall browser/AT setup, which lint, typecheck and
       # the unit suite do not need (keeps this fast and Linux-safe) -- carried forward from `lint.yml`.
-      - run: npm ci --ignore-scripts
+      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts
       # Cross-package imports resolve to `dist` (every `exports` entry points there) -- CLAUDE.md's own
       # rule: run the file runner on its own and it tests the LAST BUILD, which on a fresh checkout is no
       # build at all.
@@ -130,7 +171,11 @@ jobs:
       - run: npm run docs:coverage
       - run: npm run lint
       - run: npm run typecheck
-      - name: Unit tests of the touched package(s)
+      - name: Unit tests of the touched package(s) and their workspace dependents
+        # `testPackages`, NOT `packages` -- see `ci-changed.mjs`'s own header. A change under
+        # `packages/evidence` must still test `packages/judge` (depends on it) and everything downstream
+        # of judge, not just evidence's own tests.
+        #
         # GH_TOKEN: `packages/lab/src/packaging/*` (board-style.test.ts, row-claim.test.ts's live
         # fetchLabels) shells out to real `gh` calls against this repo's own Issues -- read-only, and
         # `github.token` already has that scope for the repo the workflow runs in.
@@ -138,7 +183,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           globs=()
-          for pkg in ${{ needs.changed.outputs.packages }}; do
+          for pkg in ${{ needs.changed.outputs.testPackages }}; do
             globs+=("packages/$pkg/src/**/*.test.ts")
           done
           if [ "${#globs[@]}" -eq 0 ]; then
@@ -148,29 +193,6 @@ jobs:
             exit 1
           fi
           npx tsx --test "${globs[@]}"
-      # THE FULL SUITE, on the PR -- there is nowhere else left for these to run now that `push` is gone.
-      # Coverage is a whole-repo threshold (`.c8rc.json`'s 78%), and `rules-check`/`scorer:verify`/
-      # `gate:isolation` are repo-wide invariants, not package-scoped ones -- none of them answer "did THIS
-      # PR's diff regress", they answer "is the repository as a whole still sound", and that question has
-      # to be answered before the merge now, not after it.
-      - name: Coverage, the rules fitness function, and packaging integrity
-        # GH_TOKEN, THE SAME ONE THE STEP ABOVE ALREADY SETS. `npm run coverage` runs the WHOLE suite
-        # under c8, so it reaches `board-style.test.ts` and `row-claim.test.ts`'s live `fetchLabels`
-        # exactly as the step above does -- and without the token those tests fail here while passing
-        # thirty lines up, in the same job, on the same commit. Measured on `main` at 830a7d4d: 2648 pass,
-        # 5 fail, all five network-dependent; reproduced locally by putting a `gh` that exits 127 on the
-        # PATH, which fails those and no others.
-        #
-        # A REMEDY APPLIED AT ONE CALL SITE WHEN THE BEHAVIOUR REACHES SEVERAL -- this repository's most
-        # expensive recurring shape, here in the workflow that enforces it. Two steps in one job run the
-        # same tests; the env reached one.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          npm run coverage
-          npm run rules-check
-          npm run scorer:verify
-          npm run gate:isolation
 
   python:
     needs: changed
@@ -264,8 +286,68 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  # BOARD-ONLY, THE NARROWEST JOB IN THIS FILE -- chairman's direction, 2026-09-06, the product manager's
+  # single largest recurring cost that night: `docs/board/summaries/*.md` and `docs/board/reported.json`
+  # are edited far more often than anything else under `docs/`, and every such edit used to pay the full
+  # `docs` job above (a build, then the whole packaging directory) for a change no rule outside the board
+  # guards could react to. Fires only when `board` is true -- see `ci-changed.mjs`'s own header -- which is
+  # mutually exclusive with `docs`: a diff mixing a board file with any other doc file runs the wider
+  # `docs` job instead, never both.
+  #
+  # NO TYPECHECK, NO GH_TOKEN -- verified, not assumed: none of the six files this job runs shell out to
+  # `gh`. A BUILD IS STILL NEEDED, though the first version of this job shipped without one on the strength
+  # of a grep that checked only these test files' own top-level imports: `board-liveness.test.ts`,
+  # `board-markdown.test.ts`, `board-style.test.ts` and `board-summary-origin.test.ts` all drive a real
+  # `scripts/board-*.mjs` script, and those scripts import `@a11y-witness/worker-fleet/cli-flags` --
+  # exactly the stale-dist trap CLAUDE.md names for every other job in this file, reached one hop further
+  # than the grep looked. Caught by actually RUNNING the job's real command with no build present, not by
+  # reading the imports -- this repo's own rule, applied to itself. Still far cheaper than the `docs` job:
+  # six files instead of the whole packaging directory, no coverage, no rules-check.
+  board:
+    needs: changed
+    if: needs.changed.outputs.board == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      # GH_TOKEN: `board-*.test.ts` reach real `gh` calls TRANSITIVELY -- `board-style.test.ts` imports
+      # `scripts/board-data.mjs`, whose `collect()` shells out to `gh issue list`. The `ts` job has carried
+      # this env, with a comment naming board-style.test.ts as the reason, since before these tests were
+      # split into their own job -- and the env did not travel with them. Read-only; `github.token` already
+      # has that scope for the repo the workflow runs in.
+      #
+      # `gh-token-jobs.test.ts` pins the CLASS: it walks each job's test glob and every LOCAL import
+      # beneath it, and requires GH_TOKEN on any job that can reach a `gh` spawn. A test grepping the test
+      # FILES alone would have found nothing here -- neither board test names `gh` at all.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
+
+  # THE RULES FITNESS GATE, ITS OWN JOB -- chairman's direction, 2026-09-06. Used to run inside `ts`
+  # unconditionally on every package change; now gated on `rulesFitness`, true only when
+  # `packages/judge` or `packages/evidence` changed, the only two paths that can move its answer.
+  rulesFitness:
+    needs: changed
+    if: needs.changed.outputs.rulesFitness == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run rules-check
+
   changeset:
     needs: changed
+    # `needs.changed.outputs.changeset` here is a cheap OVER-APPROXIMATION -- `changed` has no `npm ci`
+    # and so cannot safely call `npm pack`, so its `classify()` run answers "does this PR touch a
+    # published package's directory at all", the same blunt shape `changeset-check.yml`'s old regex used
+    # before #132. A false positive here costs one job run that then finds nothing to enforce (below); a
+    # false negative would skip the real check entirely, which is why the cheap answer only ever widens.
     if: needs.changed.outputs.changeset == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -274,9 +356,16 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      # PRECISE, now that `npm ci` has made `npm pack` safe to call. `orchestrator` reproduced the crash
+      # this avoids: `classify()` calling the real `packedFiles` inside `changed` (no install at all) fails
+      # on every PR touching a published package. This re-derives the real answer -- does npm actually
+      # SHIP this file -- and it is what decides whether the enforcement step below runs anything at all.
+      - id: precise
+        run: node scripts/ci-changed.mjs --event=${{ github.event_name }} --base=${{ needs.changed.outputs.base }} --precise
       - name: A consumer-visible change must say what it does to a consumer
+        if: steps.precise.outputs.changeset == 'true'
         run: |
-          if ! npx changeset status --since=origin/${{ github.base_ref }}; then
+          if ! npx changeset status --since=${{ needs.changed.outputs.base }}; then
             echo "::error::This PR changes a published package and carries no changeset."
             echo "Run 'npm run changeset', pick the packages and bump levels, and write one sentence a"
             echo "CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT follow"
@@ -296,7 +385,7 @@ jobs:
   # skipped counts as passing (the job's own `if:` decided it, correctly, that this PR does not need it);
   # anything else does not.
   gate:
-    needs: [changed, ts, python, ansible, docs, changeset]
+    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -308,7 +397,9 @@ jobs:
             "${{ needs.python.result }}" \
             "${{ needs.ansible.result }}" \
             "${{ needs.docs.result }}" \
-            "${{ needs.changeset.result }}"
+            "${{ needs.board.result }}" \
+            "${{ needs.changeset.result }}" \
+            "${{ needs.rulesFitness.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"
