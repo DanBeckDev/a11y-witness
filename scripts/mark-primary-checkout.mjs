@@ -19,7 +19,7 @@
 import { execFileSync } from "node:child_process";
 import { statSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 // GIT_* SCRUBBED, and it is load-bearing rather than ceremony HERE of all places. An inherited `GIT_DIR`
 // -- exported by any hook that invoked us -- would point these `git config --local` calls at whatever
 // repository that variable names, so a command whose entire job is "mark THIS checkout" would read, or

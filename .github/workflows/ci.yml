@@ -179,9 +179,9 @@ jobs:
       # #331: IT DOES NOT SKIP A WORKSPACE PACKAGE'S OWN `prepare` SCRIPT -- measured, not assumed. npm
       # 10.9.8 (bundled with the Node 22 this job pins) runs every workspace's `prepare` regardless of
       # `--ignore-scripts`: `npm ci --ignore-scripts --loglevel=verbose` on a fresh clone logs `npm info
-      # run @a11y-witness/worker-fleet@0.1.0 prepare packages/worker-fleet tsc --build` and leaves a real,
+      # run @a11ign/worker-fleet@0.1.0 prepare packages/worker-fleet tsc --build` and leaves a real,
       # populated `dist/` behind. That is what masked #238: `build-packages.mjs` used to import
-      # `@a11y-witness/worker-fleet/cli-flags` (a `dist/` path) at its own top level (#164), and on a cache
+      # `@a11ign/worker-fleet/cli-flags` (a `dist/` path) at its own top level (#164), and on a cache
       # MISS this step's silent side-build made that import resolve by accident, so `gate` read green on a
       # tree that could not build from a cache HIT (where this whole step, prepare included, is skipped).
       # #330 fixed the real bug (a relative import that needs no pre-built `dist/` at all); this note is
@@ -263,7 +263,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
-      # `@a11y-witness/worker-fleet/cli-flags` resolves through its package.json `exports` to
+      # `@a11ign/worker-fleet/cli-flags` resolves through its package.json `exports` to
       # `dist/cli-flags.mjs` -- `npm ci` alone is not enough, the same stale-dist trap CLAUDE.md already
       # names for cross-package imports in the TS suite, here reached from a Python subprocess instead.
       - run: npm run build
@@ -346,7 +346,7 @@ jobs:
   # `gh`. A BUILD IS STILL NEEDED, though the first version of this job shipped without one on the strength
   # of a grep that checked only these test files' own top-level imports: `board-liveness.test.ts`,
   # `board-markdown.test.ts`, `board-style.test.ts` and `board-summary-origin.test.ts` all drive a real
-  # `scripts/board-*.mjs` script, and those scripts import `@a11y-witness/worker-fleet/cli-flags` --
+  # `scripts/board-*.mjs` script, and those scripts import `@a11ign/worker-fleet/cli-flags` --
   # exactly the stale-dist trap CLAUDE.md names for every other job in this file, reached one hop further
   # than the grep looked. Caught by actually RUNNING the job's real command with no build present, not by
   # reading the imports -- this repo's own rule, applied to itself. Still far cheaper than the `docs` job:

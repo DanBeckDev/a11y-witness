@@ -12,7 +12,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { coverageFrom } from "./axe.js";
-import { criterionOutcomes } from "@a11y-witness/judge/outcomes";
+import { criterionOutcomes } from "@a11ign/judge/outcomes";
 const rule = (id: string, criterion: string) => ({ id, tags: ["wcag2a", `wcag${criterion.replace(/\./g, "")}`] });
 
 /**

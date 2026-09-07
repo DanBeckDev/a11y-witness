@@ -68,7 +68,7 @@ test("EVALUATING a candidate is allowed while a migration is open; RELEASING is 
 });
 
 test("promotion runs the candidate gate FIRST, and cannot commit", () => {
-  // Promoting IS a MAJOR release of @a11y-witness/scorer (ADR 0007). A job that can push a release is a
+  // Promoting IS a MAJOR release of @a11ign/scorer (ADR 0007). A job that can push a release is a
   // job that can release by accident, so this one stops at an uncommitted working tree.
   const scripts = JSON.parse(readFileSync(
     fileURLToPath(new URL("../../../package.json", import.meta.url)), "utf8")).scripts;

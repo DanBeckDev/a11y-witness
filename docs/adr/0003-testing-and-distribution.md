@@ -37,7 +37,7 @@ do not use the Action form or any CI.
    The Proxmox VM remains an optional always-on worker, not the only path.
 
 2. **Distribution: ship a GitHub Action as the primary consumption model.**
-   Teams add `a11y-witness` to their workflow; on each PR it sets up NVDA, starts
+   Teams add `a11ign` to their workflow; on each PR it sets up NVDA, starts
    the worker, captures the target/preview URL, judges it, and reports findings
    (job summary + PR comment, optionally failing on new violations above a
    severity threshold). It reuses the exact CI infra from (1).
@@ -66,7 +66,7 @@ do not use the Action form or any CI.
   real-NVDA-in-CI.)
 - **Phase 2 — Pluggable judge backend.** Backend interface + Codex / Anthropic /
   OpenAI implementations, env-selected. Eval keeps running on Codex locally.
-- **Phase 3 — The GitHub Action (the product).** `a11y-witness-action`: on a
+- **Phase 3 — The GitHub Action (the product).** `a11ign-action`: on a
   Windows runner, setup -> capture -> judge (user's key) -> findings as a job
   summary + PR comment + optional failing check. Inputs: `url(s)`, `task`,
   `probe-forms`, `fail-on`, `api-key`. Ship an example workflow + marketplace

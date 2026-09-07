@@ -10,7 +10,7 @@
  * a parseable line the Python process prints on stdout, not over HTTP — the shape differs but the reason
  * for having a table at all does not: a caller must not have to parse a message to act on a failure.
  *
- * DUPLICATED, deliberately: `@a11y-witness/nvda-worker` is not a dependency of this package.
+ * DUPLICATED, deliberately: `@a11ign/nvda-worker` is not a dependency of this package.
  * `isolation-smoke.mjs` asserts it must not be — the CLI speaks HTTP to a worker, and importing that
  * package once already broke the published bundle (it reaches guidepup, which throws at import wherever
  * there is no screen reader; see `cli.ts`'s own comment on `no-win32-imports.test.ts`'s finding). So the
