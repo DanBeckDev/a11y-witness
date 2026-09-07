@@ -39,6 +39,7 @@ import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { REPO } from "./repo-identity.mjs";
+import { READY_LABEL } from "./ready-label-audit.mjs";
 
 export const CLAIM_LABEL = "in-progress";
 export const STARTED_LABEL = "started";
@@ -161,6 +162,13 @@ export function decideClaim(labelsBefore, mySession) {
  * this same session) is a harmless no-op -- `--add-label` is idempotent -- so this needs no special case
  * for "already dispatched to me, now starting".
  *
+ * ALSO REMOVES `ready` IN THE SAME CALL. `dispatchRow`/`claimRow` only ever added labels, so a row still
+ * carrying `ready` at the moment it was dispatched came out the other side as `ready` + `in-progress` +
+ * `session:*` -- exactly the state `ready-label-audit.mjs` exists to catch (a row cannot be both
+ * "unclaimed, pickable" and "claimed"), found on #197's own review after being stripped by hand seventeen
+ * times in one evening. `--remove-label` on a label a row does not carry is a harmless no-op, so this needs
+ * no branch for "was it ready in the first place".
+ *
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
@@ -176,7 +184,8 @@ function writeRowLabels(issueNumber, mySession, extraLabels, { run = defaultRun 
   const sessionLabel = `session:${mySession}`;
   const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels];
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
-    ...labelsToAdd.flatMap((l) => ["--add-label", l])]);
+    ...labelsToAdd.flatMap((l) => ["--add-label", l]),
+    "--remove-label", READY_LABEL]);
 
   const after = fetchLabels(issueNumber, { run });
   const afterStatus = claimStatus(after.labels);
