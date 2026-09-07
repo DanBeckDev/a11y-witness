@@ -50,6 +50,8 @@ const JSON_REPORTER =
   + "caller then parses the prose";
 
 const GUARDED: Record<string, string> = {
+  "packages/lab/scripts/check-preregistered-verdict.mjs":
+    "takes NO flags -- it reads docs/board/reported.json and nothing else -- so it calls refuseUnknownFlags([]) with an EMPTY list. That is the case worth guarding rather than skipping: a command with no flags is exactly where a mistyped one would otherwise be discarded in silence and the default reported as success.",
   "scripts/board-only-check.mjs":
     "takes no flags; it decides whether a change is board-only, and an ignored argument would answer "
     + "about a different change than the one asked about",
