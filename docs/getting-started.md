@@ -1,6 +1,6 @@
 # Getting started
 
-From nothing to your first report.
+From nothing to your first report — **this is the local path, which needs a Windows worker of your own.**
 
 **No machine to spare? The GitHub Action needs no worker of your own at all** — it runs on a
 GitHub-hosted Windows runner, at no cost to try. See "Route C — no machine to spare" under
