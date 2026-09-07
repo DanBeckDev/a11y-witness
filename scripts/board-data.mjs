@@ -114,6 +114,23 @@ export function issues() {
   return all.map((i) => ({ ...i, labelNames: i.labels.map((l) => l.name) }));
 }
 
+/** A row that is not work: a container, or a process row. NOT counted, and the document says so.
+ *
+ * `#20` is the whole reason this exists. It is the daily board report itself -- its comments ARE the
+ * editions -- so it is an open issue that will never close and can never be worked. Counted, it inflates
+ * "road to version one" by one for ever and the number quietly stops meaning what a reader thinks.
+ *
+ * EXCLUDED BY RULE AND THE RULE IS PRINTED, which is the whole point: a count that silently drops rows is
+ * worse than one that counts the wrong thing, because nobody can tell. Section 6 states the exclusion
+ * beside the figure.
+ */
+export const META_LABEL = "meta";
+
+/** The rows the document COUNTS. `issues()` stays complete -- a meta row still needs its state resolved. */
+export function countable(list) {
+  return list.filter((i) => !(i.labelNames ?? i.labels?.map((l) => l.name) ?? []).includes(META_LABEL));
+}
+
 export function milestone() {
   const all = JSON.parse(gh(["api", `repos/${REPO}/milestones?state=all`]));
   return all.find((m) => m.title === MILESTONE) ?? null;
@@ -210,7 +227,8 @@ export function readSetIsNotMain() {
 /** Everything both outputs need, read once. */
 export function collect(since) {
   const all = issues();
-  const open = all.filter((i) => i.state === "OPEN");
+  // Counted rows only. `all` stays complete for state lookups; `open` is what the document reports.
+  const open = countable(all.filter((i) => i.state === "OPEN"));
   return {
     since,
     all,

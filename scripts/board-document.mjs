@@ -238,7 +238,12 @@ function sourceTable(d) {
   push("Pieces of work blocking that release",
     String(d.open.filter((i) => i.milestone?.title === MILESTONE).length),
     "the project's issue tracker (GitHub Issues API)");
-  push("Open work items in total", String(d.open.length), "the project's issue tracker");
+  // THE EXCLUSION IS PRINTED, NEVER SILENT. A count that quietly drops rows is worse than one that
+  // counts the wrong thing, because a reader cannot tell. `meta` rows are containers rather than work --
+  // the daily report's own issue is one, and it will never close.
+  push("Open work items in total", String(d.open.length),
+    "the project's issue tracker, excluding rows marked as containers rather than work — the daily "
+    + "report's own issue is one of these, and counting it would inflate this figure for ever");
   push("Work items closed in this period", String(d.closed.length), "the project's issue tracker");
   push("Saved changes merged in this period", String(d.merges.length),
     "the project's own version history, over the stated window — two correct counts over different "
