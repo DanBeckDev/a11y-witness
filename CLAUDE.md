@@ -2366,6 +2366,7 @@ failure as `capture-check` being mandatory and never running once.
 | `fleet:recover` | **a worker that is UP, ANSWERING and not working.** Measured 2026-09-02 on a11y-worker-6: a capture began at 03:00 and was still `current` at 06:32, with every readiness check green and `busy: true` for three and a half hours — from the run's side that is a slow page, so it waited and a corpus recapture made no progress at all. `fleet:deploy` cannot fix it: `Stop-ScheduledTask` will not end a node process wedged in a capture, the restart loses the race for port 8765, and the old process keeps serving a `/health.code` read from files the deploy just updated — so `verify-code.yml` sees a MATCH and its reboot never fires. This kills node outright and reboots, and PROVES it by requiring `vitals.uptimeMinutes` to have fallen: a worker that answers is not a worker that restarted, and that box answered perfectly for six days |
 | `guest:run` | run a script on a UTM guest elevated and actually get its output — `utmctl exec` returns exit 0 and no output whether or not it ran |
 | `fleet:inventory-install` | **put `inventory.yml` where a `git pull` cannot delete it.** The file is untracked and gitignored (#54), so a pull removes it from any checkout holding one — and on 2026-09-06 the CONTROL PLANE pulled main, lost it, and `fleet:deploy` printed `skipping: no hosts matched` and **exited 0** with ten workers untouched. This installs it at `/etc/a11ign/inventory.yml`, which `ansible.cfg` now reads FIRST, and verifies arrival by SHA-256 read back over a channel that shares no failure mode with the write. A playbook rather than an `scp` for this file's own reason: an operation that matters is CLI-invocable and reviewable, or it is done differently every time by whoever is at the keyboard. Additive and idempotent — it never touches the in-tree copy, which stays as the migration fallback |
+| `fleet:control-host-install` | **the sibling of `fleet:inventory-install`, for `A11Y_CONTROL_HOST` itself** (#285). Ten bare-metal workers sat idle because the shell dispatching `fleet:deploy` had never had the variable set, and `requireControlPlaneHost()` correctly refuses rather than guessing (#83). This installs the value it just used at `/etc/a11ign/control-host` on the control plane — the third state between "committed to git" (never) and "typed into every shell" — so a future shell that never set the variable falls back to the file instead of refusing. `requireControlPlaneHost()` checks the env var first, then the file, then still refuses when neither exists; the installer never reads the environment itself, it records what `fleet-playbook.mjs` already resolved to reach the machine it is writing to. `A11Y_PVE_KEY` deliberately gets no equivalent here — see #285 for why it stayed its own decision |
 | `fleet:tailscale` | put the fleet on Tailscale |
 | `layers:compare` | **the project's central claim, demonstrated**: which findings can ONLY the screen-reader layer produce? Asserted for a long time before anyone ran the two side by side |
 | `fleet:hours` | **what did a capture run COST the fleet, in worker-hours** — the method is EMITTED by the tool (`--json` carries a `method` field) so a board record copies it rather than retyping it — one fact, one place. Measured 54.11 worker-hours across the 5,395 captures on disk, median 27.4s, p95 134.2s. It REFUSES rather than printing 0.00 when it billed nothing, and tells "no JSON found" apart from "walked N and billed none" because those need opposite fixes. Built after the obvious method — sum the per-case times in `capture-progress.json` — turned out to describe data that does not exist: **0 of 1,623 cases carry any time field**, and only the transient `current` array holds `startedAt`, which an entry leaves the moment the case completes |
@@ -2493,8 +2494,13 @@ Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth
 - **Every `.mjs` CLI here ignored an unrecognised flag**, because they all parse argv by looking for what
   they know — so a mistyped one ran the default and reported success. `refuseUnknownFlags`
   (`cli-flags.mjs`) refuses it, names the near miss, and prints what the command does take.
-  **ALL 54 are guarded as of 2026-09-06**, and `cli-flags.test.ts` DISCOVERS every argv-reading
-  module and requires each to be guarded or exempted with a reason. The exemption list is empty.
+  **Every argv-reading module in the tree is guarded or exempted with a stated reason, and
+  `cli-flags.test.ts` is the only place that says how many.** It DISCOVERS them by walking the tree and
+  fails on any it cannot classify. This paragraph used to carry the count, and the count moved six times
+  in one night (75, 76, 77, 79, 82, 85), each value correct for the minutes between two merges; a number
+  the tree computes does not live in prose. The one exemption, `scripts/check-schema-migration.mjs`, is
+  copied into a throwaway directory by its own gate test and so cannot resolve a workspace import; its
+  single flag fails closed, and the test names it with that reason.
   > **The flag lists are READ out of each file, never derived, and every batch proved why.**
   > `stability-gate` builds flags from a variable and `repeat-capture` reads seven through an `arg(name)`
   > helper, so a regex reports ZERO for both. `fleet-playbook`, `capture-fixtures` and
@@ -2692,6 +2698,27 @@ Verification is layered; pick the layers your change touches:
 - `npm run training:check-signals` — proves every dataset `badSignal` fires on the bad page and stays silent on the good one, against captures already on disk (no worker needed). Run it after ANY change to a probe's output shape: a probe and its signal are coupled, and 8 cases once went silently blind when a probe changed. `npm run training:status` reports a long capture run; `--resume` picks up where one stopped.
 - **Worker broken? Don't debug from first principles** — `docs/nvda-worker-runbook.md` has the error-string → real-cause table (the messages are misleading: `"NVDA not installed"` usually means a version mismatch, not a missing install), and `packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1` applies it automatically. `packages/worker-fleet/src/provisioning/provision-nvda-worker.ps1` is the idempotent repair.
 - **No worker to hand?** Build one: `docs/getting-started.md` (~1.5–2 h, almost all of it downloading Windows). Validating capture changes through CI is a ~10-minute loop and should be the fallback, not the habit.
+
+## A GATE THAT READS `runs/` IS NOT YOURS TO REPORT
+
+**Ruled 2026-09-06.** `rules:gate`, `rules:coverage`, `check-signals`, `corpus:starvation`,
+`scorer:shortcuts` and anything else reading `runs/` give a VERDICT only when the agent driving the fleet
+and the lab runs them — against a corpus just fetched, or on the lab, which owns the authoritative one.
+
+**Anyone else may run one as a PRE-CHECK**, to decide whether a change is worth handing on. **Never as a
+reported result**, and never in an acceptance section as though it settled anything.
+
+The reason is measured rather than procedural. `runs/` in any checkout is a copy only as fresh as its last
+sync — one measured here was 89 hours old and carried neither `focusEvents` nor `baselineWaitedMs`, so a
+sweep across it found zero of the two keys it was written to find. **A gate run there reports cleanly
+having examined a corpus that no longer exists.** The pre-push hook already SKIPS the corpus-dependent
+checks loudly for exactly this reason, and calls that honest rather than passing quietly.
+
+**So an issue's acceptance may name a `runs/`-reading gate, and must say who runs it.**
+
+> Moved here 2026-09-06 from `docs/backlog-ready.md`, which was retired when the tracker moved to GitHub
+> Issues. That page was the only place this ruling existed, so deleting it would have deleted the rule —
+> which is why the page was read for what it uniquely held before it was replaced.
 
 ## Environment facts
 - ESM throughout (`"type": "module"`). `.ts` for the control plane, `.mjs` for the capture worker (it runs under plain Node on the VM) — see `docs/adr/0031-the-worker-ships-plain-mjs-with-no-build-step.md` for why, and what was rejected to get there.

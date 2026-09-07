@@ -32,6 +32,12 @@
 #   "running right now", the exact ambiguity the old query step had to fail closed on three ways.
 #
 # Removing any of the six is a deliberate act. Do not remove them in the same change that first uses this.
+#
+# `dist-tag` (issue #326) IS NOT A SEVENTH GUARD -- it is a CHANNEL, orthogonal to all six. All of them
+# still gate the run identically whether `dist-tag` is empty (publishes "latest", today's only behaviour)
+# or set (publishes under a named tag instead). It exists so the real path -- dry-run false, confirm typed,
+# access public, both smoke jobs green -- can be rehearsed against `next` without a first user's plain
+# `npm install` ever resolving to it, which `latest` would.
 name: release
 
 on:
@@ -43,6 +49,13 @@ on:
         default: true
       confirm:
         description: 'To publish for real, type: publish-for-real'
+        type: string
+        default: ''
+      dist-tag:
+        description: >-
+          npm dist-tag for a real publish, e.g. "next" -- lets the real path be exercised without
+          claiming "latest", which is what a first user installs. Empty publishes to "latest" as before;
+          this changes WHICH TAG gets the version, none of the six guards above.
         type: string
         default: ''
 
@@ -177,7 +190,10 @@ jobs:
       # so a version shipped without it can never gain it. The first publish is the only chance.
       - name: Publish
         if: inputs.dry-run == false && inputs.confirm == 'publish-for-real'
-        run: npx changeset publish
+        # `--tag` ONLY when a dist-tag was given -- changesets' own default (no flag) is "latest", and
+        # passing an empty `--tag ""` is not the same as omitting the flag, so the flag itself is built
+        # conditionally rather than always passed.
+        run: npx changeset publish${{ inputs.dist-tag != '' && format(' --tag {0}', inputs.dist-tag) || '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
@@ -185,6 +201,10 @@ jobs:
       - name: Say plainly what happened
         run: |
           if [ "${{ inputs.dry-run }}" = "false" ] && [ "${{ inputs.confirm }}" = "publish-for-real" ]; then
+            if [ -n "${{ inputs.dist-tag }}" ]; then
+              echo "Published under dist-tag '${{ inputs.dist-tag }}' -- 'npm install <pkg>' still "
+              echo "resolves to whatever 'latest' already points at; only 'npm install <pkg>@${{ inputs.dist-tag }}' reaches this."
+            fi
             echo "Published. npm versions cannot be unpublished after 72 hours, only deprecated."
           else
             echo "DRY RUN — versioned and packed, published nothing. This is the default and correct path"

@@ -148,13 +148,74 @@ commit that moves it leaves the number briefly wrong on `main` AND stops the PR 
 measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
 no permission. Where prose asserts it, it does.**
 
+## A CITATION TO A RECORD THAT NO LONGER EXISTS READS LIKE ONE THAT NEVER DID — 2026-09-07
+
+Three failures in one day, and they are the same failure pointed at three sources.
+
+**A summary is not a citation.** I wrote on a tracked row that *"`CLAUDE.md` records the repository
+settings as merge commits only, PR required, force-push blocked, linear history"*. That sentence is on no
+ref: `git grep 'merge commits only' $(git rev-list --all) -- CLAUDE.md` returns nothing. It came from a
+compaction summary of my own session. **A summary is written in the same voice as a quotation** — it says
+"CLAUDE.md records" because that is what the session believed — so nothing in the text marks it as
+second-hand, and any agent resuming from one is carrying beliefs that read as citations.
+
+**A deleted record is not a missing record.** `screenreader_features.py:921` cites
+`schema-migration.json`'s `correctedBeforeTheVerdict_2026_09_05` as *"the whole record"* of a decision, and
+that file is deleted on every migration close **by design** — its absence is how `check-schema-migration`
+reports "none open". Following the citation from the working tree finds nothing, and `orchestrator` read
+that absence as "nobody recorded it" and reported a partial revert that had not happened. The record was
+one commit out of reach the whole time. Filed as #340.
+
+**And an artefact is not a design.** I relayed "ten features described, one crossed" as a narrowing. The
+comment eleven lines further down says *"four new columns … starts with the two pairs whose starvation is
+measured; the rest follow if the gates hold"* — a staged rollout, which looks exactly like a partial
+revert if you read only what shipped.
+
+**Why:** in every one of the three, the wrong thing was available and the right thing was one step away —
+a `git show`, a `git log -S`, eleven more lines of the same comment. And in the worst of them I had
+verified the OTHER half of the same message carefully, because a publish blocker turned on it. **I checked
+the load-bearing claim and forwarded the alarming one.** The alarming claim is the one that most needs the
+check, because it is the one that will travel.
+
+**How to apply:** cite a document the way this project cites a number — `file:line` AND the ref you read it
+from. `git show origin/main:<file> | grep -n` is a citation; "the file says" is a belief. When a citation
+resolves to nothing, the question is *where did this move to*, never *did this ever exist* — absence in a
+working tree is not evidence about history. And before repeating a peer's conclusion, ask whether it is
+load-bearing **or alarming**: relay neither unchecked, but never let the second travel because it felt
+urgent. Related: the mutation-check rule, and `a-number-from-the-apparatus`.
+
+## I COUNTED WORDS WHEN THE FAULT WAS STRUCTURE — 2026-09-07
+
+A five-page document rendered a sixth page holding one word, `"discover."`. I measured length, found the
+body inside its cap, and reported the overflow as probably legitimate. `ceo` read the same document and
+diagnosed it in one line: section five opened with two caveat paragraphs before its claim, under a
+heading duplicated by a bold sub-heading below it. **Ordering, not length.** Deleting the duplicate
+heading and moving the recommendation up returned it to five pages without a word being cut.
+
+**Why:** the cap is the instrument I had, so the cap is the question I asked. A word count is the wrong
+tool for a layout fault and it answers confidently anyway — which is this repository's own rule about a
+number being only as good as what it was computed from, pointed at a document instead of a gate.
+
+**How to apply:** when an artefact is the wrong SHAPE, look at its structure before its size. Ask what
+the reader meets first and whether anything is said twice, and only then reach for a measurement. The
+same morning produced the sibling: a heading said *four* above three bullets, and no amount of counting
+words would have found it, because the defect was that a number had been typed rather than derived.
+
 ## The tracker's rules, ruled by `ceo` 2026-09-07 after the board asked why the count mattered
 
 **The honest answer was that it does not — three things it stood for do.** The total cap is withdrawn.
 
-**1. Work-in-progress limits, where they bite.** Ready holds **at least 3 and at most 6** unclaimed rows. **At most one row in progress per worker.** No cap on the total.
+**1. Work-in-progress limits, where they bite.** Ready holds **at least three PRODUCT rows** and at most six unclaimed. **A worker holds at most one claimed row beyond the one in flight** — two claimed, total. No cap on the open total.
 
-**2. Every row carries a milestone**, and the document reports **three counts with trend, not one** — blocks publish, road to version one, capture throughput — with **epics and decisions shown separately from ordinary rows**. Read as one number, 48 looks like 48 pieces of unfinished work; read as `18 epics + 5 decisions + 25 rows`, the epics are the roadmap the board approved.
+> **Both numbers were amended on 2026-09-07, by the same incident.** `worker-judge` held SIX claimed rows while Ready was EMPTY and `worker-contracts` sat idle: rows parked against one worker while another had nothing to pick up. The old rule said "at most one row in progress per worker", which reads as a limit and is not one — a row claimed and not started is not in progress, so six of them broke nothing as written.
+>
+> **The release is done on the `started` label and nothing else.** A row carrying `in-progress` without `started` is a reservation; a row carrying `started` is work, and work is not taken from a worker on the strength of a label. Verified when it was used: `worker-judge` confirmed `started` means real current work and that the three released were stale claims. **If that signal ever stops being accurate the fix is the signal, not the count.**
+>
+> **The floor is three rows in total, PRODUCT FIRST**, and a tooling row may fill it only when it unblocks a product row or the pipeline. Ruled 2026-09-07. It is not a product-only floor, because that was structurally unmeetable and would have been met by relabelling within a day — **a floor met by a label I control is not a measurement**, the rule I hold the dispatcher to and therefore hold myself to first. **The hourly line says how many of the three are product**, so the composition is visible rather than inferred.
+>
+> **A FLEET-GATED ROW HAS TWO HALVES, and only one of them is gated.** The capture is the orchestrator's queue; the pages, the analysis script and the row that records the result are not, and they are pickable product work. Split the row rather than parking the whole thing behind fleet time — that is what made most of the roadmap look unpickable when most of it was not.
+
+**2. Every open row carries a milestone OR the label `out-of-release`, and there is no third state.** A row with neither is a tracker defect, not a judgement call. Amended 2026-09-07 after #290 — real work, deliberately not in the release — made the open-items total count a row the blocker count could not, so one page carried two numbers disagreeing about it and neither was wrong. The document's open-items figure now reconciles on the page (`blocks release + later milestone + out-of-release + unclassified = total`, with the sum printed and a sentence when it does not hold), and `tracker-auditor`'s hourly table asks the question. **The label means "deliberately not in this release", never "unsorted"** — which is why the unclassified count is printed rather than absorbed: tolerating it silently would rebuild the fault inside its own fix. And the document reports **three counts with trend, not one** — blocks publish, road to version one, capture throughput — with **epics and decisions shown separately from ordinary rows**. Read as one number, 48 looks like 48 pieces of unfinished work; read as `18 epics + 5 decisions + 25 rows`, the epics are the roadmap the board approved.
 
 **3. A row untouched for 14 days is re-verified by its own open-check, or closed.** A weekly pass, and it is mine.
 

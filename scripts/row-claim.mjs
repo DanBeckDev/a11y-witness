@@ -59,6 +59,11 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { realpathSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+// RELATIVE, NOT the `@a11y-witness/worker-fleet/cli-flags` package specifier: that export map
+// points at `dist/`, so it needs both `node_modules` AND a completed build. This file is reachable
+// from a pre-install entry (see `pre-install-import-graph.test.ts`, which derives that population
+// rather than naming it), and there it dies on startup with ERR_MODULE_NOT_FOUND.
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { READY_LABEL } from "./ready-label-audit.mjs";
 import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
@@ -546,6 +551,17 @@ function runConflict(issueNumber, rest) {
 }
 
 async function main() {
+  // THE PULL LOOP RESTS ON THIS COMMAND, so a flag it silently discards is the worst place for one.
+  // Measured 2026-09-07 before this guard: `row-claim.mjs check 161 --jsonn` printed the ordinary claim
+  // line and exited 0, and so did `--format=json`. Both look like a machine-readable request that was
+  // honoured.
+  //
+  // `--row=` IS DECLARED ALONGSIDE `--session` because #197 added it while this branch was open: it is
+  // the bare status-read shape below, and a guard listing only `--session` would refuse the command's
+  // own documented invocation. A flag guard that has not been merged forward is a guard that breaks the
+  // thing it protects.
+  refuseUnknownFlags(["--session", "--row="],
+    { entry: import.meta.url, command: "node scripts/row-claim.mjs" });
   const argv = process.argv.slice(2);
   const rowFlag = argv.find((a) => a.startsWith("--row="));
 
