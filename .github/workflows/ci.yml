@@ -237,9 +237,15 @@ jobs:
   # mutually exclusive with `docs`: a diff mixing a board file with any other doc file runs the wider
   # `docs` job instead, never both.
   #
-  # NO BUILD, NO TYPECHECK -- verified, not assumed: none of the six files this job runs import a
-  # `@a11y-witness/*` package (the stale-dist trap CLAUDE.md names for every other job here) or shell out
-  # to `gh` (`github.token` is not needed either). Seconds, not the `docs` job's four minutes.
+  # NO TYPECHECK, NO GH_TOKEN -- verified, not assumed: none of the six files this job runs shell out to
+  # `gh`. A BUILD IS STILL NEEDED, though the first version of this job shipped without one on the strength
+  # of a grep that checked only these test files' own top-level imports: `board-liveness.test.ts`,
+  # `board-markdown.test.ts`, `board-style.test.ts` and `board-summary-origin.test.ts` all drive a real
+  # `scripts/board-*.mjs` script, and those scripts import `@a11y-witness/worker-fleet/cli-flags` --
+  # exactly the stale-dist trap CLAUDE.md names for every other job in this file, reached one hop further
+  # than the grep looked. Caught by actually RUNNING the job's real command with no build present, not by
+  # reading the imports -- this repo's own rule, applied to itself. Still far cheaper than the `docs` job:
+  # six files instead of the whole packaging directory, no coverage, no rules-check.
   board:
     needs: changed
     if: needs.changed.outputs.board == 'true'
@@ -249,6 +255,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
+      - run: npm run build
       - run: npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
 
   # THE RULES FITNESS GATE, ITS OWN JOB -- chairman's direction, 2026-09-06. Used to run inside `ts`

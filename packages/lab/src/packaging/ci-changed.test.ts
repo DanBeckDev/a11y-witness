@@ -24,8 +24,8 @@ const readWorkflow = (name: string) => readFileSync(`${WORKFLOWS}${name}`, "utf8
 
 test("classify: a docs-only change fires only the docs category", () => {
   const result = classify(["docs/known-gaps.md", "README.md"], ["lab", "judge"]);
-  assert.deepEqual(result, { ts: false, python: false, ansible: false, docs: true, changeset: false,
-    rulesFitness: false, packages: [], testPackages: [] });
+  assert.deepEqual(result, { ts: false, python: false, ansible: false, docs: true, board: false,
+    changeset: false, rulesFitness: false, packages: [], testPackages: [] });
 });
 
 test("classify: a source change under one package fires ts, names that package, and nothing else", () => {
@@ -82,8 +82,8 @@ test("classify: a scripts/*.mjs change also touches EVERY known package, for the
 
 test("classify: an unrelated file changes nothing", () => {
   const result = classify([".gitignore"], ["lab"]);
-  assert.deepEqual(result, { ts: false, python: false, ansible: false, docs: false, changeset: false,
-    rulesFitness: false, packages: [], testPackages: [] });
+  assert.deepEqual(result, { ts: false, python: false, ansible: false, docs: false, board: false,
+    changeset: false, rulesFitness: false, packages: [], testPackages: [] });
 });
 
 test("classify: a multi-package, multi-category diff sets every category it touches, independently", () => {
@@ -134,6 +134,27 @@ test("knownPackages finds the real repo's workspace directories, and refuses a s
 // sixty-second budget. `testPackages` is touched packages plus every workspace DEPENDENT, transitively;
 // `rulesFitness` fires the rules-fitness gate only when packages/judge or packages/evidence changed.
 // -------------------------------------------------------------------------------------------------------
+
+test("classify: board fires, and docs does not, when EVERY doc-touching file is a board file", () => {
+  // chairman's follow-up, same day: docs/board/summaries/*.md and docs/board/reported.json are edited far
+  // more often than anything else under docs/, and each edit used to pay the full docs job.
+  const summary = classify(["docs/board/summaries/2026-09-07.md"], ["lab"]);
+  assert.equal(summary.board, true);
+  assert.equal(summary.docs, false, "board and docs are mutually exclusive -- a board-only diff must not "
+    + "also pay for the wider docs job");
+
+  const reported = classify(["docs/board/reported.json"], ["lab"]);
+  assert.equal(reported.board, true);
+  assert.equal(reported.docs, false);
+});
+
+test("classify: mixing a board file with ANY other doc file falls back to the wider docs job", () => {
+  // Narrower-than-usual needs its own argument, and a mixed diff has not made it -- the wider docs job
+  // covers the guards a non-board doc file could plausibly need.
+  const result = classify(["docs/board/summaries/2026-09-07.md", "docs/known-gaps.md"], ["lab"]);
+  assert.equal(result.docs, true);
+  assert.equal(result.board, false);
+});
 
 test("classify: rulesFitness fires on packages/judge or packages/evidence, and nothing else", () => {
   assert.equal(classify(["packages/judge/src/rules.ts"], ["judge"]).rulesFitness, true);
@@ -280,7 +301,7 @@ test("ci.yml has a gate job needing every scoped job, running even when one of t
   assert.ok(gate, "ci.yml must declare a job named 'gate' -- branch protection has nothing else it can "
     + "require that reports on every PR regardless of which path-scoped jobs a diff happened to trigger");
   assert.deepEqual([...gate.needs as string[]].sort(),
-    ["ansible", "changed", "changeset", "docs", "python", "rulesFitness", "ts"].sort(),
+    ["ansible", "board", "changed", "changeset", "docs", "python", "rulesFitness", "ts"].sort(),
     "gate must need every other job in this file, or a job could fail silently with gate still passing");
   assert.equal(gate.if, "always()",
     "gate must run with if: always() -- without it, a failing upstream job would SKIP gate too (a job's "
@@ -289,25 +310,62 @@ test("ci.yml has a gate job needing every scoped job, running even when one of t
 });
 
 test("PROOF: gate's own check fails when a needed job's result is neither success nor skipped", () => {
-  // Extracts the real shell loop from ci.yml's gate job (never re-typed) and drives it with each of the
-  // four real GitHub Actions job-result values, proving the loop actually discriminates rather than
-  // merely looking like it does.
+  // Extracts the real shell loop from ci.yml's gate job (never re-typed) and drives it with real GitHub
+  // Actions job-result values, proving the loop actually discriminates rather than merely looking like it
+  // does. The COUNT of placeholders is read off the loop itself, never hand-typed here -- a hand-typed
+  // count is exactly the "fact stated twice" shape this repo names as its most expensive recurring
+  // defect, and this file already had to bump it three times as `gate`'s own `needs:` list grew.
   const workflow = readWorkflow("ci.yml");
   const loopMatch = /for result in \\[\s\S]*?\n\s*done/.exec(workflow);
   assert.ok(loopMatch, "could not find gate's result-checking loop in the real workflow to drive");
+  const placeholderCount = (loopMatch[0].match(/\$\{\{ needs\.[\w-]+\.result \}\}/g) ?? []).length;
+  assert.ok(placeholderCount > 0, "found no needs.*.result placeholders in the loop -- the regex above no "
+    + "longer matches the real file's shape");
 
   const runWith = (results: string[]) => {
     const script = loopMatch[0]
-      .replace(/"\$\{\{ needs\.\w+\.result \}\}"/g, () => `"${results.shift()}"`)
+      .replace(/"\$\{\{ needs\.[\w-]+\.result \}\}"/g, () => `"${results.shift()}"`)
       + "\necho LOOP_OK";
     return execFileSync("bash", ["-c", script], { encoding: "utf8" });
   };
+  const allGood: string[] = Array.from({ length: placeholderCount },
+    (_, i) => (i % 2 === 0 ? "success" : "skipped"));
+  const withOneReplaced = (index: number, value: string) => {
+    const results = [...allGood];
+    results[index] = value;
+    return results;
+  };
 
-  assert.equal(
-    runWith(["success", "success", "skipped", "success", "skipped", "success", "skipped"]).trim(), "LOOP_OK",
+  assert.equal(runWith([...allGood]).trim(), "LOOP_OK",
     "all success/skipped must pass -- this is the ordinary shape of a docs-only or single-package PR");
-  assert.throws(() => runWith(["success", "failure", "skipped", "success", "skipped", "success", "skipped"]),
-    /Command failed/, "a single 'failure' among the seven must fail the loop, or gate cannot do its job");
-  assert.throws(() => runWith(["success", "cancelled", "skipped", "success", "skipped", "success", "skipped"]),
+  assert.throws(() => runWith(withOneReplaced(1, "failure")),
+    /Command failed/, "a single 'failure' among the results must fail the loop, or gate cannot do its job");
+  assert.throws(() => runWith(withOneReplaced(1, "cancelled")),
     /Command failed/, "'cancelled' must also fail the loop -- an aborted run is not a passed one");
+});
+
+test("ci.yml's board job runs exactly the board guards and the claim guard, and DOES build", () => {
+  const doc = parseYaml(readWorkflow("ci.yml")) as {
+    jobs: Record<string, { if?: string; steps: Array<Record<string, unknown>> }>;
+  };
+  const board = doc.jobs.board;
+  assert.ok(board, "ci.yml must declare a job named 'board'");
+  assert.equal(board.if, "needs.changed.outputs.board == 'true'");
+
+  const runLines = (board.steps ?? []).map((s) => String(s.run ?? "")).join("\n");
+  assert.match(runLines, /packages\/lab\/src\/packaging\/board-\*\.test\.ts/,
+    "the board job must run the board-*.test.ts glob -- board-liveness, board-schedule, board-markdown, "
+    + "board-achievement-staleness, board-style and board-summary-origin, discovered rather than "
+    + "hand-listed");
+  assert.match(runLines, /packages\/lab\/src\/packaging\/public-claim\.test\.ts/,
+    "the board job must also run public-claim.test.ts -- \"the claim guard\", which reads "
+    + "docs/board/reported.json but does not match the board-*.test.ts glob by name");
+  // A BUILD IS NEEDED, and the first version of this test asserted the opposite on the strength of a grep
+  // that checked only these files' own top-level imports. Running the job's real command with no build
+  // present (not reading it) found that board-liveness/board-markdown/board-style/board-summary-origin
+  // each drive a scripts/board-*.mjs script that imports @a11y-witness/worker-fleet/cli-flags -- the
+  // stale-dist trap one hop further than the grep looked.
+  assert.match(runLines, /npm run build/,
+    "the board job must build -- several of its test files drive a scripts/board-*.mjs script that "
+    + "imports @a11y-witness/worker-fleet, which resolves to dist and does not exist unbuilt");
 });

@@ -133,7 +133,28 @@ const ROOT_TS_FILES = new Set([
   ".eslintrc.json", ".eslintrc.cjs", "eslint.config.js", "eslint.config.mjs",
 ]);
 
-const DOC_ROOT_FILES = new Set(["README.md", "CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md", "PLAN.md"]);
+// Exported: `scripts/board-only-check.mjs` needs the identical set to decide "is this a doc-touching
+// file", so the pre-push hook's board-only fast path asks the exact question `classify` does.
+export const DOC_ROOT_FILES = new Set(["README.md", "CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md", "PLAN.md"]);
+
+/**
+ * Is every one of these doc-touching files a BOARD file -- `docs/board/summaries/*.md` or
+ * `docs/board/reported.json` -- the first named instance of "narrower than the general docs case", per
+ * chairman's direction, 2026-09-06, the product manager's single largest recurring cost that night.
+ * `docs/board/summaries/*.md` and `docs/board/reported.json` are edited far more often than anything else
+ * under `docs/`, and every such edit used to pay the full `docs` job (a build, then the whole
+ * `packages/lab/src/packaging/` directory) for a change no rule outside the board guards could possibly
+ * react to. Exported separately from `classify` so the pre-push hook's board-only fast path can ask the
+ * identical question `ci.yml`'s `board` job asks, rather than a second copy of the same two regexes.
+ *
+ * @param {string[]} docsFiles every file already known to be doc-touching (`f.startsWith("docs/")` or a
+ *   `DOC_ROOT_FILES` member) -- callers filter first, since an EMPTY list is not "board-only", it is "no
+ *   doc changed at all", and those are different questions with different callers.
+ */
+export function boardOnly(docsFiles) {
+  return docsFiles.length > 0 && docsFiles.every((f) =>
+    f === "docs/board/reported.json" || /^docs\/board\/summaries\/.*\.md$/.test(f));
+}
 
 /**
  * Classify a list of repo-relative changed paths into which `ci.yml` jobs must run.
@@ -173,16 +194,11 @@ export function classify(files, allPackages, dependencyGraph = {}) {
   const ansible = files.some((f) => f.startsWith("packages/control/ansible/"));
 
   const docsFiles = files.filter((f) => f.startsWith("docs/") || DOC_ROOT_FILES.has(f));
-  // BOARD-ONLY, THE FIRST NAMED INSTANCE OF THIS SHAPE -- chairman's direction, 2026-09-06, the product
-  // manager's single largest recurring cost that night. `docs/board/summaries/*.md` and
-  // `docs/board/reported.json` are edited far more often than anything else under `docs/`, and every such
-  // edit used to pay the full `docs` job (a build, then the whole `packages/lab/src/packaging/` directory)
-  // for a change no rule outside the board guards could possibly react to. `board` is true, and `docs`
-  // FALSE, only when EVERY doc-touching file in the diff is a board file -- mixing in any other doc means
-  // the ordinary, wider `docs` job runs instead, because this file's own rule is "narrower than usual
-  // needs its own argument", and a mixed diff has not made that argument.
-  const board = docsFiles.length > 0 && docsFiles.every((f) =>
-    f === "docs/board/reported.json" || /^docs\/board\/summaries\/.*\.md$/.test(f));
+  // `board` is true, and `docs` FALSE, only when EVERY doc-touching file in the diff is a board file --
+  // see `boardOnly`'s own doc comment for why. Mixing in any other doc means the ordinary, wider `docs`
+  // job runs instead, because this file's own rule is "narrower than usual needs its own argument", and a
+  // mixed diff has not made that argument.
+  const board = docsFiles.length > 0 && boardOnly(docsFiles);
   const docs = docsFiles.length > 0 && !board;
 
   // The exact regex `changeset-check.yml` used before this file existed — kept identical rather than
