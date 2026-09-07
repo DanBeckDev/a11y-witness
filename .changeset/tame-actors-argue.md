@@ -1,5 +1,5 @@
 ---
-"a11y-witness": patch
+"a11ign": patch
 ---
 
 The GitHub PR comment (`packages/cli/src/action/summary.ts`) no longer prints the raw ACT vocabulary

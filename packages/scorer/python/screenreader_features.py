@@ -876,7 +876,7 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # NO SCHEMA BUMP, deliberately. The function changed; the values cannot. A v17 model scored under this
     # pipeline produces identical numbers on every record that exists, so no mismatch is possible and the
     # guarantee `FEATURE_SCHEMA_VERSION` exists to give is not at risk. Bumping would force a retrain and
-    # burn a MAJOR release of `@a11y-witness/scorer` -- the weights are the API -- for a provably
+    # burn a MAJOR release of `@a11ign/scorer` -- the weights are the API -- for a provably
     # zero-difference change.
     #
     # WHAT WOULD CHANGE THAT: the first capture that records an errored disclosure probe. At that point

@@ -1,3 +1,4 @@
+// @ts-check
 // Build every package under `packages/` — `npm run build`.
 //
 // `tsc --build` is given all the package directories at once, so it resolves their `references` itself and
@@ -15,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
 
 import { allPackages } from "./isolation-gate.mjs";
-// RELATIVE, NOT `@a11y-witness/worker-fleet/cli-flags` -- same rule `ci-changed.mjs`'s header already
+// RELATIVE, NOT `@a11ign/worker-fleet/cli-flags` -- same rule `ci-changed.mjs`'s header already
 // states, and `isolation-gate.mjs` (imported above) already follows: this script IS the thing that
 // builds every package's `dist/`, so it cannot depend on a build having already happened. The package
 // specifier resolves to `dist/cli-flags.mjs`, which does not exist on a genuinely fresh checkout --

@@ -75,7 +75,7 @@ export function earlReport(input: EarlAssertionInput): object {
       {
         "@id": "_:assertor",
         "@type": "earl:Software",
-        "dct:title": "a11y-witness",
+        "dct:title": "a11ign",
         "dct:hasVersion": input.toolVersion,
         "dct:description": `Drives a real screen reader. Evidence produced by ${input.environment}.`,
       },

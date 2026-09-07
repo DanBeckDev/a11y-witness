@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // IS THE FIRST-PUBLISH NPM TOKEN STILL THERE AFTER IT SHOULD BE GONE? — #73, built alongside #72.
 //
 //   npm run npm-token:check            say whether NPM_TOKEN is gone, present, or unaskable
@@ -35,7 +36,7 @@
 // the same reason `evidence:check` has an INCONCLUSIVE exit distinct from both SAME and CHANGED.
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { REPO, gh } from "./board-data.mjs";
 
 const ISSUE = "73";
@@ -94,7 +95,11 @@ export function tokenLivenessVerdict({ today, present }) {
   return { code: EXIT.ALIVE, headline: `${SECRET_NAME} is gone`, detail: "" };
 }
 
-/** `true`/`false` when the ask succeeded, `"unknown"` when it could not be asked at all. */
+/**
+ * `true`/`false` when the ask succeeded, `"unknown"` when it could not be asked at all.
+ * @param {string} org
+ * @param {string} name
+ */
 function secretPresent(org, name) {
   let out;
   try {
@@ -107,7 +112,11 @@ function secretPresent(org, name) {
   return JSON.parse(out).some((/** @type {{name: string}} */ s) => s.name === name);
 }
 
-/** One comment per spell, not one per push. A warning that repeats is a warning people filter. */
+/**
+ * One comment per spell, not one per push. A warning that repeats is a warning people filter.
+ * @param {string} issue
+ * @param {{ code: number, headline: string, detail: string }} verdict
+ */
 function postOnce(issue, verdict) {
   const marker = `${SECRET_NAME} liveness: ${verdict.headline}`;
   const existing = gh(["issue", "view", issue, "--repo", REPO, "--json", "comments", "--jq",

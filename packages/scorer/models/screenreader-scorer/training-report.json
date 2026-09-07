@@ -1,5 +1,5 @@
 {
-  "schema": "a11y-witness/screenreader-scorer-training",
+  "schema": "a11ign/screenreader-scorer-training",
   "encoder": {
     "path": "/opt/a11y/packages/scorer/models/encoders/all-MiniLM-L6-v2",
     "hiddenSize": 384,

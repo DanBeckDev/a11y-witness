@@ -16,7 +16,7 @@ test("every required ACT field is present and says something", () => {
   // ACT names these as required. `assumptions` and `accessibilitySupport` are the two that earn the file,
   // so they are held to a length that a placeholder would not reach.
   for (const rule of ACT_RULES) {
-    assert.match(rule.id, /^a11y-witness:[a-z-]+$/, "identifiers must be namespaced and stable");
+    assert.match(rule.id, /^a11ign:[a-z-]+$/, "identifiers must be namespaced and stable");
     assert.match(rule.version, /^\d{4}-\d{2}-\d{2}$/, `${rule.id} needs a version`);
     assert.ok(rule.applicability.length > 30, `${rule.id} must say what it applies to`);
     assert.ok(rule.expectation.length > 20, `${rule.id} must say what passing means`);
@@ -110,15 +110,15 @@ test("only the announcement-reading rules claim conformance", () => {
     .map((r) => r.id)
     .sort();
   assert.deepEqual(asserting, [
-    "a11y-witness:unlabelled-image",
-    "a11y-witness:unnamed-control",
+    "a11ign:unlabelled-image",
+    "a11ign:unnamed-control",
   ]);
 });
 
 test("the rule that has been wrong before says so in its assumptions", () => {
   // The census rule reported CSS list bullets as images missing text alternatives, on a page W3C publishes
   // as conformant. A metadata file that quietly omitted that would be marketing, not documentation.
-  const census = ACT_RULES.find((r) => r.id === "a11y-witness:unnamed-graphic-count")!;
+  const census = ACT_RULES.find((r) => r.id === "a11ign:unnamed-graphic-count")!;
   assert.match(census.assumptions.join(" "), /list-style-image|bullet/i);
   assert.match(census.assumptions.join(" "), /WRONG once|already been wrong/i);
 });

@@ -34,8 +34,8 @@
  */
 
 /** One channel-tagged piece of evidence. The featurizer's unit of input. */
-import type { CaptureStructure } from "@a11y-witness/evidence";
-import { annotateCapture } from "@a11y-witness/evidence";
+import type { CaptureStructure } from "@a11ign/evidence";
+import { annotateCapture } from "@a11ign/evidence";
 
 export interface EvidenceUnit {
   channel: string;
@@ -154,7 +154,7 @@ export function captureEvidenceText(capture: ScorableCapture): string {
  * Which capture PRODUCER populates each channel — the sweep type, or the read-through.
  *
  * Needed to answer "was the evidence the model sees complete?". `captureWasTruncated`
- * (`@a11y-witness/evidence/verify`) reports incomplete channels by sweep type, and most of what it reports
+ * (`@a11ign/evidence/verify`) reports incomplete channels by sweep type, and most of what it reports
  * never reaches a model: of 26 real-page captures ALL 26 were truncated somewhere, but only 16 on a channel
  * the model reads. `link`, `list`, `graphic` and `landmark` sweeps starve first on a big page and none of
  * them is an input, so gating on them would discard the whole corpus for evidence nobody consumes.
