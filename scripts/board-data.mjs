@@ -196,6 +196,39 @@ export function reported() {
  * @returns {string | null} the gate's own spread sentence, or null when it printed none (not a real-page
  *   result, or an older recording taken before the gate stated its spread)
  */
+/** The verdicts a gate PRINTED, quoted from its own output and never retyped.
+ *
+ * THE BOARD'S DOCUMENT COULD NOT SAY WHETHER A CHECK PASSED. `board-report.mjs` prints the gate's whole
+ * output verbatim into the GitHub edition; the PDF quoted only the COMMAND and the capture spread. So the
+ * two editions would have disagreed about whether a check passed, and the silent one is the one the board
+ * reads -- found 2026-09-07, the day before the first FAIL was due to be recorded.
+ *
+ * Quoted, never classified. A gate states its own verdict in its own sentence; this returns those
+ * sentences. Deciding whether a FAIL blocks anything is a JUDGEMENT and is not derivable from the output,
+ * which is why `note` on the entry carries it and why an unexplained FAIL renders as unexplained rather
+ * than as an opinion this file invented.
+ */
+export function gateVerdicts(gateOutput) {
+  const lines = String(gateOutput ?? "").split("\n");
+  const found = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    // A verdict is the word at the head of its own clause, so `RULES: PASS -- ...` and `PASS -- ...`
+    // both count and the word inside a sentence ("a page that FAILS this rule") does not.
+    const m = /^(?:[A-Za-z: ]{0,24}?\b)?(PASS|FAIL|BLOCKED|INCONCLUSIVE)\b\s*(?:[—-]\s*(.*))?$/.exec(line);
+    if (m) found.push({ verdict: m[1], line });
+  }
+  return found;
+}
+
+/** The single worst verdict a gate printed, or null when it printed none. */
+export function worstVerdict(gateOutput) {
+  const order = { PASS: 0, INCONCLUSIVE: 1, BLOCKED: 2, FAIL: 3 };
+  const all = gateVerdicts(gateOutput);
+  if (all.length === 0) return null;
+  return all.reduce((w, v) => (order[v.verdict] > order[w.verdict] ? v : w), all[0]);
+}
+
 export function realPageCaptureAge(gateOutput) {
   if (!gateOutput) return null;
   const spread = gateOutput.match(/\*{0,3}\s*\d+\s*hour\(s\)\s*between the oldest and newest[^\n]*/i);
