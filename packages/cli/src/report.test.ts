@@ -262,15 +262,39 @@ test("#40: the legend is not repeated -- one explanation, not three slightly dif
     "the old per-finding-section legend text must be gone, not duplicated alongside the new one");
 });
 
-test("#40: the outcomes tally explains cantTell/untested only in the shared legend, not a second time", () => {
+test("#40: the outcomes tally explains asserted/referred/untested only in the shared legend, not a second time", () => {
   const outcomes = [
     { criterion: "1.1.1", outcome: "cantTell" as const, reason: "abstained" },
     { criterion: "2.4.3", outcome: "untested" as const, reason: "no assessor" },
   ];
   const output = render({ outcomes });
-  assert.match(output, /cantTell 1/);
+  assert.match(output, /referred 1/);
   assert.doesNotMatch(output, /no assessor of ours covers it/,
     "the old inline gloss inside outcomesSection must be gone -- the shared legend already said this");
+});
+
+/**
+ * #242, wording decided by `ceo`: `asserted` ("this FAILS the criterion") and `referred` ("worth a
+ * person's eyes; the tool cannot decide this one") replace ACT's own `failed`/`cantTell` at every point a
+ * stranger reads the report. `cantTell` IS ACT's own vocabulary and stays exactly that in the
+ * machine-readable field a consumer of `CriterionOutcome[]` (and `--json`) reads -- so the acceptance is
+ * not "never appears", it is "appears exactly once, in the legend's own parenthetical, and nowhere a
+ * finding is actually reported."
+ */
+test("#242: `cantTell` appears exactly once -- the legend's parenthetical -- never on a finding line", () => {
+  const outcomes = [
+    { criterion: "1.1.1", outcome: "cantTell" as const, reason: "the scorer abstained" },
+    { criterion: "4.1.2", outcome: "failed" as const, reason: "a finding establishes this" },
+  ];
+  const output = render({ outcomes });
+  const occurrences = output.match(/cantTell/g) ?? [];
+  assert.equal(occurrences.length, 1,
+    "exactly one occurrence, in the legend's parenthetical -- any more means it leaked onto a finding line");
+  assert.match(output, /\(ACT: `cantTell`\)/, "and that one occurrence is the legend's own gloss");
+  assert.match(output, /\[ASSERTED\]/, "the per-outcome tag for a FAILED criterion, not the ACT word");
+  assert.match(output, /\[REFERRED\]/, "the per-outcome tag for a criterion needing a person's eyes");
+  assert.match(output, /asserted 1/, "and in the tally line");
+  assert.match(output, /referred 1/);
 });
 
 test("and IS printed when there are findings, because then it describes them", () => {
