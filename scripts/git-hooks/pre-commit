@@ -85,3 +85,43 @@ if [ "$count" -gt "$MAX_FILES" ]; then
   echo "Name the paths you mean, or set A11Y_COMMIT_ALL=1 if the breadth is deliberate." >&2
   exit 1
 fi
+
+# `cmd | head` (or `| tail`, `| grep`) reports the STATUS TOOL's exit code, not the piped command's --
+# issue #180, measured twice in one night, once an hour after the first was diagnosed and warned about.
+# Scoped to files where this shape gets BAKED IN and runs repeatedly (shell scripts, CI/ansible YAML,
+# this hook itself, package.json) -- not .md, where the exact same text is usually the rule being
+# DOCUMENTED, not committed. `A11Y_ALLOW_PIPED_EXIT_STATUS=1` overrides.
+if [ "${A11Y_ALLOW_PIPED_EXIT_STATUS:-0}" != "1" ]; then
+  # Resolved relative to THIS script, never `git rev-parse --show-toplevel` -- the hook is exercised in
+  # `pre-commit-hook.test.ts` against a disposable sandbox repo whose toplevel is not this checkout, and
+  # the guard script only exists here.
+  guard_script="$(cd "$(dirname "$0")/.." && pwd)/piped-exit-status-guard.mjs"
+  hazard_hits=""
+  while IFS= read -r f; do
+    case "$f" in
+      *.sh|*.yml|*.yaml|package.json|scripts/git-hooks/*) ;;
+      *) continue ;;
+    esac
+    [ -f "$f" ] || continue
+    while IFS= read -r line; do
+      case "$line" in
+        +++*) continue ;;
+        +*)
+          added="${line#+}"
+          [ -z "$added" ] && continue
+          if ! node "$guard_script" "$added" >/dev/null 2>&1; then
+            hazard_hits="$hazard_hits  $f: $added"$'\n'
+          fi
+          ;;
+      esac
+    done <<< "$(git diff --cached -U0 --no-color -- "$f")"
+  done <<< "$staged"
+
+  if [ -n "$hazard_hits" ]; then
+    echo "pre-commit: refusing — a newly staged line pipes into head/tail/grep and then reads \$?," >&2
+    echo "which names the STATUS TOOL's exit code, not the piped command's (issue #180):" >&2
+    printf '%s' "$hazard_hits" >&2
+    echo "Fix the line, or set A11Y_ALLOW_PIPED_EXIT_STATUS=1 if this is a false positive." >&2
+    exit 1
+  fi
+fi
