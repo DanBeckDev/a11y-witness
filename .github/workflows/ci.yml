@@ -303,7 +303,18 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
       - run: npm run build
-      - run: npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
+      # GH_TOKEN: `board-*.test.ts` reach real `gh` calls TRANSITIVELY -- `board-style.test.ts` imports
+      # `scripts/board-data.mjs`, whose `collect()` shells out to `gh issue list`. The `ts` job has carried
+      # this env, with a comment naming board-style.test.ts as the reason, since before these tests were
+      # split into their own job -- and the env did not travel with them. Read-only; `github.token` already
+      # has that scope for the repo the workflow runs in.
+      #
+      # `gh-token-jobs.test.ts` pins the CLASS: it walks each job's test glob and every LOCAL import
+      # beneath it, and requires GH_TOKEN on any job that can reach a `gh` spawn. A test grepping the test
+      # FILES alone would have found nothing here -- neither board test names `gh` at all.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
 
   # THE RULES FITNESS GATE, ITS OWN JOB -- chairman's direction, 2026-09-06. Used to run inside `ts`
   # unconditionally on every package change; now gated on `rulesFitness`, true only when
