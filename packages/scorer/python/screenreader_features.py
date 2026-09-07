@@ -95,9 +95,20 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # inert; it is the reason the real-page tier exists.
 # v19, 2026-09-03: the observation FEATURE CROSS. Ten structured features are `float(bool(channel))` and
 # `any([])` is `False`, so a `0` means both "the page has none" and "nothing looked". Measured on the
-# authoritative corpus: 61.7% of empty `formChanges`, 56.1% of empty `postSubmitFields` and 65.3% of the
-# `formControl` sweep are the second. A head can therefore take a free negative weight on a capture
-# CONDITION, which is ADR 0015's entire subject.
+# authoritative corpus: 61.7% of empty `formChanges` and 56.1% of empty `postSubmitFields` are the
+# second (`emptyNotAsked`). A head can therefore take a free negative weight on a capture CONDITION,
+# which is ADR 0015's entire subject.
+#
+# `formControl` has NO never-asked figure, and not because it has not been measured recently -- the
+# quantity does not exist for that channel. `emptyNotAsked` is computed only for `formChanges` and
+# `postSubmitFields` (`observation-ambiguity.mjs`'s `CHANNEL_TO_OBSERVED`); `formControl` has never been
+# among them, in any commit of that file. **65.3% was previously quoted here as a third never-asked
+# rate, for the `formControl` sweep -- that was false.** The closest real figure, `cannotSay/empty` at
+# 64.5% for `formControl`, answers a DIFFERENT question: "no census to compare against", a statement
+# about the CORPUS'S AGE, not about any page (`observation-ambiguity.mjs`'s own `cannotSay` comment).
+# The provenance of 65.3% is lost -- likely corpus age mislabelled as never-asked, but that is an
+# inference nobody can prove, and a record that guesses at its own history is worse than one that
+# admits the gap. See #341.
 #
 # Two routes were closed before this one. Masking was REFUTED (not-working §15, it cost a real finding),
 # and giving the model `observed` as its own column was DECIDED AGAINST (§14, for the shortcut risk). This
