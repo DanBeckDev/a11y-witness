@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // IS THIS PR ACTUALLY TESTED? -- asked of the check RUNS, never of `mergeStateStatus`.
 //
 // `mergeStateStatus` cannot tell "every required check passed" from "no check ever ran", and on
@@ -31,25 +32,49 @@
 // reach far enough back. **Ask the authoritative source and let it tell you what it is bounded to** --
 // `/commits/<sha>/check-runs` for the head sha, never a grep over the most recent runs.
 //
-//   node scripts/merge-guard.mjs <pr-number>
+//   node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close]
 //
 // Exit codes are the contract:
 //   0  READY      -- based on main, every required context present and concluded, tested against this main
 //   1  REFUSED    -- and it NAMES which of the reasons, because they need different fixes
 //   2  CANNOT ASK -- a lookup failed. INCONCLUSIVE, never "fine": reporting an unaskable question as
 //                    clean is how "verified" comes to mean "unexamined"
+//
+// #249: ARMING CLOSES ROWS, AND NOTHING AT THAT END EVER CHECKED WHETHER SOMEBODY ELSE WAS INSIDE ONE.
+// `row-claim check` runs before a worker DISPATCHES or STARTS a row; nothing ran before a PR closing that
+// row was ARMED, and arming is the act that actually closes it. Measured 2026-09-07: PR #245 was armed
+// while the row it closed (#237) carried `in-progress`, `session:worker-judge`, `started` -- a second,
+// independent fix on that row was discarded. Ninth dispatch collision that night, seventh from the
+// dispatcher, who had been the one running `row-claim check` correctly at the OTHER end of the loop every
+// time.
+//
+// So this guard now asks GitHub what a PR would close (`closingIssuesReferences` -- resolved server-side,
+// never a `Closes #N` regex over the PR body) and reuses `row-claim.mjs`'s own claim predicate,
+// `decideClaim`, rather than re-deriving "is this row somebody else's" a second time. `decideClaim`
+// already draws the one line this needs: resuming your OWN claimed row is not a collision, which is why
+// `--session=<name>` exists here -- the identity of whoever is running this check, compared against the
+// `session:*` label on each row it would close. Omit it and every claimed row it would close reads as
+// somebody else's, which is the conservative default: a check that does not know who is asking cannot
+// vouch for the asker.
+//
+// NOT A POLICY CHANGE ABOUT WHO MAY ARM. A dispatcher who has confirmed with the row's holder should be
+// able to proceed, and `--allow-claimed-close` is that escape hatch -- printed, never silent, the same
+// shape `--allow-stale-workers` already uses elsewhere in this repo, because a bypass nobody can see is
+// one that becomes the default.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
+import { decideClaim } from "./row-claim.mjs";
 
 const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2 };
 
 /** A concluded context that does not block a merge. `skipped` is a path filter declining, not a failure. */
 const SATISFIED = new Set(["success", "skipped", "neutral"]);
 
+/** @param {string[]} args */
 export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
 /**
@@ -64,15 +89,18 @@ export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: 
  *          required: string[] | null,
  *          runs: {name: string, status: string, conclusion: string | null, completedAt: string | null}[] | null,
  *          mainTipIso: string | null,
- *          behindBy: number | null}} facts
+ *          behindBy: number | null,
+ *          closes?: {number: number, title?: string, labels: string[]}[] | null,
+ *          session?: string | null}} facts
  * @returns {{code: number, reasons: string[], notes: string[]}}
  */
-export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy }) {
+export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, closes = [], session = null }) {
   const missingLookups = [
     required === null && "the required status checks for `main` (branch protection)",
     runs === null && `the check runs for head ${pr.headRefOid.slice(0, 10)}`,
     mainTipIso === null && "the current tip of `main`",
     behindBy === null && "whether this head contains `main`'s tip (the compare API)",
+    closes === null && "which rows this PR would close (the closingIssuesReferences lookup)",
   ].filter(Boolean);
   if (missingLookups.length > 0) {
     return { code: EXIT.CANNOT_ASK, notes: [], reasons: [
@@ -83,11 +111,47 @@ export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy }) {
 
   const notes = pr.state === "OPEN" ? []
     : [`note: #${pr.number} is ${pr.state}, so this is a post-mortem rather than a merge decision.`];
-  const reasons = [...baseReason(pr), ...checkReasons(pr, required, runs),
-    ...ancestryReason(behindBy), ...stalenessReason(runs, mainTipIso)];
+  // Already proven non-null by `missingLookups` above -- TS's narrowing does not follow a null check
+  // performed inside an array-literal expression, so the casts restate what the guard clause established.
+  const knownRequired = /** @type {string[]} */ (required);
+  const knownRuns = /** @type {{name: string, status: string, conclusion: string | null,
+    completedAt: string | null}[]} */ (runs);
+  const knownMainTipIso = /** @type {string} */ (mainTipIso);
+  const knownCloses = /** @type {{number: number, title?: string, labels: string[]}[]} */ (closes);
+  const reasons = [...baseReason(pr), ...checkReasons(pr, knownRequired, knownRuns),
+    ...ancestryReason(behindBy), ...stalenessReason(knownRuns, knownMainTipIso),
+    ...closingClaimReasons(knownCloses, session)];
   return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons, notes };
 }
 
+/**
+ * WOULD ARMING THIS PR CLOSE A ROW SOMEBODY ELSE IS INSIDE? — #249.
+ *
+ * Reuses `row-claim.mjs`'s own claim predicate rather than re-deriving "is this row somebody else's" a
+ * second time in this file: `decideClaim` already draws the line that resuming your OWN claimed row is
+ * not a collision (row-claim.mjs, `decideClaim`'s own doc comment). `session` is who is running THIS
+ * check, never inferred from the PR -- omit it and every claimed row this PR would close reads as
+ * somebody else's, which is the safe default when the asker has not said who they are.
+ *
+ * @param {{number: number, title?: string, labels: string[]}[]} closes
+ * @param {string | null} session
+ * @returns {string[]}
+ */
+function closingClaimReasons(closes, session) {
+  const reasons = [];
+  for (const issue of closes) {
+    const decision = decideClaim(issue.labels, session ?? "");
+    if (!decision.proceed) {
+      reasons.push(`WOULD CLOSE #${issue.number}${issue.title ? ` "${issue.title}"` : ""}, but `
+        + `${decision.reason}.\n`
+        + "  Arming this PR closes that row whether or not you hold it. Confirm with whoever does, or\n"
+        + "  wait -- or pass `--allow-claimed-close` if you have already confirmed.");
+    }
+  }
+  return reasons;
+}
+
+/** @param {{baseRefName: string}} pr */
 function baseReason(pr) {
   if (pr.baseRefName === "main") return [];
   return [`BASE IS NOT main — it is \`${pr.baseRefName}\`.\n`
@@ -96,6 +160,12 @@ function baseReason(pr) {
     + "  base first and let this one re-open against `main`."];
 }
 
+/**
+ * @param {{headRefOid: string}} pr
+ * @param {string[]} required
+ * @param {{name: string, status: string, conclusion: string | null}[]} runs
+ * @returns {string[]}
+ */
 export function checkReasons(pr, required, runs) {
   if (runs.length === 0) {
     return [`NO CHECK RUNS EXIST for head ${pr.headRefOid.slice(0, 10)} — not one, ever.\n`
@@ -108,12 +178,14 @@ export function checkReasons(pr, required, runs) {
   const failing = runs.filter((run) => run.status === "completed" && !SATISFIED.has(run.conclusion ?? ""))
     .map((run) => `${run.name} (${run.conclusion})`);
 
+  // `.filter(Boolean)` does not narrow `(string | false)[]` to `string[]` -- a well-known TS gap, not a
+  // behaviour bug -- so the predicate says so explicitly.
   return [
     missing.length > 0 && `REQUIRED CONTEXT NEVER RAN: ${missing.join(", ")}.\n`
       + "  Present-and-failing and never-ran are different states; this is the second.",
     unfinished.length > 0 && `STILL RUNNING: ${unfinished.join(", ")}. Not a refusal forever — ask again.`,
     failing.length > 0 && `FAILING: ${failing.join(", ")}.`,
-  ].filter(Boolean);
+  ].filter(/** @returns {reason is string} */ (reason) => Boolean(reason));
 }
 
 /**
@@ -123,6 +195,10 @@ export function checkReasons(pr, required, runs) {
  * current; #135's finished 00:08:02Z against that same tip and is not. The comparison is deliberately
  * against the COMMIT DATE of `main`'s tip rather than against a run of `main`, because what matters is
  * whether this head was ever tested alongside the code it is about to join.
+ *
+ * @param {{completedAt: string | null}[]} runs
+ * @param {string} mainTipIso
+ * @returns {string[]}
  */
 function stalenessReason(runs, mainTipIso) {
   const finished = runs.map((run) => run.completedAt).filter(Boolean).sort();
@@ -195,6 +271,7 @@ function ancestryReason(behindBy) {
  * log from "nothing ever disagreed", which is exactly the failure mode this row exists to close. The git
  * common dir resolves to the SAME `.git` for the primary and every worktree.
  */
+/** @type {[RegExp, string][]} */
 const REASON_KINDS = [
   [/^BASE IS NOT main/, "BASE_NOT_MAIN"],
   [/^NO CHECK RUNS EXIST/, "NO_RUNS"],
@@ -203,6 +280,7 @@ const REASON_KINDS = [
   [/^FAILING/, "FAILING"],
   [/^THIS HEAD DOES NOT CONTAIN main's TIP/, "ANCESTRY"],
   [/^EVERY RUN PREDATES THE CURRENT main/, "STALE"],
+  [/^WOULD CLOSE #/, "CLAIMED_BY_ANOTHER_SESSION"],
 ];
 
 /**
@@ -218,12 +296,21 @@ export function reasonKind(reason) {
   return hit ? hit[1] : "UNCLASSIFIED";
 }
 
-/** Never a silent no-op: a write failure is the exact defect this mechanism exists to avoid. */
-function appendJsonl(path, entry) {
+/**
+ * Never a silent no-op: a write failure is the exact defect this mechanism exists to avoid.
+ *
+ * Exported (#226) so a second log -- `row-claim`'s check/conflict log -- reuses this rather than
+ * re-deriving "append one JSON line, fail loud" a second time in this repo.
+ *
+ * @param {string} path
+ * @param {object} entry
+ */
+export function appendJsonl(path, entry) {
   try {
     appendFileSync(path, `${JSON.stringify(entry)}\n`);
   } catch (error) {
-    throw new Error(`could not write the merge-guard log at ${path}: ${error.message}`, { cause: error });
+    throw new Error(`could not write the log at ${path}: ${/** @type {Error} */ (error).message}`,
+      { cause: error });
   }
 }
 
@@ -241,7 +328,12 @@ export function agreementLogPath() {
   return `${gitCommonDir()}/merge-guard-agreement-log.jsonl`;
 }
 
-/** Appends one verdict. Called on every live guard run against an OPEN PR. */
+/**
+ * Appends one verdict. Called on every live guard run against an OPEN PR.
+ * @param {string} logPath
+ * @param {number} prNumber
+ * @param {{code: number, reasons: string[]}} verdict
+ */
 export function recordVerdict(logPath, prNumber, verdict) {
   appendJsonl(logPath, {
     prNumber, at: new Date().toISOString(),
@@ -250,7 +342,12 @@ export function recordVerdict(logPath, prNumber, verdict) {
   });
 }
 
-/** The most recently recorded verdict for a PR, or null if none was ever recorded. */
+/**
+ * The most recently recorded verdict for a PR, or null if none was ever recorded.
+ * @param {string} logPath
+ * @param {number} prNumber
+ * @returns {{prNumber: number, at: string, code: number, reasonKinds: string[]} | null}
+ */
 export function latestVerdictFor(logPath, prNumber) {
   let text;
   try {
@@ -324,7 +421,12 @@ export function reconcile({ prNumber, recordedVerdict, realOutcome, resolvedAt }
   };
 }
 
-/** Each lookup returns null on failure rather than an empty answer — the distinction the verdict needs. */
+/**
+ * Each lookup returns null on failure rather than an empty answer — the distinction the verdict needs.
+ * @template T
+ * @param {() => T} fn
+ * @returns {T | null}
+ */
 export function lookup(fn) {
   try {
     return fn();
@@ -345,14 +447,41 @@ export function lookupRequiredContexts() {
     gh(["api", `repos/${REPO}/branches/main/protection/required_status_checks`])).contexts);
 }
 
-/** Every check run recorded against a commit sha, or `null` if the lookup failed. */
+/**
+ * Every check run recorded against a commit sha, or `null` if the lookup failed.
+ * @param {string} sha
+ * @returns {{name: string, status: string, conclusion: string | null, completedAt: string | null}[] | null}
+ */
 export function lookupCheckRuns(sha) {
   return lookup(() => JSON.parse(
     gh(["api", `repos/${REPO}/commits/${sha}/check-runs`, "--paginate"])).check_runs
-    .map((run) => ({ name: run.name, status: run.status, conclusion: run.conclusion,
-      completedAt: run.completed_at })));
+    .map((/** @type {{name: string, status: string, conclusion: string | null, completed_at: string | null}} */ run) => (
+      { name: run.name, status: run.status, conclusion: run.conclusion, completedAt: run.completed_at })));
 }
 
+/**
+ * Which issues arming PR `number` would close, resolved by GitHub itself (never a `Closes #N` regex over
+ * the PR body) -- #249. `null` on failure, same as every other lookup here.
+ * @param {number} number
+ * @returns {{number: number, title?: string, labels: string[]}[] | null}
+ */
+export function lookupClosingIssues(number) {
+  return lookup(() => {
+    const [owner, name] = REPO.split("/");
+    const query = "query($owner:String!,$name:String!,$number:Int!){"
+      + "repository(owner:$owner,name:$name){pullRequest(number:$number){"
+      + "closingIssuesReferences(first:20){nodes{number title labels(first:20){nodes{name}}}}}}}";
+    const data = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`,
+      "-F", `owner=${owner}`, "-F", `name=${name}`, "-F", `number=${number}`]));
+    return data.data.repository.pullRequest.closingIssuesReferences.nodes.map(
+      (/** @type {{number: number, title: string, labels: {nodes: {name: string}[]}}} */ issue) => ({
+        number: issue.number, title: issue.title,
+        labels: issue.labels.nodes.map((/** @type {{name: string}} */ l) => l.name),
+      }));
+  });
+}
+
+/** @param {number} number */
 function facts(number) {
   // DELIBERATELY NOT REQUESTING `mergeStateStatus`. Asking for it at all would invite the next reader to
   // use it, and this tool's entire reason for existing is that its answer cannot be trusted here.
@@ -370,10 +499,14 @@ function facts(number) {
       `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
     return typeof value === "number" ? value : null;
   });
-  return { pr, required, runs, mainTipIso, behindBy };
+  const closes = lookupClosingIssues(number);
+  return { pr, required, runs, mainTipIso, behindBy, closes };
 }
 
-/** `--reconcile <n>`: compare the LAST recorded verdict for #n against its real, terminal outcome (#188). */
+/**
+ * `--reconcile <n>`: compare the LAST recorded verdict for #n against its real, terminal outcome (#188).
+ * @param {number} number
+ */
 function reconcileCommand(number) {
   const recordedVerdict = latestVerdictFor(verdictLogPath(), number);
   const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
@@ -381,7 +514,11 @@ function reconcileCommand(number) {
   const realOutcome = realOutcomeFor(pr.state);
   const resolvedAt = pr.mergedAt ?? pr.closedAt ?? null;
   const result = reconcile({ prNumber: number, recordedVerdict, realOutcome, resolvedAt });
-  if (result.code !== EXIT.READY) {
+  // NARROWED ON `record`, NEVER ON `code` -- `code` is typed as plain `number` in both branches of
+  // `reconcile`'s return union, so comparing it to `EXIT.READY` (also a plain number) cannot narrow
+  // which branch this is. `record` is the actual discriminant: null in one branch, an object in the
+  // other. Checking the wrong field type-checked as fine before #234 added `@ts-check` to this file.
+  if (result.record === null) {
     console.error(`CANNOT RECONCILE #${number}: ${result.reason}`);
     process.exit(result.code);
   }
@@ -393,10 +530,11 @@ function reconcileCommand(number) {
 }
 
 function main() {
-  refuseUnknownFlags(["--reconcile"], { entry: import.meta.url, command: "node scripts/merge-guard.mjs" });
+  refuseUnknownFlags(["--reconcile", "--session", "--allow-claimed-close"],
+    { entry: import.meta.url, command: "node scripts/merge-guard.mjs" });
   const number = process.argv.slice(2).find((arg) => /^\d+$/.test(arg));
   if (!number) {
-    console.error("Usage: node scripts/merge-guard.mjs <pr-number>\n"
+    console.error("Usage: node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close]\n"
       + "       node scripts/merge-guard.mjs --reconcile <pr-number>\n"
       + "Answers whether that PR has actually been tested, by reading its check RUNS rather than\n"
       + "`mergeStateStatus` -- which reports CLEAN for a PR that has never run a check. `--reconcile`\n"
@@ -409,16 +547,36 @@ function main() {
     return;
   }
 
-  const verdict = mergeReadiness(facts(Number(number)));
+  const sessionArg = process.argv.find((arg) => arg.startsWith("--session="));
+  const session = sessionArg ? sessionArg.slice("--session=".length) : null;
+  const allowClaimedClose = process.argv.includes("--allow-claimed-close");
+
+  const verdict = mergeReadiness({ ...facts(Number(number)), session });
   recordVerdict(verdictLogPath(), Number(number), verdict);
   for (const note of verdict.notes) console.error(note);
-  if (verdict.code === EXIT.READY) {
+
+  // `--allow-claimed-close` OVERRIDES ONLY THE CLAIM-COLLISION REASON, never any other refusal, and
+  // never a CANNOT_ASK (that code carries a lookup-failure message, not a reasons list to filter) --
+  // and it PRINTS what it bypassed, following the `--allow-stale-workers` precedent: a bypass nobody
+  // can see is one that becomes the default.
+  const applyOverride = allowClaimedClose && verdict.code === EXIT.REFUSED;
+  const overridden = applyOverride
+    ? verdict.reasons.filter((r) => reasonKind(r) === "CLAIMED_BY_ANOTHER_SESSION") : [];
+  const remaining = applyOverride
+    ? verdict.reasons.filter((r) => reasonKind(r) !== "CLAIMED_BY_ANOTHER_SESSION") : verdict.reasons;
+  for (const reason of overridden) {
+    console.error(`OVERRIDDEN by --allow-claimed-close: ${reason}`);
+  }
+  const code = verdict.code === EXIT.CANNOT_ASK ? EXIT.CANNOT_ASK
+    : (remaining.length > 0 ? EXIT.REFUSED : EXIT.READY);
+
+  if (code === EXIT.READY) {
     console.log(`#${number} is tested: based on main, every required context present and concluded, and `
       + "this head CONTAINS main's tip -- so what ran, ran against the code it is about to join.");
-  } else {
-    console.error(`REFUSING #${number}:\n${verdict.reasons.map((r) => `- ${r}`).join("\n")}`);
+  } else if (code === EXIT.REFUSED) {
+    console.error(`REFUSING #${number}:\n${remaining.map((r) => `- ${r}`).join("\n")}`);
   }
-  process.exit(verdict.code);
+  process.exit(code);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
