@@ -66,8 +66,18 @@ export function checkPipedExitStatus(cmd) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
-  // Guarded per #164: takes the command POSITIONALLY (argv[2]) and no flags.
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/piped-exit-status-guard.mjs" });
+  // Guarded per #164: takes the command POSITIONALLY (argv[2]) and no flags. The check is scoped to
+  // `process.argv.slice(3)` -- everything AFTER that positional -- never the default `.slice(2)`.
+  // The positional is arbitrary shell/YAML text and routinely starts with `-` or `--` on its own merits
+  // (`---`, a YAML doc marker; `--foo` inside a shell command being checked) -- checking it for
+  // flag-shape misreads the PAYLOAD as an unknown flag on this CLI's own command line (#349). Found the
+  // day this guard shipped, false-flagging on its own pre-commit hook: `node ... "---"` (the line the
+  // pre-commit hook feeds it for any newly-staged YAML file) refused with "unknown flag ---".
+  refuseUnknownFlags([], {
+    entry: import.meta.url,
+    command: "node scripts/piped-exit-status-guard.mjs",
+    argv: process.argv.slice(3),
+  });
   const cmd = process.argv[2];
   if (!cmd) {
     console.error("usage: piped-exit-status-guard.mjs '<shell command string>'");
