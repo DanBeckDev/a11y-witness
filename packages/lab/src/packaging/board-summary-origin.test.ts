@@ -250,3 +250,44 @@ test("main() feeds the RECORD's verdict the origin copy too, and asks whatever t
   assert.equal((main.match(/reported\.code === EXIT\.WILL_RENDER/g) ?? []).length, 2,
     "both exit paths print it: the one where a summary exists, and the one where none does");
 });
+
+/* THE ONE PIECE OF #159 THAT NOTHING RAN.
+ *
+ * Every test above hands `reportedDifferences` hand-built JSON STRINGS, which is right for what they
+ * check -- the entry-identity property, position-insensitivity, reformat-is-not-a-finding. But the
+ * directory-to-object reconstruction those strings stand in for is the only genuinely new code in the
+ * migration, and the sole thing validating it was a source-regex asserting `main()` mentions
+ * `dirOnOriginMain`.
+ *
+ * A REGEX OVER SOURCE TEXT IS NOT A TEST OF BEHAVIOUR -- this repository's own rule, and it has already
+ * paid for it: a signal-type scrape once asserted over an empty set and passed. Renaming a kind, changing
+ * the layout under `reported/`, or breaking the order sort would leave that wiring assertion green.
+ *
+ * Found in review by `worker-audit`, who traced the chain end to end and noticed that the middle link
+ * was the untested one.
+ */
+test("assembleReported rebuilds the pre-migration object from a directory", async () => {
+  const { assembleReported } = await import("../../../../scripts/board-summary-check.mjs");
+  const files = new Map([
+    ["docs/board/reported/meta.json", JSON.stringify({ staleAfterHours: 24, fleetHours: { total: "1 h" } })],
+    ["docs/board/reported/gates/b.json", JSON.stringify({ command: "second", order: 20 })],
+    ["docs/board/reported/gates/a.json", JSON.stringify({ command: "first", order: 10 })],
+    ["docs/board/reported/achievements/x.json", JSON.stringify({ issue: 7, order: 10 })],
+  ]);
+  const built = assembleReported((rel: string) => files.get(rel) ?? null, [...files.keys()]);
+
+  // ORDER, NOT FILENAME. `b.json` sorts before `a.json` alphabetically and must come second, because the
+  // authored order is what the document renders in and it is not the filename's business.
+  assert.deepEqual(built.gates.map((g: { command: string }) => g.command), ["first", "second"],
+    "entries must come back in their authored order, not the order the filesystem lists them");
+  assert.deepEqual(built.achievements.map((a: { issue: number }) => a.issue), [7]);
+  assert.equal(built.staleAfterHours, 24, "meta.json's scalars must survive into the assembled object");
+  assert.deepEqual(built.fleetHours, { total: "1 h" });
+
+  // A KIND WITH NO FILES IS AN EMPTY LIST, NEVER ABSENT: a caller reading `.gates` must not get
+  // `undefined` and treat it as "no gates recorded" versus "the key is missing" — two states, one
+  // reading, and this repo has paid for that conflation more than once.
+  const empty = assembleReported(() => null, []);
+  assert.deepEqual(empty.gates, []);
+  assert.deepEqual(empty.achievements, []);
+});
