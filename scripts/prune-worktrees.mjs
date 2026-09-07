@@ -419,6 +419,8 @@ function formatReport(report) {
 }
 
 async function main() {
+  // Guarded per #164: positional repo root; git flags go onward.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/prune-worktrees.mjs" });
   const repoRoot = process.argv[2] ?? process.cwd();
   const report = pruneWorktrees(statSync(repoRoot).isDirectory() ? repoRoot : process.cwd());
   process.stdout.write(formatReport(report) + "\n");
@@ -426,6 +428,7 @@ async function main() {
 
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   main();
 }

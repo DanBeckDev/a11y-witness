@@ -25,7 +25,7 @@ checks against reality.
 | **`node_modules` — symlinked to primary** | OWNER: #57 tracks the resolution risk this creates (a symlinked worktree reads the PRIMARY's `dist`, not its own). Reported here, not re-decided here. |
 | **`node_modules` — missing** | EXPECTED for a worktree mid-setup or one kept only for its git history. Not a defect on its own. |
 | **`.venv` — real (own copy)** | RULE: always symlink `.venv` to the primary's, never install a fresh one per worktree. One real copy (the primary's) is correct; more than one is the accumulator to fix by hand. |
-| **Per-worktree `dist`, for packages another package imports by name** | VERIFIED, not assumed, while writing this row: every package this repo actually imports by BARE specifier (`from "@a11y-witness/x"`, resolving through `exports`/`main` into `dist/`) already declares its own `"prepare": "tsc --build"`, which npm workspaces run automatically on `npm install` — so the "missing dist breaks a fresh worktree's `tsc --noEmit`" trap named when this row was filed does **not currently reproduce**. It named `packages/scorer` specifically; that package already has the hook. `scripts/control-plane-hygiene.mjs`'s dist-trap check re-verifies this on every run rather than trusting the original report, and fails loudly (naming the package) if a bare-imported, dist-exporting package is ever added without one. |
+| **Per-worktree `dist`, for packages another package imports by name** | VERIFIED, not assumed, while writing this row: every package this repo actually imports by BARE specifier (`from "@a11ign/x"`, resolving through `exports`/`main` into `dist/`) already declares its own `"prepare": "tsc --build"`, which npm workspaces run automatically on `npm install` — so the "missing dist breaks a fresh worktree's `tsc --noEmit`" trap named when this row was filed does **not currently reproduce**. It named `packages/scorer` specifically; that package already has the hook. `scripts/control-plane-hygiene.mjs`'s dist-trap check re-verifies this on every run rather than trusting the original report, and fails loudly (naming the package) if a bare-imported, dist-exporting package is ever added without one. |
 | **Local `runs/` copy** | RULE (already the answer this repo had; restated here so nobody re-derives it): KEEP. It is what lets a laptop read the corpus at all. Staleness, not size, is the risk — `npm run lab:inventory` reports how stale a copy is. **Never delete without `orchestrator`** — it is a copy several tools read, per issue #58's own fleet note. |
 | **Disk free** | Informational only. Not an accumulator; no rule needed at the current 275 GB of 926 GB scale. |
 
@@ -36,13 +36,13 @@ checks against reality.
 the build step that produces its own `dist`?** Two false positives were found and fixed while building
 this check, both worth keeping as the reasoning rather than only as passing tests:
 
-- A cruder "does the package name appear after `from \"`" match flagged `@a11y-witness/lab` and
-  `@a11y-witness/nvda-worker` as exposed. Both are reached from elsewhere in this repo only by SUBPATH
-  import (`@a11y-witness/lab/src/dataset-paths.mjs`, `@a11y-witness/nvda-worker/error-text`) straight into
+- A cruder "does the package name appear after `from \"`" match flagged `@a11ign/lab` and
+  `@a11ign/nvda-worker` as exposed. Both are reached from elsewhere in this repo only by SUBPATH
+  import (`@a11ign/lab/src/dataset-paths.mjs`, `@a11ign/nvda-worker/error-text`) straight into
   raw `.mjs` source — the shape ADR 0031 documents deliberately for `nvda-worker` (no build step at all).
-  Narrowed to match only the BARE specifier (`from "@a11y-witness/x"` with the closing quote immediately
+  Narrowed to match only the BARE specifier (`from "@a11ign/x"` with the closing quote immediately
   after), which a subpath import never satisfies.
-- Even narrowed to bare imports, `@a11y-witness/nvda-worker` still flagged, because nothing had checked
+- Even narrowed to bare imports, `@a11ign/nvda-worker` still flagged, because nothing had checked
   whether that package's OWN root export resolves into `dist/` at all — it resolves straight to
   `src/index.mjs` (`exports["."]`), so a missing `dist` there breaks nothing. The check now reads each
   package's own `exports`/`main` field and only flags one whose root genuinely points into `dist/`.

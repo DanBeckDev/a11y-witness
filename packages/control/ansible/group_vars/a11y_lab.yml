@@ -46,7 +46,12 @@ ansible_port: 22
 # The Proxmox key, not `~/.ssh/id_ed25519`. Same reasoning as the fleet key: an operator with several keys
 # would otherwise have ssh pick one by luck, and "Permission denied (publickey)" says nothing about which
 # key was offered.
-ansible_ssh_private_key_file: "{{ lookup('env', 'A11Y_PVE_KEY') | default('~/.ssh/a11y-pve_ed25519', true) }}"
+# NO DEFAULT -- #255. A real key filename here is somebody's infrastructure written down, and the
+# policy in `packages/control/README.md` says this variable is REQUIRED. The refusal that makes
+# that true is `tasks/require-control-plane-key.yml`, asserted on localhost before anything
+# connects; `| mandatory` does NOT work here, because `lookup('env', ...)` returns '' rather than
+# Undefined and passes straight through it.
+ansible_ssh_private_key_file: "{{ lookup('env', 'A11Y_PVE_KEY') }}"
 
 # TWO PYTHONS on this box, and they are not interchangeable.
 #
@@ -66,6 +71,6 @@ lab_runs_path: /srv/a11y-runs
 lab_python: /opt/a11y/.venv/bin/python
 
 # `tsx`, for the jobs that apply the pipeline's own gates — those live in TypeScript
-# (@a11y-witness/evidence/verify), which is why `evidence-check.mjs` cannot run under plain node.
+# (@a11ign/evidence/verify), which is why `evidence-check.mjs` cannot run under plain node.
 # The binary rather than `npx`, so a job cannot become a package install on a box holding the corpus.
 lab_tsx: /opt/a11y/node_modules/.bin/tsx

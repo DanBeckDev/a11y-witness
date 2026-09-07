@@ -24,8 +24,8 @@ patches, four as minors and **three as no release at all**. All fourteen are maj
 
 | package | major means |
 |---|---|
-| `@a11y-witness/scorer` | **any retrain, any threshold change, any encoder swap.** The weights ARE the API: a consumer's build goes from passing to failing with no code change. Record the training-report provenance — corpus, encoder hash, thresholds — in the entry, because "which model scored this" is what a disputed finding turns on. |
-| `@a11y-witness/nvda-worker` | a wire-protocol change a host cannot ignore. **Not** the same as `CAPTURE_PROTOCOL_VERSION`, which is a capture-cache key: a package major must not force a recapture, and a protocol bump must not wait for a major. |
+| `@a11ign/scorer` | **any retrain, any threshold change, any encoder swap.** The weights ARE the API: a consumer's build goes from passing to failing with no code change. Record the training-report provenance — corpus, encoder hash, thresholds — in the entry, because "which model scored this" is what a disputed finding turns on. |
+| `@a11ign/nvda-worker` | a wire-protocol change a host cannot ignore. **Not** the same as `CAPTURE_PROTOCOL_VERSION`, which is a capture-cache key: a package major must not force a recapture, and a protocol bump must not wait for a major. |
 | everything else | ordinary semver on the exported API. |
 
 A 40-line refactor of `capture-core.mjs` that `evidence:check` reports as SAME is a **patch**, however
@@ -39,14 +39,14 @@ large the diff.
   should fail rather than put a package under a name we may not keep. On a free npm account a restricted
   publish errors outright, which is the failure direction we want. **Change this to `public` in the same
   change that cuts the first release, not before.**
-- **`@a11y-witness/lab` and `@a11y-witness/nvda-speech` are `private`** and are skipped automatically.
+- **`@a11ign/lab` and `@a11ign/nvda-speech` are `private`** and are skipped automatically.
   `lab` ships nothing by design — what ships is its output.
 
 ## Promoting a trained model is a release, and it writes its own changeset
 
 `npm run promote:model -- --from=<candidate>` is the only supported route from a trained candidate into
 `packages/scorer/models/screenreader-scorer`. It exists because **promoting a model IS a release of
-`@a11y-witness/scorer`** — the weights are that package's API — so it belongs in this machinery rather
+`@a11ign/scorer`** — the weights are that package's API — so it belongs in this machinery rather
 than beside it.
 
 It refuses unless the candidate's OWN reports say it earned promotion: `releaseEligible` in the training

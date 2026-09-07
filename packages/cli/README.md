@@ -1,19 +1,40 @@
-# `a11y-witness`
+# `a11ign`
 
 Drives a **real screen reader** through a real page and reports the WCAG 2.2 AA failures a rule scanner cannot
 see — the ones that need to know what a blind user actually heard, and whether they could still finish the task.
 
 **Alongside axe, never instead of it.** Both layers run; neither subsumes the other.
 
-```bash
-npx a11y-witness https://example.com --task "Find the opening hours"
+**Two ways in that work today.** No install and no Windows machine of your own — add the action to a
+workflow:
+
+```yaml
+runs-on: windows-2022          # NVDA is Windows-only; the action fails fast and says so otherwise
+steps:
+  - uses: DanBeckDev/a11y-witness@main
+    with:
+      url: https://example.com/checkout
+      task: Complete the checkout with a saved card
+      fail-on: never           # report first; gate when your team asks for it
 ```
 
-> **Not published yet.** `npx a11y-witness` returns E404 today — no package has been pushed to npm, and the
-> name is still undecided (PLAN.md, B5). Until it is, the working paths are the **GitHub Action**
-> (`uses: DanBeckDev/a11y-witness@main`, no install and no Windows machine of your own) or a clone of the
-> repo. The command above is what the CLI *is*, and it works from a checkout; it is written here as the
-> package's front page because that is where it will be true. Tracked as PLAN.md B7.
+Or run it yourself from a checkout:
+
+```bash
+git clone https://github.com/a11ign/a11ign.git
+cd a11ign
+npm install
+npm run witness -- https://example.com --task "Find the opening hours"
+```
+
+**See the [top-level README](../../README.md) for which of those two paths is yours** — this file does not
+repeat that decision.
+
+> **`npx a11ign` does NOT work yet, and that is why it is not the first thing on this page.**
+> `npx a11ign https://example.com --task "Find the opening hours"` is what the CLI *is*, and it
+> works from a checkout — but no package has been pushed to npm, so run as typed it returns `E404` and
+> teaches a reader only that the tool is broken. The name is still undecided (PLAN.md, B5); publishing is
+> tracked as PLAN.md B7. It will move to the top of this file on the day it is true.
 
 ## What "a rule scanner cannot see" means, concretely
 
@@ -44,9 +65,9 @@ the rule layer did not run, because "we checked and found nothing" and "we did n
 alike. Reporting silence as a clean bill of health is the single most misleading thing this tool could do.
 
 ```bash
-npx a11y-witness <url> --no-axe                    # screen-reader layer only, and the report says so
-npx a11y-witness <url> --axe-results axe.json      # import a run you already did
-npx a11y-witness <url> --json                      # machine-readable, for CI
+npx a11ign <url> --no-axe                    # screen-reader layer only, and the report says so
+npx a11ign <url> --axe-results axe.json      # import a run you already did
+npx a11ign <url> --json                      # machine-readable, for CI
 ```
 
 ## You need a Windows worker
@@ -55,13 +76,13 @@ The capture runs on Windows, with NVDA, in an interactive desktop session — th
 around, it is what makes the evidence real. Point the CLI at one:
 
 ```bash
-A11Y_WORKER=http://192.168.64.4:8765 npx a11y-witness <url> --task "..."
+A11Y_WORKER=http://192.168.64.4:8765 npx a11ign <url> --task "..."
 ```
 
-**UTM is DEPRECATED — it was a testing path, not the fleet.** `@a11y-witness/worker-fleet` can still lease a
+**UTM is DEPRECATED — it was a testing path, not the fleet.** `@a11ign/worker-fleet` can still lease a
 local UTM VM on macOS and put it back as it found it, and every UTM entry point now says so at runtime. Point
 `A11Y_WORKER` at a Windows machine you have, or use the GitHub Action if you have none. See
-`docs/getting-started.md` for setting a worker up, and `@a11y-witness/nvda-worker` for the worker itself.
+`docs/getting-started.md` for setting a worker up, and `@a11ign/nvda-worker` for the worker itself.
 
 ## Judging what the screen reader heard
 
@@ -70,7 +91,7 @@ network call for the judgment itself. Point it at a rented model instead if you 
 do not trust the local one yet:
 
 ```bash
-JUDGE_BACKEND=openai OPENAI_API_KEY=sk-... npx a11y-witness <url> --task "..."
+JUDGE_BACKEND=openai OPENAI_API_KEY=sk-... npx a11ign <url> --task "..."
 ```
 
 `JUDGE_BACKEND=openai` speaks plain `/v1/chat/completions`, so it works against hosted OpenAI, Anthropic's
@@ -105,7 +126,7 @@ point; the exit code is not what does it.**
 ## Rendering the report yourself
 
 ```js
-import { reportLines } from "a11y-witness";
+import { reportLines } from "a11ign";
 
 console.log(reportLines(report).join("\n"));
 ```
@@ -114,5 +135,5 @@ console.log(reportLines(report).join("\n"));
 them — perceive, then navigate, then interact — because a finding about operating a control is not useful to
 someone who could not perceive it.
 
-The pieces underneath are packages in their own right: `@a11y-witness/judge` for the judgment,
-`@a11y-witness/evidence` for the capture contract, `@a11y-witness/worker-fleet` for the VM lifecycle.
+The pieces underneath are packages in their own right: `@a11ign/judge` for the judgment,
+`@a11ign/evidence` for the capture contract, `@a11ign/worker-fleet` for the VM lifecycle.

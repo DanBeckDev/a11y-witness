@@ -14,6 +14,7 @@ import { isPrimaryWorktree } from "./prune-worktrees.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
@@ -33,6 +34,8 @@ export function updatePrimary(root = REPO, run = (args) =>
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
+  // Guarded per #164: takes no flags; --detach/--quiet go to git.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/update-primary.mjs" });
   const sha = updatePrimary();
   console.log(`primary checkout detached at origin/main (${sha})`);
 }

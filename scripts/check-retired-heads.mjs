@@ -26,6 +26,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 export const SHIPPED_REPORT = "packages/scorer/models/screenreader-scorer/training-report.json";
 export const CANDIDATE_REPORT = "runs/model-candidate/training-report.json";
@@ -96,6 +97,8 @@ function readJson(path) {
 }
 
 function main() {
+  // Guarded per #164: takes no flags at all.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/check-retired-heads.mjs" });
   const repoRoot = fileURLToPath(new URL("../", import.meta.url));
   const shipped = readJson(join(repoRoot, SHIPPED_REPORT));
   const candidate = readJson(join(repoRoot, CANDIDATE_REPORT));

@@ -115,8 +115,8 @@ test("pipes and newlines in a finding cannot break the table", () => {
 });
 
 test("the marker is emitted so a PR comment can be UPDATED rather than duplicated", () => {
-  const out = renderSummary(result(), { marker: "a11y-witness" });
-  assert.ok(out.startsWith("<!-- a11y-witness -->"), "the marker must be findable at the top");
+  const out = renderSummary(result(), { marker: "a11ign" });
+  assert.ok(out.startsWith("<!-- a11ign -->"), "the marker must be findable at the top");
   assert.doesNotMatch(renderSummary(result()), /<!--/, "and absent when not asked for");
 });
 
@@ -198,9 +198,28 @@ test("UNDETERMINED CRITERIA ARE STATED, not left to an empty findings table", ()
     { criterion: "4.1.2", outcome: "passed", reason: "examined in full" },
   ]));
   assert.match(md, /Not determined/);
-  assert.match(md, /2 criteria we cover came back/);
+  assert.match(md, /2 criteria we cover were referred/);
   assert.match(md, /1 are not covered/);
   assert.match(md, /Neither is a pass/, "the caveat is the point, not the numbers");
+});
+
+/**
+ * #254: `summary.ts` renders on a STRANGER'S pull request -- no legend, no chance to ask, and worse than
+ * #242's `report.ts` instance (which at least reaches someone who ran the CLI and can scroll up to one).
+ * `cantTell` is ACT's own vocabulary term; a reviewer who has never read the ACT spec reads it as a typo
+ * or an accusation. Uses #242's own wording (`ceo`'s ruling, PR #252) -- "referred" -- and unlike
+ * report.ts's legend, the ACT term does not appear at all here, since there is no legend to house even
+ * one parenthetical mention.
+ */
+test("#254: the rendered comment never contains the raw ACT token `cantTell`", () => {
+  const md = renderSummary(withOutcomes([
+    { criterion: "1.3.1", outcome: "cantTell", reason: "the landmark sweep was short" },
+    { criterion: "1.4.3", outcome: "untested", reason: "no assessor covers it" },
+  ]));
+  assert.doesNotMatch(md, /\bcantTell\b/,
+    "a stranger with no legend must never meet ACT's own machine vocabulary term");
+  assert.match(md, /referred/, "the count must still be stated in words a reviewer can read -- silence "
+    + "is not the fix, per this row's own acceptance");
 });
 
 test("AN OLDER RESULT WITH NO OUTCOMES SAYS NOTHING, rather than a tally of zeroes", () => {

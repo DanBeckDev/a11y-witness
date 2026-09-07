@@ -131,6 +131,41 @@ export function issues() {
  */
 export const META_LABEL = "meta";
 
+/** Real work, deliberately not in this release. Carried INSTEAD of a milestone, never alongside one.
+ *
+ * THE RULE IS: every open row carries a milestone or this label, and there is no third state. A row with
+ * neither is a tracker defect rather than a judgement call, and `unclassified()` below is what makes that
+ * checkable instead of a thing somebody notices.
+ *
+ * It exists because two counts on one page disagreed about one row. #290 -- `git stash` is repo-global
+ * across worktrees -- is real work that is not in the release, so the open-items total counted it and the
+ * blocker count could not. Neither number was wrong; the page had no way to say why they differed. The
+ * footnote beside the total now names how many rows are in this state, so the two reconcile BY
+ * CONSTRUCTION rather than by a reader working it out. Ruled by `ceo` 2026-09-07; see issue #290.
+ */
+export const OUT_OF_RELEASE_LABEL = "out-of-release";
+
+/** @param {any[]} list */
+export function outOfRelease(list) {
+  return list.filter((/** @type {any} */ i) => labelsOf(i).includes(OUT_OF_RELEASE_LABEL));
+}
+
+/** Open rows carrying NEITHER a milestone nor `out-of-release` -- the state the rule forbids.
+ *
+ * Reported rather than absorbed. A row here is counted in the total and invisible to every milestone
+ * figure, which is exactly the disagreement this pair of functions exists to end -- so silently tolerating
+ * it would rebuild the fault inside the fix.
+ * @param {any[]} list
+ */
+export function unclassified(list) {
+  return list.filter((/** @type {any} */ i) => !i.milestone && !labelsOf(i).includes(OUT_OF_RELEASE_LABEL));
+}
+
+/** @param {any} i */
+function labelsOf(i) {
+  return i.labelNames ?? i.labels?.map((/** @type {any} */ l) => l.name) ?? [];
+}
+
 /** The rows the document COUNTS. `issues()` stays complete -- a meta row still needs its state resolved.
  * @param {any[]} list */
 export function countable(list) {
@@ -150,8 +185,50 @@ export function reported() {
   const fresh = (entry) => Date.now() - Date.parse(entry.at) < staleMs;
   const gates = (raw.gates ?? []).filter((/** @type {any} */ g) => g.at && Number.isFinite(Date.parse(g.at)));
   const latest = gates.sort((/** @type {any} */ a, /** @type {any} */ b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
+  // EVERY GATE, not just the newest. Section five recommended "buying nothing yet" while the record held
+  // the measurement that answered it, because the document could not SEE any gate but the latest -- so
+  // the prose was hand-written and went stale the moment the re-run landed. A section that states a
+  // figure is absent while `reported.json` carries it is the failure this file exists to prevent.
   return { latestGate: latest, gateIsFresh: latest ? fresh(latest) : false, fleetHours: raw.fleetHours,
-    achievements: raw.achievements ?? [] };
+    gates, achievements: raw.achievements ?? [] };
+}
+
+/** The verdicts a gate PRINTED, quoted from its own output and never retyped.
+ *
+ * THE BOARD'S DOCUMENT COULD NOT SAY WHETHER A CHECK PASSED. `board-report.mjs` prints the gate's whole
+ * output verbatim into the GitHub edition; the PDF quoted only the COMMAND and the capture spread. So the
+ * two editions would have disagreed about whether a check passed, and the silent one is the one the board
+ * reads -- found 2026-09-07, the day before the first FAIL was due to be recorded.
+ *
+ * Quoted, never classified. A gate states its own verdict in its own sentence; this returns those
+ * sentences. Deciding whether a FAIL blocks anything is a JUDGEMENT and is not derivable from the output,
+ * which is why `note` on the entry carries it and why an unexplained FAIL renders as unexplained rather
+ * than as an opinion this file invented.
+ *
+ * @param {string | undefined} gateOutput
+ */
+export function gateVerdicts(gateOutput) {
+  const lines = String(gateOutput ?? "").split("\n");
+  /** @type {{ verdict: string, line: string }[]} */
+  const found = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    // A verdict is the word at the head of its own clause, so `RULES: PASS -- ...` and `PASS -- ...`
+    // both count and the word inside a sentence ("a page that FAILS this rule") does not.
+    const m = /^(?:[A-Za-z: ]{0,24}?\b)?(PASS|FAIL|BLOCKED|INCONCLUSIVE)\b\s*(?:[—-]\s*(.*))?$/.exec(line);
+    if (m) found.push({ verdict: m[1], line });
+  }
+  return found;
+}
+
+/** The single worst verdict a gate printed, or null when it printed none.
+ * @param {string | undefined} gateOutput */
+export function worstVerdict(gateOutput) {
+  /** @type {Record<string, number>} */
+  const order = { PASS: 0, INCONCLUSIVE: 1, BLOCKED: 2, FAIL: 3 };
+  const all = gateVerdicts(gateOutput);
+  if (all.length === 0) return null;
+  return all.reduce((w, v) => (order[v.verdict] > order[w.verdict] ? v : w), all[0]);
 }
 
 /**
@@ -170,7 +247,32 @@ export function reported() {
 export function realPageCaptureAge(gateOutput) {
   if (!gateOutput) return null;
   const spread = gateOutput.match(/\*{0,3}\s*\d+\s*hour\(s\)\s*between the oldest and newest[^\n]*/i);
-  return spread ? spread[0].replace(/^\*+\s*/, "").trim() : null;
+  if (spread) return spread[0].replace(/^\*+\s*/, "").trim();
+  // A PARSER THAT ONLY READS THE WARNING GOES SILENT ON THE GOOD NEWS.
+  //
+  // The gate prints `*** N hour(s) between the oldest and newest` only when the spread is WIDE enough to
+  // warn about. So on 2026-09-07, when #82's refresh took it from 304 hours to about one, this returned
+  // null and the row simply stopped mentioning the spread -- which a reader compares against yesterday's
+  // "304 hours, a MIXED population" and reads as the figure being WITHDRAWN rather than the problem being
+  // fixed. The single most important improvement in the run would have been invisible for being good.
+  //
+  // So fall back to the timestamps the gate prints EVERY time, and say which of the two it is. This is
+  // derived from the gate's own output rather than retyped from a message, and the distinction is stated
+  // on the page rather than left for a reader to assume.
+  return computedCaptureSpread(gateOutput);
+}
+
+/** The spread computed from the per-role capture ranges the gate always prints, or null if it printed none.
+ * @param {string | undefined} gateOutput */
+function computedCaptureSpread(gateOutput) {
+  const stamps = [...String(gateOutput).matchAll(/(\d{4}-\d{2}-\d{2}T[\d:.]+Z)/g)].map((m) => Date.parse(m[1]));
+  const usable = stamps.filter((t) => Number.isFinite(t));
+  if (usable.length < 2) return null;
+  const ms = Math.max(...usable) - Math.min(...usable);
+  const hours = Math.floor(ms / 3_600_000);
+  const minutes = Math.round((ms % 3_600_000) / 60_000);
+  return `${hours} hour(s) ${minutes} minute(s) between the oldest and newest capture, computed from the `
+    + "timestamps the gate printed — it states a spread itself only when wide enough to warn about";
 }
 
 /**

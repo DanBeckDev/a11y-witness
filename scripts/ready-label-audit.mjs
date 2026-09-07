@@ -19,13 +19,27 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+// RELATIVE, NOT the `@a11ign/worker-fleet/cli-flags` package specifier: that export map
+// points at `dist/`, so it needs both `node_modules` AND a completed build. This file is reachable
+// from a pre-install entry (see `pre-install-import-graph.test.ts`, which derives that population
+// rather than naming it), and there it dies on startup with ERR_MODULE_NOT_FOUND.
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 
 export const READY_LABEL = "ready";
 
-/** Every label that already means "not actually pickable", independent of `ready`. */
-export const MUTEX_LABELS = ["fleet-gated", "disputed", "decision", "awaiting-merge", "blocked", "review-only"];
+/**
+ * Every label that already means "not actually pickable", independent of `ready`.
+ *
+ * `in-progress` belongs here for the reason `row-claim.mjs:161-170` names: `dispatchRow`/`claimRow` only
+ * ever ADD labels, so a row still carrying `ready` at the moment it was dispatched comes out the other
+ * side as `ready` + `in-progress` + `session:*` -- claimed and started, while still advertising itself as
+ * pickable. #246: three real rows sat in exactly that state and this list could not see any of them,
+ * because the string `in-progress` was never in it -- a correct predicate fed a list that cannot express
+ * the fault, the `fleet-consistency`/`browserVersion` shape (CLAUDE.md).
+ */
+export const MUTEX_LABELS =
+  ["fleet-gated", "disputed", "decision", "awaiting-merge", "blocked", "review-only", "in-progress"];
 
 /**
  * @typedef {{ number: number, title: string, labels: string[] }} LabelledIssue

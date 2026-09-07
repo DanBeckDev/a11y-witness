@@ -10,7 +10,7 @@ while a capture is running.
 | what | from | to | how |
 |---|---|---|---|
 | Source, tests, docs, role files, memory | this Mac's checkout | the new machine | `git clone`, or `git remote add` + `git fetch` if the new machine already has a stale clone |
-| **Claude Code's own memory for each agent** | `~/.claude/projects/-Users-<user>-Documents-repos-personal-a11y-witness/` on this Mac | the equivalent path under `~/.claude/projects/` on the new machine | see "The project-key rename" below — this is the one step that is NOT a plain copy |
+| **Claude Code's own memory for each agent** | `~/.claude/projects/-Users-<user>-Documents-repos-personal-a11ign/` on this Mac | the equivalent path under `~/.claude/projects/` on the new machine | see "The project-key rename" below — this is the one step that is NOT a plain copy |
 | The fleet SSH key, the lab's `a11y-pve` key | this Mac's filesystem | the new machine's filesystem | out of band, by whoever holds them today — see `packages/control/ansible/README.md`'s "Issuing a new operator's credentials", and note that MOVING a key to a new machine is not the same operation as issuing a new one: prefer generating a fresh keypair for the new machine and revoking the old, per that section's step 4, unless the old machine is being destroyed in the same act as the move |
 | The authoritative training/real-page corpus | `a11y-lab` (CT 121) | unchanged — the lab is a separate host from whichever Mac is the control plane | nothing to migrate here UNLESS the lab itself is also moving, which this runbook does not cover |
 | The daily board report's schedule | a launchd agent on this Mac (`bash scripts/install-board-report.sh`) | GitHub Actions, per `ceo`'s ruling — see "The board report job" below | nothing to migrate once the Action lands; kept as a row here until it does |
@@ -21,8 +21,8 @@ while a capture is running.
 
 Claude Code keys each project's memory directory by the **absolute path** of the working directory a
 session was launched from — this repo's own memory lived at
-`~/.claude/projects/-Users-danielbeck-Documents-repos-personal-a11y-witness/memory/`, where the directory
-name is a mechanical transform of `/Users/danielbeck/Documents/repos/personal/a11y-witness`.
+`~/.claude/projects/-Users-danielbeck-Documents-repos-personal-a11ign/memory/`, where the directory
+name is a mechanical transform of `/Users/danielbeck/Documents/repos/personal/a11ign`.
 
 **This means the key is almost certainly wrong on a new machine before anything is done about it.** A
 different username, a different home directory layout, or simply cloning to a differently-named directory
@@ -104,22 +104,22 @@ locally regardless of where the corpus lives. Read it as the general "how to sch
 machine's successor" reference, not as the board report's own answer anymore.
 
 ```ini
-# /etc/systemd/system/a11y-witness-board-report.service
+# /etc/systemd/system/a11ign-board-report.service
 [Unit]
-Description=a11y-witness daily board report
+Description=a11ign daily board report
 After=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=/path/to/a11y-witness
+WorkingDirectory=/path/to/a11ign
 ExecStart=/usr/bin/npm run board:report -- --post --issue=20
 User=<the operator account>
 ```
 
 ```ini
-# /etc/systemd/system/a11y-witness-board-report.timer
+# /etc/systemd/system/a11ign-board-report.timer
 [Unit]
-Description=Run the a11y-witness board report daily at 08:00 Europe/London
+Description=Run the a11ign board report daily at 08:00 Europe/London
 
 [Timer]
 OnCalendar=*-*-* 08:00:00 Europe/London
@@ -131,8 +131,8 @@ WantedBy=timers.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now a11y-witness-board-report.timer
-systemctl list-timers a11y-witness-board-report.timer   # confirm the next scheduled run
+sudo systemctl enable --now a11ign-board-report.timer
+systemctl list-timers a11ign-board-report.timer   # confirm the next scheduled run
 ```
 
 `Persistent=true` mirrors launchd's own catch-up behaviour (a missed run — machine off at 08:00 — fires

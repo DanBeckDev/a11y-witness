@@ -48,7 +48,7 @@ const NVDA_EDGE = "Evidence is NVDA's announcements in Edge on Windows. Another 
 
 export const ACT_RULES: ActRuleDescription[] = [
   {
-    id: "a11y-witness:unnamed-control",
+    id: "a11ign:unnamed-control",
     version: "2026-08-08",
     name: "Control announced with a role but no accessible name",
     description: "A user-interface component the screen reader announces as a bare role — \"combo box, "
@@ -100,7 +100,7 @@ export const ACT_RULES: ActRuleDescription[] = [
     accessibilitySupport: NVDA_EDGE,
   },
   {
-    id: "a11y-witness:unlabelled-image",
+    id: "a11ign:unlabelled-image",
     version: "2026-08-08",
     name: "Image announced as having no text alternative",
     description: "The screen reader itself reports the image as unlabelled, or the browser offers to "
@@ -121,7 +121,7 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "would need its own signal.",
   },
   {
-    id: "a11y-witness:alt-text-is-a-filename",
+    id: "a11ign:alt-text-is-a-filename",
     version: "2026-08-08",
     name: "Image alternative text is a file name",
     description: "Alt text like \"IMG 4821\" or \"logo.png\" is present but does not describe the image.",
@@ -140,7 +140,7 @@ export const ACT_RULES: ActRuleDescription[] = [
     accessibilitySupport: NVDA_EDGE,
   },
   {
-    id: "a11y-witness:unnamed-graphic-count",
+    id: "a11ign:unnamed-graphic-count",
     version: "2026-08-08",
     name: "The page exposes images with no accessible name",
     description: "The accessibility tree reports images the screen reader never announced a name for, "
@@ -175,7 +175,7 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "never quoted as what a user heard.",
   },
   {
-    id: "a11y-witness:vague-link-text",
+    id: "a11ign:vague-link-text",
     version: "2026-08-08",
     name: "Link text does not indicate where the link goes",
     description: "A link announced as \"click here\" or \"read more\" tells a user navigating by link "
@@ -196,7 +196,7 @@ export const ACT_RULES: ActRuleDescription[] = [
     accessibilitySupport: NVDA_EDGE,
   },
   {
-    id: "a11y-witness:no-headings",
+    id: "a11ign:no-headings",
     version: "2026-08-08",
     name: "A page of content with no headings",
     description: "There is no heading structure to skim, so reaching any part of the page means reading "
@@ -218,7 +218,7 @@ export const ACT_RULES: ActRuleDescription[] = [
     accessibilitySupport: NVDA_EDGE,
   },
   {
-    id: "a11y-witness:autoplaying-audio",
+    id: "a11ign:autoplaying-audio",
     version: "2026-08-08",
     name: "Audio starts automatically with no way to stop it",
     description: "A page that plays audio on load, unmuted and with no visible control, gives a "
@@ -247,7 +247,7 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "audible to a given user, only that the page declared it to start on its own.",
   },
   {
-    id: "a11y-witness:keyboard-trap",
+    id: "a11ign:keyboard-trap",
     version: "2026-08-08",
     name: "Tab stopped moving, so focus is trapped",
     description: "Pressing Tab repeatedly stopped advancing while most of the page's controls had never "
@@ -274,8 +274,8 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "the focus order a screen-reader user experiences, which can differ from raw browser tab order.",
   },
   {
-    id: "a11y-witness:stale-route-title",
-    version: "2026-08-22",
+    id: "a11ign:stale-route-title",
+    version: "2026-09-07",
     name: "The route changed and the page title did not",
     description: "Activating a navigation control moved the page to different content while the title the "
       + "screen reader announces stayed the same, so a user who checks where they are is told the name of "
@@ -297,13 +297,20 @@ export const ACT_RULES: ActRuleDescription[] = [
       "SECONDARY because 2.4.2 requires a title that describes topic or purpose, and whether a given title "
         + "does so is human judgement. This rule proves only that the title no longer describes the content "
         + "on screen, which is a sufficient failure and not the whole criterion.",
+      "#253: 'the first heading changed' does not distinguish real navigation from a consent overlay "
+        + "switching panels, a link opening a new tab, or a modal opening -- all three read identically to "
+        + "this rule's evidence. Declines when the activated link announces it opens elsewhere (WCAG's own "
+        + "Understanding text for 2.4.2 calls a new-tab link structurally inapplicable), or when either "
+        + "heading sits inside a `dialog` container -- both are read from NVDA's own announcement, never "
+        + "inferred from page content. This narrows two of the three known shapes; #142 (open, unscheduled) "
+        + "is the only path to a general fix.",
     ],
     accessibilitySupport: NVDA_EDGE + " Both readings come from NVDA's own report-title command, the same "
       + "one that supplies the title on entry, so this is what a user hears when they ask where they are — "
       + "not an inference from the DOM, which is valid at every instant in this failure.",
   },
   {
-    id: "a11y-witness:tab-order-contradicts-reading-order",
+    id: "a11ign:tab-order-contradicts-reading-order",
     version: "2026-08-22",
     name: "Tab visits the controls in a different order from the one the page reads in",
     description: "The sequence a keyboard user moves through does not match the sequence the content "
@@ -332,7 +339,7 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "compared after stripping the states only the focus channel announces ('focused', 'blank').",
   },
   {
-    id: "a11y-witness:inert-skip-link",
+    id: "a11ign:inert-skip-link",
     version: "2026-08-22",
     name: "The skip link does not skip anything",
     description: "Activating the page's skip link left focus exactly where the next Tab would have gone "
@@ -365,7 +372,7 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "for every variant and made a working skip link indistinguishable from an inert one.",
   },
   {
-    id: "a11y-witness:announced-control-keyboard-unreachable",
+    id: "a11ign:announced-control-keyboard-unreachable",
     version: "2026-08-22",
     name: "A control the page announces as operable that the keyboard never reaches",
     description: "The screen reader announces an interactive control, and Tab passed the point where it "
@@ -393,7 +400,7 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "the reachability a screen-reader user experiences.",
   },
   {
-    id: "a11y-witness:error-announced-without-remedy",
+    id: "a11ign:error-announced-without-remedy",
     version: "2026-09-02",
     name: "A validation error is announced but names only the problem",
     description: "A form submit is rejected and the screen reader announces an error — \"Visit date, edit, "
@@ -463,7 +470,7 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "after the submit, not from the DOM, so what is judged is what a screen-reader user actually hears.",
   },
   {
-    id: "a11y-witness:context-change-without-action",
+    id: "a11ign:context-change-without-action",
     version: "2026-09-02",
     name: "Focusing or typing into a control changes the page's context",
     description: "A control renames the page the moment it receives focus, or as the user types into it. "
@@ -529,7 +536,7 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "what a screen-reader user would hear if they asked where they were.",
   },
   {
-    id: "a11y-witness:focus-reveal-not-dismissable",
+    id: "a11ign:focus-reveal-not-dismissable",
     version: "2026-09-05",
     name: "Content revealed on focus is not dismissed by Escape",
     description: "Focusing a control makes additional content appear — a tooltip, a panel, a menu — and "
@@ -580,7 +587,7 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "regardless of which screen reader is listening.",
   },
   {
-    id: "a11y-witness:focus-removed-by-script",
+    id: "a11ign:focus-removed-by-script",
     version: "2026-09-06",
     name: "Script removes focus immediately after a control receives it",
     description: "A control receives focus and script strips it again within a window too short for a "

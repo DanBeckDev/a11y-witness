@@ -10,7 +10,7 @@
  * a parseable line the Python process prints on stdout, not over HTTP — the shape differs but the reason
  * for having a table at all does not: a caller must not have to parse a message to act on a failure.
  *
- * DUPLICATED, deliberately: `@a11y-witness/nvda-worker` is not a dependency of this package.
+ * DUPLICATED, deliberately: `@a11ign/nvda-worker` is not a dependency of this package.
  * `isolation-smoke.mjs` asserts it must not be — the CLI speaks HTTP to a worker, and importing that
  * package once already broke the published bundle (it reaches guidepup, which throws at import wherever
  * there is no screen reader; see `cli.ts`'s own comment on `no-win32-imports.test.ts`'s finding). So the
@@ -60,6 +60,18 @@ export const FAULT_REMEDIATION: Record<string, FaultRemediation> = {
     whereToLook: "the target site's own behaviour for the URL you passed — compare what it does in an "
       + "ordinary browser.",
   },
+  "hard-timeout": {
+    what: "The capture ran too long and the worker abandoned it before your page was fully read. This "
+      + "is the documented failure mode of a heavy page (many images and headings, a form, a consent "
+      + "banner) — the same shape docs/try-it.md tells a first reader to point this at.",
+    tryThis: "Retrying will not help by itself — the worker already spent its whole budget. If the page "
+      + "has a lot of content, try narrowing the task to a smaller flow first (a single form, not a "
+      + "whole checkout) to see whether the tool completes at all on that site; if it does, the full "
+      + "page may simply need a longer budget than this worker is configured for.",
+    whereToLook: "the `reachedPhase` this message names, if one is given — that is how far the capture "
+      + "got before it ran out of time, not a guess. docs/nvda-worker-runbook.md if you operate this "
+      + "worker and want to raise the timeout.",
+  },
   "artifact-schema-mismatch": {
     what: "The shipped scorer weights and the code running them disagree about the evidence format "
       + "(schema version, encoder hash, feature order, feature scale, or feature multipliers). This is a "
@@ -83,12 +95,25 @@ export function remediationFor(fault: string): FaultRemediation | undefined {
  * explicitly, rather than silently falling back to nothing: "no remediation recorded" is itself
  * information, and a NEW fault shipping with no entry here is exactly the gap this file exists to close.
  */
-export function formatFaultMessage(fault: string, message: string | undefined): string {
+export function formatFaultMessage(fault: string, message: string | undefined,
+  /**
+   * How far a PARTIAL capture got before the fault, when the worker reported one — issue #336. "We ran
+   * out of time after N marks" and "we could not read your page at all" are different findings, and
+   * only one of them invites a retry; bundled into one object rather than two more parameters, per this
+   * repo's own rule against growing positional argument lists.
+   */
+  progress?: { reachedPhase?: string; markCount?: number }): string {
   const base = `The worker's capture failed: ${message ?? "no message given"} (fault: ${fault}).`;
+  const progressLine = progress?.reachedPhase
+    ? `\n  Got as far as: "${progress.reachedPhase}"`
+      + (typeof progress.markCount === "number"
+        ? ` (${progress.markCount} progress mark(s) recorded before stopping)` : "")
+    : "";
   const remediation = remediationFor(fault);
   if (!remediation) {
-    return `${base} No remediation is recorded for this fault code yet — please file an issue naming it.`;
+    return `${base}${progressLine}\n  No remediation is recorded for this fault code yet — please file `
+      + "an issue naming it.";
   }
-  return `${base}\n  What happened: ${remediation.what}\n  Try: ${remediation.tryThis}\n`
+  return `${base}${progressLine}\n  What happened: ${remediation.what}\n  Try: ${remediation.tryThis}\n`
     + `  See: ${remediation.whereToLook}`;
 }
