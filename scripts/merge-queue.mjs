@@ -83,9 +83,33 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main();
 }
 
+/**
+ * `--merge=<n>` AND `--merge <n>` MUST DO THE SAME THING (#178).
+ *
+ * `--event=`, `--base=`, `--only=`, `--worker=`, `--ref=` are all equals-joined -- that is this repo's
+ * dominant CLI convention -- but this file's own hand-rolled parser matched only the space-separated
+ * form. The equals form was silently accepted (it is a known flag) and then ignored, so
+ * `--merge=156` fell through to the LIST branch and exited 0 having merged nothing. This is on the
+ * highest-consequence CLI in the repo: a caller who types the convention every other command here uses
+ * gets a listing, reads it as "nothing to merge", and nothing anywhere says a merge did not happen.
+ *
+ * Note the class: `refuseUnknownFlags` (a different file) closed *an unknown flag is discarded and the
+ * default runs*. This is *a KNOWN flag in a valid shape is discarded and the default runs* -- the same
+ * failure, one step past the guard built for it. A flag-name guard cannot see this; only reading the
+ * value in both shapes can.
+ *
+ * @param {string[]} argv
+ * @returns {string | null}
+ */
+export function wantedPrNumber(argv) {
+  const equalsForm = argv.find((arg) => arg.startsWith("--merge="));
+  if (equalsForm) return equalsForm.slice("--merge=".length);
+  const spaceIndex = argv.indexOf("--merge");
+  return spaceIndex === -1 ? null : (argv[spaceIndex + 1] ?? null);
+}
+
 function main() {
-  const wanted = process.argv.includes("--merge")
-    ? process.argv[process.argv.indexOf("--merge") + 1] : null;
+  const wanted = wantedPrNumber(process.argv);
 
   let raw = "";
   try {
