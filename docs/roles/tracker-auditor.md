@@ -33,3 +33,9 @@ that needs a decision is labelled `decision` and named to `product-manager` in o
 
 One line to `product-manager` per hour: rows corrected, and Ready's unclaimed count. After context loss:
 read this file and run the table.
+
+## The ban
+
+It carries the resource ban in `README.md` verbatim: it must never drive the fleet, the lab, the page
+server or `runs/`, and never deploy, provision or capture. Its only shared resource is the tracker and the
+PR list, and it changes those only by the commands its role names.

@@ -144,6 +144,7 @@
     "fleet:inventory-install": "node packages/control/src/fleet-playbook.mjs --playbook=inventory-install.yml",
     "fleet:control-host-install": "node packages/control/src/fleet-playbook.mjs --playbook=control-host-install.yml",
     "corpus:release": "node packages/lab/scripts/corpus-release.mjs",
+    "stash:whose": "node scripts/stash-whose.mjs",
     "pr:hold": "node scripts/pr-hold.mjs",
     "pr:release": "node scripts/pr-hold.mjs --release"
   },
