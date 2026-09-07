@@ -10,8 +10,12 @@
 ## THE HIERARCHY
 
 The chairman speaks to `ceo` and to nobody else. `ceo` decides and reports to the chairman. `orchestrator`
-(fleet, lab, gates, cross-cutting review), `dispatcher` (worker loop, PR review and merge) and
+(fleet, lab, gates, cross-cutting review), `dispatcher` (worker loop: briefing, claims, merge order) and
 `product-manager` (tracker, milestone, board document) report to `ceo`. Workers report to `dispatcher`.
+`reviewer` (first-pass PR review, may arm) reports to `dispatcher`; `tracker-auditor` (hourly tracker
+hygiene) reports to `product-manager`. Both added 2026-09-07 on the board's finding that one dispatcher
+holding review, merging, briefing and CI repair was the serial step. Workers report by PR, not by message;
+the dispatcher writes no code; merging is GitHub's on green, merge commits only.
 Nobody messages the chairman; a question only the chairman can answer goes up the chain to `ceo`, who asks.
 An idle notice, a status line, a finding, a refusal: each goes to the agent above you, not sideways and not
 up two levels, unless `ceo` has asked you directly, in which case you answer `ceo` and copy your reporting
@@ -37,6 +41,8 @@ where state actually lives, and the enforcement that keeps the set complete.
 | Fleet/lab driver ("the lead") | `orchestrator` | [`orchestrator.md`](./orchestrator.md) | `ceo` |
 | Worker-loop dispatcher | `dispatcher` | [`worker-loop-orchestrator.md`](./worker-loop-orchestrator.md) | `orchestrator` (utilisation line to `ceo`) |
 | Product loop | `product-manager` | [`product-manager.md`](./product-manager.md) | `ceo` |
+| First-pass review | `reviewer` | [`reviewer.md`](./reviewer.md) | `dispatcher` |
+| Tracker audit | `tracker-auditor` | [`tracker-auditor.md`](./tracker-auditor.md) | `product-manager` |
 | Worker | `worker-audit` | [`worker-audit.md`](./worker-audit.md) | `dispatcher` |
 | Worker | `worker-capture` | [`worker-capture.md`](./worker-capture.md) | `dispatcher` |
 | Worker | `worker-config` | [`worker-config.md`](./worker-config.md) | `dispatcher` |
