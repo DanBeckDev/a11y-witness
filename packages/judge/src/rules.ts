@@ -1174,7 +1174,11 @@ const NOTHING_FURTHER = /^\s*no (next|previous) \w+/i;
 
 function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
   const route = input.interaction?.routeChange;
-  if (!route || route.error || !route.navigated) return; // not probed, or the probe could not answer
+  // `route.control === null` is the applicability gate -- not probed, errored, or quick-nav reached the
+  // end of the links with nothing to activate. `routeChange.navigated` looks like the same check and is
+  // NOT: `probeRouteChange` sets it `true` on every successful activation regardless of whether the view
+  // actually moved, so it is a tautology relative to what this rule exists to establish (#250).
+  if (!route || route.error || route.control === null) return;
   // The probe reached the end of the links instead of activating one. See `NOTHING_FURTHER`.
   if (NOTHING_FURTHER.test(String(route.control ?? ""))) return;
   const { titleBefore, titleAfter, headingBefore, headingAfter } = route;
@@ -1318,7 +1322,9 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
  */
 function addInertSkipLink(input: RuleInput, add: AddFinding): void {
   const route = input.interaction?.routeChange;
-  if (!route || route.error || !route.navigated) return;
+  // See `addStaleRouteTitle`'s comment: `route.control === null` is the applicability gate this rule
+  // actually needs, and `routeChange.navigated` is a tautology that must not be read as evidence (#250).
+  if (!route || route.error || route.control === null) return;
   // It has to BE a skip link. The probe activates the first link on the page, which elsewhere is a logo or
   // a cookie banner — finding focus unmoved after activating one of those says nothing about bypassing.
   if (!/\b(skip|jump)\b/i.test(String(route.control ?? ""))) return;
