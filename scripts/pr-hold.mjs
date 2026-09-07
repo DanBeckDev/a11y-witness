@@ -7,6 +7,11 @@
  *   npm run pr:release -- <n> --session=<name>    # give it back
  *   npm run pr:hold -- <n>                        # no --session: REPORTS who holds it, writes nothing
  *
+ * **THERE IS NO `pr-release.mjs`.** `pr:release` is this file with `--release` (see `package.json`), and
+ * the two being named as a pair everywhere else makes a sibling script the natural thing to go looking
+ * for — `dispatcher` did, and got a module-not-found. One file because the two operations share the
+ * lookup, the holder parsing and the refusals; splitting them would be two spellings of one fact.
+ *
  * ## Why this is a command rather than a remembered `gh pr edit --add-label`
  *
  * #197's finding was not that people are careless, it was that **a claim depending on somebody
@@ -69,21 +74,32 @@ export function prLabels(number) {
  * Separated from the `gh` calls so every outcome is testable without a network — including the two that
  * cannot be produced on demand against a live API (a failed lookup, and a PR held by a third party).
  *
+ * `displaces` IS THE WHOLE FIX FOR #268's FIRST REAL USE. `--steal` printed "STEALING from X" and then
+ * only ADDED its own label, leaving both holders on the PR — so the thief was simultaneously a holder and
+ * refused by `merge-guard`, and the refusal named somebody who no longer thought they held it. That is
+ * this command's own argument turned on itself: `--steal` exists because `--add-label` is idempotent and
+ * so says nothing about what happened, and the fix said nothing about what happened either.
+ *
+ * Found by `dispatcher` running it against the real PR within a minute of it being pushed, which no unit
+ * test here could have done — these exercise the decision, and the defect was in the WRITE.
+ *
  * @param {{holders: string[], session: string, steal: boolean}} state
- * @returns {{act: boolean, code: number, message: string}}
+ * @returns {{act: boolean, code: number, message: string, displaces: string[]}}
  */
 export function holdDecision({ holders, session, steal }) {
   const others = holders.filter((held) => held !== session);
   if (others.length === 0) {
     return holders.includes(session)
-      ? { act: false, code: EXIT.DONE, message: `you (${session}) already hold it — nothing to do` }
-      : { act: true, code: EXIT.DONE, message: "it was unheld" };
+      ? { act: false, code: EXIT.DONE, displaces: [], message: `you (${session}) already hold it — nothing to do` }
+      : { act: true, code: EXIT.DONE, displaces: [], message: "it was unheld" };
   }
   if (!steal) {
-    return { act: false, code: EXIT.REFUSED, message: `REFUSING: ${others.join(", ")} holds it. Ask them `
+    return { act: false, code: EXIT.REFUSED, displaces: [],
+      message: `REFUSING: ${others.join(", ")} holds it. Ask them `
       + "to release it, or pass --steal, which says so in the output rather than doing it quietly" };
   }
-  return { act: true, code: EXIT.DONE, message: `STEALING from ${others.join(", ")} — say why to them` };
+  return { act: true, code: EXIT.DONE, displaces: others,
+    message: `STEALING from ${others.join(", ")} — say why to them` };
 }
 
 /** @param {number} number @param {string} session @param {"add"|"remove"} how */
@@ -135,8 +151,25 @@ function main() {
   const decision = holdDecision({ holders, session, steal: process.argv.includes("--steal") });
   process.stdout.write(`#${number}: ${decision.message}\n`);
   if (!decision.act) process.exit(decision.code);
+  // DISPLACE FIRST, THEN TAKE. A steal that only adds leaves BOTH holders on the PR, so the thief is
+  // simultaneously a holder and refused by `merge-guard` -- and the refusal names somebody who no longer
+  // thinks they hold it. Removing before adding also means a half-failed write leaves the PR UNHELD
+  // rather than doubly held, which is the direction that fails safe: unheld is visible and recoverable.
+  for (const displaced of decision.displaces) writeLabel(number, displaced, "remove");
   writeLabel(number, session, "add");
-  process.stdout.write(`#${number} is now held by ${session}.\n`);
+  // AND READ IT BACK, because this is two or more writes and either can half-succeed. `gh pr edit`
+  // exiting 0 says the request was accepted, not that the PR now says what you think -- the same reason
+  // `/health.code` is checked over HTTP rather than through the channel that performed the deploy.
+  const after = prLabels(number);
+  const nowHeld = after === null ? null : claimStatus(after).sessions;
+  if (nowHeld === null || nowHeld.length !== 1 || nowHeld[0] !== session) {
+    process.stderr.write(`#${number}: THE WRITE DID NOT LAND AS INTENDED. Expected exactly `
+      + `session:${session}; the PR now reads ${nowHeld === null ? "unreadable" : nowHeld.join(", ") || "no holder"}.\n`
+      + "  Fix it by hand with `gh pr edit --add-label/--remove-label` before anyone acts on this PR.\n");
+    process.exit(EXIT.CANNOT_ASK);
+  }
+  process.stdout.write(`#${number} is now held by ${session}${decision.displaces.length
+    ? `, and ${decision.displaces.join(", ")} no longer holds it` : ""}.\n`);
   process.exit(EXIT.DONE);
 }
 
