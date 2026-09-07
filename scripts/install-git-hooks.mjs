@@ -28,6 +28,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 
 /** Relative, so it keeps working inside a `git worktree` — where `.git` is a file, not a directory. */
 export const HOOKS_PATH = "scripts/git-hooks";
@@ -87,8 +88,20 @@ export function installHooks({ run = gitConfig, exists = existsSync, log = conso
 
 // NOT `file://${process.argv[1]}`: a template-literal URL does not percent-encode, so a checkout path
 // containing a space makes this comparison false and `npm install` silently never installs the hooks —
-// entry-points.test.ts polices exactly this idiom for every packages/*.mjs entry point, but its discovery
-// only matches paths under packages/, so this scripts/ file was invisible to it. realpathSync'd for the
+// entry-points.test.ts polices exactly this idiom for every npm entry point. THIS SENTENCE USED TO SAY
+// "but its discovery only matches paths under packages/, so this scripts/ file was invisible to it" —
+// no longer true: that pattern is `(?:packages|scripts)/…` and, measured 2026-09-07, it discovers 77
+// entry points of which 16 are under `scripts/`, this file among them. Kept as a correction rather than
+// deleted, because the stale version was cited as evidence that a SIBLING guard had the same population
+// gap #164 fixed here, and it had already been closed. A comment describing another file's coverage goes
+// stale when that file is fixed, and nothing links the two. realpathSync'd for the
 // same reason cli.ts's bin guard needed it: harmless here (this file is always invoked as a literal path
 // by `npm run prepare`, never through a symlink), but consistent with every other entry point in this repo.
-if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) installHooks();
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
+  // Guarded per #164: takes no flags; the `--get` in this file is passed onward to `git config`.
+  // Guarded HERE rather than inside `installHooks`, which is exported and driven by tests with injected
+  // dependencies — a guard inside it would be reading a test runner's argv, which is the exact mistake
+  // `refuseUnknownFlags`'s own `entry` parameter exists to prevent.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/install-git-hooks.mjs" });
+  installHooks();
+}

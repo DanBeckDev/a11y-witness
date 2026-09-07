@@ -29,6 +29,7 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { sandboxGitEnv } from "./git-env.mjs";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 
 /**
  * Issue references a commit range makes: `#12`, `Closes #12`, `fix(#30):`.
@@ -53,6 +54,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 }
 
 function main() {
+  // Guarded per #164: takes a positional commit range; --json/--jq go to gh.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/close-merged-rows.mjs" });
   const range = process.argv[2];
   if (!range || !range.includes("..")) {
     process.stderr.write("usage: close-merged-rows.mjs <base>..<head>\n");

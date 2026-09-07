@@ -275,7 +275,7 @@ export const ACT_RULES: ActRuleDescription[] = [
   },
   {
     id: "a11y-witness:stale-route-title",
-    version: "2026-08-22",
+    version: "2026-09-07",
     name: "The route changed and the page title did not",
     description: "Activating a navigation control moved the page to different content while the title the "
       + "screen reader announces stayed the same, so a user who checks where they are is told the name of "
@@ -297,6 +297,13 @@ export const ACT_RULES: ActRuleDescription[] = [
       "SECONDARY because 2.4.2 requires a title that describes topic or purpose, and whether a given title "
         + "does so is human judgement. This rule proves only that the title no longer describes the content "
         + "on screen, which is a sufficient failure and not the whole criterion.",
+      "#253: 'the first heading changed' does not distinguish real navigation from a consent overlay "
+        + "switching panels, a link opening a new tab, or a modal opening -- all three read identically to "
+        + "this rule's evidence. Declines when the activated link announces it opens elsewhere (WCAG's own "
+        + "Understanding text for 2.4.2 calls a new-tab link structurally inapplicable), or when either "
+        + "heading sits inside a `dialog` container -- both are read from NVDA's own announcement, never "
+        + "inferred from page content. This narrows two of the three known shapes; #142 (open, unscheduled) "
+        + "is the only path to a general fix.",
     ],
     accessibilitySupport: NVDA_EDGE + " Both readings come from NVDA's own report-title command, the same "
       + "one that supplies the title on entry, so this is what a user hears when they ask where they are — "
