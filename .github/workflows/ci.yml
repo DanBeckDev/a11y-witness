@@ -517,9 +517,28 @@ jobs:
       # PR_BODY AS AN ENV VAR, NEVER AS A SHELL ARGUMENT -- a PR body is adversarial input (anyone can open
       # a PR), and GitHub Actions' own `env:` mapping keeps it one opaque string here rather than
       # re-parsing it as shell. `acceptance-commands.mjs` reads it from `process.env.PR_BODY`, never argv.
+      #
+      # GH_TOKEN: #382, measured on PR #370 -- an acceptance command naming `gh` (directly or through an
+      # import) failed on "set the GH_TOKEN environment variable" rather than on its own subject, 6 of 19
+      # subtests. THE POPULATION RULE, not a special case for this one job: a job that runs a command it
+      # did not author needs every credential any command MIGHT need, because it cannot know in advance
+      # which one a PR body will ask for. `acceptance` is the only job in that class today.
+      #
+      # This WIDENS what a PR body can do -- said here rather than left implicit. The job already runs
+      # arbitrary shell from a PR body; the containment is `pull_request` (a read-only token, the fork's
+      # own checkout) plus `classifyCommand`'s refusal list, never isolation. Granting GH_TOKEN gives those
+      # commands a read-scoped credential for the repo this workflow runs in. `permissions: contents:
+      # read` above stays the explicit ceiling -- this token cannot write regardless.
+      #
+      # `gh-token-jobs.test.ts` cannot discover this job the way it discovers `board`/`mergeSafety`: those
+      # are found by walking a literal test GLOB and its imports, and `acceptance` has no glob -- its
+      # commands arrive at runtime, in a PR body, and may be anything. So it is named explicitly in that
+      # guard's own UNAUTHORED_COMMAND_JOBS census, with this same reason, rather than silently unreachable
+      # by the class of check built for exactly this defect.
       - name: Run the PR's own stated Acceptance command(s)
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/acceptance-commands.mjs
 
   # THE ONE CONTEXT BRANCH PROTECTION REQUIRES. `if: always()` so this still runs when an upstream job
