@@ -231,7 +231,27 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      # THE TRIGGER IS OVER-INCLUSIVE ON PURPOSE; THIS STEP IS THE GATE.
+      #
+      # `ci-changed.mjs` fires this job for any file under a published package's `src`/`python`/`models`/
+      # `bin` -- a question about where a file LIVES, cheap enough to answer without npm and deliberately
+      # wide. The question that decides the PR is whether the change can reach somebody who INSTALLS the
+      # package, and only `npm pack` can answer that. Keeping the two separate means the expensive,
+      # authoritative check runs exactly when the cheap one says it might matter.
+      #
+      # Without this step the job refused three PRs in one night over test files npm never packs (#132),
+      # and the prescribed escape -- `changeset add --empty` -- is the very silence the gate exists to
+      # prevent. A gate that cries wolf trains people out of reading it.
+      #
+      # `npm pack` runs each package's `prepack` (`tsc --build`), which it MUST: listed against an unbuilt
+      # `dist` every source maps to nothing and a real change reads as invisible. That is the one direction
+      # this must never fail in, so `npm ci` above is not `--ignore-scripts` here.
+      - name: Can any changed file reach a consumer at all?
+        id: visible
+        run: node scripts/consumer-visible.mjs --base=origin/${{ github.base_ref }}
+        continue-on-error: true
       - name: A consumer-visible change must say what it does to a consumer
+        if: steps.visible.outcome == 'failure'
         run: |
           if ! npx changeset status --since=origin/${{ github.base_ref }}; then
             echo "::error::This PR changes a published package and carries no changeset."

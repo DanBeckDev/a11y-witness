@@ -109,12 +109,35 @@ const siblingDir = (packageDir, dependency) =>
  * @param {string} dir the package directory
  * @returns {string[]} packed paths that git does not track, relative to the package
  */
+/**
+ * What `npm pack` would put in this package's tarball, as paths relative to the package.
+ *
+ * EXPORTED so `scripts/consumer-visible.mjs` asks the same authority rather than spelling the question a
+ * second time. Two gates deciding "what ships" from two derivations is the fact-stated-twice shape this
+ * repo pays for most, and here the two answers would guard the SAME promise: what a consumer is told.
+ *
+ * It THROWS rather than returning `[]` when npm cannot answer, and the difference is load-bearing at the
+ * new call site: "npm says this package ships nothing" and "npm could not be asked" must produce opposite
+ * verdicts there — the first would make every change invisible, which is the one direction a changeset
+ * gate must never fail in. `packedButUntracked` keeps its own local catch, where claiming nothing is the
+ * conservative answer.
+ *
+ * **`npm pack` runs `prepack`, which is `tsc --build` in every package here, and it must.** Listed with
+ * `--ignore-scripts` the tarball describes an unbuilt `dist` and every source file maps to nothing.
+ *
+ * @param {string} dir the package directory
+ * @returns {string[]} packed paths, relative to the package
+ */
+export function packedFiles(dir) {
+  // `--json` gives the file list without unpacking; `--dry-run` so nothing is written.
+  const listing = JSON.parse(run("npm", ["pack", "--dry-run", "--json"], dir));
+  return (listing?.[0]?.files ?? []).map((/** @type {{path: string}} */ f) => f.path);
+}
+
 function packedButUntracked(dir) {
   let packed;
   try {
-    // `--json` gives the file list without unpacking; `--dry-run` so nothing is written.
-    const listing = JSON.parse(run("npm", ["pack", "--dry-run", "--json"], dir));
-    packed = (listing?.[0]?.files ?? []).map((/** @type {{path: string}} */ f) => f.path);
+    packed = packedFiles(dir);
   } catch {
     return []; // cannot list -- claim nothing rather than invent a finding
   }

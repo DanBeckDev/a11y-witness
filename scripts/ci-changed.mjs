@@ -21,6 +21,7 @@
 // makes the tested commit the one that lands.
 import { execFileSync } from "node:child_process";
 import { readFileSync, appendFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 // RELATIVE, NOT `@a11y-witness/worker-fleet/cli-flags` — every other root script uses the package
 // specifier, and every other root script runs after `npm run build`. This one gates whether ANYTHING
 // else in the workflow builds at all, so it cannot depend on a build having already happened; the file
@@ -98,6 +99,18 @@ export function classify(files, allPackages) {
   // The exact regex `changeset-check.yml` used before this file existed — kept identical rather than
   // "improved", because the set of published packages IS the decision and re-deriving it independently is
   // how the two copies would drift.
+  // A TRIGGER, NOT THE GATE, and the distinction is deliberate rather than a shortcut.
+  //
+  // This asks where a file LIVES, which is answerable from a path list with no npm, no install and no
+  // build -- exactly what this pure function is for. It is over-inclusive on purpose: it fires for a
+  // `.test.ts` that npm never packs.
+  //
+  // `scripts/consumer-visible.mjs` decides the PR, by asking `npm pack --dry-run --json` which files are
+  // actually in each tarball and which sources build into one. That needs an install and a build, so it
+  // runs INSIDE the changeset job rather than here. Splitting them means the cheap question gates the
+  // expensive one instead of standing in for it -- see #132, where this regex alone refused three PRs in
+  // one night over test files, and the prescribed escape (`changeset add --empty`) is the very silence
+  // the gate exists to prevent.
   const changeset = files.some((f) =>
     /^packages\/(cli|judge|scorer|evidence|nvda-worker|worker-fleet)\/(src|python|models|bin)\//.test(f));
 
@@ -174,6 +187,12 @@ async function main() {
 }
 
 // Only when invoked directly — importing `classify` for a test must not trigger a git subprocess.
-if (import.meta.url === `file://${process.argv[1]}`) {
+//
+// `pathToFileURL`, not a template literal. Concatenation does not percent-encode, so a checkout under a
+// path containing a SPACE compares false, the guard never fires, and this exits 0 having classified
+// nothing — which a workflow reads as a clean run. `entry-points.test.ts` forbids the concatenated form
+// and could not see this file, because it discovers entry points from `package.json` and `ci.yml` invokes
+// this one with `node` directly. Fixed in passing; the discovery gap is its own row.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main();
 }
