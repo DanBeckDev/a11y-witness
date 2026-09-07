@@ -9,6 +9,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -125,46 +126,50 @@ test("knownPackages finds the real repo's workspace directories, and refuses a s
 // action-smoke") fails here rather than costing real Windows minutes on every PR again.
 // -------------------------------------------------------------------------------------------------------
 
-test("ci.yml triggers on pull_request and on push to main only, never on an agent/lead branch push", () => {
+test("ci.yml triggers on pull_request ONLY -- no push trigger at all, on main or anywhere else", () => {
+  // Chairman's direction, 2026-09-06: the flow is PR then merge, and a check that runs after a merge
+  // cannot stop it -- a `push: branches: [main]` trigger is a gate with the barn door already open.
+  // Branch protection (checks green AND up to date with main) is what makes the tested commit the one
+  // that lands, so NOTHING here may run post-merge.
   const doc = parseYaml(readWorkflow("ci.yml"));
   assert.ok(doc.on.pull_request, "ci.yml must trigger on pull_request -- that is the whole of the rebuild");
-  assert.deepEqual(doc.on.push.branches, ["main"],
-    "ci.yml's push trigger must be main-only, or a branch push and its PR both run the full check on the "
-    + "same commit again");
-  assert.equal(Object.keys(doc.on).length, 2,
-    `ci.yml declares triggers ${Object.keys(doc.on).join(", ")} -- only pull_request and push are expected`);
+  assert.ok(!("push" in doc.on),
+    "ci.yml must not trigger on push at all -- a check that runs after the merge cannot stop it");
+  assert.equal(Object.keys(doc.on).length, 1,
+    `ci.yml declares triggers ${Object.keys(doc.on).join(", ")} -- only pull_request is expected`);
 });
 
-test("action-smoke.yml and capture-regression.yml never trigger on pull_request, and push is main-only", () => {
+test("action-smoke.yml and capture-regression.yml trigger on workflow_call and workflow_dispatch only", () => {
+  // Both left `main` entirely, chairman's direction: they are release-time gates now, called as jobs from
+  // `release.yml` (workflow_call) or run on demand (workflow_dispatch) -- never on a push or a PR, so
+  // Windows/NVDA minutes are spent once, before a release, rather than on every commit.
   for (const file of ["action-smoke.yml", "capture-regression.yml"]) {
     const doc = parseYaml(readWorkflow(file));
-    assert.ok(!("pull_request" in doc.on),
-      `${file} must not trigger on pull_request -- it is a real Windows/NVDA job and doubling it onto `
-      + "every PR is exactly what the CI rebuild removed");
-    assert.ok(doc.on.workflow_dispatch !== undefined || "workflow_dispatch" in doc.on,
-      `${file} must keep workflow_dispatch for an on-demand run`);
-    assert.deepEqual(doc.on.push.branches, ["main"], `${file}'s push trigger must be main-only`);
+    assert.ok(!("pull_request" in doc.on), `${file} must not trigger on pull_request`);
+    assert.ok(!("push" in doc.on), `${file} must not trigger on push`);
+    assert.ok("workflow_call" in doc.on,
+      `${file} must declare workflow_call, or release.yml has no way to run it as a job`);
+    assert.ok("workflow_dispatch" in doc.on, `${file} must keep workflow_dispatch for an on-demand run`);
   }
 });
 
-test("PROOF: the trigger-table guard bites -- a synthetic pull_request block on a push-only workflow fails", () => {
+test("PROOF: the trigger-table guard bites -- a synthetic push block on a pull_request-only workflow fails", () => {
   // Driven directly against a FIXTURE rather than by mutating a real file on disk, for the reason every
   // other MUTATION test in this repo gives when the real check is cheap enough to reproduce inline: the
-  // property under test is "does parsing a `pull_request:` key make `"pull_request" in doc.on` true", and
-  // a fixture proves that without touching a tracked file at all.
-  const withPullRequest = parseYaml([
+  // property under test is "does parsing a `push:` key make `\"push\" in doc.on` true", and a fixture
+  // proves that without touching a tracked file at all.
+  const withPush = parseYaml([
     "on:",
-    "  workflow_dispatch:",
+    "  pull_request:",
+    "    branches: [main]",
     "  push:",
     "    branches: [main]",
-    "  pull_request:",
-    "    paths: [\"x\"]",
     "jobs:",
     "  x:",
     "    runs-on: ubuntu-latest",
   ].join("\n"));
-  assert.ok("pull_request" in withPullRequest.on,
-    "the fixture itself must carry a pull_request trigger, or this proves nothing about the real assertion");
+  assert.ok("push" in withPush.on,
+    "the fixture itself must carry a push trigger, or this proves nothing about the real assertion");
 });
 
 test("lint.yml, ansible-check.yml and changeset-check.yml are retired, not merely unused", () => {
@@ -172,4 +177,49 @@ test("lint.yml, ansible-check.yml and changeset-check.yml are retired, not merel
     assert.throws(() => readWorkflow(retired), /ENOENT/,
       `${retired} still exists on disk -- it was meant to be folded into ci.yml and removed`);
   }
+});
+
+/**
+ * `gate` IS THE ONE CONTEXT BRANCH PROTECTION MAY REQUIRE, not the five scoped jobs above it -- see
+ * `ci.yml`'s own header. Requiring `ts`/`python`/`ansible`/`docs`/`changeset` directly means a required
+ * check with no run against a docs-only PR's commit, and GitHub treats a job SKIPPED by its own `if:` as
+ * satisfying a required check only because it still posts a real check run concluding `skipped` -- an
+ * implicit platform behaviour, not a fact this repo's own tests can see. `gate` computes the identical
+ * answer explicitly and is what these tests pin.
+ */
+test("ci.yml has a gate job needing every scoped job, running even when one of them failed", () => {
+  const doc = parseYaml(readWorkflow("ci.yml")) as { jobs: Record<string, { needs?: unknown; if?: string }> };
+  const gate = doc.jobs.gate;
+  assert.ok(gate, "ci.yml must declare a job named 'gate' -- branch protection has nothing else it can "
+    + "require that reports on every PR regardless of which path-scoped jobs a diff happened to trigger");
+  assert.deepEqual([...gate.needs as string[]].sort(),
+    ["ansible", "changed", "changeset", "docs", "python", "ts"].sort(),
+    "gate must need every other job in this file, or a job could fail silently with gate still passing");
+  assert.equal(gate.if, "always()",
+    "gate must run with if: always() -- without it, a failing upstream job would SKIP gate too (a job's "
+    + "default if is success() on its dependencies), and the one context branch protection requires would "
+    + "then report nothing on exactly the commit most in need of a red mark");
+});
+
+test("PROOF: gate's own check fails when a needed job's result is neither success nor skipped", () => {
+  // Extracts the real shell loop from ci.yml's gate job (never re-typed) and drives it with each of the
+  // four real GitHub Actions job-result values, proving the loop actually discriminates rather than
+  // merely looking like it does.
+  const workflow = readWorkflow("ci.yml");
+  const loopMatch = /for result in \\[\s\S]*?\n\s*done/.exec(workflow);
+  assert.ok(loopMatch, "could not find gate's result-checking loop in the real workflow to drive");
+
+  const runWith = (results: string[]) => {
+    const script = loopMatch[0]
+      .replace(/"\$\{\{ needs\.\w+\.result \}\}"/g, () => `"${results.shift()}"`)
+      + "\necho LOOP_OK";
+    return execFileSync("bash", ["-c", script], { encoding: "utf8" });
+  };
+
+  assert.equal(runWith(["success", "success", "skipped", "success", "skipped", "success"]).trim(), "LOOP_OK",
+    "all success/skipped must pass -- this is the ordinary shape of a docs-only or single-package PR");
+  assert.throws(() => runWith(["success", "failure", "skipped", "success", "skipped", "success"]),
+    /Command failed/, "a single 'failure' among the six must fail the loop, or gate cannot do its job");
+  assert.throws(() => runWith(["success", "cancelled", "skipped", "success", "skipped", "success"]),
+    /Command failed/, "'cancelled' must also fail the loop -- an aborted run is not a passed one");
 });
