@@ -19,7 +19,8 @@ import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
-import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS, issues, achievementsWhoseWorldMoved} from "./board-data.mjs";
+import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS, issues, achievementsWhoseWorldMoved,
+  realPageCaptureAge } from "./board-data.mjs";
 import { toHtml } from "./board-markdown.mjs";
 
 // Module scope, not inside main(): `section5` reads it, and `document()` is exported for the renderer
@@ -255,11 +256,16 @@ function sourceTable(d) {
   push("Changes carrying the wrong author", String(d.strays.length),
     `the project's own version history, over the SAME window as the merge count above (since `
     + `${d.since}); the cause is diagnosed and the record is kept by decision`);
+  const captureAge = d.latestGate ? realPageCaptureAge(d.latestGate.output) : null;
   push("Most recent automated check result",
     d.latestGate ? `${d.latestGate.command}${d.gateIsFresh ? "" : " — older than this report's window"}`
       : "**not reported**",
     d.latestGate
       ? `run by the engineer who owns the machines at ${d.latestGate.at}, output recorded word for word`
+        // Pulled from the gate's OWN printed line, never retyped -- issue #128. `rules:real-pages` prints
+        // its own capture spread, and this is the one place a human used to have to copy it by hand into
+        // the report; now it either quotes what the gate said or says nothing, never a stale guess.
+        + (captureAge ? `; the gate's own capture spread: ${captureAge}` : "")
       : "no result has been recorded. This report does not run these checks itself: they read a library "
         + "of recordings, and a local copy of that library is only as current as its last synchronisation "
         + "— one measured here was 89 hours old and answered cleanly having examined a library that no "
