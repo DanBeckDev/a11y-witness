@@ -127,3 +127,64 @@ were right — the cost lands on someone else's budget on a schedule nobody is w
 **"Nothing unclaimed in my lane" is a complete and correct turn-ending report**, and it is worth more than a
 marginal row: it is the signal that the constraint is rows entering Ready rather than workers taking them.
 Say it plainly and end the turn. `dispatcher` holds an idle-notice subscription as the backstop.
+
+## A NUMERIC PIN IS THE AUTHOR'S TO MOVE — ruled 2026-09-06
+
+**A numeric pin in `CLAUDE.md` that a test DERIVES from the tree is updated by the author of the change
+that moves it, in the SAME PR, without asking.** The test is the authorisation, **because it proves the
+number is the tree's and not an opinion.**
+
+**Prose changes to `CLAUDE.md` still go to `ceo`**, who holds the owner's delegated authority over that
+file. A peer's request is still not authorisation.
+
+**Why the split is at "derived by a test" and not somewhere tidier.** A finished unit was blocked for an
+evening on ONE CHARACTER — `ALL 54` -> `ALL 55` — because a new CLI moved a guarded-CLI count that
+`cli-flags.test.ts` pins to the real one. The pin was doing exactly its job (*"a number a human retypes is
+a number that drifts"*), the worker correctly refused `A11Y_SKIP_VERIFY=1`, and correctly routed it up
+rather than round it. **The refusal was right and the block was still waste**: splitting the count from the
+commit that moves it leaves the number briefly wrong on `main` AND stops the PR passing its own gate.
+
+**The rule generalises past `CLAUDE.md`:** a pinned number is not a claim its author may choose, it is a
+measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
+no permission. Where prose asserts it, it does.**
+
+## I COUNTED WORDS WHEN THE FAULT WAS STRUCTURE — 2026-09-07
+
+A five-page document rendered a sixth page holding one word, `"discover."`. I measured length, found the
+body inside its cap, and reported the overflow as probably legitimate. `ceo` read the same document and
+diagnosed it in one line: section five opened with two caveat paragraphs before its claim, under a
+heading duplicated by a bold sub-heading below it. **Ordering, not length.** Deleting the duplicate
+heading and moving the recommendation up returned it to five pages without a word being cut.
+
+**Why:** the cap is the instrument I had, so the cap is the question I asked. A word count is the wrong
+tool for a layout fault and it answers confidently anyway — which is this repository's own rule about a
+number being only as good as what it was computed from, pointed at a document instead of a gate.
+
+**How to apply:** when an artefact is the wrong SHAPE, look at its structure before its size. Ask what
+the reader meets first and whether anything is said twice, and only then reach for a measurement. The
+same morning produced the sibling: a heading said *four* above three bullets, and no amount of counting
+words would have found it, because the defect was that a number had been typed rather than derived.
+
+## The tracker's rules, ruled by `ceo` 2026-09-07 after the board asked why the count mattered
+
+**The honest answer was that it does not — three things it stood for do.** The total cap is withdrawn.
+
+**1. Work-in-progress limits, where they bite.** Ready holds **at least three PRODUCT rows** and at most six unclaimed. **A worker holds at most one claimed row beyond the one in flight** — two claimed, total. No cap on the open total.
+
+> **Both numbers were amended on 2026-09-07, by the same incident.** `worker-judge` held SIX claimed rows while Ready was EMPTY and `worker-contracts` sat idle: rows parked against one worker while another had nothing to pick up. The old rule said "at most one row in progress per worker", which reads as a limit and is not one — a row claimed and not started is not in progress, so six of them broke nothing as written.
+>
+> **The release is done on the `started` label and nothing else.** A row carrying `in-progress` without `started` is a reservation; a row carrying `started` is work, and work is not taken from a worker on the strength of a label. Verified when it was used: `worker-judge` confirmed `started` means real current work and that the three released were stale claims. **If that signal ever stops being accurate the fix is the signal, not the count.**
+>
+> **The floor is three rows in total, PRODUCT FIRST**, and a tooling row may fill it only when it unblocks a product row or the pipeline. Ruled 2026-09-07. It is not a product-only floor, because that was structurally unmeetable and would have been met by relabelling within a day — **a floor met by a label I control is not a measurement**, the rule I hold the dispatcher to and therefore hold myself to first. **The hourly line says how many of the three are product**, so the composition is visible rather than inferred.
+>
+> **A FLEET-GATED ROW HAS TWO HALVES, and only one of them is gated.** The capture is the orchestrator's queue; the pages, the analysis script and the row that records the result are not, and they are pickable product work. Split the row rather than parking the whole thing behind fleet time — that is what made most of the roadmap look unpickable when most of it was not.
+
+**2. Every open row carries a milestone OR the label `out-of-release`, and there is no third state.** A row with neither is a tracker defect, not a judgement call. Amended 2026-09-07 after #290 — real work, deliberately not in the release — made the open-items total count a row the blocker count could not, so one page carried two numbers disagreeing about it and neither was wrong. The document's open-items figure now reconciles on the page (`blocks release + later milestone + out-of-release + unclassified = total`, with the sum printed and a sentence when it does not hold), and `tracker-auditor`'s hourly table asks the question. **The label means "deliberately not in this release", never "unsorted"** — which is why the unclassified count is printed rather than absorbed: tolerating it silently would rebuild the fault inside its own fix. And the document reports **three counts with trend, not one** — blocks publish, road to version one, capture throughput — with **epics and decisions shown separately from ordinary rows**. Read as one number, 48 looks like 48 pieces of unfinished work; read as `18 epics + 5 decisions + 25 rows`, the epics are the roadmap the board approved.
+
+**3. A row untouched for 14 days is re-verified by its own open-check, or closed.** A weekly pass, and it is mine.
+
+> **Why an open-check and not a judgement.** A row's premise is verified once, at filing time, and nothing asks it again — nine stale-open rows were found in one day, every one by a worker checking the premise before starting. Re-reading a row tells you what it says; running its open-check tells you whether it is still true.
+
+**4. A finding that fits an existing epic goes on the epic as a checklist item**, not as a new row. The instance belongs on the class: a guard that works keeps finding instances, and one row each turns a working guard into tracker noise.
+
+**Every closure carries the sentence that closes it** — done, decided, superseded, folded, or measured-and-below-threshold. A closure nobody can write a true sentence for is one that should not be made, and reporting a number short is better than closing real work to reach it.

@@ -15,6 +15,38 @@
 #   A11Y_COMMIT_ALL=1 git commit ...
 set -euo pipefail
 
+# THE PRIMARY CHECKOUT IS READ-ONLY EXCEPT FAST-FORWARD -- issue #126, ruled by `ceo` after three real
+# incidents in one night: a worktree left on a branch, `lab:collect-promotion` committed there because
+# nothing marks the boundary between producing an artefact and committing it, and a failed `cd` into a
+# deleted merge worktree silently falling back here. None was carelessness -- the rule was known and
+# written in a role file, and it broke anyway three times because nothing could REFUSE.
+#
+# It matters mechanically, not territorially. `assertFleetRunsThisCheckout` hashes the WORKING TREE, so a
+# stray branch or a half-resolved merge here makes a capture run stamp itself against code that never
+# existed -- best case a refused run, worst case one that passes and should not have. And a worktree's
+# `node_modules` may symlink to the primary's `dist`, so a branch parked here silently changes what every
+# OTHER agent compiles and tests against.
+#
+# IDENTIFIED BY AN EXPLICIT LOCAL MARK, never by branch name, an absolute path, or the shape of `.git`.
+#
+# It used to ask whether `.git` is a directory -- the mechanism `prune-worktrees.mjs`'s
+# `isPrimaryWorktree` uses, and CORRECT for that function's question (within one repo, primary worktree or
+# linked one?). It does not answer THIS question, because a real `.git` directory is true of every ordinary
+# clone: the lab's, a worker's, a colleague's. `post-checkout` carried the identical predicate and #198 is
+# what it cost. See `lib/is-primary-checkout.sh`.
+. "$(dirname "$0")/lib/is-primary-checkout.sh"
+if is_primary_checkout; then
+  if [ -n "${A11Y_PRIMARY_COMMIT_REASON:-}" ]; then
+    echo "pre-commit: committing in the PRIMARY checkout, overridden: $A11Y_PRIMARY_COMMIT_REASON" >&2
+  else
+    echo "pre-commit: REFUSING — this is the fleet-driving checkout; commit in a worktree." >&2
+    echo "If this is deliberate: A11Y_PRIMARY_COMMIT_REASON=\"<why>\" git commit ... — the reason is" >&2
+    echo "printed, not just the override, so a deliberate exception is in the log rather than in" >&2
+    echo "somebody's memory." >&2
+    exit 1
+  fi
+fi
+
 [ "${A11Y_COMMIT_ALL:-0}" = "1" ] && exit 0
 
 STALE_MIN="${A11Y_STALE_MIN:-30}"   # a staged file untouched this long is suspicious
@@ -27,8 +59,16 @@ count=$(printf '%s\n' "$staged" | wc -l | tr -d ' ')
 stale=""
 while IFS= read -r f; do
   [ -f "$f" ] || continue
-  # Minutes since last modification, via stat's epoch seconds (BSD stat on macOS).
-  mtime=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
+  # Minutes since last modification, via stat's epoch seconds. GNU form FIRST, not BSD: GNU coreutils'
+  # `-f` means "filesystem status" (a different mode entirely) and happily exits 0 printing filesystem
+  # info -- Namelen, Block size, Inodes -- instead of failing, so `stat -f %m || stat -c %Y` never reaches
+  # the correct fallback on Linux, and the garbage multi-line "mtime" later reaches an arithmetic context
+  # containing the bareword `File`, which bash's arithmetic evaluator reads as a variable reference and
+  # `set -u` refuses as unbound. BSD stat (macOS) does the safe thing here: an unrecognised `-c` is a real
+  # error ("illegal option"), so the fallback fires correctly in that direction. Found running this hook's
+  # own test suite in CI for the first time -- `pre-commit-hook.test.ts` had never actually run on Linux
+  # before the ts/docs jobs split out of one shared, earlier-failing job.
+  mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo 0)
   [ "$mtime" = 0 ] && continue
   age_min=$(( ( $(date +%s) - mtime ) / 60 ))
   [ "$age_min" -ge "$STALE_MIN" ] && stale="$stale  $f (last touched ${age_min}m ago)"$'\n'
@@ -48,4 +88,44 @@ if [ "$count" -gt "$MAX_FILES" ]; then
   printf '%s\n' "$staged" | sed 's/^/  /' >&2
   echo "Name the paths you mean, or set A11Y_COMMIT_ALL=1 if the breadth is deliberate." >&2
   exit 1
+fi
+
+# `cmd | head` (or `| tail`, `| grep`) reports the STATUS TOOL's exit code, not the piped command's --
+# issue #180, measured twice in one night, once an hour after the first was diagnosed and warned about.
+# Scoped to files where this shape gets BAKED IN and runs repeatedly (shell scripts, CI/ansible YAML,
+# this hook itself, package.json) -- not .md, where the exact same text is usually the rule being
+# DOCUMENTED, not committed. `A11Y_ALLOW_PIPED_EXIT_STATUS=1` overrides.
+if [ "${A11Y_ALLOW_PIPED_EXIT_STATUS:-0}" != "1" ]; then
+  # Resolved relative to THIS script, never `git rev-parse --show-toplevel` -- the hook is exercised in
+  # `pre-commit-hook.test.ts` against a disposable sandbox repo whose toplevel is not this checkout, and
+  # the guard script only exists here.
+  guard_script="$(cd "$(dirname "$0")/.." && pwd)/piped-exit-status-guard.mjs"
+  hazard_hits=""
+  while IFS= read -r f; do
+    case "$f" in
+      *.sh|*.yml|*.yaml|package.json|scripts/git-hooks/*) ;;
+      *) continue ;;
+    esac
+    [ -f "$f" ] || continue
+    while IFS= read -r line; do
+      case "$line" in
+        +++*) continue ;;
+        +*)
+          added="${line#+}"
+          [ -z "$added" ] && continue
+          if ! node "$guard_script" "$added" >/dev/null 2>&1; then
+            hazard_hits="$hazard_hits  $f: $added"$'\n'
+          fi
+          ;;
+      esac
+    done <<< "$(git diff --cached -U0 --no-color -- "$f")"
+  done <<< "$staged"
+
+  if [ -n "$hazard_hits" ]; then
+    echo "pre-commit: refusing — a newly staged line pipes into head/tail/grep and then reads \$?," >&2
+    echo "which names the STATUS TOOL's exit code, not the piped command's (issue #180):" >&2
+    printf '%s' "$hazard_hits" >&2
+    echo "Fix the line, or set A11Y_ALLOW_PIPED_EXIT_STATUS=1 if this is a false positive." >&2
+    exit 1
+  fi
 fi
