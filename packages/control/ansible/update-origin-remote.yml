@@ -2,7 +2,7 @@
 # Point every guest's `origin` at a new repository, and PROVE the new remote actually resolves —
 # #325's scripted answer to #63's fourth silent breakage: "the fleet and the lab pull from origin."
 #
-#     ansible-playbook update-origin-remote.yml -e new_repo_url=https://github.com/a11ign/a11y-witness.git
+#     ansible-playbook update-origin-remote.yml -e new_repo_url=https://github.com/a11ign/a11ign.git
 #     ansible-playbook update-origin-remote.yml -e new_repo_url=... -l a11y-worker-3
 #
 # ## Why this exists rather than relying on GitHub's redirect

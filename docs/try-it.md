@@ -39,7 +39,7 @@ If your app is on GitHub, this needs one workflow file and no machine of your ow
 
 ```yaml
 jobs:
-  a11y-witness:
+  a11ign:
     runs-on: windows-2022        # NVDA is Windows-only; the action fails fast anywhere else
     steps:
       - uses: DanBeckDev/a11y-witness@main

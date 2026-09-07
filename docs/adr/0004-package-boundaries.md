@@ -56,13 +56,13 @@ exists because some real consumer wants it *without* one of the others — excep
 
 | package | licence | runs on | why it is separate |
 |---|---|---|---|
-| `@a11y-witness/evidence` | Apache-2.0 | anywhere | zero deps; the only thing an alternative screen-reader backend needs |
-| `@a11y-witness/scorer` | AGPL | host w/ Python | weights are the API; a retrain is a breaking change to scores |
-| `@a11y-witness/judge` | AGPL | anywhere | score an archived capture with no worker at all |
-| `@a11y-witness/nvda-worker` | AGPL | **win32 only** | a GitHub Windows runner needs this and nothing else |
-| `@a11y-witness/worker-fleet` | AGPL | macOS/Linux host | `doctor`/`worker-ctl` run where there is no NVDA |
-| `a11y-witness` | AGPL | host | the front door; drags in axe/playwright a library consumer does not want |
-| `@a11y-witness/lab` | AGPL, **never published** | host | our own corpus, gates and dataset pipeline |
+| `@a11ign/evidence` | Apache-2.0 | anywhere | zero deps; the only thing an alternative screen-reader backend needs |
+| `@a11ign/scorer` | AGPL | host w/ Python | weights are the API; a retrain is a breaking change to scores |
+| `@a11ign/judge` | AGPL | anywhere | score an archived capture with no worker at all |
+| `@a11ign/nvda-worker` | AGPL | **win32 only** | a GitHub Windows runner needs this and nothing else |
+| `@a11ign/worker-fleet` | AGPL | macOS/Linux host | `doctor`/`worker-ctl` run where there is no NVDA |
+| `a11ign` | AGPL | host | the front door; drags in axe/playwright a library consumer does not want |
+| `@a11ign/lab` | AGPL, **never published** | host | our own corpus, gates and dataset pipeline |
 
 `evidence` gets the project's own vocabulary as its name (`evidence:check`, "did
 the evidence move") rather than a generic `contracts` or `types`.
@@ -71,7 +71,7 @@ without renaming anything — ADR 0001 deferred VoiceOver, it did not rule it ou
 
 ### Public API surface, and what is deliberately not public
 
-**`@a11y-witness/evidence`** — all contract, no I/O. Deliberately no `node:fs`, no
+**`@a11ign/evidence`** — all contract, no I/O. Deliberately no `node:fs`, no
 `process.env`, so a guest, a browser or a third party can import it.
 - `.` — the wire types: `CaptureRequest`, `CaptureResult`, `CaptureStructure`,
   `CaptureInteraction`, `CaptureBackend`, `NavigationStrategy`, `CapturedAnnouncements`.
@@ -82,11 +82,11 @@ without renaming anything — ADR 0001 deferred VoiceOver, it did not rule it ou
 - Stability: highest in the repo. A breaking change here majors every downstream
   package, which is the intended disincentive.
 
-**`@a11y-witness/scorer`** — the trained model as an artefact, not a library.
+**`@a11ign/scorer`** — the trained model as an artefact, not a library.
 - `.` — `scorerPaths()` returning absolute paths (`weights`, `trainingReport`,
   `scoreScript`, `requirements`, `encoderDir`) resolved from `import.meta.url`;
   `encoderPresent()`; `scorerProvenance()` reading `training-report.json`.
-- bin — `a11y-scorer-fetch-encoder`.
+- bin — `a11ign-scorer-fetch-encoder`.
 - **Not public: the training program.** `train-screenreader-model.py` stays in
   `lab`. Shipping a trainer implies a promise that a consumer can reproduce
   training; we cannot make that promise (the corpus is not distributed). The
@@ -96,7 +96,7 @@ without renaming anything — ADR 0001 deferred VoiceOver, it did not rule it ou
   consumer's pass/fail without any code change, so it is a **major** bump. This is
   the whole reason the model is not folded into `judge`.
 
-**`@a11y-witness/judge`**
+**`@a11ign/judge`**
 - `.` — `judge()`, `validateJudgment()`, and the types `JudgeInput`, `Judgment`,
   `Finding`, `Severity`.
 - `./layers` — `layerOf`, `orderByLayer`, `LAYER_LABEL`, `ExperienceLayer`.
@@ -108,14 +108,14 @@ without renaming anything — ADR 0001 deferred VoiceOver, it did not rule it ou
   as carrying **no semver guarantee**. `docs/METHODOLOGY.md` records that these
   guards were tuned against the eval cases; a public promise on tuned thresholds
   would freeze numbers we intend to move.
-- Peer deps: `@a11y-witness/scorer` for the default `local` backend;
+- Peer deps: `@a11ign/scorer` for the default `local` backend;
   `@anthropic-ai/sdk` optional for the `anthropic` backend.
 
-**`@a11y-witness/nvda-worker`** — Windows only, but **NOT** via `"os": ["win32"]`.
+**`@a11ign/nvda-worker`** — Windows only, but **NOT** via `"os": ["win32"]`.
 
 > **Corrected during M5, by measurement.** npm applies the platform check to WORKSPACE MEMBERS, not just to
 > installed dependencies, so `"os": ["win32"]` made `npm install` fail outright on macOS:
-> `npm error notsup Unsupported platform for @a11y-witness/nvda-worker@0.1.0: wanted {"os":"win32"} (current:
+> `npm error notsup Unsupported platform for @a11ign/nvda-worker@0.1.0: wanted {"os":"win32"} (current:
 > {"os":"darwin"})`. Removing the package from the root `dependencies` did not help — workspace membership
 > alone is enough. Since this repo is developed on a Mac (CLAUDE.md's "the usual case"), the field and the
 > monorepo are mutually exclusive, and `publishConfig` cannot add `os` at publish time either.
@@ -125,7 +125,7 @@ without renaming anything — ADR 0001 deferred VoiceOver, it did not rule it ou
 > no screen reader is present, which is exactly the situation `os` was guarding against — and the README says
 > Windows in its first line. A worse error message on a rarer mistake was the cheaper trade against not being
 > able to install the repo at all.
-- bin — `a11y-nvda-worker`, `a11y-capture-check`.
+- bin — `a11ign-nvda-worker`, `a11y-capture-check`.
 - `.` — `captureWithNvda()` (the one-shot entrypoint ADR 0003 Phase 1 asked for),
   `CAPTURE_PROTOCOL_VERSION`, `codeVersion()`.
 - **Not public:** `capture-core` internals, `speech-channel`'s `tls.connect` shim,
@@ -139,8 +139,8 @@ without renaming anything — ADR 0001 deferred VoiceOver, it did not rule it ou
   and a caret range would let a consumer's `npm update` silently change what a
   capture says.
 
-**`@a11y-witness/worker-fleet`** — host-side lifecycle and diagnosis.
-- bin — `a11y-doctor`, `a11y-worker-ctl`, `a11y-worker-deploy`, `a11y-worker-compare`.
+**`@a11ign/worker-fleet`** — host-side lifecycle and diagnosis.
+- bin — `a11ign-doctor`, `a11ign-worker-ctl`, `a11ign-worker-deploy`, `a11ign-worker-compare`.
 - `.` — `leaseWorker`, `leaseWorkerPool`, `DEFAULT_WORKER`, `AfterRun`,
   `isAfterRun`, `guestReachableUrl`, `hostAddressForWorker`.
 - `./health` — `assessWorker`. **Not `shouldRetireWorker`**, corrected during M6: it lives in
@@ -154,15 +154,15 @@ without renaming anything — ADR 0001 deferred VoiceOver, it did not rule it ou
   measurement internals whose shapes change every time we measure something new,
   and CLAUDE.md's own history is a record of that happening.
 
-**`a11y-witness`** (unscoped, the CLI) — takes the memorable name so `npx
-a11y-witness` works with no wrapper package to maintain.
-- bin — `a11y-witness`.
+**`a11ign`** (unscoped, the CLI) — takes the memorable name so `npx
+a11ign` works with no wrapper package to maintain.
+- bin — `a11ign`.
 - `.` — `reportLines`, `Report` only, so a consumer can render our report shape.
 - Depends on `evidence`, `judge`, `worker-fleet`. **Not** on `nvda-worker`: the CLI
   speaks HTTP to a worker, and a Windows consumer installs both deliberately.
 - `playwright` / `@axe-core/playwright` stay optional deps, as today.
 
-**`@a11y-witness/lab`** — private, `"private": true`, never published: `src/eval`
+**`@a11ign/lab`** — private, `"private": true`, never published: `src/eval`
 plus fixtures and cases, `src/training/*`, `page-server.mjs`, `src/spike`'s three
 harnesses, `score-rules`, `stability-gate`, `evidence-check`, `corpus-snapshot`,
 `compare-layers`, and the Python analysis/training programs. ADR 0008 gives the
@@ -203,7 +203,7 @@ error afterwards.
    referenced as the default by `local-judge.ts:312` and by three npm scripts, and
    `git cat-file -e main:scripts/score-screenreader-model.py` fails; it survives
    only in unreachable `kanban checkpoint` commits. The default judge backend
-   therefore cannot run from a clean checkout, and `@a11y-witness/scorer` cannot be
+   therefore cannot run from a clean checkout, and `@a11ign/scorer` cannot be
    built until it is restored. M0 must confirm this and M3 is blocked on it.
 2. **`local-judge.ts` resolves the scorer relative to the process cwd**
    (`".venv/bin/python"`, `"scripts/score-screenreader-model.py"`). That works only

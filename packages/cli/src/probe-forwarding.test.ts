@@ -24,7 +24,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { stripComments } from "@a11y-witness/evidence/source-text";
+import { stripComments } from "@a11ign/evidence/source-text";
 
 const SOURCE = stripComments(readFileSync(resolve(process.cwd(), "packages/cli/src/cli.ts"), "utf8"));
 
@@ -54,7 +54,7 @@ const HOPS: Record<string, [string, string]> = {
     ["async function captureAndScan(", "function reportOnTheCapture("],
   "runWitness's destructure and its captureAndScan call":
     ["async function runWitness(", "function printJson("],
-  // `CaptureRequest` derives its probe-flag field NAMES from `@a11y-witness/evidence`'s wire type via
+  // `CaptureRequest` derives its probe-flag field NAMES from `@a11ign/evidence`'s wire type via
   // `Pick` (wire-contract unit, 2026-09-06) rather than spelling each out as its own field, but the flag
   // names still appear here as the `Pick` string-literal union, which is what this span actually checks.
   "the CaptureRequest interface": ["export type CaptureRequest =", "type FormStateRequest ="],

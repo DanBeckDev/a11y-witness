@@ -20,7 +20,7 @@ agree: move the publish time and it is the second one you forget, and the failur
 simply never runs.
 
 ```bash
-bash scripts/fetch-board-report.sh            # today's PDF into ~/Documents/a11y-witness-board-reports/
+bash scripts/fetch-board-report.sh            # today's PDF into ~/Documents/a11ign-board-reports/
 bash scripts/fetch-board-report.sh 2026-09-06 # a given date
 ```
 
@@ -47,7 +47,7 @@ one.**
 
 ## Where the document goes, and why not beside the log
 
-**`~/Documents/a11y-witness-board-reports/<date>.pdf`, one file per date.** The GitHub Release draft is
+**`~/Documents/a11ign-board-reports/<date>.pdf`, one file per date.** The GitHub Release draft is
 the second copy.
 
 It was written beside the scheduled job's log for a while, on the reasoning that a LaunchAgent's output
@@ -138,7 +138,7 @@ from a message.
 ```bash
 npm run board:report                          # generate to stdout and read it
 npm run board:report -- --post --issue=20     # publish it
-gh workflow run board-report.yml --repo DanBeckDev/a11y-witness   # force one edition now
+gh workflow run board-report.yml --repo a11ign/a11ign   # force one edition now
 ```
 
 Generating and posting are separate acts on purpose, so a bad report can be seen before it is posted.
