@@ -137,40 +137,61 @@ function main() {
     process.exit(EXIT.DONE);
   }
 
-  if (process.argv.includes("--release")) {
-    if (!holders.includes(session)) {
-      process.stdout.write(`#${number} was not held by ${session}`
-        + `${holders.length ? ` (it is held by ${holders.join(", ")})` : ""} — nothing released.\n`);
-      process.exit(EXIT.DONE);
-    }
-    writeLabel(number, session, "remove");
-    process.stdout.write(`#${number}: ${session} released it.\n`);
-    process.exit(EXIT.DONE);
-  }
+  process.exit(process.argv.includes("--release")
+    ? releaseHold(number, session, holders)
+    : takeHold(number, session, holders, process.argv.includes("--steal")));
+}
 
-  const decision = holdDecision({ holders, session, steal: process.argv.includes("--steal") });
+/**
+ * Give back a hold you own. Releasing one you do NOT own writes nothing and says so — `--remove-label`
+ * is idempotent in the same direction `--add-label` is, so quietly succeeding here would be the same
+ * false success `--steal` exists to prevent, pointed the other way.
+ *
+ * @param {number} number @param {string} session @param {string[]} holders
+ * @returns {number} the exit code
+ */
+function releaseHold(number, session, holders) {
+  if (!holders.includes(session)) {
+    process.stdout.write(`#${number} was not held by ${session}`
+      + `${holders.length ? ` (it is held by ${holders.join(", ")})` : ""} — nothing released.\n`);
+    return EXIT.DONE;
+  }
+  writeLabel(number, session, "remove");
+  process.stdout.write(`#${number}: ${session} released it.\n`);
+  return EXIT.DONE;
+}
+
+/**
+ * Take the hold, displacing anyone else who has it — and then PROVE the PR says so.
+ *
+ * DISPLACE FIRST, THEN TAKE, so a half-failed write leaves the PR UNHELD rather than doubly held. Unheld
+ * is visible and recoverable; two holders is the state that had `merge-guard` refusing the very session
+ * that had just been told it succeeded.
+ *
+ * @param {number} number @param {string} session @param {string[]} holders @param {boolean} steal
+ * @returns {number} the exit code
+ */
+function takeHold(number, session, holders, steal) {
+  const decision = holdDecision({ holders, session, steal });
   process.stdout.write(`#${number}: ${decision.message}\n`);
-  if (!decision.act) process.exit(decision.code);
-  // DISPLACE FIRST, THEN TAKE. A steal that only adds leaves BOTH holders on the PR, so the thief is
-  // simultaneously a holder and refused by `merge-guard` -- and the refusal names somebody who no longer
-  // thinks they hold it. Removing before adding also means a half-failed write leaves the PR UNHELD
-  // rather than doubly held, which is the direction that fails safe: unheld is visible and recoverable.
+  if (!decision.act) return decision.code;
   for (const displaced of decision.displaces) writeLabel(number, displaced, "remove");
   writeLabel(number, session, "add");
-  // AND READ IT BACK, because this is two or more writes and either can half-succeed. `gh pr edit`
-  // exiting 0 says the request was accepted, not that the PR now says what you think -- the same reason
+  // READ IT BACK, because this is two or more writes and either can half-succeed. `gh pr edit` exiting 0
+  // says the request was accepted, not that the PR now says what you think -- the same reason
   // `/health.code` is checked over HTTP rather than through the channel that performed the deploy.
   const after = prLabels(number);
   const nowHeld = after === null ? null : claimStatus(after).sessions;
   if (nowHeld === null || nowHeld.length !== 1 || nowHeld[0] !== session) {
     process.stderr.write(`#${number}: THE WRITE DID NOT LAND AS INTENDED. Expected exactly `
-      + `session:${session}; the PR now reads ${nowHeld === null ? "unreadable" : nowHeld.join(", ") || "no holder"}.\n`
+      + `session:${session}; the PR now reads `
+      + `${nowHeld === null ? "unreadable" : nowHeld.join(", ") || "no holder"}.\n`
       + "  Fix it by hand with `gh pr edit --add-label/--remove-label` before anyone acts on this PR.\n");
-    process.exit(EXIT.CANNOT_ASK);
+    return EXIT.CANNOT_ASK;
   }
   process.stdout.write(`#${number} is now held by ${session}${decision.displaces.length
     ? `, and ${decision.displaces.join(", ")} no longer holds it` : ""}.\n`);
-  process.exit(EXIT.DONE);
+  return EXIT.DONE;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
