@@ -1,4 +1,8 @@
-# First-pass review — `reviewer`
+# First-pass review — `reviewer` — RETIRED 2026-09-07
+
+> **Retired the day it was created.** The board adopted a CI/CD pipeline in which acceptance and mutation
+> run as a required job, so first-pass review by a person is not a role. Kept as the record of what the
+> job replaces.
 
 The agent filling this role is named **`reviewer`**. It reports to **`dispatcher`**. Model: Opus, high.
 
