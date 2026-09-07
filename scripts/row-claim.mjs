@@ -34,12 +34,34 @@
 // right. `declineRow` is the remedy: it returns a row this session holds to genuinely unclaimed, and is
 // also the general "give it back" this tool always lacked -- #186 needed it too, when `worker-audit`
 // claimed a row, found it unstartable, and had no way to release it short of a hand edit.
+//
+// #226: A WORKER FINDING A DISPATCHED ROW ALREADY CLOSED, HELD OR BUILT IS A DISAGREEMENT NOBODY RECORDS.
+// Three times on 2026-09-07 a worker ran `check`, was told a verdict, and then discovered reality was
+// different -- and every one of those reached `dispatcher` as a message and died there. This is #188 one
+// layer out: `merge-guard`'s wrong answers were absorbed by branch protection, so nothing recorded them
+// being wrong; `row-claim check`'s wrong answers are absorbed by a person being careful, which does not
+// survive the session.
+//
+// So EVERY `check` call now appends its own verdict to a log -- unconditionally, not only when something
+// later turns out wrong. That is what makes "how often is this tool wrong" answerable rather than "three
+// times that somebody happened to mention": the check-log is the DENOMINATOR, and a `conflict` entry
+// (recorded by a worker who found reality different, pairing the tool's own verdict with what they found)
+// is the NUMERATOR. A log that only ever grew on disagreement could never tell "the tool was right" from
+// "nobody checked" -- the exact trap #188's `agreementLogPath` already exists to avoid, and the reason
+// this reuses its `gitCommonDir`/`appendJsonl` (both exported from `merge-guard.mjs` for exactly this)
+// rather than inventing a second version of "append one JSON line, fail loud".
+//
+// IT RECORDS; IT NEVER GATES -- same as `reportReachability` below. A log write failing is reported and
+// never touches `process.exitCode`, for the identical reason `reportReachability`'s own failure does not:
+// "I could not tell you whether it is claimed" and "I could not log that I told you" are different
+// failures, and conflating them would make a full disk read as an unreadable board.
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { realpathSync } from "node:fs";
+import { realpathSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { REPO } from "./repo-identity.mjs";
 import { READY_LABEL } from "./ready-label-audit.mjs";
+import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
 
 export const CLAIM_LABEL = "in-progress";
 export const STARTED_LABEL = "started";
@@ -213,7 +235,13 @@ function writeRowLabels(issueNumber, mySession, extraLabels, { run = defaultRun 
  * "I could not tell you whether it is startable" from reading as "I could not tell you whether it is
  * claimed". The exit code is set before this runs and is never touched by it.
  *
+ * RETURNS the verdict (#226), rather than only printing it, so the caller can log the exact same answer
+ * it showed the worker -- `code: null` for the one case not even the subprocess's own exit code can name
+ * (the spawn itself failing, e.g. `node` missing), kept distinct from `row-reachability.mjs`'s own real
+ * `CANNOT_ASK` (2), which IS a code and is logged as one.
+ *
  * @param {number} issueNumber
+ * @returns {{ code: number | null, output: string }}
  */
 function reportReachability(issueNumber) {
   try {
@@ -225,9 +253,12 @@ function reportReachability(issueNumber) {
       [fileURLToPath(new URL("row-reachability.mjs", import.meta.url)), String(issueNumber)],
       { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     process.stdout.write(out);
+    return { code: 0, output: out };
   } catch (error) {
-    const spawned = /** @type {{stdout?: string, stderr?: string}} */ (error);
-    process.stdout.write(`${spawned.stdout ?? ""}${spawned.stderr ?? ""}`);
+    const spawned = /** @type {{stdout?: string, stderr?: string, status?: number}} */ (error);
+    const output = `${spawned.stdout ?? ""}${spawned.stderr ?? ""}`;
+    process.stdout.write(output);
+    return { code: typeof spawned.status === "number" ? spawned.status : null, output };
   }
 }
 
@@ -299,13 +330,84 @@ export function declineRow(issueNumber, mySession, { run = defaultRun } = {}) {
   return { declined: true };
 }
 
+/** @returns {string} the check/conflict log's path -- shared across every worktree, per `gitCommonDir`. */
+export function checkLogPath() {
+  return `${gitCommonDir()}/row-claim-check-log.jsonl`;
+}
+
+/**
+ * Appends ONE `check` verdict -- called on EVERY `check`/`--row=` invocation, whatever it found. This is
+ * the log's DENOMINATOR (#226): without an entry for every ask, a reader can never tell "the tool has been
+ * asked N times and wrong M of them" from "the tool has only ever been asked when someone suspected it".
+ *
+ * @param {string} logPath
+ * @param {{ issueNumber: number, claimed: boolean, started: boolean, sessions: string[],
+ *           reachability: { code: number | null, output: string } | null }} entry
+ */
+export function recordCheck(logPath, entry) {
+  appendJsonl(logPath, { kind: "check", at: new Date().toISOString(), ...entry });
+}
+
+/**
+ * Appends ONE `conflict` -- a worker's own finding, paired with the tool's most recently recorded verdict
+ * for the SAME issue. This is the log's NUMERATOR. `recordedVerdict` is whatever `latestCheckFor` returned
+ * -- `null` when nobody ever ran `check` on this issue first, which is itself worth keeping rather than
+ * inventing a verdict that was never given.
+ *
+ * @param {string} logPath
+ * @param {{ issueNumber: number, recordedVerdict: object | null, found: string }} entry
+ */
+export function recordConflict(logPath, entry) {
+  appendJsonl(logPath, { kind: "conflict", at: new Date().toISOString(), ...entry });
+}
+
+/**
+ * The most recently recorded `check` entry for an issue, or `null` if `check` was never run against it --
+ * mirrors `merge-guard.mjs`'s `latestVerdictFor` exactly, one field renamed.
+ *
+ * @param {string} logPath
+ * @param {number} issueNumber
+ * @returns {object | null}
+ */
+export function latestCheckFor(logPath, issueNumber) {
+  /** @type {string} */
+  let text;
+  try {
+    text = readFileSync(logPath, "utf8");
+  } catch (error) {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code === "ENOENT") return null;
+    throw error;
+  }
+  const entries = text.split("\n").filter(Boolean).map((line) => JSON.parse(line))
+    .filter((entry) => entry.kind === "check" && entry.issueNumber === issueNumber);
+  return entries.length > 0 ? entries[entries.length - 1] : null;
+}
+
+/**
+ * Records the `check` verdict without letting a LOGGING failure read as a CLAIM-DETERMINATION failure --
+ * the same distinction `reportReachability`'s own doc draws for reachability. A full disk should not turn
+ * a correctly-answered `check` into `COULD NOT DETERMINE`.
+ *
+ * @param {{ issueNumber: number, claimed: boolean, started: boolean, sessions: string[],
+ *           reachability: { code: number | null, output: string } | null }} entry
+ */
+function recordCheckSafely(entry) {
+  try {
+    recordCheck(checkLogPath(), entry);
+  } catch (error) {
+    process.stderr.write(`row-claim: could not record this check to the log -- the answer above is still `
+      + `correct. ${/** @type {Error} */ (error).message}\n`);
+  }
+}
+
 function usage() {
   return "Usage:\n"
     + "  node scripts/row-claim.mjs --row=<issue-number>                       (status: three states)\n"
     + "  node scripts/row-claim.mjs check <issue-number>                       (alias of --row=)\n"
     + "  node scripts/row-claim.mjs dispatch <issue-number> --session=<name>   (mark taken at dispatch)\n"
     + "  node scripts/row-claim.mjs claim <issue-number> --session=<name>      (mark started)\n"
-    + "  node scripts/row-claim.mjs decline <issue-number> --session=<name>    (give it back)\n";
+    + "  node scripts/row-claim.mjs decline <issue-number> --session=<name>    (give it back)\n"
+    + "  node scripts/row-claim.mjs conflict <issue-number> --found=<text>     (#226: reality differed)\n";
 }
 
 /**
@@ -329,13 +431,16 @@ function renderStatus(issueNumber, title, status) {
   if (!status.claimed) {
     process.stdout.write(`UNCLAIMED -- #${issueNumber} "${title}"\n`);
     process.exitCode = 0;
-    reportReachability(issueNumber);
+    const reachability = reportReachability(issueNumber);
+    recordCheckSafely({ issueNumber, claimed: false, started: false, sessions: [], reachability });
     return;
   }
   const by = status.sessions.length > 0 ? status.sessions.join(", ") : "someone (no session label yet)";
   const state = status.started ? "STARTED" : "DISPATCHED (not started)";
   process.stdout.write(`${state} by ${by} -- #${issueNumber} "${title}"\n`);
   process.exitCode = 1;
+  recordCheckSafely({ issueNumber, claimed: true, started: status.started, sessions: status.sessions,
+    reachability: null });
 }
 
 /** @param {number} issueNumber */
@@ -407,6 +512,39 @@ function runDecline(issueNumber, rest) {
   }
 }
 
+/**
+ * A worker recording that reality differed from `check`'s own last-recorded verdict for this issue (#226)
+ * -- CLOSED when it read startable, already built, a held region that turned out to matter, or the
+ * inverse. Pairs the tool's verbatim answer with what was actually found, the same way `merge-guard`'s
+ * `reconcile` pairs a recorded verdict with the real PR outcome -- except here nothing can look the real
+ * outcome up automatically, so the worker who found it IS the reconciliation.
+ *
+ * @param {number} issueNumber
+ * @param {string[]} rest
+ */
+function runConflict(issueNumber, rest) {
+  const foundFlag = rest.find((a) => a.startsWith("--found="));
+  const found = foundFlag?.slice("--found=".length);
+  if (!found) {
+    process.stderr.write(`row-claim conflict: --found=<what you found instead> is required\n${usage()}`);
+    process.exitCode = 2;
+    return;
+  }
+  try {
+    const recordedVerdict = latestCheckFor(checkLogPath(), issueNumber);
+    recordConflict(checkLogPath(), { issueNumber, recordedVerdict, found });
+    const against = recordedVerdict
+      ? `against the check recorded at ${recordedVerdict.at}`
+      : "-- no prior `check` was ever recorded for this issue, so there is nothing to pair it against, "
+        + "and that absence is itself recorded";
+    process.stdout.write(`RECORDED -- #${issueNumber} conflict logged ${against}\n`);
+    process.exitCode = 0;
+  } catch (error) {
+    process.stderr.write(`COULD NOT RECORD: ${/** @type {Error} */ (error).message}\n`);
+    process.exitCode = 2;
+  }
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const rowFlag = argv.find((a) => a.startsWith("--row="));
@@ -441,6 +579,10 @@ async function main() {
   }
   if (mode === "decline") {
     runDecline(issueNumber, rest);
+    return;
+  }
+  if (mode === "conflict") {
+    runConflict(issueNumber, rest);
     return;
   }
 
