@@ -21,8 +21,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { sandboxGitEnv } from "../../../scripts/git-env.mjs";
 import { fileURLToPath } from "node:url";
 import { join, dirname, basename } from "node:path";
 
@@ -74,62 +72,55 @@ const REPO = fileURLToPath(new URL("../../../", import.meta.url));
  * path never appears, so a path-regex reads that hook and still misses the file it runs. Basenames are
  * resolved against the directories this repo actually keeps scripts in.
  */
-/** Tracked files, for the sources that are not a fixed directory — Windows task scripts, anywhere. */
-function trackedFiles(): string[] {
-  return execFileSync("git", ["ls-files"], { cwd: REPO, encoding: "utf8", env: sandboxGitEnv() })
-    .split("\n").filter(Boolean);
+/** Each hook, with shell comments stripped. */
+function hookTexts(): string[] {
+  const dir = `${REPO}scripts/git-hooks`;
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    // No hooks directory in this checkout is not a fault here; anything else that cannot be listed is.
+    return [];
+  }
+  return names.flatMap((name) => {
+    const path = `${dir}/${name}`;
+    if (!statSync(path).isFile()) return [];
+    // COMMENTS STRIPPED FIRST. A hook is heavily commented and its prose NAMES paths it does not run --
+    // `git-sandbox.ts`, `cli-flags.mjs` and `axe.ts` are all mentioned in explanations here and are
+    // libraries, not entry points. Every other discovery guard in this repo strips comments before
+    // matching for the same reason: a file that only MENTIONS a script has not invoked it.
+    return [readFileSync(path, "utf8").split("\n").filter((line) => !/^\s*#/.test(line)).join("\n")];
+  });
 }
 
 function invocationTexts(): { kind: "path" | "hook", text: string }[] {
-  const texts: { kind: "path" | "hook", text: string }[] = [
-    { kind: "path", text: readFileSync(`${REPO}package.json`, "utf8") }];
-  for (const file of workflowFiles()) texts.push({ kind: "path", text: file });
-  for (const dir of ["scripts/git-hooks"]) {
-    try {
-      for (const name of readdirSync(`${REPO}${dir}`)) {
-        const path = `${REPO}${dir}/${name}`;
-        try {
-          if (statSync(path).isFile()) {
-                        // COMMENTS STRIPPED FIRST. A hook is heavily commented and its prose NAMES paths it does
-            // not run -- `git-sandbox.ts`, `cli-flags.mjs` and `axe.ts` are all mentioned in explanations
-            // here and are libraries, not entry points. Every other discovery guard in this repo strips
-            // comments before matching for exactly this reason; a file that only MENTIONS a script has
-            // not invoked it.
-            texts.push({ kind: "hook", text: readFileSync(path, "utf8").split("\n")
-              .filter((line) => !/^\s*#/.test(line)).join("\n") });
-          }
-        } catch { /* unreadable entry */ }
-      }
-    } catch { /* absent in this checkout, which is not a fault here */ }
-  }
-  return texts;
+  return [
+    { kind: "path" as const, text: readFileSync(`${REPO}package.json`, "utf8") },
+    ...workflowFiles().map((text) => ({ kind: "path" as const, text })),
+    ...hookTexts().map((text) => ({ kind: "hook" as const, text })),
+  ];
 }
-
-/**
- * Where a bare `<name>.mjs` in a HOOK resolves. Only `scripts/`, and the narrowness is the point: widened
- * to the package source directories it matched `cli-flags.mjs`, a library a hook merely mentions. The
- * runtime-constructed case this exists for -- `pre-commit` building
- * `"$(dirname "$0")/.."/piped-exit-status-guard.mjs` -- is a sibling of the hook, so `scripts/` is where
- * it can be, and anywhere else would be a guess.
- */
-const SCRIPT_DIRS = ["scripts"];
 
 function entryPoints(): string[] {
   const found = new Set<string>();
+  const keep = (path: string) => {
+    // A GLOB IS NOT AN ENTRY POINT. `scripts/*.mjs` in a paths-filter reads exactly like an invocation,
+    // and the first version of the workflow widening crashed ENOENT on one. Requiring the file to exist
+    // is the honest filter; a path that has been DELETED is `referenced-scripts.test.ts`'s question.
+    if (path.endsWith(".test.ts") || path.includes("*")) return;
+    if (existsSync(`${REPO}${path}`)) found.add(path);
+  };
   for (const { kind, text } of invocationTexts()) {
     for (const match of text.matchAll(/(?:^|\s)((?:packages|scripts)\/[^\s]+\.(?:mjs|ts))/g)) {
-      // A GLOB IS NOT AN ENTRY POINT. `scripts/*.mjs` in a paths-filter reads exactly like an invocation,
-      // and the first version of the workflow widening crashed ENOENT on one. Requiring the file to exist
-      // is the honest filter; a path that has been DELETED is `referenced-scripts.test.ts`'s question.
-      if (match[1].endsWith(".test.ts") || match[1].includes("*")) continue;
-      if (existsSync(`${REPO}${match[1]}`)) found.add(match[1]);
+      keep(match[1]);
     }
-    // The runtime-constructed case: a bare basename, resolved against the script directories.
+    // THE RUNTIME-CONSTRUCTED CASE, AND ONLY IN A HOOK. A hook is shell: a `.mjs` basename there is
+    // something it runs. In source or a playbook the same token is far more often an IMPORT -- applied
+    // everywhere it matched `cli-flags.mjs`, `code-version.mjs` and `dataset-paths.mjs`, none of them an
+    // entry point, which is a discovery that finds too much and gets loosened until it finds nothing.
+    if (kind !== "hook") continue;
     for (const match of text.matchAll(/(?:^|[\s"'`(/$])([a-z][a-z0-9-]*\.mjs)\b/g)) {
-      for (const dir of SCRIPT_DIRS) {
-        const candidate = `${dir}/${match[1]}`;
-        if (existsSync(`${REPO}${candidate}`)) found.add(candidate);
-      }
+      keep(`scripts/${match[1]}`);
     }
   }
   return [...found].sort();
