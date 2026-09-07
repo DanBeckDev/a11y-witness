@@ -155,9 +155,13 @@ export const DOC_ROOT_FILES = new Set(["README.md", "CLAUDE.md", "CONTRIBUTING.m
  * react to. Exported separately from `classify` so the pre-push hook's board-only fast path can ask the
  * identical question `ci.yml`'s `board` job asks, rather than a second copy of the same two regexes.
  *
- * @param {string[]} docsFiles every file already known to be doc-touching (`f.startsWith("docs/")` or a
- *   `DOC_ROOT_FILES` member) -- callers filter first, since an EMPTY list is not "board-only", it is "no
- *   doc changed at all", and those are different questions with different callers.
+ * @param {string[]} docsFiles a list of files to check -- an EMPTY list is not "board-only", it is "no
+ *   doc changed at all", and those are different questions with different callers. Two valid shapes,
+ *   deliberately: `classify` pre-filters to doc-touching files only, because its `board`/`docs` decision
+ *   is independent of the OTHER categories (`ts`, `python`, ...) it computes over the same diff in the
+ *   same call -- a non-doc file is that diff's problem, not this function's. `isBoardOnlyDiff` (#296) is a
+ *   single yes/no gate with no sibling categories to catch anything this function lets through, so it
+ *   passes the WHOLE, unfiltered diff -- a non-doc file must fail `.every()` here, or it fails nowhere.
  */
 export function boardOnly(docsFiles) {
   return docsFiles.length > 0 && docsFiles.every((f) =>
@@ -231,6 +235,85 @@ function everythingIsPacked(repoRoot, pkgName) {
 }
 
 /**
+ * Every literal path a test declares via the `file: "<path>"` SITES convention, mapped to the package
+ * whose `ts`-job glob (`packages/<pkg>/src/**\/*.test.ts`) covers the test file making the claim — issue
+ * #283, found when a board-only diff routed to the narrower `board` job (`board-*.test.ts` +
+ * `public-claim.test.ts`) and skipped `repo-identity-consolidated.test.ts`, which sits in the same
+ * directory but is not a board test. `classify` folds this map's matched package(s) into `packages` WHEN
+ * `board` fires — see the comment at that call site for why the fold is gated rather than unconditional:
+ * this map itself is not, because the same handful of literals (README.md, CLAUDE.md, ...) are also named
+ * by OTHER, non-board packaging tests, and folding those in for every diff that touches them would re-run
+ * the same tests under both `docs` and `ts` for nothing.
+ *
+ * SCOPED TO THE `file:`-KEYED CONVENTION this repo already uses for exactly this class of check
+ * (`repo-identity-consolidated.test.ts`, `tracked-source-leak-guard.test.ts`, `fetch-wrapper-coverage.
+ * test.ts`, `backlog-file-facts.test.ts` …) rather than a repo-wide scrape of every string literal —
+ * CLAUDE.md's own caution about static derivation applies here too ("a regex reports ZERO flags" for a
+ * CLI that builds its list from a variable): a looser pattern would answer a noisier question, and this
+ * one is the idiom the repo already commits to as a deliberate, reviewed claim about ONE file. NOTE FOR
+ * ANYONE EDITING COMMENTS NEAR THIS FUNCTION: this regex reads SOURCE TEXT and cannot tell documentation
+ * of the convention from a real use of it — writing out an example as `file: "<some path>"` inside a
+ * comment adds a phantom entry to the derived map (harmless, since `<some path>` never appears in a real
+ * diff, but sloppy and worth avoiding; caught once already in this function's own test file).
+ *
+ * @param {string} repoRoot
+ * @returns {Map<string, Set<string>>} literal path -> package name(s) whose ts-job glob covers a test
+ *   naming it
+ */
+export function testDependencyMap(repoRoot) {
+  const testFiles = execFileSync("git", ["ls-files", "packages"], { cwd: repoRoot, env: sandboxGitEnv(), encoding: "utf8" })
+    .split("\n")
+    .filter((f) => /\/src\/.*\.test\.ts$/.test(f));
+  const map = new Map();
+  for (const testFile of testFiles) {
+    const pkgMatch = /^packages\/([^/]+)\//.exec(testFile);
+    if (!pkgMatch) continue;
+    const text = readFileSync(`${repoRoot}/${testFile}`, "utf8");
+    for (const m of text.matchAll(/\bfile:\s*["']([^"']+)["']/g)) {
+      if (!map.has(m[1])) map.set(m[1], new Set());
+      map.get(m[1]).add(pkgMatch[1]);
+    }
+  }
+  return map;
+}
+
+/**
+ * Adds, IN PLACE, every package a NAMED TEST implicates for this file list — gated on `board`, per
+ * `testDependencyMap`'s own comment on why the fold must not apply unconditionally. Extracted to its own
+ * function so `classify` counts this as one call rather than the `if` plus two nested `for`s ESLint's
+ * `complexity` rule would otherwise charge it for directly — CLAUDE.md's own remedy for this exact shape:
+ * move the branching into a helper called through one line, rather than splitting it across two guards at
+ * the call site (which measured WORSE, not better, the last time this file's own `rules.ts` sibling tried
+ * it).
+ *
+ * @param {Set<string>} tsPackages mutated in place
+ * @param {{ files: string[], board: boolean,
+ *   getTestDependencyMap: (repoRoot: string) => Map<string, Set<string>>, repoRoot: string }} ctx
+ */
+function foldTestNamedPackages(tsPackages, { files, board, getTestDependencyMap, repoRoot }) {
+  if (!board) return;
+  const testDeps = getTestDependencyMap(repoRoot);
+  for (const f of files) {
+    for (const pkg of testDeps.get(f) ?? []) tsPackages.add(pkg);
+  }
+}
+
+/**
+ * Which `ci.yml` jobs must run for this file list — a thin wrapper around `classify` itself, so this
+ * answer and `classify`'s can never disagree about the same diff (the fact-stated-twice shape this file's
+ * own header opens with, applied to itself). Exists so the #283 acceptance check can ask the CLASS
+ * question standalone, with no diff or checkout: does `docs/board/reported.json` alone route to `ts`.
+ *
+ * @param {string[]} files
+ * @param {string} [repoRoot]
+ * @returns {string[]} the job names `classify` set true for this file list
+ */
+export function jobsFor(files, repoRoot = process.cwd()) {
+  const result = classify(files, knownPackages(repoRoot), {}, { repoRoot });
+  return ["ts", "python", "ansible", "docs", "board", "changeset", "rulesFitness"].filter((job) => result[job]);
+}
+
+/**
  * Classify a list of repo-relative changed paths into which `ci.yml` jobs must run.
  *
  * @param {string[]} files
@@ -238,14 +321,16 @@ function everythingIsPacked(repoRoot, pkgName) {
  * @param {Record<string, string[]>} [dependencyGraph] from `readWorkspaceDependencyGraph`; defaults to
  *   empty, so `testPackages` degrades to exactly `packages` when no graph is supplied (every existing
  *   call site that predates `testPackages` keeps working unchanged)
- * @param {{ repoRoot?: string, getPackedFiles?: (repoRoot: string, pkgName: string) => Set<string> }} [deps]
- *   `repoRoot` defaults to `process.cwd()`, `getPackedFiles` to the real `packedFiles` above — both
- *   injectable so `classify` itself stays testable without a real npm pack per call.
+ * @param {{ repoRoot?: string, getPackedFiles?: (repoRoot: string, pkgName: string) => Set<string>,
+ *   getTestDependencyMap?: (repoRoot: string) => Map<string, Set<string>> }} [deps]
+ *   `repoRoot` defaults to `process.cwd()`, `getPackedFiles` to the real `packedFiles` above,
+ *   `getTestDependencyMap` to the real `testDependencyMap` above — all three injectable so `classify`
+ *   itself stays testable without touching disk or git per call.
  * @returns {{ ts: boolean, python: boolean, ansible: boolean, docs: boolean, board: boolean,
  *   changeset: boolean, rulesFitness: boolean, packages: string[], testPackages: string[] }}
  */
 export function classify(files, allPackages, dependencyGraph = {},
-  { repoRoot = process.cwd(), getPackedFiles = packedFiles } = {}) {
+  { repoRoot = process.cwd(), getPackedFiles = packedFiles, getTestDependencyMap = testDependencyMap } = {}) {
   const rootTsChanged = files.some((f) => ROOT_TS_FILES.has(f));
   // BLUNT ON PURPOSE, matching `changedPackages`'s own stated philosophy: any file under `packages/<name>/`
   // — not only `.ts`/`.mjs`/`.json` under `src`/`bin` — marks that package touched. A second, narrower
@@ -278,6 +363,11 @@ export function classify(files, allPackages, dependencyGraph = {},
   // mixed diff has not made that argument.
   const board = docsFiles.length > 0 && boardOnly(docsFiles);
   const docs = docsFiles.length > 0 && !board;
+
+  // #283: `board`'s glob is a strict subset of `docs`'s over the same directory -- see
+  // `foldTestNamedPackages`'s own comment for why that makes this the one place a file can be classified
+  // without running a test that names it, and why the fold is gated on `board` rather than unconditional.
+  foldTestNamedPackages(tsPackages, { files, board, getTestDependencyMap, repoRoot });
 
   // ISSUE #132: the regex `changeset-check.yml` used before this file existed asked "is this file UNDER
   // a published package's src/python/models/bin", which answers a different question than the one the

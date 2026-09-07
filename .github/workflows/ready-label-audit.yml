@@ -1,0 +1,37 @@
+name: ready-label-audit
+
+# `ready` MUST BE MUTUALLY EXCLUSIVE WITH EVERY LABEL THAT ALREADY MEANS "NOT ACTUALLY PICKABLE" (#121),
+# and until now `npm run ready:audit` -- the command built to prove that -- was invoked by NOTHING. #246:
+# three real rows sat `ready` + `in-progress` + `session:*` (claimed and started, still advertising as
+# pickable) and were found by a human reading `gh issue list --label ready` by hand, not by this check.
+#
+# SCHEDULED, LIKE `coverage.yml`, AND FOR THE SAME REASON coverage.yml GIVES FOR ITS OWN CHOICE — this is
+# not a watchdog for another schedule (that shape belongs on `push`, per `board-liveness.yml`'s header);
+# this schedule IS the thing being relied on. It audits live GitHub label state, which no commit touches,
+# so there is no "the push that broke it" to attach a red mark to and no reason to gate a merge on it.
+#
+# Runs hourly rather than daily (unlike coverage.yml): the incident this row fixes was a live multi-agent
+# dispatch mistake, caught within minutes by a human — a daily cadence would have let it stand for most of
+# a working session. This repo pushes many times a day, so the 60-day-inactivity auto-disable that makes a
+# schedule-only workflow risky elsewhere is not a live concern here.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run ready:audit
