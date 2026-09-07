@@ -15,6 +15,11 @@ HOW THE BLOCK IS READ
     hand it to bash as a command. That is why all of this sits above the header.
 
 RULES WORTH KNOWING BEFORE YOU WRITE ONE
+  - A MARKDOWN HEADING IS NOT THE HEADER. `## Acceptance`, `## Acceptance:` and `### Acceptance:` all parse
+    as MISSING -- the pattern is anchored at the start of the line, so a `#` in front means it is never
+    seen. `Acceptance:` bare and `**Acceptance:**` both work. This one is easy to hit precisely because the
+    rest of this template uses `## ` headings, so the heading form is the natural thing to write. It cost
+    #183 a MISSING verdict on a body that had the field.
   - DO NOT WRAP THE COMMAND IN MARKDOWN BACKTICKS. This repository's prose convention is `like this`, and
     it is exactly wrong here: the extractor keeps the backticks, so the file check sees `npx as a token
     and reports `fail (matched no file: `npx, ...)` for a command that runs perfectly. Measured against the
