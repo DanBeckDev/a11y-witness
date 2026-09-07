@@ -53,16 +53,28 @@
 // queue. Every skip prints its reason, and an arming FAILURE does not end the loop: failures are collected
 // and the run exits non-zero naming them, so one unarmable PR cannot strand the rest.
 //
-// It takes NO ARGUMENTS. That is why it does not use `refuseUnknownFlags` and is not an argv-reading
-// module: there is no flag to mistype. It imports nothing but `node:child_process`, so the workflow needs
-// a checkout and nothing else -- no `npm ci`, no build, no `dist`. #330 and #331 are what that costs when
-// a bootstrap script reaches for a workspace package.
+// IT TAKES NO ARGUMENTS, AND THAT IS PRECISELY WHY IT IS GUARDED RATHER THAN SKIPPED.
+//
+// The first version of this comment said the opposite -- "no flag to mistype, so it is not an argv-reading
+// module" -- and `cli-flags.test.ts` refused it: #164 widened that census to top-level `scripts/`, and a
+// command with NO flags is exactly where a mistyped one is discarded in silence and the default reported
+// as success. `check-preregistered-verdict.mjs` and `build-packages.mjs` both call it with an empty list
+// for the same reason. An argument handed to this sweep means the caller wanted something other than
+// "arm the standing queue", and running the sweep anyway would answer a question nobody asked.
+//
+// THE IMPORT IS RELATIVE, never `@a11y-witness/worker-fleet/cli-flags`. The package specifier resolves to
+// `dist/cli-flags.mjs`, so it needs `npm ci` AND a build to have happened -- and this job deliberately has
+// neither, only `actions/checkout`. #330 and #331 are what that circular bootstrap costs: a top-level
+// workspace import in `build-packages.mjs` took `main` down, and every worktree symlinking `node_modules`
+// to a sibling's inherited a stale `dist` and never saw it fail locally. `cli-flags.mjs` itself imports
+// only `node:path`, `node:fs` and `node:url`, so the relative form needs nothing installed.
 //
 // Exit codes are the contract:
 //   0  the queue is drained -- everything armable was armed, and every skip was reported with its reason
 //   1  at least one PR could not be armed. NAMED, never counted.
 //   2  a lookup failed. INCONCLUSIVE, never "fine".
 import { execFileSync } from "node:child_process";
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -101,6 +113,8 @@ export function sweepDecision({ labels, checkRunCount }) {
 const gh = (args) => execFileSync("gh", args, { encoding: "utf8" }).trim();
 
 function main() {
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/auto-arm-sweep.mjs" });
+
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo) {
     console.error("CANNOT ASK: GITHUB_REPOSITORY is unset, so there is no repo to sweep.");
