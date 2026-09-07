@@ -5,7 +5,7 @@
 > concluded there was no work to pull. **A dead copy that still answers questions is worse than two copies
 > that visibly disagree.**
 
-**What is open, and what is ready to start:** <https://github.com/DanBeckDev/a11y-witness/issues> and
+**What is open, and what is ready to start:** <https://github.com/a11ign/a11ign/issues> and
 Project 2, whose **Ready** column is what the dispatcher pulls from.
 
 **The rows are gone from this page rather than left under a warning**, because a banner does not stop

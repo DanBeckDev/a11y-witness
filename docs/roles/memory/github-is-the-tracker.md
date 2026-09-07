@@ -1,11 +1,11 @@
 ---
 name: github-is-the-tracker
-description: a11y-witness's tracker is GitHub Issues + Project 2, not docs/backlog.md; the milestone carries its own date-move log.
+description: a11ign's tracker is GitHub Issues + Project 2, not docs/backlog.md; the milestone carries its own date-move log.
 metadata:
   type: project
 ---
 
-Since 2026-09-06, "what is open" for a11y-witness is **GitHub Issues on DanBeckDev/a11y-witness**, not
+Since 2026-09-06, "what is open" for a11ign is **GitHub Issues on a11ign/a11ign**, not
 `docs/backlog.md`. The markdown files stay as the RECORD of lessons and link to issues.
 
 - Board: https://github.com/users/DanBeckDev/projects/2 — Status is Ready / In progress / Awaiting merge /

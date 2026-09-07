@@ -3,7 +3,7 @@
  * `(fault: screen-reader-mute)` learns nothing from it — see this file's own header for the incident.
  *
  * DISCOVERS the fault codes from `packages/nvda-worker/src/capture-faults.mjs`'s `FAULT`, by RELATIVE
- * PATH to its source, never a package import — `@a11y-witness/nvda-worker` is deliberately not a
+ * PATH to its source, never a package import — `@a11ign/nvda-worker` is deliberately not a
  * dependency of this package (see `fault-remediation.ts`'s header), and even if it were, importing the
  * PUBLISHED package would resolve to a `dist` that could be stale relative to this worktree's source
  * (docs/backlog.md, issue #28's exact shape) — a relative import into `../../nvda-worker/src/` reads the
@@ -77,6 +77,33 @@ test("an UNKNOWN fault code says so explicitly, rather than silently omitting re
   assert.match(message, /it broke/);
   assert.match(message, /\(fault: some-future-fault-nobody-taught-this-file-yet\)/);
   assert.match(message, /no remediation is recorded/i);
+});
+
+test("hard-timeout gets the full WHAT/TRY/WHERE treatment, like any other known fault", () => {
+  const message = formatFaultMessage("hard-timeout", "capture exceeded the hard timeout of 520000 ms "
+    + "and was abandoned");
+  assert.match(message, /hard timeout/i);
+  assert.match(message, /\(fault: hard-timeout\)/);
+  const remediation = remediationFor("hard-timeout")!;
+  assert.match(message, new RegExp(remediation.what.slice(0, 40).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("#336: the progress argument reports how far a PARTIAL capture got, when the worker said", () => {
+  const withProgress = formatFaultMessage("hard-timeout", "capture exceeded the hard timeout",
+    { reachedPhase: "readingForm", markCount: 7 });
+  assert.match(withProgress, /Got as far as: "readingForm"/);
+  assert.match(withProgress, /7 progress mark\(s\) recorded before stopping/);
+
+  const withoutProgress = formatFaultMessage("hard-timeout", "capture exceeded the hard timeout");
+  assert.doesNotMatch(withoutProgress, /Got as far as/,
+    "no progress was given, so none may be invented -- 'we could not read your page at all' and 'we "
+    + "ran out of time partway through' are different findings");
+
+  const phaseOnly = formatFaultMessage("hard-timeout", "capture exceeded the hard timeout",
+    { reachedPhase: "navigated" });
+  assert.match(phaseOnly, /Got as far as: "navigated"/);
+  assert.doesNotMatch(phaseOnly, /progress mark\(s\)/,
+    "a mark COUNT that was never supplied must not be fabricated as a number");
 });
 
 test("MUTATION: a fault code with no remediation entry is caught by name", () => {

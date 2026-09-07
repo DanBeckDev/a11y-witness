@@ -32,7 +32,7 @@ split is wrong and briefing goes back.
 See [[ceo-worker-utilisation]] and [[orchestrating-peer-sessions]].
 
 **Added 2026-09-06 (board-approved):** `product-manager` owns the PRODUCT loop: the tracker (GitHub Issues +
-a Project on DanBeckDev/a11y-witness; markdown files demoted to record), the release milestone with a
+a Project on a11ign/a11ign; markdown files demoted to record), the release milestone with a
 recorded reason for every date move, and a daily board report generated from GitHub data. Reports to `ceo`.
 Never merges, never briefs workers, never touches fleet/lab/runs/. Contingency plan: role files for all
 eight agents in `docs/roles/`, memory into the repo, credentials to a secrets store, corpus snapshot

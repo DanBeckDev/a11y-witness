@@ -43,6 +43,10 @@ import { existsSync, mkdtempSync, copyFileSync, readFileSync, rmSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join, resolve, basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+// RELATIVE, for `ci-changed.mjs`'s documented reason: this file is in that script's import graph, and
+// `ci.yml`'s `changed` job runs no `npm ci` — it decides whether anything else installs at all. A package
+// specifier here dies before the workflow starts.
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 export const SMOKE = "isolation-smoke.mjs";
 
@@ -57,7 +61,7 @@ function run(command, args, cwd, env) {
 /**
  * Sibling packages this one depends on, as directories, transitively.
  *
- * Only `@a11y-witness/*` — everything else comes from the registry, which is the point of the gate: a
+ * Only `@a11ign/*` — everything else comes from the registry, which is the point of the gate: a
  * dependency npm can actually resolve is not the failure mode being tested.
  */
 export function internalDependencies(packageDir, seen = new Set()) {
@@ -66,7 +70,7 @@ export function internalDependencies(packageDir, seen = new Set()) {
   const optional = manifest.peerDependenciesMeta ?? {};
   const dirs = [];
   for (const dependency of Object.keys(wanted)) {
-    if (!dependency.startsWith("@a11y-witness/") || seen.has(dependency)) continue;
+    if (!dependency.startsWith("@a11ign/") || seen.has(dependency)) continue;
     if (optional[dependency]?.optional && !existsSync(siblingDir(packageDir, dependency))) continue;
     seen.add(dependency);
     const dir = siblingDir(packageDir, dependency);
@@ -78,9 +82,9 @@ export function internalDependencies(packageDir, seen = new Set()) {
   return dirs;
 }
 
-/** `@a11y-witness/foo` lives at `packages/foo`, beside the package asking for it. */
+/** `@a11ign/foo` lives at `packages/foo`, beside the package asking for it. */
 const siblingDir = (packageDir, dependency) =>
-  join(resolve(packageDir), "..", dependency.slice("@a11y-witness/".length));
+  join(resolve(packageDir), "..", dependency.slice("@a11ign/".length));
 
 
 /**
@@ -182,7 +186,7 @@ export function checkIsolation(packageDir) {
   try {
     // Every sibling this package needs, packed too.
     //
-    // Nothing is published, so npm cannot fetch `@a11y-witness/evidence` from the registry — it would fail
+    // Nothing is published, so npm cannot fetch `@a11ign/evidence` from the registry — it would fail
     // the install with E404 and the gate would report a broken package that is fine. npm 7+ also
     // auto-installs PEER dependencies, so a peer on an unpublished sibling fails the same way; that is why
     // peers are collected here as well.
@@ -255,7 +259,7 @@ export function allPackages() {
     .filter((entry) => entry.isDirectory() && existsSync(join(root, entry.name, "package.json")))
     .map((entry) => join(root, entry.name))
     // A `private` package is never published, so "can a consumer install this?" has no meaning for it and a
-    // missing smoke test is not a defect. `@a11y-witness/lab` is private on purpose (ADR 0008): the corpus is
+    // missing smoke test is not a defect. `@a11ign/lab` is private on purpose (ADR 0008): the corpus is
     // not distributable and the trainer would imply a reproducibility promise this project cannot make.
     // Skipping is announced by the caller rather than silent — a gate that quietly covers less than you think
     // is the failure mode this whole file exists to prevent.
@@ -280,6 +284,8 @@ function countPrivatePackages() {
 // `node scripts/isolation-gate.mjs` invocation, but this file is ALSO imported by test files under
 // packages/, so the same guard idiom this repo now uses everywhere is worth using here too.
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
+  // Guarded per #164: --all, plus positional package dirs; npm flags go onward.
+  refuseUnknownFlags(["--all"], { entry: import.meta.url, command: "node scripts/isolation-gate.mjs" });
   const args = process.argv.slice(2);
   const targets = args.length === 0 || args[0] === "--all" ? allPackages() : args;
   if (args.length > 0 && args[0] !== "--all" && targets.length === 0) {

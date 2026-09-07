@@ -1,5 +1,5 @@
 ---
-"@a11y-witness/scorer": major
+"@a11ign/scorer": major
 ---
 
 Retrained scorer weights (`candidate`).

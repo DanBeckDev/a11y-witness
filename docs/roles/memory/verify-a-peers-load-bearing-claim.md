@@ -5,7 +5,7 @@ metadata:
   type: feedback
 ---
 
-Peers on a11y-witness are good and their reports are honest. That is not the question. The question is
+Peers on a11ign are good and their reports are honest. That is not the question. The question is
 which claims I re-derive before merging, and the answer is **the ones where being wrong is expensive**, not
 the ones I doubt.
 

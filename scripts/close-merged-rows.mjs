@@ -24,11 +24,29 @@
  * nothing.
  *
  *   node scripts/close-merged-rows.mjs <base>..<head>
+ *
+ * ## NOTHING INVOKES THIS, AND `close-rows-for-merged-pr.mjs` NOW DOES THE CLOSING -- #298, 2026-09-07
+ *
+ * Recorded here because an uninvoked script reads to the next person as a fallback that is merely broken.
+ * No npm script, no workflow and no module calls this one; the only references in the tree are its own
+ * test and the CLI census. It has never run.
+ *
+ * Its premise has also moved. The refusal above is deliberate and its reasoning was right -- closing
+ * needs the sha and a sentence, and those were the DISPATCHER's to write, because a human dispatcher
+ * merged. Under the pipeline nobody merges: auto-arm arms and GitHub merges, so there is no moment at
+ * which a person is holding the range this command wants.
+ *
+ * `close-rows-for-merged-pr.mjs` answers the same need from the other end -- one merged PR, GitHub's own
+ * `closingIssuesReferences` rather than a regex over commit subjects, and the merge sha in the comment it
+ * leaves -- so the risk this header names is answered rather than dropped. This file is kept, not yet
+ * retired: its `issuesReferenced` parser is separately useful and the retirement is a decision with its
+ * own reasoning, not a side effect of adding the replacement.
  */
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { sandboxGitEnv } from "./git-env.mjs";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 /**
  * Issue references a commit range makes: `#12`, `Closes #12`, `fix(#30):`.
@@ -53,6 +71,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 }
 
 function main() {
+  // Guarded per #164: takes a positional commit range; --json/--jq go to gh.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/close-merged-rows.mjs" });
   const range = process.argv[2];
   if (!range || !range.includes("..")) {
     process.stderr.write("usage: close-merged-rows.mjs <base>..<head>\n");

@@ -18,7 +18,7 @@
 // generating and the publishing are separate acts and a bad report can be seen before it is posted.
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import {
   REPO, MILESTONE, HOURS_MS, READ_SET,
   gh, git, issues, milestone, mergeState, misAuthored, reported, daysUntil, readSetIsNotMain, countable} from "./board-data.mjs";
@@ -36,7 +36,7 @@ const flag = (name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").sl
  * Each section takes the whole fact set and destructures only what it reads, so what a section depends on
  * is visible in its first line rather than inferred from its body.
  */
-function release(d, L) {
+export function release(d, L) {
   const { ms } = d;
   L.push("## Release");
   if (!ms) {
@@ -54,7 +54,7 @@ function release(d, L) {
   L.push("");
 }
 
-function blockerTable(d, L) {
+export function blockerTable(d, L) {
   const { blockers } = d;
   L.push("## Blockers");
   if (blockers.length === 0) {
@@ -70,7 +70,7 @@ function blockerTable(d, L) {
   L.push("");
 }
 
-function issuesClosed(d, L) {
+export function issuesClosed(d, L) {
   const { merges, closed } = d;
   L.push("## Issues closed");
   if (closed.length === 0) {
@@ -82,7 +82,7 @@ function issuesClosed(d, L) {
   L.push("");
 }
 
-function whatMerged(d, L) {
+export function whatMerged(d, L) {
   const { merges, unpushed, since } = d;
   L.push("## What merged");
   L.push(`**${merges.length}** merge${merges.length === 1 ? "" : "s"} to \`main\` since \`${since}\`, read `
@@ -116,7 +116,7 @@ function whatMerged(d, L) {
   L.push("");
 }
 
-function authorship(d, L) {
+export function authorship(d, L) {
   const { strays } = d;
   if (strays.length > 0) {
     L.push("## Commit authorship — a known defect, not a discovery");
@@ -132,7 +132,7 @@ function authorship(d, L) {
   }
 }
 
-function lastGate(d, L) {
+export function lastGate(d, L) {
   const { latestGate, gateIsFresh } = d;
   L.push("## Last gate result");
   if (!latestGate) {
@@ -152,7 +152,7 @@ function lastGate(d, L) {
   L.push("");
 }
 
-function fleetHoursSection(d, L) {
+export function fleetHoursSection(d, L) {
   const { fleetHours } = d;
   L.push("## Fleet hours");
   if (!fleetHours || fleetHours.status === "not instrumented") {
@@ -189,7 +189,7 @@ function fleetHoursSection(d, L) {
   L.push("");
 }
 
-function queue(d, L) {
+export function queue(d, L) {
   const { open, ready, awaiting } = d;
   L.push("## Queue");
   L.push(`**Ready ${ready.length}** · **Awaiting merge ${awaiting.length}** · **Open ${open.length}**`);
@@ -219,7 +219,7 @@ function facts(since, sinceLabel) {
     fleetHours, closed, open, blockers, ready, awaiting };
 }
 
-function render(d) {
+export function render(d) {
   const { sinceLabel } = d;
   const L = [];
   L.push(`# Board report — ${new Date().toISOString().slice(0, 10)}`);

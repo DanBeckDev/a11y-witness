@@ -8,10 +8,10 @@
 // is the half of this package that ADR 0002 says must never depend on one.
 import assert from "node:assert/strict";
 
-import { judge, validateJudgment } from "@a11y-witness/judge";
-import { ruleFindings } from "@a11y-witness/judge/rules";
-import { layerOf, orderByLayer, LAYER_LABEL } from "@a11y-witness/judge/layers";
-import { applyGate, hasEvidenceFor } from "@a11y-witness/judge/internal";
+import { judge, validateJudgment } from "@a11ign/judge";
+import { ruleFindings } from "@a11ign/judge/rules";
+import { layerOf, orderByLayer, LAYER_LABEL } from "@a11ign/judge/layers";
+import { applyGate, hasEvidenceFor } from "@a11ign/judge/internal";
 
 for (const [name, value] of Object.entries({ judge, validateJudgment, ruleFindings, layerOf, applyGate, hasEvidenceFor })) {
   assert.equal(typeof value, "function", `${name} should be callable`);
@@ -55,4 +55,4 @@ assert.throws(() => validateJudgment({ nonsense: true }), /invalid taskCompletab
 assert.throws(() => validateJudgment({ taskCompletable: true, summary: "  ", findings: [], confidence: 1 }),
   /invalid summary/, "a blank summary is not a summary");
 
-console.log(`@a11y-witness/judge works when installed: 4 subpaths resolve, rules found ${findings.length} finding(s) with no model`);
+console.log(`@a11ign/judge works when installed: 4 subpaths resolve, rules found ${findings.length} finding(s) with no model`);

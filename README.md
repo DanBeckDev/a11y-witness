@@ -1,14 +1,19 @@
-# a11y-witness
+# a11ign
 
-[![lint](https://github.com/DanBeckDev/a11y-witness/actions/workflows/lint.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/lint.yml)
-[![capture-regression](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml)
+**[a11ign.com](https://a11ign.com)**
+
+*(formerly a11y-witness — renamed 2026-09-07, before the transfer to the `a11ign` organisation; see #66.
+Nothing had been published under the old name, so this is a rename, not a migration.)*
+
+[![lint](https://github.com/a11ign/a11ign/actions/workflows/lint.yml/badge.svg)](https://github.com/a11ign/a11ign/actions/workflows/lint.yml)
+[![capture-regression](https://github.com/a11ign/a11ign/actions/workflows/capture-regression.yml/badge.svg)](https://github.com/a11ign/a11ign/actions/workflows/capture-regression.yml)
 [![licence: AGPL-3.0-or-later](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](./LICENSE)
 
-**a11y-witness drives a real screen reader (NVDA) through a web page and reports the barriers a screen-reader user would hit.** Every finding cites a WCAG criterion and quotes the announcement it rests on, so you can check it yourself.
+**a11ign drives a real screen reader (NVDA) through a web page and reports the barriers a screen-reader user would hit.** Every finding cites a WCAG criterion and quotes the announcement it rests on, so you can check it yourself.
 
 > **Which path is yours? If you have no Windows machine, start with the [GitHub Action](#quickstart) —
 > it needs none.** If you have one, or don't mind building a VM, the [local path](#quickstart) is likely
-> yours instead. (`npx a11y-witness` is not published yet — see
+> yours instead. (`npx a11ign` is not published yet — see
 > [`packages/cli/README.md`](./packages/cli/README.md) for why and what to use instead.) This is the one
 > decision every other doc in this repo defers to.
 
@@ -57,7 +62,7 @@ trying to make sure nobody has to hunt for where to apply it.
 A real run against `https://example.com`:
 
 ```
-a11y-witness report
+a11ign report
 ===================
 URL:   https://example.com
 Task:  Read and understand this page
@@ -245,7 +250,7 @@ Running it is one command; getting value out of it is a few habits.
 
 **Already running axe? Feed it in rather than running ours.** `--axe-results ./axe.json` keeps one engine, one version, one set of rule findings — and you still get the layered report.
 
-**Where it fits.** This is not a gate to put in front of every commit — a capture takes about a minute of real screen-reader time. It earns its keep on the flows that matter (checkout, sign-up, search), before a release, or as the evidence base for an audit. Keep your rule scanner where it is, on every commit, doing the fast mechanical layer.
+**Where it fits.** This is not a gate to put in front of every commit — a capture takes real screen-reader time to run, and exact timing is under re-measurement since 2026-09-07 (#311). It earns its keep on the flows that matter (checkout, sign-up, search), before a release, or as the evidence base for an audit. Keep your rule scanner where it is, on every commit, doing the fast mechanical layer.
 
 ## Part 2: getting a real screen reader to run, repeatably
 
@@ -331,7 +336,7 @@ A monorepo: everything a consumer installs is under `packages/`, one directory p
 
 ```
 packages/
-  cli/            the `witness` pipeline — capture -> axe -> judge -> report. Published as `a11y-witness`
+  cli/            the `witness` pipeline — capture -> axe -> judge -> report. Published as `a11ign`
   control/        PRIVATE. Ansible job control for the lab and the bare-metal fleet (ADR 0012)
   judge/          the deterministic WCAG rules, criterion coverage, and experience-layer ordering
   scorer/         the trained heads, the feature contract, and the Python scoring program
@@ -486,7 +491,7 @@ you are trying to do. The four you are most likely to want:
 | [`docs/getting-started.md`](./docs/getting-started.md) | **start here**: install, set up a worker by whichever route fits, run your first report, and what to do when it fails |
 | [`docs/adr/README.md`](./docs/adr/README.md) | 24 architecture decision records, indexed — the *why*, including the alternatives that were rejected |
 | [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) | how the numbers were produced, the biases we are exposed to, and why the eval figures must not be quoted as a headline |
-| [`docs/coverage.md`](./docs/coverage.md) | **every WCAG 2.2 A/AA criterion and whether we detect it** — read that page for the current count rather than this one, and each partial one names the gap. Generated from the code and pinned by a test that regenerates and diffs it, but this sentence is a hand-typed copy and drifted from it once already |
+| `docs/coverage.md` | **every WCAG 2.2 A/AA criterion and whether we detect it** — each partial one names the gap. Generated from the code, deliberately not committed (issue #158: two branches regenerating the same tracked page produced conflicts in a file neither author wrote), so it is not a link — run `npm run docs:coverage` to read it |
 | [`docs/screenreader-coverage.md`](./docs/screenreader-coverage.md) | every behaviour we drive — and **what we do not drive yet**, which bounds what this tool can claim |
 
 For contributors: [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`SECURITY.md`](./SECURITY.md). Read the second

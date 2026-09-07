@@ -865,7 +865,7 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # NO SCHEMA BUMP, deliberately. The function changed; the values cannot. A v17 model scored under this
     # pipeline produces identical numbers on every record that exists, so no mismatch is possible and the
     # guarantee `FEATURE_SCHEMA_VERSION` exists to give is not at risk. Bumping would force a retrain and
-    # burn a MAJOR release of `@a11y-witness/scorer` -- the weights are the API -- for a provably
+    # burn a MAJOR release of `@a11ign/scorer` -- the weights are the API -- for a provably
     # zero-difference change.
     #
     # WHAT WOULD CHANGE THAT: the first capture that records an errored disclosure probe. At that point
@@ -918,8 +918,9 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     )
     values["post_submit_present"] = float(bool(post_submit_fields))
     # `postSubmitFields` IS NOT CROSSED. It was, and the pair was WITHDRAWN before the verdict rather than
-    # in response to one -- `schema-migration.json`'s `correctedBeforeTheVerdict_2026_09_05` is the whole
-    # record, and this is the summary the next reader of THIS function needs.
+    # in response to one -- `docs/schema-migration-history.md`'s "v18 -> v19" section is the whole record
+    # (schema-migration.json itself is deleted at the moment a migration closes, which is why the record
+    # does NOT live there -- #340), and this is the summary the next reader of THIS function needs.
     #
     # TWO DEFINITIONS OF "asked", and the 56.1% that justified the pair measured the wrong one.
     # `observation-ambiguity.mjs` counts a channel as asked whenever the form probe RAN; the capture writes

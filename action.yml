@@ -1,13 +1,13 @@
-# a11y-witness — drive a real screen reader over a page in CI and report what it announced.
+# a11ign — drive a real screen reader over a page in CI and report what it announced.
 #
 # A composite action, not a Docker one: container actions do not run on Windows runners, and NVDA needs
 # Windows. It must therefore be used with `runs-on: windows-2022` (or 2025).
 #
 # The setup steps below are not boilerplate. Each one is a fault this project already paid for, and the
 # reasons are kept inline because a future reader's instinct will be to delete them.
-name: a11y-witness
+name: a11ign
 description: Drive NVDA over a page and report the accessibility barriers a screen-reader user would hit.
-author: a11y-witness
+author: a11ign
 branding:
   icon: ear
   color: purple
@@ -157,7 +157,7 @@ runs:
       shell: bash
       run: |
         if [ "$RUNNER_OS" != "Windows" ]; then
-          echo "::error::a11y-witness needs NVDA, which is Windows-only. Use runs-on: windows-2022." >&2
+          echo "::error::a11ign needs NVDA, which is Windows-only. Use runs-on: windows-2022." >&2
           exit 1
         fi
 
@@ -205,7 +205,7 @@ runs:
     # falls back to `channel: "msedge"`, which Windows runners DO have, and which is the same engine the
     # capture itself drives. Skipping the download is what puts every Action run on that fallback path
     # rather than an occasional one.
-    - name: Install a11y-witness
+    - name: Install a11ign
       shell: bash
       working-directory: ${{ github.action_path }}
       run: npm ci
@@ -243,7 +243,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~\AppData\Local\guidepup
-        key: a11y-witness-nvda-${{ runner.os }}-${{ hashFiles('package-lock.json', 'node_modules/@guidepup/guidepup/manifest.json') }}
+        key: a11ign-nvda-${{ runner.os }}-${{ hashFiles('package-lock.json', 'node_modules/@guidepup/guidepup/manifest.json') }}
 
     # Install NVDA with the repo's OWN guidepup rather than guidepup/setup-action. The action predates
     # the @guidepup/setup 0.24.0 CLI rewrite and installs the pre-0.29 layout (registry pointer +
@@ -321,7 +321,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~\AppData\Local\pip\Cache
-        key: a11y-witness-pip-${{ runner.os }}-${{ hashFiles('packages/scorer/requirements.txt') }}
+        key: a11ign-pip-${{ runner.os }}-${{ hashFiles('packages/scorer/requirements.txt') }}
 
     # NO encoder cache (87 MB), and no npm cache (18 s). Both needed `${{ github.action_path }}` in a
     # path, and that is "." when the action is used locally (`uses: ./`) — actions/cache then rejects
@@ -423,7 +423,7 @@ runs:
         fi
         echo "worker ready"
 
-        out="$RUNNER_TEMP/a11y-witness-result.json"
+        out="$RUNNER_TEMP/a11ign-result.json"
         args=("${{ inputs.url }}" --task "${{ inputs.task }}" --json)
         [ "${{ inputs.probe-forms }}" = "true" ] && args+=(--probe-forms)
         # A DECLARED config, and it is separate from `probe-forms` rather than replacing it. The
@@ -456,8 +456,8 @@ runs:
         npx tsx packages/cli/src/action/run.ts \
           --result="${{ steps.capture.outputs.result-json }}" \
           --fail-on="${{ inputs.fail-on }}" \
-          --summary-out="$RUNNER_TEMP/a11y-witness-summary.md" \
-          --marker=a11y-witness || status=$?
+          --summary-out="$RUNNER_TEMP/a11ign-summary.md" \
+          --marker=a11ign || status=$?
         # Outputs are set BEFORE propagating the failure, so a failing check still exposes its numbers to
         # later steps. Reading them from the result rather than re-deriving keeps one source of truth.
         node -e '
@@ -478,7 +478,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
       run: |
         gh pr comment "${{ github.event.pull_request.number }}" \
-          --body-file "$RUNNER_TEMP/a11y-witness-summary.md" \
+          --body-file "$RUNNER_TEMP/a11ign-summary.md" \
           --edit-last --create-if-none \
           --repo "${{ github.repository }}" \
           || echo "::warning::Could not post the PR comment. The job summary still has the report."

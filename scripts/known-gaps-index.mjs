@@ -14,6 +14,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 export const KNOWN_GAPS_FILE = "docs/known-gaps.md";
 
@@ -117,6 +118,8 @@ export function applyIndexBlock(text) {
 }
 
 function main() {
+  // Guarded per #164: reads --write.
+  refuseUnknownFlags(["--write"], { entry: import.meta.url, command: "node scripts/known-gaps-index.mjs" });
   const repoRoot = fileURLToPath(new URL("../", import.meta.url));
   const path = join(repoRoot, KNOWN_GAPS_FILE);
   if (!existsSync(path)) {

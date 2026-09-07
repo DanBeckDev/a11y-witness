@@ -57,7 +57,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { networkInterfaces } from "node:os";
 import { sandboxGitEnv } from "../../../scripts/git-env.mjs";
-// RELATIVE, NEVER `@a11y-witness/worker-fleet/cli-flags`. A package-name import resolves through
+// RELATIVE, NEVER `@a11ign/worker-fleet/cli-flags`. A package-name import resolves through
 // `node_modules`, and the control plane deliberately has none — ADR 0012 keeps npm's transitive surface
 // away from the key that can reconfigure twelve auto-logging-in Windows boxes. So this package runs from a
 // RAW GIT CHECKOUT, and every import it makes has to work without an install.
@@ -68,7 +68,7 @@ import { protocolVerdict, servedProtocols } from "../../worker-fleet/src/protoco
 // BY PATH, never by package name, AND TRANSITIVELY SO. The control plane has no `node_modules` — ADR
 // 0012's boundary — so a path import is not enough on its own: what it imports must obey the rule too.
 // The first version of this reached `workerUrls` in `check-worker-code.mjs`, which imports
-// `@a11y-witness/nvda-worker` by package name, and `fleet:deploy` died on the control plane with
+// `@a11ign/nvda-worker` by package name, and `fleet:deploy` died on the control plane with
 // ERR_MODULE_NOT_FOUND while passing on a laptop that has node_modules. A gate that does not exercise
 // what ships, for the fifth time in this repo.
 //
@@ -95,10 +95,14 @@ refuseUnknownFlags(
 const FOLLOW_POLL_MS = 5_000;
 
 // No default: see control-plane-host.mjs -- this used to fall back to a real, specific LAN address (#83).
-const CONTROL_PLANE = process.env.A11Y_CONTROL_HOST;
+// Resolved by `requireControlPlaneHost()` at the top of `main()`, not at import: env var first, then the
+// durable file it installs (#285, `fleet:control-host-install`), then a loud refusal. A bare env read
+// here would miss the file entirely, so this is reassigned once resolved rather than only validated.
+/** @type {string} */
+let CONTROL_PLANE;
 /** The playbooks, in THIS checkout — where a bootstrap's source file actually is. */
 const ANSIBLE_DIR = resolve(import.meta.dirname, "../ansible");
-const CHECKOUT = "a11y-witness";
+const CHECKOUT = "a11ign";
 
 /**
  * Playbooks this may run, by NAME. Not a path, and not free text: the value is interpolated into a
@@ -110,7 +114,8 @@ const CHECKOUT = "a11y-witness";
 // keyboard. It also inherits the zero-host refusal below, which is the guard whose absence let a deploy to
 // nothing exit 0 -- though it targets `control_plane`, not `a11y_workers`, so an empty fleet is not its
 // failure mode.
-const PLAYBOOKS = ["deploy.yml", "sleep.yml", "provision-role.yml", "recover.yml", "inventory-install.yml"];
+const PLAYBOOKS =
+  ["deploy.yml", "sleep.yml", "provision-role.yml", "recover.yml", "inventory-install.yml", "control-host-install.yml"];
 
 /**
  * Ansible host patterns this may target, by SHAPE. Same containment as the playbook list, and needed for
@@ -439,6 +444,10 @@ try {
     // deploy inferring success from a shell that exited 0. The 2026-08-24 note above fixed WHICH ref
     // the guests fetch; this catches the fetch silently not taking.
     + ` -e a11y_expected_commit=${expected}`
+    // The control-plane address ALREADY resolved above (env var or its installed file, #285), so
+    // `control-host-install.yml` never has to read the environment itself -- it just records what got
+    // used to reach this machine. Harmless for every other playbook, which does not read this var.
+    + ` -e a11y_control_host=${CONTROL_PLANE}`
     + (limitFlag ? ` -l ${limitFlag}` : "")
     + (serialFlag !== undefined ? ` -e worker_provision_serial=${serialFlag}` : "")
     // A NAMED FLAG, because the obvious spelling silently did nothing. `-e worker_edge_allow_downgrade=true`
@@ -459,7 +468,8 @@ try {
 }
 
 async function main() {
-  requireControlPlaneHost(); // throws before anything else if A11Y_CONTROL_HOST is unset -- see #83
+  // Throws before anything else if neither A11Y_CONTROL_HOST nor its installed file exist -- see #83, #285.
+  CONTROL_PLANE = requireControlPlaneHost();
   requireControlPlaneKey(); // same, for A11Y_PVE_KEY -- see #85
   const { chosen, limitFlag, serialFlag, ref, allowEdgeDowngrade } = parseArgs();
   await guardProtocolChange(chosen);

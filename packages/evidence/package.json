@@ -1,5 +1,5 @@
 {
-  "name": "@a11y-witness/evidence",
+  "name": "@a11ign/evidence",
   "version": "0.1.0",
   "description": "The shared evidence contract for screen-reader accessibility captures: wire types, pure verification predicates, and the WCAG 2.2 AA criteria list. Zero dependencies, no I/O.",
   "license": "Apache-2.0",
@@ -44,9 +44,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/DanBeckDev/a11y-witness.git",
+    "url": "git+https://github.com/a11ign/a11ign.git",
     "directory": "packages/evidence"
   },
+  "homepage": "https://a11ign.com",
   "keywords": [
     "accessibility",
     "a11y",

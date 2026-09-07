@@ -1,2 +1,2 @@
-import { hello } from "@a11y-witness-fixture/truncated-files";
+import { hello } from "@a11ign-fixture/truncated-files";
 console.log(hello());

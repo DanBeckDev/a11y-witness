@@ -1,4 +1,4 @@
-# The worker-loop orchestrator — `dispatcher`
+# The pipeline owner — `dispatcher`
 
 ## RESUMING AFTER CONTEXT LOSS — run this before anything else
 
@@ -46,7 +46,23 @@ above, and treat what it names as CANDIDATES needing a look, not an automatic di
 own header for why a rebase can produce the identical shape without being stranded.
 
 
-The agent filling this role is named **`dispatcher`**. It reports to **`orchestrator`** — the lead orchestrator, which owns the fleet, the lab, `runs/`, every corpus-reading gate and all cross-cutting review — and hands up to it the three triggers below. It sends its utilisation line to **`ceo`** with every status message.
+The agent filling this role is named **`dispatcher`**. It reports to **`ceo`** directly — see the roster
+in `docs/roles/README.md`, corrected 2026-09-07 to agree with the hierarchy paragraph there rather than the
+stale `orchestrator` this line and that table used to both say.
+
+**This role owns the PIPELINE, not the merge step.** Workflows, trunk health, the Ready queue and briefing
+— not reviewing or arming individual PRs. **`dispatcher` does not arm PRs.** Auto-merge is enabled by
+workflow on open; a required `acceptance` job runs each PR's own stated `Acceptance:`/`Mutation:` commands;
+a push to `main` that fails `gate` is reverted automatically. A worker owns their own PR from open to
+merge. This is a deliberate narrowing from the role's original shape (see "Created 2026-09-06" below,
+which is now history rather than the current job) — the pipeline decides what merges, and this role builds
+and keeps that pipeline honest rather than standing in the loop it used to run by hand.
+
+**The escalation language below this point (the three triggers, "hands up to `orchestrator`") describes
+the PRE-pipeline shape of this role and is due its own pass** — flagged rather than silently rewritten,
+since `dispatcher` owns this file's wording. What is current: `ceo` is the reporting line; `orchestrator`
+remains code owner and required approver for `packages/nvda-worker`, cache keys, `packages/scorer/models`
+and the gates, which is a narrower, PATH-scoped authority than "hands up every escalation to orchestrator."
 
 **Created 2026-09-06, because one agent was the serial step and the measurement said which part.**
 
@@ -117,7 +133,7 @@ The standing resource ban, verbatim, and it applies to this role exactly as to a
 
 ### THE FLEET TREE, NAMED
 
-**`/Users/danielbeck/Documents/repos/personal/a11y-witness` — the primary checkout — is the tree the fleet
+**`/Users/danielbeck/Documents/repos/personal/a11ign` — the primary checkout — is the tree the fleet
 and the lab are driven from. NO OTHER AGENT MERGES IN IT.** `dispatcher` merges in
 `../a11y-wt-dispatch`; the lead's own `main`-moving work goes through `../a11y-wt-lead`.
 
@@ -132,8 +148,8 @@ sitting on `agent/product-tracker` with two files modified eleven seconds earlie
 nobody MERGES there; that was too narrow. Feature work is worktrees only, and the second reason is the one
 nobody had:
 
-**Every worktree's `node_modules` can be a symlink to the primary's, so `@a11y-witness/*` resolves to the
-PRIMARY's `packages/*/dist` — not the worktree's.** Measured: `require.resolve('@a11y-witness/judge')` from
+**Every worktree's `node_modules` can be a symlink to the primary's, so `@a11ign/*` resolves to the
+PRIMARY's `packages/*/dist` — not the worktree's.** Measured: `require.resolve('@a11ign/judge')` from
 a worktree prints a path inside the primary checkout. Two consequences, and both cost real time the day this
 was written:
 
@@ -151,8 +167,8 @@ Verified safe during a live capture: a build writes `dist/` only, `nvda-worker` 
 worker source 0 dirty either side and `worker:code` 10/10 after.
 
 **And when a tool reads stale code, resolve the module and print the PATH, not the link type.** The check
-that missed this was `ls -ld node_modules/@a11y-witness/judge`, which answered *is this a symlink* when the
-question was *to which checkout*. `node -e "console.log(require.resolve('@a11y-witness/judge'))"` answers the
+that missed this was `ls -ld node_modules/@a11ign/judge`, which answered *is this a symlink* when the
+question was *to which checkout*. `node -e "console.log(require.resolve('@a11ign/judge'))"` answers the
 right one.
 
 A corollary worth stating rather than discovering: **a merge tree cannot faithfully run the corpus-reading
@@ -372,6 +388,82 @@ something I missed"* rather than *"I did not commit what I tested"*:
 `npm test` reads the working tree; CI reads the commit. `CLAUDE.md` records the mirror — *"`git commit --
 <paths>` commits from the WORKING TREE, so a staged path not listed is silently dropped"* — and this is the
 other door: stage, then edit, then commit without paths, and the edit is dropped instead.
+
+## THE STASH IS SHARED BETWEEN EVERY WORKTREE, AND AN UNLABELLED ONE IS NOW REFUSED (#290)
+
+`refs/stash` lives in the **common git directory** — the same one that makes branches shared, and the
+same fact that lets a branch survive its worktree's deletion. So a stash made in one worktree is visible
+and poppable from every other, `git stash list` shows a POSITION rather than an owner, and
+`git stash pop` takes the top of a shared pile.
+
+Measured 2026-09-07: `orchestrator` stashed their own change, checked out `origin/main` to test whether a
+failure was pre-existing, switched back, and `git stash pop` returned **somebody else's uncommitted
+work** — a 95-line diff plus a new test file, with nothing on it saying whose it was. Their own stash was
+consumed in the same operation. Nothing was lost, and only because they read a diff they did not
+recognise. A `pop` followed by `commit -a` would have put another worker's half-finished work into an
+unrelated branch.
+
+```bash
+git stash push -m "agent/my-branch: what this is"   # required — the message is the only owner record
+npm run stash:whose                                 # every stash with the branch it was made on
+A11Y_STASH_ANY=1 git stash push                     # deliberate exception, named in the refusal
+```
+
+**The hook is `reference-transaction`, not `pre-commit`.** Git has no pre-stash hook and `pre-commit`
+cannot see a stash at all — a stash is a ref update, not a commit. `reference-transaction` is the only
+hook that observes one, and exiting non-zero in its `prepared` phase aborts the transaction **with the
+working tree untouched**, so a refused stash costs nothing.
+
+**It refuses CREATION only.** The first version refused every `refs/stash` transaction and broke
+`git stash clear`, `pop` and `drop` — all three update that ref. The discriminator is that a push creates
+a commit while pop and drop move the ref to one already in its reflog. Found by running it.
+
+**`stash:whose` reads the branch out of the stash's own subject**, in both shapes: `WIP on <branch>: …`
+for an unlabelled one and `On <branch>: <message>` for a named one. Naming a stash therefore does not
+cost the ownership information — it adds to it. What no stash records is the WORKTREE, because git does
+not write it, which is why the message is the only place a human can put what git cannot derive.
+
+## WHO HOLDS THIS PR — take the hold, do not announce it (#266)
+
+**Two agents have standing to act on one PR, and until #266 nothing on the PR recorded who held it.**
+The split — the dispatcher updates and arms, the author pushes — lived in messages.
+
+Measured 2026-09-07 on PR #258: the dispatcher said *"arming on green"* and ran `gh pr update-branch`;
+the author ran `merge-guard`, saw `7 commit(s) behind`, rebased and pushed into it.
+
+```
+! [remote rejected] ... cannot lock ref: is at 23140341 but expected 29f41cd8
+```
+
+`--force-with-lease` refused, and it is the only reason nothing was lost. A plain `--force` would have
+taken the branch to a base fetched before #229 merged, **silently reverting that PR's README and
+changeset inside a branch nobody would think to check for them.**
+
+**The boundary was wrong rather than ignored.** The stated rule named *armed* PRs; #258 was UNARMED, so
+by that rule it was the author's — while the dispatcher was updating it in preparation for arming. The
+real predicate is *"a PR somebody is actively working on"*, and the other party cannot see that state
+from outside. The collision was invisible, not careless.
+
+```bash
+npm run pr:hold -- <n> --session=<name>      # take it; prints who held it before
+npm run pr:release -- <n> --session=<name>   # give it back
+npm run pr:hold -- <n>                       # report only, writes nothing
+```
+
+`merge-guard` refuses a PR held by another session and names the holder. **There is deliberately no
+`--allow-held` flag**, unlike #249's `--allow-claimed-close`: a row you do not hold cannot be taken from
+its owner, so a flag is the only route there — but a PR hold *can* be handed over, so the escape hatch is
+`pr:release` followed by `pr:hold`, which leaves a record where a flag would leave none.
+
+**Why a label rather than an agreement, and it is not a preference.** The remedy first agreed was a
+sentence: *once the dispatcher says they will arm it, it is theirs.* This repository has already measured
+that shape. **#197 is the identical experiment on rows** — a claim existing only as a sentence in a
+dispatch message produced three double-dispatches (#156, #158, #159), *"each caught only by a worker's
+own caution, never the tool."* `row-claim.mjs` states the principle this inherits: the Project Status
+field is a VIEW; the label, on the object and timestamped by GitHub's own timeline, is the RECORD.
+
+And it is a COMMAND rather than a remembered `gh pr edit --add-label` for #197's other half: a claim that
+depends on somebody remembering to record it does not get recorded.
 
 ## Standing rules inherited from the lead's own record
 
