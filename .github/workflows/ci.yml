@@ -48,6 +48,16 @@ name: ci
 # alone and never the whole suite. A contract change under `packages/evidence` still tests `packages/judge`
 # and everything downstream of it; an unrelated package's PR does not pay for packages it cannot affect.
 #
+# #212 MEASURED THE 60S BUDGET ON A GENUINE LEAF CASE (`packages/lab`, zero dependents post-#206) AND FOUND
+# ~90S, NOT 60S -- two independent CI runs, step-by-step: checkout+setup-node+cache+npm-ci 7s (npm ci fully
+# SKIPPED on the cache hit -- caching already works), build 5s, lint+typecheck 15s (whole-repo, not scoped
+# to `testPackages` -- real, but small), and "Unit tests of the touched package(s) and their workspace
+# dependents" 56s -- ~66% of the step total, on BOTH runs. That is `lab`'s own suite (199 test files, ~1,305
+# `test()` calls, this repo's largest package by test count), not unscoped CI -- `testPackages` resolved to
+# `["lab"]` only. Disposition: accept it. A PR touching `lab` has a measured, understood floor around
+# 85-90s from `lab`'s own suite size; the 60s budget holds for an ordinary single/few-package PR elsewhere.
+# Not a target missed -- a cost named rather than chased.
+#
 # AGENT/** AND LEAD/** BRANCH PUSHES DO NOT TRIGGER THIS WORKFLOW EITHER, same as before -- every unit ends
 # with `gh pr create` (the standing worker-loop flow), so the PR's own `pull_request` trigger is where a
 # branch's full check runs; a push with no PR yet gets only the local pre-push hook's fast gate. See
