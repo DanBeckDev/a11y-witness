@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // HAS THE BOARD EDITION STOPPED ARRIVING? — the check that does not live inside the job being checked.
 //
 //   npm run board:liveness            say whether editions are still arriving
@@ -83,7 +84,7 @@ const EDITION_HEADING = /^#\s*Board report\s*[—-]\s*(\d{4}-\d{2}-\d{2})/m;
  */
 export function newestEditionDay(bodies) {
   const days = bodies.map((body) => body.match(EDITION_HEADING)?.[1]).filter((d) => typeof d === "string");
-  return days.length ? days.sort().at(-1) : null;
+  return days.length ? (days.sort().at(-1) ?? null) : null;
 }
 
 /** @param {string} day @param {Date} now @returns {number} */
@@ -147,7 +148,10 @@ export function livenessVerdict({ lastDay, now, hasSummary }) {
 /** @param {string} day */
 const summaryExists = (day) => existsSync(path.join(ROOT, "docs/board/summaries", `${day}.md`));
 
-/** Every comment body on the report issue, or null when GitHub could not be asked. */
+/**
+ * Every comment body on the report issue, or null when GitHub could not be asked.
+ * @param {string} issue
+ */
 function commentBodies(issue) {
   try {
     return JSON.parse(gh(["issue", "view", issue, "--repo", REPO, "--json", "comments"]))
@@ -161,7 +165,11 @@ function commentBodies(issue) {
   }
 }
 
-/** One comment per stale spell, not one per push. A warning that repeats is a warning people filter. */
+/**
+ * One comment per stale spell, not one per push. A warning that repeats is a warning people filter.
+ * @param {string} issue
+ * @param {{code: number, headline: string, detail: string}} verdict
+ */
 function postOnce(issue, verdict) {
   const marker = `board editions: ${verdict.headline}`;
   const existing = gh(["issue", "view", issue, "--repo", REPO, "--json", "comments", "--jq",

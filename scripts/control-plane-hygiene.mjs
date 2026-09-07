@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // THE MEASUREMENT THIS ROW EXISTS TO REPLACE: a table typed once, from numbers somebody had to go and
 // find. Every row below is measured fresh, by command, and printed beside the RULE or recorded DECISION
 // for that accumulator -- never "we should clean this up" on its own, which #58 names as a failed
@@ -17,6 +18,7 @@ import { sandboxGitEnv } from "./git-env.mjs";
 const REPO_ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"],
   { encoding: "utf8", env: sandboxGitEnv() }).trim();
 
+/** @param {string} path */
 function du(path) {
   if (!existsSync(path)) return 0;
   try {
@@ -27,6 +29,7 @@ function du(path) {
   }
 }
 
+/** @param {number} bytes */
 function humanMb(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
@@ -36,6 +39,7 @@ function humanMb(bytes) {
 export function worktrees(repoRoot = REPO_ROOT) {
   const out = execFileSync("git", ["worktree", "list", "--porcelain"],
     { cwd: repoRoot, encoding: "utf8", env: sandboxGitEnv() });
+  /** @type {string[]} */
   const paths = [];
   for (const line of out.split("\n")) {
     if (line.startsWith("worktree ")) paths.push(line.slice("worktree ".length));
@@ -45,6 +49,7 @@ export function worktrees(repoRoot = REPO_ROOT) {
 
 /** real | symlink | missing, for a path that is meant to hold either a real directory or a symlink to
  * one -- `node_modules` and `.venv` are both this shape across this repo's worktrees. */
+/** @param {string} path */
 export function linkState(path) {
   if (!existsSync(path)) return "missing";
   return lstatSync(path).isSymbolicLink() ? "symlink" : "real";
@@ -54,7 +59,9 @@ export function linkState(path) {
  * root export actually resolves into `dist/` at all -- read from each package's own package.json under
  * `packages/`, never hand-listed. The third field matters: `nvda-worker`'s bare import resolves through
  * `exports["."]` straight to `src/index.mjs` (ADR 0031, no build step by design), so it has no `prepare`
- * and needs none -- flagging it on "no prepare" alone was this check's own first false positive. */
+ * and needs none -- flagging it on "no prepare" alone was this check's own first false positive.
+ * @param {string} repoRoot
+ */
 export function workspacePackages(repoRoot) {
   const dir = join(repoRoot, "packages");
   const dirsWithPackageJson = readdirSync(dir, { withFileTypes: true })
@@ -74,10 +81,15 @@ export function workspacePackages(repoRoot) {
  * `@a11y-witness/nvda-worker/error-text`) is deliberately excluded: this repo uses that shape specifically
  * to reach raw `.mjs` source with no build step at all (ADR 0031), so flagging it would be a false
  * positive -- checked against the real repo while building this, which is what found the false positives
- * a cruder "does the name appear" search produced first. */
+ * a cruder "does the name appear" search produced first.
+ * @typedef {{ dir: string, name: string, hasPrepare: boolean, rootExportsDist: boolean }} WorkspacePackage
+ * @param {string} repoRoot
+ * @param {WorkspacePackage[]} packages
+ */
 export function packagesImportedByName(repoRoot, packages) {
   const bareQuoted = packages.map((p) => `from "${p.name}"`);
   const grepArgs = ["grep", "-l", "-F", ...bareQuoted.flatMap((pattern) => ["-e", pattern])];
+  /** @type {string[]} */
   let rgOut;
   try {
     rgOut = execFileSync("git", grepArgs, { cwd: repoRoot, encoding: "utf8", env: sandboxGitEnv() })
@@ -85,6 +97,7 @@ export function packagesImportedByName(repoRoot, packages) {
   } catch {
     rgOut = []; // git grep exits 1 when nothing matches at all -- an empty result, not an error
   }
+  /** @type {Set<string>} */
   const needed = new Set();
   for (const p of packages) {
     const pattern = `from "${p.name}"`;
@@ -96,6 +109,7 @@ export function packagesImportedByName(repoRoot, packages) {
   return needed;
 }
 
+/** @param {string} repoRoot */
 export function distTrapReport(repoRoot) {
   const packages = workspacePackages(repoRoot);
   const needed = packagesImportedByName(repoRoot, packages);
@@ -112,7 +126,7 @@ function main() {
   const nmRealBytes = trees.reduce((sum, t, i) => sum + (nmStates[i] === "real" ? du(join(t, "node_modules")) : 0), 0);
   const venvRealBytes = trees.reduce((sum, t, i) => sum + (venvStates[i] === "real" ? du(join(t, ".venv")) : 0), 0);
   const runsBytes = du(join(REPO_ROOT, "runs"));
-  const diskFreeOut = execFileSync("df", ["-k", homedir()], { encoding: "utf8" }).trim().split("\n").pop();
+  const diskFreeOut = execFileSync("df", ["-k", homedir()], { encoding: "utf8" }).trim().split("\n").pop() ?? "";
   const diskFreeKb = Number(diskFreeOut.trim().split(/\s+/)[3]);
   const trap = distTrapReport(REPO_ROOT);
 

@@ -1,3 +1,4 @@
+// @ts-check
 // THE ONE DECLARED VALUE for this repository's own name — issue #92.
 //
 // Written out by hand in 38 places across 25 files before this existed, because GitHub's redirect from an

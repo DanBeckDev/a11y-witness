@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // MUTATION CHECKING, AS A COMMAND RATHER THAN A SEQUENCE PEOPLE TYPE.
 //
 // This repository relies on mutation checking more than on any other technique: almost every guard here
@@ -57,21 +58,27 @@ import { sandboxGitEnv } from "./git-env.mjs";
 
 const EXIT = { BITES: 0, DID_NOT_BITE: 1, REFUSED: 2, RESTORE_FAILED: 3 };
 
+/** @type {(file: string) => string} */
 const digest = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
 
-/** Run a shell command, returning whether it succeeded and its combined output.
+/**
+ * Run a shell command, returning whether it succeeded and its combined output.
  *
  * `GIT_*` is scrubbed: a mutation check is most often run from a hook or a test harness, and a leaked
- * `GIT_DIR` makes any git the command reaches operate on a different repository. */
+ * `GIT_DIR` makes any git the command reaches operate on a different repository.
+ * @param {string} command
+ */
 function run(command) {
   try {
     const out = execSync(command, { encoding: "utf8", stdio: "pipe", env: sandboxGitEnv() });
     return { ok: true, out };
   } catch (error) {
-    return { ok: false, out: `${error.stdout ?? ""}${error.stderr ?? ""}` };
+    const e = /** @type {{ stdout?: string, stderr?: string }} */ (error);
+    return { ok: false, out: `${e.stdout ?? ""}${e.stderr ?? ""}` };
   }
 }
 
+/** @param {string} message @returns {never} */
 function refuse(message) {
   console.error(`REFUSING: ${message}`);
   process.exit(EXIT.REFUSED);
@@ -81,6 +88,7 @@ function main() {
   refuseUnknownFlags(["--file", "--mutate", "--test", "--keep"],
     { entry: import.meta.url, command: "npm run mutate" });
   const argv = process.argv.slice(2);
+  /** @type {(name: string) => string | undefined} */
   const flag = (name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
 
   const file = flag("--file");

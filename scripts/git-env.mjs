@@ -1,3 +1,4 @@
+// @ts-check
 // git EXPORTS `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` into every hook environment, and any process that
 // then spawns `git` with an inherited `env` and only a `cwd` operates on whatever `GIT_DIR` names, not on
 // `cwd` -- proven in isolation: `GIT_DIR=<real>/.git git init && git commit` lands the commit in `<real>`

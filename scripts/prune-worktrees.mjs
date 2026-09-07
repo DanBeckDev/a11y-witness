@@ -1,3 +1,4 @@
+// @ts-check
 // WORKTREE LIFECYCLE, AS A COMMAND -- not a discipline somebody has to remember.
 //
 // The rule ("prune after every merge") existed as prose from 2026-09-06, `dispatcher` pruned 28 stale
@@ -381,13 +382,15 @@ export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.
   return report;
 }
 
-/** Appends a header plus one indented line per entry -- and nothing at all when `entries` is empty. */
+/** Appends a header plus one indented line per entry -- and nothing at all when `entries` is empty.
+ * @param {string[]} lines @param {ReportedWorktree[]} entries @param {string} header */
 function pushSection(lines, entries, header) {
   if (entries.length === 0) return;
   lines.push(header);
   for (const e of entries) lines.push(`  ${e.path}  (${e.branch ?? "detached"})`);
 }
 
+/** @param {PruneReport} report */
 function formatReport(report) {
   const lines = [`removed ${report.removed.length} worktree(s):`];
   for (const r of report.removed) lines.push(`  ${r.path}  (${r.branch ?? "detached"})`);

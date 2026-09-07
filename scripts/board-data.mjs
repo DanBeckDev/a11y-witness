@@ -1,3 +1,4 @@
+// @ts-check
 // THE DATA LAYER BOTH BOARD OUTPUTS READ, and the only place that talks to GitHub or git.
 //
 // Extracted from `board-report.mjs` when the weekly board document was added, rather than letting the
@@ -63,10 +64,12 @@ export const READ_SET = ["docs/board/reported.json", "scripts/board-report.mjs"]
 // `gh` is scrubbed too. Every call here passes `--repo` explicitly so it does not resolve from git
 // remotes, but `gh` shells git internally and the scrub costs nothing -- the defence should not depend on
 // knowing which subprocess reads which variable.
+/** @param {string[]} args */
 export function gh(args) {
   return execFileSync("gh", args,
     { encoding: "utf8", cwd: ROOT, env: sandboxGitEnv(), maxBuffer: 32 * 1024 * 1024 });
 }
+/** @param {string[]} args */
 export function git(args) {
   return execFileSync("git", args,
     { encoding: "utf8", cwd: ROOT, env: sandboxGitEnv(), maxBuffer: 32 * 1024 * 1024 }).trim();
@@ -79,10 +82,11 @@ export function git(args) {
  * report saying "0 merges" would have been a correct reading of the wrong ref. So the count comes from
  * local `main` and the divergence is stated rather than hidden — a flat origin/main is a hold, not a stall,
  * and the two look identical from GitHub.
+ * @param {string} since
  */
 export function mergeState(since) {
   const log = git(["log", "main", "--merges", `--since=${since}`, "--format=%h\t%aI\t%s"]);
-  const merges = log ? log.split("\n").map((l) => {
+  const merges = log ? log.split("\n").map((/** @type {string} */ l) => {
     const [sha, at, ...rest] = l.split("\t");
     return { sha, at, subject: rest.join("\t") };
   }) : [];
@@ -98,7 +102,8 @@ export function mergeState(since) {
 }
 
 /** Commits whose author is not the repository owner — a KNOWN DEFECT, printed so the board reads it as
- * one rather than discovering it. Issue #7 carries the cause and the decision (history stays). */
+ * one rather than discovering it. Issue #7 carries the cause and the decision (history stays).
+ * @param {string} since */
 export function misAuthored(since) {
   const log = git(["log", "main", `--since=${since}`, "--format=%h\t%ae"]);
   if (!log) return [];
@@ -111,7 +116,7 @@ export function issues() {
   const fields = "number,title,state,labels,closedAt,milestone,url";
   const all = JSON.parse(gh(["issue", "list", "--repo", REPO, "--state", "all",
     "--limit", "200", "--json", fields]));
-  return all.map((i) => ({ ...i, labelNames: i.labels.map((l) => l.name) }));
+  return all.map((/** @type {any} */ i) => ({ ...i, labelNames: i.labels.map((/** @type {any} */ l) => l.name) }));
 }
 
 /** A row that is not work: a container, or a process row. NOT counted, and the document says so.
@@ -126,23 +131,25 @@ export function issues() {
  */
 export const META_LABEL = "meta";
 
-/** The rows the document COUNTS. `issues()` stays complete -- a meta row still needs its state resolved. */
+/** The rows the document COUNTS. `issues()` stays complete -- a meta row still needs its state resolved.
+ * @param {any[]} list */
 export function countable(list) {
-  return list.filter((i) => !(i.labelNames ?? i.labels?.map((l) => l.name) ?? []).includes(META_LABEL));
+  return list.filter((i) => !(i.labelNames ?? i.labels?.map((/** @type {any} */ l) => l.name) ?? []).includes(META_LABEL));
 }
 
 export function milestone() {
   const all = JSON.parse(gh(["api", `repos/${REPO}/milestones?state=all`]));
-  return all.find((m) => m.title === MILESTONE) ?? null;
+  return all.find((/** @type {any} */ m) => m.title === MILESTONE) ?? null;
 }
 
 /** The two numbers this report cannot compute, and how it refuses to invent them. */
 export function reported() {
   const raw = JSON.parse(readFileSync(path.join(ROOT, "docs/board/reported.json"), "utf8"));
   const staleMs = (raw.staleAfterHours ?? 24) * HOURS_MS;
+  /** @param {any} entry */
   const fresh = (entry) => Date.now() - Date.parse(entry.at) < staleMs;
-  const gates = (raw.gates ?? []).filter((g) => g.at && Number.isFinite(Date.parse(g.at)));
-  const latest = gates.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
+  const gates = (raw.gates ?? []).filter((/** @type {any} */ g) => g.at && Number.isFinite(Date.parse(g.at)));
+  const latest = gates.sort((/** @type {any} */ a, /** @type {any} */ b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
   return { latestGate: latest, gateIsFresh: latest ? fresh(latest) : false, fleetHours: raw.fleetHours,
     achievements: raw.achievements ?? [] };
 }
@@ -205,6 +212,7 @@ export function realPageCaptureAge(gateOutput) {
  */
 export function achievementsWhoseWorldMoved({ achievements, issueState, now = Date.now(),
   staleAfterHours = 24 }) {
+  /** @type {{index: number, claim: string, why: string}[]} */
   const findings = [];
   achievements.forEach((entry, index) => {
     const claim = String(entry.boardClaim ?? entry.claim ?? "(no claim text)").slice(0, 90);
@@ -237,6 +245,7 @@ export function achievementsWhoseWorldMoved({ achievements, issueState, now = Da
   return findings;
 }
 
+/** @param {string} iso */
 export function daysUntil(iso) {
   return Math.ceil((Date.parse(iso) - Date.now()) / (24 * HOURS_MS));
 }
@@ -259,16 +268,17 @@ export function readSetIsNotMain() {
   return lines.join("\n");
 }
 
-/** Everything both outputs need, read once. */
+/** Everything both outputs need, read once.
+ * @param {string} since */
 export function collect(since) {
   const all = issues();
   // Counted rows only. `all` stays complete for state lookups; `open` is what the document reports.
-  const open = countable(all.filter((i) => i.state === "OPEN"));
+  const open = countable(all.filter((/** @type {any} */ i) => i.state === "OPEN"));
   return {
     since,
     all,
     open,
-    closed: all.filter((i) => i.state === "CLOSED" && i.closedAt
+    closed: all.filter((/** @type {any} */ i) => i.state === "CLOSED" && i.closedAt
       && Date.parse(i.closedAt) >= Date.parse(since)),
     milestones: JSON.parse(gh(["api", `repos/${REPO}/milestones?state=all`])),
     release: milestone(),

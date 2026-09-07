@@ -1,3 +1,4 @@
+// @ts-check
 // IS THIS ROW CLAIMED? -- reads the BOARD (issue labels), never git history.
 //
 // #28 and #30 (2026-09-06) were both pulled twice in one hour. Both workers ran the documented collision
@@ -215,6 +216,7 @@ function writeRowLabels(issueNumber, mySession, extraLabels, { run = defaultRun 
  *
  * @param {number} issueNumber
  */
+/** @param {number} issueNumber */
 function reportReachability(issueNumber) {
   try {
     // `fileURLToPath`, NOT `.pathname` -- a URL's pathname is percent-ENCODED, so a checkout under a

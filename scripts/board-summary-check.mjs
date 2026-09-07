@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // THE 21:00 CHECK: is tomorrow's executive summary written?
 //
 // The 08:00 job refuses an edition with no hand-written summary for that day, which is correct and was
@@ -126,6 +127,7 @@ function fileOnOriginMain(relPath) {
  */
 const summaryOnOriginMain = (day) => fileOnOriginMain(`docs/board/summaries/${day}.md`);
 
+/** @param {string} text */
 const wordsIn = (text) => text.trim().split(/\s+/).filter(Boolean).length;
 
 /**
@@ -233,25 +235,37 @@ export function reportedDifferences(localText, remoteText) {
 }
 
 /** Identity field per array section, so a difference names an ENTRY a reader recognises. */
-const ARRAY_IDENTITY = { gates: "command", achievements: "issue" };
+const ARRAY_IDENTITY = /** @type {Record<string, string>} */ ({ gates: "command", achievements: "issue" });
 
-/** Key order is not a value; this makes two spellings of one record compare equal. */
+/** Key order is not a value; this makes two spellings of one record compare equal.
+ * @param {unknown} value */
 const canonical = (value) => JSON.stringify(value, (_key, val) =>
   val && typeof val === "object" && !Array.isArray(val)
     ? Object.fromEntries(Object.keys(val).sort().map((k) => [k, val[k]]))
     : val);
 
-/** @returns {Map<string, unknown>} */
+/**
+ * @param {string} section
+ * @param {unknown[]} items
+ * @returns {Map<string, unknown>}
+ */
 function indexEntries(section, items) {
   const key = ARRAY_IDENTITY[section];
-  const named = (item) => (key && item && typeof item === "object" && item[key] !== undefined
-    ? String(item[key]) : canonical(item));
+  /** @param {unknown} item */
+  const named = (item) => (key && item && typeof item === "object" && /** @type {any} */ (item)[key] !== undefined
+    ? String(/** @type {any} */ (item)[key]) : canonical(item));
   return new Map(items.map((item) => [named(item), item]));
 }
 
+/**
+ * @param {string} section
+ * @param {unknown[]} localItems
+ * @param {unknown[]} remoteItems
+ */
 function arrayDifferences(section, localItems, remoteItems) {
   const mine = indexEntries(section, localItems);
   const theirs = indexEntries(section, remoteItems);
+  /** @type {string[]} */
   const out = [];
   for (const [id, item] of mine) {
     if (!theirs.has(id)) out.push(`${section}[${id}] — in your tree, NOT on origin/main`);
@@ -263,7 +277,12 @@ function arrayDifferences(section, localItems, remoteItems) {
   return out;
 }
 
+/**
+ * @param {Record<string, unknown> | null} local
+ * @param {Record<string, unknown> | null} remote
+ */
 function sectionDifferences(local, remote) {
+  /** @type {string[]} */
   const out = [];
   for (const key of [...new Set([...Object.keys(local ?? {}), ...Object.keys(remote ?? {})])]) {
     const mine = local?.[key];
@@ -330,6 +349,7 @@ function main() {
   refuseUnknownFlags(["--post", "--issue", "--day"],
     { entry: import.meta.url, command: "npm run board:summary-check" });
   const argv = process.argv.slice(2);
+  /** @type {(n: string) => string | undefined} */
   const flag = (n) => argv.find((a) => a.startsWith(`${n}=`))?.split("=").slice(1).join("=");
 
   const day = flag("--day") ?? nextEditionDay();

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 /**
  * Detects the shape behind issue #180: `cmd | head` (or `| tail`, `| grep`) reports the STATUS TOOL's
  * exit code, not the piped command's — so `$?` read afterward names the wrong thing. Measured twice in
@@ -19,7 +20,10 @@ import { pathToFileURL } from "node:url";
 
 const STATUS_TOOLS = ["head", "tail", "grep"];
 
-/** Split a compound shell command into its top-level statements: `;`, `&&`, `||`, and newlines. */
+/**
+ * Split a compound shell command into its top-level statements: `;`, `&&`, `||`, and newlines.
+ * @param {string} cmd
+ */
 function statementsOf(cmd) {
   return cmd.split(/;|&&|\|\||\r?\n/).map((s) => s.trim()).filter(Boolean);
 }
@@ -29,6 +33,7 @@ function statementsOf(cmd) {
  * plain, non-`pipefail` shell reports for the whole pipeline. A tool that appears mid-pipeline (piped
  * INTO something else afterward) does not own the exit status and is not the hazard.
  */
+/** @param {string} stmt */
 function endsInStatusTool(stmt) {
   const lastPipe = stmt.lastIndexOf("|");
   if (lastPipe === -1) return false;

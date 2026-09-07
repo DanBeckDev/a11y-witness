@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A declared schema migration may exist on a branch. It may never be released.
  *
@@ -21,7 +22,10 @@ import { join } from "node:path";
 
 export const MIGRATION_FILE = "packages/scorer/models/schema-migration.json";
 
-/** Pure so the test can drive it; `present` is the caller's business, not the filesystem's. */
+/**
+ * Pure so the test can drive it; `present` is the caller's business, not the filesystem's.
+ * @param {{shippedSchema: string, pendingSchema: string, openedAt: string, why: string} | null} declaration
+ */
 export function migrationVerdict(declaration) {
   if (!declaration) return { ok: true, message: "no schema migration is open" };
   return {
@@ -35,6 +39,7 @@ export function migrationVerdict(declaration) {
   };
 }
 
+/** @param {string} repoRoot */
 function readDeclaration(repoRoot) {
   const path = join(repoRoot, MIGRATION_FILE);
   return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;

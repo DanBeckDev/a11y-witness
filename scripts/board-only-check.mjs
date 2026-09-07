@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // IS THIS BRANCH'S DIFF, AGAINST origin/main, A BOARD-ONLY DIFF? -- the pre-push hook's board-only fast
 // path asks this exact question, and it must ask it the SAME WAY `ci.yml`'s `board` job does (via
 // `ci-changed.mjs`'s `boardOnly`), never a second copy of the two regexes. Prints "true" or "false" to
@@ -13,6 +14,7 @@ import { pathToFileURL } from "node:url";
 import { filesChangedAgainstOrigin } from "./changed-packages.mjs";
 import { boardOnly, DOC_ROOT_FILES } from "./ci-changed.mjs";
 
+/** @param {string[]} files */
 export function isBoardOnlyDiff(files) {
   const docsFiles = files.filter((f) => f.startsWith("docs/") || DOC_ROOT_FILES.has(f));
   return docsFiles.length > 0 && boardOnly(docsFiles);
