@@ -96,10 +96,30 @@ const FORMS_PROBE_CHANNELS = new Set(["formChanges", "postSubmitFields", "typedF
  * Every ASSESSED criterion whose evidence, per `CRITERION_COVERAGE`, comes (at least partly) from the
  * forms probe -- the set `CRITERION_STATES` exists to report readiness for.
  */
+/**
+ * `assessed` OR `partial`, and the second was added when 4.1.3 moved (#251).
+ *
+ * This asked `status === "assessed"` alone, which conflates two different facts. The status answers *how
+ * much of the criterion is covered*; this table answers *which criteria the forms probe can answer at
+ * all*. 4.1.3 became `partial` because ONE of its four categories is covered — waiting state and progress
+ * are not — and that says nothing about whether the forms probe backs the category that IS covered. It
+ * does: `formChanges` is where the status-message evidence lives, and `CRITERION_STATES` has declared
+ * states for it all along.
+ *
+ * Dropping it on the status change would have removed a form config's ability to declare states for
+ * 4.1.3 — silently, and in the direction this test's own comment calls out: "one
+ * assessed-and-forms-probe-backed criterion missing here is a form config that can never fully answer it,
+ * silently." Correcting an overstated coverage claim must not cost a real capability.
+ *
+ * Measured before widening: it adds exactly `4.1.3` and nothing else, so the derived set continues to
+ * equal what `CRITERION_STATES` declares. `out-of-scope` and `reachable` stay excluded — those are
+ * criteria the probe cannot answer, which is the overclaim half this test exists to catch.
+ */
 function formsProbeBackedAssessedCriteria(): string[] {
   return Object.entries(CRITERION_COVERAGE)
     .filter(([, coverage]) =>
-      coverage.status === "assessed" && (coverage.channels ?? []).some((ch) => FORMS_PROBE_CHANNELS.has(ch)))
+      (coverage.status === "assessed" || coverage.status === "partial")
+      && (coverage.channels ?? []).some((ch) => FORMS_PROBE_CHANNELS.has(ch)))
     .map(([criterion]) => criterion)
     .sort();
 }
