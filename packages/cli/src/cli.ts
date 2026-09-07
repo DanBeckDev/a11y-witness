@@ -892,14 +892,23 @@ type FormStateRequest = Omit<CaptureFormState, "state"> & { state: string };
  * verbatim at a person (`Worker error 429: {"error":"a capture is already in progress"}`) makes them parse
  * it themselves. 429 in particular has a real, immediate remedy that the raw body does not say out loud.
  */
-function describeWorkerError(status: number, body: unknown): string {
-  const parsed = body && typeof body === "object" ? (body as { error?: string; fault?: string }) : {};
+export function describeWorkerError(status: number, body: unknown): string {
+  const parsed = body && typeof body === "object"
+    ? (body as { error?: string; fault?: string; reachedPhase?: string; diagnostics?: unknown[] })
+    : {};
   if (status === 429) {
     return `That worker is busy with another capture right now. Wait for it to finish, or point `
       + `--worker (or A11Y_WORKER) at a different one.`;
   }
   if (parsed.fault) {
-    return formatFaultMessage(parsed.fault, parsed.error);
+    // `reachedPhase`/`diagnostics` are the worker's OWN record of how far a partial capture got --
+    // already on the wire (see server.mjs's `runCapture`), and unused here until #336 gave a caller a
+    // reason to read them: "we ran out of time after N marks" and "we could not read your page at all"
+    // are different findings, and only one of them invites a retry.
+    return formatFaultMessage(parsed.fault, parsed.error, {
+      reachedPhase: parsed.reachedPhase,
+      markCount: Array.isArray(parsed.diagnostics) ? parsed.diagnostics.length : undefined,
+    });
   }
   if (parsed.error) {
     return `The worker returned an error (HTTP ${status}): ${parsed.error}`;
