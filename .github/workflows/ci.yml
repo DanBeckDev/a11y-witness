@@ -222,6 +222,12 @@ jobs:
           head -20 packages/evidence/dist/wcag.d.ts || echo "(no wcag.d.ts)"
           echo "--- does tsc consider the graph up to date? ---"
           npx tsc --build --dry $(node -e "const fs=require('fs');console.log(fs.readdirSync('packages').filter(d=>fs.existsSync('packages/'+d+'/tsconfig.json')).map(d=>'packages/'+d).join(' '))") || true
+
+      # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (issue #158) -- a fresh checkout has no
+      # copy on disk, and this job can reach `doc-references.test.ts` (packages/lab/src/packaging/**)
+      # both in the scoped run below and in the full-suite coverage run further down, either of which
+      # would otherwise report a real doc citation as broken.
+      - run: npm run docs:coverage
       - run: npm run lint
       - run: npm run typecheck
       - name: Unit tests of the touched package(s) and their workspace dependents
@@ -318,6 +324,11 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
       - run: npm run build
+      # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (issue #158) -- a fresh checkout has no
+      # copy on disk, so `doc-references.test.ts` below (which asserts every path the top-level docs cite
+      # actually exists) would report a real reference as broken. Regenerating it here keeps that citation
+      # honest without resurrecting the git conflict untracking it was meant to remove.
+      - run: npm run docs:coverage
       # The doc/tracker/board guards -- `backlog.test.ts`, `backlog-ready.test.ts`, `known-gaps-file-
       # facts.test.ts`, `board-liveness.test.ts` and their siblings, all of which read `docs/*.md` content
       # and would otherwise only ever run when `packages/lab/src/packaging/**` itself changes, never when
@@ -520,8 +531,41 @@ jobs:
   # in `needs:` below has an opinion here regardless of whether `ci-changed.mjs` decided it should run.
   # skipped counts as passing (the job's own `if:` decided it, correctly, that this PR does not need it);
   # anything else does not.
+  # A CHANGE TO A CORPUS-INVALIDATING PATH MUST NAME THE FACTS IT DID NOT MOVE -- #356.
+  #
+  # NOT a CODEOWNERS review, and the reason is measured: every session pushes as the same account, so
+  # `gh pr review --approve` answers "Can not approve your own pull request" -- and a review would have
+  # caught NONE of the failures these paths have actually had. Each was a correct-looking change whose
+  # consequence was invisible at the diff (a memo stale for five days; a remedy guarded on a flag nothing
+  # set; a census stripped at export). This asks for FACTS AND THEIR STATES instead, because writing the
+  # state is what makes an author look.
+  #
+  # The fact list is `docs/owned-path-facts.json`, which `orchestrator` owns -- data, so the owner can
+  # correct it without touching the mechanism, and so the mechanism cannot quietly decide what the
+  # facts are.
+  ownedPaths:
+    needs: changed
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # No `npm ci`: this script imports `cli-flags` RELATIVELY for exactly that reason, and
+      # `pre-install-import-graph.test.ts` derives this job's entry into its population automatically.
+      - name: Which paths did this PR change, and does its body sign them off?
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > /tmp/changed.txt
+          printf '%s' "$BODY" > /tmp/body.txt
+          node scripts/owned-path-signoff.mjs --diff=/tmp/changed.txt --body=/tmp/body.txt
+
   gate:
-    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness, mergeSafety, acceptance]
+    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness, mergeSafety, acceptance, ownedPaths]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -537,7 +581,8 @@ jobs:
             "${{ needs.changeset.result }}" \
             "${{ needs.rulesFitness.result }}" \
             "${{ needs.mergeSafety.result }}" \
-            "${{ needs.acceptance.result }}"
+            "${{ needs.acceptance.result }}" \
+            "${{ needs.ownedPaths.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"

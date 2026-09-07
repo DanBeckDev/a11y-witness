@@ -196,10 +196,67 @@ export function reported() {
  * @returns {string | null} the gate's own spread sentence, or null when it printed none (not a real-page
  *   result, or an older recording taken before the gate stated its spread)
  */
+/** The verdicts a gate PRINTED, quoted from its own output and never retyped.
+ *
+ * THE BOARD'S DOCUMENT COULD NOT SAY WHETHER A CHECK PASSED. `board-report.mjs` prints the gate's whole
+ * output verbatim into the GitHub edition; the PDF quoted only the COMMAND and the capture spread. So the
+ * two editions would have disagreed about whether a check passed, and the silent one is the one the board
+ * reads -- found 2026-09-07, the day before the first FAIL was due to be recorded.
+ *
+ * Quoted, never classified. A gate states its own verdict in its own sentence; this returns those
+ * sentences. Deciding whether a FAIL blocks anything is a JUDGEMENT and is not derivable from the output,
+ * which is why `note` on the entry carries it and why an unexplained FAIL renders as unexplained rather
+ * than as an opinion this file invented.
+ */
+export function gateVerdicts(gateOutput) {
+  const lines = String(gateOutput ?? "").split("\n");
+  const found = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    // A verdict is the word at the head of its own clause, so `RULES: PASS -- ...` and `PASS -- ...`
+    // both count and the word inside a sentence ("a page that FAILS this rule") does not.
+    const m = /^(?:[A-Za-z: ]{0,24}?\b)?(PASS|FAIL|BLOCKED|INCONCLUSIVE)\b\s*(?:[—-]\s*(.*))?$/.exec(line);
+    if (m) found.push({ verdict: m[1], line });
+  }
+  return found;
+}
+
+/** The single worst verdict a gate printed, or null when it printed none. */
+export function worstVerdict(gateOutput) {
+  const order = { PASS: 0, INCONCLUSIVE: 1, BLOCKED: 2, FAIL: 3 };
+  const all = gateVerdicts(gateOutput);
+  if (all.length === 0) return null;
+  return all.reduce((w, v) => (order[v.verdict] > order[w.verdict] ? v : w), all[0]);
+}
+
 export function realPageCaptureAge(gateOutput) {
   if (!gateOutput) return null;
   const spread = gateOutput.match(/\*{0,3}\s*\d+\s*hour\(s\)\s*between the oldest and newest[^\n]*/i);
-  return spread ? spread[0].replace(/^\*+\s*/, "").trim() : null;
+  if (spread) return spread[0].replace(/^\*+\s*/, "").trim();
+  // A PARSER THAT ONLY READS THE WARNING GOES SILENT ON THE GOOD NEWS.
+  //
+  // The gate prints `*** N hour(s) between the oldest and newest` only when the spread is WIDE enough to
+  // warn about. So on 2026-09-07, when #82's refresh took it from 304 hours to about one, this returned
+  // null and the row simply stopped mentioning the spread -- which a reader compares against yesterday's
+  // "304 hours, a MIXED population" and reads as the figure being WITHDRAWN rather than the problem being
+  // fixed. The single most important improvement in the run would have been invisible for being good.
+  //
+  // So fall back to the timestamps the gate prints EVERY time, and say which of the two it is. This is
+  // derived from the gate's own output rather than retyped from a message, and the distinction is stated
+  // on the page rather than left for a reader to assume.
+  return computedCaptureSpread(gateOutput);
+}
+
+/** The spread computed from the per-role capture ranges the gate always prints, or null if it printed none. */
+function computedCaptureSpread(gateOutput) {
+  const stamps = [...String(gateOutput).matchAll(/(\d{4}-\d{2}-\d{2}T[\d:.]+Z)/g)].map((m) => Date.parse(m[1]));
+  const usable = stamps.filter((t) => Number.isFinite(t));
+  if (usable.length < 2) return null;
+  const ms = Math.max(...usable) - Math.min(...usable);
+  const hours = Math.floor(ms / 3_600_000);
+  const minutes = Math.round((ms % 3_600_000) / 60_000);
+  return `${hours} hour(s) ${minutes} minute(s) between the oldest and newest capture, computed from the `
+    + "timestamps the gate printed — it states a spread itself only when wide enough to warn about";
 }
 
 /**
