@@ -150,11 +150,21 @@ test("the two staleness faults stay separable, and a contained head raises neith
   assert.match(oldRuns.reasons.join("\n"), /PREDATES/);
   assert.doesNotMatch(oldRuns.reasons.join("\n"), /DOES NOT CONTAIN/);
 
-  // And both at once, which is the common live state, prints both sentences rather than one merged one.
+  // AND THE THIRD CASE, WHICH IS THE WORST TO NOTICE: right answer, unsound method.
+  //
+  // #137, measured 2026-09-07 and used here as the fixture rather than invented numbers: newest run
+  // 01:38:32Z against a `main` tipped 01:38:39Z, and `behind_by` 1. The clock refused it correctly on a
+  // SEVEN-SECOND margin -- a gap that decided a question about commit containment and happened to land on
+  // the right side. Neither of the other two cases covers this: it is not a false pass, and it is not
+  // #135's honest refusal. It is the one that makes the defect hard to see in normal operation, because
+  // the guard looks like it is working.
   const both = mergeReadiness({
-    pr: pr(), required: REQUIRED, runs: green(BEFORE), mainTipIso: MAIN_TIP, behindBy: 3,
+    pr: pr(), required: REQUIRED, runs: green("2026-09-07T01:38:32Z"),
+    mainTipIso: "2026-09-07T01:38:39Z", behindBy: 1,
   });
   assert.equal(both.reasons.length, 2, "two faults, two sentences");
+  assert.match(both.reasons[0], /DOES NOT CONTAIN main's TIP — it is 1 commit\(s\) behind/,
+    "the ancestry reason is the load-bearing one here; the timestamp reason is right by seven seconds");
 });
 
 test("a FAILED ancestry lookup is inconclusive, never read as contained", () => {
