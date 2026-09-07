@@ -90,16 +90,21 @@ export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: 
  *          runs: {name: string, status: string, conclusion: string | null, completedAt: string | null}[] | null,
  *          mainTipIso: string | null,
  *          behindBy: number | null,
+ *          branchTip: string | null,
  *          closes?: {number: number, title?: string, labels: string[]}[] | null,
  *          session?: string | null}} facts
  * @returns {{code: number, reasons: string[], notes: string[]}}
  */
-export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, closes = [], session = null }) {
+export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, branchTip, closes = [],
+  session = null }) {
   const missingLookups = [
     required === null && "the required status checks for `main` (branch protection)",
     runs === null && `the check runs for head ${pr.headRefOid.slice(0, 10)}`,
     mainTipIso === null && "the current tip of `main`",
     behindBy === null && "whether this head contains `main`'s tip (the compare API)",
+    // A FAILED tip lookup is CANNOT_ASK, never READY -- `null` and "equal to headRefOid" are different
+    // answers, the same distinction every other lookup here already draws (#294).
+    branchTip === null && "the branch's real tip (`git ls-remote`)",
     closes === null && "which rows this PR would close (the closingIssuesReferences lookup)",
   ].filter(Boolean);
   if (missingLookups.length > 0) {
@@ -117,8 +122,10 @@ export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, close
   const knownRuns = /** @type {{name: string, status: string, conclusion: string | null,
     completedAt: string | null}[]} */ (runs);
   const knownMainTipIso = /** @type {string} */ (mainTipIso);
+  const knownBranchTip = /** @type {string} */ (branchTip);
   const knownCloses = /** @type {{number: number, title?: string, labels: string[]}[]} */ (closes);
-  const reasons = [...baseReason(pr), ...checkReasons(pr, knownRequired, knownRuns),
+  const reasons = [...baseReason(pr), ...headTipMismatchReason(pr, knownBranchTip),
+    ...checkReasons(pr, knownRequired, knownRuns),
     ...ancestryReason(behindBy), ...stalenessReason(knownRuns, knownMainTipIso),
     ...closingClaimReasons(knownCloses, session)];
   return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons, notes };
@@ -158,6 +165,30 @@ function baseReason(pr) {
     + "  `ci.yml` triggers on `pull_request: branches: [main]`, so NO workflow runs for this PR and the\n"
     + "  branch protection that covers `main` protects nothing here. Re-target it at `main`, or merge its\n"
     + "  base first and let this one re-open against `main`."];
+}
+
+/**
+ * GITHUB'S RECORDED HEAD CAN LAG THE BRANCH'S REAL TIP — #294, found on #195: `gh pr checks` and every
+ * check-run lookup here are keyed on `pr.headRefOid`, which is GitHub's own bookkeeping and not the
+ * branch itself. A push GitHub has not yet indexed (or any other cause) leaves `headRefOid` pointing at
+ * the tip's PARENT, and every "green" belongs to that older commit — including one whose own commit
+ * message says a later commit refuted it.
+ *
+ * Deliberately NOT folded into `ancestryReason` (which reads `behindBy`, ancestry against `main`) or
+ * `stalenessReason` (runs older than `main`'s current tip): those need opposite remedies from this one.
+ * Behind `main` — update the branch. Runs predate `main` — re-run. GitHub's head is not the tip — RE-PUSH,
+ * so GitHub picks up the commit that is already there.
+ *
+ * @param {{headRefOid: string}} pr
+ * @param {string} branchTip
+ * @returns {string[]}
+ */
+function headTipMismatchReason(pr, branchTip) {
+  if (branchTip === pr.headRefOid) return [];
+  return [`GITHUB'S HEAD IS NOT THE BRANCH TIP: GitHub recorded ${pr.headRefOid.slice(0, 10)}, the branch's `
+    + `real tip is ${branchTip.slice(0, 10)}.\n`
+    + "  Every check below belongs to the recorded head, which is not the commit that would actually merge.\n"
+    + "  Re-push the branch so GitHub picks up the real tip, then ask again."];
 }
 
 /**
@@ -448,6 +479,22 @@ export function lookupRequiredContexts() {
 }
 
 /**
+ * The real, current tip of a branch on `origin` right now — never GitHub's `headRefOid`, which is a
+ * separate piece of bookkeeping that can lag a push (#294). `null` on failure, same as every lookup here;
+ * an unparseable or empty `ls-remote` line is treated the same as a thrown error rather than as a real
+ * empty-string sha, since neither means "the branch has no tip".
+ * @param {string} branchName
+ * @returns {string | null}
+ */
+export function lookupBranchTip(branchName) {
+  return lookup(() => {
+    const line = execFileSync("git", ["ls-remote", "origin", branchName], { encoding: "utf8" }).trim();
+    const sha = line.split(/\s+/)[0];
+    return sha || null;
+  });
+}
+
+/**
  * Every check run recorded against a commit sha, or `null` if the lookup failed.
  * @param {string} sha
  * @returns {{name: string, status: string, conclusion: string | null, completedAt: string | null}[] | null}
@@ -486,7 +533,7 @@ function facts(number) {
   // DELIBERATELY NOT REQUESTING `mergeStateStatus`. Asking for it at all would invite the next reader to
   // use it, and this tool's entire reason for existing is that its answer cannot be trusted here.
   const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
-    "--json", "number,state,baseRefName,headRefOid"]));
+    "--json", "number,state,baseRefName,headRefOid,headRefName"]));
   const required = lookupRequiredContexts();
   const runs = lookupCheckRuns(pr.headRefOid);
   const mainTipIso = lookup(() => gh(["api", `repos/${REPO}/commits/main`,
@@ -499,8 +546,9 @@ function facts(number) {
       `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
     return typeof value === "number" ? value : null;
   });
+  const branchTip = lookupBranchTip(pr.headRefName);
   const closes = lookupClosingIssues(number);
-  return { pr, required, runs, mainTipIso, behindBy, closes };
+  return { pr, required, runs, mainTipIso, behindBy, branchTip, closes };
 }
 
 /**
