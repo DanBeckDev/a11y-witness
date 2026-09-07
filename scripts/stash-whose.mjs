@@ -33,6 +33,7 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { sandboxGitEnv } from "./git-env.mjs";
 
 const EXIT = { DONE: 0, CANNOT_ASK: 2 };
 
@@ -79,7 +80,8 @@ function main() {
   /** @type {string} */
   let raw;
   try {
-    raw = execFileSync("git", ["stash", "list", "--format=%gd%x09%s"], { encoding: "utf8" });
+    raw = execFileSync("git", ["stash", "list", "--format=%gd%x09%s"],
+      { encoding: "utf8", env: sandboxGitEnv() });
   } catch (error) {
     process.stderr.write("CANNOT SAY what is in the stash: `git stash list` failed. This is "
       + `INCONCLUSIVE, not "no stashes" -- the two need opposite responses. ${
