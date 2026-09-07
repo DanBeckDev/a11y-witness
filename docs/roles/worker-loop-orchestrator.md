@@ -373,6 +373,48 @@ something I missed"* rather than *"I did not commit what I tested"*:
 <paths>` commits from the WORKING TREE, so a staged path not listed is silently dropped"* — and this is the
 other door: stage, then edit, then commit without paths, and the edit is dropped instead.
 
+## WHO HOLDS THIS PR — take the hold, do not announce it (#266)
+
+**Two agents have standing to act on one PR, and until #266 nothing on the PR recorded who held it.**
+The split — the dispatcher updates and arms, the author pushes — lived in messages.
+
+Measured 2026-09-07 on PR #258: the dispatcher said *"arming on green"* and ran `gh pr update-branch`;
+the author ran `merge-guard`, saw `7 commit(s) behind`, rebased and pushed into it.
+
+```
+! [remote rejected] ... cannot lock ref: is at 23140341 but expected 29f41cd8
+```
+
+`--force-with-lease` refused, and it is the only reason nothing was lost. A plain `--force` would have
+taken the branch to a base fetched before #229 merged, **silently reverting that PR's README and
+changeset inside a branch nobody would think to check for them.**
+
+**The boundary was wrong rather than ignored.** The stated rule named *armed* PRs; #258 was UNARMED, so
+by that rule it was the author's — while the dispatcher was updating it in preparation for arming. The
+real predicate is *"a PR somebody is actively working on"*, and the other party cannot see that state
+from outside. The collision was invisible, not careless.
+
+```bash
+npm run pr:hold -- <n> --session=<name>      # take it; prints who held it before
+npm run pr:release -- <n> --session=<name>   # give it back
+npm run pr:hold -- <n>                       # report only, writes nothing
+```
+
+`merge-guard` refuses a PR held by another session and names the holder. **There is deliberately no
+`--allow-held` flag**, unlike #249's `--allow-claimed-close`: a row you do not hold cannot be taken from
+its owner, so a flag is the only route there — but a PR hold *can* be handed over, so the escape hatch is
+`pr:release` followed by `pr:hold`, which leaves a record where a flag would leave none.
+
+**Why a label rather than an agreement, and it is not a preference.** The remedy first agreed was a
+sentence: *once the dispatcher says they will arm it, it is theirs.* This repository has already measured
+that shape. **#197 is the identical experiment on rows** — a claim existing only as a sentence in a
+dispatch message produced three double-dispatches (#156, #158, #159), *"each caught only by a worker's
+own caution, never the tool."* `row-claim.mjs` states the principle this inherits: the Project Status
+field is a VIEW; the label, on the object and timestamped by GitHub's own timeline, is the RECORD.
+
+And it is a COMMAND rather than a remembered `gh pr edit --add-label` for #197's other half: a claim that
+depends on somebody remembering to record it does not get recorded.
+
 ## Standing rules inherited from the lead's own record
 
 - **Verify a row is OPEN by a command before briefing it.** Three units were dispatched at already-closed
