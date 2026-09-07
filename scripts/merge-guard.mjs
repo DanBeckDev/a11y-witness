@@ -39,9 +39,10 @@
 //   2  CANNOT ASK -- a lookup failed. INCONCLUSIVE, never "fine": reporting an unaskable question as
 //                    clean is how "verified" comes to mean "unexamined"
 import { execFileSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
 
 const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2 };
@@ -169,6 +170,160 @@ function ancestryReason(behindBy) {
     + "  no longer exists. Update the branch and let it re-run."];
 }
 
+/**
+ * A GUARD WHOSE WRONG ANSWERS ARE ABSORBED BY ANOTHER MECHANISM HAS NO FAILURE SIGNAL (#188).
+ *
+ * #182 was caught only because strict branch protection refused what this tool passed — the guard's own
+ * wrongness was invisible until somebody happened to run `gh pr update-branch` right after. Nothing
+ * compared the guard's verdict to what actually happened, so the disagreement left no record anywhere.
+ *
+ * So: every verdict this tool computes for an OPEN PR is appended to a log. Once a PR is terminal (merged
+ * or closed), `--reconcile` compares the LAST recorded verdict against the real outcome and records
+ * whether they AGREED or DISAGREED — always, not only on conflict, because a log that only records
+ * disagreements cannot tell "the two agreed" from "the two were never compared" (`worker-capture`'s
+ * constraint on this row).
+ *
+ * THE COMPARISON TARGET IS `pr.state` (MERGED / CLOSED), NEVER `mergeStateStatus`. The issue is explicit
+ * that this must be an OUTCOME, not an opinion — the same distinction the rest of this file exists for.
+ * There is deliberately no attempt to reconstruct history for PRs that resolved before this shipped:
+ * "did this merge need an update first" is not reliably decidable from git alone after the fact, so
+ * reconciliation is forward-only rather than producing a plausible retro-verdict.
+ *
+ * THE LOG LIVES AT THE GIT COMMON DIR, NEVER `runs/`. `runs/` exists only in the primary checkout (it is
+ * gitignored, and absent from every worktree) — a worker running this from its own worktree would write
+ * this log nowhere, silently, and an empty log from "nothing ran here" is indistinguishable from an empty
+ * log from "nothing ever disagreed", which is exactly the failure mode this row exists to close. The git
+ * common dir resolves to the SAME `.git` for the primary and every worktree.
+ */
+const REASON_KINDS = [
+  [/^BASE IS NOT main/, "BASE_NOT_MAIN"],
+  [/^NO CHECK RUNS EXIST/, "NO_RUNS"],
+  [/^REQUIRED CONTEXT NEVER RAN/, "MISSING_REQUIRED_CONTEXT"],
+  [/^STILL RUNNING/, "STILL_RUNNING"],
+  [/^FAILING/, "FAILING"],
+  [/^THIS HEAD DOES NOT CONTAIN main's TIP/, "ANCESTRY"],
+  [/^EVERY RUN PREDATES THE CURRENT main/, "STALE"],
+];
+
+/**
+ * WHICH reason a refusal is, not just that there was one — because "the guard refused for ancestry and
+ * GitHub merged it" and "the guard refused for a missing check and GitHub merged it" are different bugs,
+ * and a bare verdict cannot distinguish them.
+ *
+ * @param {string} reason
+ * @returns {string}
+ */
+export function reasonKind(reason) {
+  const hit = REASON_KINDS.find(([pattern]) => pattern.test(reason));
+  return hit ? hit[1] : "UNCLASSIFIED";
+}
+
+/** Never a silent no-op: a write failure is the exact defect this mechanism exists to avoid. */
+function appendJsonl(path, entry) {
+  try {
+    appendFileSync(path, `${JSON.stringify(entry)}\n`);
+  } catch (error) {
+    throw new Error(`could not write the merge-guard log at ${path}: ${error.message}`, { cause: error });
+  }
+}
+
+/** @returns {string} the `.git` directory shared by the primary checkout and every worktree. */
+export function gitCommonDir() {
+  return execFileSync("git", ["rev-parse", "--git-common-dir"],
+    { encoding: "utf8", env: sandboxGitEnv() }).trim();
+}
+
+export function verdictLogPath() {
+  return `${gitCommonDir()}/merge-guard-log.jsonl`;
+}
+
+export function agreementLogPath() {
+  return `${gitCommonDir()}/merge-guard-agreement-log.jsonl`;
+}
+
+/** Appends one verdict. Called on every live guard run against an OPEN PR. */
+export function recordVerdict(logPath, prNumber, verdict) {
+  appendJsonl(logPath, {
+    prNumber, at: new Date().toISOString(),
+    code: verdict.code,
+    reasonKinds: verdict.reasons.map(reasonKind),
+  });
+}
+
+/** The most recently recorded verdict for a PR, or null if none was ever recorded. */
+export function latestVerdictFor(logPath, prNumber) {
+  let text;
+  try {
+    text = readFileSync(logPath, "utf8");
+  } catch (error) {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code === "ENOENT") return null;
+    throw error;
+  }
+  const entries = text.split("\n").filter(Boolean).map((line) => JSON.parse(line))
+    .filter((entry) => entry.prNumber === prNumber);
+  return entries.length > 0 ? entries[entries.length - 1] : null;
+}
+
+/**
+ * `pr.state` -> a real outcome, or null when there isn't one yet. Never `mergeStateStatus` — see the
+ * header above this section.
+ *
+ * @param {string} state
+ * @returns {"ACCEPTED" | "REFUSED" | null}
+ */
+export function realOutcomeFor(state) {
+  if (state === "MERGED") return "ACCEPTED";
+  if (state === "CLOSED") return "REFUSED";
+  return null; // OPEN, or anything not yet terminal
+}
+
+/**
+ * THE COMPARISON, PURE. Records AGREEMENT as explicitly as DISAGREEMENT — an absent line here is
+ * indistinguishable from "never compared", which is the trap this row exists to close.
+ *
+ * `resolvedAt` guards a real trap, found by running this live against an already-merged PR: recomputing
+ * the guard's verdict AFTER a PR has resolved almost always reads REFUSED, because `main` has kept moving
+ * and the merged head is now "behind" a tip it was never tested against and never needed to be — that is
+ * not a disagreement, it is a stale question asked of a settled outcome. So a verdict recorded AFTER the
+ * PR's own resolution timestamp is refused here rather than reconciled: it was never a live, pre-decision
+ * check, and treating it as one would flood this log with false DISAGREED entries for every merged PR
+ * anyone runs the guard against after the fact.
+ *
+ * @param {{prNumber: number, recordedVerdict: {code: number, reasonKinds: string[], at: string} | null,
+ *          realOutcome: "ACCEPTED" | "REFUSED" | null, resolvedAt: string | null}} args
+ * @returns {{code: number, reason: string, record: null} | {code: number, reason: null, record:
+ *   {prNumber: number, at: string, guardVerdict: "READY" | "REFUSED", guardReasonKinds: string[],
+ *    realOutcome: "ACCEPTED" | "REFUSED", agreement: "AGREED" | "DISAGREED"}}}
+ */
+export function reconcile({ prNumber, recordedVerdict, realOutcome, resolvedAt }) {
+  if (recordedVerdict === null) {
+    return { code: EXIT.CANNOT_ASK, record: null,
+      reason: `no recorded guard verdict for #${prNumber} — nothing to reconcile against.` };
+  }
+  if (realOutcome === null) {
+    return { code: EXIT.CANNOT_ASK, record: null,
+      reason: `#${prNumber} has no outcome yet — reconciliation is forward-only and never invents one ` +
+        "for a PR that is still OPEN." };
+  }
+  if (resolvedAt != null && recordedVerdict.at > resolvedAt) {
+    return { code: EXIT.CANNOT_ASK, record: null,
+      reason: `the recorded verdict for #${prNumber} (${recordedVerdict.at}) was made AFTER it resolved ` +
+        `(${resolvedAt}) — that is a stale post-mortem question, not a live pre-decision check, and ` +
+        "comparing it would read as a disagreement for a reason that has nothing to do with the merge." };
+  }
+  const guardVerdict = recordedVerdict.code === EXIT.READY ? "READY" : "REFUSED";
+  const platformAccepted = realOutcome === "ACCEPTED";
+  const agreement = (guardVerdict === "READY") === platformAccepted ? "AGREED" : "DISAGREED";
+  return {
+    code: EXIT.READY,
+    reason: null,
+    record: {
+      prNumber, at: new Date().toISOString(), guardVerdict,
+      guardReasonKinds: recordedVerdict.reasonKinds, realOutcome, agreement,
+    },
+  };
+}
+
 /** Each lookup returns null on failure rather than an empty answer — the distinction the verdict needs. */
 function lookup(fn) {
   try {
@@ -203,17 +358,44 @@ function facts(number) {
   return { pr, required, runs, mainTipIso, behindBy };
 }
 
+/** `--reconcile <n>`: compare the LAST recorded verdict for #n against its real, terminal outcome (#188). */
+function reconcileCommand(number) {
+  const recordedVerdict = latestVerdictFor(verdictLogPath(), number);
+  const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
+    "--json", "state,mergedAt,closedAt"]));
+  const realOutcome = realOutcomeFor(pr.state);
+  const resolvedAt = pr.mergedAt ?? pr.closedAt ?? null;
+  const result = reconcile({ prNumber: number, recordedVerdict, realOutcome, resolvedAt });
+  if (result.code !== EXIT.READY) {
+    console.error(`CANNOT RECONCILE #${number}: ${result.reason}`);
+    process.exit(result.code);
+  }
+  appendJsonl(agreementLogPath(), result.record);
+  console.log(`#${number}: guard said ${result.record.guardVerdict} `
+    + `(${result.record.guardReasonKinds.join(", ") || "no reasons"}), the platform's real outcome was `
+    + `${result.record.realOutcome} — ${result.record.agreement}.`);
+  process.exit(EXIT.READY);
+}
+
 function main() {
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/merge-guard.mjs" });
+  refuseUnknownFlags(["--reconcile"], { entry: import.meta.url, command: "node scripts/merge-guard.mjs" });
   const number = process.argv.slice(2).find((arg) => /^\d+$/.test(arg));
   if (!number) {
     console.error("Usage: node scripts/merge-guard.mjs <pr-number>\n"
+      + "       node scripts/merge-guard.mjs --reconcile <pr-number>\n"
       + "Answers whether that PR has actually been tested, by reading its check RUNS rather than\n"
-      + "`mergeStateStatus` -- which reports CLEAN for a PR that has never run a check.");
+      + "`mergeStateStatus` -- which reports CLEAN for a PR that has never run a check. `--reconcile`\n"
+      + "compares the last recorded verdict against the PR's real, terminal outcome (#188).");
     process.exit(EXIT.CANNOT_ASK);
   }
 
+  if (process.argv.includes("--reconcile")) {
+    reconcileCommand(Number(number));
+    return;
+  }
+
   const verdict = mergeReadiness(facts(Number(number)));
+  recordVerdict(verdictLogPath(), Number(number), verdict);
   for (const note of verdict.notes) console.error(note);
   if (verdict.code === EXIT.READY) {
     console.log(`#${number} is tested: based on main, every required context present and concluded, and `
