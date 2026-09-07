@@ -114,6 +114,23 @@ export function issues() {
   return all.map((i) => ({ ...i, labelNames: i.labels.map((l) => l.name) }));
 }
 
+/** A row that is not work: a container, or a process row. NOT counted, and the document says so.
+ *
+ * `#20` is the whole reason this exists. It is the daily board report itself -- its comments ARE the
+ * editions -- so it is an open issue that will never close and can never be worked. Counted, it inflates
+ * "road to version one" by one for ever and the number quietly stops meaning what a reader thinks.
+ *
+ * EXCLUDED BY RULE AND THE RULE IS PRINTED, which is the whole point: a count that silently drops rows is
+ * worse than one that counts the wrong thing, because nobody can tell. Section 6 states the exclusion
+ * beside the figure.
+ */
+export const META_LABEL = "meta";
+
+/** The rows the document COUNTS. `issues()` stays complete -- a meta row still needs its state resolved. */
+export function countable(list) {
+  return list.filter((i) => !(i.labelNames ?? i.labels?.map((l) => l.name) ?? []).includes(META_LABEL));
+}
+
 export function milestone() {
   const all = JSON.parse(gh(["api", `repos/${REPO}/milestones?state=all`]));
   return all.find((m) => m.title === MILESTONE) ?? null;
@@ -128,6 +145,25 @@ export function reported() {
   const latest = gates.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
   return { latestGate: latest, gateIsFresh: latest ? fresh(latest) : false, fleetHours: raw.fleetHours,
     achievements: raw.achievements ?? [] };
+}
+
+/**
+ * The capture age a real-page gate printed, pulled from its own verbatim output rather than retyped by a
+ * human -- issue #128. `rules:real-pages` computes and prints this line itself
+ * (`*** 298 hour(s) between the oldest and newest, so this compares a MIXED population against one
+ * baseline`); the defect was that everything downstream of the recorded entry re-typed a bare figure and
+ * dropped it. The board document quotes a gate's output verbatim already, so once the recording keeps the
+ * line this needs only to find it, never to compute it -- a second computation of the same spread is
+ * exactly the fact-stated-twice shape this file's own header warns about.
+ *
+ * @param {string | undefined} gateOutput
+ * @returns {string | null} the gate's own spread sentence, or null when it printed none (not a real-page
+ *   result, or an older recording taken before the gate stated its spread)
+ */
+export function realPageCaptureAge(gateOutput) {
+  if (!gateOutput) return null;
+  const spread = gateOutput.match(/\*{0,3}\s*\d+\s*hour\(s\)\s*between the oldest and newest[^\n]*/i);
+  return spread ? spread[0].replace(/^\*+\s*/, "").trim() : null;
 }
 
 /**
@@ -226,7 +262,8 @@ export function readSetIsNotMain() {
 /** Everything both outputs need, read once. */
 export function collect(since) {
   const all = issues();
-  const open = all.filter((i) => i.state === "OPEN");
+  // Counted rows only. `all` stays complete for state lookups; `open` is what the document reports.
+  const open = countable(all.filter((i) => i.state === "OPEN"));
   return {
     since,
     all,

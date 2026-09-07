@@ -21,8 +21,7 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 import {
   REPO, MILESTONE, HOURS_MS, READ_SET,
-  gh, git, issues, milestone, mergeState, misAuthored, reported, daysUntil, readSetIsNotMain,
-} from "./board-data.mjs";
+  gh, git, issues, milestone, mergeState, misAuthored, reported, daysUntil, readSetIsNotMain, countable} from "./board-data.mjs";
 
 const argv = process.argv.slice(2);
 const flag = (name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
@@ -210,7 +209,8 @@ function facts(since, sinceLabel) {
   const { latestGate, gateIsFresh, fleetHours } = reported();
 
   const closed = all.filter((i) => i.state === "CLOSED" && i.closedAt && Date.parse(i.closedAt) >= Date.parse(since));
-  const open = all.filter((i) => i.state === "OPEN");
+  // Meta rows are containers, not work -- see `countable` in board-data.mjs, and section 6 prints the rule.
+  const open = countable(all.filter((i) => i.state === "OPEN"));
   const blockers = open.filter((i) => i.milestone?.title === MILESTONE);
   const ready = open.filter((i) => i.labelNames.includes("ready"));
   const awaiting = open.filter((i) => i.labelNames.includes("awaiting-merge"));
