@@ -300,7 +300,12 @@ test("neither hook fires in an UNMARKED clone — the lab's exact shape, and #19
     sandbox.commit("second", ["--allow-empty"]);
     const head = sandbox.run(["rev-parse", "HEAD"]).trim();
     const before = sandbox.run(["rev-parse", "HEAD~1"]).trim();
-    const checkout = runPostCheckout(sandbox, { previous: before, next: head, branchCheckout: true });
+    // The REAL parameter names. The first version of this test passed `{previous, next, branchCheckout}`,
+    // which `runPostCheckout` ignores — so `isBranchCheckout` was undefined, the hook saw "0", exited 0 on
+    // its very first line, and the assertion passed having exercised NOTHING. Lint and the unit run were
+    // both green; `tsc` caught it. A test written against a shape you did not verify, in the test for the
+    // guard that had just been fixed for the same class of mistake.
+    const checkout = runPostCheckout(sandbox, { prevHead: before, newHead: head, isBranchCheckout: "1" });
     assert.equal(checkout.status, 0,
       `an unmarked clone must be free to detach at any ref; that is how every lab job runs. ${checkout.stderr}`);
   });
