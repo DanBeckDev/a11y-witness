@@ -162,7 +162,6 @@ export function startability({ row, subjectsMissing, heldRegions, examined, bloc
  *
  * A ref with no PR at all is not an error — plenty of branches never open one — so it reports `no PR`
  * rather than failing, and an unreadable answer says so instead of implying `none`.
- * @param {string} ref
  */
 /**
  * ONE LISTING, NOT ONE CALL PER REF — with a per-ref fallback so a truncated page cannot lie.
@@ -176,6 +175,7 @@ export function startability({ row, subjectsMissing, heldRegions, examined, bloc
  * "nobody is coming". So a ref MISSING from the map is not answered from the map; it falls through to
  * the authoritative per-ref query. Truncation then costs an extra call and never a wrong answer.
  */
+/** @type {Map<string, string[]> | undefined} */
 let prMap;
 function prStateMap() {
   if (prMap) return prMap;
@@ -183,7 +183,7 @@ function prStateMap() {
   try {
     for (const pr of JSON.parse(gh(["pr", "list", "--repo", REPO, "--state", "all",
       "--limit", "400", "--json", "number,state,headRefName"]))) {
-      const key = pr.headRefName;
+      const key = /** @type {{ headRefName: string }} */ (pr).headRefName;
       prMap.set(key, [...(prMap.get(key) ?? []), `PR #${pr.number} ${pr.state}`]);
     }
   } catch {
@@ -193,6 +193,7 @@ function prStateMap() {
   return prMap;
 }
 
+/** @param {string} ref */
 function prState(ref) {
   const branch = ref.replace(/^origin\//, "");
   const known = prStateMap().get(branch);
