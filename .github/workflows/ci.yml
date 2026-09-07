@@ -312,9 +312,9 @@ jobs:
       # `gh-token-jobs.test.ts` pins the CLASS: it walks each job's test glob and every LOCAL import
       # beneath it, and requires GH_TOKEN on any job that can reach a `gh` spawn. A test grepping the test
       # FILES alone would have found nothing here -- neither board test names `gh` at all.
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
 
   # THE RULES FITNESS GATE, ITS OWN JOB -- chairman's direction, 2026-09-06. Used to run inside `ts`
   # unconditionally on every package change; now gated on `rulesFitness`, true only when
