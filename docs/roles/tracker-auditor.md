@@ -19,11 +19,12 @@ command that showed it:
 | is any pushed branch without a PR? | `npm run branches:stranded` |
 | is any issue closed by a merge still open? | `gh pr list --state merged` against each PR body's `Closes #N` |
 | does any open row lack acceptance, region or open-check? | the template fields, read back |
+| does any open row carry NEITHER a milestone nor `out-of-release`? | `gh issue list --state open --json number,milestone,labels` — the rule allows no third state, and an unclassified row is counted in the open-items total while being invisible to every milestone figure |
 | is Ready below three unclaimed rows? | count, and tell `product-manager` |
 
 ## What this role does not do
 
-It files no work of its own, briefs nobody, merges nothing, and never changes a milestone date. A row
+It files no work of its own, briefs nobody, merges nothing, and never changes a milestone date. **It does not decide whether an unclassified row belongs in the release** — that is a scope decision, and assigning a milestone changes a number the board reads. Name the row and ask; either answer takes one command. A row
 that needs a decision is labelled `decision` and named to `product-manager` in one line.
 
 ## Reporting
