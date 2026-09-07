@@ -16,6 +16,7 @@
 
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 
 const STATUS_TOOLS = ["head", "tail", "grep"];
 
@@ -65,6 +66,8 @@ export function checkPipedExitStatus(cmd) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
+  // Guarded per #164: takes the command POSITIONALLY (argv[2]) and no flags.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/piped-exit-status-guard.mjs" });
   const cmd = process.argv[2];
   if (!cmd) {
     console.error("usage: piped-exit-status-guard.mjs '<shell command string>'");
