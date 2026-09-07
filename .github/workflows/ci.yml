@@ -1,0 +1,398 @@
+name: ci
+
+# ONE workflow for a PR, replacing three that used to run independently on the same commit:
+#
+#   - `lint.yml` had NO path filter at all and ran lint, typecheck, the full TS suite and the full Python
+#     suite on a one-line docs edit exactly as it did on a capture-path rewrite -- on BOTH `push` and
+#     `pull_request`, so every PR commit ran the whole thing twice.
+#   - `changeset-check.yml` re-derived "does this touch a published package" with its own inline `git diff`.
+#   - `ansible-check.yml` carried a THIRD, independent "did the fleet's Ansible layer change" `paths:` block.
+#
+# Three copies of "what changed", proven capable of drifting the moment a fourth question (docs) needed
+# asking too -- this repo's own most-repeated defect, aimed at its own CI. `scripts/ci-changed.mjs` is now
+# the one place that question is answered, and every job below is conditional on its output rather than
+# carrying its own `paths:` filter. `ci-changed.test.ts` pins the classification AND this file's own
+# trigger table, so a future "just add the tests to lint" (or the equivalent here) fails a unit test rather
+# than the PR budget.
+#
+# NO PUSH TRIGGER, EVER -- chairman's direction, 2026-09-06, correcting this file's own first version. The
+# flow is PR then merge, and every check that gates code must run before the merge: a check that runs AFTER
+# it cannot stop it, which is exactly what a `push: branches: [main]` trigger was -- a gate with the barn
+# door already open. `pull_request` and `merge_group` (#156) are both PRE-merge events; branch protection
+# (requiring these checks green AND the branch up to date with `main`) is what makes the commit that was
+# tested the commit that lands, via a squash/fast-forward merge or a merge-queue merge, never a merge
+# commit CI never saw.
+#
+# #156's OTHER HALF IS A SETTINGS CHANGE, NOT MADE HERE: branch protection on `main` must require `gate`
+# alone, not the five scoped jobs directly (see the `gate` job's own comment below for why), or a
+# merge-group run gets asked for six path-scoped contexts against a ref that most of them correctly skip --
+# multiplying the "a required check with no run blocks merge forever" exposure `gate` exists to remove. And
+# enabling the merge queue itself (a ruleset) is `ceo`'s to authorise, not a code change at all.
+#
+# THE `ts` JOB IS SCOPED TO CHANGED PACKAGES AND THEIR DEPENDENTS, NOT THE WHOLE REPO -- chairman's
+# follow-up, 2026-09-06, measuring `ci/ts` at 269s on a one-package PR (unit tests 84s, then a 154s step
+# running coverage/rules-check/scorer:verify/gate:isolation over the ENTIRE repository regardless of what
+# the PR actually touched). Budget dropped from four minutes to sixty seconds the same day. Two changes:
+#
+#   - Coverage (`.c8rc.json`'s whole-repo 78% threshold) and `gate:isolation` (every package's tarball is
+#     installable) left the PR job entirely -- see `release.yml` (gate:isolation, via `release:gate:ci`,
+#     already there) and `coverage.yml` (new: nightly schedule + release-time, threshold intact). Neither
+#     answers "did THIS PR's diff regress"; both answer "is the repository as a whole still sound", which
+#     does not need re-asking on every commit of every PR.
+#   - The rules fitness gate (`npm run rules-check`) is now its own job below, `rulesFitness`, gated on
+#     `packages/judge` or `packages/evidence` having changed -- the only two paths that can move its
+#     answer, per `ci-changed.mjs`'s `rulesFitness` category.
+#
+# Unit tests run over `testPackages` (touched packages PLUS every workspace DEPENDENT, transitively,
+# computed from real `package.json` dependencies -- see `ci-changed.mjs`'s own header), never `packages`
+# alone and never the whole suite. A contract change under `packages/evidence` still tests `packages/judge`
+# and everything downstream of it; an unrelated package's PR does not pay for packages it cannot affect.
+#
+# #212 MEASURED THE 60S BUDGET ON A GENUINE LEAF CASE (`packages/lab`, zero dependents post-#206) AND FOUND
+# ~90S, NOT 60S -- two independent CI runs, step-by-step: checkout+setup-node+cache+npm-ci 7s (npm ci fully
+# SKIPPED on the cache hit -- caching already works), build 5s, lint+typecheck 15s (whole-repo, not scoped
+# to `testPackages` -- real, but small), and "Unit tests of the touched package(s) and their workspace
+# dependents" 56s -- ~66% of the step total, on BOTH runs. That is `lab`'s own suite (199 test files, ~1,305
+# `test()` calls, this repo's largest package by test count), not unscoped CI -- `testPackages` resolved to
+# `["lab"]` only. Disposition: accept it. A PR touching `lab` has a measured, understood floor around
+# 85-90s from `lab`'s own suite size; the 60s budget holds for an ordinary single/few-package PR elsewhere.
+# Not a target missed -- a cost named rather than chased.
+#
+# AGENT/** AND LEAD/** BRANCH PUSHES DO NOT TRIGGER THIS WORKFLOW EITHER, same as before -- every unit ends
+# with `gh pr create` (the standing worker-loop flow), so the PR's own `pull_request` trigger is where a
+# branch's full check runs; a push with no PR yet gets only the local pre-push hook's fast gate. See
+# `scripts/git-hooks/pre-push`'s own header for the other half of this.
+#
+# THE `gate` JOB AT THE BOTTOM IS WHAT BRANCH PROTECTION ACTUALLY REQUIRES, not the five scoped jobs
+# above it. Every job but `changed` is conditional on `ci-changed.mjs`'s output, so a docs-only PR never
+# runs `ts`/`python`/`ansible` at all -- and a required check with no run against a given commit blocks
+# merge FOREVER, it does not pass by default. GitHub does treat a job SKIPPED by its own `if:` as
+# satisfying a required check (a real run, concluding `skipped`, distinct from never running) -- #133
+# required all five path-scoped contexts directly and it merged fine on that behaviour. But relying on an
+# implicit platform behaviour for the one thing that gates every merge is exactly this repo's own rule
+# about a verification not sharing a failure mode with what it guards: `gate` computes the same answer
+# explicitly, from `needs.*.result`, so branch protection has ONE always-reporting context to require and
+# the real logic lives in a file this repo tests, not in an assumption about how GitHub renders a skip.
+on:
+  pull_request:
+    branches: [main]
+  # #156: a merge queue CANNOT be turned on without this. GitHub's own docs are explicit -- "You must use
+  # the merge_group event to trigger your GitHub Actions workflow when a pull request is added to a merge
+  # queue ... Otherwise, status checks will not be triggered" -- and an entry whose checks never report is
+  # removed for timing out, silently, with no error anywhere. `ci-changed.test.ts` pins that this key stays
+  # ALONGSIDE `pull_request`, never in place of it: the PR itself still needs its own run before it can be
+  # queued at all.
+  merge_group:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # THE FIRST JOB, and everything else is conditional on it. Always runs -- cheap, no build, one git diff
+  # -- so a skipped downstream job is a real decision rather than an artefact of this job itself having
+  # been skipped.
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      ts: ${{ steps.classify.outputs.ts }}
+      python: ${{ steps.classify.outputs.python }}
+      ansible: ${{ steps.classify.outputs.ansible }}
+      docs: ${{ steps.classify.outputs.docs }}
+      board: ${{ steps.classify.outputs.board }}
+      changeset: ${{ steps.classify.outputs.changeset }}
+      rulesFitness: ${{ steps.classify.outputs.rulesFitness }}
+      packages: ${{ steps.classify.outputs.packages }}
+      testPackages: ${{ steps.classify.outputs.testPackages }}
+      # EXPOSED so `changeset` (below) does not re-derive it and risk the merge_group trap this step's own
+      # comment names -- a second, independent `github.base_ref` read in a different job is exactly the
+      # shape that drifted once already (#156).
+      base: ${{ steps.base.outputs.ref }}
+    steps:
+      # FULL HISTORY. A shallow clone fails `git diff <base>...HEAD` with "no commits in common" --
+      # `changeset-check.yml`'s own comment already named this trap.
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      # `github.base_ref` is EMPTY on a merge_group event -- it exists only for pull_request. The base
+      # there is `github.event.merge_group.base_ref`, and GitHub's own payload documents that as the FULL
+      # ref (`refs/heads/main`), not the short name `pull_request` gives (`main`) -- two different shapes
+      # for "the base branch", and treating them as the same string is exactly the trap #156 was filed
+      # against. Verified rather than assumed: an unhandled empty `github.base_ref` does not hit
+      # `ci-changed.mjs`'s own named "diff returned nothing" refusal at all -- `git diff origin/...HEAD`
+      # with nothing between the dots is a `fatal: ambiguous argument`, an uncaught crash with a git error
+      # rather than this script's clear message. `${base#refs/heads/}` strips a leading `refs/heads/` if
+      # present and is a no-op otherwise, so this is correct for both shapes regardless of which one
+      # GitHub actually sends.
+      - id: base
+        run: |
+          if [ "${{ github.event_name }}" = "merge_group" ]; then
+            base="${{ github.event.merge_group.base_ref }}"
+            base="${base#refs/heads/}"
+          else
+            base="${{ github.base_ref }}"
+          fi
+          echo "ref=origin/$base" >> "$GITHUB_OUTPUT"
+      - id: classify
+        run: node scripts/ci-changed.mjs --event=${{ github.event_name }} --base=${{ steps.base.outputs.ref }}
+
+  ts:
+    needs: changed
+    if: needs.changed.outputs.ts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      # CACHE node_modules ITSELF, KEYED ON THE LOCKFILE -- `setup-node`'s own `cache: npm` above caches
+      # the npm DOWNLOAD cache, not the installed tree, so `npm ci` still re-links everything on every run.
+      # On a cache hit this skips `npm ci` outright; on a miss it runs it once and the next PR touching an
+      # unchanged lockfile hits. Keyed on `package-lock.json`'s hash because that is the only thing that
+      # can make a previously-installed `node_modules` wrong.
+      - uses: actions/cache@v4
+        id: node-modules-cache
+        with:
+          path: node_modules
+          key: node-modules-${{ hashFiles('package-lock.json') }}
+      # --ignore-scripts: skip Playwright/Guidepup postinstall browser/AT setup, which lint, typecheck and
+      # the unit suite do not need (keeps this fast and Linux-safe) -- carried forward from `lint.yml`.
+      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts
+      # Cross-package imports resolve to `dist` (every `exports` entry points there) -- CLAUDE.md's own
+      # rule: run the file runner on its own and it tests the LAST BUILD, which on a fresh checkout is no
+      # build at all.
+      - run: npm run build
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Unit tests of the touched package(s) and their workspace dependents
+        # `testPackages`, NOT `packages` -- see `ci-changed.mjs`'s own header. A change under
+        # `packages/evidence` must still test `packages/judge` (depends on it) and everything downstream
+        # of judge, not just evidence's own tests.
+        #
+        # GH_TOKEN: `packages/lab/src/packaging/*` (board-style.test.ts, row-claim.test.ts's live
+        # fetchLabels) shells out to real `gh` calls against this repo's own Issues -- read-only, and
+        # `github.token` already has that scope for the repo the workflow runs in.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          globs=()
+          for pkg in ${{ needs.changed.outputs.testPackages }}; do
+            globs+=("packages/$pkg/src/**/*.test.ts")
+          done
+          if [ "${#globs[@]}" -eq 0 ]; then
+            echo "ts=true but no package was implicated -- ci-changed.mjs's own rule is that this should"
+            echo "never happen (a root config or scripts/*.mjs change adds every package); failing loudly"
+            echo "rather than silently running nothing."
+            exit 1
+          fi
+          npx tsx --test "${globs[@]}"
+
+  python:
+    needs: changed
+    if: needs.changed.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # NODE TOO, deliberately, though this is "the Python job". A handful of Python tests shell out to a
+      # `node` script (`test_grants_map_is_current.py`, `test_unclosable_map_is_current.py`) to read a JS
+      # declaration the Python-side audit must agree with -- `lint.yml` ran this correctly by accident,
+      # because it was ONE job with both `setup-node`+`npm ci` and `setup-python` in sequence. Splitting
+      # them cleanly (this row's whole point) first shipped WITHOUT this step and broke both files on the
+      # very first real PR run: `node_modules` did not exist, so the subprocess failed before pytest could
+      # even report why. Found by watching this PR's own first CI run, not by inspection.
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      # `@a11y-witness/worker-fleet/cli-flags` resolves through its package.json `exports` to
+      # `dist/cli-flags.mjs` -- `npm ci` alone is not enough, the same stale-dist trap CLAUDE.md already
+      # names for cross-package imports in the TS suite, here reached from a Python subprocess instead.
+      - run: npm run build
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      # `requirements-ci.txt`, not `requirements.txt` -- the lab's full environment is torch + transformers
+      # + onnxruntime + huggingface-hub, and the test suite does not need most of it. See that file's own
+      # header for the measurement. Two tests DO need torch/onnxruntime and are marked
+      # `pytest.importorskip` for exactly that reason -- they run on the lab, not here.
+      - run: pip install -r requirements-ci.txt
+      # Same two flags as the root `test:python` script, deliberately: `spec_from_file_location` honours
+      # `__pycache__`, and a stale compile has decided a mutation check wrongly in this repo before.
+      - run: PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider packages/*/tests -q
+
+  ansible:
+    needs: changed
+    if: needs.changed.outputs.ansible == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      # `ansible-core`, not the full `ansible` metapackage -- the metapackage bundles hundreds of
+      # collections this fleet does not use.
+      - run: pip install ansible-core pyyaml
+      - name: Install the collections these playbooks import
+        run: ansible-galaxy collection install -r packages/control/ansible/requirements.yml
+      - name: Every playbook still parses
+        env:
+          ANSIBLE_CONFIG: packages/control/ansible/ansible.cfg
+        run: |
+          status=0
+          for playbook in packages/control/ansible/*.yml; do
+            # roles/, tasks/, group_vars/ and the two inventory files are not playbooks (no top-level
+            # `hosts:`) and --syntax-check on one of those fails for a reason unrelated to this check.
+            grep -q "^- hosts:\|^  hosts:" "$playbook" || continue
+            echo "--- $playbook ---"
+            ansible-playbook -i packages/control/ansible/inventory.example.yml --syntax-check "$playbook" || status=1
+          done
+          exit $status
+      - name: Every module invocation matches what the module actually documents
+        working-directory: packages/control/ansible
+        run: python3 check-modules.py
+
+  docs:
+    needs: changed
+    if: needs.changed.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      # The doc/tracker/board guards -- `backlog.test.ts`, `backlog-ready.test.ts`, `known-gaps-file-
+      # facts.test.ts`, `board-liveness.test.ts` and their siblings, all of which read `docs/*.md` content
+      # and would otherwise only ever run when `packages/lab/src/packaging/**` itself changes, never when
+      # the DOCUMENT it pins does. Running the whole directory rather than hand-picking a subset: it is
+      # already the repo's own home for "guard, not capture/fleet" tests (leak sweeps, worktree lifecycle,
+      # lab-job catalogue checks alongside the doc guards), so a hand-picked list would need its own
+      # discovery test to stay honest -- simpler to run the directory a docs change could plausibly affect.
+      #
+      # GH_TOKEN: a handful of these (board-style.test.ts, the live issue-fetch tests) shell out to `gh`
+      # against this repo's own real Issues/labels -- read-only, and `github.token` already has that scope
+      # for the repo the workflow runs in. Found missing on this PR's own first real CI run: these tests
+      # had never reached this far before either (same earlier-failing-job shape as the Python split).
+      - run: npx tsx --test "packages/lab/src/packaging/*.test.ts"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # BOARD-ONLY, THE NARROWEST JOB IN THIS FILE -- chairman's direction, 2026-09-06, the product manager's
+  # single largest recurring cost that night: `docs/board/summaries/*.md` and `docs/board/reported.json`
+  # are edited far more often than anything else under `docs/`, and every such edit used to pay the full
+  # `docs` job above (a build, then the whole packaging directory) for a change no rule outside the board
+  # guards could react to. Fires only when `board` is true -- see `ci-changed.mjs`'s own header -- which is
+  # mutually exclusive with `docs`: a diff mixing a board file with any other doc file runs the wider
+  # `docs` job instead, never both.
+  #
+  # NO TYPECHECK, NO GH_TOKEN -- verified, not assumed: none of the six files this job runs shell out to
+  # `gh`. A BUILD IS STILL NEEDED, though the first version of this job shipped without one on the strength
+  # of a grep that checked only these test files' own top-level imports: `board-liveness.test.ts`,
+  # `board-markdown.test.ts`, `board-style.test.ts` and `board-summary-origin.test.ts` all drive a real
+  # `scripts/board-*.mjs` script, and those scripts import `@a11y-witness/worker-fleet/cli-flags` --
+  # exactly the stale-dist trap CLAUDE.md names for every other job in this file, reached one hop further
+  # than the grep looked. Caught by actually RUNNING the job's real command with no build present, not by
+  # reading the imports -- this repo's own rule, applied to itself. Still far cheaper than the `docs` job:
+  # six files instead of the whole packaging directory, no coverage, no rules-check.
+  board:
+    needs: changed
+    if: needs.changed.outputs.board == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      # GH_TOKEN: `board-*.test.ts` reach real `gh` calls TRANSITIVELY -- `board-style.test.ts` imports
+      # `scripts/board-data.mjs`, whose `collect()` shells out to `gh issue list`. The `ts` job has carried
+      # this env, with a comment naming board-style.test.ts as the reason, since before these tests were
+      # split into their own job -- and the env did not travel with them. Read-only; `github.token` already
+      # has that scope for the repo the workflow runs in.
+      #
+      # `gh-token-jobs.test.ts` pins the CLASS: it walks each job's test glob and every LOCAL import
+      # beneath it, and requires GH_TOKEN on any job that can reach a `gh` spawn. A test grepping the test
+      # FILES alone would have found nothing here -- neither board test names `gh` at all.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
+
+  # THE RULES FITNESS GATE, ITS OWN JOB -- chairman's direction, 2026-09-06. Used to run inside `ts`
+  # unconditionally on every package change; now gated on `rulesFitness`, true only when
+  # `packages/judge` or `packages/evidence` changed, the only two paths that can move its answer.
+  rulesFitness:
+    needs: changed
+    if: needs.changed.outputs.rulesFitness == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run rules-check
+
+  changeset:
+    needs: changed
+    # `needs.changed.outputs.changeset` here is a cheap OVER-APPROXIMATION -- `changed` has no `npm ci`
+    # and so cannot safely call `npm pack`, so its `classify()` run answers "does this PR touch a
+    # published package's directory at all", the same blunt shape `changeset-check.yml`'s old regex used
+    # before #132. A false positive here costs one job run that then finds nothing to enforce (below); a
+    # false negative would skip the real check entirely, which is why the cheap answer only ever widens.
+    if: needs.changed.outputs.changeset == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      # PRECISE, now that `npm ci` has made `npm pack` safe to call. `orchestrator` reproduced the crash
+      # this avoids: `classify()` calling the real `packedFiles` inside `changed` (no install at all) fails
+      # on every PR touching a published package. This re-derives the real answer -- does npm actually
+      # SHIP this file -- and it is what decides whether the enforcement step below runs anything at all.
+      - id: precise
+        run: node scripts/ci-changed.mjs --event=${{ github.event_name }} --base=${{ needs.changed.outputs.base }} --precise
+      - name: A consumer-visible change must say what it does to a consumer
+        if: steps.precise.outputs.changeset == 'true'
+        run: |
+          if ! npx changeset status --since=${{ needs.changed.outputs.base }}; then
+            echo "::error::This PR changes a published package and carries no changeset."
+            echo "Run 'npm run changeset', pick the packages and bump levels, and write one sentence a"
+            echo "CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT follow"
+            echo "from the size of the diff, and for the scorer any retrain is a MAJOR."
+            echo "If the change genuinely cannot affect a consumer, 'npx changeset add --empty' records"
+            echo "that decision explicitly rather than leaving it to be inferred from silence."
+            exit 1
+          fi
+
+  # THE ONE CONTEXT BRANCH PROTECTION REQUIRES. `if: always()` so this still runs when an upstream job
+  # fails or is cancelled -- without it, a failing `ts` would skip `gate` too (the default `if` on a job
+  # is `success()` on its dependencies), and a job that never reports on the one commit that most needs it
+  # blocked is worse than one that reports failure.
+  #
+  # `needs.*.result` is one of success | failure | cancelled | skipped -- never absent, so every job named
+  # in `needs:` below has an opinion here regardless of whether `ci-changed.mjs` decided it should run.
+  # skipped counts as passing (the job's own `if:` decided it, correctly, that this PR does not need it);
+  # anything else does not.
+  gate:
+    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job that ran, ran clean
+        run: |
+          for result in \
+            "${{ needs.changed.result }}" \
+            "${{ needs.ts.result }}" \
+            "${{ needs.python.result }}" \
+            "${{ needs.ansible.result }}" \
+            "${{ needs.docs.result }}" \
+            "${{ needs.board.result }}" \
+            "${{ needs.changeset.result }}" \
+            "${{ needs.rulesFitness.result }}"
+          do
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "::error::a job reported '$result', which is neither success nor skipped"
+              exit 1
+            fi
+          done

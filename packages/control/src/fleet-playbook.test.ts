@@ -53,7 +53,8 @@ test("only the named playbooks are runnable, and they are names rather than path
   // because the fault it exists for cannot be reached any other way — a worker wedged inside a capture
   // does not respond to `Stop-ScheduledTask`, keeps the port, and goes on serving a matching
   // `/health.code` from files the deploy has just updated, so `verify-code.yml`'s reboot never fires.
-  assert.deepEqual(PLAYBOOKS, ["deploy.yml", "sleep.yml", "provision-role.yml", "recover.yml", "inventory-install.yml"]);
+  assert.deepEqual(PLAYBOOKS,
+    ["deploy.yml", "sleep.yml", "provision-role.yml", "recover.yml", "inventory-install.yml", "control-host-install.yml"]);
   // `provision.yml` stays REFUSED and that is not an oversight: it is the UTM/PowerShell provisioning
   // playbook, a different file from `provision-role.yml`, and only the role one should be reachable from
   // a laptop. Two files one character apart, one allowed and one not, is exactly what an allowlist is for.
@@ -158,20 +159,20 @@ test("the provision stamp is the ENVIRONMENT, not the moment it was applied", ()
  * time only because the first failure (a package-name import) had masked it.
  */
 test("running ON the control plane is detected, so commands go to a shell and not through ssh", () => {
-  const here = { en0: [{ address: "192.168.1.172" }], lo0: [{ address: "127.0.0.1" }] };
-  assert.equal(onTheControlPlane(here, "192.168.1.172"), true);
+  const here = { en0: [{ address: "203.0.113.172" }], lo0: [{ address: "127.0.0.1" }] };
+  assert.equal(onTheControlPlane(here, "203.0.113.172"), true);
 });
 
 test("a laptop on the same LAN is NOT the control plane", () => {
   // The failure that would matter more: deciding we are the control plane when we are not sends every
   // deploy command to the wrong filesystem, silently, and it would look like a checkout that never moved.
   const laptop = { en0: [{ address: "192.168.1.50" }], lo0: [{ address: "127.0.0.1" }] };
-  assert.equal(onTheControlPlane(laptop, "192.168.1.172"), false);
+  assert.equal(onTheControlPlane(laptop, "203.0.113.172"), false);
 });
 
 test("an interface with no address does not throw or match", () => {
   // `networkInterfaces()` returns undefined for an interface in some states, and `.flat()` keeps the hole.
-  assert.equal(onTheControlPlane({ en0: undefined, lo0: [{ }] }, "192.168.1.172"), false);
+  assert.equal(onTheControlPlane({ en0: undefined, lo0: [{ }] }, "203.0.113.172"), false);
 });
 
 test("the journal a deploy streams is bounded to THIS run, not the unit's whole history", () => {

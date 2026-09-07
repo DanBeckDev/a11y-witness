@@ -478,6 +478,23 @@ export function scorerPaths(): { python: string; script: string } {
   };
 }
 
+/**
+ * `score.py`'s parseable fault line (#81), or `null` if `stdout` does not carry one -- PURE, so the
+ * shape can be tested without spawning anything. A line that starts with `{` but is not valid JSON, or
+ * is valid JSON with no `fault` key, both read as "no fault line" rather than throwing: the caller
+ * ({@link scoreCapture}) falls back to wrapping the raw process output for either case.
+ */
+function parseFaultLine(stdout: string): { fault: string; error?: string } | null {
+  const line = stdout.split("\n").find((l) => l.trim().startsWith("{"));
+  if (!line) return null;
+  try {
+    const parsed = JSON.parse(line) as { fault?: string; error?: string };
+    return parsed.fault ? { fault: parsed.fault, error: parsed.error } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Run the scorer over one raw witness capture. Separate so the pure logic above needs no subprocess. */
 export async function scoreCapture(capture: unknown, options: { python?: string; script?: string; timeoutMs?: number } = {}):
 Promise<ScorerOutput> {
@@ -509,7 +526,19 @@ Promise<ScorerOutput> {
     child.on("error", (e) => { clearTimeout(timer); reject(e); });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code !== 0) return reject(new Error(`the local scorer exited ${code}: ${err.slice(0, 400)}`));
+      if (code !== 0) {
+        // A shipped-artefact/runtime-schema mismatch is an EXPECTED domain failure (#81), and score.py's
+        // __main__ prints it as one parseable JSON line on stdout for exactly this reason -- so it can
+        // be read as a NAMED fault here rather than left as 400 characters of stderr traceback. Any
+        // OTHER failure (a missing file, a bad threshold) still exits non-zero with no such line, and
+        // falls through to the generic wrap unchanged.
+        const fault = parseFaultLine(out);
+        if (fault) {
+          return reject(Object.assign(new Error(fault.error ?? `the local scorer reported fault ${fault.fault}`),
+            { fault: fault.fault }));
+        }
+        return reject(new Error(`the local scorer exited ${code}: ${err.slice(0, 400)}`));
+      }
       const start = out.indexOf("{");
       if (start === -1) return reject(new Error(`the local scorer printed no JSON: ${out.slice(0, 200)}`));
       try {

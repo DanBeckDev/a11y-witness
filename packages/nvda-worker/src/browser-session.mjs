@@ -133,7 +133,7 @@ export function expectedPageUrlForTest() {
  * corpus made that the right line to draw, not a guess:
  *
  *   - Every synthetic fixture is declared against `localhost:5050` in `case-matrix.mjs` and served from
- *     whichever lab box runs the capture, e.g. `192.168.1.79:5050` — a real, permanent host mismatch on
+ *     whichever lab box runs the capture, e.g. `<the lab's address>:5050` — a real, permanent host mismatch on
  *     every synthetic capture this project has ever taken, not a hypothetical.
  *   - The contaminating target is never confusable by PATH: a Cookiebot consent panel's own document has
  *     a path like `/what-is-behind-powered-by-cookiebot`, nothing close to `/action-weve-taken/enforcement/`
@@ -357,6 +357,24 @@ export function lastResolvedPageUrl() {
 
 /** @param {string} url */
 export async function navigateExisting(url) {
+  // FIRST STATEMENT, BEFORE `pageTarget()`, and the position is the whole fix.
+  //
+  // The reset used to sit below, inside the try, after the socket opened -- and its own comment named the
+  // exact call it failed to protect: *"`pageTarget()` runs at the TOP of the next `navigateExisting`,
+  // before that capture has navigated, so capture N+1 of page B would call `choosePageTarget(expectedUrl =
+  // B, resolvedUrl = A)`"*. `pageTarget()` reads this module-level value on its way to `choosePageTarget`,
+  // and it ran first. So the comment described the defect and the code was ordered the other way round:
+  // a correct diagnosis one line above a statement placed where it could not act on it.
+  //
+  // THE FAILURE LOOKS LIKE SUCCESS, which is why nothing caught it. A stale `resolvedPageUrl` is a real
+  // URL from the previous capture, so it does not throw and does not read as absent -- it makes
+  // `choosePageTarget` accept the document the reused window is still showing as a legitimate match for
+  // the page we are about to request. `A11Y_REUSE_BROWSER` is ON by default, so that is the normal path.
+  //
+  // Reset before anything can read it: the value is then only ever "where THIS navigation landed", or
+  // null. `browser-session.test.ts` pins the ordering, because a statement's POSITION is the property
+  // here and moving it back is a one-line edit that changes nothing a type or a lint check can see.
+  resolvedPageUrl = null;
   const target = await pageTarget();
   const socket = new WebSocket(target.webSocketDebuggerUrl);
   // THE BRACKETS ARE THE MECHANISM. Collection starts before `Page.navigate` is sent and the resolved URL
@@ -374,15 +392,9 @@ export async function navigateExisting(url) {
   });
   try {
     await once(socket, "open", CDP_READY_TIMEOUT_MS);
-    // RESET BEFORE NAVIGATING, not merely assign after. `resolvedNavigationUrl` returns the REQUESTED url
-    // when nothing redirected, so this never becomes null on its own: after a capture of page A it holds A.
-    // `pageTarget()` runs at the TOP of the next `navigateExisting`, before that capture has navigated, so
-    // capture N+1 of page B would call `choosePageTarget(expectedUrl = B, resolvedUrl = A)` against a
-    // reused window still showing A. `A11Y_REUSE_BROWSER` is ON by default, so that is the normal path.
-    //
-    // Clearing it here means the value is only ever "where THIS navigation landed" or null -- never a
-    // previous capture's answer wearing this one's clothes.
-    resolvedPageUrl = null;
+    // The reset that used to be here is now the first statement of this function -- see the comment
+    // there. `resolvedNavigationUrl` returns the REQUESTED url when nothing redirected, so this value
+    // never becomes null on its own: after a capture of page A it holds A until something clears it.
     const loaded = waitForMethod(socket, "Page.loadEventFired", NAVIGATE_TIMEOUT_MS);
     socket.send(JSON.stringify({ id: 1, method: "Page.enable" }));
     socket.send(JSON.stringify({ id: 2, method: "Page.navigate", params: { url } }));
@@ -435,25 +447,6 @@ const ROLE_BUCKET = new Map([
   .../** @type {[string, string][]} */ (LANDMARK_ROLES.map((role) => [role, "landmark"])),
 ]);
 
-/**
- * How many structural elements does the PAGE actually expose?
- *
- * This is a completeness ORACLE, never evidence. The distinction is the whole design: what a screen
- * reader announced is the evidence, and `docs/local-model.md` forbids the accessibility tree as a model
- * feature. But a sweep that under-reports is indistinguishable from a page that has nothing -- and that
- * is exactly the defect this exists to catch. `structure.landmarks` misses a `<main>` wrapping the page
- * on 2,063 of 2,064 corpus captures, because quick navigation cannot reach a landmark containing the
- * caret, and nothing could see it.
- *
- * Asking Chromium costs one CDP call on a socket that is already open: milliseconds, no keystrokes, no
- * modal dialog. The alternative -- reading NVDA's own Elements List -- is authoritative but costs ~11s
- * per capture for landmarks alone, because every keystroke waits on guidepup's 1s speech-quiet
- * debounce. At 2,122 captures that is the difference between a verification you run always and one you
- * can never afford.
- *
- * @param {Array<{role?: {value?: string}, name?: {value?: string}, ignored?: boolean}>} nodes
- *   `Accessibility.getFullAXTree`'s flat node list.
- */
 /**
  * Which bucket this node counts toward, and whether it is nameless — or null when it counts toward none.
  *
@@ -707,6 +700,22 @@ export async function bringPageToFront() {
 }
 
 /**
+ * How many structural elements does the PAGE actually expose?
+ *
+ * This is a completeness ORACLE, never evidence. The distinction is the whole design: what a screen
+ * reader announced is the evidence, and `docs/local-model.md` forbids the accessibility tree as a model
+ * feature. But a sweep that under-reports is indistinguishable from a page that has nothing -- and that
+ * is exactly the defect this exists to catch. `structure.landmarks` misses a `<main>` wrapping the page
+ * on 2,063 of 2,064 corpus captures, because quick navigation cannot reach a landmark containing the
+ * caret, and nothing could see it.
+ *
+ * Asking Chromium costs one CDP call on a socket that is already open: milliseconds, no keystrokes, no
+ * modal dialog. The alternative -- reading NVDA's own Elements List -- is authoritative but costs ~11s
+ * per capture for landmarks alone, because every keystroke waits on guidepup's 1s speech-quiet
+ * debounce. At 2,122 captures that is the difference between a verification you run always and one you
+ * can never afford.
+ */
+/**
  * @param {(Record<string, any> | null)[] | null | undefined} nodes
  *   NULL ENTRIES ARE EXPECTED. `ax-census.test.ts` passes `[null, {}]` deliberately -- 'the oracle must
  *   never be the reason a capture fails' -- so a type refusing them would describe a stricter function
@@ -918,8 +927,8 @@ export async function structuralCensus() {
  *
  * A GUARD FOR THIS ALREADY EXISTED AND COULD NOT SEE IT. `BROWSER_ERROR_TITLE_RE` matches Chromium's error
  * PHRASES ("can't reach this page", "refused to connect"), but Chromium titles a network-error page with
- * the HOST -- so an unserved `http://192.168.1.15:3000/x` is titled `192.168.1.15` and matched nothing. The
- * capture read `"192.168.1.15, document, read only"` and passed. That is this repo's oldest lesson in a new
+ * the HOST -- so an unserved `http://<host>:3000/x` is titled with that bare host and matched nothing. The
+ * capture read `"<host>, document, read only"` and passed. That is this repo's oldest lesson in a new
  * place: prefer the authoritative answer over an inference about behaviour. The title is a proxy for the
  * status; the status is the status.
  *

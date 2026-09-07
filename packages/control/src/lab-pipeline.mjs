@@ -27,7 +27,7 @@
  *   - the WORKERS are reachable only from the control plane, which holds the fleet SSH key
  *     (`inventory.yml`: *"worker playbooks can only be run from here and not from a developer's Mac"*)
  *   - the LAB is reachable only with the `a11y-pve` key, which the control plane does NOT have — verified
- *     2026-08-25: `192.168.1.79:22` is open from the control plane and answers
+ *     2026-08-25: `<the lab's address>:22` is open from the control plane and answers
  *     `Permission denied (publickey)` to the only key it holds
  *
  * So exactly one machine can drive both: this one. Giving the control plane the lab key would make a
@@ -57,6 +57,7 @@ import { sandboxGitEnv } from "../../../scripts/git-env.mjs";
 import { refuseUnknownFlags, flagValue } from "../../worker-fleet/src/cli-flags.mjs";
 // The TESTED spelling of "which journal is this". See `printUnitLog`.
 import { journalScope } from "./fleet-playbook.mjs";
+import { requireControlPlaneHost, requireControlPlaneKey } from "./control-plane-host.mjs";
 
 /**
  * a mistyped `--ref=` falls back to the local branch, which is how the fleet and the lab came to be on
@@ -415,8 +416,12 @@ function usage() {
 }
 
 /** Where the sequencing runs. Same address `fleet-playbook.mjs` already uses; named once, not twice. */
-const CONTROL_PLANE = process.env.A11Y_CONTROL_HOST || "192.168.1.172";
-const CONTROL_KEY = process.env.A11Y_PVE_KEY || `${process.env.HOME}/.ssh/a11y-pve_ed25519`;
+// No default: see control-plane-host.mjs -- this used to fall back to a real, specific LAN address (#83).
+// Resolved by `requireControlPlaneHost()` below, not at import: env var first, then the durable file it
+// installs (#285, `fleet:control-host-install`), then a loud refusal. A bare env read here would miss the
+// file entirely, so this is reassigned once resolved rather than only validated.
+/** @type {string} */
+let CONTROL_PLANE;
 /**
  * The key CONTROL uses to reach the LAB. Not the same key this laptop uses, deliberately: it was generated
  * ON control so its private half has never been anywhere else, which is the property that makes moving the
@@ -465,7 +470,7 @@ function unitProperties(/** @type {string} */ unit) {
   // SubState was `running`, because it had read Description into subState and the command line into
   // ExecMainStatus. That is the precise defect this whole file warns about -- "Result and ExecMainStatus
   // are populated WHILE a unit runs" -- committed by the tool written to prevent it.
-  const seen = spawnSync("ssh", ["-i", CONTROL_KEY, "-o", "StrictHostKeyChecking=no",
+  const seen = spawnSync("ssh", ["-i", requireControlPlaneKey(), "-o", "StrictHostKeyChecking=no",
     "-o", "ConnectTimeout=10", `root@${CONTROL_PLANE}`,
     `systemctl show -p SubState -p Result -p ExecMainStatus -p Description ${unit}`], { encoding: "utf8" });
   if (seen.status !== 0) {
@@ -499,7 +504,7 @@ function unitProperties(/** @type {string} */ unit) {
  */
 function printUnitLog(/** @type {string} */ unit) {
   const ssh = (/** @type {string} */ command) => spawnSync("ssh",
-    ["-i", CONTROL_KEY, "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10",
+    ["-i", requireControlPlaneKey(), "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10",
       `root@${CONTROL_PLANE}`, command],
     { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 
@@ -614,7 +619,7 @@ function dispatchToControlUnlessLocal() {
     + `--setenv=PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin `
     + `--setenv=A11Y_PVE_KEY=${CONTROL_TO_LAB_KEY} --setenv=PYTHONUNBUFFERED=1 `
     + `npm run --silent lab:pipeline -- ${args.join(" ")} --local`;
-  const started = spawnSync("ssh", ["-i", CONTROL_KEY, "-o", "StrictHostKeyChecking=no",
+  const started = spawnSync("ssh", ["-i", requireControlPlaneKey(), "-o", "StrictHostKeyChecking=no",
     "-o", "ConnectTimeout=10", `root@${CONTROL_PLANE}`, remote], { stdio: "inherit" });
   if (started.status !== 0) process.exit(started.status ?? 2);
   process.stdout.write(`\nstarted as ${unit} on ${CONTROL_PLANE}. It now outlives this terminal.\n`
@@ -650,7 +655,9 @@ async function main() {
   }
   // AFTER the two questions above, never before: `--list` and a malformed request are answered locally in
   // milliseconds, and shipping them to another host would make asking what pipelines exist depend on the
-  // control plane being up.
+  // control plane being up. Same reason the host is required only here, not at import: see #83.
+  CONTROL_PLANE = requireControlPlaneHost();
+  requireControlPlaneKey(); // same, for A11Y_PVE_KEY -- see #85
   dispatchToControlUnlessLocal();
   // Indexed by a name that came off the command line, which is the whole reason the refusal below
   // exists. The inferred type admits only the seven keys, so the lookup that CHECKS for an eighth is

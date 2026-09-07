@@ -16,15 +16,36 @@ import { writeFileSync, mkdirSync, mkdtempSync, readFileSync, existsSync, realpa
   from "node:fs";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
-import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS } from "./board-data.mjs";
+import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS, issues, outOfRelease, unclassified, achievementsWhoseWorldMoved,
+  realPageCaptureAge } from "./board-data.mjs";
 import { toHtml } from "./board-markdown.mjs";
 
 // Module scope, not inside main(): `section5` reads it, and `document()` is exported for the renderer
 // test, which builds a real document without ever calling main().
-const THROUGHPUT = "Capture throughput";
+
+/** How many WCAG criteria the tool claims what about, COUNTED FROM THE SOURCE OF TRUTH.
+ *
+ * Read out of `criterion-coverage.ts` at render time rather than typed, for the reason every other number
+ * in this document is: a coverage claim that a person maintains by hand drifts from the code the first
+ * time a criterion moves, and the drift is invisible -- both numbers look like numbers.
+ *
+ * It is a text count rather than an import on purpose. Importing the package would resolve through
+ * `node_modules` to whichever checkout that symlink points at, which in a worktree is NOT this one -- the
+ * defect that cost an hour on 2026-09-06. Reading the file beside us cannot do that.
+ */
+function criteriaCounts(root = ROOT) {
+  const file = path.join(root, "packages/judge/src/criterion-coverage.ts");
+  if (!existsSync(file)) return null;
+  const text = readFileSync(file, "utf8");
+  const count = (status) => (text.match(new RegExp(`status: "${status}"`, "g")) ?? []).length;
+  const assessed = count("assessed");
+  const partial = count("partial");
+  return assessed && partial ? { assessed, partial, reachable: count("reachable") } : null;
+}
+
 const SUMMARY_WORDS = 120;
 // TWO PAGES OF BODY, and the number is MEASURED rather than chosen.
 //
@@ -91,7 +112,7 @@ function section1(d) {
     "1. We set the date by adding up the remaining work, and every change to it is recorded — a slip "
     + "cannot arrive as a bare new date.",
     "2. **This carries most of the weight:** the date assumes the one item of unknown size finishes "
-    + "inside the week we allowed, and this afternoon that week began resting on less.",
+    + "inside the week we allowed, and today's measurement left that week resting on less.",
     "3. It is not padded against the risk most likely to move it, stated below.",
   ].join("\n");
 }
@@ -101,8 +122,8 @@ function section2() {
     "## Version one has no date until the outside user is named.",
     "",
     "**Version one means one person outside this project runs the tool on an application they own and "
-    + "says plainly whether it was worth their time**, approved by the board on 6 September. **It has no "
-    + "date until that person is named** — the board is introducing a candidate, and the date follows.",
+    + "says whether it was worth their time**, approved by the board on 6 September. **That person exists "
+    + "and is waiting for first publish**, so the date is theirs: however long they take to form a view.",
     "",
     "| stage | what decides it | when |",
     "|---|---|---|",
@@ -120,7 +141,14 @@ function section2() {
 }
 
 function section3(d) {
-  const L = ["## We made four things demonstrable today that were previously only claimed."];
+  // THE COUNT COMES FROM THE LIST, and this line is why the rule exists. It read "four" as a literal
+  // while the section rendered THREE bullets, and it went to the board that way on 2026-09-07 -- read
+  // by five people including the one who wrote it, caught by nobody, because a numeral in prose looks
+  // like a fact rather than a claim. Every other count in this file was already derived; this was the
+  // one that was typed. See issue #284.
+  const n = d.achievements.length;
+  const L = [`## We made ${numberWord(n).toLowerCase()} thing${n === 1 ? "" : "s"} demonstrable today `
+    + `that ${n === 1 ? "was" : "were"} previously only claimed.`];
   L.push("");
   if (d.achievements.length === 0) {
     L.push("Nothing was recorded for this period. That is a statement about our record-keeping and not "
@@ -138,76 +166,200 @@ function section3(d) {
   return L.join("\n");
 }
 
+/**
+ * THE DECISIONS ARE A LIST BECAUSE TWO SENTENCES COUNT THEM. The heading said "three decisions" and the
+ * line under it said "These three do", both typed, above a table of three rows -- correct on the day and
+ * held that way by nobody. `costsNothing` is here for the same reason: "two of them cost nothing to make"
+ * is an editorial claim about WHICH rows, so the row carries it and the sentence counts it. See #284.
+ */
+// EXPORTED, not restated -- #284. `board-style.test.ts`'s "no count in the prose is typed" check used to
+// hand-type the expected value beside a regex naming its sentence; the achievements/decisions/risks/stages
+// counts were never added to that list because adding a fourth entry per edition is exactly the habit
+// that let the first three drift silently. Reading these three lists' real `.length` at test time -- the
+// same value `section4`/`section5` read to render -- means a wrong count beside ANY of them fails without
+// anyone having to name the sentence.
+export const DECISIONS = [
+  { ask: "Approve the definition of version one.", costsNothing: true,
+    ifNothing: "The question the board keeps asking stays unanswerable, and every edition repeats that." },
+  { ask: "Name one person outside the project to try the tool.", costsNothing: false,
+    ifNothing: "Version one cannot start, whatever engineering does. Open since August." },
+  { ask: "Confirm publication may proceed in September.", costsNothing: true,
+    ifNothing: "Three final steps need the owner's hands, so the engineering finishes and the release "
+      + "waits." },
+];
+
 function section4(d) {
   const blockers = d.open.filter((i) => i.milestone?.title === MILESTONE);
   return [
-    "## The board is asked for three decisions, and two of them cost nothing to make.",
+    `## The board is asked for ${numberWord(DECISIONS.length).toLowerCase()} decisions, and `
+    + `${numberWord(DECISIONS.filter((x) => x.costsNothing).length).toLowerCase()} of them cost nothing `
+    + "to make.",
     "",
     `None of the ${blockers.length} pieces of work between today and publication needs a board `
-    + "decision. These three do.",
+    + `decision. These ${numberWord(DECISIONS.length).toLowerCase()} do.`,
     "",
     "| decision | if nothing is decided |",
     "|---|---|",
-    "| **Approve the definition of version one.** | The question the board keeps asking stays "
-    + "unanswerable, and every edition repeats that. |",
-    "| **Name one person outside the project to try the tool.** | Version one cannot start, whatever "
-    + "engineering does. Open since August. |",
-    "| **Confirm publication may proceed in September.** | Three final steps need the owner's hands, so "
-    + "the engineering finishes and the release waits. |",
+    ...DECISIONS.map((x) => `| **${x.ask}** | ${x.ifNothing} |`),
     "",
-    "### Four risks are live, and only the first could move the date.",
+    "**One rule we assess can currently be seen only on some pages**, because a page that fails it hides "
+    + "its own evidence from the path a user takes. **The check now says \"cannot say\" rather than "
+    + "\"nothing found\"**, which is the difference between a gap and a clean bill of health. Widening "
+    + "it is tracked work. The appendix says how the failure hid.",
+    "",
+    // COUNTED FROM THE ROWS, never typed. This read "Four risks are live" above a table of three: a
+    // sentence adjacent to a table is a claim ABOUT that table, and the only honest source for it is
+    // the table.
+    `### ${RISKS.length === 1 ? "One risk is" : `${numberWord(RISKS.length)} risks are`} live, and only the first could move the date.`,
     "",
     "| risk | state |",
     "|---|---|",
-    "| **We may abandon the change to the trained component rather than adjust it.** | Its abandonment conditions were written in advance so the decision could not be softened, and the assumption it rests on is being measured properly for the first time now. |",
-    "| **One item still has no known size.** | We published a fix this morning, measured it wrong this "
-    + "afternoon, and replaced it with a theory nobody has tested. The process working — and the week we "
-    + "allowed now rests on less. |",
-    "| **Everything runs on one machine.** | The capture machines' credentials live on one computer. "
-    + "The list of open work moved off it today; the credentials have not. |",
-    `| **${d.strays.length} of the ${d.merges.length} changes saved since midnight carry the wrong `
-    + "author.** | An automated test overwrote our identity settings. They are fixed; the record is not, "
-    + "and we leave it rather than rewrite history others are building on. Cosmetic, disclosed. |",
+    ...RISKS,
   ].join("\n");
 }
 
+/** The throughput programme's stages, named ONCE.
+ *
+ * Section five said "the first of 1 stages" -- from the milestone's open-issue count, which falls as
+ * stages close -- while the appendix said "the five stages are". Two sources for one fact, and the
+ * section's was not even counting stages. The list is the fact; both places read it.
+ */
+export const STAGES = [
+  "establish what a page should cost to record on the current format",
+  "measure what more machines actually give us",
+  "set a target from that",
+  "make the improvements",
+  "decide on hardware with the numbers attached",
+];
+
+/** The live risks, as a LIST so the sentence above the table can count them.
+ *
+ * The heading read "Four risks are live" above a table of three. A sentence adjacent to a table is a
+ * claim about that table, and the only honest source for it is the table.
+ */
+export const RISKS = [
+    "| **We may abandon the change to the trained component rather than adjust it.** | Its abandonment conditions were written in advance so the decision could not be softened, and the assumption it rests on is being measured properly for the first time now. |",
+    "| **One item still has no known size.** | We published a fix today, found by measurement that it was "
+    + "wrong, and replaced it with a theory nobody has tested. The process working — and the week we "
+    + "allowed now rests on less. |",
+    "| **Everything runs on one machine.** | The capture machines' credentials live on one computer. "
+    + "The list of open work moved off it today; the credentials have not. |",
+];
+
+/** Small counts read as words in prose; the number still comes from the data. Exported so
+ * `board-style.test.ts` renders the SAME word a real count produces, rather than re-deriving the mapping.
+ */
+export function numberWord(n) {
+  return ["zero", "one", "Two", "Three", "Four", "Five", "Six", "Seven"][n] ?? String(n);
+}
+
 function section5(d) {
-  const throughput = d.milestones.find((m) => m.title === THROUGHPUT);
   const fh = d.fleetHours;
-  const L = ["## We are not asking for money, and the measurement that would justify asking is "
+  // THE HEADING COMES FROM THE SAME SOURCE AS THE BODY, and the CLAIM comes before the caveats.
+  //
+  // It read "We are not asking for money" above a body recommending a purchase -- the headings test
+  // passed a heading that negated its own section, because the two were written at different times from
+  // different facts. Fixing that left a second fault the board caught: the section opened with two
+  // paragraphs saying we cannot cost the fleet and have not established what a page should cost, and
+  // only then reached the recommendation, under a second heading repeating the first. A reader met the
+  // caveats before the claim.
+  const scaling = scalingArms(d);
+  const L = [scaling
+    ? "## We are asking for the five pre-approved machines, and the measurement that justifies it is in."
+    : "## We are not asking for money, and the measurement that would justify asking is "
     + "scheduled.", ""];
-  if (!fh || fh.status === "not instrumented") {
-    L.push("**We cannot yet report how much machine time the capture fleet consumed, and we print that "
-      + "rather than estimate it.** A figure exists but spans many runs and formats, so it is nobody's "
-      + "single run.");
+
+  if (scaling) {
+    const { ten, five, ratio } = scaling;
+    L.push(`**Twice the machines record a page in the same time each.** Ten take a median of `
+      + `${ten.medianSeconds} seconds per page against ${five.medianSeconds} on five — `
+      + `${(ten.medianSeconds - five.medianSeconds).toFixed(1)} seconds apart inside a spread of about `
+      + `${Math.round((ten.iqrSeconds + five.iqrSeconds) / 2)}, unchanged at this sample size. They do `
+      + `${ratio} times the work in the same hour.`);
+    L.push("");
+    L.push("**The outcome that would have argued against buying — each machine getting slower as "
+      + "machines are added — did not occur.**");
   } else {
+    L.push("**The number that would decide it is how long one page takes to record with ten machines "
+      + "against five.** Unchanged, and machines buy speed in proportion. Higher, and they do not — "
+      + "which is what happened last time, on older hardware, where they competed for one disk.");
+  }
+  L.push("");
+
+  // The fleet-hours line is NOT in the body: the appendix table carries it with its source, and a
+  // caveat about what we cannot yet measure does not belong above the thing we have measured.
+  if (fh && fh.status !== "not instrumented") {
     L.push(`**The capture machines consumed ${fh.total} on their most recent full run.** That counts `
       + "only time spent actively reading a page: not waiting between pages, setup, restarts or "
       + "electricity.");
+    L.push("");
   }
-  L.push("");
-  L.push("**A capture takes about a minute at median on our last sample** — 56 captures across five "
-    + "machines, at older recording formats — and **we have not established what it should cost on the "
-    + "current format**, the first of "
-    + `${throughput?.open_issues ?? "several"} stages in a programme opened today. It is outside the `
-    + "release: nothing in it delays September. The appendix lists them.");
-  L.push("");
-  L.push("**How long our engineering waits between finishing one piece of work and the next is not "
-    + "instrumented, and we print that rather than estimate it.** Recording started today; the figure "
-    + "appears once a week exists. The appendix says why the first design was wrong.");
+  L.push("**A capture takes about a minute at median on our last sample**, and **we have not established "
+    + "what it should cost on the current recording format** — the first of "
+    + `${numberWord(STAGES.length).toLowerCase()} stages in a programme opened today, outside the release: `
+    + "nothing in it delays September. The appendix lists them.");
   L.push("");
   L.push("**The architect's two findings are planned in; the appendix says what was done with each.**");
   L.push("");
-  L.push("### We recommend buying nothing yet, and one number would change that.");
-  L.push("");
-  L.push("**The number is how long one page takes to record with ten machines against five.** "
-    + "Unchanged, and machines buy speed in proportion. Higher, and they do not — which is what happened "
-    + "last time, on older hardware, where they competed for the same disk.");
-
+  L.push("**The product has a name and a home: a11ign, at a11ign.com**, and the board has decided it is "
+    + "an all-in-one accessibility tool rather than a screen-reader one — so its parts are renamed "
+    + "around that **before** publication. The appendix says what that costs.");
   return L.join("\n");
 }
 
+/** The scaling measurement, read out of the recorded gate rather than restated.
+ *
+ * Returns null when no gate carries it, and the section then says the number is missing -- which is the
+ * honest state and was the TRUE state until the re-run landed. What must never happen is the section
+ * saying it is missing while the record holds it.
+ */
+function scalingArms(d) {
+  const gate = (d.gates ?? []).find((g) => /medianSeconds/.test(g.output ?? ""));
+  if (!gate) return null;
+  const arm = (name) => {
+    const line = (gate.output.split("\n").find((l) => l.trim().startsWith(name)) ?? "");
+    const json = line.slice(line.indexOf("{"));
+    try { return JSON.parse(json); } catch { return null; }
+  };
+  const ten = arm("arm-ten");
+  const five = arm("arm-five");
+  if (!ten || !five) return null;
+  const wall = /ten boxes (\d+)s,\s*five boxes (\d+)s/.exec(gate.output);
+  const ratio = wall ? (Number(wall[2]) / Number(wall[1])).toFixed(2) : null;
+  return ratio ? { ten, five, ratio } : null;
+}
+
 /** The source table: every figure the body states, with where it came from. */
+/** Why the open-items total exceeds the blocker count, in buckets that add up on the page.
+ *
+ * #290 is the case that forced it: real work, deliberately outside the release, so the total counted it
+ * and the blocker figure could not. Neither number was wrong and the page could not say why they differed.
+ *
+ * EVERY BUCKET IS COUNTED ON ITS OWN TERMS, and `later` is the one that matters. Written first as
+ * `length - onRelease - out - none` it made the printed sum a TAUTOLOGY: it added up because it was
+ * defined to, so it could never fail, verified nothing, and looked exactly like a check. Counting it
+ * independently means the four can genuinely disagree -- and the sentence says so when they do, rather
+ * than printing a total that hides it.
+ */
+function reconciliation(d) {
+  const onRelease = d.open.filter((i) => i.milestone?.title === MILESTONE).length;
+  const out = outOfRelease(d.open).length;
+  const none = unclassified(d.open).length;
+  const later = d.open.filter((i) => i.milestone && i.milestone.title !== MILESTONE
+    && !outOfRelease([i]).length).length;
+  const sum = onRelease + later + out + none;
+  const unclassifiedClause = none === 0
+    ? ", and none are unclassified"
+    : `, and ${none} carr${none === 1 ? "ies" : "y"} neither a milestone nor that label, which the rule `
+      + "does not allow — they are counted here and in no milestone figure";
+  const disagreement = sum === d.open.length ? ""
+    : `, which does NOT equal the ${d.open.length} above — a row is being counted twice or not at all, `
+      + "and this figure should not be relied on until that is explained";
+  return `It reconciles with the figure above: ${onRelease} block this release, ${later} sit on a later `
+    + `milestone, ${out} ${out === 1 ? "is" : "are"} deliberately out of the release`
+    + `${unclassifiedClause}. ${onRelease} + ${later} + ${out} + ${none} = ${sum}${disagreement}`;
+}
+
 function sourceTable(d) {
   const rows = [];
   const push = (what, value, source) => rows.push(`| ${what} | ${value} | ${source} |`);
@@ -217,7 +369,20 @@ function sourceTable(d) {
   push("Pieces of work blocking that release",
     String(d.open.filter((i) => i.milestone?.title === MILESTONE).length),
     "the project's issue tracker (GitHub Issues API)");
-  push("Open work items in total", String(d.open.length), "the project's issue tracker");
+  // THE EXCLUSION IS PRINTED, NEVER SILENT. A count that quietly drops rows is worse than one that
+  // counts the wrong thing, because a reader cannot tell. `meta` rows are containers rather than work --
+  // the daily report's own issue is one, and it will never close.
+  // AND THE TWO COUNTS RECONCILE ON THE PAGE. The row above counts only what is on the release milestone
+  // and this one counts everything, so a reader met two figures with no way to see why they differ. #290
+  // is the case: real work, deliberately out of the release, counted here and invisible there. Naming the
+  // out-of-release figure beside the total closes the gap by construction rather than by the reader
+  // working it out -- the same rule as #284, that a count stated next to another count is a claim about
+  // both. An UNCLASSIFIED row is reported rather than absorbed, because tolerating it silently would
+  // rebuild the fault inside its own fix.
+  push("Open work items in total", String(d.open.length),
+    "the project's issue tracker, excluding rows marked as containers rather than work — the daily "
+    + "report's own issue is one of these, and counting it would inflate this figure for ever. "
+    + reconciliation(d));
   push("Work items closed in this period", String(d.closed.length), "the project's issue tracker");
   push("Saved changes merged in this period", String(d.merges.length),
     "the project's own version history, over the stated window — two correct counts over different "
@@ -229,11 +394,16 @@ function sourceTable(d) {
   push("Changes carrying the wrong author", String(d.strays.length),
     `the project's own version history, over the SAME window as the merge count above (since `
     + `${d.since}); the cause is diagnosed and the record is kept by decision`);
+  const captureAge = d.latestGate ? realPageCaptureAge(d.latestGate.output) : null;
   push("Most recent automated check result",
     d.latestGate ? `${d.latestGate.command}${d.gateIsFresh ? "" : " — older than this report's window"}`
       : "**not reported**",
     d.latestGate
       ? `run by the engineer who owns the machines at ${d.latestGate.at}, output recorded word for word`
+        // Pulled from the gate's OWN printed line, never retyped -- issue #128. `rules:real-pages` prints
+        // its own capture spread, and this is the one place a human used to have to copy it by hand into
+        // the report; now it either quotes what the gate said or says nothing, never a stale guess.
+        + (captureAge ? `; the gate's own capture spread: ${captureAge}` : "")
       : "no result has been recorded. This report does not run these checks itself: they read a library "
         + "of recordings, and a local copy of that library is only as current as its last synchronisation "
         + "— one measured here was 89 hours old and answered cleanly having examined a library that no "
@@ -251,8 +421,57 @@ function sourceTable(d) {
   return rows;
 }
 
+/** What the rename costs, and why the naming rule is more than a coat of paint. */
+function renameBackground(L) {
+  const counts = criteriaCounts();
+  if (counts) {
+    L.push("### What the tool claims about how many accessibility rules, and the one it withdrew.");
+    L.push("");
+    L.push(`Counted from the source rather than maintained by hand: **${counts.assessed} rules it `
+      + `assesses**, **${counts.partial} it assesses in part**, and **${counts.reachable} it could reach `
+      + "and does not yet.**");
+    L.push("");
+    L.push("**None of those numbers moved today, and one nearly did.** Content on hover or focus is "
+      + "claimed as partly assessed. Downgrading it to *reachable* was ruled and then **refused by our "
+      + "own coverage test**: the rule still produces findings, and calling it unassessed would document "
+      + "a criterion we report on as one we do not. **Partial is true as written**, and it stays.");
+    L.push("");
+    L.push("**What changed is what the check says when it cannot see.** A page that FAILS this rule "
+      + "leaves its panel open, so the check compared a changed page against a changed page and found no "
+      + "change. **On a page that passes, the same check is correct** — which is why it read as working "
+      + "for exactly as long as it was only ever asked about pages that pass. It now speaks only from a "
+      + "baseline it trusts and is silent otherwise, so the claim is narrower than it looked and true. "
+      + "Widening it is tracked work.");
+    L.push("");
+  }
+
+  L.push("### Commit authorship, disclosed rather than listed as a risk.");
+  L.push("");
+  L.push("An automated test overwrote our identity settings, so some saved changes carry the wrong "
+    + "author's name — the count and its window are in the table above. **The settings are fixed; the "
+    + "record is not**, and we leave it rather than rewrite history other people are building on. It is "
+    + "here rather than among the risks because it changes no decision: it is disclosed so that nobody "
+    + "discovers it and wonders what else was not mentioned.");
+  L.push("");
+
+  L.push("### The rename, and what it costs to do it before publication rather than after.");
+  L.push("");
+  L.push("Three hundred and fifty-two files in the project mention the old name, and every one of the "
+    + "six things we will publish changes its name. **Doing it now costs a fortnight's care; doing it "
+    + "after publication would cost every person who had already installed it** — and there is nobody in "
+    + "that position yet, which is exactly why now is the moment.");
+  L.push("");
+  L.push("**The naming rule is what makes it worth more than a coat of paint.** A part that produces one "
+    + "kind of evidence carries that in its name; a part belonging to the product itself never does. So "
+    + "the screen-reader pieces say so, and the pieces that would serve any future kind of checking do "
+    + "not. A second kind of checking can then join without a second rename, which is the debt this "
+    + "avoids.");
+  L.push("");
+}
+
 /** Why re-reading the library is expensive, and the programme opened for it. */
 function throughputBackground(L) {
+  renameBackground(L);
   L.push("### The architect's two findings, and what was done with each.");
   L.push("");
   L.push("**Our development copies read one another's build output rather than their own**, because they "
@@ -272,10 +491,8 @@ function throughputBackground(L) {
   L.push("");
   L.push("The tool learns from several thousand recordings of a screen reader reading web pages. "
     + "Changing anything that alters what those recordings contain means making them all again, which "
-    + "costs hours of machine time — and that is why a list of improvements sits deferred. The five "
-    + "stages are: establish what a page should cost to record on the current format; measure what more "
-    + "machines actually give us; set a target from that; make the improvements; and decide on hardware "
-    + "with the numbers attached.");
+    + "costs hours of machine time — and that is why a list of improvements sits deferred. The "
+    + `${numberWord(STAGES.length).toLowerCase()} stages are: ${STAGES.join("; ")}.`);
   L.push("");
   L.push("### Why the capacity measure is not instrumented yet, and what the first design got wrong.");
   L.push("");
@@ -358,6 +575,81 @@ export function document(d, summary) {
   ].join("\n");
 }
 
+/**
+ * Sections one to five only: not the title, not the summary, not the appendix.
+ *
+ * EXPORTED, not restated — issue #88. `board-style.test.ts` had its own copy of exactly this slice, which
+ * is how the body-cap check could exist as a TEST but not as a REFUSAL: the generator itself had no way to
+ * ask "is my own output too long" without duplicating the boundary logic a second time. One copy now feeds
+ * both the test and `requireBodyWithinCap` below.
+ */
+export function bodyOnly(md) {
+  const start = md.indexOf("\n## ", md.indexOf("## Executive summary") + 1);
+  const from = start === -1 ? md.indexOf("\n## ") : start;
+  const to = md.indexOf("## Appendix");
+  return md.slice(from === -1 ? 0 : from, to === -1 ? undefined : to);
+}
+
+const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
+
+/** "2026-09-06", or the honest word for a missing one — never a guess. */
+const dateLabel = (at) => {
+  const parsed = at ? Date.parse(at) : NaN;
+  return Number.isNaN(parsed) ? "unknown date" : at.slice(0, 10);
+};
+
+const MAX_CLAIM_PREVIEW = 70;
+/** A claim, shortened for a refusal message that has to stay scannable, not published. */
+const preview = (text) =>
+  text.length > MAX_CLAIM_PREVIEW ? `${text.slice(0, MAX_CLAIM_PREVIEW - 1)}…` : text;
+
+/**
+ * THE BODY CAP MUST NAME THE TRADE, NOT JUST THE OVERFLOW — issue #88.
+ *
+ * `board-style.test.ts` already refused a body over `BODY_WORD_CAP`, but only as a TEST someone reads
+ * later — `main()` itself never checked, so the first person to actually HIT the cap was an agent at
+ * 07:50 with an edition to render, staring at a bare word count. The guard is right; what it left unsaid
+ * is what forced the deletion — new evidence displacing old evidence, invisibly, decided by whoever was
+ * in the most hurry rather than by anyone weighing which claim had stopped earning its place.
+ *
+ * So the refusal lists every achievement OLDEST FIRST, by its `at` timestamp, with the word count it
+ * costs the body (section 3's bullet only — the evidence itself lives in the appendix and is not part of
+ * this cap). Age is a fact read off the record, not a guess made under the same time pressure the
+ * original bug was about.
+ */
+/**
+ * The refusal MESSAGE, as a pure function of the data and the rendered document — or `null` when the body
+ * fits. Split from `requireBodyWithinCap` below purely so a test can assert on the TEXT without spawning
+ * the CLI or trapping `process.exit`.
+ */
+export function bodyCapRefusal(d, md) {
+  const words = wordCount(bodyOnly(md));
+  if (words <= BODY_WORD_CAP) return null;
+  const over = words - BODY_WORD_CAP;
+  const lines = [`board:document REFUSES — the body is ${words} words against a ${BODY_WORD_CAP} cap.`,
+    `Retiring or shortening ${over} word(s) worth of content would fit.`];
+  if (d.achievements.length === 0) {
+    lines.push("No achievements are recorded to retire, so the overflow is in the other sections' prose "
+      + "— cut repetition or move detail to the appendix.");
+  } else {
+    lines.push("The achievements, oldest first:");
+    const oldestFirst = [...d.achievements].sort((a, b) => Date.parse(a.at ?? 0) - Date.parse(b.at ?? 0));
+    oldestFirst.forEach((a, i) => {
+      const text = a.boardClaim ?? a.claim;
+      lines.push(`  [${i}] "${preview(text)}"   written ${dateLabel(a.at)}, ${wordCount(text)} words`);
+    });
+    lines.push("Retire one, or shorten the entry you are adding.");
+  }
+  return lines.join("\n");
+}
+
+function requireBodyWithinCap(d, md) {
+  const refusal = bodyCapRefusal(d, md);
+  if (!refusal) return;
+  console.error(refusal);
+  process.exit(5);
+}
+
 const PAGE_CSS = `
   /* TYPOGRAPHY IS WHERE THE TWO-PAGE BODY IS PAID FOR, not content.
      The body reached 910 words with every repetition removed and all evidence moved to the appendix;
@@ -416,6 +708,96 @@ function requireSummary(publishing) {
   return summary;
 }
 
+/**
+ * REFUSE, DO NOT WARN, and the reason is the render itself: this document is produced at 08:00
+ * unattended. A warning in a log nobody reads is exactly how the false sentence would have shipped —
+ * which it nearly did (#90), and was caught only because a person happened to re-read it.
+ *
+ * The refusal names the entry, its claim and what moved, so re-affirming is a ten-second act rather than
+ * an investigation. `--allow-dirty-read-set` deliberately does NOT override it: that flag is about which
+ * COPY of the read set is quoted, and this is about whether a quoted sentence still describes the world.
+ */
+function refuseIfTheWorldMoved(achievements) {
+  const cited = achievements.map((a) => a.issue).filter((n) => n !== undefined);
+  if (!cited.length) return;
+  // CLOSED-AT, not just CLOSED. The refusal is 'nobody has looked since it moved', so the moment it
+  // moved is part of the question -- see `achievementsWhoseWorldMoved`.
+  const issueState = Object.fromEntries(
+    issues().map((i) => [String(i.number), { state: i.state, closedAt: i.closedAt ?? null }]));
+  const moved = achievementsWhoseWorldMoved({ achievements, issueState });
+  if (!moved.length) return;
+
+  console.error(`REFUSING to render: ${moved.length} achievement(s) in docs/board/reported.json have `
+    + "outlived what they were written against. Section 3 is the one part of this document no gate "
+    + "computes, so it is also the one nothing re-checks -- and an entry that is true when written stays "
+    + "in the file after it stops being true.\n");
+  for (const { index, claim, why } of moved) {
+    console.error(`  achievements[${index}]  ${claim}\n      ${why}\n`);
+  }
+  console.error("This does NOT say the claims are false -- it says nobody has looked since the world "
+    + "moved. Re-affirm an entry with an `affirmed` field saying why it still stands, or retire it.");
+  process.exit(1);
+}
+
+/** The env var override, checked first so a runner with Chrome somewhere unusual never has to touch code. */
+const CHROME_ENV_VAR = "BOARD_DOCUMENT_CHROME";
+
+/** Every location this has actually needed to check, existsSync'd rather than executed. */
+const CHROME_CANDIDATES = [
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",   // a developer's Mac
+  "/usr/bin/google-chrome-stable",                                   // GitHub's ubuntu-latest runner image
+  "/usr/bin/google-chrome",
+  "/usr/bin/chromium-browser",                                       // Ubuntu's own chromium package name
+  "/usr/bin/chromium",
+];
+
+/** Names to fall back to on PATH, in case a package manager put Chrome somewhere none of the above see. */
+const CHROME_PATH_NAMES = ["google-chrome-stable", "google-chrome", "chromium-browser", "chromium"];
+
+/**
+ * Resolve a real, existing Chrome/Chromium executable -- issue #280. This used to be a single hardcoded
+ * macOS path (`/Applications/Google Chrome.app/...`), which is exactly the assumption this workflow
+ * stopped being able to make the day it moved off a developer's laptop onto `ubuntu-latest`: every run
+ * failed `spawnSync ... ENOENT`, a stack trace that names neither the missing browser nor what to do
+ * about it -- "a verification that shares a failure mode with the action verifies nothing" applies here
+ * to a PRECONDITION rather than a check, but the lesson is the same: name the cause, don't let the
+ * OS report it as a generic failure to spawn.
+ *
+ * Every candidate is checked with `existsSync`, never executed speculatively, so a wrong guess costs one
+ * stat call rather than a spawned, possibly-misbehaving process. The `which` fallback only runs if none
+ * of the known paths hit, and only against a fixed, hardcoded list of names -- never a name built from
+ * input, so there is nothing here for a shell to interpret unsafely.
+ */
+/**
+ * @param {{ env?: NodeJS.ProcessEnv, exists?: (p: string) => boolean, which?: (name: string) => string }} [deps]
+ *   Injectable for the "not found" and "found on PATH" branches, which cannot be exercised
+ *   deterministically against this machine's REAL filesystem and PATH -- this Mac has the real Chrome
+ *   installed at the real candidate path, so a test asserting "not found" would have to delete it.
+ */
+export function resolveChromeBinary(deps = {}) {
+  const env = deps.env ?? process.env;
+  const exists = deps.exists ?? existsSync;
+  const which = deps.which ?? ((name) => spawnSync("which", [name], { encoding: "utf8" }).stdout?.trim() ?? "");
+
+  const override = env[CHROME_ENV_VAR];
+  if (override) {
+    if (!exists(override)) {
+      throw new Error(`${CHROME_ENV_VAR}=${override} does not exist. Unset it to use the built-in search, `
+        + "or point it at a real Chrome/Chromium executable.");
+    }
+    return override;
+  }
+  for (const candidate of CHROME_CANDIDATES) {
+    if (exists(candidate)) return candidate;
+  }
+  for (const name of CHROME_PATH_NAMES) {
+    const found = which(name);
+    if (found) return found;
+  }
+  throw new Error("No Chrome or Chromium found. Checked the usual macOS and Linux install locations, plus "
+    + `PATH for ${CHROME_PATH_NAMES.join(", ")}. Install one, or set ${CHROME_ENV_VAR} to its path.`);
+}
+
 function main() {
   refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release"],
     { entry: import.meta.url, command: "npm run board:document" });
@@ -424,8 +806,16 @@ function main() {
   const flagOf = (n) => argv.find((a) => a.startsWith(`${n}=`))?.split("=").slice(1).join("=");
 
   const summary = requireSummary(argv.includes("--pdf") || argv.includes("--release"));
-  const md = document(collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString()),
-    summary);
+  const d = collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString());
+  // THE WORLD-MOVED CHECK RUNS FIRST, before the markdown is built: a stale claim should not be
+  // rendered at all, and this is the cheaper of the two refusals. The body cap needs `md` and so must
+  // follow it.
+  refuseIfTheWorldMoved(d.achievements);
+  const md = document(d, summary);
+  // UNCONDITIONAL, unlike the summary check above: a body over the cap is wrong in the plain markdown
+  // preview too, not only when publishing, and catching it earlier is the whole point of issue #88 (the
+  // agent who hit this had already reached the render-a-PDF step before the cap said anything).
+  requireBodyWithinCap(d, md);
 
   if (!argv.includes("--pdf")) {
     process.stdout.write(md + "\n");
@@ -469,31 +859,43 @@ function main() {
     writeFileSync(html, `<!doctype html><meta charset="utf-8"><title>${stem}</title>`
       + `<style>${PAGE_CSS}</style>${toHtml(stamped)}`);
 
-    // HEADLESS CHROME, not pandoc or a PDF library. Chrome is already on this machine because the capture
-    // fleet needs a Chromium; pandoc is not installed and would make the board's daily document depend on
-    // an operator running `brew install`. A dependency the board's report cannot be produced without is a
-    // worse risk than a slightly plainer typeface.
-    const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-    execFileSync(chrome, ["--headless", "--disable-gpu", "--no-pdf-header-footer",
-      `--print-to-pdf=${pdf}`, `file://${html}`], { stdio: "pipe" });
+    renderPdfWithChrome(html, pdf);
     process.stdout.write(`${pdf}\n`);
 
     if (argv.includes("--release")) publishToDraftRelease(pdf);
   }
-
-  /** Deliver the PDF as an asset on a DRAFT GitHub Release, which is one click from the Releases tab.
-   *
-   * A draft release was chosen over attaching to the report issue because GitHub's API cannot attach a file
-   * to an issue comment at all -- that is a web-UI drag-and-drop, so a daily automated attachment is
-   * impossible, not merely awkward.
-   *
-   * THE TAG IS NAMESPACED `board/<date>` AND THE RELEASE STAYS A DRAFT, both deliberately. A draft creates
-   * no git tag until it is published, so nothing here can be mistaken for a product version or picked up by
-   * the changesets machinery -- which matters in a repo whose first npm publish has not happened yet and
-   * whose release workflow reads tags.
-   */
 }
 
+/**
+ * HEADLESS CHROME, not pandoc or a PDF library. Chrome is already on this machine because the capture
+ * fleet needs a Chromium; pandoc is not installed and would make the board's daily document depend on
+ * an operator running `brew install`. A dependency the board's report cannot be produced without is a
+ * worse risk than a slightly plainer typeface.
+ */
+function renderPdfWithChrome(html, pdf) {
+  let chrome;
+  try {
+    chrome = resolveChromeBinary();
+  } catch (e) {
+    console.error(`REFUSING to render: ${e.message}`);
+    process.exit(2);
+  }
+  console.error(`Using ${chrome}`);
+  execFileSync(chrome, ["--headless", "--disable-gpu", "--no-pdf-header-footer",
+    `--print-to-pdf=${pdf}`, `file://${html}`], { stdio: "pipe" });
+}
+
+/** Deliver the PDF as an asset on a DRAFT GitHub Release, which is one click from the Releases tab.
+ *
+ * A draft release was chosen over attaching to the report issue because GitHub's API cannot attach a file
+ * to an issue comment at all -- that is a web-UI drag-and-drop, so a daily automated attachment is
+ * impossible, not merely awkward.
+ *
+ * THE TAG IS NAMESPACED `board/<date>` AND THE RELEASE STAYS A DRAFT, both deliberately. A draft creates
+ * no git tag until it is published, so nothing here can be mistaken for a product version or picked up by
+ * the changesets machinery -- which matters in a repo whose first npm publish has not happened yet and
+ * whose release workflow reads tags.
+ */
 function publishToDraftRelease(pdf) {
   const tag = `board/${new Date().toISOString().slice(0, 10)}`;
   const title = `Board report — ${new Date().toISOString().slice(0, 10)}`;
