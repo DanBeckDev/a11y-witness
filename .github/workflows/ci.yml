@@ -164,6 +164,35 @@ jobs:
       # rule: run the file runner on its own and it tests the LAST BUILD, which on a fresh checkout is no
       # build at all.
       - run: npm run build
+      # WHAT THE BUILD ACTUALLY PRODUCED, kept only when something after it fails -- #168.
+      #
+      # `ci/ts` fails intermittently with eleven type errors in a package the PR never touched, and every
+      # one is a consequence of the first: `File '.../packages/evidence/dist/wcag.d.ts' is not a module`
+      # means the emitted declaration had no top-level exports. The tell that it is not a real fault is
+      # that `tsc --build` reported no errors in `evidence` at all -- a genuine one there would have been
+      # named and would have stopped the build before `judge` compiled.
+      #
+      # Re-running the identical sha passes. So the TREE differs between the two runs and the LOGS CANNOT
+      # SAY HOW: they record the same commands and the same errors either way.
+      #
+      # Three causes remain open and they need opposite work -- a declaration that is ABSENT (nothing was
+      # emitted), EMPTY (a truncated write), or PRESENT-BUT-EXPORTLESS (a compile that produced no
+      # top-level exports). One `ls` and one `head` separate them, and only on the failing run.
+      #
+      # `if: failure()` so a green run pays nothing, and deliberately NO `continue-on-error` on the steps
+      # below: this is a diagnostic, not a remedy, and the job must still fail. Reproduction was attempted
+      # four times locally -- ci/ts's exact path and the parallel-`prepare` path, from a fresh clone with
+      # no `dist` and no `.tsbuildinfo` -- and did not reproduce on a 14-core machine, which is
+      # unremarkable for a race on a 2-core runner and is why the evidence must be caught where it happens.
+      - name: "#168: what the build produced, if anything below fails"
+        if: failure()
+        run: |
+          echo "--- packages/evidence/dist ---"
+          ls -la packages/evidence/dist/ || echo "(no dist directory at all)"
+          echo "--- wcag.d.ts, first 20 lines ---"
+          head -20 packages/evidence/dist/wcag.d.ts || echo "(no wcag.d.ts)"
+          echo "--- does tsc consider the graph up to date? ---"
+          npx tsc --build --dry $(node -e "const fs=require('fs');console.log(fs.readdirSync('packages').filter(d=>fs.existsSync('packages/'+d+'/tsconfig.json')).map(d=>'packages/'+d).join(' '))") || true
       - run: npm run lint
       - run: npm run typecheck
       - name: Unit tests of the touched package(s) and their workspace dependents
