@@ -1,0 +1,53 @@
+name: auto-arm
+
+# ENABLE AUTO-MERGE ON EVERY NON-DRAFT PR AGAINST main, SO NOBODY ARMS BY HAND AGAIN -- pipeline unit 1,
+# board decision via `ceo`/`dispatcher`, #298.
+#
+# `gh pr merge --auto --merge` only ARMS the merge; it does not complete one. GitHub itself still withholds
+# the actual merge until every required status check (`gate`, `ci.yml`) reports green for the CURRENT head
+# -- arming early costs nothing and is what removes "somebody has to remember to click the button" as a
+# step in every PR's life.
+#
+# ## Why this alone would NOT have been safe, and what makes it safe here
+#
+# `main`'s branch protection runs with `strict=false` (#277): GitHub completes a merge the instant `gate`
+# is green for the head IT HAS RECORDED, with no requirement that the head still contains `main`'s current
+# tip. #195 (GitHub's recorded head disagreed with the branch's real tip) is exactly the defect a bare
+# version of this workflow would have let through. `ci.yml`'s `mergeSafety` job
+# (`scripts/merge-guard.mjs --ci-gate`) is now part of the required `gate` context and refuses that shape
+# (#294) -- see that job's own comment for why it is architecturally safe to run mid-workflow where
+# `merge-guard.mjs`'s human-facing check-run inspection is not, and why it deliberately does NOT also
+# check ancestry (#182) or closing-claim (#262): both refuse the NORMAL case when CI, which has no way to
+# know who is asking or that the queue moves faster than any one branch stays current, asks them. So
+# arming here is safe BY CONSTRUCTION for the one thing CI can answer: GitHub cannot complete a merge this
+# workflow arms without `gate` -- and therefore `mergeSafety` -- reporting green for the real, current head.
+#
+# ## Why `opened` and `ready_for_review`, not `synchronize`
+#
+# Arming is idempotent and only needs to happen once per PR; GitHub keeps auto-merge enabled across every
+# later push on its own. Re-arming on every `synchronize` would be a redundant API call on every commit for
+# no behavioural difference, and this workflow's own job only asks "is this PR eligible to be armed at
+# all" (open, against `main`, not a draft) -- a question that does not change between commits.
+#
+# ## Why DRAFT is excluded, explicitly, rather than left to GitHub
+#
+# `gh pr merge --auto` REFUSES a draft PR outright ("--auto is not allowed for draft PRs"), so admitting
+# one here would just fail loudly. Excluding it here means the run reports `SKIPPED (draft)` instead of a
+# needless GitHub API error on every draft PR opened in this repo.
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  arm:
+    if: github.event.pull_request.draft == false && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge (merge commit) -- GitHub still withholds the merge until `gate` is green
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr merge --auto --merge "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}"

@@ -394,6 +394,52 @@ jobs:
             exit 1
           fi
 
+  # #298 (pipeline unit 1): WITH `strict=false` (#277), branch protection no longer requires this head to
+  # contain `main`'s current tip before merging -- it merges the instant `gate` is green for the RECORDED
+  # head. `strict` bought head-vs-tip agreement for free; without it, nothing does, and #195 (GitHub's
+  # recorded head disagreed with the branch's real tip -- #294) is exactly the defect a bare auto-arm
+  # workflow would have let through.
+  #
+  # HEAD-VS-TIP ONLY, DELIBERATELY -- not ancestry (#182) and not closing-claim (#262), both of which
+  # `merge-guard.mjs` can also check. `dispatcher` drove `mergeSafetyVerdict` against the real, moving PR
+  # queue and measured both refusing the NORMAL case: with merges landing roughly one a minute, almost
+  # every open PR is behind `main` almost all the time (13 of 13 checked), and a CI job has no session
+  # identity to compare against a claimed row's holder, so closing the exact row a PR was built for --
+  # the ordinary worker-owned shape -- reads as discarding a stranger's work. A required job refusing the
+  # normal case is not a gate, it is a wall everyone routes around; see `mergeSafetyVerdict`'s own comment
+  # in `scripts/merge-guard.mjs` for the measurements. Both stay useful ADVICE in `merge-guard.mjs`'s
+  # plain CLI mode, which knows who is asking and is run by a person, never by this job.
+  #
+  # UNCONDITIONAL, NOT GATED ON `ci-changed.mjs`. Every other job here answers "did the DIFF change
+  # something this checks" -- head-vs-tip is a fact about the COMMIT, true or false regardless of which
+  # files moved, so there is no diff shape that makes this safe to skip.
+  #
+  # NEVER `mergeReadiness` -- `scripts/merge-guard.mjs --ci-gate` calls the narrower `mergeSafetyVerdict`,
+  # which deliberately never inspects check-run CONCLUSIONS. This job's own siblings (`ts`, `python`, ...)
+  # are still in flight while it runs, in the SAME workflow run -- a check asking "did every required
+  # context conclude" about a commit it is itself currently testing would read STILL_RUNNING on every
+  # ordinary push, forever, and block every merge rather than only the unsafe ones. `gate` below already
+  # answers "did CI pass" by construction; this answers the one question `strict` used to.
+  mergeSafety:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/cache@v4
+        id: node-modules-cache
+        with:
+          path: node_modules
+          key: node-modules-${{ hashFiles('package-lock.json') }}
+      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: This head matches what GitHub recorded (#294)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/merge-guard.mjs --ci-gate ${{ github.event.pull_request.number }}
+
   # THE ONE CONTEXT BRANCH PROTECTION REQUIRES. `if: always()` so this still runs when an upstream job
   # fails or is cancelled -- without it, a failing `ts` would skip `gate` too (the default `if` on a job
   # is `success()` on its dependencies), and a job that never reports on the one commit that most needs it
@@ -404,7 +450,7 @@ jobs:
   # skipped counts as passing (the job's own `if:` decided it, correctly, that this PR does not need it);
   # anything else does not.
   gate:
-    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness]
+    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness, mergeSafety]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -418,7 +464,8 @@ jobs:
             "${{ needs.docs.result }}" \
             "${{ needs.board.result }}" \
             "${{ needs.changeset.result }}" \
-            "${{ needs.rulesFitness.result }}"
+            "${{ needs.rulesFitness.result }}" \
+            "${{ needs.mergeSafety.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"

@@ -11,7 +11,10 @@
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { filesChangedAgainstOrigin } from "./changed-packages.mjs";
+// `DOC_ROOT_FILES` is gone rather than merged: #296 stopped filtering the diff to its docs/ subset, so
+// nothing here reads it any more and keeping the import would be an unused binding lint refuses.
 import { boardOnly } from "./ci-changed.mjs";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 
 // #296: THE WHOLE DIFF, NOT JUST ITS docs/ SUBSET -- this used to filter to doc-touching files first and
 // ask `boardOnly` about only those, so a diff mixing `docs/board/reported.json` with a Node script (or
@@ -25,5 +28,7 @@ export function isBoardOnlyDiff(files) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
+  // Guarded per #164: takes no flags; it decides whether a change is board-only.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/board-only-check.mjs" });
   process.stdout.write(String(isBoardOnlyDiff(filesChangedAgainstOrigin())));
 }
