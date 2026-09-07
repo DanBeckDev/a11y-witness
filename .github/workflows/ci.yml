@@ -48,6 +48,16 @@ name: ci
 # alone and never the whole suite. A contract change under `packages/evidence` still tests `packages/judge`
 # and everything downstream of it; an unrelated package's PR does not pay for packages it cannot affect.
 #
+# #212 MEASURED THE 60S BUDGET ON A GENUINE LEAF CASE (`packages/lab`, zero dependents post-#206) AND FOUND
+# ~90S, NOT 60S -- two independent CI runs, step-by-step: checkout+setup-node+cache+npm-ci 7s (npm ci fully
+# SKIPPED on the cache hit -- caching already works), build 5s, lint+typecheck 15s (whole-repo, not scoped
+# to `testPackages` -- real, but small), and "Unit tests of the touched package(s) and their workspace
+# dependents" 56s -- ~66% of the step total, on BOTH runs. That is `lab`'s own suite (199 test files, ~1,305
+# `test()` calls, this repo's largest package by test count), not unscoped CI -- `testPackages` resolved to
+# `["lab"]` only. Disposition: accept it. A PR touching `lab` has a measured, understood floor around
+# 85-90s from `lab`'s own suite size; the 60s budget holds for an ordinary single/few-package PR elsewhere.
+# Not a target missed -- a cost named rather than chased.
+#
 # AGENT/** AND LEAD/** BRANCH PUSHES DO NOT TRIGGER THIS WORKFLOW EITHER, same as before -- every unit ends
 # with `gh pr create` (the standing worker-loop flow), so the PR's own `pull_request` trigger is where a
 # branch's full check runs; a push with no PR yet gets only the local pre-push hook's fast gate. See
@@ -95,6 +105,10 @@ jobs:
       rulesFitness: ${{ steps.classify.outputs.rulesFitness }}
       packages: ${{ steps.classify.outputs.packages }}
       testPackages: ${{ steps.classify.outputs.testPackages }}
+      # EXPOSED so `changeset` (below) does not re-derive it and risk the merge_group trap this step's own
+      # comment names -- a second, independent `github.base_ref` read in a different job is exactly the
+      # shape that drifted once already (#156).
+      base: ${{ steps.base.outputs.ref }}
     steps:
       # FULL HISTORY. A shallow clone fails `git diff <base>...HEAD` with "no commits in common" --
       # `changeset-check.yml`'s own comment already named this trap.
@@ -308,6 +322,11 @@ jobs:
 
   changeset:
     needs: changed
+    # `needs.changed.outputs.changeset` here is a cheap OVER-APPROXIMATION -- `changed` has no `npm ci`
+    # and so cannot safely call `npm pack`, so its `classify()` run answers "does this PR touch a
+    # published package's directory at all", the same blunt shape `changeset-check.yml`'s old regex used
+    # before #132. A false positive here costs one job run that then finds nothing to enforce (below); a
+    # false negative would skip the real check entirely, which is why the cheap answer only ever widens.
     if: needs.changed.outputs.changeset == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -316,9 +335,16 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      # PRECISE, now that `npm ci` has made `npm pack` safe to call. `orchestrator` reproduced the crash
+      # this avoids: `classify()` calling the real `packedFiles` inside `changed` (no install at all) fails
+      # on every PR touching a published package. This re-derives the real answer -- does npm actually
+      # SHIP this file -- and it is what decides whether the enforcement step below runs anything at all.
+      - id: precise
+        run: node scripts/ci-changed.mjs --event=${{ github.event_name }} --base=${{ needs.changed.outputs.base }} --precise
       - name: A consumer-visible change must say what it does to a consumer
+        if: steps.precise.outputs.changeset == 'true'
         run: |
-          if ! npx changeset status --since=origin/${{ github.base_ref }}; then
+          if ! npx changeset status --since=${{ needs.changed.outputs.base }}; then
             echo "::error::This PR changes a published package and carries no changeset."
             echo "Run 'npm run changeset', pick the packages and bump levels, and write one sentence a"
             echo "CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT follow"

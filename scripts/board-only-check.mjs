@@ -8,6 +8,8 @@
 // `node -e` embedded in bash, with escaped quotes and escaped `&&`, unreadable and untestable. This is
 // three lines of real logic, reusing `filesChangedAgainstOrigin` and `boardOnly` exactly as `ci.yml`'s own
 // `changed` job's classification does, and it has its own test like every other script here.
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { filesChangedAgainstOrigin } from "./changed-packages.mjs";
 import { boardOnly, DOC_ROOT_FILES } from "./ci-changed.mjs";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
@@ -17,7 +19,7 @@ export function isBoardOnlyDiff(files) {
   return docsFiles.length > 0 && boardOnly(docsFiles);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   // Guarded per #164: takes no flags; it decides whether a change is board-only.
   refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/board-only-check.mjs" });
   process.stdout.write(String(isBoardOnlyDiff(filesChangedAgainstOrigin())));

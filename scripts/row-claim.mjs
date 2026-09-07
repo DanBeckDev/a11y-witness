@@ -19,6 +19,7 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
 
@@ -158,6 +159,34 @@ export function claimRow(issueNumber, mySession, { run = defaultRun } = {}) {
   return { claimed: true };
 }
 
+/**
+ * Print whether the row can be STARTED today, alongside whether it is claimed (#177).
+ *
+ * A SEPARATE PROCESS on purpose. `row-reachability.mjs` walks every remote ref and shells `git` dozens of
+ * times; importing it would make every `check` pay that even when the answer is not wanted, and a slow
+ * claim tool is one people stop running before claiming -- which is the defect `row-claim` exists for.
+ *
+ * ITS FAILURE IS NOT THIS COMMAND'S FAILURE. If reachability cannot be computed, the claim answer above
+ * is still correct and is what the caller asked for; swallowing the reachability error here keeps
+ * "I could not tell you whether it is startable" from reading as "I could not tell you whether it is
+ * claimed". The exit code is set before this runs and is never touched by it.
+ */
+function reportReachability(issueNumber) {
+  try {
+    // `fileURLToPath`, NOT `.pathname` -- a URL's pathname is percent-ENCODED, so a checkout under a
+    // path containing a space becomes `%20` and node cannot find the file. This repo already records that
+    // exact defect for entry-point guards built by string concatenation; it is the same trap read from
+    // the other end.
+    const out = execFileSync("node",
+      [fileURLToPath(new URL("row-reachability.mjs", import.meta.url)), String(issueNumber)],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    process.stdout.write(out);
+  } catch (error) {
+    const spawned = /** @type {{stdout?: string, stderr?: string}} */ (error);
+    process.stdout.write(`${spawned.stdout ?? ""}${spawned.stderr ?? ""}`);
+  }
+}
+
 function usage() {
   return "Usage:\n"
     + "  node scripts/row-claim.mjs check <issue-number>\n"
@@ -189,6 +218,16 @@ async function main() {
       } else {
         process.stdout.write(`UNCLAIMED -- #${issueNumber} "${title}"\n`);
         process.exitCode = 0;
+        // UNCLAIMED IS NOT THE SAME AS STARTABLE (#177), and the labels cannot tell you which. Three rows
+        // on 2026-09-07 were `ready`, not `fleet-gated`, correctly classified, and unstartable: one held
+        // by an unmerged branch, one whose step 1 could not reproduce on `main`, and one whose SUBJECT
+        // existed on a single open PR and nowhere else. A worker should learn that here rather than at
+        // step 1, which is where the evening goes.
+        //
+        // REPORTED, NEVER ENFORCED. The exit code above is untouched: this inference is coarse (the
+        // blocking PR may land in ten minutes, or the worker may mean to build on that branch), and a
+        // check that refuses a claim on it would be bypassed and then not consulted at all.
+        reportReachability(issueNumber);
       }
     } catch (error) {
       process.stderr.write(`COULD NOT DETERMINE: ${/** @type {Error} */ (error).message}\n`);

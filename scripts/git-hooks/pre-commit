@@ -27,11 +27,15 @@ set -euo pipefail
 # `node_modules` may symlink to the primary's `dist`, so a branch parked here silently changes what every
 # OTHER agent compiles and tests against.
 #
-# IDENTIFIED BY WHETHER `.git` IS A DIRECTORY, never by branch name or an absolute path -- the identical
-# mechanism `prune-worktrees.mjs`'s `isPrimaryWorktree` already uses (see that function's own comment): a
-# branch is the thing that moves, and a hardcoded path breaks the moment this checkout lives somewhere
-# else. A linked worktree's `.git` is a text file (`gitdir: ...`); the primary's is a real directory.
-if [ -d "$(git rev-parse --show-toplevel)/.git" ]; then
+# IDENTIFIED BY AN EXPLICIT LOCAL MARK, never by branch name, an absolute path, or the shape of `.git`.
+#
+# It used to ask whether `.git` is a directory -- the mechanism `prune-worktrees.mjs`'s
+# `isPrimaryWorktree` uses, and CORRECT for that function's question (within one repo, primary worktree or
+# linked one?). It does not answer THIS question, because a real `.git` directory is true of every ordinary
+# clone: the lab's, a worker's, a colleague's. `post-checkout` carried the identical predicate and #198 is
+# what it cost. See `lib/is-primary-checkout.sh`.
+. "$(dirname "$0")/lib/is-primary-checkout.sh"
+if is_primary_checkout; then
   if [ -n "${A11Y_PRIMARY_COMMIT_REASON:-}" ]; then
     echo "pre-commit: committing in the PRIMARY checkout, overridden: $A11Y_PRIMARY_COMMIT_REASON" >&2
   else
