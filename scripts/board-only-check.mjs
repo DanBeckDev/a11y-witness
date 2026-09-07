@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // IS THIS BRANCH'S DIFF, AGAINST origin/main, A BOARD-ONLY DIFF? -- the pre-push hook's board-only fast
 // path asks this exact question, and it must ask it the SAME WAY `ci.yml`'s `board` job does (via
 // `ci-changed.mjs`'s `boardOnly`), never a second copy of the two regexes. Prints "true" or "false" to
@@ -23,6 +24,7 @@ import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 // job never lints either (see the pre-push hook's own comment on that job). `boardOnly` already requires
 // EVERY member of its input to be a board file, so passing it the unfiltered diff is the fix: a diff of
 // board files alone still passes, and one member outside that set fails it, whatever kind of file it is.
+/** @param {string[]} files */
 export function isBoardOnlyDiff(files) {
   return files.length > 0 && boardOnly(files);
 }

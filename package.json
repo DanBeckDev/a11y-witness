@@ -30,7 +30,7 @@
     "eval:gate": "A11Y_PYTHON=.venv/bin/python EVAL_GATE=1 EVAL_RUNS=3 tsx packages/lab/src/eval/run.ts",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build-packages.mjs",
-    "prepare": "node scripts/install-git-hooks.mjs && node scripts/prune-stale-workspace-scope.mjs",
+    "prepare": "node scripts/install-git-hooks.mjs",
     "lint": "eslint .",
     "scan": "tsx packages/cli/src/scan/run-axe.ts",
     "training:generate": "node packages/lab/src/training/generate-screenreader-dataset.mjs",
