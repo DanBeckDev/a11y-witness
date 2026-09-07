@@ -510,23 +510,15 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
       + "for the full argument and the measured incident.",
   },
   "1.3.5": {
-    status: "partial", needs: ["dom"], channels: ["formInputs"],
-    note: "Identify Input Purpose, ASSESSED for its F107 half since 2026-09-06 (issue #79) and decided by "
-      + "a RULE, `addUnidentifiedInputPurpose` -- deterministic against HTML's fixed Autofill field name "
-      + "table, needing the DOM rather than a screen reader, like 1.4.2. `PARTIAL`, not `assessed`: the "
-      + "criterion's OTHER failure mode -- a personal-data field with NO `autocomplete` attribute at all, "
-      + "which H98 (the criterion's only listed sufficient technique) makes just as unsatisfied as a "
-      + "malformed value -- is NOT covered, and cannot be from an attribute the field never carries. Seeing "
-      + "that failure would need deciding which fields \"collect information about the user\" from their "
-      + "label or name alone, independent of any attribute the markup already asserts -- the word-sense "
-      + "guessing this project has paid for once already (corpus:starvation) -- so the rule fires only "
-      + "when a field's OWN markup has already attempted a purpose declaration and gotten it wrong. "
-      + "`mapping: 'secondary'`, on ACT rule 73f2c2's own authority that a nonstandard token may still "
-      + "satisfy the criterion under some assistive technology's own taxonomy. NOT YET VALIDATED ON A REAL "
-      + "CAPTURE: `RuleInput.formInputs` has no worker-side census yet -- mirroring `mediaCensus` "
-      + "(browser-session.mjs) for `autocomplete` is a separate, fleet-touching unit this one's region "
-      + "excludes, so `rules:coverage` reads this subtype as NEVER FIRED ANYWHERE until that lands and a "
-      + "real page is captured.",
+    status: "reachable", needs: ["dom"], channels: ["formInputs"],
+    note: "Identify Input Purpose is the `autocomplete` attribute against a fixed token list -- "
+      + "deterministic, and squarely a rule. Needs the DOM, like 1.4.2. `addUnidentifiedInputPurpose` "
+      + "(issue #79) decides the F107 half of it in code today, but stays `reachable` rather than "
+      + "`partial` here: `RuleInput.formInputs` has no worker-side census on any capture yet, so "
+      + "`rules:coverage` reads this subtype as NEVER FIRED ANYWHERE and the stranger-facing count in "
+      + "action.yml/RELEASE.md must not include a criterion that cannot fire on a page anyone actually "
+      + "points this tool at. #170 is the worker-side census (mirroring `mediaCensus` in "
+      + "browser-session.mjs) that earns the flip to `partial` once a real page fires the rule.",
   },
   "3.1.1": { status: "reachable", needs: ["dom"], channels: ["transcript"], note: "Language of Page: `<html lang>`. THE CONCLUSION STANDS AND ITS STATED MECHANISM WENT STALE on 2026-09-03. This read \"NVDA switching SYNTHESISER LANGUAGE is an indirect and unreliable proxy\", which described NVDA at its defaults; `speech.reportLanguage` has been ON since that date, so NVDA SPEAKS the language and it lands in the transcript as text. The signal is therefore direct, not a proxy -- and the criterion is still not decidable from it, for the reason 3.1.2 records: an announcement CONFIRMS a language was declared, while SILENCE is what both a missing `lang` and a page matching NVDA's own default produce. Absence is the failure here, so the transcript can satisfy but never accuse, and the attribute remains the fact. Keeping a stale mechanism beside a right answer is how a reader concludes the answer was never re-examined.", },
   // 3.1.2 CLAIMED THE TRANSCRIPT AND THE TRANSCRIPT CANNOT CARRY IT — corrected 2026-09-01, measured.
