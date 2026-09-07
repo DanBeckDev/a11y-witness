@@ -2493,10 +2493,13 @@ Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth
 - **Every `.mjs` CLI here ignored an unrecognised flag**, because they all parse argv by looking for what
   they know — so a mistyped one ran the default and reported success. `refuseUnknownFlags`
   (`cli-flags.mjs`) refuses it, names the near miss, and prints what the command does take.
-  **ALL 82 are guarded as of 2026-09-07**, and `cli-flags.test.ts` DISCOVERS every argv-reading
-  module and requires each to be guarded or exempted with a reason. The exemption list holds ONE entry, `scripts/check-schema-migration.mjs`, which is copied into a
-  throwaway directory by its own gate test and so cannot resolve a workspace import; its single flag
-  fails closed.
+  **Every argv-reading module in the tree is guarded or exempted with a stated reason, and
+  `cli-flags.test.ts` is the only place that says how many.** It DISCOVERS them by walking the tree and
+  fails on any it cannot classify. This paragraph used to carry the count, and the count moved six times
+  in one night (75, 76, 77, 79, 82, 85), each value correct for the minutes between two merges; a number
+  the tree computes does not live in prose. The one exemption, `scripts/check-schema-migration.mjs`, is
+  copied into a throwaway directory by its own gate test and so cannot resolve a workspace import; its
+  single flag fails closed, and the test names it with that reason.
   > **The flag lists are READ out of each file, never derived, and every batch proved why.**
   > `stability-gate` builds flags from a variable and `repeat-capture` reads seven through an `arg(name)`
   > helper, so a regex reports ZERO for both. `fleet-playbook`, `capture-fixtures` and
