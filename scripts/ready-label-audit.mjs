@@ -23,8 +23,18 @@ import { REPO } from "./repo-identity.mjs";
 
 export const READY_LABEL = "ready";
 
-/** Every label that already means "not actually pickable", independent of `ready`. */
-export const MUTEX_LABELS = ["fleet-gated", "disputed", "decision", "awaiting-merge", "blocked", "review-only"];
+/**
+ * Every label that already means "not actually pickable", independent of `ready`.
+ *
+ * `in-progress` belongs here for the reason `row-claim.mjs:161-170` names: `dispatchRow`/`claimRow` only
+ * ever ADD labels, so a row still carrying `ready` at the moment it was dispatched comes out the other
+ * side as `ready` + `in-progress` + `session:*` -- claimed and started, while still advertising itself as
+ * pickable. #246: three real rows sat in exactly that state and this list could not see any of them,
+ * because the string `in-progress` was never in it -- a correct predicate fed a list that cannot express
+ * the fault, the `fleet-consistency`/`browserVersion` shape (CLAUDE.md).
+ */
+export const MUTEX_LABELS =
+  ["fleet-gated", "disputed", "decision", "awaiting-merge", "blocked", "review-only", "in-progress"];
 
 /**
  * @typedef {{ number: number, title: string, labels: string[] }} LabelledIssue
