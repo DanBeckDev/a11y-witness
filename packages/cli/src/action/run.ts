@@ -9,6 +9,7 @@
 // displayed cannot break how they are produced.
 import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { renderSummary, shouldFail, type FailOn, type RunResult } from "./summary.js";
 import { taskVerdictLabel } from "@a11y-witness/judge";
@@ -17,79 +18,100 @@ import { flagValue } from "@a11y-witness/worker-fleet/cli-flags";
 // audit §9 "argv parsing": this was its own copy of the fifteen-file idiom. `flagValue` is the shared,
 // tested extraction; `?? fallback` stays here because defaulting is this call site's business, not the
 // extractor's.
-const arg = (name: string, fallback?: string): string | undefined => flagValue(process.argv, name) ?? fallback;
+/**
+ * The Action's whole body, so importing this file does not RUN it.
+ *
+ * It was top-level code ending in `process.exit`, which meant nothing could import it — not a test, not
+ * another entry point — and `entry-points.test.ts` could not see that, because it discovers entry points
+ * from `package.json` scripts and this one is invoked by `action.yml`. Two blindnesses, one file: a guard
+ * that was never there, in a place the guard for it could not look.
+ *
+ * `process.exit` stays inside rather than becoming a returned code. This IS the process's last act, the
+ * exit codes are the Action's documented contract (2 = we could not look, 1 = findings met the
+ * threshold), and routing them through a return value would put a second place where that contract can be
+ * got wrong. What the wrapper buys is that the code no longer runs merely because somebody imported the
+ * module.
+ */
+function main(): void {
+  const arg = (name: string, fallback?: string): string | undefined => flagValue(process.argv, name) ?? fallback;
 
-const resultPath = arg("result");
-if (!resultPath) {
-  process.stderr.write("usage: tsx packages/cli/src/action/run.ts --result=<file.json> [--fail-on=...] [--summary-out=...]\n");
-  process.exit(2);
+  const resultPath = arg("result");
+  if (!resultPath) {
+    process.stderr.write("usage: tsx packages/cli/src/action/run.ts --result=<file.json> [--fail-on=...] [--summary-out=...]\n");
+    process.exit(2);
+  }
+
+  const failOn = (arg("fail-on", "never") as FailOn);
+  const marker = arg("marker", "a11y-witness");
+
+  let result: RunResult;
+  try {
+    result = JSON.parse(readFileSync(resolve(resultPath), "utf8")) as RunResult;
+  } catch (error) {
+    // A capture that never produced JSON is an infrastructure failure, not a clean page. Failing loudly
+    // here is the difference between "your page is fine" and "we did not manage to look at it" — the
+    // distinction this whole project is built around.
+    process.stderr.write(`a11y-witness: could not read the run result at ${resultPath}: ${(error as Error).message}\n`);
+    process.exit(2);
+  }
+
+  if (!result?.verdict || !Array.isArray(result.verdict.findings)) {
+    process.stderr.write("a11y-witness: the run result has no verdict — the judge did not complete, so nothing was assessed.\n");
+    process.exit(2);
+  }
+
+  const markdown = renderSummary(result, { marker, taskQuestion: taskVerdictLabel().question });
+
+  // An unverified capture is an infrastructure failure, not a verdict about the page — so it exits 2, the
+  // same code used for "could not read the result". Green would say "we checked and it is fine"; red (1)
+  // would say "your page has a problem". Neither is true: we did not manage to look at it.
+  //
+  // The summary is written FIRST so the reader still gets the explanation. Found on gov.uk, where the
+  // capture read Edge's image-magnifier overlay, the retry warned three times, and the run reported a 4.1.2
+  // finding about the browser's own Zoom In / Rotate buttons.
+  const unverified = result.captureVerified === false;
+
+  // $GITHUB_STEP_SUMMARY is append-only and shared with other steps, so append rather than overwrite.
+  const stepSummary = process.env.GITHUB_STEP_SUMMARY;
+  if (stepSummary) appendFileSync(stepSummary, `${markdown}\n`);
+
+  const summaryOut = arg("summary-out");
+  if (summaryOut) writeFileSync(resolve(summaryOut), `${markdown}\n`, "utf8");
+  if (!stepSummary && !summaryOut) process.stdout.write(`${markdown}\n`);
+
+  // The summary has already been written above, so this only decides the exit code. Writing it again here
+  // appended it TWICE to $GITHUB_STEP_SUMMARY, which is append-only.
+  if (unverified) {
+    process.stderr.write("a11y-witness: the capture could not be confirmed to have read the requested page; "
+      + "reporting no findings. This is a failed measurement, not a clean page.\n");
+    process.exit(2);
+  }
+
+  const { findings } = result.verdict;
+  let fail: boolean;
+  try {
+    fail = shouldFail(findings, failOn);
+  } catch (error) {
+    // An unrecognised `fail-on` is a workflow typo, and the dangerous outcome is treating it as "never":
+    // the check goes green and nobody looks again. Refuse instead.
+    process.stderr.write(`a11y-witness: ${(error as Error).message}. Use never|any|blocker|serious|moderate|minor.\n`);
+    process.exit(2);
+  }
+
+  const counts = findings.reduce<Record<string, number>>((acc, f) => {
+    acc[f.severity] = (acc[f.severity] ?? 0) + 1;
+    return acc;
+  }, {});
+  const breakdown = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ") || "none";
+  process.stderr.write(`a11y-witness: ${findings.length} finding(s) (${breakdown}); fail-on=${failOn}\n`);
+
+  if (fail) {
+    process.stderr.write(`a11y-witness: failing the check — findings met the ${failOn} threshold.\n`);
+    process.exit(1);
+  }
 }
 
-const failOn = (arg("fail-on", "never") as FailOn);
-const marker = arg("marker", "a11y-witness");
-
-let result: RunResult;
-try {
-  result = JSON.parse(readFileSync(resolve(resultPath), "utf8")) as RunResult;
-} catch (error) {
-  // A capture that never produced JSON is an infrastructure failure, not a clean page. Failing loudly
-  // here is the difference between "your page is fine" and "we did not manage to look at it" — the
-  // distinction this whole project is built around.
-  process.stderr.write(`a11y-witness: could not read the run result at ${resultPath}: ${(error as Error).message}\n`);
-  process.exit(2);
-}
-
-if (!result?.verdict || !Array.isArray(result.verdict.findings)) {
-  process.stderr.write("a11y-witness: the run result has no verdict — the judge did not complete, so nothing was assessed.\n");
-  process.exit(2);
-}
-
-const markdown = renderSummary(result, { marker, taskQuestion: taskVerdictLabel().question });
-
-// An unverified capture is an infrastructure failure, not a verdict about the page — so it exits 2, the
-// same code used for "could not read the result". Green would say "we checked and it is fine"; red (1)
-// would say "your page has a problem". Neither is true: we did not manage to look at it.
-//
-// The summary is written FIRST so the reader still gets the explanation. Found on gov.uk, where the
-// capture read Edge's image-magnifier overlay, the retry warned three times, and the run reported a 4.1.2
-// finding about the browser's own Zoom In / Rotate buttons.
-const unverified = result.captureVerified === false;
-
-// $GITHUB_STEP_SUMMARY is append-only and shared with other steps, so append rather than overwrite.
-const stepSummary = process.env.GITHUB_STEP_SUMMARY;
-if (stepSummary) appendFileSync(stepSummary, `${markdown}\n`);
-
-const summaryOut = arg("summary-out");
-if (summaryOut) writeFileSync(resolve(summaryOut), `${markdown}\n`, "utf8");
-if (!stepSummary && !summaryOut) process.stdout.write(`${markdown}\n`);
-
-// The summary has already been written above, so this only decides the exit code. Writing it again here
-// appended it TWICE to $GITHUB_STEP_SUMMARY, which is append-only.
-if (unverified) {
-  process.stderr.write("a11y-witness: the capture could not be confirmed to have read the requested page; "
-    + "reporting no findings. This is a failed measurement, not a clean page.\n");
-  process.exit(2);
-}
-
-const { findings } = result.verdict;
-let fail: boolean;
-try {
-  fail = shouldFail(findings, failOn);
-} catch (error) {
-  // An unrecognised `fail-on` is a workflow typo, and the dangerous outcome is treating it as "never":
-  // the check goes green and nobody looks again. Refuse instead.
-  process.stderr.write(`a11y-witness: ${(error as Error).message}. Use never|any|blocker|serious|moderate|minor.\n`);
-  process.exit(2);
-}
-
-const counts = findings.reduce<Record<string, number>>((acc, f) => {
-  acc[f.severity] = (acc[f.severity] ?? 0) + 1;
-  return acc;
-}, {});
-const breakdown = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ") || "none";
-process.stderr.write(`a11y-witness: ${findings.length} finding(s) (${breakdown}); fail-on=${failOn}\n`);
-
-if (fail) {
-  process.stderr.write(`a11y-witness: failing the check — findings met the ${failOn} threshold.\n`);
-  process.exit(1);
-}
+// RUN ONLY WHEN INVOKED. `pathToFileURL`, never a template literal: concatenation does not
+// percent-encode, so a checkout under a path containing a SPACE compares false, the guard never fires,
+// and the Action exits 0 having assessed nothing -- which a workflow reads as a passing check.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
