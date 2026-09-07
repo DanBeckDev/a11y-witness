@@ -76,10 +76,29 @@ export function fetchPushedBranches({ run = defaultRun } = {}) {
 }
 
 /**
+ * `gh pr list` returns NEWEST-first, so a truncating `--limit` drops the OLDEST PRs -- and stage 1 of
+ * this file's own filter is "has this branch EVER had a PR". A dropped PR's head then reads as "no PR
+ * ever pointed at this", which does not make the tool miss a stranded branch, it makes the tool
+ * MANUFACTURE one, from exactly the oldest branches a stranded-work check most wants to be right about
+ * (#321). 400 is ~3x headroom over the 127 PRs measured when this was filed -- raising the number moves
+ * the cliff without removing it, so the real fix is detecting arrival AT it, below.
+ */
+export const PR_LIST_LIMIT = 400;
+
+/**
  * Every branch name that has EVER had a PR opened against it, in ANY state. THROWS on failure -- never an
  * empty Set standing in for "no PR anywhere", which would read every pushed branch as stranded. The same
  * vacuity guard as `fetchOpenIssues`/`fetchLabels` elsewhere in this repo, aimed at the opposite direction:
  * there the danger is under-reporting a claim, here it is OVER-reporting a stranded branch.
+ *
+ * ALSO THROWS when the response comes back at exactly `PR_LIST_LIMIT` (#321) -- not a bigger-number fix,
+ * a DIFFERENT kind of check: `gh` exits 0 whether that is genuinely every PR or the first `PR_LIST_LIMIT`
+ * of more, and nothing about the response tells the two apart. A truncated listing is exactly the
+ * CANNOT-ASK state this file already has an exit code for ("a clean sweep over an unreadable board"),
+ * not a performance setting to be raised and forgotten. Contrast #286's `--limit 100` on a SCHEDULE
+ * workflow: there, 100 consecutive non-schedule runs *is itself the finding* the check exists to report,
+ * so hitting that bound is a correct answer, not a truncation -- the two look identical in the code and
+ * are opposite in meaning, which is why each has to be reasoned about on its own rather than copied.
  *
  * @param {{ run?: typeof defaultRun }} [deps]
  * @returns {Set<string>}
@@ -88,7 +107,7 @@ export function fetchAllPRHeadRefs({ run = defaultRun } = {}) {
   /** @type {string} */
   let raw;
   try {
-    raw = run("gh", ["pr", "list", "--repo", REPO, "--state", "all", "--limit", "400",
+    raw = run("gh", ["pr", "list", "--repo", REPO, "--state", "all", "--limit", String(PR_LIST_LIMIT),
       "--json", "headRefName"]);
   } catch (cause) {
     throw new Error(`stranded-branches: could not list PRs from ${REPO} -- refusing to guess. `
@@ -105,6 +124,16 @@ export function fetchAllPRHeadRefs({ run = defaultRun } = {}) {
   if (!Array.isArray(parsed)) {
     throw new Error(`stranded-branches: gh's PR list was not an array -- refusing to guess. `
       + `Got: ${JSON.stringify(parsed).slice(0, 300)}`);
+  }
+  // AT THE CAP IS NOT "A LOT OF PRs", IT IS "CANNOT TELL" (#321). `gh` exits 0 and returns exactly
+  // `PR_LIST_LIMIT` rows whether that is every PR this repo has ever opened or the newest slice of many
+  // more -- and because the response is newest-first, anything past the cap is silently missing from the
+  // OLDEST end, which is precisely the population stage 1 of this file's filter depends on being complete.
+  if (parsed.length === PR_LIST_LIMIT) {
+    throw new Error(`stranded-branches: gh returned exactly ${PR_LIST_LIMIT} PRs, the configured `
+      + "--limit -- cannot tell whether that is every PR or a truncated, newest-first slice missing the "
+      + "oldest ones. Refusing to guess rather than silently manufacturing stranded-branch candidates "
+      + "from PRs that were dropped off the end.");
   }
   return new Set(parsed.map((/** @type {unknown} */ pr, /** @type {number} */ i) => {
     const headRefName = /** @type {{ headRefName?: unknown }} */ (pr)?.headRefName;
