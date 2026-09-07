@@ -79,6 +79,33 @@ test("an UNKNOWN fault code says so explicitly, rather than silently omitting re
   assert.match(message, /no remediation is recorded/i);
 });
 
+test("hard-timeout gets the full WHAT/TRY/WHERE treatment, like any other known fault", () => {
+  const message = formatFaultMessage("hard-timeout", "capture exceeded the hard timeout of 520000 ms "
+    + "and was abandoned");
+  assert.match(message, /hard timeout/i);
+  assert.match(message, /\(fault: hard-timeout\)/);
+  const remediation = remediationFor("hard-timeout")!;
+  assert.match(message, new RegExp(remediation.what.slice(0, 40).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("#336: the progress argument reports how far a PARTIAL capture got, when the worker said", () => {
+  const withProgress = formatFaultMessage("hard-timeout", "capture exceeded the hard timeout",
+    { reachedPhase: "readingForm", markCount: 7 });
+  assert.match(withProgress, /Got as far as: "readingForm"/);
+  assert.match(withProgress, /7 progress mark\(s\) recorded before stopping/);
+
+  const withoutProgress = formatFaultMessage("hard-timeout", "capture exceeded the hard timeout");
+  assert.doesNotMatch(withoutProgress, /Got as far as/,
+    "no progress was given, so none may be invented -- 'we could not read your page at all' and 'we "
+    + "ran out of time partway through' are different findings");
+
+  const phaseOnly = formatFaultMessage("hard-timeout", "capture exceeded the hard timeout",
+    { reachedPhase: "navigated" });
+  assert.match(phaseOnly, /Got as far as: "navigated"/);
+  assert.doesNotMatch(phaseOnly, /progress mark\(s\)/,
+    "a mark COUNT that was never supplied must not be fabricated as a number");
+});
+
 test("MUTATION: a fault code with no remediation entry is caught by name", () => {
   const withGap = { ...FAULT_REMEDIATION };
   delete withGap["wrong-page"];
