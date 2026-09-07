@@ -24,14 +24,14 @@ the project's whole life while every local run succeeded.
 git clone --local . /tmp/witness-clean     # committed files only
 cd /tmp/witness-clean && npm pack          # 659 kB, 235 files
 mkdir /tmp/consumer && cd /tmp/consumer
-npm init -y && npm i /tmp/witness-clean/a11y-witness-0.0.0.tgz
+npm init -y && npm i /tmp/witness-clean/a11ign-0.0.0.tgz
 ```
 
 ## Findings
 
 | # | finding | evidence |
 |---|---|---|
-| 1 | **No entry point at all.** `import("a11y-witness")` fails. | `ERR_MODULE_NOT_FOUND`; root `package.json` has no `exports`, `main`, `files` or `bin`, plus `private: true` and `version: 0.0.0` |
+| 1 | **No entry point at all.** `import("a11ign")` fails. | `ERR_MODULE_NOT_FOUND`; root `package.json` has no `exports`, `main`, `files` or `bin`, plus `private: true` and `version: 0.0.0` |
 | 2 | **Shipped TypeScript is unusable, not merely unbuilt.** | `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` — Node **refuses** to strip types for files under `node_modules`, whatever the consumer's flags. 59 `.ts` files ship; 1 `.js` does |
 | 3 | `.mjs` works verbatim, with no build. | `import(".../capture-faults.mjs")` returned `FAULT, captureFault, faultCode` |
 | 4 | Dependencies resolve correctly, including the optional ones. | `@guidepup/guidepup`, `playwright`, `axe-core` all installed into the consumer |
@@ -73,10 +73,10 @@ which is the honest state of the repository until that pipeline work is committe
 
 Nothing here invalidates the package boundaries:
 
-- **`@a11y-witness/scorer` as an npm package survives.** The program is 15 KB and the heads 27 KB; both
+- **`@a11ign/scorer` as an npm package survives.** The program is 15 KB and the heads 27 KB; both
   ship without trouble. The encoder is the only large artifact and already has a fetch path, so the
   "cannot be fetched without our credentials" risk M0 was told to watch for did not materialise.
-- **`@a11y-witness/nvda-worker` shipping `.mjs` verbatim is confirmed viable** (findings 3 and 4).
+- **`@a11ign/nvda-worker` shipping `.mjs` verbatim is confirmed viable** (findings 3 and 4).
 - **Every package needs a real build and real entry points** (findings 1 and 2) — which is M1's work, and
   is now justified by measurement rather than convention.
 
@@ -85,8 +85,8 @@ Nothing here invalidates the package boundaries:
 ```bash
 git clone --local . /tmp/witness-clean && cd /tmp/witness-clean && npm pack
 mkdir -p /tmp/consumer && cd /tmp/consumer && npm init -y
-npm i /tmp/witness-clean/a11y-witness-0.0.0.tgz
-node --input-type=module -e "import('a11y-witness').catch(e=>console.log(e.code))"   # finding 1
+npm i /tmp/witness-clean/a11ign-0.0.0.tgz
+node --input-type=module -e "import('a11ign').catch(e=>console.log(e.code))"   # finding 1
 ```
 
 `/health` from the capture worker was **not** attempted: it needs a Windows host with NVDA, and this spike

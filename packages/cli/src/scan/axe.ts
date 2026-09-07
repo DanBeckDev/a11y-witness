@@ -5,7 +5,7 @@
  * read-through cannot perceive. It complements the lived-experience judge; it
  * does not replace it.
  *
- * Scoped to WCAG A/AA to match @a11y-witness/evidence/wcag and the legal baseline.
+ * Scoped to WCAG A/AA to match @a11ign/evidence/wcag and the legal baseline.
  *
  * OPTIONAL. Playwright and @axe-core/playwright are optionalDependencies: the layer is
  * ~100 lines and about a second of wall-clock, but it pulls half a gigabyte of Chromium,
@@ -30,7 +30,7 @@ export const WCAG_AA_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22
 // Imported rather than redeclared: the judge owns the outcomes model, and a second spelling of this type
 // would be the fact-stated-twice defect with a compiler that cannot see it, since structurally identical
 // types unify silently.
-import type { RuleLayerCoverage, RuleLayerVerdict } from "@a11y-witness/judge/outcomes";
+import type { RuleLayerCoverage, RuleLayerVerdict } from "@a11ign/judge/outcomes";
 export type { RuleLayerCoverage, RuleLayerVerdict };
 
 export interface AxeFinding {

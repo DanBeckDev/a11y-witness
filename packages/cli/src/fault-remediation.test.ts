@@ -3,7 +3,7 @@
  * `(fault: screen-reader-mute)` learns nothing from it — see this file's own header for the incident.
  *
  * DISCOVERS the fault codes from `packages/nvda-worker/src/capture-faults.mjs`'s `FAULT`, by RELATIVE
- * PATH to its source, never a package import — `@a11y-witness/nvda-worker` is deliberately not a
+ * PATH to its source, never a package import — `@a11ign/nvda-worker` is deliberately not a
  * dependency of this package (see `fault-remediation.ts`'s header), and even if it were, importing the
  * PUBLISHED package would resolve to a `dist` that could be stale relative to this worktree's source
  * (docs/backlog.md, issue #28's exact shape) — a relative import into `../../nvda-worker/src/` reads the

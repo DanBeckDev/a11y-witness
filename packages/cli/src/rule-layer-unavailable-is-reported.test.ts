@@ -4,7 +4,7 @@
  * The audit's own §7.1 finding was that the GitHub Action's axe layer went structurally dead and nothing
  * said so -- `ruleBased: null` on a run that never opted out, fixed by `assert-action-report.mjs --require-
  * rule-layer`. That fix covers the ACTION. This proves the same is true of the plain CLI, which a first
- * external user actually runs (`npx a11y-witness <url>`) on whatever machine they have -- one where
+ * external user actually runs (`npx a11ign <url>`) on whatever machine they have -- one where
  * `playwright`/`@axe-core/playwright` failed to install, were pruned with `--omit=optional`, or were never
  * fetched because the registry was unreachable.
  *

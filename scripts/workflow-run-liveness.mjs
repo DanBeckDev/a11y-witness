@@ -34,7 +34,7 @@
 //                   in the one place it would be most expensive -- the record of what actually shipped.
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags, flagValue } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
 import { gh, lookup, lookupRequiredContexts, lookupCheckRuns, checkReasons } from "./merge-guard.mjs";
 

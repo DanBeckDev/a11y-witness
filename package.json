@@ -1,5 +1,5 @@
 {
-  "name": "a11y-witness-monorepo",
+  "name": "a11ign-monorepo",
   "version": "0.0.0",
   "private": true,
   "description": "Judge the real assistive-technology experience of a website with AI: drive a real screen reader through real navigation and assess whether the experience is coherent and usable.",
@@ -145,14 +145,14 @@
     "corpus:release": "node packages/lab/scripts/corpus-release.mjs"
   },
   "dependencies": {
-    "@a11y-witness/evidence": "0.1.0",
-    "@a11y-witness/judge": "0.1.0",
-    "@a11y-witness/nvda-worker": "0.1.0",
-    "@a11y-witness/scorer": "0.1.0",
-    "@a11y-witness/worker-fleet": "0.1.0",
+    "@a11ign/evidence": "0.1.0",
+    "@a11ign/judge": "0.1.0",
+    "@a11ign/nvda-worker": "0.1.0",
+    "@a11ign/scorer": "0.1.0",
+    "@a11ign/worker-fleet": "0.1.0",
     "@anthropic-ai/sdk": "^0.106.0",
     "@guidepup/guidepup": "^0.31.0",
-    "a11y-witness": "0.1.0"
+    "a11ign": "0.1.0"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.1",

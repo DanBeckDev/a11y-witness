@@ -59,7 +59,7 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { realpathSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
 import { READY_LABEL } from "./ready-label-audit.mjs";
 import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
