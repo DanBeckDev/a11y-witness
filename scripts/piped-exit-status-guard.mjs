@@ -14,6 +14,9 @@
  * a remedy that fires on legitimate use and gets disabled.
  */
 
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
 const STATUS_TOOLS = ["head", "tail", "grep"];
 
 /** Split a compound shell command into its top-level statements: `;`, `&&`, `||`, and newlines. */
@@ -61,7 +64,7 @@ export function checkPipedExitStatus(cmd) {
   };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   const cmd = process.argv[2];
   if (!cmd) {
     console.error("usage: piped-exit-status-guard.mjs '<shell command string>'");
