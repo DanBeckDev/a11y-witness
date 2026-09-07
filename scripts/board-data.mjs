@@ -177,8 +177,12 @@ function readEntries(kind) {
 
 export function reported() {
   const metaPath = path.join(ROOT, REPORTED_DIR, "meta.json");
+  // DERIVED FROM `REPORTED_KINDS`, not repeated. This line read `gates: readEntries("gates"),
+  // achievements: readEntries("achievements")` until 2026-09-07 -- so the constant governed one call site
+  // and this one restated it, which is the fact-stated-twice shape the constant was introduced to remove.
+  // Caught by mutation: shrinking `REPORTED_KINDS` changed nothing here, because nothing here read it.
   const raw = { ...(existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, "utf8")) : {}),
-    gates: readEntries("gates"), achievements: readEntries("achievements") };
+    ...Object.fromEntries(REPORTED_KINDS.map((kind) => [kind, readEntries(kind)])) };
   const staleMs = (raw.staleAfterHours ?? 24) * HOURS_MS;
   const fresh = (entry) => Date.now() - Date.parse(entry.at) < staleMs;
   const gates = (raw.gates ?? []).filter((g) => g.at && Number.isFinite(Date.parse(g.at)));
