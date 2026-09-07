@@ -5,7 +5,7 @@ metadata:
   type: feedback
 ---
 
-Every brief I send a peer session working on a11y-witness carries this, verbatim. It is not boilerplate:
+Every brief I send a peer session working on a11ign carries this, verbatim. It is not boilerplate:
 each banned command reaches a single shared resource whose guards turn a collision into a silent wrong
 answer rather than an error.
 

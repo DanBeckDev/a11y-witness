@@ -27,13 +27,13 @@
 // alone (a PR's directly touched packages) would test the changed code but not its consumers -- a
 // contract change under `packages/evidence` breaking `packages/judge`'s use of it would pass a scoped run
 // that only ever looked at `evidence`. `testPackages` is the transitive closure of dependents, computed
-// from the real `@a11y-witness/*` `dependencies`/`devDependencies` in every package's own `package.json`
+// from the real `@a11ign/*` `dependencies`/`devDependencies` in every package's own `package.json`
 // -- never a hand-written map, for this file's own stated reason: three independent hand-written copies
 // of "what changed" is the defect this file exists to end.
 import { execFileSync } from "node:child_process";
 import { readFileSync, appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-// RELATIVE, NOT `@a11y-witness/worker-fleet/cli-flags` — every other root script uses the package
+// RELATIVE, NOT `@a11ign/worker-fleet/cli-flags` — every other root script uses the package
 // specifier, and every other root script runs after `npm run build`. This one gates whether ANYTHING
 // else in the workflow builds at all, so it cannot depend on a build having already happened; the file
 // itself is plain JS with no TypeScript syntax, so importing straight from `src` costs nothing.
@@ -79,8 +79,8 @@ export function knownPackages(repoRoot) {
 
 /**
  * Every package directory's own workspace dependencies, as directory names -- not by convention (e.g.
- * assuming `@a11y-witness/<dir>`), because `packages/cli`'s own `package.json` name is the UNSCOPED
- * `"a11y-witness"`, and `packages/lab` genuinely depends on it. Each directory's real declared `name` is
+ * assuming `@a11ign/<dir>`), because `packages/cli`'s own `package.json` name is the UNSCOPED
+ * `"a11ign"`, and `packages/lab` genuinely depends on it. Each directory's real declared `name` is
  * read and used as the lookup key, so a future package with an unconventional name is still resolved
  * correctly rather than silently dropped from the graph.
  *

@@ -27,7 +27,7 @@ import assert from "node:assert/strict";
 import { openSync, readSync, closeSync, readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { scorerPaths } from "@a11y-witness/scorer";
+import { scorerPaths } from "@a11ign/scorer";
 import { join } from "node:path";
 
 /**

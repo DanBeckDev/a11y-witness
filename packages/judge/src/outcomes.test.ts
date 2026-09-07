@@ -11,7 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
+import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 
 import { assessedCriteria } from "./coverage.js";
 import { criterionOutcomes, NOT_SWEEP_DERIVED, outcomeTally, type CriterionOutcome }

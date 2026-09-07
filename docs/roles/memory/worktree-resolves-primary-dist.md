@@ -5,8 +5,8 @@ metadata:
   type: project
 ---
 
-On a11y-witness the peer worktrees (`../a11y-wt-*`) can have `node_modules` **symlinked to the primary
-checkout's**. When they do, `@a11y-witness/<pkg>` resolves to the PRIMARY's `packages/<pkg>`, so any
+On a11ign the peer worktrees (`../a11y-wt-*`) can have `node_modules` **symlinked to the primary
+checkout's**. When they do, `@a11ign/<pkg>` resolves to the PRIMARY's `packages/<pkg>`, so any
 cross-package import reads the **primary's `dist`** — not the worktree's.
 
 **Consequence: `npm run build` inside your worktree changes nothing that a cross-package tool will read.**
@@ -16,7 +16,7 @@ paragraphs the source plainly contained, because the primary's `packages/judge/d
 the source changed at 12:45. I concluded the generator was broken, committed a "regeneration" that reverted
 another agent's work, and told a peer to route a worker at a defect that did not exist.
 
-**The check that missed it, and why.** I ran `ls -ld node_modules/@a11y-witness/judge`, saw a proper
+**The check that missed it, and why.** I ran `ls -ld node_modules/@a11ign/judge`, saw a proper
 symlink, and ruled it out. It IS a proper symlink — to another repository. **My check answered "is this a
 symlink" when the question was "to which checkout".** Same shape as every other wrong answer that day: a
 correct method against the wrong population.
@@ -27,7 +27,7 @@ the branch itself. All four were right and none was the cause.
 **The habit: when a tool reads stale code, resolve the module and print the PATH, not the link type.**
 
 ```
-node -e "console.log(require.resolve('@a11y-witness/judge'))"   # which checkout, not which kind of file
+node -e "console.log(require.resolve('@a11ign/judge'))"   # which checkout, not which kind of file
 readlink node_modules                                           # the whole tree may be shared, not one pkg
 ```
 

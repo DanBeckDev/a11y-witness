@@ -21,18 +21,18 @@ process.stdin.on('end',()=>console.log(JSON.parse(d).map(p=>p.name)))"
 
 | package directory | published name | publishable? |
 |---|---|---|
-| `packages/cli` | `a11y-witness` | yes |
-| `packages/evidence` | `@a11y-witness/evidence` | yes |
-| `packages/judge` | `@a11y-witness/judge` | yes |
-| `packages/nvda-worker` | `@a11y-witness/nvda-worker` | yes |
-| `packages/scorer` | `@a11y-witness/scorer` | yes |
-| `packages/worker-fleet` | `@a11y-witness/worker-fleet` | yes |
-| `packages/control` | `@a11y-witness/control` | no — `"private": true` |
-| `packages/lab` | `@a11y-witness/lab` | no — `"private": true` |
-| `packages/nvda-speech` | `@a11y-witness/nvda-speech` | no — `"private": true` |
+| `packages/cli` | `a11ign` | yes |
+| `packages/evidence` | `@a11ign/evidence` | yes |
+| `packages/judge` | `@a11ign/judge` | yes |
+| `packages/nvda-worker` | `@a11ign/nvda-worker` | yes |
+| `packages/scorer` | `@a11ign/scorer` | yes |
+| `packages/worker-fleet` | `@a11ign/worker-fleet` | yes |
+| `packages/control` | `@a11ign/control` | no — `"private": true` |
+| `packages/lab` | `@a11ign/lab` | no — `"private": true` |
+| `packages/nvda-speech` | `@a11ign/nvda-speech` | no — `"private": true` |
 
 **These are today's names.** #66 (the `a11ign` rename) changes the unscoped package's name and the
-`@a11y-witness` scope before the transfer — #72's own acceptance script already writes the scope as
+`@a11ign` scope before the transfer — #72's own acceptance script already writes the scope as
 `@a11ign`. **A token or trusted publisher scoped to today's six names must be re-scoped to the renamed
 ones once #66 lands, or it grants publish rights to names that no longer exist and silently denies the
 ones that do.**
@@ -49,7 +49,7 @@ Its job is named `release`, triggered only by `workflow_dispatch` (never a push 
 publish step itself is gated on `inputs.dry-run == false && inputs.confirm == 'publish-for-real'` — see
 the workflow's own comments for why that double gate exists. **A trusted publisher (or a granular token's
 repository restriction) must name `a11ign/a11ign`, workflow `release.yml`** — the POST-transfer, POST-
-rename location, per #72's own body — not the current `DanBeckDev/a11y-witness`, which is where the
+rename location, per #72's own body — not the current `a11ign/a11ign`, which is where the
 repository lives only until #63 and #66 land.
 
 **The two secrets this repository actually uses**, so #63's transfer re-creates exactly these and no
@@ -65,7 +65,7 @@ more:
 
 **Which of these change on the org move.** Both already do NOT need re-creating, and that is deliberate
 rather than lucky: `NPM_TOKEN` is stored as an **organisation-level** Actions secret on `github.com/
-a11ign` (not a repository secret on `DanBeckDev/a11y-witness`), specifically so the repository transfer
+a11ign` (not a repository secret on `a11ign/a11ign`), specifically so the repository transfer
 in #63 does not lose it — #63's own point 2 names "Actions secrets... do not transfer" as one of the four
 silent breakages, and this secret was placed at the org level in anticipation of exactly that. Once the
 repository joins the `a11ign` organisation, it inherits the secret automatically. `ORG_SECRETS_READ_TOKEN`,

@@ -580,7 +580,7 @@ While iterating on `capture-core.mjs` specifically, it is faster to copy the sin
 file and restart the worker than to commit and pull:
 
 ```bash
-scp packages/nvda-worker/src/capture-core.mjs user@vm:C:/Users/user/a11y-witness/packages/nvda-worker/src/
+scp packages/nvda-worker/src/capture-core.mjs user@vm:C:/Users/user/a11ign/packages/nvda-worker/src/
 # Prefer a REBOOT over a task restart. Stop/Start-ScheduledTask silently fails to replace the
 # running process when the guest agent is not ready, and two workers once served stale code for
 # an hour that way. `worker-ctl.sh stop && up` always picks up a pushed file, and
@@ -593,7 +593,7 @@ code looks exactly like a logic bug, and costs far more time than the check:
 
 ```bash
 shasum -a 256 packages/nvda-worker/src/capture-core.mjs
-ssh user@vm "powershell -NoProfile -Command \"(Get-FileHash 'C:\Users\user\a11y-witness\src\capture\nvda\capture-core.mjs' -Algorithm SHA256).Hash\""
+ssh user@vm "powershell -NoProfile -Command \"(Get-FileHash 'C:\Users\user\a11ign\src\capture\nvda\capture-core.mjs' -Algorithm SHA256).Hash\""
 ```
 
 Then re-validate with `node packages/nvda-worker/src/capture-check.mjs` **in the VM's console
