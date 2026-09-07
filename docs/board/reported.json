@@ -30,14 +30,6 @@
   "achievements_//": "SECTION 3 OF THE BOARD DOCUMENT: what the product can now DO or PROVE that it could not before -- never commit counts, which measure activity rather than capability. This is the one section no API can derive, so it is authored, and every entry carries the EVIDENCE that makes it a capability claim rather than an assertion. An empty list prints as 'nothing recorded for this window' with what that means, never as a gap the reader has to notice. Shape: {\"claim\": \"<what the product can now do or prove, in a sentence a non-engineer reads>\", \"evidence\": \"<the command, the artefact or the measurement that shows it>\", \"issue\": <number or null>, \"reportedBy\": \"<agent>\", \"at\": \"<ISO 8601>\"}. AN ENTRY WHOSE `evidence` IS ANOTHER AGENT'S SUMMARY IS NOT EVIDENCE. Point at what printed it. `boardClaim` IS WHAT THE BOARD READS and `claim` is what the engineers do. Sections one to five of the board document carry no repository internals at all -- no file names, no identifiers, no command names -- so a claim written for a colleague cannot appear there. The evidence and the exact references stay in the appendix. Added 2026-09-06 on board feedback: every internal reference in edition 1 told them the product manager was pointing at files instead of managing the product. AND THE EVIDENCE BLOCK OPENS WITH WORDS AND ENDS WITH IDENTIFIERS, IN PARENTHESES. Board feedback on edition 2: the body had been cleaned of internals and the appendix was still LEADING with them, which teaches the reader the habit is only hidden. Plain sentence first, exact reference last, so anyone who wants to check can and nobody else has to read past it.",
   "achievements": [
     {
-      "claim": "What is open now survives the loss of this machine.",
-      "evidence": "The list of open work, its acceptance criteria and its release blockers now lives in a hosted issue tracker rather than in a document on one machine. Verified by listing the issues and the release milestone directly from the tracker. Previously the answer lived in a 1,049-line file that contradicted itself, and five items checked during the move were already finished. That contradiction has since been closed. Whether the retired document still holds work that never became an issue is not yet known. (GitHub Issues and milestones on DanBeckDev/a11y-witness; open question tracked as issue #105.)",
-      "issue": 105,
-      "reportedBy": "product-manager",
-      "at": "2026-09-06T20:40:00Z",
-      "boardClaim": "The list of what is open now survives the loss of the one machine this project runs on."
-    },
-    {
       "claim": "The project can say what a capture costs in worker time, for the first time.",
       "evidence": "A tool now exists that adds up how long each recorded page occupied a capture machine, so the fleet's cost can be stated rather than guessed. It reports 54.11 machine-hours across 5,395 of the 5,396 recordings it found, with a middle value of 27.4 seconds per page. The figure is summed per recording from each recording's own timings, never from elapsed time multiplied by the number of machines. (`fleet:hours`, built by orchestrator on branch `lead/fleet-hours`, commit `10ad2e5`; tracked as issue #21.)",
       "issue": 21,
@@ -47,10 +39,10 @@
     },
     {
       "claim": "The page written to prove a rule was recorded, and did not prove it.",
-      "evidence": "A rule could previously only be demonstrated on pages we wrote ourselves, which cannot falsify the assumptions behind it. A page exercising it was written and has now been recorded — and the recording showed the opposite of what was expected. The conformant version was measured correctly and the FAILING version was not, because the same property that makes a page fail this rule also prevents the tool from observing it. The tool now reports 'cannot say' on those pages instead of reporting them as clean, and the underlying fix is scheduled. Superseded issue #2, now tracked as #76. (`focus-panel-undismissable-help` in `packages/lab/src/training/real-page-corpus.mjs`; measured 2026-09-06 by orchestrator on both halves of the pair, same fleet, minutes apart.)",
-      "issue": 76,
+      "evidence": "A rule could previously only be demonstrated on pages we wrote ourselves, which cannot falsify the assumptions behind it. A page exercising it was written and has now been recorded — and the recording showed the opposite of what was expected. The conformant version was measured correctly and the FAILING version was not, because the same property that makes a page fail this rule also prevents the tool from observing it. The tool now reports 'cannot say' on those pages instead of reporting them as clean, and the underlying fix is scheduled. Superseded issue #2, now tracked as #31. (`focus-panel-undismissable-help` in `packages/lab/src/training/real-page-corpus.mjs`; measured 2026-09-06 by orchestrator on both halves of the pair, same fleet, minutes apart.)",
+      "issue": 31,
       "reportedBy": "orchestrator",
-      "at": "2026-09-06T20:50:00Z",
+      "at": "2026-09-07T07:40:00Z",
       "boardClaim": "A page built to prove a rule showed instead that the rule cannot see that fault."
     },
     {
