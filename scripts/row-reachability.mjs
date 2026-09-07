@@ -1,0 +1,215 @@
+// IS THIS ROW STARTABLE? -- computed from the tree, never from a label.
+//
+// Ready showed four unclaimed rows, none `fleet-gated`, so by every label the lane read fully pickable.
+// It was not. Measured 2026-09-07: the honest pickable count was 3 where the label count said 4, and on
+// one earlier evening the true count was 1.
+//
+//   #143  held by an unmerged `lead/*` branch
+//   #171  its step 1 is unreproducible on `main` -- the fixture is another row's unmerged groundwork
+//   #186  `dirOnOriginMain` EXISTS ON NO REF BUT ONE, and that one is an open, conflicting PR
+//
+// **Every one of those rows is correctly classified.** They are `ready`, they are not `fleet-gated`, and
+// nothing about their labels is wrong. The classification simply cannot express the fact, so the lane
+// count is right about its labels and wrong about the work.
+//
+// NOT A LABEL, AND THAT IS THE WHOLE DESIGN. A hand-applied `blocked-behind-branch` is a fact stated
+// twice and drifts the moment the branch merges, leaving a row marked blocked by something that landed --
+// worse than no label, because it reads as current. This computes the answer at the moment it is asked.
+//
+// THE CHECK IS "DOES THIS ROW'S SUBJECT EXIST ON `main` YET", NOT "IS ANYONE ELSE IN THESE FILES".
+// #186 is the case that forces the distinction and a naive implementation scores it CLEAR: nobody is
+// editing `board-summary-check.mjs`, and the row is unstartable anyway because the function it is about
+// is not in it. Region contention is the easier half and falls out of the same walk.
+//
+//   node scripts/row-reachability.mjs <issue-number>
+//   node scripts/row-reachability.mjs --row=<issue-number>
+//
+// IT REPORTS; IT NEVER REFUSES A CLAIM. A row can be worth starting for reasons this cannot see -- the
+// blocking PR may land in ten minutes, or the worker may intend to build on that branch deliberately.
+// Exit codes say what was found, and `row-claim` prints it as a warning rather than acting on it: a check
+// that blocks on an inference this coarse gets bypassed, and then it is not consulted at all.
+//
+// Exit codes are the contract:
+//   0  STARTABLE   -- the subject is on `main` and no unmerged branch is in its region
+//   1  BLOCKED     -- and it NAMES what on, because "wait" and "wait for X" are different instructions
+//   2  CANNOT ASK  -- a lookup failed. INCONCLUSIVE, never "startable": reporting an unaskable question
+//                     as clear is how a worker loses an evening at step 1
+import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { REPO } from "./repo-identity.mjs";
+import { sandboxGitEnv } from "./git-env.mjs";
+
+const EXIT = { STARTABLE: 0, BLOCKED: 1, CANNOT_ASK: 2 };
+
+const git = (args) => execFileSync("git", args,
+  { encoding: "utf8", env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
+const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+
+/** Repo-relative source paths named anywhere in the row — its region, and whatever else it cites. */
+const PATH_IN_PROSE = /(?:^|[\s`"'(])((?:packages|scripts|docs|\.github)\/[A-Za-z0-9/_.-]+\.[A-Za-z]{2,4})/g;
+
+/**
+ * IDENTIFIERS THE ROW IS ABOUT — the subject, as opposed to the region.
+ *
+ * A row names its subject in backticks: `dirOnOriginMain`, `RULE_CRITERIA`, `stalenessReason`. Only
+ * multi-word-cased tokens are taken (camelCase or SCREAMING_SNAKE), because a lowercase backticked word
+ * is far more often prose (`ready`, `main`, `git show`) than a symbol, and a check that treats every
+ * quoted word as a subject reports every row blocked and is then ignored.
+ */
+const SYMBOL_IN_PROSE = /`([a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*|[A-Z][A-Z0-9]+_[A-Z0-9_]+)`/g;
+
+const unique = (values) => [...new Set(values)];
+
+/**
+ * THE VERDICT, PURE — so every state is reachable without a network or a checkout.
+ *
+ * `null` for a lookup means it failed and is never read as an empty answer, the distinction this whole
+ * tool exists to preserve one level up.
+ *
+ * @param {{row: number,
+ *          subjectsMissing: {name: string, refs: string[]}[] | null,
+ *          heldRegions: {path: string, refs: string[]}[] | null,
+ *          examined: {paths: number, symbols: number}}} facts
+ * @returns {{code: number, lines: string[]}}
+ */
+export function startability({ row, subjectsMissing, heldRegions, examined }) {
+  if (subjectsMissing === null || heldRegions === null) {
+    return { code: EXIT.CANNOT_ASK, lines: [
+      `CANNOT SAY whether #${row} is startable: a lookup failed.`,
+      "  INCONCLUSIVE, not clear. Reporting an unaskable question as startable is how somebody loses an",
+      "  evening discovering it at step 1, which is the whole reason this check exists.",
+    ] };
+  }
+  if (examined.paths === 0 && examined.symbols === 0) {
+    return { code: EXIT.CANNOT_ASK, lines: [
+      `CANNOT SAY whether #${row} is startable: it names no source path and no symbol this can check.`,
+      "  A row with no Region and no backticked identifier gives this nothing to examine, and reporting",
+      "  STARTABLE having examined nothing is the defect this repo records most.",
+    ] };
+  }
+
+  const lines = [];
+  for (const { name, refs } of subjectsMissing) {
+    lines.push(`SUBJECT NOT ON main: \`${name}\` exists only on ${refs.join(", ")}.`,
+      "  The row is about code that has not landed. Building on `main` finds nothing to change; building",
+      "  on that branch means editing somebody's open work. Wait for it, or take the row WITH its branch.");
+  }
+  for (const { path, refs } of heldRegions) {
+    lines.push(`REGION HELD: \`${path}\` has unmerged changes on ${refs.join(", ")}.`,
+      "  Startable, but you will merge against them. Worth knowing before you begin, not at review.");
+  }
+  if (subjectsMissing.length > 0) return { code: EXIT.BLOCKED, lines };
+  if (heldRegions.length > 0) {
+    return { code: EXIT.STARTABLE,
+      lines: [...lines,
+        `#${row} is STARTABLE — its subject is on \`main\`.`,
+        "  The contention above is a merge cost, not a blocker."] };
+  }
+  return { code: EXIT.STARTABLE,
+    lines: [`#${row} is STARTABLE: every symbol it names is on \`main\`, and no unmerged branch is in its `
+      + `region (${examined.paths} path(s), ${examined.symbols} symbol(s) examined).`] };
+}
+
+/** Every remote branch except `main` — the population an unmerged claim is measured against. */
+function unmergedRefs() {
+  return git(["for-each-ref", "--format=%(refname:short)", "refs/remotes/origin"]).split("\n")
+    .map((r) => r.trim()).filter((r) => r && r !== "origin/main" && !r.startsWith("origin/HEAD"));
+}
+
+const onMain = (path) => {
+  try {
+    git(["cat-file", "-e", `origin/main:${path}`]);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Which refs carry this symbol in this file? Read from the BLOB, never from a branch name. */
+function refsCarrying(path, symbol, refs) {
+  const carrying = [];
+  for (const ref of refs) {
+    try {
+      if (git(["show", `${ref}:${path}`]).includes(symbol)) carrying.push(ref);
+    } catch { /* the file does not exist on that ref */ }
+  }
+  return carrying;
+}
+
+function facts(row) {
+  const body = JSON.parse(gh(["issue", "view", String(row), "--repo", REPO, "--json", "body"])).body ?? "";
+  const paths = unique([...body.matchAll(PATH_IN_PROSE)].map((m) => m[1]))
+    .filter((p) => !p.endsWith(".md"));
+  const symbols = unique([...body.matchAll(SYMBOL_IN_PROSE)].map((m) => m[1]));
+  const refs = unmergedRefs();
+
+  // THE #186 CASE FIRST. A symbol the row is about, absent from every file the row names on `main` and
+  // present on some other ref, means the row's subject has not landed -- which no region check can see,
+  // because nobody is editing the file it is missing from.
+  const present = paths.filter(onMain);
+  const mainText = present.map((p) => git(["show", `origin/main:${p}`])).join("\n");
+  const subjectsMissing = [];
+  for (const name of symbols) {
+    if (mainText.includes(name)) continue;
+    const carriers = unique(present.flatMap((p) => refsCarrying(p, name, refs)));
+    if (carriers.length > 0) subjectsMissing.push({ name, refs: carriers });
+  }
+
+  // BOTH DIFFS, AND EACH ALONE GIVES A WRONG ANSWER. This tool produced both wrong answers in turn, on
+  // its first two runs, which is why the conjunction is spelled out rather than assumed.
+  //
+  //   THREE-DOT `origin/main...<ref>` -- what the ref changed since the MERGE BASE. Stays non-empty for
+  //     work already on `main` under a different sha (a squash, a cherry-pick, a re-resolved merge), so
+  //     it reported a branch that merged hours earlier as holding a region. That is the fourth state --
+  //     content-merged is neither "unmerged" nor "absent" -- which this session corrected in three other
+  //     people's claims tonight and then committed here, in the tool written to compute it.
+  //
+  //   TWO-DOT `origin/main <ref>` -- how the blobs DIFFER, in either direction. Non-empty for any branch
+  //     merely BEHIND `main`, because `main` has moved on. That reported EIGHTY-FIVE branches as holding
+  //     one file, which is not a report anyone reads.
+  //
+  // A ref genuinely holds a path when it has changed that path since the merge base AND the result still
+  // differs from `main`: its own work, not yet landed. Neither condition is sufficient; the pair is.
+  const heldRegions = [];
+  const changed = (range, path) => {
+    try {
+      return git(["diff", "--numstat", ...range, "--", path]).trim().length > 0;
+    } catch { return false; }
+  };
+  for (const path of present) {
+    const holders = refs.filter((ref) => changed([`origin/main...${ref}`], path)
+      && changed(["origin/main", ref], path));
+    if (holders.length > 0) heldRegions.push({ path, refs: holders });
+  }
+  return { row, subjectsMissing, heldRegions, examined: { paths: paths.length, symbols: symbols.length } };
+}
+
+function main() {
+  // GUARDED THOUGH NOTHING CURRENTLY REQUIRES IT. `cli-flags.test.ts`'s census walks
+  // `packages/{lab,worker-fleet}/{src,scripts}` and cannot see top-level `scripts/` -- which is #164, and
+  // is why this file could have shipped unguarded without a single test objecting. Guarding it because it
+  // is right, not because something asked.
+  refuseUnknownFlags(["--row"], { entry: import.meta.url, command: "node scripts/row-reachability.mjs" });
+  const argv = process.argv.slice(2);
+  const row = Number(argv.map((a) => a.replace(/^--row=/, "")).find((a) => /^\d+$/.test(a)));
+  if (!row) {
+    console.error("Usage: node scripts/row-reachability.mjs <issue-number>\n"
+      + "Answers whether a row can be STARTED today, computed from the tree rather than from its labels.");
+    process.exit(EXIT.CANNOT_ASK);
+  }
+  let verdict;
+  try {
+    verdict = startability(facts(row));
+  } catch (error) {
+    verdict = startability({ row, subjectsMissing: null, heldRegions: null,
+      examined: { paths: 0, symbols: 0 } });
+    verdict.lines.push(`  ${String(error).slice(0, 200)}`);
+  }
+  const write = verdict.code === EXIT.STARTABLE ? console.log : console.error;
+  for (const line of verdict.lines) write(line);
+  process.exit(verdict.code);
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
