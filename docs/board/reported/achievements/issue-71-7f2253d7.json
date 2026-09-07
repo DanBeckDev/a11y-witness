@@ -1,0 +1,9 @@
+{
+  "claim": "Two capture defects that would have silently mismeasured real pages are fixed and merged.",
+  "evidence": "Two faults were found that would have made the tool measure a different web page from the one it was asked to examine, in both cases without any error being raised. They were awaiting merge when first reported and have since merged, so the product carries them. They were found by checking which parts of the code unmerged work already touches, rather than by reading the code. A third fault of the same kind — the tool accepting the previous page as a match for the one requested — is open and needs a capture machine. (Merged as dcf5377c on the main branch; the remaining fault is issue #71.)",
+  "issue": 71,
+  "reportedBy": "product-manager",
+  "at": "2026-09-06T20:40:00Z",
+  "boardClaim": "We fixed two recording faults that would have silently measured the wrong web page; both now ship.",
+  "order": 40
+}

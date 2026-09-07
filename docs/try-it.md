@@ -163,7 +163,7 @@ it, and nothing else. No telemetry, no usage reporting, no call home, and no pla
 **How accurate is it?**
 
 <!-- CLAIM:BEGIN -- checked by public-claim.test.ts against a gate result recorded in
-     docs/board/reported.json, exactly as the README's claim block is. This figure lived here as a
+     docs/board/reported/, exactly as the README's claim block is. This figure lived here as a
      SECOND COPY for a while and went stale when the first one moved; that is why the markers exist. -->
 
 **On our own corpus of 1,405 conformant records the deterministic rules asserted no failures.** The real-page figure is under re-measurement since 2026-09-06 and this page states none: a refreshed baseline produced four findings on pages an older baseline had passed, and until each is established as an assertion or a referral there is no honest number to give.

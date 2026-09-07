@@ -1,0 +1,9 @@
+{
+  "claim": "What is open now survives the loss of this machine.",
+  "evidence": "The list of open work, its acceptance criteria and its release blockers now lives in a hosted issue tracker rather than in a document on one machine. Verified by listing the issues and the release milestone directly from the tracker. Previously the answer lived in a 1,049-line file that contradicted itself, and five items checked during the move were already finished. That contradiction has since been closed. Whether the retired document still holds work that never became an issue is not yet known. (GitHub Issues and milestones on DanBeckDev/a11y-witness; open question tracked as issue #105.)",
+  "issue": 105,
+  "reportedBy": "product-manager",
+  "at": "2026-09-06T20:40:00Z",
+  "boardClaim": "The list of what is open now survives the loss of the one machine this project runs on.",
+  "order": 10
+}

@@ -14,7 +14,7 @@ while a capture is running.
 | The fleet SSH key, the lab's `a11y-pve` key | this Mac's filesystem | the new machine's filesystem | out of band, by whoever holds them today — see `packages/control/ansible/README.md`'s "Issuing a new operator's credentials", and note that MOVING a key to a new machine is not the same operation as issuing a new one: prefer generating a fresh keypair for the new machine and revoking the old, per that section's step 4, unless the old machine is being destroyed in the same act as the move |
 | The authoritative training/real-page corpus | `a11y-lab` (CT 121) | unchanged — the lab is a separate host from whichever Mac is the control plane | nothing to migrate here UNLESS the lab itself is also moving, which this runbook does not cover |
 | The daily board report's schedule | a launchd agent on this Mac (`bash scripts/install-board-report.sh`) | GitHub Actions, per `ceo`'s ruling — see "The board report job" below | nothing to migrate once the Action lands; kept as a row here until it does |
-| `docs/board/reported.json` | tracked in the repo | tracked in the repo | moves automatically with `git clone` — nothing to do |
+| `docs/board/reported/` | tracked in the repo | tracked in the repo | moves automatically with `git clone` — nothing to do |
 | `runs/` in the primary checkout | this Mac's local copy | re-synced on the new machine | `runs/` is gitignored and a LOCAL COPY everywhere, including the primary checkout today — the new machine starts with none and that is normal; `npm run lab:inventory` says how stale a copy is once one exists. The authoritative corpus never moved (see row above) |
 
 ## The project-key rename

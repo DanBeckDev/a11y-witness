@@ -1,0 +1,9 @@
+{
+  "claim": "The project can say what a capture costs in worker time, for the first time.",
+  "evidence": "A tool now exists that adds up how long each recorded page occupied a capture machine, so the fleet's cost can be stated rather than guessed. It reports 54.11 machine-hours across 5,395 of the 5,396 recordings it found, with a middle value of 27.4 seconds per page. The figure is summed per recording from each recording's own timings, never from elapsed time multiplied by the number of machines. (`fleet:hours`, built by orchestrator on branch `lead/fleet-hours`, commit `10ad2e5`; tracked as issue #21.)",
+  "issue": 21,
+  "reportedBy": "orchestrator",
+  "at": "2026-09-06T12:00:00Z",
+  "boardClaim": "We can say for the first time how much machine time it costs to record a page with a screen reader.",
+  "order": 20
+}

@@ -136,7 +136,7 @@ function lastGate(d, L) {
   const { latestGate, gateIsFresh } = d;
   L.push("## Last gate result");
   if (!latestGate) {
-    L.push("**Not reported.** No gate output has been recorded in `docs/board/reported.json`. This report "
+    L.push("**Not reported.** No gate output has been recorded in `docs/board/reported/`. This report "
       + "does not read gates itself and must not: a checkout's `runs/` is only as fresh as its last sync "
       + "— one measured here was 89 hours old and answered cleanly having examined a corpus that no "
       + "longer existed.");
@@ -175,7 +175,7 @@ function fleetHoursSection(d, L) {
       + `\`${fleetHours.total}\`, measured by ${fleetHours.reportedBy ?? "nobody named"}`
       + `${fleetHours.run ? `, citing \`${fleetHours.run}\`` : ""}. A total whose run is unstated or `
       + "unfinished cannot be checked, re-derived, or compared with the next edition, so it is not "
-      + "printed. See `docs/board/reported.json` for the shape.");
+      + "printed. See `docs/board/reported/` for the shape.");
   } else {
     L.push(`**${fleetHours.total}**, computed from **${fleetHours.run}**, which finished `
       + `${fleetHours.runFinishedAt} — measured by ${fleetHours.reportedBy} at ${fleetHours.at}.`);
@@ -226,7 +226,7 @@ function render(d) {
   L.push("");
   L.push(`Generated from GitHub and git by \`npm run board:report\`. Nothing here is taken from what an `
     + `agent said: issues and the milestone are read from the API, merges from \`git log main\`, and the `
-    + `two figures neither can supply are quoted from \`docs/board/reported.json\` with their measurer `
+    + `two figures neither can supply are quoted from \`docs/board/reported/\` with their measurer `
     + `named — or declared unreported. Window: ${sinceLabel}.`);
   L.push("");
   release(d, L);
