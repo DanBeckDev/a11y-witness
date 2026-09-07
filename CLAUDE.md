@@ -2694,6 +2694,27 @@ Verification is layered; pick the layers your change touches:
 - **Worker broken? Don't debug from first principles** — `docs/nvda-worker-runbook.md` has the error-string → real-cause table (the messages are misleading: `"NVDA not installed"` usually means a version mismatch, not a missing install), and `packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1` applies it automatically. `packages/worker-fleet/src/provisioning/provision-nvda-worker.ps1` is the idempotent repair.
 - **No worker to hand?** Build one: `docs/getting-started.md` (~1.5–2 h, almost all of it downloading Windows). Validating capture changes through CI is a ~10-minute loop and should be the fallback, not the habit.
 
+## A GATE THAT READS `runs/` IS NOT YOURS TO REPORT
+
+**Ruled 2026-09-06.** `rules:gate`, `rules:coverage`, `check-signals`, `corpus:starvation`,
+`scorer:shortcuts` and anything else reading `runs/` give a VERDICT only when the agent driving the fleet
+and the lab runs them — against a corpus just fetched, or on the lab, which owns the authoritative one.
+
+**Anyone else may run one as a PRE-CHECK**, to decide whether a change is worth handing on. **Never as a
+reported result**, and never in an acceptance section as though it settled anything.
+
+The reason is measured rather than procedural. `runs/` in any checkout is a copy only as fresh as its last
+sync — one measured here was 89 hours old and carried neither `focusEvents` nor `baselineWaitedMs`, so a
+sweep across it found zero of the two keys it was written to find. **A gate run there reports cleanly
+having examined a corpus that no longer exists.** The pre-push hook already SKIPS the corpus-dependent
+checks loudly for exactly this reason, and calls that honest rather than passing quietly.
+
+**So an issue's acceptance may name a `runs/`-reading gate, and must say who runs it.**
+
+> Moved here 2026-09-06 from `docs/backlog-ready.md`, which was retired when the tracker moved to GitHub
+> Issues. That page was the only place this ruling existed, so deleting it would have deleted the rule —
+> which is why the page was read for what it uniquely held before it was replaced.
+
 ## Environment facts
 - ESM throughout (`"type": "module"`). `.ts` for the control plane, `.mjs` for the capture worker (it runs under plain Node on the VM) — see `docs/adr/0031-the-worker-ships-plain-mjs-with-no-build-step.md` for why, and what was rejected to get there.
 - **The judge is our own trained scorer.** `JUDGE_BACKEND` defaults to `local` — the 27 KB of heads in
