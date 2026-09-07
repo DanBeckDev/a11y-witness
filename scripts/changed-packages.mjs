@@ -1,3 +1,4 @@
+// @ts-check
 // Which `packages/<name>` directories a branch actually touched against `origin/main` -- the population
 // the pre-push hook's FAST gate (agent/*, lead/* pushes) tests, so a branch that never touched `judge` does
 // not pay for `judge`'s suite on every commit. `main` pushes are unaffected: they still run the full suite,
@@ -29,7 +30,10 @@ import { sandboxGitEnv } from "./git-env.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
-/** `packages/<name>` for every changed path, deduped and sorted -- pure, given the diff's own output. */
+/**
+ * `packages/<name>` for every changed path, deduped and sorted -- pure, given the diff's own output.
+ * @param {string} diffOutput
+ */
 export function changedPackages(diffOutput) {
   const names = new Set();
   for (const line of diffOutput.split("\n")) {

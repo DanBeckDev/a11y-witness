@@ -1,3 +1,4 @@
+// @ts-check
 // IS THIS ROW STARTABLE? -- computed from the tree, never from a label.
 //
 // Ready showed four unclaimed rows, none `fleet-gated`, so by every label the lane read fully pickable.
@@ -43,8 +44,10 @@ import { sandboxGitEnv } from "./git-env.mjs";
 
 const EXIT = { STARTABLE: 0, BLOCKED: 1, CANNOT_ASK: 2 };
 
+/** @type {(args: string[]) => string} */
 const git = (args) => execFileSync("git", args,
   { encoding: "utf8", env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
+/** @type {(args: string[]) => string} */
 const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
 /** Repo-relative source paths named anywhere in the row — its region, and whatever else it cites. */
@@ -60,6 +63,7 @@ const PATH_IN_PROSE = /(?:^|[\s`"'(])((?:packages|scripts|docs|\.github)\/[A-Za-
  */
 const SYMBOL_IN_PROSE = /`([a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*|[A-Z][A-Z0-9]+_[A-Z0-9_]+)`/g;
 
+/** @type {(values: string[]) => string[]} */
 const unique = (values) => [...new Set(values)];
 
 /**
@@ -158,6 +162,7 @@ export function startability({ row, subjectsMissing, heldRegions, examined, bloc
  *
  * A ref with no PR at all is not an error — plenty of branches never open one — so it reports `no PR`
  * rather than failing, and an unreadable answer says so instead of implying `none`.
+ * @param {string} ref
  */
 /**
  * ONE LISTING, NOT ONE CALL PER REF — with a per-ref fallback so a truncated page cannot lie.
@@ -208,6 +213,7 @@ function unmergedRefs() {
     .map((r) => r.trim()).filter((r) => r && r !== "origin/main" && !r.startsWith("origin/HEAD"));
 }
 
+/** @param {string} path */
 const onMain = (path) => {
   try {
     git(["cat-file", "-e", `origin/main:${path}`]);
@@ -217,8 +223,14 @@ const onMain = (path) => {
   }
 };
 
-/** Which refs carry this symbol in this file? Read from the BLOB, never from a branch name. */
+/**
+ * Which refs carry this symbol in this file? Read from the BLOB, never from a branch name.
+ * @param {string} path
+ * @param {string} symbol
+ * @param {string[]} refs
+ */
 function refsCarrying(path, symbol, refs) {
+  /** @type {string[]} */
   const carrying = [];
   for (const ref of refs) {
     try {
@@ -228,6 +240,7 @@ function refsCarrying(path, symbol, refs) {
   return carrying;
 }
 
+/** @param {number} row */
 function facts(row) {
   const issue = JSON.parse(gh(["issue", "view", String(row), "--repo", REPO,
     "--json", "body,labels,state,closedAt"]));
@@ -236,7 +249,7 @@ function facts(row) {
   // #35's schema migration" and carries the `blocked` label -- and neither its region nor its symbols say
   // so. Reading the LABEL is not the prose-parsing this tool refuses elsewhere: it is the same
   // authoritative record `row-claim` already trusts for `in-progress`.
-  const blockedLabel = (issue.labels ?? []).some((l) => l?.name === "blocked");
+  const blockedLabel = (issue.labels ?? []).some((/** @type {any} */ l) => l?.name === "blocked");
   // THE ROW'S OWN STATE, and it was in this query's reach the whole time. See `startability`.
   const state = typeof issue.state === "string" ? issue.state : null;
   const closedAt = typeof issue.closedAt === "string" ? issue.closedAt : null;
@@ -274,7 +287,9 @@ function facts(row) {
   //
   // A ref genuinely holds a path when it has changed that path since the merge base AND the result still
   // differs from `main`: its own work, not yet landed. Neither condition is sufficient; the pair is.
+  /** @type {{ path: string, refs: string[] }[]} */
   const heldRegions = [];
+  /** @param {string[]} range @param {string} path */
   const changed = (range, path) => {
     try {
       return git(["diff", "--numstat", ...range, "--", path]).trim().length > 0;
