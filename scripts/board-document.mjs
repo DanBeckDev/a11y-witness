@@ -19,7 +19,7 @@ import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
-import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS, issues, achievementsWhoseWorldMoved,
+import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS, issues, outOfRelease, unclassified, achievementsWhoseWorldMoved,
   realPageCaptureAge } from "./board-data.mjs";
 import { toHtml } from "./board-markdown.mjs";
 
@@ -322,6 +322,36 @@ function scalingArms(d) {
 }
 
 /** The source table: every figure the body states, with where it came from. */
+/** Why the open-items total exceeds the blocker count, in buckets that add up on the page.
+ *
+ * #290 is the case that forced it: real work, deliberately outside the release, so the total counted it
+ * and the blocker figure could not. Neither number was wrong and the page could not say why they differed.
+ *
+ * EVERY BUCKET IS COUNTED ON ITS OWN TERMS, and `later` is the one that matters. Written first as
+ * `length - onRelease - out - none` it made the printed sum a TAUTOLOGY: it added up because it was
+ * defined to, so it could never fail, verified nothing, and looked exactly like a check. Counting it
+ * independently means the four can genuinely disagree -- and the sentence says so when they do, rather
+ * than printing a total that hides it.
+ */
+function reconciliation(d) {
+  const onRelease = d.open.filter((i) => i.milestone?.title === MILESTONE).length;
+  const out = outOfRelease(d.open).length;
+  const none = unclassified(d.open).length;
+  const later = d.open.filter((i) => i.milestone && i.milestone.title !== MILESTONE
+    && !outOfRelease([i]).length).length;
+  const sum = onRelease + later + out + none;
+  const unclassifiedClause = none === 0
+    ? ", and none are unclassified"
+    : `, and ${none} carr${none === 1 ? "ies" : "y"} neither a milestone nor that label, which the rule `
+      + "does not allow — they are counted here and in no milestone figure";
+  const disagreement = sum === d.open.length ? ""
+    : `, which does NOT equal the ${d.open.length} above — a row is being counted twice or not at all, `
+      + "and this figure should not be relied on until that is explained";
+  return `It reconciles with the figure above: ${onRelease} block this release, ${later} sit on a later `
+    + `milestone, ${out} ${out === 1 ? "is" : "are"} deliberately out of the release`
+    + `${unclassifiedClause}. ${onRelease} + ${later} + ${out} + ${none} = ${sum}${disagreement}`;
+}
+
 function sourceTable(d) {
   const rows = [];
   const push = (what, value, source) => rows.push(`| ${what} | ${value} | ${source} |`);
@@ -334,9 +364,17 @@ function sourceTable(d) {
   // THE EXCLUSION IS PRINTED, NEVER SILENT. A count that quietly drops rows is worse than one that
   // counts the wrong thing, because a reader cannot tell. `meta` rows are containers rather than work --
   // the daily report's own issue is one, and it will never close.
+  // AND THE TWO COUNTS RECONCILE ON THE PAGE. The row above counts only what is on the release milestone
+  // and this one counts everything, so a reader met two figures with no way to see why they differ. #290
+  // is the case: real work, deliberately out of the release, counted here and invisible there. Naming the
+  // out-of-release figure beside the total closes the gap by construction rather than by the reader
+  // working it out -- the same rule as #284, that a count stated next to another count is a claim about
+  // both. An UNCLASSIFIED row is reported rather than absorbed, because tolerating it silently would
+  // rebuild the fault inside its own fix.
   push("Open work items in total", String(d.open.length),
     "the project's issue tracker, excluding rows marked as containers rather than work — the daily "
-    + "report's own issue is one of these, and counting it would inflate this figure for ever");
+    + "report's own issue is one of these, and counting it would inflate this figure for ever. "
+    + reconciliation(d));
   push("Work items closed in this period", String(d.closed.length), "the project's issue tracker");
   push("Saved changes merged in this period", String(d.merges.length),
     "the project's own version history, over the stated window — two correct counts over different "
