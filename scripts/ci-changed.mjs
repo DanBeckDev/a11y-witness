@@ -207,6 +207,30 @@ function isPublished(repoRoot, pkgName) {
 }
 
 /**
+ * A `getPackedFiles` stand-in that answers "packed" for EVERY candidate path, unconditionally. Used only
+ * by the `changed` job, which runs before `npm ci` and so cannot safely call the real `npm pack` --
+ * `orchestrator` reproduced `classify()` crashing there on every PR touching a published package, once
+ * `packedFiles` stopped being an inert, never-actually-called comment and started being the real call
+ * this file's own header always claimed it was.
+ *
+ * SAFE BECAUSE IT IS ONLY EVER TOO EAGER, never too quiet: `classify()`'s `changeset` output computed this
+ * way is a strict SUPERSET of the precise answer -- exactly `changed` file under `packages/<published>/`,
+ * the same shape `changeset-check.yml`'s old regex used before #132. That is fine for what this output
+ * actually decides here: whether the `changeset` job (which has `npm ci`, and re-derives the PRECISE
+ * answer with the real `packedFiles` before enforcing anything) runs at all. A false positive here costs
+ * one job invocation that then finds nothing to enforce; a false negative would skip the real check
+ * entirely, which is why this never goes the other way.
+ *
+ * @param {string} repoRoot unused -- present only to match `getPackedFiles`'s real shape
+ * @param {string} pkgName unused -- present only to match `getPackedFiles`'s real shape
+ * @returns {Set<string>} answers `.has(anything)` true, without ever running the real `npm pack`
+ */
+function everythingIsPacked(repoRoot, pkgName) {
+  void repoRoot; void pkgName;
+  return /** @type {Set<string>} */ ({ has: () => true });
+}
+
+/**
  * Classify a list of repo-relative changed paths into which `ci.yml` jobs must run.
  *
  * @param {string[]} files
@@ -324,7 +348,12 @@ function writeOutputs(result) {
 }
 
 async function main() {
-  const KNOWN_FLAGS = ["--event", "--base", "--repo"];
+  // --precise: the `changeset` job passes this AFTER its own `npm ci`, to get the real, `npm pack`-backed
+  // answer -- see `everythingIsPacked`'s own comment for why the `changed` job (no install at all) must
+  // never take this path. Its ABSENCE is not "changeset: false"; it is "changeset: true whenever a
+  // published package changed at all", a deliberate over-approximation that only decides whether the
+  // `changeset` job runs, never whether anything is actually enforced.
+  const KNOWN_FLAGS = ["--event", "--base", "--repo", "--precise"];
   refuseUnknownFlags(KNOWN_FLAGS, { entry: import.meta.url, command: "ci-changed" });
 
   // `--event` stays a required, explicit flag rather than being dropped outright: a caller that types
@@ -373,7 +402,9 @@ async function main() {
   }
 
   const dependencyGraph = readWorkspaceDependencyGraph(repoRoot, packages);
-  writeOutputs(classify(files, packages, dependencyGraph, { repoRoot }));
+  const precise = process.argv.includes("--precise");
+  writeOutputs(classify(files, packages, dependencyGraph,
+    { repoRoot, getPackedFiles: precise ? packedFiles : everythingIsPacked }));
 }
 
 // Only when invoked directly — importing `classify` for a test must not trigger a git subprocess.
