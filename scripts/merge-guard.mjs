@@ -32,19 +32,42 @@
 // reach far enough back. **Ask the authoritative source and let it tell you what it is bounded to** --
 // `/commits/<sha>/check-runs` for the head sha, never a grep over the most recent runs.
 //
-//   node scripts/merge-guard.mjs <pr-number>
+//   node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close]
 //
 // Exit codes are the contract:
 //   0  READY      -- based on main, every required context present and concluded, tested against this main
 //   1  REFUSED    -- and it NAMES which of the reasons, because they need different fixes
 //   2  CANNOT ASK -- a lookup failed. INCONCLUSIVE, never "fine": reporting an unaskable question as
 //                    clean is how "verified" comes to mean "unexamined"
+//
+// #249: ARMING CLOSES ROWS, AND NOTHING AT THAT END EVER CHECKED WHETHER SOMEBODY ELSE WAS INSIDE ONE.
+// `row-claim check` runs before a worker DISPATCHES or STARTS a row; nothing ran before a PR closing that
+// row was ARMED, and arming is the act that actually closes it. Measured 2026-09-07: PR #245 was armed
+// while the row it closed (#237) carried `in-progress`, `session:worker-judge`, `started` -- a second,
+// independent fix on that row was discarded. Ninth dispatch collision that night, seventh from the
+// dispatcher, who had been the one running `row-claim check` correctly at the OTHER end of the loop every
+// time.
+//
+// So this guard now asks GitHub what a PR would close (`closingIssuesReferences` -- resolved server-side,
+// never a `Closes #N` regex over the PR body) and reuses `row-claim.mjs`'s own claim predicate,
+// `decideClaim`, rather than re-deriving "is this row somebody else's" a second time. `decideClaim`
+// already draws the one line this needs: resuming your OWN claimed row is not a collision, which is why
+// `--session=<name>` exists here -- the identity of whoever is running this check, compared against the
+// `session:*` label on each row it would close. Omit it and every claimed row it would close reads as
+// somebody else's, which is the conservative default: a check that does not know who is asking cannot
+// vouch for the asker.
+//
+// NOT A POLICY CHANGE ABOUT WHO MAY ARM. A dispatcher who has confirmed with the row's holder should be
+// able to proceed, and `--allow-claimed-close` is that escape hatch -- printed, never silent, the same
+// shape `--allow-stale-workers` already uses elsewhere in this repo, because a bypass nobody can see is
+// one that becomes the default.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
+import { decideClaim } from "./row-claim.mjs";
 
 const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2 };
 
@@ -66,15 +89,18 @@ export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: 
  *          required: string[] | null,
  *          runs: {name: string, status: string, conclusion: string | null, completedAt: string | null}[] | null,
  *          mainTipIso: string | null,
- *          behindBy: number | null}} facts
+ *          behindBy: number | null,
+ *          closes?: {number: number, title?: string, labels: string[]}[] | null,
+ *          session?: string | null}} facts
  * @returns {{code: number, reasons: string[], notes: string[]}}
  */
-export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy }) {
+export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, closes = [], session = null }) {
   const missingLookups = [
     required === null && "the required status checks for `main` (branch protection)",
     runs === null && `the check runs for head ${pr.headRefOid.slice(0, 10)}`,
     mainTipIso === null && "the current tip of `main`",
     behindBy === null && "whether this head contains `main`'s tip (the compare API)",
+    closes === null && "which rows this PR would close (the closingIssuesReferences lookup)",
   ].filter(Boolean);
   if (missingLookups.length > 0) {
     return { code: EXIT.CANNOT_ASK, notes: [], reasons: [
@@ -91,9 +117,38 @@ export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy }) {
   const knownRuns = /** @type {{name: string, status: string, conclusion: string | null,
     completedAt: string | null}[]} */ (runs);
   const knownMainTipIso = /** @type {string} */ (mainTipIso);
+  const knownCloses = /** @type {{number: number, title?: string, labels: string[]}[]} */ (closes);
   const reasons = [...baseReason(pr), ...checkReasons(pr, knownRequired, knownRuns),
-    ...ancestryReason(behindBy), ...stalenessReason(knownRuns, knownMainTipIso)];
+    ...ancestryReason(behindBy), ...stalenessReason(knownRuns, knownMainTipIso),
+    ...closingClaimReasons(knownCloses, session)];
   return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons, notes };
+}
+
+/**
+ * WOULD ARMING THIS PR CLOSE A ROW SOMEBODY ELSE IS INSIDE? — #249.
+ *
+ * Reuses `row-claim.mjs`'s own claim predicate rather than re-deriving "is this row somebody else's" a
+ * second time in this file: `decideClaim` already draws the line that resuming your OWN claimed row is
+ * not a collision (row-claim.mjs, `decideClaim`'s own doc comment). `session` is who is running THIS
+ * check, never inferred from the PR -- omit it and every claimed row this PR would close reads as
+ * somebody else's, which is the safe default when the asker has not said who they are.
+ *
+ * @param {{number: number, title?: string, labels: string[]}[]} closes
+ * @param {string | null} session
+ * @returns {string[]}
+ */
+function closingClaimReasons(closes, session) {
+  const reasons = [];
+  for (const issue of closes) {
+    const decision = decideClaim(issue.labels, session ?? "");
+    if (!decision.proceed) {
+      reasons.push(`WOULD CLOSE #${issue.number}${issue.title ? ` "${issue.title}"` : ""}, but `
+        + `${decision.reason}.\n`
+        + "  Arming this PR closes that row whether or not you hold it. Confirm with whoever does, or\n"
+        + "  wait -- or pass `--allow-claimed-close` if you have already confirmed.");
+    }
+  }
+  return reasons;
 }
 
 /** @param {{baseRefName: string}} pr */
@@ -225,6 +280,7 @@ const REASON_KINDS = [
   [/^FAILING/, "FAILING"],
   [/^THIS HEAD DOES NOT CONTAIN main's TIP/, "ANCESTRY"],
   [/^EVERY RUN PREDATES THE CURRENT main/, "STALE"],
+  [/^WOULD CLOSE #/, "CLAIMED_BY_ANOTHER_SESSION"],
 ];
 
 /**
@@ -403,6 +459,28 @@ export function lookupCheckRuns(sha) {
       { name: run.name, status: run.status, conclusion: run.conclusion, completedAt: run.completed_at })));
 }
 
+/**
+ * Which issues arming PR `number` would close, resolved by GitHub itself (never a `Closes #N` regex over
+ * the PR body) -- #249. `null` on failure, same as every other lookup here.
+ * @param {number} number
+ * @returns {{number: number, title?: string, labels: string[]}[] | null}
+ */
+export function lookupClosingIssues(number) {
+  return lookup(() => {
+    const [owner, name] = REPO.split("/");
+    const query = "query($owner:String!,$name:String!,$number:Int!){"
+      + "repository(owner:$owner,name:$name){pullRequest(number:$number){"
+      + "closingIssuesReferences(first:20){nodes{number title labels(first:20){nodes{name}}}}}}}";
+    const data = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`,
+      "-F", `owner=${owner}`, "-F", `name=${name}`, "-F", `number=${number}`]));
+    return data.data.repository.pullRequest.closingIssuesReferences.nodes.map(
+      (/** @type {{number: number, title: string, labels: {nodes: {name: string}[]}}} */ issue) => ({
+        number: issue.number, title: issue.title,
+        labels: issue.labels.nodes.map((/** @type {{name: string}} */ l) => l.name),
+      }));
+  });
+}
+
 /** @param {number} number */
 function facts(number) {
   // DELIBERATELY NOT REQUESTING `mergeStateStatus`. Asking for it at all would invite the next reader to
@@ -421,7 +499,8 @@ function facts(number) {
       `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
     return typeof value === "number" ? value : null;
   });
-  return { pr, required, runs, mainTipIso, behindBy };
+  const closes = lookupClosingIssues(number);
+  return { pr, required, runs, mainTipIso, behindBy, closes };
 }
 
 /**
@@ -451,10 +530,11 @@ function reconcileCommand(number) {
 }
 
 function main() {
-  refuseUnknownFlags(["--reconcile"], { entry: import.meta.url, command: "node scripts/merge-guard.mjs" });
+  refuseUnknownFlags(["--reconcile", "--session", "--allow-claimed-close"],
+    { entry: import.meta.url, command: "node scripts/merge-guard.mjs" });
   const number = process.argv.slice(2).find((arg) => /^\d+$/.test(arg));
   if (!number) {
-    console.error("Usage: node scripts/merge-guard.mjs <pr-number>\n"
+    console.error("Usage: node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close]\n"
       + "       node scripts/merge-guard.mjs --reconcile <pr-number>\n"
       + "Answers whether that PR has actually been tested, by reading its check RUNS rather than\n"
       + "`mergeStateStatus` -- which reports CLEAN for a PR that has never run a check. `--reconcile`\n"
@@ -467,16 +547,36 @@ function main() {
     return;
   }
 
-  const verdict = mergeReadiness(facts(Number(number)));
+  const sessionArg = process.argv.find((arg) => arg.startsWith("--session="));
+  const session = sessionArg ? sessionArg.slice("--session=".length) : null;
+  const allowClaimedClose = process.argv.includes("--allow-claimed-close");
+
+  const verdict = mergeReadiness({ ...facts(Number(number)), session });
   recordVerdict(verdictLogPath(), Number(number), verdict);
   for (const note of verdict.notes) console.error(note);
-  if (verdict.code === EXIT.READY) {
+
+  // `--allow-claimed-close` OVERRIDES ONLY THE CLAIM-COLLISION REASON, never any other refusal, and
+  // never a CANNOT_ASK (that code carries a lookup-failure message, not a reasons list to filter) --
+  // and it PRINTS what it bypassed, following the `--allow-stale-workers` precedent: a bypass nobody
+  // can see is one that becomes the default.
+  const applyOverride = allowClaimedClose && verdict.code === EXIT.REFUSED;
+  const overridden = applyOverride
+    ? verdict.reasons.filter((r) => reasonKind(r) === "CLAIMED_BY_ANOTHER_SESSION") : [];
+  const remaining = applyOverride
+    ? verdict.reasons.filter((r) => reasonKind(r) !== "CLAIMED_BY_ANOTHER_SESSION") : verdict.reasons;
+  for (const reason of overridden) {
+    console.error(`OVERRIDDEN by --allow-claimed-close: ${reason}`);
+  }
+  const code = verdict.code === EXIT.CANNOT_ASK ? EXIT.CANNOT_ASK
+    : (remaining.length > 0 ? EXIT.REFUSED : EXIT.READY);
+
+  if (code === EXIT.READY) {
     console.log(`#${number} is tested: based on main, every required context present and concluded, and `
       + "this head CONTAINS main's tip -- so what ran, ran against the code it is about to join.");
-  } else {
-    console.error(`REFUSING #${number}:\n${verdict.reasons.map((r) => `- ${r}`).join("\n")}`);
+  } else if (code === EXIT.REFUSED) {
+    console.error(`REFUSING #${number}:\n${remaining.map((r) => `- ${r}`).join("\n")}`);
   }
-  process.exit(verdict.code);
+  process.exit(code);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
