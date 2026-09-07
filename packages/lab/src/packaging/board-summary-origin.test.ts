@@ -89,14 +89,14 @@ test("absent everywhere falls through to the script's own write-one message", ()
 /**
  * THE SAME QUESTION OF `reported.json`, WHICH CARRIES MORE (#131).
  *
- * The summary is one hand-written paragraph. `docs/board/reported.json` holds every number the document
+ * The summary is one hand-written paragraph. `docs/board/reported/` holds every number the document
  * quotes that no gate can recompute — the gate outputs, the fleet-hours figure, the capacity note, every
  * achievement — and it had the identical gap. Three times on 2026-09-06 a correct, complete record sat on
  * the wrong side of a merge: a corrected achievement replacing one that had become FALSE, #22's
  * pre-registered median, and the refreshed real-page gate output. Each was found by a person running
  * `git show origin/main:...` by hand; none by a tool.
  */
-const REPORTED = "docs/board/reported.json";
+const REPORTED = "docs/board/reported";
 const record = (over: object = {}) => JSON.stringify({
   staleAfterHours: 24,
   gates: [{ command: "npm run rules:real-pages", output: "PASS — 84 of 84" }],
@@ -233,7 +233,10 @@ test("main() feeds the RECORD's verdict the origin copy too, and asks whatever t
   const src = readFileSync(new URL("../../../../scripts/board-summary-check.mjs", import.meta.url), "utf8");
   const main = src.slice(src.indexOf("function main()"));
 
-  assert.match(main, /remote: fileOnOriginMain\(REPORTED\)/,
+  // #159: the record is a DIRECTORY, and `git show origin/main:<dir>` returns a tree listing rather
+  // than content -- so a port that kept `fileOnOriginMain` would have compared two listings and
+  // reported nothing when an entry's CONTENT moved. The property is unchanged and the reader is not.
+  assert.match(main, /dirOnOriginMain\(REPORTED\)/,
     "the record must be read from origin/main, which is the only copy the 08:00 job sees");
   assert.doesNotMatch(main, /remote:\s*\{[^}]*readFileSync\(reportedFile/,
     "and must never be constructed from the local file -- the pre-#91 shape, reached by a second door");

@@ -75,7 +75,7 @@ with it, and issue #20's body says a missing edition is a defect in this process
 `--post` will **not publish** unless the files the report reads out of the working tree match `main`:
 
 ```
-docs/board/reported.json      the gate result and the fleet-hours total
+docs/board/reported/      the gate result and the fleet-hours total
 scripts/board-report.mjs      the generator itself
 ```
 

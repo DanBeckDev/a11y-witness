@@ -1,20 +1,6 @@
 {
   "//": "THE ONLY PLACE THE BOARD REPORT TAKES A NUMBER IT CANNOT COMPUTE ITSELF, and every entry names who measured it and when. The report reads GitHub for issues, the milestone and merges; those need no entry here. A gate result and the fleet-hours total cannot be read from GitHub, so they are recorded here VERBATIM by the agent that ran them. An absent or stale entry is printed as 'not reported since <date>' -- never omitted, and never estimated. The rule this enforces is the CEO's: nothing in the report comes from what an agent SAID, it comes from what merged and what gates PRINTED, so `output` must be the gate's own text and not a summary of it.",
   "staleAfterHours": 24,
-  "gates": [
-    {
-      "command": "npm run lab:job -- -e job=promote -e ref=main",
-      "reportedBy": "orchestrator",
-      "at": "2026-09-06T19:30:00Z",
-      "output": "1652 discriminating, 0 blind, 0 contaminated, 0 uncaptured, 0 stale, 5 provisional (not yet proven, not blocking)\nPASS — all 1652 case(s) discriminate, and the corpus is complete. (5 provisional case(s) still BLIND, not counted either way)\n# conformant records\n  1405 scored, 0 false positive(s)\n  2810 of 2810 record(s) carry ruleEvidence; 2810 carry a census\nRULES: PASS — all 21 of 21 from rule-ownership.json, against 2810 record(s) in /opt/a11y/runs/screenreader-dataset/screenreader-evidence.jsonl examined and clean\n  PASS — every RULE-ONLY criterion has fired on a real page, or declares why it cannot. Nothing this project claims rests solely on an untested rule.\n  PASS — all 84 of 84 from conformant real pages scored against the baseline examined and clean\nPromoted candidate.\n  weights   -> /opt/a11y/packages/scorer/models/screenreader-scorer\n  changeset -> /opt/a11y/.changeset/promote-candidate-0d498ef6.md"
-    },
-    {
-      "command": "npm run lab:job -- -e job=capture-only -e only=<7 families> -e capture_root=arm-ten   (then -e workers=5 -e capture_root=arm-five)\nnpm run lab:job -- -e job=fleet-hours -e captures_dir=/opt/a11y/runs/screenreader-dataset/arm-ten   (then arm-five)",
-      "reportedBy": "orchestrator",
-      "at": "2026-09-06T22:00:00Z",
-      "output": "arm-ten   {\"capturesBilled\": 98, \"medianSeconds\": 46.5, \"q1Seconds\": 42.1, \"q3Seconds\": 53.3, \"iqrSeconds\": 11.2, \"p95Seconds\": 60.2, \"dir\": \"/opt/a11y/runs/screenreader-dataset/arm-ten\"}\narm-five  {\"capturesBilled\": 99, \"medianSeconds\": 45.6, \"q1Seconds\": 42.6, \"q3Seconds\": 52.9, \"iqrSeconds\": 10.3, \"p95Seconds\": 58.1, \"dir\": \"/opt/a11y/runs/screenreader-dataset/arm-five\"}\nCapture complete: 49 captured, 0 failed  (both arms)\ncapture window, journal Capturing -> Capture complete:  ten boxes 525s,  five boxes 998s  = 1.90x"
-    }
-  ],
   "fleetHours": {
     "status": "not instrumented",
     "note": "No cumulative total has been published. `fleet:hours` is built and measured (orchestrator, lead/fleet-hours) and reports 54.11 worker-hours across every capture on disk -- which spans several runs and protocol versions and is therefore NOT any single run's figure, which is why no edition carries it yet. Until an entry names one finished run, the report prints 'not instrumented' in those words.",
@@ -22,48 +8,6 @@
   },
   "gates_//": "Shape of a `gates` entry: {\"command\": \"npm run lab:job -- -e job=rules-real-pages\", \"reportedBy\": \"orchestrator\", \"at\": \"<ISO 8601>\", \"output\": \"<the gate's OWN text, verbatim, not a summary>\"}. The newest entry by `at` is the one printed. Older than `staleAfterHours` still prints, marked STALE and saying it describes an earlier state of the corpus -- an absent line and an old line mean different things and must never render the same.",
   "achievements_//": "SECTION 3 OF THE BOARD DOCUMENT: what the product can now DO or PROVE that it could not before -- never commit counts, which measure activity rather than capability. This is the one section no API can derive, so it is authored, and every entry carries the EVIDENCE that makes it a capability claim rather than an assertion. An empty list prints as 'nothing recorded for this window' with what that means, never as a gap the reader has to notice. Shape: {\"claim\": \"<what the product can now do or prove, in a sentence a non-engineer reads>\", \"evidence\": \"<the command, the artefact or the measurement that shows it>\", \"issue\": <number or null>, \"reportedBy\": \"<agent>\", \"at\": \"<ISO 8601>\"}. AN ENTRY WHOSE `evidence` IS ANOTHER AGENT'S SUMMARY IS NOT EVIDENCE. Point at what printed it. `boardClaim` IS WHAT THE BOARD READS and `claim` is what the engineers do. Sections one to five of the board document carry no repository internals at all -- no file names, no identifiers, no command names -- so a claim written for a colleague cannot appear there. The evidence and the exact references stay in the appendix. Added 2026-09-06 on board feedback: every internal reference in edition 1 told them the product manager was pointing at files instead of managing the product. AND THE EVIDENCE BLOCK OPENS WITH WORDS AND ENDS WITH IDENTIFIERS, IN PARENTHESES. Board feedback on edition 2: the body had been cleaned of internals and the appendix was still LEADING with them, which teaches the reader the habit is only hidden. Plain sentence first, exact reference last, so anyone who wants to check can and nobody else has to read past it.",
-  "achievements": [
-    {
-      "claim": "What is open now survives the loss of this machine.",
-      "evidence": "The list of open work, its acceptance criteria and its release blockers now lives in a hosted issue tracker rather than in a document on one machine. Verified by listing the issues and the release milestone directly from the tracker. Previously the answer lived in a 1,049-line file that contradicted itself, and five items checked during the move were already finished. That contradiction has since been closed. Whether the retired document still holds work that never became an issue is not yet known. (GitHub Issues and milestones on DanBeckDev/a11y-witness; open question tracked as issue #105.)",
-      "issue": 105,
-      "reportedBy": "product-manager",
-      "at": "2026-09-06T20:40:00Z",
-      "boardClaim": "The list of what is open now survives the loss of the one machine this project runs on."
-    },
-    {
-      "claim": "The project can say what a capture costs in worker time, for the first time.",
-      "evidence": "A tool now exists that adds up how long each recorded page occupied a capture machine, so the fleet's cost can be stated rather than guessed. It reports 54.11 machine-hours across 5,395 of the 5,396 recordings it found, with a middle value of 27.4 seconds per page. The figure is summed per recording from each recording's own timings, never from elapsed time multiplied by the number of machines. (`fleet:hours`, built by orchestrator on branch `lead/fleet-hours`, commit `10ad2e5`; tracked as issue #21.)",
-      "issue": 21,
-      "reportedBy": "orchestrator",
-      "at": "2026-09-06T12:00:00Z",
-      "boardClaim": "We can say for the first time how much machine time it costs to record a page with a screen reader."
-    },
-    {
-      "claim": "The page written to prove a rule was recorded, and did not prove it.",
-      "evidence": "A rule could previously only be demonstrated on pages we wrote ourselves, which cannot falsify the assumptions behind it. A page exercising it was written and has now been recorded — and the recording showed the opposite of what was expected. The conformant version was measured correctly and the FAILING version was not, because the same property that makes a page fail this rule also prevents the tool from observing it. The tool now reports 'cannot say' on those pages instead of reporting them as clean, and the underlying fix is scheduled. Superseded issue #2, now tracked as #76. (`focus-panel-undismissable-help` in `packages/lab/src/training/real-page-corpus.mjs`; measured 2026-09-06 by orchestrator on both halves of the pair, same fleet, minutes apart.)",
-      "issue": 76,
-      "reportedBy": "orchestrator",
-      "at": "2026-09-06T20:50:00Z",
-      "boardClaim": "A page built to prove a rule showed instead that the rule cannot see that fault."
-    },
-    {
-      "claim": "Two capture defects that would have silently mismeasured real pages are fixed and merged.",
-      "evidence": "Two faults were found that would have made the tool measure a different web page from the one it was asked to examine, in both cases without any error being raised. They were awaiting merge when first reported and have since merged, so the product carries them. They were found by checking which parts of the code unmerged work already touches, rather than by reading the code. A third fault of the same kind — the tool accepting the previous page as a match for the one requested — is open and needs a capture machine. (Merged as dcf5377c on the main branch; the remaining fault is issue #71.)",
-      "issue": 71,
-      "reportedBy": "product-manager",
-      "at": "2026-09-06T20:40:00Z",
-      "boardClaim": "We fixed two recording faults that would have silently measured the wrong web page; both now ship."
-    },
-    {
-      "claim": "The corpus survives losing its machine.",
-      "evidence": "Several thousand screen-reader recordings, which cannot be re-recorded once a browser updates, existed in exactly one place. A copy now sits off that machine, and it was checked by downloading it back and counting what was inside rather than by trusting that the upload succeeded. 7,694 files, 108.1 MB of evidence in an 8.5 MB archive, zero empty files. Each step of the chain distrusts the one before it: the machine holding the corpus verifies its own archive against what is on its disk, the transfer is counted on arrival, and the upload is verified by retrieval. (`corpus:snapshot` -> `lab:fetch -e artifact=corpus-archive` -> `corpus:release`, orchestrator, 2026-09-06; release tag corpus-2026-09-06_19-31-35; tracked as issue #43.)",
-      "issue": 43,
-      "reportedBy": "orchestrator",
-      "at": "2026-09-06T20:45:00Z",
-      "boardClaim": "The recordings this product rests on now exist in more than one place."
-    }
-  ],
   "capacity": {
     "status": "not instrumented",
     "note": "Engineering capacity waiting for its next assignment is not yet instrumented and will print as those words until a week of data exists. It is derived from LABEL EVENTS, which are timestamped: a `session:*` label and `in-progress` are applied together when a row is briefed, so the gap between one session's `in-progress` being removed and that same session's next `in-progress` being added is the measure.",

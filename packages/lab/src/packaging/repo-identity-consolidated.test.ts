@@ -52,7 +52,10 @@ const SITES: Array<{ file: string; expect: string }> = [
     expect: `raw.githubusercontent.com/${REPO}/main/packages/worker-fleet/src/provisioning/`
       + "bootstrap-windows-worker.ps1" },
   { file: "docs/board/README.md", expect: `--repo ${REPO}` },
-  { file: "docs/board/reported.json", expect: `on ${REPO}` },
+  // #159 split `reported.json` into one file per entry. SITES names FILES, so it names the entry that
+  // carries the identity rather than the directory -- a directory here read as EISDIR, which is a
+  // guard failing on its own subject rather than on the property it guards.
+  { file: "docs/board/reported/achievements/issue-105-1253e937.json", expect: `on ${REPO}` },
   { file: "docs/roles/memory/github-is-the-tracker.md", expect: `GitHub Issues on ${REPO}` },
   { file: "docs/roles/README.md", expect: `\`${REPO}\`` },
   { file: "docs/roles/memory/org-shape-second-orchestrator.md", expect: `a Project on ${REPO}` },

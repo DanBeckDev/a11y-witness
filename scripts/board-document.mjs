@@ -591,7 +591,7 @@ function refuseIfTheWorldMoved(achievements) {
   const moved = achievementsWhoseWorldMoved({ achievements, issueState });
   if (!moved.length) return;
 
-  console.error(`REFUSING to render: ${moved.length} achievement(s) in docs/board/reported.json have `
+  console.error(`REFUSING to render: ${moved.length} achievement(s) in docs/board/reported/ have `
     + "outlived what they were written against. Section 3 is the one part of this document no gate "
     + "computes, so it is also the one nothing re-checks -- and an entry that is true when written stays "
     + "in the file after it stops being true.\n");

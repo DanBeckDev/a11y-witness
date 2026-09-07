@@ -493,7 +493,7 @@ carries the known limitations, stated plainly. `CLAUDE.md` is operational instru
 ## What this tool claims, with the number it was measured on
 
 <!-- CLAIM:BEGIN -- every figure between these markers is checked by public-claim.test.ts against a
-     gate result recorded in docs/board/reported.json. Do not TYPE a number here: a figure the report
+     gate result recorded in docs/board/reported/. Do not TYPE a number here: a figure the report
      cannot source is a figure that outlives its measurement, and one already did. -->
 
 **On our own corpus of 1,405 conformant records the deterministic rules asserted no failures. The real-page figure is under re-measurement since 2026-09-06 and this page states none: a refreshed baseline produced four findings on pages an older baseline had passed, and until each is established as an assertion or a referral there is no honest number to give. The trained component refers, it never asserts, and a referral on a conformant page is expected rather than a defect.**
