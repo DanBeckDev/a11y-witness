@@ -143,8 +143,12 @@ export function reported() {
   const fresh = (entry) => Date.now() - Date.parse(entry.at) < staleMs;
   const gates = (raw.gates ?? []).filter((g) => g.at && Number.isFinite(Date.parse(g.at)));
   const latest = gates.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
+  // EVERY GATE, not just the newest. Section five recommended "buying nothing yet" while the record held
+  // the measurement that answered it, because the document could not SEE any gate but the latest -- so
+  // the prose was hand-written and went stale the moment the re-run landed. A section that states a
+  // figure is absent while `reported.json` carries it is the failure this file exists to prevent.
   return { latestGate: latest, gateIsFresh: latest ? fresh(latest) : false, fleetHours: raw.fleetHours,
-    achievements: raw.achievements ?? [] };
+    gates, achievements: raw.achievements ?? [] };
 }
 
 /**
