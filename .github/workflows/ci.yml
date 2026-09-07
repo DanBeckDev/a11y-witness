@@ -76,6 +76,23 @@ name: ci
 on:
   pull_request:
     branches: [main]
+    # `edited` IS LOAD-BEARING, and its absence deadlocked the queue for eight hours -- 2026-09-07.
+    #
+    # GitHub's default `pull_request` types are `opened, synchronize, reopened`. Unit 2's `acceptance` job
+    # (#353) reads the PR BODY, so a PR whose only defect is its body -- a prose `Acceptance:` line that
+    # bash cannot run, or no line at all -- can be fixed only by editing the body, and NO DEFAULT TRIGGER
+    # FIRES ON THAT. Measured: zero merges between 13:38Z and 21:10Z, every `ci.yml` run red on
+    # `acceptance`, five open PRs written before the field existed and two whose corrected bodies could
+    # not be re-read. The gate was right and there was no way to satisfy it.
+    #
+    # A job that reads an input no trigger watches cannot be fixed by the person holding the input. That
+    # is the general shape, and it costs a whole queue rather than one PR.
+    #
+    # The cost of the fix is a full `ci.yml` run per title or body edit. Bounded by the `concurrency`
+    # block below, which cancels the previous run on the same ref, and cheap in this repo because the
+    # `changed` job gates every expensive job behind a real diff -- a body edit changes no files, so the
+    # heavy jobs skip and what actually re-runs is `changed`, `acceptance`, `mergeSafety` and `gate`.
+    types: [opened, synchronize, reopened, edited]
   # #156: a merge queue CANNOT be turned on without this. GitHub's own docs are explicit -- "You must use
   # the merge_group event to trigger your GitHub Actions workflow when a pull request is added to a merge
   # queue ... Otherwise, status checks will not be triggered" -- and an entry whose checks never report is
