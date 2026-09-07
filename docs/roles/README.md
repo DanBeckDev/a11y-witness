@@ -48,6 +48,12 @@ from the author's own summary. Anything you resume with is a BELIEF until re-rea
 Cite `file:line` and the ref you read it from, the same as a number carries its command. This binds `ceo`
 first.
 
+**The second example, same day, harder to see:** a source comment cited `schema-migration.json` as "the
+whole record" of a decision, and that file is deleted whenever a migration closes, by design. A citation to
+a record that no longer exists reads identically to one that never existed, and it sent three sessions to
+a wrong conclusion about a schema change. When a citation resolves to nothing, say "the record is gone"
+rather than "there was no record"; they need opposite work (#340).
+
 ## The roster
 
 | role | agent name | file | reports to |
