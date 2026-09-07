@@ -126,6 +126,38 @@ export function issues() {
  */
 export const META_LABEL = "meta";
 
+/** Real work, deliberately not in this release. Carried INSTEAD of a milestone, never alongside one.
+ *
+ * THE RULE IS: every open row carries a milestone or this label, and there is no third state. A row with
+ * neither is a tracker defect rather than a judgement call, and `unclassified()` below is what makes that
+ * checkable instead of a thing somebody notices.
+ *
+ * It exists because two counts on one page disagreed about one row. #290 -- `git stash` is repo-global
+ * across worktrees -- is real work that is not in the release, so the open-items total counted it and the
+ * blocker count could not. Neither number was wrong; the page had no way to say why they differed. The
+ * footnote beside the total now names how many rows are in this state, so the two reconcile BY
+ * CONSTRUCTION rather than by a reader working it out. Ruled by `ceo` 2026-09-07; see issue #290.
+ */
+export const OUT_OF_RELEASE_LABEL = "out-of-release";
+
+export function outOfRelease(list) {
+  return list.filter((i) => labelsOf(i).includes(OUT_OF_RELEASE_LABEL));
+}
+
+/** Open rows carrying NEITHER a milestone nor `out-of-release` -- the state the rule forbids.
+ *
+ * Reported rather than absorbed. A row here is counted in the total and invisible to every milestone
+ * figure, which is exactly the disagreement this pair of functions exists to end -- so silently tolerating
+ * it would rebuild the fault inside the fix.
+ */
+export function unclassified(list) {
+  return list.filter((i) => !i.milestone && !labelsOf(i).includes(OUT_OF_RELEASE_LABEL));
+}
+
+function labelsOf(i) {
+  return i.labelNames ?? i.labels?.map((l) => l.name) ?? [];
+}
+
 /** The rows the document COUNTS. `issues()` stays complete -- a meta row still needs its state resolved. */
 export function countable(list) {
   return list.filter((i) => !(i.labelNames ?? i.labels?.map((l) => l.name) ?? []).includes(META_LABEL));
