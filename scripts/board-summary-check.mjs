@@ -28,7 +28,7 @@ import path from "node:path";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 import { execFileSync } from "node:child_process";
 import { sandboxGitEnv } from "./git-env.mjs";
-import { REPO, ROOT, gh, git } from "./board-data.mjs";
+import { REPO, ROOT, gh, git, REPORTED_KINDS } from "./board-data.mjs";
 
 const HOURS_MS = 3600_000;
 const ISSUE = "20";
@@ -130,6 +130,15 @@ function dirOnOriginMain(relDir) {
     const listing = execFileSync("git", ["ls-tree", "-r", "--name-only", "origin/main", "--", relDir],
       { encoding: "utf8", cwd: ROOT, env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
     const paths = listing.split("\n").map((l) => l.trim()).filter((l) => l.endsWith(".json"));
+    // AN EMPTY LISTING IS ABSENCE, and `ls-tree` reports it with exit 0 and no output rather than by
+    // failing -- so the catch below never sees the commonest case: the directory is not on origin/main
+    // at all. Found in review by running it against the real remote during this migration's own
+    // aftermath, where it produced a fourteen-line wall of "X — in your tree, NOT on origin/main"
+    // instead of the one line worth acting on. Git cannot track an empty directory, so "no entries" and
+    // "no such path" are the same fact, and the honest answer is the shorter one.
+    if (paths.length === 0) {
+      return { files: null, asked: true, why: `no such directory on origin/main (origin/main:${relDir})` };
+    }
     const files = new Map(paths.map((rel) => [rel,
       execFileSync("git", ["show", `origin/main:${rel}`],
         { encoding: "utf8", cwd: ROOT, env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] })]));
@@ -402,7 +411,7 @@ function main() {
   // is how the other stays invisible, which is the whole of #131.
   const localDir = path.join(ROOT, REPORTED);
   const localPaths = existsSync(localDir)
-    ? ["gates", "achievements"].flatMap((kind) => (existsSync(path.join(localDir, kind))
+    ? REPORTED_KINDS.flatMap((kind) => (existsSync(path.join(localDir, kind))
       ? readdirSync(path.join(localDir, kind)).map((f) => `${REPORTED}/${kind}/${f}`) : []))
       .concat(existsSync(path.join(localDir, "meta.json")) ? [`${REPORTED}/meta.json`] : [])
     : [];

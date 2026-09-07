@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { collect } from "../../../../scripts/board-data.mjs";
@@ -353,4 +353,49 @@ test("meta rows are excluded from the counted set, and the document says so", as
   assert.match(doc, /excluding rows marked as containers rather than work/,
     "the document must PRINT the exclusion beside the count — an unexplained exclusion is a figure "
     + "whose population a reader cannot reconstruct, which is the defect this whole file exists for");
+});
+/* ONE ENTRY, ONE FILE — AND NOTHING ENFORCED IT UNTIL THIS TEST.
+ *
+ * #159 names each file by the entry's own identity plus a hash of it. That is stable and unique while the
+ * identity holds still, and it says nothing about what happens when somebody EDITS an identity: the entry
+ * is written under a new name, the old file stays, and `reported()` reads BOTH. Found by simulating
+ * exactly that on the real directory -- two gates for one command, and `order` values of 10 and 10, so
+ * the record silently carried a duplicate AND the tie-break between them was arbitrary.
+ *
+ * A duplicated entry is not a cosmetic fault here. The board document quotes these figures, and the one
+ * thing it must never do is report a number twice or report the wrong one of two.
+ *
+ * REFUSED AT PUSH RATHER THAN AT RENDER, deliberately. The 08:00 job runs unattended, and a refusal there
+ * is a missing edition; a refusal here is a red test in front of the person who caused it.
+ */
+test("no two recorded entries share an identity or an order", () => {
+  for (const [kind, identity] of [["gates", "command"], ["achievements", "issue"]] as const) {
+    const dir = path.join(REPO, "docs/board/reported", kind);
+    if (!existsSync(dir)) continue;
+    const entries = readdirSync(dir).filter((f) => f.endsWith(".json"))
+      .map((f) => ({ file: f, body: JSON.parse(readFileSync(path.join(dir, f), "utf8")) }));
+
+    const byIdentity = new Map<string, string[]>();
+    const byOrder = new Map<number, string[]>();
+    for (const { file, body } of entries) {
+      const id = String(body[identity]);
+      byIdentity.set(id, [...(byIdentity.get(id) ?? []), file]);
+      byOrder.set(body.order, [...(byOrder.get(body.order) ?? []), file]);
+      assert.ok(typeof body.order === "number",
+        `${kind}/${file} has no numeric order. An entry with no place in the sequence is appended `
+        + "silently, and the document renders in that order — so it would move what the board reads "
+        + "without anybody choosing to");
+    }
+    for (const [id, files] of byIdentity) {
+      assert.equal(files.length, 1,
+        `${kind}: ${files.length} files carry ${identity} ${JSON.stringify(id)} — ${files.join(", ")}. `
+        + "Editing an identity writes a new file and leaves the old one, and BOTH are read, so the "
+        + "document would quote the same measurement twice. Delete the stale file.");
+    }
+    for (const [order, files] of byOrder) {
+      assert.equal(files.length, 1,
+        `${kind}: ${files.length} files share order ${order} — ${files.join(", ")}. The tie-break `
+        + "between them is the filename, which is not a decision anybody made about what the board reads.");
+    }
+  }
 });
