@@ -109,8 +109,27 @@ export function misAuthored(since) {
 
 export function issues() {
   const fields = "number,title,state,labels,closedAt,milestone,url";
+  // AND IT REFUSES A LISTING THAT MAY BE TRUNCATED, rather than reporting on part of the tracker.
+  //
+  // This read `--limit 200`. On 2026-09-08 the repository passed 200 issues, and #31 -- open, fine, and
+  // cited by a section-three achievement -- fell outside the window. The freshness guard did exactly the
+  // right thing with that ("whether it is still open COULD NOT BE ASKED; do not assume") and REFUSED the
+  // edition. So a bound nobody had revisited became, silently and on a Tuesday, the thing that stopped
+  // the board getting a document.
+  //
+  // A HIGHER NUMBER ALONE JUST MOVES THE CLIFF. `gh issue list --limit N` returns AT MOST N and says
+  // nothing about what it dropped, so `length === limit` is indistinguishable from "there were exactly
+  // N" -- the bounded-listing defect this repository has now met in `branches:stranded` (#321), in
+  // `ready-label-audit` (#378) and here. The limit is raised AND the ambiguous case is refused, because
+  // the refusal is the part that cannot rot.
+  const LIMIT = 1000;
   const all = JSON.parse(gh(["issue", "list", "--repo", REPO, "--state", "all",
-    "--limit", "200", "--json", fields]));
+    "--limit", String(LIMIT), "--json", fields]));
+  if (all.length >= LIMIT) {
+    throw new Error(`board-data: the issue listing returned ${all.length} rows against a limit of `
+      + `${LIMIT}, so it MAY BE TRUNCATED and this document would report on part of the tracker. `
+      + "Raise the limit or page the query -- do not read a partial listing as the whole.");
+  }
   return all.map((i) => ({ ...i, labelNames: i.labels.map((l) => l.name) }));
 }
 
