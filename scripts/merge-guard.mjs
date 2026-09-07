@@ -86,30 +86,47 @@ export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: 
  * currently testing reads STILL_RUNNING on every ordinary push, forever, and would block every merge
  * permanently rather than only the unsafe ones. `gate` already answers "did CI pass" by construction
  * (branch protection requires it, and it is `if: always()` over every sibling's `result`) — this answers
- * the three questions `strict=false` (#277) left nobody answering, none of which depend on whether CI has
- * finished: is this head CURRENT (ancestry, #182), does it match what the platform thinks it is
- * (head-vs-tip, #294), and would arming it close a row somebody else is inside (closing-claim, #262).
+ * the one question `strict=false` (#277) left nobody answering that does not depend on whether CI has
+ * finished: does this head match what the platform thinks it is (head-vs-tip, #294).
  *
- * @param {{pr: {headRefOid: string}, behindBy: number | null,
- *          closes?: {number: number, title?: string, labels: string[]}[] | null,
- *          session?: string | null, branchTip: string | null}} facts
+ * TWO REASONS `mergeReadiness` CARRIES ARE DELIBERATELY NOT HERE, and both cost a live near-miss to find
+ * before they shipped — `dispatcher` drove this function against the real, moving queue and measured both
+ * refusing the NORMAL case:
+ *
+ * - **Ancestry (behind-`main`, #182).** `ceo` has ruled staleness out as a refusal reason now that
+ *   `strict` is off, and the reason is throughput, not principle: with merges landing roughly one a
+ *   minute, almost every open PR is behind `main` almost all the time. A required job refusing on
+ *   behind-ness would recreate the update-then-fall-behind treadmill #277 exists to end, as a HARD block
+ *   — measured: `dispatcher` found 13 of 13 checked PRs behind in one pass. Ancestry stays in
+ *   `mergeReadiness`, which is still useful ADVICE to a person deciding whether to update a branch by hand;
+ *   it must never be something CI enforces.
+ * - **Closing-claim (#262).** It needs `session` — who is ARMING this PR — to tell "this is my own
+ *   claimed row" apart from "I am discarding someone else's work"; `decideClaim` treats every session it
+ *   cannot recognise as a stranger, the conservative default everywhere else in this file. A CI job has no
+ *   session identity at all: every push here lands as the same GitHub account, so passing no `--session=`
+ *   makes `decideClaim` read a WORKER'S OWN PR — closing the exact row it was built for, the normal case —
+ *   as somebody else's claim. Measured: `dispatcher` found 10 of 13 open PRs in exactly that state, and on
+ *   #309 itself (closes #298, which still carries `session:worker-config` — the label does not clear until
+ *   merge) a required CI job asking this with no real session would have refused its own PR's merge, and
+ *   every ordinary worker-owned PR behind it. #262's protection stays CLI-only
+ *   (`merge-guard.mjs <n> --session=<name>`, for a human — usually `dispatcher` — to run before arming a
+ *   PR they did not author themselves); CI asks only what it can answer authoritatively.
+ *
+ * **What must NOT happen is a required job refusing the normal case** — `dispatcher`'s own words — because
+ * the response to an unmergeable-by-default queue is to bypass the gate, and this repository's record on
+ * that is `A11Y_SKIP_VERIFY` used six times in one evening.
+ *
+ * @param {{pr: {headRefOid: string}, branchTip: string | null}} facts
  * @returns {{code: number, reasons: string[]}}
  */
-export function mergeSafetyVerdict({ pr, behindBy, closes = [], session = null, branchTip }) {
-  const missingLookups = [
-    behindBy === null && "whether this head contains `main`'s tip (the compare API)",
-    closes === null && "which rows this PR would close (the closingIssuesReferences lookup)",
-    branchTip === null && "the branch's real tip (`git ls-remote`, #294)",
-  ].filter(Boolean);
-  if (missingLookups.length > 0) {
+export function mergeSafetyVerdict({ pr, branchTip }) {
+  if (branchTip === null) {
     return { code: EXIT.CANNOT_ASK, reasons: [
-      `CANNOT SAY whether #${pr.headRefOid.slice(0, 10)} is safe to auto-arm: could not read `
-      + `${missingLookups.join("; ")}.\n  This is INCONCLUSIVE, not clear.`,
+      `CANNOT SAY whether #${pr.headRefOid.slice(0, 10)} is safe to auto-arm: could not read the branch's `
+      + "real tip (`git ls-remote`, #294).\n  This is INCONCLUSIVE, not clear.",
     ] };
   }
-  const knownCloses = /** @type {{number: number, title?: string, labels: string[]}[]} */ (closes);
-  const reasons = [...ancestryReason(behindBy), ...closingClaimReasons(knownCloses, session),
-    ...headTipMismatchReason(pr, /** @type {string} */ (branchTip))];
+  const reasons = headTipMismatchReason(pr, branchTip);
   return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons };
 }
 
@@ -575,26 +592,20 @@ function ciGateFacts(number) {
   const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
     "--json", "number,state,baseRefName,headRefOid,headRefName"]));
   const branchTip = lookupBranchTip(pr.headRefName);
-  const behindBy = lookup(() => {
-    const value = JSON.parse(gh(["api", `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
-    return typeof value === "number" ? value : null;
-  });
-  const closes = lookupClosingIssues(number);
-  return { pr, behindBy, closes, branchTip };
+  return { pr, branchTip };
 }
 
 /**
- * `--ci-gate <n>`: the check a required CI job runs FOR ITSELF, mid-workflow -- #298 (unit 1). Never
- * `--allow-claimed-close`: that escape hatch is for a human who has confirmed with a row's holder, and an
- * unattended CI gate has nobody to have confirmed with.
+ * `--ci-gate <n>`: the check a required CI job runs FOR ITSELF, mid-workflow -- #298 (unit 1). Checks
+ * head-vs-tip (#294) ONLY -- see `mergeSafetyVerdict`'s own comment for why ancestry (#182) and
+ * closing-claim (#262) are deliberately not asked here: both refuse the NORMAL case when CI asks them,
+ * measured live on this PR's own queue.
  * @param {number} number
- * @param {string | null} session
  */
-function ciGateCommand(number, session) {
-  const verdict = mergeSafetyVerdict({ ...ciGateFacts(number), session });
+function ciGateCommand(number) {
+  const verdict = mergeSafetyVerdict(ciGateFacts(number));
   if (verdict.code === EXIT.READY) {
-    console.log(`#${number} is safe to auto-arm: this head is current with main, matches what GitHub `
-      + "recorded (#294), and closes no row another session holds (#262).");
+    console.log(`#${number} is safe to auto-arm: this head matches what GitHub recorded (#294).`);
   } else {
     console.error(`REFUSING to auto-arm #${number}:\n${verdict.reasons.map((r) => `- ${r}`).join("\n")}`);
   }
@@ -657,7 +668,7 @@ function main() {
   if (!number) {
     console.error("Usage: node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close]\n"
       + "       node scripts/merge-guard.mjs --reconcile <pr-number>\n"
-      + "       node scripts/merge-guard.mjs --ci-gate <pr-number> [--session=<name>]\n"
+      + "       node scripts/merge-guard.mjs --ci-gate <pr-number>\n"
       + "Answers whether that PR has actually been tested, by reading its check RUNS rather than\n"
       + "`mergeStateStatus` -- which reports CLEAN for a PR that has never run a check. `--reconcile`\n"
       + "compares the last recorded verdict against the PR's real, terminal outcome (#188). `--ci-gate` is\n"
@@ -670,13 +681,13 @@ function main() {
     return;
   }
 
-  const sessionArg = process.argv.find((arg) => arg.startsWith("--session="));
-  const session = sessionArg ? sessionArg.slice("--session=".length) : null;
-
   if (process.argv.includes("--ci-gate")) {
-    ciGateCommand(Number(number), session);
+    ciGateCommand(Number(number));
     return;
   }
+
+  const sessionArg = process.argv.find((arg) => arg.startsWith("--session="));
+  const session = sessionArg ? sessionArg.slice("--session=".length) : null;
 
   const allowClaimedClose = process.argv.includes("--allow-claimed-close");
 
