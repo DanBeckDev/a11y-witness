@@ -1,6 +1,6 @@
 ---
-"@a11y-witness/nvda-worker": patch
-"a11y-witness": patch
+"@a11ign/nvda-worker": patch
+"a11ign": patch
 ---
 
 The hard capture timeout now carries a fault code (`hard-timeout`) instead of an untagged `Error`, so a
