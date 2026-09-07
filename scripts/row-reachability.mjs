@@ -159,8 +159,39 @@ export function startability({ row, subjectsMissing, heldRegions, examined, bloc
  * A ref with no PR at all is not an error — plenty of branches never open one — so it reports `no PR`
  * rather than failing, and an unreadable answer says so instead of implying `none`.
  */
+/**
+ * ONE LISTING, NOT ONE CALL PER REF — with a per-ref fallback so a truncated page cannot lie.
+ *
+ * The region half can name a dozen branches for one file (`ci.yml` currently has six), and a `gh` call
+ * each would make the tool slow enough that people stop running it before dispatching, which is the
+ * failure `row-claim` exists to prevent. So the map is built once.
+ *
+ * BUT A BOUNDED LISTING IS THE DEFECT THIS SESSION HAS CORRECTED MOST: a page that stops short would
+ * report a real PR as `no PR`, which is the *worse* direction here — it turns "wait for it" into
+ * "nobody is coming". So a ref MISSING from the map is not answered from the map; it falls through to
+ * the authoritative per-ref query. Truncation then costs an extra call and never a wrong answer.
+ */
+let prMap;
+function prStateMap() {
+  if (prMap) return prMap;
+  prMap = new Map();
+  try {
+    for (const pr of JSON.parse(gh(["pr", "list", "--repo", REPO, "--state", "all",
+      "--limit", "400", "--json", "number,state,headRefName"]))) {
+      const key = pr.headRefName;
+      prMap.set(key, [...(prMap.get(key) ?? []), `PR #${pr.number} ${pr.state}`]);
+    }
+  } catch {
+    // An unreadable listing leaves the map EMPTY, so every ref falls through to its own query rather
+    // than being reported as `no PR` on the strength of a call that failed.
+  }
+  return prMap;
+}
+
 function prState(ref) {
   const branch = ref.replace(/^origin\//, "");
+  const known = prStateMap().get(branch);
+  if (known) return known.join(", ");
   try {
     const found = JSON.parse(gh(["pr", "list", "--repo", REPO, "--head", branch, "--state", "all",
       "--json", "number,state"]));
@@ -252,7 +283,25 @@ function facts(row) {
   for (const path of present) {
     const holders = refs.filter((ref) => changed([`origin/main...${ref}`], path)
       && changed(["origin/main", ref], path));
-    if (holders.length > 0) heldRegions.push({ path, refs: holders });
+    // THE SAME FACT THE SUBJECT HALF ALREADY REPORTS. `(PR #89 CLOSED)`, `(PR #172 OPEN)` and `(no PR)`
+    // are three different messages: nobody is coming, wait for it, and somebody's unproposed work. The
+    // fifth state was solved for the subject half in #208 and not carried across, so the two halves of
+    // one tool said different amounts about the same branch -- and a reader takes an undecorated
+    // `REGION HELD` as "wait for that to land" even when the branch is dead.
+    // A MERGED BRANCH CANNOT HOLD A REGION AGAINST YOU, and neither git diff can tell that on its own.
+    // A SQUASH merge leaves the branch's commits off `main`, so three-dot stays non-empty, and `main`
+    // has moved on, so two-dot does too -- the pair I added to defeat the fourth state does not defeat
+    // this form of it. Measured: `agent/changeset-packed-check-132 (PR #151 MERGED)` was reported as
+    // holding `ci.yml`. The PR state is the authoritative record git cannot reconstruct.
+    //
+    // THE FAILURE MODE THIS ACCEPTS, named rather than hidden: a branch that was merged and then REUSED
+    // for new commits is dropped here, and it does genuinely hold. That is rare, and the alternative --
+    // listing every squash-merged branch for ever -- is the eighty-five-branch report nobody reads.
+    const live = holders.map((ref) => ({ ref, state: prState(ref) }))
+      .filter(({ state }) => !/\bMERGED\b/.test(state));
+    if (live.length > 0) {
+      heldRegions.push({ path, refs: live.map(({ ref, state }) => `${ref} (${state})`) });
+    }
   }
   return { row, subjectsMissing, heldRegions, blockedLabel, state, closedAt,
     examined: { paths: paths.length, symbols: symbols.length } };
