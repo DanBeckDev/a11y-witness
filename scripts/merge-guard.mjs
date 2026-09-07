@@ -50,7 +50,7 @@ const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2 };
 /** A concluded context that does not block a merge. `skipped` is a path filter declining, not a failure. */
 const SATISFIED = new Set(["success", "skipped", "neutral"]);
 
-const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
 /**
  * THE VERDICT, PURE — so every state can be exercised without a network, including the one no fixture
@@ -96,7 +96,7 @@ function baseReason(pr) {
     + "  base first and let this one re-open against `main`."];
 }
 
-function checkReasons(pr, required, runs) {
+export function checkReasons(pr, required, runs) {
   if (runs.length === 0) {
     return [`NO CHECK RUNS EXIST for head ${pr.headRefOid.slice(0, 10)} — not one, ever.\n`
       + "  Nothing has tested this code. This is the state that reads as `CLEAN`, because a required\n"
@@ -325,7 +325,7 @@ export function reconcile({ prNumber, recordedVerdict, realOutcome, resolvedAt }
 }
 
 /** Each lookup returns null on failure rather than an empty answer — the distinction the verdict needs. */
-function lookup(fn) {
+export function lookup(fn) {
   try {
     return fn();
   } catch (error) {
@@ -334,17 +334,32 @@ function lookup(fn) {
   }
 }
 
+// EXPORTED SO `workflow-run-liveness.mjs` (#118) DOES NOT RE-DERIVE THESE — the same
+// fact-stated-twice shape this repo's own CLAUDE.md names most often, one call away from happening here.
+// Both return `null` on failure, never an empty answer: `lookup`'s whole point is that "could not ask" and
+// "asked and got nothing" must stay distinguishable.
+
+/** The branch-protection required status-check contexts for `main`, or `null` if the lookup failed. */
+export function lookupRequiredContexts() {
+  return lookup(() => JSON.parse(
+    gh(["api", `repos/${REPO}/branches/main/protection/required_status_checks`])).contexts);
+}
+
+/** Every check run recorded against a commit sha, or `null` if the lookup failed. */
+export function lookupCheckRuns(sha) {
+  return lookup(() => JSON.parse(
+    gh(["api", `repos/${REPO}/commits/${sha}/check-runs`, "--paginate"])).check_runs
+    .map((run) => ({ name: run.name, status: run.status, conclusion: run.conclusion,
+      completedAt: run.completed_at })));
+}
+
 function facts(number) {
   // DELIBERATELY NOT REQUESTING `mergeStateStatus`. Asking for it at all would invite the next reader to
   // use it, and this tool's entire reason for existing is that its answer cannot be trusted here.
   const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
     "--json", "number,state,baseRefName,headRefOid"]));
-  const required = lookup(() => JSON.parse(
-    gh(["api", `repos/${REPO}/branches/main/protection/required_status_checks`])).contexts);
-  const runs = lookup(() => JSON.parse(
-    gh(["api", `repos/${REPO}/commits/${pr.headRefOid}/check-runs`, "--paginate"])).check_runs
-    .map((run) => ({ name: run.name, status: run.status, conclusion: run.conclusion,
-      completedAt: run.completed_at })));
+  const required = lookupRequiredContexts();
+  const runs = lookupCheckRuns(pr.headRefOid);
   const mainTipIso = lookup(() => gh(["api", `repos/${REPO}/commits/main`,
     "--jq", ".commit.committer.date"]).trim() || null);
   // `behind_by` is how many commits `main` has that this head does not -- the ancestry fact, not a
