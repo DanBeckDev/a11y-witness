@@ -265,6 +265,10 @@ const GUARDED: Record<string, string> = {
   "packages/control/src/fleet-status.mjs": JSON_REPORTER,
   "packages/lab/src/training/capture-status.mjs": JSON_REPORTER,
   "packages/lab/scripts/lab-inventory.mjs": JSON_REPORTER,
+  "scripts/pr-hold.mjs":
+    "it WRITES a `session:` label that decides whether `merge-guard` refuses a PR (#266). `--session` "
+    + "says who is taking the hold and `--steal` displaces whoever has it, so a discarded flag either "
+    + "takes a hold in nobody's name or fails to displace the person it just announced displacing",
   "scripts/stash-whose.mjs":
     "it reports who holds each stash in a pile SHARED between every worktree (#290). It takes no "
     + "flags, and a discarded argument would answer about a different question than the one asked -- "

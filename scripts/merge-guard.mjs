@@ -71,7 +71,7 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { decideClaim } from "./row-claim.mjs";
+import { claimStatus, decideClaim } from "./row-claim.mjs";
 
 const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2 };
 
@@ -149,10 +149,12 @@ export function mergeSafetyVerdict({ pr, branchTip }) {
  *          behindBy: number | null,
  *          branchTip: string | null,
  *          closes?: {number: number, title?: string, labels: string[]}[] | null,
+ *          prLabels?: string[] | null,
  *          session?: string | null}} facts
  * @returns {{code: number, reasons: string[], notes: string[]}}
  */
 export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, branchTip, closes = [],
+  prLabels = [],
   session = null }) {
   const missingLookups = [
     required === null && "the required status checks for `main` (branch protection)",
@@ -163,6 +165,7 @@ export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, branc
     // answers, the same distinction every other lookup here already draws (#294).
     branchTip === null && "the branch's real tip (`git ls-remote`)",
     closes === null && "which rows this PR would close (the closingIssuesReferences lookup)",
+    prLabels === null && "this PR's own labels (which say whether somebody is holding it)",
   ].filter(Boolean);
   if (missingLookups.length > 0) {
     return { code: EXIT.CANNOT_ASK, notes: [], reasons: [
@@ -181,11 +184,60 @@ export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, branc
   const knownMainTipIso = /** @type {string} */ (mainTipIso);
   const knownBranchTip = /** @type {string} */ (branchTip);
   const knownCloses = /** @type {{number: number, title?: string, labels: string[]}[]} */ (closes);
+  const knownPrLabels = /** @type {string[]} */ (prLabels);
   const reasons = [...baseReason(pr), ...headTipMismatchReason(pr, knownBranchTip),
     ...checkReasons(pr, knownRequired, knownRuns),
     ...ancestryReason(behindBy), ...stalenessReason(knownRuns, knownMainTipIso),
-    ...closingClaimReasons(knownCloses, session)];
+    ...closingClaimReasons(knownCloses, session), ...prHoldReasons(pr, knownPrLabels, session)];
   return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons, notes };
+}
+
+/**
+ * IS SOMEBODY ELSE HOLDING THIS PR? — #266, and it is #197's finding one object along.
+ *
+ * The split between the dispatcher and a PR's author lived entirely in messages: *the dispatcher updates
+ * and arms, the author pushes.* Measured 2026-09-07 on PR #258 — the dispatcher said "arming on green"
+ * and ran `update-branch`; the author ran this very guard, saw `7 commit(s) behind`, rebased, and pushed
+ * into it. `--force-with-lease` refused, which is the only reason nothing was lost: a plain `--force`
+ * would have taken the branch to a base fetched before #229 merged and silently reverted that PR's
+ * README and changeset inside a branch nobody would think to check for them.
+ *
+ * **The boundary was wrong rather than ignored.** The stated rule named *armed* PRs; #258 was UNARMED,
+ * so by that rule it was the author's — while the dispatcher was updating it in preparation for arming.
+ * The real predicate is "a PR somebody is actively working on", and **the other party cannot see that
+ * state from outside**. So the collision was invisible, not careless, which is a property of the rule.
+ *
+ * WHY A LABEL AND NOT AN AGREEMENT. The agreed remedy was a sentence — *once the dispatcher says they
+ * will arm it, it is theirs.* Better than what it replaced, and this repo has already MEASURED that shape
+ * and found it wanting: #197 is the identical experiment on rows, where a claim that existed only as a
+ * sentence in a dispatch message produced **three double-dispatches (#156, #158, #159), each caught by a
+ * worker's own caution and never by the tool.** `row-claim.mjs`'s header states the principle this
+ * inherits: the Project Status field is a VIEW; the label, on the object and timestamped by GitHub's own
+ * timeline, is the RECORD.
+ *
+ * READS `session:*` OFF THE PR, the same field `closingClaimReasons` reads off a ROW, because two
+ * spellings of one fact is the shape half this repo's defects share. It deliberately does NOT reuse
+ * `decideClaim`: that predicate requires the `in-progress` label, which is a row's vocabulary — on a PR
+ * the `session:` label IS the hold, and passing PR labels through a row's predicate would report every
+ * held PR as unheld.
+ *
+ * NO `--allow-held` ESCAPE HATCH, unlike #249's `--allow-claimed-close`, and the asymmetry is the point:
+ * a row you do not hold cannot be taken from its owner, so confirming and passing a flag is the only
+ * route. A PR hold CAN be handed over — `npm run pr:release` then `pr:hold` — so a flag here would be a
+ * silent bypass standing in for an action that leaves a record. The escape hatch is taking the hold.
+ *
+ * @param {{number: number}} pr
+ * @param {string[]} prLabels
+ * @param {string | null} session  who is running this check; omitted means every holder is somebody else
+ * @returns {string[]}
+ */
+function prHoldReasons(pr, prLabels, session) {
+  const holders = claimStatus(prLabels).sessions.filter((held) => held !== session);
+  if (holders.length === 0) return [];
+  return [`#${pr.number} IS HELD by ${holders.join(", ")}${session ? `, and you are ${session}` : ""}.\n`
+    + "  They are working on it now -- updating, rebasing or about to arm it. Pushing into a PR somebody\n"
+    + "  else holds is how #258 nearly reverted a merged PR's content inside an unrelated branch.\n"
+    + "  Ask them to hand it back, or take it with `npm run pr:hold` once they have released it."];
 }
 
 /**
@@ -621,7 +673,14 @@ function facts(number) {
   // DELIBERATELY NOT REQUESTING `mergeStateStatus`. Asking for it at all would invite the next reader to
   // use it, and this tool's entire reason for existing is that its answer cannot be trusted here.
   const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
-    "--json", "number,state,baseRefName,headRefOid,headRefName"]));
+    "--json", "number,state,baseRefName,headRefOid,headRefName,labels"]));
+  // `null` WHEN THE SHAPE IS NOT THE ONE EXPECTED, never `[]` -- an empty array reads as "nobody holds
+  // this PR", which is the safest-LOOKING answer and the wrong one when the truth is "I could not ask".
+  // Same rule as every other lookup here, and the reason this file exists.
+  const prLabels = Array.isArray(pr.labels)
+    ? pr.labels.map((/** @type {{name?: unknown}} */ l) => l?.name).filter(
+      (/** @type {unknown} */ name) => typeof name === "string")
+    : null;
   const required = lookupRequiredContexts();
   const runs = lookupCheckRuns(pr.headRefOid);
   const mainTipIso = lookup(() => gh(["api", `repos/${REPO}/commits/main`,
@@ -636,7 +695,7 @@ function facts(number) {
   });
   const branchTip = lookupBranchTip(pr.headRefName);
   const closes = lookupClosingIssues(number);
-  return { pr, required, runs, mainTipIso, behindBy, branchTip, closes };
+  return { pr, required, runs, mainTipIso, behindBy, branchTip, closes, prLabels };
 }
 
 /**
