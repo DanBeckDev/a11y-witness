@@ -70,6 +70,12 @@ const GUARDED: Record<string, string> = {
     + "POSITIONALLY and no flags, which is why the guarded list is empty rather than absent. Added to "
     + "this table the same night it merged, because it landed on `main` from #167 while #164's own "
     + "branch was open and turned that branch red: a derived count is only true of one commit range",
+  "scripts/trunk-revert.mjs":
+    "decides whether a push to main that just failed its own gate is safe to REVERT, so a discarded "
+    + "--push-sha or --before-sha would decide about the wrong commit while reading as a correct answer "
+    + "-- the identical hazard `merge-guard.mjs` is guarded against, one door over. It takes "
+    + "--push-sha=/--before-sha=/--run-url= and no positional argument (unlike merge-guard.mjs's PR "
+    + "number), because a push event carries no PR to number.",
   "scripts/row-claim.mjs":
     "THE COMMAND THE PULL LOOP RESTS ON. Measured 2026-09-07, before the guard: `check 161 --jsonn` "
     + "printed the ordinary claim line and exited 0, and so did `--format=json` -- both read as a "
@@ -219,6 +225,9 @@ const GUARDED: Record<string, string> = {
     "takes its sites POSITIONALLY; the flags in the file are passed onward",
   "packages/lab/scripts/corpus-backup.mjs":
     "--verify-only is the difference between checking a backup and WRITING one",
+  // Its ONLY flag, and the one that decides whether it destroys anything. A mistyped `--aply` must be
+  // refused rather than silently running the reporting default and reading as "nothing to prune".
+  "packages/lab/scripts/corpus-prune-orphans.mjs": "--apply",
   "packages/lab/scripts/corpus-snapshot.mjs":
     "a mistyped --out= writes the snapshot where you will not look for it",
   "packages/lab/scripts/corpus-release.mjs":
@@ -282,6 +291,17 @@ const GUARDED: Record<string, string> = {
   "scripts/workflow-run-liveness.mjs":
     "`--sha` falls back to $GITHUB_SHA, so a mistyped flag silently answers about a DIFFERENT commit — "
     + "and the question it answers is whether that commit was tested before it reached main",
+  "scripts/history-secret-scan.mjs":
+    "`--all` is required and not optional -- a mistyped or dropped flag would run neither branch, since "
+    + "the script REFUSES rather than defaulting when it is absent, precisely because scanning only the "
+    + "current branch would silently miss the branches with more instances of the defect than main has "
+    + "(measured: 72 vs 48, #310). `--repo` decides WHICH repository is scanned; a discarded one falls "
+    + "back to this checkout, reporting on the wrong tree entirely for a rehearsal clone.",
+  "scripts/history-purge-rehearsal.mjs":
+    "`--source` names the real repository to mirror-clone from; a discarded flag would fail closed "
+    + "(refuses without one) rather than silently rewriting the wrong tree, but `--clone-into` and "
+    + "`--replacements` deciding the WRONG path or pattern set silently is exactly the failure this tool "
+    + "exists to make impossible for a history rewrite, #310",
 };
 
 
