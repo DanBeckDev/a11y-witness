@@ -1,0 +1,61 @@
+#!/bin/sh
+# AN UNLABELLED STASH IS REFUSED, BECAUSE THE STASH IS SHARED ACROSS EVERY WORKTREE (#290).
+#
+# `refs/stash` lives in the COMMON git directory — the same one that makes branches and reflogs shared,
+# and the same fact this repository already records for a branch surviving its worktree's deletion. So a
+# stash made in one worktree is visible and poppable from every other, `git stash list` does not say which
+# worktree a stash came from, and `git stash pop` takes the top of a shared pile.
+#
+# Measured 2026-09-07: `orchestrator` stashed their own change, checked out `origin/main` to test whether
+# a failure was pre-existing, switched back, and `git stash pop` returned SOMEBODY ELSE'S uncommitted work
+# — a 95-line diff plus a new test file, `worker-audit`'s #280, with nothing on it saying whose it was.
+# Their own stash was consumed in the same operation. Nothing was lost, and only because they read a diff
+# they did not recognise. A `pop` followed by `commit -a` would have put another worker's half-finished
+# work into an unrelated branch, which is the incident CLAUDE.md opens the shared-checkout section with.
+#
+# WHY THIS HOOK AND NOT `pre-commit`. Git has no pre-stash hook, and `pre-commit` cannot see a stash at
+# all — a stash is a ref update, not a commit. `reference-transaction` is the only hook that observes one,
+# and it can REFUSE: exiting non-zero in the `prepared` phase aborts the transaction and the working tree
+# keeps the change. Verified rather than assumed, because it decided the whole design.
+#
+# IT REFUSES CREATION ONLY, NEVER `pop`, `drop` OR `clear`. The first version refused every `refs/stash`
+# transaction and broke `git stash clear` — which is how you discover that this hook sees far more than
+# the operation you had in mind. The discriminator is that a push CREATES a commit while pop/drop move
+# the ref to one ALREADY IN ITS REFLOG, so a stash you are removing is never mistaken for one you are
+# making. Deleting the ref (`new` all zeros) is likewise not a creation.
+#
+# `A11Y_STASH_ANY=1 git stash push` overrides, and says so — the escape hatch is named because a guard
+# that stops work and offers no route out gets bypassed and then not consulted at all.
+[ "$1" = "prepared" ] || exit 0
+
+ZERO=0000000000000000000000000000000000000000
+
+while read -r old new ref; do
+  [ "$ref" = "refs/stash" ] || continue
+  [ "$new" = "$ZERO" ] && continue                      # dropping the ref is not a creation
+  [ -n "$A11Y_STASH_ANY" ] && continue
+
+  # Already in the reflog => this ref is MOVING to an existing entry (pop/drop), not gaining a new one.
+  short=$(git rev-parse --short=7 "$new" 2>/dev/null) || continue
+  if git reflog refs/stash 2>/dev/null | grep -q "^${short} "; then continue; fi
+
+  # `git stash push` writes "WIP on <branch>: ..."; `push -m <msg>` writes "On <branch>: <msg>".
+  # So the default subject IS the absence of a label, read off the object rather than off argv — which
+  # this hook never sees.
+  case "$(git log -1 --format=%s "$new" 2>/dev/null)" in
+    "WIP on "*)
+      echo "REFUSED: this stash carries no message, and the stash is SHARED between all worktrees." >&2
+      echo "  \`refs/stash\` is in the common git dir, so every worktree sees this pile and \`pop\` takes" >&2
+      echo "  the top of it. On 2026-09-07 that returned another agent's 95-line uncommitted change." >&2
+      echo "" >&2
+      echo "  Name it, and \`git stash list\` says whose it is:" >&2
+      echo "      git stash push -m \"$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo '<branch>'): what this is\"" >&2
+      echo "" >&2
+      echo "  \`npm run stash:whose\` lists every stash with the branch it was made on." >&2
+      echo "  Deliberate exception: A11Y_STASH_ANY=1 git stash push" >&2
+      exit 1
+      ;;
+  esac
+done
+
+exit 0
