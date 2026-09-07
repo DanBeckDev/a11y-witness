@@ -16,7 +16,7 @@ import { writeFileSync, mkdirSync, mkdtempSync, readFileSync, existsSync, realpa
   from "node:fs";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS, issues, outOfRelease, unclassified, achievementsWhoseWorldMoved,
@@ -112,7 +112,7 @@ function section1(d) {
     "1. We set the date by adding up the remaining work, and every change to it is recorded — a slip "
     + "cannot arrive as a bare new date.",
     "2. **This carries most of the weight:** the date assumes the one item of unknown size finishes "
-    + "inside the week we allowed, and this afternoon that week began resting on less.",
+    + "inside the week we allowed, and today's measurement left that week resting on less.",
     "3. It is not padded against the risk most likely to move it, stated below.",
   ].join("\n");
 }
@@ -172,7 +172,13 @@ function section3(d) {
  * held that way by nobody. `costsNothing` is here for the same reason: "two of them cost nothing to make"
  * is an editorial claim about WHICH rows, so the row carries it and the sentence counts it. See #284.
  */
-const DECISIONS = [
+// EXPORTED, not restated -- #284. `board-style.test.ts`'s "no count in the prose is typed" check used to
+// hand-type the expected value beside a regex naming its sentence; the achievements/decisions/risks/stages
+// counts were never added to that list because adding a fourth entry per edition is exactly the habit
+// that let the first three drift silently. Reading these three lists' real `.length` at test time -- the
+// same value `section4`/`section5` read to render -- means a wrong count beside ANY of them fails without
+// anyone having to name the sentence.
+export const DECISIONS = [
   { ask: "Approve the definition of version one.", costsNothing: true,
     ifNothing: "The question the board keeps asking stays unanswerable, and every edition repeats that." },
   { ask: "Name one person outside the project to try the tool.", costsNothing: false,
@@ -218,7 +224,7 @@ function section4(d) {
  * stages close -- while the appendix said "the five stages are". Two sources for one fact, and the
  * section's was not even counting stages. The list is the fact; both places read it.
  */
-const STAGES = [
+export const STAGES = [
   "establish what a page should cost to record on the current format",
   "measure what more machines actually give us",
   "set a target from that",
@@ -231,17 +237,19 @@ const STAGES = [
  * The heading read "Four risks are live" above a table of three. A sentence adjacent to a table is a
  * claim about that table, and the only honest source for it is the table.
  */
-const RISKS = [
+export const RISKS = [
     "| **We may abandon the change to the trained component rather than adjust it.** | Its abandonment conditions were written in advance so the decision could not be softened, and the assumption it rests on is being measured properly for the first time now. |",
-    "| **One item still has no known size.** | We published a fix this morning, measured it wrong this "
-    + "afternoon, and replaced it with a theory nobody has tested. The process working — and the week we "
+    "| **One item still has no known size.** | We published a fix today, found by measurement that it was "
+    + "wrong, and replaced it with a theory nobody has tested. The process working — and the week we "
     + "allowed now rests on less. |",
     "| **Everything runs on one machine.** | The capture machines' credentials live on one computer. "
     + "The list of open work moved off it today; the credentials have not. |",
 ];
 
-/** Small counts read as words in prose; the number still comes from the data. */
-function numberWord(n) {
+/** Small counts read as words in prose; the number still comes from the data. Exported so
+ * `board-style.test.ts` renders the SAME word a real count produces, rather than re-deriving the mapping.
+ */
+export function numberWord(n) {
   return ["zero", "one", "Two", "Three", "Four", "Five", "Six", "Seven"][n] ?? String(n);
 }
 
@@ -731,6 +739,65 @@ function refuseIfTheWorldMoved(achievements) {
   process.exit(1);
 }
 
+/** The env var override, checked first so a runner with Chrome somewhere unusual never has to touch code. */
+const CHROME_ENV_VAR = "BOARD_DOCUMENT_CHROME";
+
+/** Every location this has actually needed to check, existsSync'd rather than executed. */
+const CHROME_CANDIDATES = [
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",   // a developer's Mac
+  "/usr/bin/google-chrome-stable",                                   // GitHub's ubuntu-latest runner image
+  "/usr/bin/google-chrome",
+  "/usr/bin/chromium-browser",                                       // Ubuntu's own chromium package name
+  "/usr/bin/chromium",
+];
+
+/** Names to fall back to on PATH, in case a package manager put Chrome somewhere none of the above see. */
+const CHROME_PATH_NAMES = ["google-chrome-stable", "google-chrome", "chromium-browser", "chromium"];
+
+/**
+ * Resolve a real, existing Chrome/Chromium executable -- issue #280. This used to be a single hardcoded
+ * macOS path (`/Applications/Google Chrome.app/...`), which is exactly the assumption this workflow
+ * stopped being able to make the day it moved off a developer's laptop onto `ubuntu-latest`: every run
+ * failed `spawnSync ... ENOENT`, a stack trace that names neither the missing browser nor what to do
+ * about it -- "a verification that shares a failure mode with the action verifies nothing" applies here
+ * to a PRECONDITION rather than a check, but the lesson is the same: name the cause, don't let the
+ * OS report it as a generic failure to spawn.
+ *
+ * Every candidate is checked with `existsSync`, never executed speculatively, so a wrong guess costs one
+ * stat call rather than a spawned, possibly-misbehaving process. The `which` fallback only runs if none
+ * of the known paths hit, and only against a fixed, hardcoded list of names -- never a name built from
+ * input, so there is nothing here for a shell to interpret unsafely.
+ */
+/**
+ * @param {{ env?: NodeJS.ProcessEnv, exists?: (p: string) => boolean, which?: (name: string) => string }} [deps]
+ *   Injectable for the "not found" and "found on PATH" branches, which cannot be exercised
+ *   deterministically against this machine's REAL filesystem and PATH -- this Mac has the real Chrome
+ *   installed at the real candidate path, so a test asserting "not found" would have to delete it.
+ */
+export function resolveChromeBinary(deps = {}) {
+  const env = deps.env ?? process.env;
+  const exists = deps.exists ?? existsSync;
+  const which = deps.which ?? ((name) => spawnSync("which", [name], { encoding: "utf8" }).stdout?.trim() ?? "");
+
+  const override = env[CHROME_ENV_VAR];
+  if (override) {
+    if (!exists(override)) {
+      throw new Error(`${CHROME_ENV_VAR}=${override} does not exist. Unset it to use the built-in search, `
+        + "or point it at a real Chrome/Chromium executable.");
+    }
+    return override;
+  }
+  for (const candidate of CHROME_CANDIDATES) {
+    if (exists(candidate)) return candidate;
+  }
+  for (const name of CHROME_PATH_NAMES) {
+    const found = which(name);
+    if (found) return found;
+  }
+  throw new Error("No Chrome or Chromium found. Checked the usual macOS and Linux install locations, plus "
+    + `PATH for ${CHROME_PATH_NAMES.join(", ")}. Install one, or set ${CHROME_ENV_VAR} to its path.`);
+}
+
 function main() {
   refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release"],
     { entry: import.meta.url, command: "npm run board:document" });
@@ -792,31 +859,43 @@ function main() {
     writeFileSync(html, `<!doctype html><meta charset="utf-8"><title>${stem}</title>`
       + `<style>${PAGE_CSS}</style>${toHtml(stamped)}`);
 
-    // HEADLESS CHROME, not pandoc or a PDF library. Chrome is already on this machine because the capture
-    // fleet needs a Chromium; pandoc is not installed and would make the board's daily document depend on
-    // an operator running `brew install`. A dependency the board's report cannot be produced without is a
-    // worse risk than a slightly plainer typeface.
-    const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-    execFileSync(chrome, ["--headless", "--disable-gpu", "--no-pdf-header-footer",
-      `--print-to-pdf=${pdf}`, `file://${html}`], { stdio: "pipe" });
+    renderPdfWithChrome(html, pdf);
     process.stdout.write(`${pdf}\n`);
 
     if (argv.includes("--release")) publishToDraftRelease(pdf);
   }
-
-  /** Deliver the PDF as an asset on a DRAFT GitHub Release, which is one click from the Releases tab.
-   *
-   * A draft release was chosen over attaching to the report issue because GitHub's API cannot attach a file
-   * to an issue comment at all -- that is a web-UI drag-and-drop, so a daily automated attachment is
-   * impossible, not merely awkward.
-   *
-   * THE TAG IS NAMESPACED `board/<date>` AND THE RELEASE STAYS A DRAFT, both deliberately. A draft creates
-   * no git tag until it is published, so nothing here can be mistaken for a product version or picked up by
-   * the changesets machinery -- which matters in a repo whose first npm publish has not happened yet and
-   * whose release workflow reads tags.
-   */
 }
 
+/**
+ * HEADLESS CHROME, not pandoc or a PDF library. Chrome is already on this machine because the capture
+ * fleet needs a Chromium; pandoc is not installed and would make the board's daily document depend on
+ * an operator running `brew install`. A dependency the board's report cannot be produced without is a
+ * worse risk than a slightly plainer typeface.
+ */
+function renderPdfWithChrome(html, pdf) {
+  let chrome;
+  try {
+    chrome = resolveChromeBinary();
+  } catch (e) {
+    console.error(`REFUSING to render: ${e.message}`);
+    process.exit(2);
+  }
+  console.error(`Using ${chrome}`);
+  execFileSync(chrome, ["--headless", "--disable-gpu", "--no-pdf-header-footer",
+    `--print-to-pdf=${pdf}`, `file://${html}`], { stdio: "pipe" });
+}
+
+/** Deliver the PDF as an asset on a DRAFT GitHub Release, which is one click from the Releases tab.
+ *
+ * A draft release was chosen over attaching to the report issue because GitHub's API cannot attach a file
+ * to an issue comment at all -- that is a web-UI drag-and-drop, so a daily automated attachment is
+ * impossible, not merely awkward.
+ *
+ * THE TAG IS NAMESPACED `board/<date>` AND THE RELEASE STAYS A DRAFT, both deliberately. A draft creates
+ * no git tag until it is published, so nothing here can be mistaken for a product version or picked up by
+ * the changesets machinery -- which matters in a repo whose first npm publish has not happened yet and
+ * whose release workflow reads tags.
+ */
 function publishToDraftRelease(pdf) {
   const tag = `board/${new Date().toISOString().slice(0, 10)}`;
   const title = `Board report — ${new Date().toISOString().slice(0, 10)}`;
