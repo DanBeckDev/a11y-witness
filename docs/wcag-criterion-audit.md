@@ -30,11 +30,11 @@ assistive technology" — being ignored is precisely the condition the census fi
 is defined as "serving only an aesthetic purpose, providing no information, and having no functionality",
 and nothing in our rule contradicts that.
 
-`a11y-witness:alt-text-is-a-filename` maps `secondary` and its assumption quotes the reason from the
+`a11ign:alt-text-is-a-filename` maps `secondary` and its assumption quotes the reason from the
 criterion — "the criterion asks whether the alternative serves an equivalent PURPOSE, and a string that
 looks like a file name could legitimately be the right description". Correct, and correctly a referral.
 
-**FINDING — five of six exceptions are unstated.** `a11y-witness:unnamed-graphic-count` states its
+**FINDING — five of six exceptions are unstated.** `a11ign:unnamed-graphic-count` states its
 assumptions about ignored and generated nodes, and says nothing about the other five.
 
 > **CLOSED 2026-09-05: only ONE of the five could ever have bitten, and it is the one that did.** Read
@@ -115,7 +115,7 @@ handling of that gap.
 > users in general." — [Understanding 2.4.4](https://www.w3.org/WAI/WCAG22/Understanding/link-purpose-in-context)
 
 Context qualifies as: the same paragraph, list item, table cell, associated header cells, or the current
-sentence. `a11y-witness:vague-link-text` cannot see any of them, and says so: "2.4.4 permits the purpose
+sentence. `a11ign:vague-link-text` cannot see any of them, and says so: "2.4.4 permits the purpose
 to be determined from the link's programmatically determined CONTEXT — its sentence, paragraph, list item
 or table cell — so 'To apply for a permit, click here' conforms. This rule cannot see that context, so it
 is stricter than the criterion and closer to 2.4.9, which is AAA." Mapped `secondary`.
@@ -185,7 +185,7 @@ that heading HIERARCHY is not checked.
 
 **The alternative in the criterion text is the thing to get right, and the rule already does.** Structure
 must be programmatically determined **or available in text**, and a page conveying no heading structure
-at all passes trivially. `a11y-witness`'s no-headings rule states exactly that: "a page with genuinely no
+at all passes trivially. `a11ign`'s no-headings rule states exactly that: "a page with genuinely no
 headings conveys no heading structure to lose. Having none is strong evidence that styled text stands in
 for headings; proof needs the visual layer" — and it requires the tree to CONFIRM zero headings rather
 than trusting a sweep, plus a `MIN_CONTENT_LINES` floor so a short page is not accused.
@@ -227,7 +227,7 @@ gap rather than a layer one. On the backlog.
 > suggestions are provided to the user, **unless it would jeopardize the security or purpose of the
 > content**." — [Understanding 3.3.3](https://www.w3.org/WAI/WCAG22/Understanding/error-suggestion)
 
-`a11y-witness:error-remedy-missing` maps **`conformance`** — it ASSERTS — and fires whenever an announced
+`a11ign:error-remedy-missing` maps **`conformance`** — it ASSERTS — and fires whenever an announced
 error carries no instruction. The criterion has two normative conditions on that, and the rule guards
 neither and stated neither.
 
@@ -267,7 +267,7 @@ changes the meaning of the web page"**. And the criterion carries a note that de
 > outline, dynamic menu, or a tab control do not necessarily change the context, unless they also change
 > one of the above (e.g., focus)."*
 
-`a11y-witness:context-change-without-action` maps **`conformance` on both criteria** — it asserts — and
+`a11ign:context-change-without-action` maps **`conformance` on both criteria** — it asserts — and
 fires on any difference between the title read before the interaction and the title read after.
 
 **FINDING 1 — a title change is not by itself a change of context.** A page appending a result count, or

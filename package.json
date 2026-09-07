@@ -1,5 +1,5 @@
 {
-  "name": "a11y-witness-monorepo",
+  "name": "a11ign-monorepo",
   "version": "0.0.0",
   "private": true,
   "description": "Judge the real assistive-technology experience of a website with AI: drive a real screen reader through real navigation and assess whether the experience is coherent and usable.",
@@ -24,7 +24,7 @@
     "eval": "A11Y_PYTHON=.venv/bin/python tsx packages/lab/src/eval/run.ts",
     "rules-check": "tsx packages/lab/src/eval/rules-check.ts",
     "test": "npm run test:ts && npm run test:python",
-    "test:ts": "tsx --test ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY} \"packages/*/src/**/*.test.ts\"",
+    "test:ts": "node scripts/assert-glob-not-empty.mjs \"packages/*/src/**/*.test.ts\" --min=300 --run ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
     "test:python": "if [ -x .venv/bin/pytest ]; then PYTHONDONTWRITEBYTECODE=1 .venv/bin/pytest -p no:cacheprovider packages/*/tests -q; else echo \"SKIPPED: no .venv/bin/pytest — python tests need it. This is an honest skip, not a pass.\"; fi",
     "eval:capture": "A11Y_PYTHON=.venv/bin/python node packages/lab/src/harnesses/capture-fixtures.mjs",
     "eval:gate": "A11Y_PYTHON=.venv/bin/python EVAL_GATE=1 EVAL_RUNS=3 tsx packages/lab/src/eval/run.ts",
@@ -118,7 +118,7 @@
     "worker:ctl": "packages/worker-fleet/src/local-worker/worker-ctl.sh",
     "worktrees:prune": "node scripts/prune-worktrees.mjs",
     "primary:update": "node scripts/update-primary.mjs",
-    "coverage": "c8 npx tsx --test \"packages/*/src/**/*.test.ts\"",
+    "coverage": "c8 node scripts/assert-glob-not-empty.mjs \"packages/*/src/**/*.test.ts\" --min=300 --run",
     "identity:rate": "tsx packages/lab/src/harnesses/page-identity-rate.mjs",
     "verdict:stability": "tsx packages/lab/src/harnesses/occurrence-verdict-stability.mjs",
     "verdict:preregistered": "node packages/lab/scripts/check-preregistered-verdict.mjs",
@@ -149,14 +149,14 @@
     "pr:release": "node scripts/pr-hold.mjs --release"
   },
   "dependencies": {
-    "@a11y-witness/evidence": "0.1.0",
-    "@a11y-witness/judge": "0.1.0",
-    "@a11y-witness/nvda-worker": "0.1.0",
-    "@a11y-witness/scorer": "0.1.0",
-    "@a11y-witness/worker-fleet": "0.1.0",
+    "@a11ign/evidence": "0.1.0",
+    "@a11ign/judge": "0.1.0",
+    "@a11ign/nvda-worker": "0.1.0",
+    "@a11ign/scorer": "0.1.0",
+    "@a11ign/worker-fleet": "0.1.0",
     "@anthropic-ai/sdk": "^0.106.0",
     "@guidepup/guidepup": "^0.31.0",
-    "a11y-witness": "0.1.0"
+    "a11ign": "0.1.0"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.1",

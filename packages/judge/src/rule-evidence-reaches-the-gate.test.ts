@@ -24,7 +24,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ruleFindings } from "./rules.js";
-import { pageCensus, domCensus as evidenceDomCensus } from "@a11y-witness/evidence/verify";
+import { pageCensus, domCensus as evidenceDomCensus } from "@a11ign/evidence/verify";
 
 /** Enough announcements to clear MIN_CONTENT_LINES, so "no headings" is a finding and not a fragment. */
 const CONTENT = Array.from({ length: 20 }, (_unused, index) => `Paragraph ${index + 1} of body copy.`);

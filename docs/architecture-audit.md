@@ -100,7 +100,7 @@ layer's asserting findings can be suppressed by a referring one from the model.
 | 2 | Runtime and weights are coupled without a compatibility window. The original `v17` → `v18` migration closed; a new `v18` → `v19` mismatch is open at the follow-up snapshot | verified; updated 2026-09-05 | §4.2 |
 | 3 | `withRuleFindings` dedupes by criterion, so an unmapped model referral can drop a rule assertion on that criterion. Reproduced on 1.1.1; no persistent composition regression test yet | reproduced 2026-09-05 | §4.3 |
 | 4 | The GitHub Action's axe layer never runs: `chromium.launch()` with no channel on a runner that skipped the browser download; the smoke never reads `ruleBased` | verified | §7.1 |
-| 5 | `@a11y-witness/worker-fleet/cli-flags` exports `src/cli-flags.mjs`, which the tarball does not ship; 42 importers, all in the private `lab`, which the isolation gate skips | verified | §3.1 |
+| 5 | `@a11ign/worker-fleet/cli-flags` exports `src/cli-flags.mjs`, which the tarball does not ship; 42 importers, all in the private `lab`, which the isolation gate skips | verified | §3.1 |
 | 6 | The capture wire contract has no owner: a stale published `CaptureRequest`, six parallel result shapes, an untyped second contract in diagnostic mark names, protocol version regex-scraped in four places, fault codes copied as literals, four to six `POST /capture` body builders, and the product CLI sending no `captureId` | verified | §5 |
 | 7 | `control` and `worker-fleet` form a cycle: the published `worker-fleet` reads the private `control`'s `inventory.yml` from four modules | verified | §3.2 |
 | 8 | The deprecated UTM path is still the CLI's default lease order, still exported and shipped with two bins, still `doctor`'s only capacity check, and still the newcomer route in `docs/README.md` | read | §8 |
@@ -124,7 +124,7 @@ are justified by separate responsibilities and mutable state, not a line-count t
 | `judge` | AGPL | yes | 8,218 | 22 | rules, backends, criterion coverage, outcomes |
 | `nvda-worker` | AGPL | yes | 10,958 (25 `.mjs`) | 35 | the Windows capture worker |
 | `worker-fleet` | AGPL | yes | ~5,120 + 4,485 shell/ps1 | 28 | host-side lease, health, capacity, fleet status, provisioning |
-| `cli` | AGPL | yes | 3,755 | 10 | the `a11y-witness` front door and the Action runner |
+| `cli` | AGPL | yes | 3,755 | 10 | the `a11ign` front door and the Action runner |
 | `lab` | AGPL | **private** | 38,339 | 111 | corpus, capture runner, exports, gates, audits, trainer |
 | `control` | AGPL | **private** | 973 node + 39 YAML | 4 | Ansible, the job catalogue, the pipeline runner |
 | `nvda-speech` | GPL-3.0 | **private** | 5,768 py | 1 py | NVDA announcement composition ported off Windows |
@@ -151,7 +151,7 @@ control -> {}                                                    (by design, ADR
 ```
 
 Every declared workspace dependency is imported at least once. The only undeclared workspace imports are
-two tests (`packages/lab/src/packaging/public-api.test.ts:98` imports `a11y-witness`;
+two tests (`packages/lab/src/packaging/public-api.test.ts:98` imports `a11ign`;
 `packages/nvda-worker/src/field-match.test.ts:19` imports `evidence`), both surviving on root hoisting.
 `tsconfig` project references match actual imports exactly for the five TS projects that exist.
 
@@ -191,7 +191,7 @@ That direction is sanctioned: `control-has-no-dependencies.test.ts:47-79` walks 
 any package-name specifier, so relative reach is the only mechanism. The reverse edge is the problem.
 `worker-fleet` reads `../../control/ansible/inventory.yml` and `group_vars/a11y_workers.yml` from
 `fleet-env.mjs:82-83`, `fleet-status.mjs:69-71`, `fleet-discover.mjs:457` and `fleet-wake.mjs:137`. So the
-published `@a11y-witness/worker-fleet` ships code whose data file lives in a package that is never
+published `@a11ign/worker-fleet` ships code whose data file lives in a package that is never
 published, and `fleet-env.mjs:133-201` carries a hand-rolled YAML reader ("a stack, not a parser") to read it
 without a dependency. Either the inventory-reading modules belong in `control`, or the inventory path must
 be injected rather than resolved relative to the package.
@@ -206,7 +206,7 @@ be injected rather than resolved relative to the package.
 | `fleet-env.mjs` | no | 3 |
 | `fleet-consistency.mjs`, `worker-code-check.mjs` | no | 1 + 2 |
 
-The same module is imported three ways in one repo: `@a11y-witness/worker-fleet/worker-http` from `cli`,
+The same module is imported three ways in one repo: `@a11ign/worker-fleet/worker-http` from `cli`,
 `../../../worker-fleet/src/worker-http.mjs` from `lab`, `../../worker-fleet/src/...` from `control`.
 `packages/lab/scripts/generate-coverage-doc.ts:18,20` also reaches `../../judge/src/*.js`, bypassing the
 `./coverage` export. Because `lab` and `control` have **no `tsconfig.json`**, they are outside `tsc --build`
@@ -256,7 +256,7 @@ These are not structure. They are here because the structural audit found them a
 
 The exporter builds every training record's `evidenceUnits` through the TypeScript `modelInput`
 (`lab/src/training/export-screenreader-dataset.mjs:5`, `build-realism-tier.mjs:43`, both importing
-`@a11y-witness/scorer/evidence-units`). That function **deliberately omits landmarks**
+`@a11ign/scorer/evidence-units`). That function **deliberately omits landmarks**
 (`scorer/src/evidence-units.ts:98-112`), for a measured reason: the landmark sweep is nondeterministic and
 swung a conformant page across a threshold. The live path does not use it. `local-judge.ts:445` sends the
 annotated capture to `score.py --stdin`; `score.py:80-93` has its own `evidence_units`, which **appends
@@ -589,7 +589,7 @@ not to infrastructure. Each row is a fact with more copies than owners.
 
 | fact | copies | owner |
 |---|---|---|
-| where `runs/` and its artefacts live | **CLOSED.** `packages/lab/src/dataset-paths.mjs` is now the one resolution (`REPO_ROOT`, `runsRoot()`, `datasetRoot()`, `captureRoot()`, `datasetExportPath()`, `realCorpusRoot()`, `repeatCapturesRoot()`), with `evidence-diff.mjs`'s `captureFilePath()`/`rejectedCaptureFilePath()` for the filename half — the real count was closer to thirty call sites once `score-rules.ts`, `bench-capture.mjs` and several `.corpus.test.ts` files were found, not the eleven originally tallied. `dataset-paths.test.ts` discovers a new duplicate and refuses it; three cross-package exceptions remain, each with a stated reason (`nvda-worker`'s corpus test and `worker-fleet`'s `doctor.mjs`/`compare-workers.mjs` cannot import `@a11y-witness/lab` without a cycle; `promote-model.mjs`/`check-shipped-provenance.mjs` take their own per-script fixture-tree override) | `packages/lab/src/dataset-paths.mjs`, enforced by a discovering test |
+| where `runs/` and its artefacts live | **CLOSED.** `packages/lab/src/dataset-paths.mjs` is now the one resolution (`REPO_ROOT`, `runsRoot()`, `datasetRoot()`, `captureRoot()`, `datasetExportPath()`, `realCorpusRoot()`, `repeatCapturesRoot()`), with `evidence-diff.mjs`'s `captureFilePath()`/`rejectedCaptureFilePath()` for the filename half — the real count was closer to thirty call sites once `score-rules.ts`, `bench-capture.mjs` and several `.corpus.test.ts` files were found, not the eleven originally tallied. `dataset-paths.test.ts` discovers a new duplicate and refuses it; three cross-package exceptions remain, each with a stated reason (`nvda-worker`'s corpus test and `worker-fleet`'s `doctor.mjs`/`compare-workers.mjs` cannot import `@a11ign/lab` without a cycle; `promote-model.mjs`/`check-shipped-provenance.mjs` take their own per-script fixture-tree override) | `packages/lab/src/dataset-paths.mjs`, enforced by a discovering test |
 | how to read a capture | `readCapture` at `evidence-diff.mjs:295`, `check-signals.mjs:53`, `export-screenreader-dataset.mjs:91`, `capture-cache.mjs:162`, with differing error semantics (throw with cause vs swallow to null); usable-capture predicate in 3 files, one weaker | none |
 | the gate exit-code contract | `verdict.mjs:56-58` (0 pass / 1 fail / 2 inconclusive) adopted by 7 of ~25 gate scripts; elsewhere exit 2 means usage, stale build, missing precondition, worker refused or no run, and exit 3 means wedged, dirty targets, fleet inconsistent or wrong page | a shared type, no shared runner; 24 of 29 scripts define their own `main`, 46 hand-roll the entrypoint guard |
 | argv parsing | `refuseUnknownFlags` guards all 52 CLIs (verified by `cli-flags.test.ts`), but parsing is a hand-rolled `arg()` in 10 files, and the 8 unguarded readers are all `.ts` | validation owned; parsing not |
@@ -823,7 +823,7 @@ worker, capture corpus, model artefact or live job was modified. New findings be
 
 | original finding | status at `55cb006` | evidence / qualification |
 |---|---|---|
-| §3.1 missing published `cli-flags` target | **Open; reproduced** | After a full build, `npm pack --dry-run --ignore-scripts --json --workspace=@a11y-witness/worker-fleet` lists `dist/cli-flags.mjs` but not the exported `src/cli-flags.mjs`. |
+| §3.1 missing published `cli-flags` target | **Open; reproduced** | After a full build, `npm pack --dry-run --ignore-scripts --json --workspace=@a11ign/worker-fleet` lists `dist/cli-flags.mjs` but not the exported `src/cli-flags.mjs`. |
 | §3.5 undeclared cross-package `yaml` imports | **Open; adjacent lockfile defect fixed** | `9607ada` locked CLI's already-declared dependency; it did not declare the test consumers' dependencies. For example, `packages/lab/src/packaging/trainer-callers.test.ts:29` still imports `yaml` without a lab declaration. Do not mistake lockfile synchronisation for dependency ownership. |
 | §4.1 live/training evidence-unit divergence | **Open; read** | `packages/scorer/python/score.py:86` still appends landmarks; `packages/scorer/src/evidence-units.ts:98` deliberately omits them. No cross-language parity run was made here. |
 | §4.2 schema mismatch | **Old migration closed; new one open** | Safetensors header: `screenreader-structured-v18`; `screenreader_features.py:112`: `v19`; `models/schema-migration.json` explicitly records that new migration. `score.py:251` still requires equality. Do not weaken this refusal. |

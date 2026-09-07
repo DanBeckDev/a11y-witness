@@ -43,6 +43,13 @@
     // imported by tests across four packages (lab, judge, control, worker-fleet) and none of those may
     // depend on each other -- see ADR 0004. Same shape as the gate scripts above: a helper eleven tests
     // rely on to avoid corrupting the real repo is not one to leave outside the typecheck.
-    "scripts/test-support/**/*.ts"
+    "scripts/test-support/**/*.ts",
+    // #189: top-level `scripts/` was the third population-boundary gap in two days (#164, #174), and the
+    // worst of the three -- 22 CLIs, several ALREADY carrying `@type` JSDoc annotations that nothing
+    // enforced (`row-claim.mjs`'s injected `run` seam, `merge-guard.mjs`'s whole pure verdict). Being in
+    // this list alone changes nothing without `checkJs` or a per-file `// @ts-check` pragma -- see the
+    // comment on the `.mjs` entries above ("or `// @ts-check` is a comment"). This is that half: every
+    // file gets the pragma, is fixed, or carries `// @ts-nocheck` with a stated reason.
+    "scripts/**/*.mjs"
   ]
 }

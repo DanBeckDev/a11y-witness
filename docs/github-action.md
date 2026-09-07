@@ -52,7 +52,7 @@ only when a recorded gate has printed it.
 available for broader, noisier coverage; the action refuses at once if you name one without a key or an
 endpoint, rather than discovering it after a 20-minute capture.
 
-The trained weights are committed deliberately, in `@a11y-witness/scorer`
+The trained weights are committed deliberately, in `@a11ign/scorer`
 (`packages/scorer/models/screenreader-scorer/`). Only the 87 MB encoder beside them is gitignored, and an
 earlier version of that rule excluded the weights too — so the local judge worked only on the machine that
 trained it, and a shipped action would have had **no model at all**.

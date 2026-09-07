@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { oracleCounts } from "@a11y-witness/evidence/verify";
+import { oracleCounts } from "@a11ign/evidence/verify";
 
 import { hasEvidenceFor, EVIDENCE_CHANNEL_CRITERIA } from "./local-judge.js";
 import { CRITERION_COVERAGE, criteriaAssessableFrom } from "./criterion-coverage.js";
@@ -88,7 +88,7 @@ test("CRITERION_COVERAGE['4.1.2'] no longer requires structureCensus", () => {
 // Anchored on THIS FILE, never `process.cwd()`: a cwd-relative corpus path reads a different corpus
 // depending on where the runner was invoked from, and silently reads NONE when that is not the repo
 // root -- which this file's own `SKIP` would then report as "no runs/ here", i.e. a green run that
-// examined nothing. `@a11y-witness/lab` owns this resolution (`dataset-paths.mjs`) and judge cannot
+// examined nothing. `@a11ign/lab` owns this resolution (`dataset-paths.mjs`) and judge cannot
 // import it (lab depends on judge), so this is the same fix duplicated for the cycle, as
 // `doctor.mjs` and `compare-workers.mjs` already are -- see that module's EXEMPT table.
 const ROOT = resolve(fileURLToPath(new URL("../../../", import.meta.url)),

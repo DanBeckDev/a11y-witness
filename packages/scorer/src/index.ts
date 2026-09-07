@@ -28,7 +28,7 @@ export interface ScorerPaths {
   trainingReport: string;
   /** The scoring program. Spawn it with `--capture-json <file>` or `--stdin`. */
   scoreScript: string;
-  /** Downloads the 87 MB encoder. Also exposed as the `a11y-scorer-fetch-encoder` bin. */
+  /** Downloads the 87 MB encoder. Also exposed as the `a11ign-scorer-fetch-encoder` bin. */
   fetchEncoderScript: string;
   /** Python requirements for the two programs above. */
   requirements: string;
