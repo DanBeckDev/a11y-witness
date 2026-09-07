@@ -148,3 +148,18 @@ commit that moves it leaves the number briefly wrong on `main` AND stops the PR 
 measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
 no permission. Where prose asserts it, it does.**
 
+## The tracker's rules, ruled by `ceo` 2026-09-07 after the board asked why the count mattered
+
+**The honest answer was that it does not — three things it stood for do.** The total cap is withdrawn.
+
+**1. Work-in-progress limits, where they bite.** Ready holds **at least 3 and at most 6** unclaimed rows. **At most one row in progress per worker.** No cap on the total.
+
+**2. Every row carries a milestone**, and the document reports **three counts with trend, not one** — blocks publish, road to version one, capture throughput — with **epics and decisions shown separately from ordinary rows**. Read as one number, 48 looks like 48 pieces of unfinished work; read as `18 epics + 5 decisions + 25 rows`, the epics are the roadmap the board approved.
+
+**3. A row untouched for 14 days is re-verified by its own open-check, or closed.** A weekly pass, and it is mine.
+
+> **Why an open-check and not a judgement.** A row's premise is verified once, at filing time, and nothing asks it again — nine stale-open rows were found in one day, every one by a worker checking the premise before starting. Re-reading a row tells you what it says; running its open-check tells you whether it is still true.
+
+**4. A finding that fits an existing epic goes on the epic as a checklist item**, not as a new row. The instance belongs on the class: a guard that works keeps finding instances, and one row each turns a working guard into tracker noise.
+
+**Every closure carries the sentence that closes it** — done, decided, superseded, folded, or measured-and-below-threshold. A closure nobody can write a true sentence for is one that should not be made, and reporting a number short is better than closing real work to reach it.
