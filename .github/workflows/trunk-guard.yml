@@ -34,6 +34,28 @@ on:
     branches: [main]
 
 jobs:
+  # #394: A BACKSTOP FOR close-rows.yml, WHICH FIRES FOR SOME MERGES AND NOT OTHERS FOR AN UNEXPLAINED
+  # REASON. `ceo`'s ruling: do not chase the cause, remove the single point of failure -- this rides the
+  # SAME push-to-main event as `trunkGate` below (a push happens on every merge, which is what triggers
+  # this workflow at all) and asks the identical `closurePlan` decision `close-rows.yml` already drives,
+  # over every PR merged into `main` in the last `close-rows-sweep.mjs`'s window. INDEPENDENT of
+  # `trunkGate`'s result, deliberately -- row-closing has nothing to do with whether `main`'s new tip is
+  # green, and gating it on that would strand every merged PR's row behind an unrelated test failure. See
+  # `scripts/close-rows-sweep.mjs`'s own header for the window sizing and the idempotency argument.
+  closeRowsSweep:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Close any row a merged PR declared that the immediate trigger missed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/close-rows-sweep.mjs
+
   # THE ONLY QUESTION THIS JOB ANSWERS: is `main`'s new tip actually green. `decideRevert` below is what
   # decides whether that failure is this push's own, or something else -- this job just reports the fact.
   trunkGate:

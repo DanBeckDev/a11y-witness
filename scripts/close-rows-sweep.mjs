@@ -1,0 +1,158 @@
+#!/usr/bin/env node
+// @ts-check
+// #394: A BACKSTOP FOR close-rows.yml, WHICH FIRES FOR SOME MERGES AND NOT OTHERS AND NOBODY KNOWS WHY.
+//
+// Measured 2026-09-07: two PRs met every condition `close-rows.yml` needs -- bot merge, base `main`, the
+// workflow present in the head, a `Closes #N` GitHub itself resolved, the row open -- and NO run of that
+// workflow exists for either. Three mechanisms proposed for the miss were checked and killed by
+// measurement, not reasoning (see the issue). `ceo`'s ruling: do not chase the cause, remove the single
+// point of failure.
+//
+// THIS RIDES `trunk-guard.yml`'s EXISTING `push: main` RUN (unit 3), as a second entry into the SAME
+// `closurePlan` decision `close-rows-for-merged-pr.mjs` already drives -- imported, never re-derived,
+// because a second copy of that decision is the exact "fact stated twice" shape this repo keeps paying
+// for. A push to `main` happens on every merge (that IS what triggers `trunk-guard.yml`), which is also
+// why this cannot be the ONLY path: the row exists because a trigger cannot be trusted, and `push` is a
+// trigger too. Not a schedule, deliberately -- GitHub disables scheduled workflows repository-wide after
+// 60 days of inactivity, and a backstop that fails by going quiet has the disease it treats.
+//
+// IDEMPOTENT BY CONSTRUCTION. The common outcome is `ALREADY CLOSED` -- the immediate `pull_request` path
+// already did the work, and this just confirms it -- which is `closurePlan`'s own `already` bucket,
+// unchanged from the row it backstops. Running this twice against the same window closes nothing twice.
+//
+// THE WINDOW IS GENEROUS, NOT TIGHT, and that is deliberate. In the common case the window only needs to
+// bridge the gap since the LAST push to `main`, but a push can be swallowed by the identical unexplained
+// mechanism this row exists to route around -- so `DEFAULT_WINDOW_MINUTES` is sized to survive a
+// TEMPORARY loss of the trigger, not a permanent one: a PR merged during a long quiet gap is caught by
+// whenever the next push happens, not by a timer. Measured merge rate the night this was built: 13
+// merges in one hour.
+//
+// SCOPED EXACTLY LIKE close-rows.yml, because it is answering the identical question for a PR the
+// immediate path may have missed: `state: merged`, `base: main`, and GitHub's OWN
+// `closingIssuesReferences` -- never a regex over a body, never inferred from a commit range. This is
+// what keeps the risk `close-merged-rows.mjs`'s own header names ("a tool that closed rows automatically
+// would eventually close one whose work did not actually land") from reappearing here: a PR that did not
+// merge is not in this list at all, by construction of the `gh pr list --state merged` query below.
+//
+// REPORTS DISTINCTLY FROM THE IMMEDIATE PATH -- every line here is `SWEEP:`, never `CLOSE-ROWS:`. A row
+// closed by the immediate trigger and a row closed by the sweep are different facts about the pipeline's
+// health: if the sweep starts doing all the work, that is the signal the `pull_request` trigger has
+// degraded, and it must stay visible rather than be absorbed into one undifferentiated log line.
+//
+// Exit codes are the contract:
+//   0  every merged PR in the window is accounted for -- closed here, already closed, or declared nothing
+//   1  one or more rows could not be closed. NAMED, never counted.
+//   2  a lookup failed. INCONCLUSIVE, never "fine".
+//
+//   node scripts/close-rows-sweep.mjs [--window=<minutes>]
+import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+// RELATIVE, never the package specifier -- this job runs with `actions/checkout` and nothing else, the
+// identical reason close-rows-for-merged-pr.mjs's own header gives (#330/#331).
+import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { closurePlan } from "./close-rows-for-merged-pr.mjs";
+
+export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2 };
+export const DEFAULT_WINDOW_MINUTES = 45;
+
+/** @param {string[]} args */
+const gh = (args) => execFileSync("gh", args, { encoding: "utf8" }).trim();
+
+/**
+ * Every PR merged into `main` within the last `windowMinutes`, via GitHub's own search -- never inferred
+ * from a commit range. `gh_` is injectable so this is testable without a live repo.
+ * @param {string} repo
+ * @param {number} windowMinutes
+ * @param {(args: string[]) => string} [gh_]
+ * @returns {{ number: number }[]}
+ */
+export function mergedPrsInWindow(repo, windowMinutes, gh_ = gh) {
+  const since = new Date(Date.now() - windowMinutes * 60_000).toISOString();
+  const out = gh_(["pr", "list", "--repo", repo, "--state", "merged", "--base", "main", "--limit", "100",
+    "--search", `merged:>=${since}`, "--json", "number"]);
+  return JSON.parse(out);
+}
+
+/**
+ * Resolve and act on ONE merged PR's closing plan -- split out of `main` purely to keep its complexity
+ * within this repo's ESLint budget; the two are one algorithm, driven per PR by the loop below.
+ * @param {number} number
+ * @param {string} repo
+ * @returns {number[]} row numbers that could not be closed (empty on success)
+ */
+function closeOnePr(number, repo) {
+  const [owner, name] = repo.split("/");
+  let issues, sha;
+  try {
+    const query = `{repository(owner:"${owner}",name:"${name}"){pullRequest(number:${number}){`
+      + `mergeCommit{oid} closingIssuesReferences(first:20){nodes{number state}}}}}`;
+    const pr = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`,
+      "--jq", ".data.repository.pullRequest"]));
+    issues = pr.closingIssuesReferences.nodes;
+    sha = pr.mergeCommit?.oid ?? "unknown";
+  } catch (cause) {
+    console.log(`SWEEP: #${number} CANNOT ASK -- ${cause instanceof Error ? cause.message : cause}`);
+    return [number];
+  }
+
+  const { close, already, none } = closurePlan(issues);
+  if (none) {
+    console.log(`SWEEP: #${number} declared NO closing references.`);
+    return [];
+  }
+  for (const n of already) console.log(`SWEEP: #${n} ALREADY CLOSED -- left alone.`);
+
+  const failed = [];
+  for (const n of close) {
+    const sentence = `Closed by the pipeline's sweep: PR #${number} merged as \`${sha}\` and declared `
+      + `\`Closes #${n}\`, but the immediate pull_request:closed trigger did not fire for it (#394).\n\n`
+      + `If the work did not land, reopen and say so on the row: \`git show ${sha}\` is what actually `
+      + "merged.";
+    try {
+      gh(["issue", "close", String(n), "--repo", repo, "--comment", sentence, "--reason", "completed"]);
+      console.log(`SWEEP: #${n} CLOSED (PR #${number}, merge ${sha}) -- the immediate trigger missed this.`);
+    } catch (cause) {
+      console.log(`SWEEP: #${n} COULD NOT CLOSE -- ${cause instanceof Error ? cause.message : cause}`);
+      failed.push(n);
+    }
+  }
+  return failed;
+}
+
+function main() {
+  refuseUnknownFlags(["--window"], { entry: import.meta.url, command: "node scripts/close-rows-sweep.mjs" });
+
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!repo) {
+    console.error("CANNOT ASK: GITHUB_REPOSITORY is unset, so there is no repo to sweep.");
+    process.exit(EXIT.CANNOT_ASK);
+  }
+  const windowMinutes = Number(flagValue(process.argv, "window") ?? DEFAULT_WINDOW_MINUTES);
+
+  let prs;
+  try {
+    prs = mergedPrsInWindow(repo, windowMinutes);
+  } catch (cause) {
+    console.error(`CANNOT ASK: listing merged PRs failed -- ${cause instanceof Error ? cause.message : cause}`);
+    process.exit(EXIT.CANNOT_ASK);
+  }
+
+  if (prs.length === 0) {
+    console.log(`SWEEP: no PRs merged into main in the last ${windowMinutes}m.`);
+    process.exit(EXIT.DONE);
+  }
+  console.log(`SWEEP: ${prs.length} PR(s) merged into main in the last ${windowMinutes}m: `
+    + `${prs.map((p) => p.number).join(" ")}`);
+
+  const failed = prs.flatMap(({ number }) => closeOnePr(number, repo));
+
+  if (failed.length > 0) {
+    console.error(`SWEEP: could not close ${failed.length}: ${failed.join(" ")}`);
+    process.exit(EXIT.COULD_NOT_CLOSE);
+  }
+  process.exit(EXIT.DONE);
+}
+
+// The entry guard `merge-guard.mjs`/`close-rows-for-merged-pr.mjs` use.
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
