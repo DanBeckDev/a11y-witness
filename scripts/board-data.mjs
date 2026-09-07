@@ -131,6 +131,25 @@ export function reported() {
 }
 
 /**
+ * The capture age a real-page gate printed, pulled from its own verbatim output rather than retyped by a
+ * human -- issue #128. `rules:real-pages` computes and prints this line itself
+ * (`*** 298 hour(s) between the oldest and newest, so this compares a MIXED population against one
+ * baseline`); the defect was that everything downstream of the recorded entry re-typed a bare figure and
+ * dropped it. The board document quotes a gate's output verbatim already, so once the recording keeps the
+ * line this needs only to find it, never to compute it -- a second computation of the same spread is
+ * exactly the fact-stated-twice shape this file's own header warns about.
+ *
+ * @param {string | undefined} gateOutput
+ * @returns {string | null} the gate's own spread sentence, or null when it printed none (not a real-page
+ *   result, or an older recording taken before the gate stated its spread)
+ */
+export function realPageCaptureAge(gateOutput) {
+  if (!gateOutput) return null;
+  const spread = gateOutput.match(/\*{0,3}\s*\d+\s*hour\(s\)\s*between the oldest and newest[^\n]*/i);
+  return spread ? spread[0].replace(/^\*+\s*/, "").trim() : null;
+}
+
+/**
  * HAS THE WORLD MOVED UNDER AN AUTHORED ACHIEVEMENT? — the one section of the board document no gate
  * computes, and therefore the one nothing ever re-checks.
  *
