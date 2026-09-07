@@ -20,7 +20,9 @@ command that showed it:
 | is any issue closed by a merge still open? | `gh pr list --state merged` against each PR body's `Closes #N` |
 | does any open row lack acceptance, region or open-check? | the template fields, read back |
 | does any open row carry NEITHER a milestone nor `out-of-release`? | `gh issue list --state open --json number,milestone,labels` — the rule allows no third state, and an unclassified row is counted in the open-items total while being invisible to every milestone figure |
-| is Ready below three unclaimed rows? | count, and tell `product-manager` |
+| does any session hold more than TWO claimed rows? | group open rows by their `session:*` label — one in flight plus one held is the limit. **Report, never release**: which of a worker's rows to take is a judgement about work in progress |
+| do any commits exist on NO remote ref? | `git rev-list --all --not --remotes \| wc -l`, then per branch. **This is the survivability question**, and it is a different one from `branches:stranded` — that reads branches which ARE pushed, and `git branch -r --contains` searches remote refs only, so both answer merge-and-duplication. The gap between them is where unpushed work sits |
+| is Ready below three rows? | the floor is three in total, product first; report the count AND how many carry a milestone, so the composition is visible rather than inferred |
 
 ## What this role does not do
 
