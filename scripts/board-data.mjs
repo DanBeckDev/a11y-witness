@@ -152,6 +152,14 @@ export function milestone() {
  */
 const REPORTED_DIR = "docs/board/reported";
 
+/** WHICH SUBDIRECTORIES HOLD ENTRIES — declared ONCE and exported.
+ *
+ * `board-summary-check` built the same list inline, so adding a third kind meant remembering two places
+ * and the second would be forgotten silently. Found in review of #159; it is the fact-stated-twice shape
+ * that this very migration's commit message cites, reintroduced by the migration itself.
+ */
+export const REPORTED_KINDS = ["gates", "achievements"];
+
 function readEntries(kind) {
   const dir = path.join(ROOT, REPORTED_DIR, kind);
   if (!existsSync(dir)) return [];
