@@ -28,7 +28,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.mjs";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+// RELATIVE, NOT `@a11y-witness/worker-fleet/cli-flags` -- same outage as `build-packages.mjs`
+// (packages/lab/src/packaging/build-bootstrap-no-workspace-imports.test.ts). This runs as `prepare`, on
+// every plain
+// `npm install` in a fresh checkout, before any package's `dist/` exists -- a package-specifier import
+// here resolves to a file nothing has built yet, on the very first install.
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 /** Relative, so it keeps working inside a `git worktree` — where `.git` is a file, not a directory. */
 export const HOOKS_PATH = "scripts/git-hooks";
