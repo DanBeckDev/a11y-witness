@@ -71,10 +71,11 @@ const unique = (values) => [...new Set(values)];
  * @param {{row: number,
  *          subjectsMissing: {name: string, refs: string[]}[] | null,
  *          heldRegions: {path: string, refs: string[]}[] | null,
+ *          blockedLabel?: boolean,
  *          examined: {paths: number, symbols: number}}} facts
  * @returns {{code: number, lines: string[]}}
  */
-export function startability({ row, subjectsMissing, heldRegions, examined }) {
+export function startability({ row, subjectsMissing, heldRegions, examined, blockedLabel }) {
   if (subjectsMissing === null || heldRegions === null) {
     return { code: EXIT.CANNOT_ASK, lines: [
       `CANNOT SAY whether #${row} is startable: a lookup failed.`,
@@ -91,6 +92,11 @@ export function startability({ row, subjectsMissing, heldRegions, examined }) {
   }
 
   const lines = [];
+  if (blockedLabel) {
+    lines.push(`CARRIES THE \`blocked\` LABEL: somebody has recorded that this row waits on something.`,
+      "  This tool checks regions and symbols; a row blocked by another ROW is invisible to both, which is",
+      "  why the label is read rather than inferred from the prose that states it.");
+  }
   for (const { name, refs } of subjectsMissing) {
     lines.push(`SUBJECT NOT ON main: \`${name}\` exists only on ${refs.join(", ")}.`,
       "  The row is about code that has not landed. Building on `main` finds nothing to change; building",
@@ -100,7 +106,7 @@ export function startability({ row, subjectsMissing, heldRegions, examined }) {
     lines.push(`REGION HELD: \`${path}\` has unmerged changes on ${refs.join(", ")}.`,
       "  Startable, but you will merge against them. Worth knowing before you begin, not at review.");
   }
-  if (subjectsMissing.length > 0) return { code: EXIT.BLOCKED, lines };
+  if (subjectsMissing.length > 0 || blockedLabel) return { code: EXIT.BLOCKED, lines };
   if (heldRegions.length > 0) {
     return { code: EXIT.STARTABLE,
       lines: [...lines,
@@ -109,7 +115,10 @@ export function startability({ row, subjectsMissing, heldRegions, examined }) {
   }
   return { code: EXIT.STARTABLE,
     lines: [`#${row} is STARTABLE: every symbol it names is on \`main\`, and no unmerged branch is in its `
-      + `region (${examined.paths} path(s), ${examined.symbols} symbol(s) examined).`] };
+      + `region (${examined.paths} path(s), ${examined.symbols} symbol(s) examined).`,
+    "  This checks REGIONS, SYMBOLS and the `blocked` label. A row can still be blocked by something none",
+    "  of those express -- an unstated dependency, a decision nobody has taken -- so STARTABLE means "
+      + "\"nothing I can see\", never \"nothing blocks this\"."] };
 }
 
 /**
@@ -167,7 +176,14 @@ function refsCarrying(path, symbol, refs) {
 }
 
 function facts(row) {
-  const body = JSON.parse(gh(["issue", "view", String(row), "--repo", REPO, "--json", "body"])).body ?? "";
+  const issue = JSON.parse(gh(["issue", "view", String(row), "--repo", REPO,
+    "--json", "body,labels"]));
+  const body = issue.body ?? "";
+  // THE BOARD'S OWN RECORD, not prose. A row can be blocked by another ROW -- #77 is "blocked behind
+  // #35's schema migration" and carries the `blocked` label -- and neither its region nor its symbols say
+  // so. Reading the LABEL is not the prose-parsing this tool refuses elsewhere: it is the same
+  // authoritative record `row-claim` already trusts for `in-progress`.
+  const blockedLabel = (issue.labels ?? []).some((l) => l?.name === "blocked");
   const paths = unique([...body.matchAll(PATH_IN_PROSE)].map((m) => m[1]))
     .filter((p) => !p.endsWith(".md"));
   const symbols = unique([...body.matchAll(SYMBOL_IN_PROSE)].map((m) => m[1]));
@@ -213,7 +229,8 @@ function facts(row) {
       && changed(["origin/main", ref], path));
     if (holders.length > 0) heldRegions.push({ path, refs: holders });
   }
-  return { row, subjectsMissing, heldRegions, examined: { paths: paths.length, symbols: symbols.length } };
+  return { row, subjectsMissing, heldRegions, blockedLabel,
+    examined: { paths: paths.length, symbols: symbols.length } };
 }
 
 function main() {
