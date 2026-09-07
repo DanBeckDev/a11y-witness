@@ -64,7 +64,11 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+// RELATIVE, NOT the `@a11y-witness/worker-fleet/cli-flags` package specifier: that export map
+// points at `dist/`, so it needs both `node_modules` AND a completed build. This file is reachable
+// from a pre-install entry (see `pre-install-import-graph.test.ts`, which derives that population
+// rather than naming it), and there it dies on startup with ERR_MODULE_NOT_FOUND.
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { decideClaim } from "./row-claim.mjs";
