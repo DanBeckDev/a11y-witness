@@ -41,6 +41,24 @@ on:
 permissions:
   pull-requests: write
   contents: write
+  # ISSUES: WRITE, OR THE PIPELINE CANNOT CLOSE THE ROWS IT FINISHES -- #298, measured 2026-09-07.
+  #
+  # GitHub closes an issue referenced by `Closes #N` AS THE ACTOR THAT MERGED. When auto-merge was armed
+  # by this workflow, that actor is `github-actions[bot]`, carrying THIS file's token -- so without
+  # `issues: write` the merge succeeds, the reference is silently ignored, and nothing anywhere reports it.
+  #
+  #   PR #323  merged_by=github-actions[bot]  Closes #314  ->  #314 stayed OPEN
+  #   PR #315  merged_by=github-actions[bot]  Closes #11   ->  #11  stayed OPEN
+  #   PR #301  merged_by=DanBeckDev           Closes #292  ->  #292 closed
+  #
+  # Same target branch, same `auto_merge=true`, same plain-text `Closes #N`. The only difference was who
+  # merged. #314's timeline carries `cross-referenced` and `referenced` and no `connected` and no `closed`:
+  # GitHub saw the mention and could not act on it.
+  #
+  # It fails by making NOTHING happen, which is why it needed an audit to find rather than a red run. And
+  # `Closes #N` is the tracker's whole closing mechanism under the pipeline, so the drift is proportional
+  # to how much work the pipeline does -- fastest exactly when things are going best.
+  issues: write
 
 jobs:
   arm:
