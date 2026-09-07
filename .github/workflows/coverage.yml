@@ -22,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  issues: write     # the failure comment below, on #169
 
 jobs:
   coverage:
@@ -40,3 +41,17 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: npm run coverage
+
+      # A SCHEDULE NOBODY READS IS A GATE THAT FAILS QUIETLY -- dispatcher's review of #166, and this repo's
+      # own recorded rule ("a gate that does not exercise what ships is not a gate", four prior instances)
+      # applied to who's WATCHING rather than what's exercised. Same pattern `board-liveness.yml` already
+      # uses against #20: on a red run, comment on the tracking issue rather than trusting someone to open
+      # the Actions tab. One comment per failing run, not per day, because a repeating warning is a warning
+      # people filter -- `github.run_id` in the marker is what makes a rerun of the SAME failure distinct
+      # from tomorrow's fresh one without spamming the issue on a retry of the same commit.
+      - name: Coverage failed -- say so on the tracking issue, not just in the Actions log
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 169 --body "Nightly coverage failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
