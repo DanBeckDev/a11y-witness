@@ -242,15 +242,19 @@ export function reasonKind(reason) {
 
 /**
  * Never a silent no-op: a write failure is the exact defect this mechanism exists to avoid.
+ *
+ * Exported (#226) so a second log -- `row-claim`'s check/conflict log -- reuses this rather than
+ * re-deriving "append one JSON line, fail loud" a second time in this repo.
+ *
  * @param {string} path
  * @param {object} entry
  */
-function appendJsonl(path, entry) {
+export function appendJsonl(path, entry) {
   try {
     appendFileSync(path, `${JSON.stringify(entry)}\n`);
   } catch (error) {
-    throw new Error(`could not write the merge-guard log at ${path}: `
-      + `${/** @type {Error} */ (error).message}`, { cause: error });
+    throw new Error(`could not write the log at ${path}: ${/** @type {Error} */ (error).message}`,
+      { cause: error });
   }
 }
 
