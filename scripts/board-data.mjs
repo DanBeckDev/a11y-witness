@@ -145,13 +145,26 @@ export function reported() {
  * supports: the entry cites an issue and carries a timestamp, so *did the world move under this
  * sentence?* A machine can ask GitHub whether that issue is still open without understanding a word.
  *
- * RE-AFFIRMING IS THE ESCAPE, and it is a field rather than a flag: `affirmed` carries WHY the claim
- * still stands now that its issue is closed. A bare boolean would let the guard be cleared by a keystroke
- * with no thought, which is how a refusal becomes a formality — the same reason every EXEMPT table in
- * this repository demands a reason and not a name.
+ * A CLOSED ISSUE IS NOT THE FINDING, and the first version of this got that wrong. An achievement is by
+ * definition something FINISHED, so the issue that tracked it closes — refusing every entry citing a
+ * closed issue means the board can only ever be told about UNFINISHED work, and each entry decays into
+ * unrenderable the moment its own row closes. `product-manager` caught it: the implementation took the
+ * row's wording more literally than it meant.
  *
- * @param {{achievements: any[], issueState: Record<string, string>, now?: number,
- *          staleAfterHours?: number}} input
+ * **What the row asks is weaker and sufficient: the world moved under this sentence, so somebody look.**
+ * The satisfying act is RE-AFFIRMATION, not a live reference, and `at` is what records it. So:
+ *
+ *   closed reference + `at` LATER than the closure   -> a good entry: somebody looked after it moved
+ *   closed reference + `at` OLDER than the closure   -> the one to refuse: nobody has looked since
+ *
+ * A strictly smaller population than "cites a closed issue", and the one the row was written about.
+ *
+ * `affirmed` remains the explicit escape, and it is a field rather than a flag: it carries WHY the claim
+ * still stands. A bare boolean would let the guard be cleared by a keystroke with no thought, which is
+ * how a refusal becomes a formality — the reason every EXEMPT table here demands a reason, not a name.
+ *
+ * @param {{achievements: any[], issueState: Record<string, {state: string, closedAt?: string|null}>,
+ *          now?: number, staleAfterHours?: number}} input
  * @returns {{index: number, claim: string, why: string}[]}
  */
 export function achievementsWhoseWorldMoved({ achievements, issueState, now = Date.now(),
@@ -168,11 +181,14 @@ export function achievementsWhoseWorldMoved({ achievements, issueState, now = Da
       findings.push({ index, claim,
         why: `cites issue #${entry.issue}, which the issue listing did not carry -- so whether it is `
           + "still open COULD NOT BE ASKED. Widen the listing or check by hand; do not assume." });
-    } else if (state === "CLOSED" && !affirmed) {
+    } else if (state?.state === "CLOSED" && !affirmed
+      && Date.parse(entry.at) < Date.parse(state.closedAt ?? "")) {
       findings.push({ index, claim,
-        why: `cites issue #${entry.issue}, which is now CLOSED. The claim may still be true -- this does `
-          + "not judge that -- but the world moved under it and nobody has looked since. Re-affirm it by "
-          + `adding an \`affirmed\` field saying why it still stands, or retire the entry.` });
+        why: `cites issue #${entry.issue}, which closed at ${state.closedAt} -- AFTER this entry was last `
+          + `affirmed (${entry.at}). The claim may still be true, and a closed issue is the normal end of `
+          + "a finished achievement: this does not judge either. What it says is that the world moved "
+          + "under the sentence and nobody has looked since. Re-affirm it by updating `at`, or add an "
+          + "`affirmed` field saying why it still stands, or retire the entry." });
     }
     const ageHours = (now - Date.parse(entry.at)) / HOURS_MS;
     if (Number.isFinite(ageHours) && ageHours > staleAfterHours && !affirmed) {
