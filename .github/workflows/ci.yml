@@ -158,12 +158,53 @@ jobs:
           key: node-modules-${{ hashFiles('package-lock.json') }}
       # --ignore-scripts: skip Playwright/Guidepup postinstall browser/AT setup, which lint, typecheck and
       # the unit suite do not need (keeps this fast and Linux-safe) -- carried forward from `lint.yml`.
+      #
+      # #331: IT DOES NOT SKIP A WORKSPACE PACKAGE'S OWN `prepare` SCRIPT -- measured, not assumed. npm
+      # 10.9.8 (bundled with the Node 22 this job pins) runs every workspace's `prepare` regardless of
+      # `--ignore-scripts`: `npm ci --ignore-scripts --loglevel=verbose` on a fresh clone logs `npm info
+      # run @a11y-witness/worker-fleet@0.1.0 prepare packages/worker-fleet tsc --build` and leaves a real,
+      # populated `dist/` behind. That is what masked #238: `build-packages.mjs` used to import
+      # `@a11y-witness/worker-fleet/cli-flags` (a `dist/` path) at its own top level (#164), and on a cache
+      # MISS this step's silent side-build made that import resolve by accident, so `gate` read green on a
+      # tree that could not build from a cache HIT (where this whole step, prepare included, is skipped).
+      # #330 fixed the real bug (a relative import that needs no pre-built `dist/` at all); this note is
+      # why a future script must not assume `--ignore-scripts` here means "nothing built" -- one workspace
+      # `prepare` script is enough to make a broken bootstrap pass by luck exactly once in three.
       - if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci --ignore-scripts
       # Cross-package imports resolve to `dist` (every `exports` entry points there) -- CLAUDE.md's own
       # rule: run the file runner on its own and it tests the LAST BUILD, which on a fresh checkout is no
       # build at all.
       - run: npm run build
+      # WHAT THE BUILD ACTUALLY PRODUCED, kept only when something after it fails -- #168.
+      #
+      # `ci/ts` fails intermittently with eleven type errors in a package the PR never touched, and every
+      # one is a consequence of the first: `File '.../packages/evidence/dist/wcag.d.ts' is not a module`
+      # means the emitted declaration had no top-level exports. The tell that it is not a real fault is
+      # that `tsc --build` reported no errors in `evidence` at all -- a genuine one there would have been
+      # named and would have stopped the build before `judge` compiled.
+      #
+      # Re-running the identical sha passes. So the TREE differs between the two runs and the LOGS CANNOT
+      # SAY HOW: they record the same commands and the same errors either way.
+      #
+      # Three causes remain open and they need opposite work -- a declaration that is ABSENT (nothing was
+      # emitted), EMPTY (a truncated write), or PRESENT-BUT-EXPORTLESS (a compile that produced no
+      # top-level exports). One `ls` and one `head` separate them, and only on the failing run.
+      #
+      # `if: failure()` so a green run pays nothing, and deliberately NO `continue-on-error` on the steps
+      # below: this is a diagnostic, not a remedy, and the job must still fail. Reproduction was attempted
+      # four times locally -- ci/ts's exact path and the parallel-`prepare` path, from a fresh clone with
+      # no `dist` and no `.tsbuildinfo` -- and did not reproduce on a 14-core machine, which is
+      # unremarkable for a race on a 2-core runner and is why the evidence must be caught where it happens.
+      - name: "#168: what the build produced, if anything below fails"
+        if: failure()
+        run: |
+          echo "--- packages/evidence/dist ---"
+          ls -la packages/evidence/dist/ || echo "(no dist directory at all)"
+          echo "--- wcag.d.ts, first 20 lines ---"
+          head -20 packages/evidence/dist/wcag.d.ts || echo "(no wcag.d.ts)"
+          echo "--- does tsc consider the graph up to date? ---"
+          npx tsc --build --dry $(node -e "const fs=require('fs');console.log(fs.readdirSync('packages').filter(d=>fs.existsSync('packages/'+d+'/tsconfig.json')).map(d=>'packages/'+d).join(' '))") || true
       - run: npm run lint
       - run: npm run typecheck
       - name: Unit tests of the touched package(s) and their workspace dependents

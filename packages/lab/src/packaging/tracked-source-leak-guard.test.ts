@@ -352,6 +352,11 @@ const EXEMPT: Array<{ file: string; value: string; reason: string }> = [
     file: "packages/worker-fleet/src/guest-reachable.test.ts", value,
     reason: "generic test double, independent of any real address",
   })),
+  ...["192.168.64.4", "192.168.64.5", "10.0.0.1", "172.20.5.5"].map((value) => ({
+    file: "packages/lab/src/packaging/history-secret-scan.test.ts", value,
+    reason: "generic test double, independent of any real address -- the fixture history-secret-scan.mjs "
+      + "exists to FIND this exact shape, so its own test necessarily embeds one",
+  })),
 
 ];
 
