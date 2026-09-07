@@ -78,6 +78,42 @@ const SATISFIED = new Set(["success", "skipped", "neutral"]);
 export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
 /**
+ * THE SUBSET OF `mergeReadiness` THAT NEVER ASKS ABOUT THIS RUN'S OWN SIBLING CHECKS — #298 (unit 1).
+ *
+ * `mergeReadiness`'s `checkReasons`/`stalenessReason` inspect check-run CONCLUSIONS, which is exactly
+ * what makes it unsafe to run as a REQUIRED job inside the very workflow run whose own sibling jobs are
+ * still in flight: a job asking "did every required context conclude" about a commit it is itself
+ * currently testing reads STILL_RUNNING on every ordinary push, forever, and would block every merge
+ * permanently rather than only the unsafe ones. `gate` already answers "did CI pass" by construction
+ * (branch protection requires it, and it is `if: always()` over every sibling's `result`) — this answers
+ * the three questions `strict=false` (#277) left nobody answering, none of which depend on whether CI has
+ * finished: is this head CURRENT (ancestry, #182), does it match what the platform thinks it is
+ * (head-vs-tip, #294), and would arming it close a row somebody else is inside (closing-claim, #262).
+ *
+ * @param {{pr: {headRefOid: string}, behindBy: number | null,
+ *          closes?: {number: number, title?: string, labels: string[]}[] | null,
+ *          session?: string | null, remoteHeadOid: string | null}} facts
+ * @returns {{code: number, reasons: string[]}}
+ */
+export function mergeSafetyVerdict({ pr, behindBy, closes = [], session = null, remoteHeadOid }) {
+  const missingLookups = [
+    behindBy === null && "whether this head contains `main`'s tip (the compare API)",
+    closes === null && "which rows this PR would close (the closingIssuesReferences lookup)",
+    remoteHeadOid === null && "the branch's real tip (`git ls-remote`, #294)",
+  ].filter(Boolean);
+  if (missingLookups.length > 0) {
+    return { code: EXIT.CANNOT_ASK, reasons: [
+      `CANNOT SAY whether #${pr.headRefOid.slice(0, 10)} is safe to auto-arm: could not read `
+      + `${missingLookups.join("; ")}.\n  This is INCONCLUSIVE, not clear.`,
+    ] };
+  }
+  const knownCloses = /** @type {{number: number, title?: string, labels: string[]}[]} */ (closes);
+  const reasons = [...ancestryReason(behindBy), ...closingClaimReasons(knownCloses, session),
+    ...headVsTipReason(pr.headRefOid, /** @type {string} */ (remoteHeadOid))];
+  return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons };
+}
+
+/**
  * THE VERDICT, PURE — so every state can be exercised without a network, including the one no fixture
  * gives you for free (a real run against a base that has since moved).
  *
@@ -91,16 +127,26 @@ export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: 
  *          mainTipIso: string | null,
  *          behindBy: number | null,
  *          closes?: {number: number, title?: string, labels: string[]}[] | null,
- *          session?: string | null}} facts
+ *          session?: string | null,
+ *          remoteHeadOid?: string | null}} facts remoteHeadOid: omit (or pass `undefined`) to skip the
+ *          #294 head-vs-tip check entirely -- every call site predating it keeps working unchanged. Pass
+ *          `null` for "I looked it up and the lookup failed" (CANNOT_ASK, never silently skipped), or the
+ *          real sha from `git ls-remote` to have it compared against `pr.headRefOid`.
  * @returns {{code: number, reasons: string[], notes: string[]}}
  */
-export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, closes = [], session = null }) {
+export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, closes = [], session = null,
+  remoteHeadOid = undefined }) {
+  // `undefined` (the default) means the CALLER never asked for this check -- every pre-#294 call site
+  // keeps working unchanged. `null` means it was asked for and the `git ls-remote` lookup failed, which
+  // is CANNOT_ASK exactly like every other lookup here, never a silent skip.
+  const headCheckRequested = remoteHeadOid !== undefined;
   const missingLookups = [
     required === null && "the required status checks for `main` (branch protection)",
     runs === null && `the check runs for head ${pr.headRefOid.slice(0, 10)}`,
     mainTipIso === null && "the current tip of `main`",
     behindBy === null && "whether this head contains `main`'s tip (the compare API)",
     closes === null && "which rows this PR would close (the closingIssuesReferences lookup)",
+    headCheckRequested && remoteHeadOid === null && "the branch's real tip (`git ls-remote`, #294)",
   ].filter(Boolean);
   if (missingLookups.length > 0) {
     return { code: EXIT.CANNOT_ASK, notes: [], reasons: [
@@ -120,7 +166,8 @@ export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, close
   const knownCloses = /** @type {{number: number, title?: string, labels: string[]}[]} */ (closes);
   const reasons = [...baseReason(pr), ...checkReasons(pr, knownRequired, knownRuns),
     ...ancestryReason(behindBy), ...stalenessReason(knownRuns, knownMainTipIso),
-    ...closingClaimReasons(knownCloses, session)];
+    ...closingClaimReasons(knownCloses, session),
+    ...(headCheckRequested ? headVsTipReason(pr.headRefOid, /** @type {string} */ (remoteHeadOid)) : [])];
   return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons, notes };
 }
 
@@ -137,7 +184,7 @@ export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, close
  * @param {string | null} session
  * @returns {string[]}
  */
-function closingClaimReasons(closes, session) {
+export function closingClaimReasons(closes, session) {
   const reasons = [];
   for (const issue of closes) {
     const decision = decideClaim(issue.labels, session ?? "");
@@ -238,12 +285,41 @@ function stalenessReason(runs, mainTipIso) {
  * @param {number | null} behindBy
  * @returns {string[]}
  */
-function ancestryReason(behindBy) {
+export function ancestryReason(behindBy) {
   if (behindBy === null || behindBy === 0) return [];
   return [`THIS HEAD DOES NOT CONTAIN main's TIP — it is ${behindBy} commit(s) behind.\n`
     + "  Whatever ran, ran against a tree missing that work, so it cannot say the two go together. This is\n"
     + "  NOT the same as the runs being old: they may be minutes fresh and still have tested a base that\n"
     + "  no longer exists. Update the branch and let it re-run."];
+}
+
+/**
+ * GITHUB'S RECORDED HEAD MUST EQUAL THE BRANCH'S REAL TIP — #294.
+ *
+ * Measured 2026-09-07 on #195: `gh pr view --json headRefOid` answered `ac306fe9` (9 check runs, green)
+ * while `git ls-remote origin lead/prune-orphan-captures` answered `7c2e16fc` (0 runs) for the SAME
+ * branch, moments apart. Every other fact this file asks — required contexts, check runs, `behind_by`,
+ * `closingIssuesReferences` — is looked up FOR `pr.headRefOid`, so a stale read of that one field poisons
+ * every fact built on top of it: a real, green result for a commit that is no longer on the branch.
+ *
+ * `git ls-remote` and GitHub's REST/GraphQL PR API are genuinely independent channels — ls-remote is the
+ * git smart-HTTP ref advertisement, not a cached API read — so a disagreement between them is real
+ * information, not two readings of one clock. This is the same rule this repo applies to `/health` versus
+ * `exec`, and to `stat`'s checksum versus `copy`'s own `changed` flag: a verification sharing a failure
+ * mode with the thing it verifies verifies nothing.
+ *
+ * @param {string} recordedHeadOid GitHub's `pr.headRefOid`
+ * @param {string | null} remoteHeadOid `git ls-remote`'s answer for the same branch, or `null` on failure
+ * @returns {string[]}
+ */
+export function headVsTipReason(recordedHeadOid, remoteHeadOid) {
+  if (remoteHeadOid === null || remoteHeadOid === recordedHeadOid) return [];
+  return [`GITHUB'S RECORDED HEAD (${recordedHeadOid.slice(0, 10)}) DOES NOT MATCH THE BRANCH'S ACTUAL `
+    + `TIP (${remoteHeadOid.slice(0, 10)}) — #294.\n`
+    + "  Every other fact here (required contexts, runs, ancestry, closing issues) was looked up for the\n"
+    + "  RECORDED head, so a stale read here poisons all of it: a real, green result for a commit that is\n"
+    + "  no longer on the branch. Ask again — this is usually a transient propagation lag, not a permanent\n"
+    + "  fault, but it must never be treated as ready while it disagrees."];
 }
 
 /**
@@ -281,6 +357,7 @@ const REASON_KINDS = [
   [/^THIS HEAD DOES NOT CONTAIN main's TIP/, "ANCESTRY"],
   [/^EVERY RUN PREDATES THE CURRENT main/, "STALE"],
   [/^WOULD CLOSE #/, "CLAIMED_BY_ANOTHER_SESSION"],
+  [/^GITHUB'S RECORDED HEAD/, "HEAD_MISMATCH"],
 ];
 
 /**
@@ -481,12 +558,66 @@ export function lookupClosingIssues(number) {
   });
 }
 
+/**
+ * `git ls-remote`'s answer for a branch's tip -- a genuinely independent channel from GitHub's REST/
+ * GraphQL PR API (the git smart-HTTP ref advertisement, not a cached API read), which is what makes it
+ * able to catch #294 rather than agreeing with the very field it is checking. `null` on failure, same as
+ * every other lookup here.
+ * @param {string} branch
+ * @returns {string | null}
+ */
+export function lookupRemoteHeadOid(branch) {
+  return lookup(() => {
+    const line = execFileSync("git", ["ls-remote", `https://github.com/${REPO}.git`, `refs/heads/${branch}`],
+      { encoding: "utf8", env: sandboxGitEnv() }).trim();
+    const sha = line.split(/\s+/)[0];
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  });
+}
+
+/**
+ * `mergeSafetyVerdict`'s inputs, none of which ask about this run's own sibling check-runs -- see that
+ * function's own comment for why that omission is deliberate rather than an oversight. Cheaper than
+ * `facts()` too: no required-contexts or check-runs lookup at all.
+ * @param {number} number
+ */
+function ciGateFacts(number) {
+  const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
+    "--json", "number,state,baseRefName,headRefOid,headRefName"]));
+  const remoteHeadOid = lookupRemoteHeadOid(pr.headRefName);
+  const behindBy = lookup(() => {
+    const value = JSON.parse(gh(["api", `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
+    return typeof value === "number" ? value : null;
+  });
+  const closes = lookupClosingIssues(number);
+  return { pr, behindBy, closes, remoteHeadOid };
+}
+
+/**
+ * `--ci-gate <n>`: the check a required CI job runs FOR ITSELF, mid-workflow -- #298 (unit 1). Never
+ * `--allow-claimed-close`: that escape hatch is for a human who has confirmed with a row's holder, and an
+ * unattended CI gate has nobody to have confirmed with.
+ * @param {number} number
+ * @param {string | null} session
+ */
+function ciGateCommand(number, session) {
+  const verdict = mergeSafetyVerdict({ ...ciGateFacts(number), session });
+  if (verdict.code === EXIT.READY) {
+    console.log(`#${number} is safe to auto-arm: this head is current with main, matches what GitHub `
+      + "recorded (#294), and closes no row another session holds (#262).");
+  } else {
+    console.error(`REFUSING to auto-arm #${number}:\n${verdict.reasons.map((r) => `- ${r}`).join("\n")}`);
+  }
+  process.exit(verdict.code);
+}
+
 /** @param {number} number */
 function facts(number) {
   // DELIBERATELY NOT REQUESTING `mergeStateStatus`. Asking for it at all would invite the next reader to
   // use it, and this tool's entire reason for existing is that its answer cannot be trusted here.
   const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
-    "--json", "number,state,baseRefName,headRefOid"]));
+    "--json", "number,state,baseRefName,headRefOid,headRefName"]));
+  const remoteHeadOid = lookupRemoteHeadOid(pr.headRefName);
   const required = lookupRequiredContexts();
   const runs = lookupCheckRuns(pr.headRefOid);
   const mainTipIso = lookup(() => gh(["api", `repos/${REPO}/commits/main`,
@@ -500,7 +631,7 @@ function facts(number) {
     return typeof value === "number" ? value : null;
   });
   const closes = lookupClosingIssues(number);
-  return { pr, required, runs, mainTipIso, behindBy, closes };
+  return { pr, required, runs, mainTipIso, behindBy, closes, remoteHeadOid };
 }
 
 /**
@@ -530,15 +661,17 @@ function reconcileCommand(number) {
 }
 
 function main() {
-  refuseUnknownFlags(["--reconcile", "--session", "--allow-claimed-close"],
+  refuseUnknownFlags(["--reconcile", "--session", "--allow-claimed-close", "--ci-gate"],
     { entry: import.meta.url, command: "node scripts/merge-guard.mjs" });
   const number = process.argv.slice(2).find((arg) => /^\d+$/.test(arg));
   if (!number) {
     console.error("Usage: node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close]\n"
       + "       node scripts/merge-guard.mjs --reconcile <pr-number>\n"
+      + "       node scripts/merge-guard.mjs --ci-gate <pr-number> [--session=<name>]\n"
       + "Answers whether that PR has actually been tested, by reading its check RUNS rather than\n"
       + "`mergeStateStatus` -- which reports CLEAN for a PR that has never run a check. `--reconcile`\n"
-      + "compares the last recorded verdict against the PR's real, terminal outcome (#188).");
+      + "compares the last recorded verdict against the PR's real, terminal outcome (#188). `--ci-gate` is\n"
+      + "the narrower, self-reference-safe check a required CI job runs against its own commit (#298).");
     process.exit(EXIT.CANNOT_ASK);
   }
 
@@ -549,6 +682,12 @@ function main() {
 
   const sessionArg = process.argv.find((arg) => arg.startsWith("--session="));
   const session = sessionArg ? sessionArg.slice("--session=".length) : null;
+
+  if (process.argv.includes("--ci-gate")) {
+    ciGateCommand(Number(number), session);
+    return;
+  }
+
   const allowClaimedClose = process.argv.includes("--allow-claimed-close");
 
   const verdict = mergeReadiness({ ...facts(Number(number)), session });
