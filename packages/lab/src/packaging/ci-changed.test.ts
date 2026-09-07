@@ -44,9 +44,20 @@ function twoCommitRepo() {
   git("commit", "-q", "-m", "a change to classify");
   return { dir, base };
 }
+// GITHUB_OUTPUT UNSET, DELIBERATELY -- caught by CI itself running THIS test inside a real Actions job:
+// `writeOutputs()` appends to that file instead of printing to stdout whenever it is set, so a test that
+// merely inherits the ambient environment captures nothing to assert on there while passing everywhere
+// else. Deleted rather than passed as `undefined` through `sandboxGitEnv`'s `extra` (typed
+// `Record<string, string>`) -- `execFileSync` itself treats an `undefined` value as "omit this key"
+// (verified: `"X" in process.env` is false in the child), but the type would not let it in.
+const cliEnv = () => {
+  const env = sandboxGitEnv();
+  delete env.GITHUB_OUTPUT;
+  return env;
+};
 const runCliIn = (dir: string, args: string[]) =>
   execFileSync("node", [join(REPO, "scripts/ci-changed.mjs"), `--repo=${dir}`, ...args],
-    { cwd: dir, env: sandboxGitEnv(), encoding: "utf8" });
+    { cwd: dir, env: cliEnv(), encoding: "utf8" });
 
 test("classify: a docs-only change fires only the docs category", () => {
   const result = classify(["docs/known-gaps.md", "README.md"], ["lab", "judge"]);
