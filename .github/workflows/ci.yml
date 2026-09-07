@@ -570,7 +570,8 @@ jobs:
             "${{ needs.changeset.result }}" \
             "${{ needs.rulesFitness.result }}" \
             "${{ needs.mergeSafety.result }}" \
-            "${{ needs.acceptance.result }}"
+            "${{ needs.acceptance.result }}" \
+            "${{ needs.ownedPaths.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"
