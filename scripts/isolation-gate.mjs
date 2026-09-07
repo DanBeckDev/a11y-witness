@@ -43,7 +43,10 @@ import { existsSync, mkdtempSync, copyFileSync, readFileSync, rmSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join, resolve, basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+// RELATIVE, for `ci-changed.mjs`'s documented reason: this file is in that script's import graph, and
+// `ci.yml`'s `changed` job runs no `npm ci` — it decides whether anything else installs at all. A package
+// specifier here dies before the workflow starts.
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 export const SMOKE = "isolation-smoke.mjs";
 
