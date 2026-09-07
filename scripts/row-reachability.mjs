@@ -63,6 +63,37 @@ const SYMBOL_IN_PROSE = /`([a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*|[A-Z][A-Z0-9]+_[A-
 const unique = (values) => [...new Set(values)];
 
 /**
+ * NOTHING TO CHECK — and "named nothing" and "named PROSE" are two different sentences (#228).
+ *
+ * The `.md` filter is correct: there is no symbol to verify in a README, and pretending to check one
+ * would be worse than saying nothing. But dropping prose paths silently made this tell a docs row it
+ * "names no source path" when it named one, in a Region field filled in correctly -- sending its author
+ * to fix something that is not broken.
+ *
+ * Extracted from `startability` because adding the second branch took that function past the complexity
+ * ceiling, which is the lint rule doing its job rather than an obstacle to route around.
+ *
+ * @returns {{code: number, lines: string[]} | null} null when there IS something to check.
+ */
+function examinedNothing(row, examined) {
+  if (examined.paths > 0 || examined.symbols > 0) return null;
+  if ((examined.prose ?? 0) > 0) {
+    return { code: EXIT.CANNOT_ASK, lines: [
+      `CANNOT SAY whether #${row} is startable: it names ${examined.prose} document(s) and no source `
+      + "path or symbol.",
+      "  Its Region is prose, and this checks code: there is no symbol to look for in a README, and",
+      "  pretending to verify one would be worse than saying nothing.",
+      "  NOT a missing Region: do not add one. Judge a docs row by reading it.",
+    ] };
+  }
+  return { code: EXIT.CANNOT_ASK, lines: [
+    `CANNOT SAY whether #${row} is startable: it names no source path and no symbol this can check.`,
+    "  A row with no Region and no backticked identifier gives this nothing to examine, and reporting",
+    "  STARTABLE having examined nothing is the defect this repo records most.",
+  ] };
+}
+
+/**
  * THE VERDICT, PURE — so every state is reachable without a network or a checkout.
  *
  * `null` for a lookup means it failed and is never read as an empty answer, the distinction this whole
@@ -72,10 +103,33 @@ const unique = (values) => [...new Set(values)];
  *          subjectsMissing: {name: string, refs: string[]}[] | null,
  *          heldRegions: {path: string, refs: string[]}[] | null,
  *          blockedLabel?: boolean,
- *          examined: {paths: number, symbols: number}}} facts
+ *          state?: string | null,
+ *          closedAt?: string | null,
+ *          examined: {paths: number, symbols: number, prose?: number}}} facts
  * @returns {{code: number, lines: string[]}}
  */
-export function startability({ row, subjectsMissing, heldRegions, examined, blockedLabel }) {
+
+export function startability({ row, subjectsMissing, heldRegions, examined, blockedLabel,
+  state, closedAt }) {
+  // A CLOSED ROW GETS NO VERDICT AT ALL, not a verdict with a note attached (#218).
+  //
+  // Measured 2026-09-07: #83 read `STARTABLE: no unmerged branch is in its region`, and BOTH sentences
+  // were true -- nothing held the region and every symbol was on `main`, BECAUSE THE WORK WAS DONE AND
+  // MERGED twenty-five minutes earlier. A worker was dispatched on that reading and it cost nothing only
+  // because they checked GitHub themselves.
+  //
+  // This returns EARLY rather than appending a caveat: a green light with a note beside it is still a
+  // green light, and the role file's target for units dispatched at closed rows is zero. The state was in
+  // the query being made for the labels the whole time -- one field away, which is what makes it the
+  // #208 limit reached one field earlier than the limit that sentence describes.
+  if (state && state !== "OPEN") {
+    return { code: EXIT.BLOCKED, lines: [
+      `#${row} IS ${state}${closedAt ? ` (${closedAt})` : ""} — there is nothing to start.`,
+      "  Region and symbol checks say nothing here: a finished row's region is clear and its symbols are",
+      "  on `main` BECAUSE the work landed. That reads exactly like a green light, and is why this",
+      "  refuses to print one.",
+    ] };
+  }
   if (subjectsMissing === null || heldRegions === null) {
     return { code: EXIT.CANNOT_ASK, lines: [
       `CANNOT SAY whether #${row} is startable: a lookup failed.`,
@@ -83,13 +137,8 @@ export function startability({ row, subjectsMissing, heldRegions, examined, bloc
       "  evening discovering it at step 1, which is the whole reason this check exists.",
     ] };
   }
-  if (examined.paths === 0 && examined.symbols === 0) {
-    return { code: EXIT.CANNOT_ASK, lines: [
-      `CANNOT SAY whether #${row} is startable: it names no source path and no symbol this can check.`,
-      "  A row with no Region and no backticked identifier gives this nothing to examine, and reporting",
-      "  STARTABLE having examined nothing is the defect this repo records most.",
-    ] };
-  }
+  const nothingToCheck = examinedNothing(row, examined);
+  if (nothingToCheck) return nothingToCheck;
 
   const lines = [];
   if (blockedLabel) {
@@ -137,8 +186,39 @@ export function startability({ row, subjectsMissing, heldRegions, examined, bloc
  * A ref with no PR at all is not an error — plenty of branches never open one — so it reports `no PR`
  * rather than failing, and an unreadable answer says so instead of implying `none`.
  */
+/**
+ * ONE LISTING, NOT ONE CALL PER REF — with a per-ref fallback so a truncated page cannot lie.
+ *
+ * The region half can name a dozen branches for one file (`ci.yml` currently has six), and a `gh` call
+ * each would make the tool slow enough that people stop running it before dispatching, which is the
+ * failure `row-claim` exists to prevent. So the map is built once.
+ *
+ * BUT A BOUNDED LISTING IS THE DEFECT THIS SESSION HAS CORRECTED MOST: a page that stops short would
+ * report a real PR as `no PR`, which is the *worse* direction here — it turns "wait for it" into
+ * "nobody is coming". So a ref MISSING from the map is not answered from the map; it falls through to
+ * the authoritative per-ref query. Truncation then costs an extra call and never a wrong answer.
+ */
+let prMap;
+function prStateMap() {
+  if (prMap) return prMap;
+  prMap = new Map();
+  try {
+    for (const pr of JSON.parse(gh(["pr", "list", "--repo", REPO, "--state", "all",
+      "--limit", "400", "--json", "number,state,headRefName"]))) {
+      const key = pr.headRefName;
+      prMap.set(key, [...(prMap.get(key) ?? []), `PR #${pr.number} ${pr.state}`]);
+    }
+  } catch {
+    // An unreadable listing leaves the map EMPTY, so every ref falls through to its own query rather
+    // than being reported as `no PR` on the strength of a call that failed.
+  }
+  return prMap;
+}
+
 function prState(ref) {
   const branch = ref.replace(/^origin\//, "");
+  const known = prStateMap().get(branch);
+  if (known) return known.join(", ");
   try {
     const found = JSON.parse(gh(["pr", "list", "--repo", REPO, "--head", branch, "--state", "all",
       "--json", "number,state"]));
@@ -177,15 +257,23 @@ function refsCarrying(path, symbol, refs) {
 
 function facts(row) {
   const issue = JSON.parse(gh(["issue", "view", String(row), "--repo", REPO,
-    "--json", "body,labels"]));
+    "--json", "body,labels,state,closedAt"]));
   const body = issue.body ?? "";
   // THE BOARD'S OWN RECORD, not prose. A row can be blocked by another ROW -- #77 is "blocked behind
   // #35's schema migration" and carries the `blocked` label -- and neither its region nor its symbols say
   // so. Reading the LABEL is not the prose-parsing this tool refuses elsewhere: it is the same
   // authoritative record `row-claim` already trusts for `in-progress`.
   const blockedLabel = (issue.labels ?? []).some((l) => l?.name === "blocked");
-  const paths = unique([...body.matchAll(PATH_IN_PROSE)].map((m) => m[1]))
-    .filter((p) => !p.endsWith(".md"));
+  // THE ROW'S OWN STATE, and it was in this query's reach the whole time. See `startability`.
+  const state = typeof issue.state === "string" ? issue.state : null;
+  const closedAt = typeof issue.closedAt === "string" ? issue.closedAt : null;
+  // PROSE PATHS ARE COUNTED, NOT DISCARDED. The `.md` filter is correct -- there is no symbol to verify
+  // in a README, and pretending to check one would be worse than saying nothing. But dropping them
+  // SILENTLY made the verdict say a docs row "names no source path" when it named one, which sent the
+  // reader to add a Region that was already there.
+  const named = unique([...body.matchAll(PATH_IN_PROSE)].map((m) => m[1]));
+  const paths = named.filter((path) => !path.endsWith(".md"));
+  const prose = named.filter((path) => path.endsWith(".md"));
   const symbols = unique([...body.matchAll(SYMBOL_IN_PROSE)].map((m) => m[1]));
   const refs = unmergedRefs();
 
@@ -227,10 +315,28 @@ function facts(row) {
   for (const path of present) {
     const holders = refs.filter((ref) => changed([`origin/main...${ref}`], path)
       && changed(["origin/main", ref], path));
-    if (holders.length > 0) heldRegions.push({ path, refs: holders });
+    // THE SAME FACT THE SUBJECT HALF ALREADY REPORTS. `(PR #89 CLOSED)`, `(PR #172 OPEN)` and `(no PR)`
+    // are three different messages: nobody is coming, wait for it, and somebody's unproposed work. The
+    // fifth state was solved for the subject half in #208 and not carried across, so the two halves of
+    // one tool said different amounts about the same branch -- and a reader takes an undecorated
+    // `REGION HELD` as "wait for that to land" even when the branch is dead.
+    // A MERGED BRANCH CANNOT HOLD A REGION AGAINST YOU, and neither git diff can tell that on its own.
+    // A SQUASH merge leaves the branch's commits off `main`, so three-dot stays non-empty, and `main`
+    // has moved on, so two-dot does too -- the pair I added to defeat the fourth state does not defeat
+    // this form of it. Measured: `agent/changeset-packed-check-132 (PR #151 MERGED)` was reported as
+    // holding `ci.yml`. The PR state is the authoritative record git cannot reconstruct.
+    //
+    // THE FAILURE MODE THIS ACCEPTS, named rather than hidden: a branch that was merged and then REUSED
+    // for new commits is dropped here, and it does genuinely hold. That is rare, and the alternative --
+    // listing every squash-merged branch for ever -- is the eighty-five-branch report nobody reads.
+    const live = holders.map((ref) => ({ ref, state: prState(ref) }))
+      .filter(({ state }) => !/\bMERGED\b/.test(state));
+    if (live.length > 0) {
+      heldRegions.push({ path, refs: live.map(({ ref, state }) => `${ref} (${state})`) });
+    }
   }
-  return { row, subjectsMissing, heldRegions, blockedLabel,
-    examined: { paths: paths.length, symbols: symbols.length } };
+  return { row, subjectsMissing, heldRegions, blockedLabel, state, closedAt,
+    examined: { paths: paths.length, symbols: symbols.length, prose: prose.length } };
 }
 
 function main() {

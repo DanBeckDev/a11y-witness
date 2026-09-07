@@ -32,26 +32,44 @@ jobs:
         with: { ref: main }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
-      - run: npm run build
+      - id: ci
+        run: npm ci --ignore-scripts
+      - id: build
+        run: npm run build
       # GH_TOKEN: `board-style.test.ts` and `row-claim.test.ts`'s live `fetchLabels` shell out to real `gh`
       # calls against this repo's own Issues -- read-only, and `github.token` already has that scope for
       # the repo the workflow runs in. `npm run coverage` runs the whole suite under c8, so it reaches
       # both.
-      - env:
+      #
+      # CAPTURED TO A FILE, NOT JUST THE ACTIONS LOG -- `scripts/coverage-failure-classifier.mjs` (#169)
+      # reads this to tell a real threshold miss from a test failure from nothing at all. `set -o
+      # pipefail`, because `| tee` on its own reports the PIPELINE's exit status as `tee`'s (always 0) --
+      # this file's own project already lost real time to that shape once (CLAUDE.md's own rule: "never
+      # pipe a command whose exit status you intend to read").
+      - id: coverage
+        env:
           GH_TOKEN: ${{ github.token }}
-        run: npm run coverage
+        run: |
+          set -o pipefail
+          npm run coverage 2>&1 | tee coverage-output.log
 
-      # A SCHEDULE NOBODY READS IS A GATE THAT FAILS QUIETLY -- dispatcher's review of #166, and this repo's
-      # own recorded rule ("a gate that does not exercise what ships is not a gate", four prior instances)
-      # applied to who's WATCHING rather than what's exercised. Same pattern `board-liveness.yml` already
-      # uses against #20: on a red run, comment on the tracking issue rather than trusting someone to open
-      # the Actions tab. One comment per failing run, not per day, because a repeating warning is a warning
-      # people filter -- `github.run_id` in the marker is what makes a rerun of the SAME failure distinct
-      # from tomorrow's fresh one without spamming the issue on a retry of the same commit.
-      - name: Coverage failed -- say so on the tracking issue, not just in the Actions log
+      # A COMMENT SAYING "coverage failed" IS NOT A FINDING (#169) -- `if: failure()` here fires
+      # identically whichever of `ci`/`build`/`coverage` broke, and the three need three different
+      # responses: an infrastructure failure means coverage was never measured at all; a test failure is a
+      # TEST regression, not a coverage one; only a real c8 threshold miss is what this tracking issue
+      # exists to catch. `scripts/coverage-failure-classifier.mjs` reads each step's own `outcome` plus the
+      # coverage step's captured output and says which. One comment per failing run, not per day, because
+      # a repeating warning is a warning people filter -- `github.run_id` in the link is what makes a
+      # rerun of the SAME failure distinct from tomorrow's fresh one without spamming the issue on a retry
+      # of the same commit.
+      - name: Coverage failed -- classify WHY, and say so on the tracking issue rather than just the log
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh issue comment 169 --body "Nightly coverage failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BODY=$(node scripts/coverage-failure-classifier.mjs \
+            --ci-outcome=${{ steps.ci.outcome }} \
+            --build-outcome=${{ steps.build.outcome }} \
+            --log=coverage-output.log \
+            --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
+          gh issue comment 169 --body "$BODY"
