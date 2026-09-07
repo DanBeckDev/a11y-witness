@@ -27,8 +27,11 @@ import { sandboxGitEnv } from "./git-env.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { REPO } from "./repo-identity.mjs";
 
-export const REPO = "DanBeckDev/a11y-witness";
+// RE-EXPORTED, not restated -- issue #92. Five other modules import `REPO` from here, so it stays exported
+// at this path; `repo-identity.mjs` is the single declared value now, and this is one of its callers.
+export { REPO };
 export const MILESTONE = "v0.1.0 — first publish";
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const HOURS_MS = 3600_000;
@@ -111,6 +114,55 @@ export function issues() {
   return all.map((i) => ({ ...i, labelNames: i.labels.map((l) => l.name) }));
 }
 
+/** A row that is not work: a container, or a process row. NOT counted, and the document says so.
+ *
+ * `#20` is the whole reason this exists. It is the daily board report itself -- its comments ARE the
+ * editions -- so it is an open issue that will never close and can never be worked. Counted, it inflates
+ * "road to version one" by one for ever and the number quietly stops meaning what a reader thinks.
+ *
+ * EXCLUDED BY RULE AND THE RULE IS PRINTED, which is the whole point: a count that silently drops rows is
+ * worse than one that counts the wrong thing, because nobody can tell. Section 6 states the exclusion
+ * beside the figure.
+ */
+export const META_LABEL = "meta";
+
+/** Real work, deliberately not in this release. Carried INSTEAD of a milestone, never alongside one.
+ *
+ * THE RULE IS: every open row carries a milestone or this label, and there is no third state. A row with
+ * neither is a tracker defect rather than a judgement call, and `unclassified()` below is what makes that
+ * checkable instead of a thing somebody notices.
+ *
+ * It exists because two counts on one page disagreed about one row. #290 -- `git stash` is repo-global
+ * across worktrees -- is real work that is not in the release, so the open-items total counted it and the
+ * blocker count could not. Neither number was wrong; the page had no way to say why they differed. The
+ * footnote beside the total now names how many rows are in this state, so the two reconcile BY
+ * CONSTRUCTION rather than by a reader working it out. Ruled by `ceo` 2026-09-07; see issue #290.
+ */
+export const OUT_OF_RELEASE_LABEL = "out-of-release";
+
+export function outOfRelease(list) {
+  return list.filter((i) => labelsOf(i).includes(OUT_OF_RELEASE_LABEL));
+}
+
+/** Open rows carrying NEITHER a milestone nor `out-of-release` -- the state the rule forbids.
+ *
+ * Reported rather than absorbed. A row here is counted in the total and invisible to every milestone
+ * figure, which is exactly the disagreement this pair of functions exists to end -- so silently tolerating
+ * it would rebuild the fault inside the fix.
+ */
+export function unclassified(list) {
+  return list.filter((i) => !i.milestone && !labelsOf(i).includes(OUT_OF_RELEASE_LABEL));
+}
+
+function labelsOf(i) {
+  return i.labelNames ?? i.labels?.map((l) => l.name) ?? [];
+}
+
+/** The rows the document COUNTS. `issues()` stays complete -- a meta row still needs its state resolved. */
+export function countable(list) {
+  return list.filter((i) => !(i.labelNames ?? i.labels?.map((l) => l.name) ?? []).includes(META_LABEL));
+}
+
 export function milestone() {
   const all = JSON.parse(gh(["api", `repos/${REPO}/milestones?state=all`]));
   return all.find((m) => m.title === MILESTONE) ?? null;
@@ -123,8 +175,102 @@ export function reported() {
   const fresh = (entry) => Date.now() - Date.parse(entry.at) < staleMs;
   const gates = (raw.gates ?? []).filter((g) => g.at && Number.isFinite(Date.parse(g.at)));
   const latest = gates.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
+  // EVERY GATE, not just the newest. Section five recommended "buying nothing yet" while the record held
+  // the measurement that answered it, because the document could not SEE any gate but the latest -- so
+  // the prose was hand-written and went stale the moment the re-run landed. A section that states a
+  // figure is absent while `reported.json` carries it is the failure this file exists to prevent.
   return { latestGate: latest, gateIsFresh: latest ? fresh(latest) : false, fleetHours: raw.fleetHours,
-    achievements: raw.achievements ?? [] };
+    gates, achievements: raw.achievements ?? [] };
+}
+
+/**
+ * The capture age a real-page gate printed, pulled from its own verbatim output rather than retyped by a
+ * human -- issue #128. `rules:real-pages` computes and prints this line itself
+ * (`*** 298 hour(s) between the oldest and newest, so this compares a MIXED population against one
+ * baseline`); the defect was that everything downstream of the recorded entry re-typed a bare figure and
+ * dropped it. The board document quotes a gate's output verbatim already, so once the recording keeps the
+ * line this needs only to find it, never to compute it -- a second computation of the same spread is
+ * exactly the fact-stated-twice shape this file's own header warns about.
+ *
+ * @param {string | undefined} gateOutput
+ * @returns {string | null} the gate's own spread sentence, or null when it printed none (not a real-page
+ *   result, or an older recording taken before the gate stated its spread)
+ */
+export function realPageCaptureAge(gateOutput) {
+  if (!gateOutput) return null;
+  const spread = gateOutput.match(/\*{0,3}\s*\d+\s*hour\(s\)\s*between the oldest and newest[^\n]*/i);
+  return spread ? spread[0].replace(/^\*+\s*/, "").trim() : null;
+}
+
+/**
+ * HAS THE WORLD MOVED UNDER AN AUTHORED ACHIEVEMENT? — the one section of the board document no gate
+ * computes, and therefore the one nothing ever re-checks.
+ *
+ * Section 3 is authored on purpose: what the product can now DO is not derivable from an API. The cost is
+ * that an entry is true when written and nothing asks again. Measured 2026-09-06 (#90), entry [2] read
+ * *"a rule that had never been demonstrated on a real page now has a page to demonstrate it on — written,
+ * not yet captured"*. Every clause was true when written; by the time it would have reached the board
+ * three were false, including a citation of an issue that had been closed as superseded. **It was caught
+ * by a person happening to re-read it. Nothing in the pipeline could have.**
+ *
+ * THIS DOES NOT JUDGE THE CLAIM, which is unanswerable. It asks the cheap question the data already
+ * supports: the entry cites an issue and carries a timestamp, so *did the world move under this
+ * sentence?* A machine can ask GitHub whether that issue is still open without understanding a word.
+ *
+ * A CLOSED ISSUE IS NOT THE FINDING, and the first version of this got that wrong. An achievement is by
+ * definition something FINISHED, so the issue that tracked it closes — refusing every entry citing a
+ * closed issue means the board can only ever be told about UNFINISHED work, and each entry decays into
+ * unrenderable the moment its own row closes. `product-manager` caught it: the implementation took the
+ * row's wording more literally than it meant.
+ *
+ * **What the row asks is weaker and sufficient: the world moved under this sentence, so somebody look.**
+ * The satisfying act is RE-AFFIRMATION, not a live reference, and `at` is what records it. So:
+ *
+ *   closed reference + `at` LATER than the closure   -> a good entry: somebody looked after it moved
+ *   closed reference + `at` OLDER than the closure   -> the one to refuse: nobody has looked since
+ *
+ * A strictly smaller population than "cites a closed issue", and the one the row was written about.
+ *
+ * `affirmed` remains the explicit escape, and it is a field rather than a flag: it carries WHY the claim
+ * still stands. A bare boolean would let the guard be cleared by a keystroke with no thought, which is
+ * how a refusal becomes a formality — the reason every EXEMPT table here demands a reason, not a name.
+ *
+ * @param {{achievements: any[], issueState: Record<string, {state: string, closedAt?: string|null}>,
+ *          now?: number, staleAfterHours?: number}} input
+ * @returns {{index: number, claim: string, why: string}[]}
+ */
+export function achievementsWhoseWorldMoved({ achievements, issueState, now = Date.now(),
+  staleAfterHours = 24 }) {
+  const findings = [];
+  achievements.forEach((entry, index) => {
+    const claim = String(entry.boardClaim ?? entry.claim ?? "(no claim text)").slice(0, 90);
+    const affirmed = typeof entry.affirmed === "string" && entry.affirmed.trim().length > 20;
+    const state = issueState[String(entry.issue)];
+    // UNKNOWN IS NOT OPEN. An issue the listing did not carry is a question that could not be asked --
+    // reporting it as fine is the "unchecked is not clean" defect, and reporting it as CLOSED would
+    // refuse an edition over a paging limit. It gets its own sentence.
+    if (entry.issue !== undefined && state === undefined) {
+      findings.push({ index, claim,
+        why: `cites issue #${entry.issue}, which the issue listing did not carry -- so whether it is `
+          + "still open COULD NOT BE ASKED. Widen the listing or check by hand; do not assume." });
+    } else if (state?.state === "CLOSED" && !affirmed
+      && Date.parse(entry.at) < Date.parse(state.closedAt ?? "")) {
+      findings.push({ index, claim,
+        why: `cites issue #${entry.issue}, which closed at ${state.closedAt} -- AFTER this entry was last `
+          + `affirmed (${entry.at}). The claim may still be true, and a closed issue is the normal end of `
+          + "a finished achievement: this does not judge either. What it says is that the world moved "
+          + "under the sentence and nobody has looked since. Re-affirm it by updating `at`, or add an "
+          + "`affirmed` field saying why it still stands, or retire the entry." });
+    }
+    const ageHours = (now - Date.parse(entry.at)) / HOURS_MS;
+    if (Number.isFinite(ageHours) && ageHours > staleAfterHours && !affirmed) {
+      findings.push({ index, claim,
+        why: `was reported ${ageHours.toFixed(0)}h ago, past the ${staleAfterHours}h freshness this file `
+          + "already declares for a gate result. Same rule, same reason: a number nobody has re-read is "
+          + "not a current one." });
+    }
+  });
+  return findings;
 }
 
 export function daysUntil(iso) {
@@ -152,7 +298,8 @@ export function readSetIsNotMain() {
 /** Everything both outputs need, read once. */
 export function collect(since) {
   const all = issues();
-  const open = all.filter((i) => i.state === "OPEN");
+  // Counted rows only. `all` stays complete for state lookups; `open` is what the document reports.
+  const open = countable(all.filter((i) => i.state === "OPEN"));
   return {
     since,
     all,

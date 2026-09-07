@@ -1153,6 +1153,18 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
  * That also handles the probe's real limitation. It activates the first link on the page, which on a real
  * site may be a skip link or a plain fragment jump — and then the heading does not change either, so this
  * correctly makes no claim.
+ *
+ * #253: "the first heading changed" is a proxy for "the document moved", and three ordinary page shapes
+ * defeat it identically — a consent overlay switching panels, a link that opens a new tab (2.4.2 is
+ * structurally inapplicable there), and a modal opening. `act-rules.ts` already maps this ACT rule
+ * `secondary` (a REFERRAL, `cantTell`, never an assertion — a fact the row that opened this section
+ * initially read wrong, conflating `decidedBy: "rules"`, which is about OWNERSHIP, with conformance
+ * mapping, which is independent; see `rule-ownership.json`'s note). So the fix here is not about
+ * downgrading an assertion that does not exist — it is about not spending a person's attention on a
+ * referral that is really page furniture. `OPENS_ELSEWHERE` and the `dialog`-container check below narrow
+ * on evidence NVDA itself reads (the link's own announcement; a container role in `CONTAINER_ROLES`),
+ * never on inferring a page shape from its content. #142 remains the only path to a general fix: this
+ * narrows two of the three known shapes and does not claim to close the class.
  */
 /**
  * NVDA announcing that there is nothing further of a type — not a control it activated.
@@ -1172,9 +1184,43 @@ function addKeyboardTrap(input: RuleInput, add: AddFinding): void {
  */
 const NOTHING_FURTHER = /^\s*no (next|previous) \w+/i;
 
+/**
+ * A control that tells the user it leaves THIS document is not evidence this document navigated.
+ *
+ * #253: "the first heading changed" is a proxy for "the document moved", and three ordinary page shapes
+ * defeat it -- a consent overlay switching panels, a link that opens a new tab, and a modal opening all
+ * read identically to a route change, because none of them is what the evidence actually reads.
+ *
+ * `control` is NVDA's own announcement of the activated link (`capture-probes.mjs`'s `probeRouteChange`
+ * joins the raw speech log), so a link the SITE has labelled "opens in a new window/tab" is read evidence,
+ * not an inference -- exactly what a screen-reader user hears before following it. WCAG's own Understanding
+ * text for 2.4.2 is explicit that a new-tab link is "structurally inapplicable": activating it cannot
+ * change THIS document's title, because no navigation of this document occurred. #142's own measured
+ * fixture (`www.lbhf.gov.uk/council-tax`) is exactly this shape, and its control announced this phrase.
+ */
+const OPENS_ELSEWHERE = /opens? in a new (window|tab)/i;
+
+/**
+ * Does this evidence look like page furniture rather than a real navigation? Both checks read evidence
+ * NVDA itself provides — the activated link's own announcement, and a `dialog` container role
+ * (CONTAINER_ROLES) on either heading — never an inference about the page's content. One function so
+ * `addStaleRouteTitle` makes one branching decision here rather than two, and reads at one level of
+ * abstraction: "is this real?", not the parse underneath it.
+ */
+function looksLikeFurnitureNotNavigation(control: string, headingBefore: string, headingAfter: string): boolean {
+  if (OPENS_ELSEWHERE.test(control)) return true; // see OPENS_ELSEWHERE
+  const insideDialog = (heading: string) => parseAnnouncement(heading, "sweep")
+    .containers.some((c) => c.role === "dialog");
+  return insideDialog(headingBefore) || insideDialog(headingAfter);
+}
+
 function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
   const route = input.interaction?.routeChange;
-  if (!route || route.error || !route.navigated) return; // not probed, or the probe could not answer
+  // `route.control === null` is the applicability gate -- not probed, errored, or quick-nav reached the
+  // end of the links with nothing to activate. `routeChange.navigated` looks like the same check and is
+  // NOT: `probeRouteChange` sets it `true` on every successful activation regardless of whether the view
+  // actually moved, so it is a tautology relative to what this rule exists to establish (#250).
+  if (!route || route.error || route.control === null) return;
   // The probe reached the end of the links instead of activating one. See `NOTHING_FURTHER`.
   if (NOTHING_FURTHER.test(String(route.control ?? ""))) return;
   const { titleBefore, titleAfter, headingBefore, headingAfter } = route;
@@ -1196,6 +1242,10 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
   // deliberately, and the comparison there was never between two known values anyway.
   if (!headingBefore || !headingAfter) return;
   if (headingBefore === headingAfter) return; // nothing navigated; there is no transition to judge
+  // #253: a new-tab link, a modal, or a consent overlay switching PANELS all read as a route change under
+  // this proxy -- the announced control or a heading change while the document itself never moved. See
+  // `looksLikeFurnitureNotNavigation`.
+  if (looksLikeFurnitureNotNavigation(String(route.control ?? ""), headingBefore, headingAfter)) return;
   if (titleBefore !== titleAfter) return;
   add("2.4.2 Page Titled",
     "Navigating changed the page but not its title, so the screen reader still announces the previous "
@@ -1318,7 +1368,9 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
  */
 function addInertSkipLink(input: RuleInput, add: AddFinding): void {
   const route = input.interaction?.routeChange;
-  if (!route || route.error || !route.navigated) return;
+  // See `addStaleRouteTitle`'s comment: `route.control === null` is the applicability gate this rule
+  // actually needs, and `routeChange.navigated` is a tautology that must not be read as evidence (#250).
+  if (!route || route.error || route.control === null) return;
   // It has to BE a skip link. The probe activates the first link on the page, which elsewhere is a logo or
   // a cookie banner — finding focus unmoved after activating one of those says nothing about bypassing.
   if (!/\b(skip|jump)\b/i.test(String(route.control ?? ""))) return;

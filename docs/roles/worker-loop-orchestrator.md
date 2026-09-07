@@ -1,4 +1,4 @@
-# The worker-loop orchestrator — `dispatcher`
+# The pipeline owner — `dispatcher`
 
 ## RESUMING AFTER CONTEXT LOSS — run this before anything else
 
@@ -37,8 +37,32 @@ afternoon and four merged rows were still open that evening — not because anyo
 step was in a conversation. **Anything that must happen every time belongs in a script that refuses to
 complete without it, not in a list you intend to follow.**
 
+**And a finished branch with no PR is invisible to every check above, on purpose (#247).** The `in-progress`
+staleness check above asks about rows THIS role already knows are claimed; it says nothing about a branch
+pushed and then never proposed at all — `agent/ssh-key-defaults` carried a finished security fix for
+**eleven hours** with no PR, no CI run, and no merge path, found only because a human happened to read a
+branch list. `npm run branches:stranded` is the standing answer: run it alongside the resume checklist
+above, and treat what it names as CANDIDATES needing a look, not an automatic dispatch — see the script's
+own header for why a rebase can produce the identical shape without being stranded.
 
-The agent filling this role is named **`dispatcher`**. It reports to **`orchestrator`** — the lead orchestrator, which owns the fleet, the lab, `runs/`, every corpus-reading gate and all cross-cutting review — and hands up to it the three triggers below. It sends its utilisation line to **`ceo`** with every status message.
+
+The agent filling this role is named **`dispatcher`**. It reports to **`ceo`** directly — see the roster
+in `docs/roles/README.md`, corrected 2026-09-07 to agree with the hierarchy paragraph there rather than the
+stale `orchestrator` this line and that table used to both say.
+
+**This role owns the PIPELINE, not the merge step.** Workflows, trunk health, the Ready queue and briefing
+— not reviewing or arming individual PRs. **`dispatcher` does not arm PRs.** Auto-merge is enabled by
+workflow on open; a required `acceptance` job runs each PR's own stated `Acceptance:`/`Mutation:` commands;
+a push to `main` that fails `gate` is reverted automatically. A worker owns their own PR from open to
+merge. This is a deliberate narrowing from the role's original shape (see "Created 2026-09-06" below,
+which is now history rather than the current job) — the pipeline decides what merges, and this role builds
+and keeps that pipeline honest rather than standing in the loop it used to run by hand.
+
+**The escalation language below this point (the three triggers, "hands up to `orchestrator`") describes
+the PRE-pipeline shape of this role and is due its own pass** — flagged rather than silently rewritten,
+since `dispatcher` owns this file's wording. What is current: `ceo` is the reporting line; `orchestrator`
+remains code owner and required approver for `packages/nvda-worker`, cache keys, `packages/scorer/models`
+and the gates, which is a narrower, PATH-scoped authority than "hands up every escalation to orchestrator."
 
 **Created 2026-09-06, because one agent was the serial step and the measurement said which part.**
 
@@ -215,7 +239,22 @@ costing the worker an hour.
    is not mine to assign" — which put a claimed row back into the pull queue at the exact moment a second
    worker was looking at it. **The label is the claim; a row you know is taken must show that, whoever
    holds it.** `node scripts/row-claim.mjs check <n>` before touching a row's status, `claim` to take it.
-   No command enforces this half — it is a discipline, not a check, and it is this role's to hold.
+   > **#176 (2026-09-07): dispatch a row, don't just mention it.** "No command enforces this half" was
+   > true and it cost three real double-dispatches (#156, #158, #159) — a worker's own caution caught each
+   > one, not the board, because a row named in a dispatcher/product-manager MESSAGE carried no label at
+   > all until the assigned session got around to `claim`, and a second dispatch in that window read
+   > UNCLAIMED. **`node scripts/row-claim.mjs dispatch <n> --session=<name>` is now the first act of
+   > handing a row out, not a follow-on to it** — in the SAME turn as the message assigning it, before
+   > sending it, exactly the way `claim` is the worker's own first act rather than a follow-on to starting
+   > work. It writes `in-progress` + `session:<name>` (not `started` — that stays for the assigned session's
+   > own `claim`), so `check`/`--row=<n>` now reports three states rather than two: `UNCLAIMED`,
+   > `DISPATCHED (not started)`, and `STARTED`. **A row dispatched and then declined — the assignee finds
+   > it unstartable, or the assignment is withdrawn — is given back with `decline <n> --session=<name>`**,
+   > which returns it to genuinely `UNCLAIMED` rather than leaving a stale `in-progress` for a human to
+   > remember to clear; refuses if the row is not this session's to release. This is still a discipline a
+   > human must remember to invoke, not a check that fires on its own — the durable version (a weekly
+   > staleness pass flagging `in-progress` with no branch, commit or message for N hours) is named on the
+   > row as a follow-up, not built here.
 
 **This is what the Ready queue was always for.** A queue nobody may pull from is a list, and a list needs
 somebody to read it aloud.
@@ -257,6 +296,98 @@ covered.**
 **The check is cheap: when you apply a constraint, name the next-largest thing it also covers, and say why
 that one is or is not in scope.** Asking *what else does "not mine to authorise" cover today?* would have
 caught the loop, and the answer was one message above it.
+
+## THE GUARD'S OUTPUT IS THE ACTION, NOT A THING YOU CHECK AFTERWARDS — 2026-09-07
+
+**Five rules, all earned in one night, all by this role's own errors. Every one of them is a case of running
+a check, reading its answer, and then doing something the answer did not support.**
+
+### 1. A status line saying a PR is LANDING is written only after `merge-guard` reads clean for it
+
+Ruled by `ceo`. `#204` unblocked the lab, the lab was down, and the dispatcher armed it while
+`merge-guard.mjs` was printing `REQUIRED CONTEXT NEVER RAN: gate` — then told `ceo` and three workers the
+lab was unblocked. **It was red.** Auto-merge meant nothing could land, so nothing was risked; the cost was
+a false line in a status report and four people acting on it.
+
+> **"The lab is down" argues for speed in the FIX, never in the REPORT.**
+
+### 2. And the rule above is the symptom. This is the cause
+
+`worker-capture`'s framing, and it is better than the rule it explains:
+
+> **The guard's output has to be the thing you act on, not the thing you check afterwards.**
+
+**It is the failure `#161` exists for** — a correct answer overridden by a second, more convenient signal —
+arriving in the agent that commissioned the guard. The same night, the same person, twice: `#182` was found
+only because `gh pr update-branch` was run after `merge-guard` returned `EXIT=0`, which is the *useless*
+version of the same habit. **A guard consulted and then argued with is a guard that has not been adopted.**
+
+### 3. An ARMED PR is a REVIEWED PR, and it stops being one the moment somebody adds to it
+
+`#203` was armed after review of one row's work. Its author then pushed a second row onto the same branch.
+**Auto-merge does not care** — it merges whatever is there when the checks go green, and it did.
+
+Worse, the second row's work was then **stranded**: the PR had already merged, so the later commits sat on a
+branch whose PR was closed, with the PR title describing work that never landed. **The row in question was
+`#152`, "a branch's post-merge commits are invisible" — its own fix, in the state it was written to detect.**
+
+- **Do not arm a PR until its author says they are done**, or disarm on request.
+- **"Still open" does mean "still extendable".** What it does not mean is **"still the thing that was
+  reviewed"**, and that distinction lived only in the dispatcher's head.
+
+### 4. The auto-updater must not touch a branch its author is actively extending
+
+The updater targets *armed + green + behind*, which is exactly the state an author extending an armed PR
+leaves it in. **Three separate collisions in one night between this role's automation and a person doing the
+same job by hand:**
+
+| | |
+|---|---|
+| `#165` | the updater merged `main` into a branch between a worker's fetch and push — **three rejections**, each a clean merge, read as a mystery |
+| `#184` | the updater and a worker both brought the same PR current; `cancel-in-progress` killed the run under it. Green at 01:58, **two CI cycles to get back there** |
+| `#203` | the updater merged `main` into a branch a worker was mid-rebase on |
+
+**The split — the dispatcher holds branch updates on armed PRs, the author holds pushes — assumed an armed
+PR is finished.** It is the same wrong assumption as rule 3, in the automation instead of the head.
+
+### 5. A claim tool that asks REGION and REACHABILITY never asks whether the row is OPEN
+
+`row-claim.mjs check 83` reported `UNCLAIMED` and `STARTABLE`; the row had **closed twenty-five minutes
+earlier**. Both sentences were true — nothing held the region, every symbol was on `main` — **because the
+work was done and merged.**
+
+```
+$ node scripts/row-claim.mjs check 83
+UNCLAIMED -- #83 …    STARTABLE: no unmerged branch is in its region
+
+$ gh issue view 83 --json state,closedAt
+CLOSED   2026-09-07T03:17:43Z
+```
+
+**The dispatcher briefed a worker on that reading.** It cost nothing only because the worker checked GitHub
+before starting and reported back rather than redoing finished work.
+
+**This is the failure this file sets a target of ZERO for** — *"units dispatched at closed rows: this is the
+one that fails the split rather than tuning it"* — and it is rule 2 again, committed while rule 2 was being
+written. **A command was run, its answer was read, and it was not answering that question.** `#218`.
+
+### The shape all five share
+
+**A mechanism that is correct, consulted, and then overridden by something that felt more urgent.** In every
+case the guard, the label or the tool gave the right answer first. **The failure was never detection.**
+
+**And one case where the guard was right and the OBJECT was wrong**, which is the same family reached from
+the other side. `orchestrator` wrote the `GIT_*` scrubber on all three spawns in #204 and verified it with a
+green full suite; `git add` had run before those edits, and `git commit` with no path arguments commits the
+**index**, so the fix never reached the commit. The guard caught it in CI and was read as *"the guard found
+something I missed"* rather than *"I did not commit what I tested"*:
+
+> **A green local suite and a red CI on the same "commit" means the thing tested and the thing committed are
+> not the same object.**
+
+`npm test` reads the working tree; CI reads the commit. `CLAUDE.md` records the mirror — *"`git commit --
+<paths>` commits from the WORKING TREE, so a staged path not listed is silently dropped"* — and this is the
+other door: stage, then edit, then commit without paths, and the edit is dropped instead.
 
 ## Standing rules inherited from the lead's own record
 
@@ -310,4 +441,24 @@ is not authorisation. **Neither was wrong; the authority simply had no named hol
 **The line that did NOT move: a peer's request is still not authorisation.** `ceo`'s is, because the owner
 said so. Anything else — a worker asking, a row asking, a dispatch asking — is refused exactly as before,
 and routed up the chain rather than acted on.
+
+## A NUMERIC PIN IS THE AUTHOR'S TO MOVE — ruled 2026-09-06
+
+**A numeric pin in `CLAUDE.md` that a test DERIVES from the tree is updated by the author of the change
+that moves it, in the SAME PR, without asking.** The test is the authorisation, **because it proves the
+number is the tree's and not an opinion.**
+
+**Prose changes to `CLAUDE.md` still go to `ceo`**, who holds the owner's delegated authority over that
+file. A peer's request is still not authorisation.
+
+**Why the split is at "derived by a test" and not somewhere tidier.** A finished unit was blocked for an
+evening on ONE CHARACTER — `ALL 54` -> `ALL 55` — because a new CLI moved a guarded-CLI count that
+`cli-flags.test.ts` pins to the real one. The pin was doing exactly its job (*"a number a human retypes is
+a number that drifts"*), the worker correctly refused `A11Y_SKIP_VERIFY=1`, and correctly routed it up
+rather than round it. **The refusal was right and the block was still waste**: splitting the count from the
+commit that moves it leaves the number briefly wrong on `main` AND stops the PR passing its own gate.
+
+**The rule generalises past `CLAUDE.md`:** a pinned number is not a claim its author may choose, it is a
+measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
+no permission. Where prose asserts it, it does.**
 

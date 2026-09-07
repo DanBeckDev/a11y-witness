@@ -43,6 +43,10 @@ import { existsSync, mkdtempSync, copyFileSync, readFileSync, rmSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join, resolve, basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+// RELATIVE, for `ci-changed.mjs`'s documented reason: this file is in that script's import graph, and
+// `ci.yml`'s `changed` job runs no `npm ci` — it decides whether anything else installs at all. A package
+// specifier here dies before the workflow starts.
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 export const SMOKE = "isolation-smoke.mjs";
 
@@ -84,6 +88,25 @@ const siblingDir = (packageDir, dependency) =>
 
 
 /**
+ * What `npm pack --dry-run` actually ships for one package, as a `Set` of paths relative to the package
+ * root. This is this repo's one real answer to "can a consumer install this" / "does this reach a
+ * consumer", and `scripts/ci-changed.mjs`'s changeset gate imports it directly rather than carrying a
+ * second copy — two derivations of what ships, guarding the same promise, is exactly the fact-stated-
+ * twice shape this file's own header names for `referenced-scripts.test.ts`.
+ *
+ * @param {string} dir the package directory
+ * @returns {Set<string>}
+ */
+export function packedFiles(dir) {
+  // `--json` gives the file list without unpacking; `--dry-run` so nothing is written. `sandboxGitEnv()`
+  // even though this spawns `npm`, not `git` — `npm pack` walks the package looking for a `.git` to
+  // decide what "untracked" means for its own purposes, so an inherited `GIT_DIR` is the identical
+  // redirection risk `git-env.mjs`'s own header names, one process removed.
+  const listing = JSON.parse(run("npm", ["pack", "--dry-run", "--json"], dir, sandboxGitEnv()));
+  return new Set((listing?.[0]?.files ?? []).map((/** @type {{path: string}} */ f) => f.path));
+}
+
+/**
  * Would this tarball carry a file that is NOT COMMITTED? — the half this gate has always disclaimed.
  *
  * The header above names the trap and stops short of checking it: *"`npm pack` includes untracked files. A
@@ -112,9 +135,7 @@ const siblingDir = (packageDir, dependency) =>
 function packedButUntracked(dir) {
   let packed;
   try {
-    // `--json` gives the file list without unpacking; `--dry-run` so nothing is written.
-    const listing = JSON.parse(run("npm", ["pack", "--dry-run", "--json"], dir));
-    packed = (listing?.[0]?.files ?? []).map((/** @type {{path: string}} */ f) => f.path);
+    packed = [...packedFiles(dir)];
   } catch {
     return []; // cannot list -- claim nothing rather than invent a finding
   }
@@ -263,6 +284,8 @@ function countPrivatePackages() {
 // `node scripts/isolation-gate.mjs` invocation, but this file is ALSO imported by test files under
 // packages/, so the same guard idiom this repo now uses everywhere is worth using here too.
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
+  // Guarded per #164: --all, plus positional package dirs; npm flags go onward.
+  refuseUnknownFlags(["--all"], { entry: import.meta.url, command: "node scripts/isolation-gate.mjs" });
   const args = process.argv.slice(2);
   const targets = args.length === 0 || args[0] === "--all" ? allPackages() : args;
   if (args.length > 0 && args[0] !== "--all" && targets.length === 0) {

@@ -45,6 +45,27 @@
 // `git worktree remove` WITHOUT `--force` IS ITSELF A GUARD, not merely this file's own check restated --
 // measured: it refused three trees on its own in the manual pass. Never pass `--force`; a dirty tree this
 // file's own classification somehow missed is exactly the case that guard exists to catch anyway.
+//
+// #220: "CLEAN" IS NOT "FINISHED". `worker-capture` ran `git stash -u` to switch branches, which makes a
+// working tree momentarily clean -- a real prune ran inside that window and deleted the directory out from
+// under them mid-command. Nothing was lost only because a stash lives in the repository's COMMON git dir,
+// not the worktree; an uncommitted (never-stashed) edit would have gone with it.
+//
+// So "remove" now also requires the worktree to show NO RECENT GIT ACTIVITY -- the mtime of its own
+// PRIVATE gitdir (`.git/worktrees/<name>/{index,HEAD,logs/HEAD}`, resolved via `git rev-parse
+// --absolute-git-dir`, never guessed from the path) must be older than `ACTIVITY_WINDOW_MS`. Measured
+// directly (see the test file): `git stash -u` and `git add` both touch `index`'s mtime; a plain `git
+// status` on an already-modified-but-unstaged file does not. That is this signal's NAMED failure mode --
+// a session editing files through a non-git tool, with no `git add`/`stash`/`commit`/`checkout` in the
+// window, is invisible to it and could still be pruned. Chosen anyway as the cheapest of the three
+// candidates the row named (mtime / a lock file / an open PR): it directly covers the incident that
+// happened (mid-stash), needs no new file for every session to write and clean up (a lock file's own
+// failure mode -- a crashed session's lock never clears), and does not require a PR to exist yet (the
+// incident happened before one did). A genuinely abandoned tree still gets removed once the window
+// passes, which is `ACCEPTANCE step 3`'s own requirement -- this narrows the remove window, it does not
+// disable it.
+export const ACTIVITY_WINDOW_MS = 10 * 60 * 1000; // 10 minutes: survives a stash-then-checkout gap; still sweeps
+                                            // a truly abandoned tree well within an hour of prune runs
 import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -57,6 +78,46 @@ const defaultRun = (cmd, args, opts) =>
 /**
  * @typedef {{ path: string, branch: string | null, detached: boolean }} WorktreeEntry
  */
+
+/**
+ * Whether `worktreePath` shows GIT ACTIVITY within `windowMs` of `now` -- the mtime of its own PRIVATE
+ * gitdir's `index`, `HEAD` and `logs/HEAD` (whichever exist), newest wins. TRISTATE for the same reason
+ * as `mergeStatus`/`isWorkingTreeClean`: `git rev-parse --absolute-git-dir` failing (a corrupted worktree,
+ * a `.git` file pointing nowhere) must read `"unknown"`, never `false` -- collapsing "could not check"
+ * into "no recent activity" is exactly the shape this row exists to close, one layer further in.
+ *
+ * NAMED FAILURE MODE (see this file's own header for why this signal over the other two candidates): a
+ * session editing files through a non-git tool, with no `git add`/`stash`/`commit`/`checkout` inside the
+ * window, is invisible to this check and could still be pruned. Narrower than the incident this closes,
+ * not a claim of completeness.
+ *
+ * @param {string} worktreePath
+ * @param {{ run?: typeof defaultRun, now?: number, windowMs?: number }} [deps]
+ * @returns {boolean | "unknown"}
+ */
+export function recentGitActivity(worktreePath, { run = defaultRun, now = Date.now(), windowMs = ACTIVITY_WINDOW_MS } = {}) {
+  /** @type {string} */
+  let gitDir;
+  try {
+    gitDir = run("git", ["rev-parse", "--absolute-git-dir"], { cwd: worktreePath }).trim();
+  } catch {
+    return "unknown";
+  }
+  const candidates = ["index", "HEAD", join("logs", "HEAD")].map((f) => join(gitDir, f));
+  let newestMtimeMs = -Infinity;
+  let sawAny = false;
+  for (const path of candidates) {
+    try {
+      const mtimeMs = statSync(path).mtimeMs;
+      sawAny = true;
+      if (mtimeMs > newestMtimeMs) newestMtimeMs = mtimeMs;
+    } catch {
+      // this particular file may legitimately not exist (e.g. no reflog yet) -- only ALL missing is unknown
+    }
+  }
+  if (!sawAny) return "unknown";
+  return now - newestMtimeMs < windowMs;
+}
 
 /**
  * Parses `git worktree list --porcelain`'s block format. Pure, given the raw text -- the shape worker-
@@ -97,6 +158,7 @@ export function isPrimaryWorktree(worktreePath) {
  * @typedef {{
  *   path: string, branch: string | null,
  *   merge: "merged" | "not-merged" | "unknown", workingTreeClean: boolean | "unknown", contentMerged: boolean,
+ *   recentlyActive: boolean | "unknown",
  * }} WorktreeAssessment
  */
 
@@ -114,28 +176,33 @@ export function isStandingBranch(branch) {
 }
 
 /**
- * Pure: given what is already known about a worktree, which of the FIVE populations is it in?
+ * Pure: given what is already known about a worktree, which of the SIX populations is it in?
  *
  * ORDER MATTERS. A detached worktree is refused first (no branch to reason about at all). A standing
  * branch is refused next, UNCONDITIONALLY -- a role tree that happens to look clean and merged is still
  * never a prune candidate, because "merged and clean" is not the question for a tree that is not a unit
- * tree in the first place. `"unknown"` on EITHER `merge` or `workingTreeClean` is checked before "remove"
- * becomes reachable at all -- INCONCLUSIVE, never silently folded into "not merged" or "dirty". That
- * collapse is a real, measured incident, not a hypothetical: a manual prune script's own
- * `[ "$(git rev-list --count origin/main..branch 2>/dev/null)" != 0 ]` compares an EMPTY result (the
- * count errored) against `0` as unequal, treating "could not tell" as "definitely not merged" -- the same
- * shape this project has paid for repeatedly elsewhere, here inside the very tool meant to enforce
- * hygiene. Only past both of those does "cherry-picked" get checked, before the general "dirty" fallback,
- * so a content-identical branch is never lumped in with real, uncaptured work.
+ * tree in the first place. `"unknown"` on ANY of `merge`, `workingTreeClean` or `recentlyActive` is
+ * checked before "remove" becomes reachable at all -- INCONCLUSIVE, never silently folded into "not
+ * merged" or "dirty". That collapse is a real, measured incident, not a hypothetical: a manual prune
+ * script's own `[ "$(git rev-list --count origin/main..branch 2>/dev/null)" != 0 ]` compares an EMPTY
+ * result (the count errored) against `0` as unequal, treating "could not tell" as "definitely not merged"
+ * -- the same shape this project has paid for repeatedly elsewhere, here inside the very tool meant to
+ * enforce hygiene. Only past all three does "cherry-picked" get checked, before the general "dirty"
+ * fallback, so a content-identical branch is never lumped in with real, uncaptured work.
  *
- * @param {Pick<WorktreeAssessment, "branch" | "merge" | "workingTreeClean" | "contentMerged">} assessment
- * @returns {"remove" | "dirty" | "standing" | "cherry-picked" | "inconclusive"}
+ * `recentlyActive` is checked LAST, after merge+clean would otherwise say "remove" -- #220: a tree that is
+ * merged and clean but shows GIT ACTIVITY inside the window (see `recentGitActivity`'s own header) is
+ * ACTIVE, not removed, because "clean" can mean "finished" or "mid-stash", and only recency tells them
+ * apart.
+ *
+ * @param {Pick<WorktreeAssessment, "branch" | "merge" | "workingTreeClean" | "contentMerged" | "recentlyActive">} assessment
+ * @returns {"remove" | "dirty" | "standing" | "cherry-picked" | "inconclusive" | "active"}
  */
-export function classify({ branch, merge, workingTreeClean, contentMerged }) {
+export function classify({ branch, merge, workingTreeClean, contentMerged, recentlyActive }) {
   if (branch === null) return "dirty";
   if (isStandingBranch(branch)) return "standing";
-  if (merge === "unknown" || workingTreeClean === "unknown") return "inconclusive";
-  if (merge === "merged" && workingTreeClean) return "remove";
+  if (merge === "unknown" || workingTreeClean === "unknown" || recentlyActive === "unknown") return "inconclusive";
+  if (merge === "merged" && workingTreeClean) return recentlyActive ? "active" : "remove";
   if (merge === "not-merged" && contentMerged) return "cherry-picked";
   return "dirty";
 }
@@ -235,28 +302,58 @@ export function isWorkingTreeClean(worktreePath, branch, { run = defaultRun } = 
  *   standing: ReportedWorktree[],
  *   cherryPicked: ReportedWorktree[],
  *   inconclusive: ReportedWorktree[],
+ *   active: ReportedWorktree[],
  *   skippedPrimary: string | null,
  * }} PruneReport
  */
 
 /**
+ * The four facts `classify` needs about one non-primary, non-standing worktree entry.
+ *
+ * `contentMerged` is only computed when `merge` is `"not-merged"` (a real, resolved "no") -- `git cherry`
+ * is meaningless for a detached, already-merged, or UNKNOWN-status worktree, and skipping it there is not
+ * an optimisation, it is avoiding a question that does not apply, or that the first question already
+ * failed to answer.
+ *
+ * `recentlyActive` (#220) is only computed when `merge === "merged"` and `workingTreeClean` -- the ONLY
+ * case where its answer changes the verdict (`classify` never reads it otherwise). Defaults to `false`
+ * (never "unknown") when skipped, so a dirty or cherry-picked entry is never misread as inconclusive over
+ * a question that does not apply to it.
+ *
+ * @param {string} repoRoot
+ * @param {WorktreeEntry} entry
+ * @param {{ run: typeof defaultRun, now: number }} deps
+ * @returns {Pick<WorktreeAssessment, "merge" | "workingTreeClean" | "contentMerged" | "recentlyActive">}
+ */
+function assessWorktree(repoRoot, entry, { run, now }) {
+  const merge = entry.branch !== null ? mergeStatus(repoRoot, entry.branch, { run }) : "not-merged";
+  const workingTreeClean = isWorkingTreeClean(entry.path, entry.branch, { run });
+  const contentMerged = entry.branch !== null && merge === "not-merged"
+    && isContentMerged(repoRoot, entry.branch, { run });
+  const recentlyActive = merge === "merged" && workingTreeClean === true
+    ? recentGitActivity(entry.path, { run, now })
+    : false;
+  return { merge, workingTreeClean, contentMerged, recentlyActive };
+}
+
+/** Which `PruneReport` bucket a `classify` verdict other than `"remove"` lands in. */
+const VERDICT_BUCKET = {
+  active: "active", "cherry-picked": "cherryPicked", inconclusive: "inconclusive", dirty: "dirty",
+};
+
+/**
  * The whole flow: list, classify, remove the clean+merged, name the rest, never touch the primary.
  *
- * `contentMerged` is only computed when `merge` is `"not-merged"` (a real, resolved "no") and `branch` is
- * a real, non-standing name -- `git cherry` is meaningless for a detached, already-merged, or
- * UNKNOWN-status worktree, and skipping it there is not an optimisation, it is avoiding a question that
- * does not apply, or that the first question already failed to answer.
- *
  * @param {string} repoRoot the repository whose `git worktree list` is authoritative
- * @param {{ run?: typeof defaultRun, remove?: (path: string, deps: { run: typeof defaultRun }) => void }} [deps]
+ * @param {{ run?: typeof defaultRun, remove?: (path: string, deps: { run: typeof defaultRun }) => void, now?: number }} [deps]
  * @returns {PruneReport}
  */
-export function pruneWorktrees(repoRoot, { run = defaultRun, remove } = {}) {
+export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.now() } = {}) {
   const porcelain = run("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot });
   const entries = parseWorktreeList(porcelain);
   /** @type {PruneReport} */
   const report = {
-    removed: [], dirty: [], standing: [], cherryPicked: [], inconclusive: [], skippedPrimary: null,
+    removed: [], dirty: [], standing: [], cherryPicked: [], inconclusive: [], active: [], skippedPrimary: null,
   };
   const doRemove = remove ?? ((path, { run: r }) => {
     r("git", ["worktree", "remove", path], { cwd: repoRoot });
@@ -272,52 +369,48 @@ export function pruneWorktrees(repoRoot, { run = defaultRun, remove } = {}) {
       report.standing.push(reported);
       continue;
     }
-    const merge = entry.branch !== null ? mergeStatus(repoRoot, entry.branch, { run }) : "not-merged";
-    const workingTreeClean = isWorkingTreeClean(entry.path, entry.branch, { run });
-    const contentMerged = entry.branch !== null && merge === "not-merged"
-      && isContentMerged(repoRoot, entry.branch, { run });
-    const verdict = classify({ branch: entry.branch, merge, workingTreeClean, contentMerged });
+    const assessment = assessWorktree(repoRoot, entry, { run, now });
+    const verdict = classify({ branch: entry.branch, ...assessment });
     if (verdict === "remove") {
       doRemove(entry.path, { run });
       report.removed.push(reported);
-    } else if (verdict === "cherry-picked") {
-      report.cherryPicked.push(reported);
-    } else if (verdict === "inconclusive") {
-      report.inconclusive.push(reported);
     } else {
-      report.dirty.push(reported);
+      report[VERDICT_BUCKET[verdict]].push(reported);
     }
   }
   return report;
 }
 
+/** Appends a header plus one indented line per entry -- and nothing at all when `entries` is empty. */
+function pushSection(lines, entries, header) {
+  if (entries.length === 0) return;
+  lines.push(header);
+  for (const e of entries) lines.push(`  ${e.path}  (${e.branch ?? "detached"})`);
+}
+
 function formatReport(report) {
-  const lines = [];
-  lines.push(`removed ${report.removed.length} worktree(s):`);
+  const lines = [`removed ${report.removed.length} worktree(s):`];
   for (const r of report.removed) lines.push(`  ${r.path}  (${r.branch ?? "detached"})`);
-  if (report.dirty.length > 0) {
-    lines.push(`refused ${report.dirty.length} DIRTY worktree(s) -- uncommitted or unmerged work, named, nothing removed:`);
-    for (const d of report.dirty) lines.push(`  ${d.path}  (${d.branch ?? "detached"})`);
-  }
-  if (report.inconclusive.length > 0) {
-    lines.push(`${report.inconclusive.length} INCONCLUSIVE worktree(s) -- merge or clean status could not `
-      + `be determined; never guessed at, nothing removed:`);
-    for (const i of report.inconclusive) lines.push(`  ${i.path}  (${i.branch ?? "detached"})`);
-  }
-  if (report.cherryPicked.length > 0) {
-    lines.push(`${report.cherryPicked.length} CHERRY-PICKED worktree(s) -- content already on main under `
-      + `different commits, not a literal ancestor; a human decides, nothing removed:`);
-    for (const c of report.cherryPicked) lines.push(`  ${c.path}  (${c.branch})`);
-  }
-  if (report.standing.length > 0) {
-    lines.push(`${report.standing.length} STANDING worktree(s) -- not agent/*, a role tree, never a prune candidate:`);
-    for (const s of report.standing) lines.push(`  ${s.path}  (${s.branch ?? "detached"})`);
-  }
+  pushSection(lines, report.dirty,
+    `refused ${report.dirty.length} DIRTY worktree(s) -- uncommitted or unmerged work, named, nothing removed:`);
+  pushSection(lines, report.active,
+    `${report.active.length} ACTIVE worktree(s) -- merged and clean, but git activity inside the last `
+    + `${Math.round(ACTIVITY_WINDOW_MS / 60000)} minute(s); a session may be mid-command, nothing removed:`);
+  pushSection(lines, report.inconclusive,
+    `${report.inconclusive.length} INCONCLUSIVE worktree(s) -- merge, clean or activity status could not `
+    + `be determined; never guessed at, nothing removed:`);
+  pushSection(lines, report.cherryPicked,
+    `${report.cherryPicked.length} CHERRY-PICKED worktree(s) -- content already on main under different `
+    + `commits, not a literal ancestor; a human decides, nothing removed:`);
+  pushSection(lines, report.standing,
+    `${report.standing.length} STANDING worktree(s) -- not agent/*, a role tree, never a prune candidate:`);
   if (report.skippedPrimary) lines.push(`primary checkout, never touched: ${report.skippedPrimary}`);
   return lines.join("\n");
 }
 
 async function main() {
+  // Guarded per #164: positional repo root; git flags go onward.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/prune-worktrees.mjs" });
   const repoRoot = process.argv[2] ?? process.cwd();
   const report = pruneWorktrees(statSync(repoRoot).isDirectory() ? repoRoot : process.cwd());
   process.stdout.write(formatReport(report) + "\n");
@@ -325,6 +418,7 @@ async function main() {
 
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   main();
 }
