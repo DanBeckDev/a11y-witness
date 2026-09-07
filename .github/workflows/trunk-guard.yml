@@ -1,0 +1,90 @@
+name: trunk-guard
+
+# THE MERGE COMMIT THAT LANDS ON `main` HAS NEVER ITSELF BEEN TESTED -- pipeline unit 3, #316. Unit 1
+# (#298) made this real by turning branch protection's `strict` off: `ci.yml`'s `pull_request` trigger
+# tests a PR's own HEAD, never the merge commit GitHub actually produces when it lands, and with
+# `strict=false` nothing requires that merge commit to match a tree anyone tested before the merge
+# completes. This workflow is the one place that gap is closed -- it runs the full suite against `main`'s
+# real, new tip on every push, and when it fails, and ONLY when the failure is genuinely this push's own,
+# opens an automatic revert. See `scripts/trunk-revert.mjs`'s own header for the two ways a bare
+# "revert on red" would be worse than nothing, both measured live the morning this was built: reverting an
+# INHERITED failure (13 of 19 PRs read red on one bad commit and none was at fault), and reverting a
+# commit main has already moved past (a follow-up fix would be reverted instead of the fault).
+#
+# THIS IS DELIBERATELY NOT `ci.yml`'s `gate`, and not merely a copy of it moved to `push`. `ci.yml`'s own
+# header rules a push trigger out THERE for a real reason -- "a check that runs after the merge cannot
+# stop it, which is exactly what a push trigger was" -- and that reasoning is still correct for PRE-merge
+# gating. This workflow is not pre-merge gating; it cannot stop a merge that already landed, and does not
+# try to. It is the reactive half: verify, and where it is safe to, fix forward. See
+# `push-trigger-allowlist.test.ts`'s `TRUNK_GATE_ALLOWLIST` for why this is its own closed category,
+# structurally distinct from the lightweight, continue-on-error watchdogs (`board-liveness.yml`,
+# `npm-token-liveness.yml`, `workflow-run-liveness.yml`) that were the only push-to-main precedent before
+# this row -- this workflow DOES build, DOES run the full suite, and is NOT continue-on-error, because a
+# red run here is exactly the signal that drives the revert, not something to observe and move past.
+#
+# UNSCOPED, DELIBERATELY, unlike `ci.yml`'s per-package `ts` job. A push to `main` is a merge, which by
+# definition can touch anything, and pushes to `main` are far less frequent than PR commits -- there is no
+# throughput pressure here that would justify the same path-scoping.
+#
+# KNOWN GAP, STATED RATHER THAN HIDDEN: this does not (yet) run `ci.yml`'s `ansible` syntax-check or
+# `rulesFitness` (`npm run rules-check`) jobs. Both are cheap to add later; left out of the first version
+# to keep this row's scope to the revert MECHANISM, which is what #316's acceptance actually exercises.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # THE ONLY QUESTION THIS JOB ANSWERS: is `main`'s new tip actually green. `decideRevert` below is what
+  # decides whether that failure is this push's own, or something else -- this job just reports the fact.
+  trunkGate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run lint
+      - run: npm run typecheck
+      # `npm run test:ts`, unscoped -- the whole tree, never `ci.yml`'s per-package `testPackages` slice.
+      # GH_TOKEN: several packaging tests shell out to real `gh` calls against this repo's own Issues,
+      # read-only -- the same reason `ci.yml`'s `ts`/`board`/`docs` jobs all carry it.
+      - name: Unit tests, unscoped
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run test:ts
+      # DIRECT pytest, never `npm run test:python` -- that script only runs when `.venv/bin/pytest`
+      # exists (the LOCAL developer convention), which a fresh runner never has, and would silently SKIP
+      # rather than fail loud. `ci.yml`'s own `python` job makes the identical choice for the identical
+      # reason.
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements-ci.txt
+      - run: PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider packages/*/tests -q
+
+  # RUNS ONLY WHEN `trunkGate` ACTUALLY FAILED -- `if: needs.trunkGate.result == 'failure'`, never
+  # `always()`. A green trunk needs no decision at all, and `cancelled` (someone manually cancelled the
+  # run) is not the same fact as a real failure and must not be read as one.
+  decideRevert:
+    needs: trunkGate
+    if: needs.trunkGate.result == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Revert this push, unless the failure is inherited or main has already moved on
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/trunk-revert.mjs \
+            --push-sha=${{ github.sha }} \
+            --before-sha=${{ github.event.before }} \
+            --run-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
