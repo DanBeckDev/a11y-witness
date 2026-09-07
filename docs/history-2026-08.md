@@ -72,13 +72,13 @@ of its files are harnesses.
 
 | package | licence | runs on | separate because |
 |---|---|---|---|
-| `@a11y-witness/evidence` | Apache-2.0 | anywhere | zero deps; all an alternative capture backend needs |
-| `@a11y-witness/scorer` | AGPL | host + Python | the weights are the API — a retrain is a major |
-| `@a11y-witness/judge` | AGPL | anywhere | score an archived capture with no worker at all |
-| `@a11y-witness/nvda-worker` | AGPL | **win32** | a GitHub Windows runner needs this and nothing else |
-| `@a11y-witness/worker-fleet` | AGPL | macOS/Linux | `doctor`/`worker-ctl` run where there is no NVDA |
-| `a11y-witness` | AGPL | host | the front door; carries axe/playwright optionals |
-| `@a11y-witness/lab` | AGPL, **unpublished** | host | our corpus, gates, dataset pipeline and eval fixtures |
+| `@a11ign/evidence` | Apache-2.0 | anywhere | zero deps; all an alternative capture backend needs |
+| `@a11ign/scorer` | AGPL | host + Python | the weights are the API — a retrain is a major |
+| `@a11ign/judge` | AGPL | anywhere | score an archived capture with no worker at all |
+| `@a11ign/nvda-worker` | AGPL | **win32** | a GitHub Windows runner needs this and nothing else |
+| `@a11ign/worker-fleet` | AGPL | macOS/Linux | `doctor`/`worker-ctl` run where there is no NVDA |
+| `a11ign` | AGPL | host | the front door; carries axe/playwright optionals |
+| `@a11ign/lab` | AGPL, **unpublished** | host | our corpus, gates, dataset pipeline and eval fixtures |
 
 npm workspaces (pnpm's `workspace:` protocol is rejected by npm 11.5.1 with
 `EUNSUPPORTEDPROTOCOL` — measured), inter-package deps as published semver ranges,
@@ -137,7 +137,7 @@ cheaply as possible, and the first step moves no files at all.
   `tsconfig.base.json` was omitted from the first commit and every local check passed
   anyway — the clean clone caught it, and the guard is now generalised to *any*
   tsconfig `extends` target being tracked.
-- [x] **M2 — Extract `@a11y-witness/evidence`.** DONE (`cf8578d`) at `0.1.0`,
+- [x] **M2 — Extract `@a11ign/evidence`.** DONE (`cf8578d`) at `0.1.0`,
   Apache-2.0, **not published** — the release is prepared and the decision deferred.
   Verified in a tree containing only staged content: `npm ci` links the workspace,
   `prepare` builds `dist`, 365 tests / 0 fail, typecheck clean, gate 1/1, and
@@ -147,7 +147,7 @@ cheaply as possible, and the first step moves no files at all.
   workspace: two wrong field names in the README's own example, and a tarball with no
   `dist` because `npm pack` does not build. `"prepack": "tsc --build"` is now a
   documented requirement for every package.
-- [x] **M3 — Extract `@a11y-witness/scorer`.** DONE (`c5b9813`) at `0.1.0`,
+- [x] **M3 — Extract `@a11ign/scorer`.** DONE (`c5b9813`) at `0.1.0`,
   AGPL-3.0-or-later, not published. Gate met: `npm run eval` unchanged against the
   local backend, and behaviour preservation measured directly — **28 fixtures scored
   byte-identically before and after**, including the VoiceOver capture that must be
@@ -165,7 +165,7 @@ cheaply as possible, and the first step moves no files at all.
   Also closed two checks that would have passed by examining nothing after the move:
   `scorer-artifact.test.ts` read the schema from the trainer, and
   `referenced-scripts.test.ts` matched only `scripts/`.
-- [x] **M4 — Extract `@a11y-witness/judge`.** DONE (`04841b9`) at `0.1.0`,
+- [x] **M4 — Extract `@a11ign/judge`.** DONE (`04841b9`) at `0.1.0`,
   AGPL-3.0-or-later, not published. `src/spike/` is retired; its three harnesses are
   `packages/lab/src/harnesses/`, its NVDA fixtures are `packages/lab/src/eval/fixtures/nvda/`. Gate met:
   `rules:gate` PASS and `npm run eval` recall 90% with 0 false positives on conformant
@@ -181,9 +181,9 @@ cheaply as possible, and the first step moves no files at all.
   `A11Y_PYTHON` winning); and the artefact test's `repoRoot` became `packages/`.
 
   The isolation gate also turned out to handle only LEAF packages: nothing is published,
-  so npm could not resolve `@a11y-witness/evidence` for `judge` and failed with E404. It
+  so npm could not resolve `@a11ign/evidence` for `judge` and failed with E404. It
   now packs the internal closure and installs the tarballs together.
-- [x] **M5 — Extract `@a11y-witness/nvda-worker`.** DONE (`b03fab1`) at `0.1.0`,
+- [x] **M5 — Extract `@a11ign/nvda-worker`.** DONE (`b03fab1`) at `0.1.0`,
   AGPL-3.0-or-later, not published. `packages/lab/src/capture/nvda/` retired; `.mjs` ships verbatim so
   there is no build step. **`CAPTURE_PROTOCOL_VERSION` did not move** — still 4, nothing
   invalidated. All four gates met, in order:
@@ -208,7 +208,7 @@ cheaply as possible, and the first step moves no files at all.
   type-checked as M2–M5 moved them (measured with `tsc --listFiles`: 0 in the program,
   now 24) — my own regression, introduced in M2 and found in M5.
 
-- [x] **M6 — Extract `@a11y-witness/worker-fleet`.** DONE (`659a8e7`) at `0.1.0`,
+- [x] **M6 — Extract `@a11ign/worker-fleet`.** DONE (`659a8e7`) at `0.1.0`,
   AGPL-3.0-or-later, not published. Five bins; the UTM provisioning assets ship with it.
   Gate met: `doctor` finds all three workers, measures capacity, and every FAIL carries
   its remedy.
@@ -222,8 +222,8 @@ cheaply as possible, and the first step moves no files at all.
 
   ADR correction recorded: `shouldRetireWorker` stays in `capture-decisions.mjs` with the
   run's other accept/reject/evict decisions rather than moving to `./health`.
-- [x] **M7 — Extract `a11y-witness` (the CLI).** DONE (`22e7181`) at `0.1.0`, unscoped so
-  `npx a11y-witness` needs no wrapper; the root package became `a11y-witness-monorepo`
+- [x] **M7 — Extract `a11ign` (the CLI).** DONE (`22e7181`) at `0.1.0`, unscoped so
+  `npx a11ign` needs no wrapper; the root package became `a11ign-monorepo`
   because npm refuses two workspace members with the same name. `reportLines` and
   `Report` are the whole public surface.
 
@@ -239,7 +239,7 @@ cheaply as possible, and the first step moves no files at all.
   judgment nested under `verdict`); and `git add -- src` swept up another agent's
   untracked test file, which the committed-content check surfaced as 0 failures becoming
   7.
-- [x] **M8 — Collapse the remainder into `@a11y-witness/lab`.** DONE (`e09bbcd`),
+- [x] **M8 — Collapse the remainder into `@a11ign/lab`.** DONE (`e09bbcd`),
   `"private": true`, never published. **`src/` no longer exists**; root `scripts/` holds
   only monorepo tooling. The `.ps1` provisioning went to `worker-fleet` (ADR 0004 always
   said `fleetScriptPaths()` covered `.ps1`; M6 moved only the `.sh`), and
@@ -1243,7 +1243,7 @@ VoiceOver capture was deferred: macOS AppleScript automation is fragile and depr
 
 ### M1 — v1 open-source tool
 
-- [ ] CLI: `a11y-witness <url> --task "..."` produces an evidence-backed report (findings, WCAG references, confidence).
+- [ ] CLI: `a11ign <url> --task "..."` produces an evidence-backed report (findings, WCAG references, confidence).
 - [ ] Real navigation as reusable strategies: read-through, by-heading, by-landmark, forms, task completion.
 - [ ] Portable control plane (container) that dispatches to capture workers and runs the judge. Judge made provider-pluggable (Codex CLI / OpenAI / Anthropic / local) so others are not tied to one account.
 - [ ] Make the NVDA worker reproducible and usable by others (per ADR 0001): a one-command PowerShell bootstrap for any Windows box, and a GitHub Actions `windows-latest` job so contributors run the full pipeline with zero infra.
@@ -1287,7 +1287,7 @@ NVDA on Windows is the primary backend, proven in M0 and productionised in M1. M
   -e main:scripts/score-screenreader-model.py` fails) yet is the documented default in
   `local-judge.ts` and behind three npm scripts. It survives only in unreachable
   `kanban checkpoint` commits. Anyone cloning this repo cannot run the local judge,
-  and `@a11y-witness/scorer` cannot be built until it is restored. See M0.
+  and `@a11ign/scorer` cannot be built until it is restored. See M0.
 - **AGPL on published libraries will deter some adopters**, which pulls directly
   against the adoption goal. ADR 0006 resolves it by keeping the engine AGPL and
   licensing the contracts package Apache-2.0, so third-party capture backends are

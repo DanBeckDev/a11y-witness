@@ -43,7 +43,7 @@ export interface CaptureRequest {
    * — this package has exactly one real backend today, and `CaptureResult`'s `environment` already
    * documents that backend's specifics the same way. Declared here because nothing else does: until
    * 2026-09-05 (architecture-audit.md §5, item 1) this interface named `url, task, strategy?` while the
-   * worker accepted 20 fields, so a consumer typing against `@a11y-witness/evidence` could not have known
+   * worker accepted 20 fields, so a consumer typing against `@a11ign/evidence` could not have known
    * a single probe flag, `formState`, `captureId` or `async` existed.
    *
    * A future VoiceOver or Orca backend is free to ignore every field below; they are all optional for
@@ -61,7 +61,7 @@ export interface CaptureRequest {
   nav?: "object" | "line";
 
   /** Ten opt-in probes, each paying for evidence only when asked — `PROBE_FLAGS` in
-   *  `@a11y-witness/nvda-worker/capture-pure` is the worker's own copy of this exact list. */
+   *  `@a11ign/nvda-worker/capture-pure` is the worker's own copy of this exact list. */
   probeForms?: boolean;
   probeFocus?: boolean;
   probeTables?: boolean;
@@ -108,7 +108,7 @@ export interface CaptureStructure {
    * The other four sweeps, all of which a real capture carries and none of which this type declared until
    * 2026-08-29.
    *
-   * `@a11y-witness/evidence`'s `.` subpath IS the published wire description, so a consumer typing against
+   * `@a11ign/evidence`'s `.` subpath IS the published wire description, so a consumer typing against
    * it would have concluded a capture exposes no links, graphics, lists or table cells. Verified against a
    * live protocol-7 capture, whose `structure` keys are exactly the seven below.
    *
@@ -125,7 +125,7 @@ export interface CaptureStructure {
    * reason is live rather than historical: every capture taken before protocol 11 carries no `frames`,
    * and absence means "this capture did not sweep for frames", never "the page has none".
    *
-   * `@a11y-witness/evidence`'s `.` subpath IS the published wire description, so a consumer typing
+   * `@a11ign/evidence`'s `.` subpath IS the published wire description, so a consumer typing
    * against it would otherwise conclude a capture cannot expose frames at all — which is what happened to
    * links, graphics, lists and table cells until 2026-08-29.
    */

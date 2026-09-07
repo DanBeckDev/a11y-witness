@@ -11,7 +11,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { sandboxGitEnv } from "./git-env.mjs";
 
 const REPO_ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"],
@@ -67,11 +67,11 @@ export function workspacePackages(repoRoot) {
   });
 }
 
-/** Which packages are imported by their BARE root specifier (`from "@a11y-witness/name"`, no subpath)
+/** Which packages are imported by their BARE root specifier (`from "@a11ign/name"`, no subpath)
  * from source elsewhere in the repo -- that is the shape CLAUDE.md's own dist-resolution incident was
  * about, because a bare specifier resolves through the package's `exports`/`main` field, which for a
- * TypeScript package points into `dist/`. A SUBPATH import (`@a11y-witness/lab/src/x.mjs`,
- * `@a11y-witness/nvda-worker/error-text`) is deliberately excluded: this repo uses that shape specifically
+ * TypeScript package points into `dist/`. A SUBPATH import (`@a11ign/lab/src/x.mjs`,
+ * `@a11ign/nvda-worker/error-text`) is deliberately excluded: this repo uses that shape specifically
  * to reach raw `.mjs` source with no build step at all (ADR 0031), so flagging it would be a false
  * positive -- checked against the real repo while building this, which is what found the false positives
  * a cruder "does the name appear" search produced first. */

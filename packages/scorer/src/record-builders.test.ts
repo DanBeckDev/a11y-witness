@@ -85,7 +85,7 @@ test("every training-record builder emits `observation` beside `input`", () => {
     "These build a training record and never set `observation`:\n  " + silent.join("\n  ")
     + "\n\nAbsent and `asked: false` are the SAME row for the featurizer, so such a record says 'nobody"
     + "\nlooked' about every capture and nothing downstream can tell that from the truth. Import"
-    + "\n`observationOf` from @a11y-witness/scorer/evidence-units rather than writing a second spelling"
+    + "\n`observationOf` from @a11ign/scorer/evidence-units rather than writing a second spelling"
     + "\n-- one builder is the point; the drift is what this guards.");
 });
 

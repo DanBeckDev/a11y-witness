@@ -46,7 +46,7 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { sandboxGitEnv } from "./git-env.mjs";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 /**
  * Issue references a commit range makes: `#12`, `Closes #12`, `fix(#30):`.

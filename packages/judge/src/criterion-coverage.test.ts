@@ -11,7 +11,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
+import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 
 import { assessedCriteria } from "./coverage.js";
 import { CRITERION_COVERAGE, channelsPresent, criteriaAssessableFrom } from "./criterion-coverage.js";

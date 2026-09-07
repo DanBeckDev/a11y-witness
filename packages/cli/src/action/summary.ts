@@ -213,7 +213,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
   // never about their page.
   if (result.captureVerified === false) {
     lines.push(
-      "## a11y-witness — **could not read this page**",
+      "## a11ign — **could not read this page**",
       "",
       `**Page:** ${result.url}`,
       "",
@@ -238,7 +238,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     return lines.join("\n");
   }
   lines.push(
-    "## a11y-witness — what a screen reader actually experienced",
+    "## a11ign — what a screen reader actually experienced",
     "",
     `**Page:** ${result.url}`,
     `**Task:** ${result.task}`,

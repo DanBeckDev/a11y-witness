@@ -1,6 +1,6 @@
 ---
 name: merge-worktree-is-not-a-gate-environment
-description: Discovery-test failures and core.bare flips in a11y-witness came from GIT_DIR leaking into hook-run tests, not from worktrees; cwd is not isolation.
+description: Discovery-test failures and core.bare flips in a11ign came from GIT_DIR leaking into hook-run tests, not from worktrees; cwd is not isolation.
 metadata:
   type: feedback
 ---
@@ -16,7 +16,7 @@ environment.** `packages/lab/src/packaging/promotion-refuses-dirty.test.ts` shel
 `GIT_DIR` wins.** So every `git push` ran those commands against the real repository.
 
 Reproduced in isolation: `GIT_DIR=<real>/.git git init … git commit -qm base` lands
-`base` in the real repo authored `t@example.com` — the exact signature found in a11y-witness
+`base` in the real repo authored `t@example.com` — the exact signature found in a11ign
 (commits `base`/`init`, `a.txt`/`b.txt`).
 
 Consequences seen: `core.bare` flipped to `true` twice, leaving the fleet-driving checkout

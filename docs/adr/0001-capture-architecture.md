@@ -5,7 +5,7 @@
 
 ## Context
 
-The core differentiator of `a11y-witness` is that it drives a **real screen
+The core differentiator of `a11ign` is that it drives a **real screen
 reader** through real navigation, rather than checking code against rules or
 tabbing through controls. That commitment runs straight into a hard fact:
 screen readers are operating-system-bound desktop applications, not libraries.

@@ -1,5 +1,5 @@
 {
-  "name": "@a11y-witness/scorer",
+  "name": "@a11ign/scorer",
   "version": "0.1.0",
   "description": "The trained screen-reader accessibility scorer as an artefact: 27 KB of heads over a frozen MiniLM encoder, plus the Python program that runs them. The weights are the API.",
   "license": "AGPL-3.0-or-later",
@@ -15,7 +15,7 @@
     }
   },
   "bin": {
-    "a11y-scorer-fetch-encoder": "./bin/fetch-encoder.mjs"
+    "a11ign-scorer-fetch-encoder": "./bin/fetch-encoder.mjs"
   },
   "files": [
     "bin",
@@ -39,9 +39,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/DanBeckDev/a11y-witness.git",
+    "url": "git+https://github.com/a11ign/a11ign.git",
     "directory": "packages/scorer"
   },
+  "homepage": "https://a11ign.com",
   "keywords": [
     "accessibility",
     "a11y",
@@ -51,6 +52,6 @@
     "scorer"
   ],
   "dependencies": {
-    "@a11y-witness/evidence": "0.1.0"
+    "@a11ign/evidence": "0.1.0"
   }
 }
