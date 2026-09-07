@@ -44,6 +44,12 @@ import { sandboxGitEnv } from "./git-env.mjs";
 // rename, a deletion, a file directly under `packages/` with no subdirectory). Writing a second copy of
 // `/^packages\/([^/]+)\//` here would be the exact defect this file's own header names.
 import { changedPackages } from "./changed-packages.mjs";
+// REUSED FOR REAL THIS TIME. The comment on `packedFiles` below has claimed this reuse since #132 while
+// the function beneath it carried its own, second `npm pack --dry-run --json` call -- two derivations of
+// "what does a package actually ship" guarding the identical promise, the exact fact-stated-twice shape
+// this file's own header opens with. `isolation-gate.mjs` is this repo's other, older answer to the same
+// question (does a consumer's install actually work), so it is the one authority now.
+import { packedFiles as packedFilesForDir } from "./isolation-gate.mjs";
 
 /** Every top-level package directory this repo has, read once rather than hardcoded twice. */
 export function knownPackages(repoRoot) {
@@ -159,6 +165,72 @@ export function boardOnly(docsFiles) {
 }
 
 /**
+ * What `npm pack --dry-run` actually ships for one package, as a `Set` of paths relative to the package
+ * root. `classify` accepts an injected replacement (`getPackedFiles`) so its own tests never shell out to
+ * npm; this is only the REAL one, kept at this `(repoRoot, pkgName)` shape so every existing caller and
+ * test here is unaffected by where the underlying npm call actually lives.
+ *
+ * @param {string} repoRoot
+ * @param {string} pkgName
+ * @returns {Set<string>}
+ */
+export function packedFiles(repoRoot, pkgName) {
+  return packedFilesForDir(`${repoRoot}/packages/${pkgName}`);
+}
+
+/**
+ * A changed file's own path, plus its BUILT counterpart's — `src/foo.ts` also produces `dist/foo.js` and
+ * `dist/foo.d.ts` for a package that ships `dist` (every `tsc --build` package here uses `rootDir: src`,
+ * `outDir: dist`, one file in, the same relative name out). Checking BOTH against the packed manifest is
+ * what tells a real source change from a test file without ever naming `*.test.ts` here: every package's
+ * own `tsconfig.json` already excludes test files from the build ("exclude": src/**\/*.test.ts), so
+ * a test file's built counterpart simply never exists to be packed — the same fact `npm pack` already
+ * knows, read once rather than re-encoded as a second, driftable pattern.
+ *
+ * A package that ships `src` RAW (no build step -- `nvda-worker`, and `worker-fleet`'s
+ * `src/local-worker`/`src/provisioning`) needs no mapping at all: the file's own path is already a
+ * candidate, and its `files` field either lists that literal path or does not.
+ *
+ * @param {string} relPath path relative to the package root
+ * @returns {string[]}
+ */
+export function candidatePackedPaths(relPath) {
+  const candidates = [relPath];
+  const tsMatch = /^src\/(.*)\.tsx?$/.exec(relPath);
+  if (tsMatch) candidates.push(`dist/${tsMatch[1]}.js`, `dist/${tsMatch[1]}.d.ts`);
+  return candidates;
+}
+
+/** Whether `packages/<pkgName>` is ever published — a `private: true` package has no changeset question. */
+function isPublished(repoRoot, pkgName) {
+  return !JSON.parse(readFileSync(`${repoRoot}/packages/${pkgName}/package.json`, "utf8")).private;
+}
+
+/**
+ * A `getPackedFiles` stand-in that answers "packed" for EVERY candidate path, unconditionally. Used only
+ * by the `changed` job, which runs before `npm ci` and so cannot safely call the real `npm pack` --
+ * `orchestrator` reproduced `classify()` crashing there on every PR touching a published package, once
+ * `packedFiles` stopped being an inert, never-actually-called comment and started being the real call
+ * this file's own header always claimed it was.
+ *
+ * SAFE BECAUSE IT IS ONLY EVER TOO EAGER, never too quiet: `classify()`'s `changeset` output computed this
+ * way is a strict SUPERSET of the precise answer -- exactly `changed` file under `packages/<published>/`,
+ * the same shape `changeset-check.yml`'s old regex used before #132. That is fine for what this output
+ * actually decides here: whether the `changeset` job (which has `npm ci`, and re-derives the PRECISE
+ * answer with the real `packedFiles` before enforcing anything) runs at all. A false positive here costs
+ * one job invocation that then finds nothing to enforce; a false negative would skip the real check
+ * entirely, which is why this never goes the other way.
+ *
+ * @param {string} repoRoot unused -- present only to match `getPackedFiles`'s real shape
+ * @param {string} pkgName unused -- present only to match `getPackedFiles`'s real shape
+ * @returns {Set<string>} answers `.has(anything)` true, without ever running the real `npm pack`
+ */
+function everythingIsPacked(repoRoot, pkgName) {
+  void repoRoot; void pkgName;
+  return /** @type {Set<string>} */ ({ has: () => true });
+}
+
+/**
  * Classify a list of repo-relative changed paths into which `ci.yml` jobs must run.
  *
  * @param {string[]} files
@@ -166,10 +238,14 @@ export function boardOnly(docsFiles) {
  * @param {Record<string, string[]>} [dependencyGraph] from `readWorkspaceDependencyGraph`; defaults to
  *   empty, so `testPackages` degrades to exactly `packages` when no graph is supplied (every existing
  *   call site that predates `testPackages` keeps working unchanged)
+ * @param {{ repoRoot?: string, getPackedFiles?: (repoRoot: string, pkgName: string) => Set<string> }} [deps]
+ *   `repoRoot` defaults to `process.cwd()`, `getPackedFiles` to the real `packedFiles` above — both
+ *   injectable so `classify` itself stays testable without a real npm pack per call.
  * @returns {{ ts: boolean, python: boolean, ansible: boolean, docs: boolean, board: boolean,
  *   changeset: boolean, rulesFitness: boolean, packages: string[], testPackages: string[] }}
  */
-export function classify(files, allPackages, dependencyGraph = {}) {
+export function classify(files, allPackages, dependencyGraph = {},
+  { repoRoot = process.cwd(), getPackedFiles = packedFiles } = {}) {
   const rootTsChanged = files.some((f) => ROOT_TS_FILES.has(f));
   // BLUNT ON PURPOSE, matching `changedPackages`'s own stated philosophy: any file under `packages/<name>/`
   // — not only `.ts`/`.mjs`/`.json` under `src`/`bin` — marks that package touched. A second, narrower
@@ -203,11 +279,22 @@ export function classify(files, allPackages, dependencyGraph = {}) {
   const board = docsFiles.length > 0 && boardOnly(docsFiles);
   const docs = docsFiles.length > 0 && !board;
 
-  // The exact regex `changeset-check.yml` used before this file existed — kept identical rather than
-  // "improved", because the set of published packages IS the decision and re-deriving it independently is
-  // how the two copies would drift.
-  const changeset = files.some((f) =>
-    /^packages\/(cli|judge|scorer|evidence|nvda-worker|worker-fleet)\/(src|python|models|bin)\//.test(f));
+  // ISSUE #132: the regex `changeset-check.yml` used before this file existed asked "is this file UNDER
+  // a published package's src/python/models/bin", which answers a different question than the one the
+  // gate means -- "CAN this file reach a consumer". `packages/worker-fleet/src/lab-job.test.ts` matched
+  // that regex and blocked a real PR, measured: `npm pack --dry-run --json` on `worker-fleet` ships 153
+  // files and that is not one of them. Derived from what npm actually packs instead, per-package, memoised
+  // so a PR touching several files in one package still calls `npm pack` once for it.
+  const packedCache = new Map();
+  const changeset = files.some((f) => {
+    const match = /^packages\/([^/]+)\/(.*)$/.exec(f);
+    if (!match) return false;
+    const [, pkgName, relPath] = match;
+    if (!allPackages.includes(pkgName) || !isPublished(repoRoot, pkgName)) return false;
+    if (!packedCache.has(pkgName)) packedCache.set(pkgName, getPackedFiles(repoRoot, pkgName));
+    const packed = packedCache.get(pkgName);
+    return candidatePackedPaths(relPath).some((p) => packed.has(p));
+  });
 
   // NARROW ON PURPOSE, unlike every other category above -- chairman's direction, 2026-09-06. Coverage
   // and `gate:isolation` left the PR path entirely (release-time and nightly instead; see `ci.yml`'s and
@@ -261,7 +348,12 @@ function writeOutputs(result) {
 }
 
 async function main() {
-  const KNOWN_FLAGS = ["--event", "--base", "--repo"];
+  // --precise: the `changeset` job passes this AFTER its own `npm ci`, to get the real, `npm pack`-backed
+  // answer -- see `everythingIsPacked`'s own comment for why the `changed` job (no install at all) must
+  // never take this path. Its ABSENCE is not "changeset: false"; it is "changeset: true whenever a
+  // published package changed at all", a deliberate over-approximation that only decides whether the
+  // `changeset` job runs, never whether anything is actually enforced.
+  const KNOWN_FLAGS = ["--event", "--base", "--repo", "--precise"];
   refuseUnknownFlags(KNOWN_FLAGS, { entry: import.meta.url, command: "ci-changed" });
 
   // `--event` stays a required, explicit flag rather than being dropped outright: a caller that types
@@ -310,7 +402,9 @@ async function main() {
   }
 
   const dependencyGraph = readWorkspaceDependencyGraph(repoRoot, packages);
-  writeOutputs(classify(files, packages, dependencyGraph));
+  const precise = process.argv.includes("--precise");
+  writeOutputs(classify(files, packages, dependencyGraph,
+    { repoRoot, getPackedFiles: precise ? packedFiles : everythingIsPacked }));
 }
 
 // Only when invoked directly — importing `classify` for a test must not trigger a git subprocess.
