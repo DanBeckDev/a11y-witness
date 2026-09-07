@@ -51,7 +51,15 @@
       "reportedBy": "orchestrator",
       "at": "2026-09-06T20:45:00Z",
       "boardClaim": "The recordings this product rests on now exist in more than one place.",
-      "affirmed": "Re-checked 2026-09-07 evening: the release still exists and still carries its asset. `gh release list --repo a11ign/corpus-backups` -> corpus-2026-09-06_19-31-35, latest, created 2026-09-06T19:33:17Z; asset corpus-2026-09-06_19-31-35.tar.gz, 8,960,587 bytes. It lives in a SEPARATE repository from this one, which is the point of the claim and also why a check run against this repository's releases found nothing and could have retired a true entry."
+      "affirmed": "Re-verified 2026-09-07 21:2xZ by orchestrator, who ran the backup, by downloading the asset back and counting inside it: `corpus:release --verify=corpus-2026-09-06_19-31-35` reports 7,694 JSON files, exit 0, from an 8,960,587-byte asset in `a11ign/corpus-backups`. The claim is that the corpus survives losing its machine, and it still does. It is NOT a claim that the copy is current: the corpus on the lab now holds 7,941 capture files, so the backup is 247 captures behind and a new snapshot is due after the next corpus run."
+    },
+    {
+      "claim": "Adding a job to `gate` put it in `needs:` and not in the pass/fail loop, so `gate` would have waited for it, read its failure and reported success. `ci-changed.test.ts` failed the author's push and exposed it inside the branch; both lists are now derived from the workflow itself and pinned equal, and the derivation was mutation-checked to refuse.",
+      "boardClaim": "The check that guards our main line can now be shown to refuse failing work, and it is no longer possible to extend it in a way that quietly cannot.",
+      "evidence": "Every change we ship passes one automated check before it can join the main line, and that check cannot be waived by an administrator. It keeps two lists: what it waits for, and what it can fail for. Someone adding a new job put it in the first and not the second \u2014 so that job would have been waited for, seen to fail, and reported as a pass. **It never reached the main line.** A different check failed the author's own push and the fault it exposed was larger than the one it was looking for; the two commits carrying it existed only inside that branch. We examined every state the main line has ever been in \u2014 eighteen of them \u2014 and none had the gap. The fix makes the two lists read from one source, so they cannot disagree again, **and the guard was made to FAIL against the fault before it was trusted**: four earlier guards in this project shipped green against the very fault they were written for, and that demonstration is the difference. This is a statement about how the check is wired, not a re-run of past decisions \u2014 it does not claim that nothing faulty has ever merged, which is a larger question we have not asked. (`gate` in `.github/workflows/ci.yml`, issue #356 via PR #384, fixed by `worker-capture`; found by `ci-changed.test.ts`; trunk audit `git rev-list --first-parent origin/main -- ci.yml`, 18 states, 0 with the gap, run by `dispatcher` and re-derived by `product-manager`.)",
+      "issue": 356,
+      "reportedBy": "dispatcher",
+      "at": "2026-09-07T22:55:00Z"
     }
   ],
   "capacity": {
