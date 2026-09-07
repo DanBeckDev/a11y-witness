@@ -26,13 +26,6 @@
       "at": "2026-09-07T12:26:00Z",
       "output": "86 conformant real page(s) scored against the baseline.\n  the captures this scored were taken:\n    calibration: 46 capture(s), 2026-09-07T11:16:37.643Z .. 2026-09-07T11:52:26.336Z\n    training:    40 capture(s), 2026-09-07T11:58:49.285Z .. 2026-09-07T12:24:06.114Z\n\nGONE   3.2.1 on design-system.service.gov.uk/components/checkboxes/\n\n2 NEW finding(s) on pages whose publisher declares them conformant:\n  1.4.13  caselaw.nationalarchives.gov.uk/search?query=\n  2.4.2   www.historicenvironment.scot/visit/all/edinburgh-castle/\n\nOF THOSE 2: 0 ASSERTED, 2 REFERRED.\nNOTHING WAS ASSERTED. Every new finding reaches a user as `cantTell` ... not a publish blocker.\n\nFAIL \u2014 2 problem(s) across 84 of 85 from conformant real pages scored against the baseline",
       "note": "FAIL by the gate's own rule, and **0 asserted** \u2014 the number the board quotes held. Both new findings are referrals on pages whose URLs moved inside the old 298-hour window, and one of them, Historic Environment Scotland, has never been captured past its consent banner on either URL. Not a publish blocker. (Authored by `orchestrator`, who ran the gate.)"
-    },
-    {
-      "command": "npm run witness -- <url> --task \"...\" --probe-forms --no-axe   (three pre-registered pages, #337)",
-      "reportedBy": "orchestrator",
-      "at": "2026-09-08T00:05:00Z",
-      "output": "hubspot.com          4 m 50 s (290 s)   53 announcements   consent-overlay collapse, NO findings\nikea.com/de/de       7 m 54 s (474 s)  132 announcements   completed clean\ncalendly.com         4 m 38 s (278 s)  148 announcements   completed clean\n\nall exited 0; none reached CAPTURE_HARD_TIMEOUT_DEFAULT_MS (520 s)",
-      "note": "`docs/try-it.md` promised \"a few minutes\"; measured 4 m 38 s to 7 m 54 s on the fleet that will serve an outside reader. Three deliberately dissimilar page shapes landed within 4% of each other on two of three, so this is a FIXED FLOOR of about four and a half minutes for any real page, not a property of heavy pages. And the shape `try-it.md` explicitly recommends \u2014 a long marketing page with a form \u2014 spent 4 m 50 s and returned a consent-overlay warning with NO FINDINGS, which is not the same as a clean page: the screen reader never got past the dialog and the tool refused to describe the banner as the page. n=1 per page; no variance measured. (Authored by `orchestrator`, who ran it.)"
     }
   ],
   "fleetHours": {
@@ -67,6 +60,14 @@
       "issue": 356,
       "reportedBy": "dispatcher",
       "at": "2026-09-07T22:55:00Z"
+    },
+    {
+      "claim": "Three pre-registered real pages measured end to end on the fleet: 4 m 38 s, 4 m 50 s, 7 m 54 s, none reaching the 520 s hard timeout. Page shape barely moves it, so ~4.5 min is a floor.",
+      "boardClaim": "We can say what the tool costs an outside reader: four to eight minutes for a real page, most of it a floor page size does not move.",
+      "evidence": "The time a first reader waits was written down as \"a few minutes\" and had never been measured on the machines that will serve them. Three deliberately dissimilar pages were chosen in advance and recorded end to end: an image-heavy marketing page, a single-page application, and the heaviest page structure available. They took 4 m 38 s, 4 m 50 s and 7 m 54 s; none ran out of time. **Two of the three are twelve seconds apart**, so about four and a half minutes is a floor for any real page rather than a property of heavy ones \u2014 which means choosing a simpler page does not make it faster. **One of the three returned only a warning that a cookie banner had blocked the screen reader, and that is not the same as a clean page**: the tool refused to describe the banner as the page, correctly, after spending 4 m 50 s to say so. One run each; no variance measured. (`npm run witness` on three pages pre-registered in #337, measured for #311 by `orchestrator` on the fleet from `inventory.yml`, 2026-09-07/08; wording of the finding theirs.)",
+      "issue": 311,
+      "reportedBy": "orchestrator",
+      "at": "2026-09-08T00:05:00Z"
     }
   ],
   "capacity": {
