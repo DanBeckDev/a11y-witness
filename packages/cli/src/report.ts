@@ -52,6 +52,39 @@ export interface Report {
 }
 
 /**
+ * The vocabulary this report uses, explained ONCE, in reading order, before any of it appears.
+ *
+ * #40's acceptance test is a stranger reading one report end to end and being able to say which findings
+ * are claims and which need a human, and what to do about each. Before this, that answer was assembled
+ * from three separate places — an ASSERTED/INDICATOR legend printed only when a non-conformance finding
+ * existed (so a report of ONLY rule-asserted findings never explained the tag at all), a `cantTell`/
+ * `untested` gloss inside `outcomesSection`, and nothing anywhere for `passed`/`inapplicable`. A reader
+ * who reached the findings first, with no legend above them (the ASSERTED-only case), had no way to know
+ * what the tag meant.
+ *
+ * ONE explanation, always printed, in the order the terms are used below it. This is also this repo's
+ * own rule about a fact stated twice applied to prose rather than to code: the two other explanations
+ * this replaced were correct on their own and would have drifted from this one the first time either was
+ * edited alone.
+ */
+function howToReadThisSection(): string[] {
+  return [
+    "-- How to read this report --",
+    "Findings below are tagged with what kind of claim they are:",
+    "  ASSERTED    a confirmed problem -- the evidence establishes it directly. Fix it.",
+    "  INDICATOR   a likely problem, but this check is looser than the criterion itself.",
+    "              Have a person confirm it before treating it as a failure.",
+    "Per-criterion outcomes (further down) use a wider vocabulary than \"finding\":",
+    "  passed        checked, and this criterion is fine",
+    "  asserted      this FAILS the criterion -- the evidence establishes it directly (ACT: `failed`)",
+    "  referred      worth a person's eyes; the tool cannot decide this one on its own (ACT: `cantTell`).",
+    "                This is normal, not a malfunction -- most of what a real page produces lands here.",
+    "  inapplicable  nothing of this kind is on the page to be right or wrong about",
+    "  untested      nothing here checks this criterion yet",
+  ];
+}
+
+/**
  * The rule layer's section.
  *
  * "not run" and "0 violations" must never look alike: one means the visual criteria are unchecked,
@@ -118,6 +151,19 @@ function conformanceSection(requirements: ConformanceRequirement[] | undefined):
 }
 
 /**
+ * The tag a stranger meets on every per-criterion line below, in words rather than ACT's own vocabulary
+ * (#242, wording decided by `ceo`). `cantTell` is the correct value for a machine — ACT's own term, and
+ * what `--json` still emits unchanged — but a reader who has not read the ACT spec meets it as if it were
+ * a malfunction, when it is the tool working exactly as designed: most of what a real page produces lands
+ * here, not on `failed`. The two things a reader must be able to tell apart: `asserted` — this FAILS the
+ * criterion — and `referred` — worth a person's eyes, the tool cannot decide this one. The ACT term itself
+ * appears exactly once, in the legend's parenthetical, never repeated at each finding.
+ */
+const HUMAN_OUTCOME_TAG: Readonly<Record<"failed" | "cantTell", string>> = {
+  failed: "ASSERTED", cantTell: "REFERRED",
+};
+
+/**
  * Per-criterion outcomes in the W3C ACT vocabulary.
  *
  * The reason this is worth printing next to the findings: a findings list answers "what is wrong", and
@@ -135,19 +181,24 @@ function outcomesSection(outcomes: CriterionOutcome[] | undefined): string[] {
   }
   const tally = outcomeTally(outcomes);
   const lines = [
+    // Vocabulary explained once, in `howToReadThisSection`, before this section is ever reached.
+    // The LABEL here is presentation only — `tally.failed`/`tally.cantTell` still read the machine fields
+    // ACT and `--json` need (#242's boundary); only the words printed next to the counts change.
     "-- Per-criterion outcomes (W3C ACT vocabulary) --",
-    `  failed ${tally.failed}   cantTell ${tally.cantTell}   passed ${tally.passed}   `
+    `  asserted ${tally.failed}   referred ${tally.cantTell}   passed ${tally.passed}   `
       + `inapplicable ${tally.inapplicable}   untested ${tally.untested}`,
-    "  (cantTell = we could not determine it. untested = no assessor of ours covers it. Neither is clean.)",
   ];
   // The ASSESSOR is in the tag, not left to be read out of the prose. ADR 0021 turns on which layer is
   // entitled to claim what, so a reader deciding how much weight to give a `failed` needs to know whether
   // it came from a DOM rule or from driving a real screen reader — and a consumer parsing these lines
   // should not have to regex a sentence to find out. Absent means the screen-reader layer, which is the
   // default assessor and does not earn a tag on every line.
-  for (const outcome of outcomes.filter((o) => o.outcome === "failed" || o.outcome === "cantTell")) {
+  for (const outcome of outcomes.filter(
+    (o): o is CriterionOutcome & { outcome: "failed" | "cantTell" } =>
+      o.outcome === "failed" || o.outcome === "cantTell",
+  )) {
     const by = outcome.assessor ? ` · ${outcome.assessor}` : "";
-    lines.push(`    [${outcome.outcome}${by}] ${outcome.criterion} — ${outcome.reason}`);
+    lines.push(`    [${HUMAN_OUTCOME_TAG[outcome.outcome]}${by}] ${outcome.criterion} — ${outcome.reason}`);
   }
   return lines;
 }
@@ -258,13 +309,9 @@ function findingsSection(
     ...screenReaderRuntimeLine(environment),
     ...runtimeLine(verdict),
     `${verdict.findings.length} finding(s):`,
-    // Stated once, above the list, rather than repeated per finding. Without it "INDICATOR" is jargon; with
-    // it, a reader knows exactly which lines they can quote as a failure and which need a human.
-    ...(verdict.findings.some((f) => f.mapping !== "conformance")
-      ? ["  ASSERTED = the evidence establishes the criterion is not satisfied.",
-        "  INDICATOR = a likely failure, but this check is stricter or looser than the criterion itself,",
-        "              so it needs human confirmation before it is quoted as non-conformance."]
-      : []),
+    // ASSERTED/INDICATOR is explained once, in `howToReadThisSection`, before any finding appears --
+    // see that function's header for why repeating it here (conditionally, and in different words) was
+    // itself a defect: a report with no INDICATOR findings never explained the tag at all.
   ];
   let currentLayer: ExperienceLayer | "" = "";
   for (const finding of orderByLayer(verdict.findings)) {
@@ -295,6 +342,8 @@ export function reportLines(
     "===================",
     `URL:   ${url}`,
     `Task:  ${task}`,
+    "",
+    ...howToReadThisSection(),
     "",
     ...axeSection(axe),
     "",

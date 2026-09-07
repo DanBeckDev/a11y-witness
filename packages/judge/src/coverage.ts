@@ -45,7 +45,22 @@ export const SCORED_CRITERIA = [
   // training-report.json, so adding them earlier would have failed for the right reason. Both are ALSO in
   // `RULE_CRITERIA`: the rules decide them and the heads are substituted, which is the same shape as
   // 3.3.3 and answers a different question than this list does.
-  "2.4.4", "2.4.6", "3.2.1", "3.2.2", "3.3.1", "3.3.2", "3.3.3", "4.1.2", "4.1.3",
+  // v19, 2026-09-06: 3.3.2 OUT, 1.4.13 and 2.4.7 IN — and this list must move WITH the weights, in the
+  // same commit, or whichever lands first breaks `main`. That is what `coverage.test.ts` enforces
+  // ("SCORED_CRITERIA must match training-report.json — retraining changed what ships"), and it is the
+  // head-set gate this project spent an evening wishing it had: it already existed and had simply not yet
+  // run against v19.
+  //
+  // 3.3.2's head went because the SUBTYPE went. `3.3.2:unnamed-form-field` was retired on 2026-09-05 —
+  // W3C does not require a label to be ASSOCIATED for 3.3.2, that is 1.3.1 — and those cases had always
+  // declared 4.1.2 as well, so no records moved and none were lost (1,613 v18 positives excluding the
+  // retired head against 1,616 in v19). v18 went on fitting a head for a subtype nothing else recognised,
+  // which is why the loss reads as a regression and is the opposite: **the head was the stale copy.**
+  //
+  // THE CRITERION IS NOT UNCOVERED. `RULE_CRITERIA` below still carries 3.3.2 — the rule reports an
+  // unnamed field under both 3.3.2 and 4.1.2 since ADR 0017 — so `assessedCriteria()`, which is the UNION,
+  // is unchanged for it. This list answers "is there a head"; that one answers "who decides".
+  "2.4.4", "2.4.6", "1.4.13", "2.4.7", "3.2.1", "3.2.2", "3.3.1", "3.3.3", "4.1.2", "4.1.3",
 ] as const;
 
 /**

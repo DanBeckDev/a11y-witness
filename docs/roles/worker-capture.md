@@ -156,3 +156,49 @@ agent being free carries that agent's latency in every worker's day.
   "clear" for every row for as long as agent branches went unpushed. Two briefs were refuted on exactly
   this check and both refutations were worth more than the work would have been. On a row you pulled
   yourself there is nobody else who might have checked.
+
+## THE TURN IS THE UNIT, AND FILING IS THE EVENT — 2026-09-06
+
+**A session does nothing between messages.** A worker that finishes and reports ENDS ITS TURN, and nothing
+wakes it until someone sends it something — so "pull before you report" could only ever work inside that
+last turn. Five workers idled repeatedly across one day and not one had broken a rule; every rule written
+before this one assumed continuous agents.
+
+**A self-paced wake-up loop was tried for about an hour and WITHDRAWN.** Polling is not the mechanism and
+the events already exist. It also failed a second test that matters more: **a standing arrangement for a
+session to wake itself indefinitely is a change that session's USER must sanction, not one a peer proposes
+and a dispatcher forwards.** Two sessions refused it on those grounds before it was withdrawn, and both
+were right — the cost lands on someone else's budget on a schedule nobody is watching.
+
+**Two rules replace it, and nothing polls.**
+
+1. **Your LAST action in any turn is to claim the next Ready row in your lane and start it.** Your turn does
+   not end while there is work for you. **Reporting comes after claiming, in the same turn, never instead
+   of it** — a completion message with no next row attached is an unfinished turn.
+2. **Whoever files a row into a lane that was EMPTY sends one line to that lane's worker at that moment** —
+   "row #N in your lane." **Filing is the event that wakes an empty lane**, because nothing else will.
+
+**"Nothing unclaimed in my lane" is a complete and correct turn-ending report**, and it is worth more than a
+marginal row: it is the signal that the constraint is rows entering Ready rather than workers taking them.
+Say it plainly and end the turn. `dispatcher` holds an idle-notice subscription as the backstop.
+
+## A NUMERIC PIN IS THE AUTHOR'S TO MOVE — ruled 2026-09-06
+
+**A numeric pin in `CLAUDE.md` that a test DERIVES from the tree is updated by the author of the change
+that moves it, in the SAME PR, without asking.** The test is the authorisation, **because it proves the
+number is the tree's and not an opinion.**
+
+**Prose changes to `CLAUDE.md` still go to `ceo`**, who holds the owner's delegated authority over that
+file. A peer's request is still not authorisation.
+
+**Why the split is at "derived by a test" and not somewhere tidier.** A finished unit was blocked for an
+evening on ONE CHARACTER — `ALL 54` -> `ALL 55` — because a new CLI moved a guarded-CLI count that
+`cli-flags.test.ts` pins to the real one. The pin was doing exactly its job (*"a number a human retypes is
+a number that drifts"*), the worker correctly refused `A11Y_SKIP_VERIFY=1`, and correctly routed it up
+rather than round it. **The refusal was right and the block was still waste**: splitting the count from the
+commit that moves it leaves the number briefly wrong on `main` AND stops the PR passing its own gate.
+
+**The rule generalises past `CLAUDE.md`:** a pinned number is not a claim its author may choose, it is a
+measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
+no permission. Where prose asserts it, it does.**
+

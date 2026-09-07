@@ -84,6 +84,25 @@ const siblingDir = (packageDir, dependency) =>
 
 
 /**
+ * What `npm pack --dry-run` actually ships for one package, as a `Set` of paths relative to the package
+ * root. This is this repo's one real answer to "can a consumer install this" / "does this reach a
+ * consumer", and `scripts/ci-changed.mjs`'s changeset gate imports it directly rather than carrying a
+ * second copy — two derivations of what ships, guarding the same promise, is exactly the fact-stated-
+ * twice shape this file's own header names for `referenced-scripts.test.ts`.
+ *
+ * @param {string} dir the package directory
+ * @returns {Set<string>}
+ */
+export function packedFiles(dir) {
+  // `--json` gives the file list without unpacking; `--dry-run` so nothing is written. `sandboxGitEnv()`
+  // even though this spawns `npm`, not `git` — `npm pack` walks the package looking for a `.git` to
+  // decide what "untracked" means for its own purposes, so an inherited `GIT_DIR` is the identical
+  // redirection risk `git-env.mjs`'s own header names, one process removed.
+  const listing = JSON.parse(run("npm", ["pack", "--dry-run", "--json"], dir, sandboxGitEnv()));
+  return new Set((listing?.[0]?.files ?? []).map((/** @type {{path: string}} */ f) => f.path));
+}
+
+/**
  * Would this tarball carry a file that is NOT COMMITTED? — the half this gate has always disclaimed.
  *
  * The header above names the trap and stops short of checking it: *"`npm pack` includes untracked files. A
@@ -112,9 +131,7 @@ const siblingDir = (packageDir, dependency) =>
 function packedButUntracked(dir) {
   let packed;
   try {
-    // `--json` gives the file list without unpacking; `--dry-run` so nothing is written.
-    const listing = JSON.parse(run("npm", ["pack", "--dry-run", "--json"], dir));
-    packed = (listing?.[0]?.files ?? []).map((/** @type {{path: string}} */ f) => f.path);
+    packed = [...packedFiles(dir)];
   } catch {
     return []; // cannot list -- claim nothing rather than invent a finding
   }

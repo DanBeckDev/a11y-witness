@@ -231,6 +231,72 @@ test("A CONFIDENCE OF 1 IS NOT PRINTED OVER AN EMPTY FINDINGS LIST", () => {
     "with nothing found there is no shakiest claim, so there is no confidence to report");
 });
 
+test("#40: the ASSERTED/INDICATOR vocabulary is explained even when every finding IS asserted", () => {
+  // Before this, the legend only printed when a non-conformance (INDICATOR) finding existed, so a report
+  // carrying ONLY rules-asserted findings showed the tag with no explanation anywhere in the document --
+  // exactly the shape #40 exists to close: a stranger seeing "ASSERTED" for the first time with nothing
+  // above it saying what that means.
+  const output = render({
+    verdict: { ...verdict, findings: [{ ...verdict.findings[0], mapping: "conformance" }] } as Report["verdict"],
+  });
+  assert.match(output, /ASSERTED\s+a confirmed problem/i);
+  assert.match(output, /INDICATOR\s+a likely problem/i,
+    "the vocabulary is explained ONCE up front, not conditionally on which tags this particular run used");
+});
+
+test("#40: the vocabulary explanation appears before any finding, axe section or outcome", () => {
+  const output = render();
+  const legendAt = output.indexOf("How to read this report");
+  assert.ok(legendAt >= 0 && legendAt < output.indexOf("Rule-based layer"),
+    "a stranger must meet the vocabulary before the first jargon-bearing section, not partway through it");
+});
+
+test("#40: the legend is not repeated -- one explanation, not three slightly different ones", () => {
+  // This repo's own most-repeated defect is a fact stated twice, drifting. Pins that the OLD conditional
+  // legend text and the OLD inline cantTell/untested gloss are both gone now that howToReadThisSection
+  // owns the vocabulary.
+  const output = render({
+    verdict: { ...verdict, findings: [{ ...verdict.findings[0], mapping: "conformance" }] } as Report["verdict"],
+  });
+  assert.doesNotMatch(output, /the evidence establishes the criterion is not satisfied/,
+    "the old per-finding-section legend text must be gone, not duplicated alongside the new one");
+});
+
+test("#40: the outcomes tally explains asserted/referred/untested only in the shared legend, not a second time", () => {
+  const outcomes = [
+    { criterion: "1.1.1", outcome: "cantTell" as const, reason: "abstained" },
+    { criterion: "2.4.3", outcome: "untested" as const, reason: "no assessor" },
+  ];
+  const output = render({ outcomes });
+  assert.match(output, /referred 1/);
+  assert.doesNotMatch(output, /no assessor of ours covers it/,
+    "the old inline gloss inside outcomesSection must be gone -- the shared legend already said this");
+});
+
+/**
+ * #242, wording decided by `ceo`: `asserted` ("this FAILS the criterion") and `referred` ("worth a
+ * person's eyes; the tool cannot decide this one") replace ACT's own `failed`/`cantTell` at every point a
+ * stranger reads the report. `cantTell` IS ACT's own vocabulary and stays exactly that in the
+ * machine-readable field a consumer of `CriterionOutcome[]` (and `--json`) reads -- so the acceptance is
+ * not "never appears", it is "appears exactly once, in the legend's own parenthetical, and nowhere a
+ * finding is actually reported."
+ */
+test("#242: `cantTell` appears exactly once -- the legend's parenthetical -- never on a finding line", () => {
+  const outcomes = [
+    { criterion: "1.1.1", outcome: "cantTell" as const, reason: "the scorer abstained" },
+    { criterion: "4.1.2", outcome: "failed" as const, reason: "a finding establishes this" },
+  ];
+  const output = render({ outcomes });
+  const occurrences = output.match(/cantTell/g) ?? [];
+  assert.equal(occurrences.length, 1,
+    "exactly one occurrence, in the legend's parenthetical -- any more means it leaked onto a finding line");
+  assert.match(output, /\(ACT: `cantTell`\)/, "and that one occurrence is the legend's own gloss");
+  assert.match(output, /\[ASSERTED\]/, "the per-outcome tag for a FAILED criterion, not the ACT word");
+  assert.match(output, /\[REFERRED\]/, "the per-outcome tag for a criterion needing a person's eyes");
+  assert.match(output, /asserted 1/, "and in the tally line");
+  assert.match(output, /referred 1/);
+});
+
 test("and IS printed when there are findings, because then it describes them", () => {
   const found = render({
     verdict: {

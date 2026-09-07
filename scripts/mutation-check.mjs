@@ -90,7 +90,11 @@ function main() {
     refuse("this needs --file=<path> --mutate='<shell that edits it>' --test='<shell>'.\n"
       + "  Example:\n"
       + "    npm run mutate -- --file=src/rules.ts \\\n"
-      + "      --mutate=\"sed -i '' 's/>= 3/>= 99/' src/rules.ts\" \\\n"
+      // perl -pi -e, not sed -i '' -- BSD sed (macOS) needs the empty backup-suffix argument GNU sed
+      // (Linux/CI) does not, and GNU sed then reads that empty string as the SCRIPT and the real script
+      // as a FILENAME to edit -- "sed: can't read s/.../.../: No such file or directory". perl's -i has
+      // no such split between platforms.
+      + "      --mutate=\"perl -pi -e 's/>= 3/>= 99/' src/rules.ts\" \\\n"
       + "      --test='npx tsx --test src/rules.test.ts'");
   }
   if (!existsSync(file)) refuse(`${file} does not exist.`);

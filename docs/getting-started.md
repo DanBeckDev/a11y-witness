@@ -1,10 +1,16 @@
 # Getting started
 
-From nothing to your first report.
+From nothing to your first report — **this is the local path, which needs a Windows worker of your own.**
 
-**Time:** about 5 minutes if you already have a worker. Otherwise the worker is the long
-pole — roughly 20 minutes on a Windows machine you own, or 1.5–2 hours to build a VM from
-scratch on a Mac, nearly all of it downloading Windows.
+**No machine to spare? The GitHub Action needs no worker of your own at all** — it runs on a
+GitHub-hosted Windows runner, at no cost to try. See "Route C — no machine to spare" under
+step 3 below, or go straight to
+[`.github/workflows/capture-regression.yml`](../.github/workflows/capture-regression.yml)
+for a working example to copy.
+
+**Time, if you want a worker on your own machine:** about 5 minutes if you already have one.
+Otherwise the worker is the long pole — roughly 20 minutes on a Windows machine you own, or
+1.5–2 hours to build a VM from scratch on a Mac, nearly all of it downloading Windows.
 
 ## The thing to understand first
 
@@ -201,7 +207,7 @@ That is a working install. `--json` gives you the full transcript alongside the 
 
 | what you see | what it means |
 |---|---|
-| `fetch failed` / `ECONNREFUSED` | The worker is not reachable. Check `A11Y_WORKER`, and that the worker machine is up and its firewall allows 8765 |
+| `fetch failed` / `ECONNREFUSED` | Routes A/B: the worker is not reachable. Check `A11Y_WORKER`, and that the worker machine is up and its firewall allows 8765 |
 | `WARNING: 0 announcements captured` | The worker is running but NVDA produced no speech. **This is a worker problem, not a clean page.** Re-run with `--debug` and read `documentReady` first |
 | `Local worker VM ... did not become healthy` | Route A: the VM booted but the worker task did not start. `npm run worker:ctl -- status` |
 | `NVDA not installed` | Almost always a **version mismatch**, not a missing install |
@@ -223,7 +229,7 @@ enough that the table is faster than reasoning from first principles.
   valid input and record whether the error is announced at all.
 - **Keeping the VM cheap** — `worker-ctl.sh pause` between runs; `idle-pause 15` to do it
   automatically.
-- **Making it faster** — add a second worker with
+- **Making it faster (Route A)** — add a second worker with
   `packages/worker-fleet/src/local-worker/clone-worker.sh`, then just run as normal: with no `A11Y_WORKER` set,
   a run uses as many local workers as the host can hold and puts each one back afterwards.
   Measured 1.90x on two workers, 2.36x on three *on a quiet host* — but a worker VM costs ~7 GB

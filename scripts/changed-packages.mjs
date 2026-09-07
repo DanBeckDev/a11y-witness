@@ -8,10 +8,15 @@
 // reliable cross-package dependency graph from package.json files is a real project of its own, and a wrong
 // graph is a guard answering about the wrong population, which is the exact class this repo spent the day
 // closing (docs/backlog.md, "a check that answers correctly about the wrong population"). The chosen
-// tradeoff: the fast gate may legitimately MISS a cross-package regression, and CI (widened to run on every
-// `agent/**`/`lead/**` push, see .github/workflows/lint.yml) is the real, full-suite gate that catches it —
-// by design, not by oversight. A push that breaks another package's test is expected to pass the fast gate
-// and fail CI; that is the acceptance test this file exists to make possible, not a gap to close here.
+// tradeoff: the fast gate may legitimately MISS a cross-package regression, and CI is the real, full-suite
+// gate that catches it -- by design, not by oversight. A push that breaks another package's test is
+// expected to pass the fast gate and fail CI; that is the acceptance test this file exists to make
+// possible, not a gap to close here.
+//
+// CI RUNS ON THE PR, NOT ON THE BRANCH PUSH -- changed 2026-09-06 alongside `.github/workflows/ci.yml`
+// (which replaced the widened `lint.yml`). This function is also reused there, by
+// `scripts/ci-changed.mjs`, for the identical reason it exists here: one place that answers "which
+// packages did this diff touch", never a second copy re-deriving it inline in YAML.
 //
 // A diff touching nothing under `packages/` (docs, top-level scripts, .github/, package.json, tsconfig)
 // returns an EMPTY list, and the caller's job is to treat that as "run everything", never as "run nothing" --
@@ -42,16 +47,26 @@ export function changedPackages(diffOutput) {
  * direction. Empty on any git failure (no `origin/main`, a shallow clone) -- the caller must treat that as
  * "run everything", the same as a genuinely empty diff.
  */
-export function changedPackagesAgainstOrigin() {
+/**
+ * The raw changed-file paths against `origin/main`'s merge-base with HEAD -- the same diff
+ * `changedPackagesAgainstOrigin` reduces to package names, exposed separately for a caller that needs the
+ * file list itself (the pre-push hook's board-only fast path reuses this rather than re-deriving the
+ * merge-base diff a second time). Empty on any git failure, same as its sibling.
+ */
+export function filesChangedAgainstOrigin() {
   try {
     const base = execFileSync("git", ["merge-base", "HEAD", "origin/main"],
       { cwd: REPO, env: sandboxGitEnv(), encoding: "utf8" }).trim();
     const diff = execFileSync("git", ["diff", "--name-only", base, "HEAD"],
       { cwd: REPO, env: sandboxGitEnv(), encoding: "utf8" });
-    return changedPackages(diff);
+    return diff.split("\n").filter(Boolean);
   } catch {
     return [];
   }
+}
+
+export function changedPackagesAgainstOrigin() {
+  return changedPackages(filesChangedAgainstOrigin().join("\n"));
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {

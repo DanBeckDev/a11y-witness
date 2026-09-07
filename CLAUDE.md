@@ -12,7 +12,7 @@ Three shorter documents came first for a reason, and they are not duplicated her
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | the 60-second orientation, and the question that decides everything: **does your change need a Windows worker?** Most of the repo does not. |
 | [`SECURITY.md`](SECURITY.md) | what this tool does that somebody must know before running it — `probeForms` presses buttons, the worker has no authentication, `A11Y_PYTHON` is executable |
 | [`docs/README.md`](docs/README.md) | the index to every guide and runbook, grouped by task, with [`docs/adr/README.md`](docs/adr/README.md) for the 36 decision records |
-| [`docs/backlog.md`](docs/backlog.md) | **THE ONE PLACE THAT ANSWERS "WHAT IS OPEN".** The two files below are RECORDS, not trackers — long-form, valuable, and unreadable as a task list: section numbers repeat, entries are not in order, and "closed" is spelled fourteen ways. If it is open, it is on the backlog |
+| [`docs/backlog.md`](docs/backlog.md) | **The RECORD of what was found and what it cost.** [GitHub Issues](https://github.com/DanBeckDev/a11y-witness/issues) answers "what is open" — `ready` is pickable, `in-progress` plus a `session:` label is claimed. This file, `known-gaps.md` and `not-working.md` hold the measurement, the wrong turn and the command that settles it: the half an issue is bad at |
 | [`docs/known-gaps.md`](docs/known-gaps.md) | **what this project does NOT do, or does not yet know** — each with what it would cost and what would tell you it is fixed. Read it before claiming a thing is finished; "all gates pass" and "everything is validated" are different claims |
 
 ## What this is
@@ -543,27 +543,6 @@ updates go cold past one capture timeout it exits 3 rather than waiting forever.
 are the contract — **0** clean, **1** finished with failures, **2** no run, **3** wedged —
 and both commands emit a `next_command` field so you do not have to infer the next step.
 
-## A GATE THAT READS `runs/` IS NOT YOURS TO REPORT
-
-**Ruled 2026-09-06.** `rules:gate`, `rules:coverage`, `check-signals`, `corpus:starvation`,
-`scorer:shortcuts` and anything else reading `runs/` give a VERDICT only when the agent driving the fleet
-and the lab runs them — against a corpus just fetched, or on the lab, which owns the authoritative one.
-
-**Anyone else may run one as a PRE-CHECK**, to decide whether a change is worth handing on. **Never as a
-reported result**, and never in an acceptance section as though it settled anything.
-
-The reason is measured rather than procedural. `runs/` in any checkout is a copy only as fresh as its last
-sync — one measured here was 89 hours old and carried neither `focusEvents` nor `baselineWaitedMs`, so a
-sweep across it found zero of the two keys it was written to find. **A gate run there reports cleanly
-having examined a corpus that no longer exists.** The pre-push hook already SKIPS the corpus-dependent
-checks loudly for exactly this reason, and calls that honest rather than passing quietly.
-
-**So an issue's acceptance may name a `runs/`-reading gate, and must say who runs it.**
-
-> Moved here 2026-09-06 from `docs/backlog-ready.md`, which was retired when the tracker moved to GitHub
-> Issues. That page was the only place this ruling existed, so deleting it would have deleted the rule —
-> which is why the page was read for what it uniquely held before it was replaced.
-
 ## You may be sharing this checkout
 
 More than one agent works in this repo, on the same branch, at the same time. A commit of mine
@@ -580,6 +559,39 @@ once swept up 19 files, 16 of them another agent's half-finished work, and pushe
   `git apply --cached your.patch`, then `git commit` with **no path arguments** (a path argument
   makes git commit the working tree, not your staged hunk).
 - `git status` before you start. Files already modified are not yours to commit.
+
+### THE PRIMARY CHECKOUT IS READ-ONLY EXCEPT FAST-FORWARD
+
+Ruled by `ceo`, twice, in messages — and a ruling that lives only in messages is not a rule, which is
+exactly why it broke three times in one night: a worktree left parked on a branch, `lab:collect-promotion`
+committing here because nothing marked the boundary between producing an artefact and committing it, and
+a failed `cd` into a deleted merge worktree silently falling back here. None was carelessness — the rule
+was known and written in a role file, and it broke anyway because nothing could REFUSE.
+
+It matters mechanically, not territorially. `assertFleetRunsThisCheckout` hashes the WORKING TREE, so a
+stray branch or a half-resolved merge here makes a capture run stamp itself against code that never
+existed — best case a refused run, worst case one that passes and should not have. And a worktree's
+`node_modules` may symlink to the primary's `dist`, so a branch parked here silently changes what every
+OTHER agent compiles and tests against.
+
+Two hooks enforce it now, both identifying the primary the same way `worktrees:prune` already does —
+`.git` being a real directory, never a branch name or an absolute path:
+
+- **`pre-commit`** refuses any commit made in the primary outright: *"this is the fleet-driving checkout;
+  commit in a worktree."* Override with `A11Y_PRIMARY_COMMIT_REASON="<why>" git commit ...` — the reason is
+  PRINTED, so a deliberate exception is in the log rather than in somebody's memory.
+- **`post-checkout`** cannot veto a checkout that already happened (git gives it no such power), so it
+  self-corrects: the instant a checkout in the primary lands on a branch, or detaches anywhere but
+  `origin/main`, it immediately checks back out to detached `origin/main` and says why. Same override,
+  `A11Y_PRIMARY_CHECKOUT_REASON="<why>"`.
+- `npm run primary:update` is the only sanctioned way to move the primary forward — fetch, then detach at
+  `origin/main`, nothing else.
+- `lab:collect-promotion` writes its artefacts into whatever checkout it runs in, which is exactly how the
+  second incident happened. It now detects the primary the same way and prints a copy-to-worktree step
+  instead of `git commit` instructions that `pre-commit` would only refuse.
+- Both hooks are mutation-checked by attempting the forbidden thing (`primary-checkout-guard.test.ts`) — a
+  hook that has never been shown to refuse is not a verified hook, this repo's own rule, and the reason
+  four guards fired on their own authors' first real trigger rather than on a test.
 
 ### And more than one agent may be DRIVEN by another — what worked, measured 2026-09-05
 
@@ -2105,9 +2117,34 @@ round-robin with medians and IQRs, and it refuses to declare a difference the sa
 Use it instead of reading two `bench-capture` printouts — that is how a 2x difference got attributed to
 the wrong phase for hours.
 
-**Backing up the corpus:** `npm run corpus:snapshot`. `runs/` is gitignored, so 2,122 captures worth
-hours of worker time exist in one place. It writes a timestamped archive; syncing it somewhere durable
-is deliberately your call.
+**Backing up the corpus — THREE STEPS, and each verifies the one before by reading it back.** `runs/` is
+gitignored, so thousands of captures and 54 measured worker-hours exist in one place, and they are NOT
+reproducible: `browserVersion` is a cache key precisely because Edge announces differently across
+releases, so evidence taken under Edge 151 cannot be recreated now 152 ships.
+
+```bash
+npm run lab:job -- -e job=corpus-snapshot        # archive ON THE LAB, beside the corpus
+npm run lab:fetch -- -e artifact=corpus-archive  # bring the newest one to the control plane
+npm run corpus:release -- --archive=runs/fetched/<name>.tar.gz   # upload, then DOWNLOAD IT BACK
+npm run corpus:release -- --verify=corpus-<stamp>               # is an old release still restorable
+```
+
+**The transport is two hops because of CREDENTIALS.** The lab is the machine the corpus lives on, so a
+GitHub token there sits next to the thing it protects — and surviving the loss of that machine is the
+whole point. The token stays on the control plane, which already has one, and the archive travels.
+
+**Every step distrusts the one before, and each caught something real.** `corpus:snapshot` lists its own
+archive with `tar -tzf` and refuses on a shortfall, because `tar` exits 0 on a short archive — a 417 MB
+snapshot once extracted to 4,959 of 5,445 JSON files with no error anywhere. `corpus:release` downloads
+the asset back over the public API rather than trusting `gh release upload`'s exit code, because the API
+accepting bytes is not the asset being complete and readable a month from now, which is the only property
+a backup has. **A verification sharing a failure mode with the action verifies nothing** — the same rule
+as checking `/health.code` over HTTP rather than through the deploy channel.
+
+`corpus:backup` remains for an `rsync`/mounted-volume destination via `A11Y_CORPUS_REMOTE`, with
+`corpus-backup-verify` as its read-back. It **exits non-zero with no destination configured** rather than
+writing a local archive and reporting success: a backup tool that claims success while leaving one copy on
+one disk converts a known risk into an assumed safety.
 
 ## Housekeeping is automated — do not do it by hand
 
@@ -2324,10 +2361,12 @@ failure as `capture-check` being mandatory and never running once.
 | command | when |
 |---|---|
 | `worktrees:prune` | after a merge, or whenever `git worktree list` looks long: removes a linked worktree only when its branch is fully merged into `origin/main` AND its working tree is clean, names every other one as DIRTY with its branch and touches nothing about it, and never the primary checkout (identified by `.git` being a real directory there, a file everywhere else). A rule maintained by hand ("prune after every merge") reached 36 worktrees and 4.4 GB the day after a 28-tree hand-prune |
+| `primary:update` | **the only way to move the primary checkout** — fetch, then detach at `origin/main`, nothing else. Built for issue #126, after three real incidents in one night where the primary ended up holding a branch by accident (a worktree left parked there, `lab:collect-promotion` writing artefacts in with nothing marking the boundary between producing and committing, and a failed `cd` into a deleted merge worktree silently falling back here). Refuses outside the primary — running it in a worktree would detach that worktree from whatever branch it holds, which defeats the point of a worktree. See the `pre-commit`/`post-checkout` entries below for the hooks that make the primary refuse to hold anything else in the first place |
 | `fleet:normalise` | bring every LOCAL UTM guest to one baseline, elevated, and prove it took. The bare-metal equivalent is `fleet:provision` |
 | `fleet:recover` | **a worker that is UP, ANSWERING and not working.** Measured 2026-09-02 on a11y-worker-6: a capture began at 03:00 and was still `current` at 06:32, with every readiness check green and `busy: true` for three and a half hours — from the run's side that is a slow page, so it waited and a corpus recapture made no progress at all. `fleet:deploy` cannot fix it: `Stop-ScheduledTask` will not end a node process wedged in a capture, the restart loses the race for port 8765, and the old process keeps serving a `/health.code` read from files the deploy just updated — so `verify-code.yml` sees a MATCH and its reboot never fires. This kills node outright and reboots, and PROVES it by requiring `vitals.uptimeMinutes` to have fallen: a worker that answers is not a worker that restarted, and that box answered perfectly for six days |
 | `guest:run` | run a script on a UTM guest elevated and actually get its output — `utmctl exec` returns exit 0 and no output whether or not it ran |
 | `fleet:inventory-install` | **put `inventory.yml` where a `git pull` cannot delete it.** The file is untracked and gitignored (#54), so a pull removes it from any checkout holding one — and on 2026-09-06 the CONTROL PLANE pulled main, lost it, and `fleet:deploy` printed `skipping: no hosts matched` and **exited 0** with ten workers untouched. This installs it at `/etc/a11ign/inventory.yml`, which `ansible.cfg` now reads FIRST, and verifies arrival by SHA-256 read back over a channel that shares no failure mode with the write. A playbook rather than an `scp` for this file's own reason: an operation that matters is CLI-invocable and reviewable, or it is done differently every time by whoever is at the keyboard. Additive and idempotent — it never touches the in-tree copy, which stays as the migration fallback |
+| `fleet:control-host-install` | **the sibling of `fleet:inventory-install`, for `A11Y_CONTROL_HOST` itself** (#285). Ten bare-metal workers sat idle because the shell dispatching `fleet:deploy` had never had the variable set, and `requireControlPlaneHost()` correctly refuses rather than guessing (#83). This installs the value it just used at `/etc/a11ign/control-host` on the control plane — the third state between "committed to git" (never) and "typed into every shell" — so a future shell that never set the variable falls back to the file instead of refusing. `requireControlPlaneHost()` checks the env var first, then the file, then still refuses when neither exists; the installer never reads the environment itself, it records what `fleet-playbook.mjs` already resolved to reach the machine it is writing to. `A11Y_PVE_KEY` deliberately gets no equivalent here — see #285 for why it stayed its own decision |
 | `fleet:tailscale` | put the fleet on Tailscale |
 | `layers:compare` | **the project's central claim, demonstrated**: which findings can ONLY the screen-reader layer produce? Asserted for a long time before anyone ran the two side by side |
 | `fleet:hours` | **what did a capture run COST the fleet, in worker-hours** — the method is EMITTED by the tool (`--json` carries a `method` field) so a board record copies it rather than retyping it — one fact, one place. Measured 54.11 worker-hours across the 5,395 captures on disk, median 27.4s, p95 134.2s. It REFUSES rather than printing 0.00 when it billed nothing, and tells "no JSON found" apart from "walked N and billed none" because those need opposite fixes. Built after the obvious method — sum the per-case times in `capture-progress.json` — turned out to describe data that does not exist: **0 of 1,623 cases carry any time field**, and only the transient `current` array holds `startedAt`, which an entry leaves the moment the case completes |
@@ -2338,6 +2377,7 @@ failure as `capture-check` being mandatory and never running once.
 | `scorer:verify` | **is the SHIPPED model directory free of unsafe artefact types?** `.pt`, `.pkl`, `.ckpt` and friends are executable-on-load weight formats; safetensors is not. The script existed and NOTHING invoked it — not an npm script, not a playbook, not another module — so a security check on the one artefact this project publishes had never run. First stage of `release:gate` now |
 | `release:provenance` | **do the weights about to ship have a changelog entry saying where they came from?** ADR 0007 makes the weights the API and `promote:model` writes their provenance into a changeset, which is the only record of it — and nothing checked that the entry described the weights actually present. Found the shipped model at 2,485 records while both pending changesets said 2,403 and were BYTE-IDENTICAL to each other, so a first release would have published weights nothing accounts for beside one note printed twice. Both are invisible elsewhere: a changeset is prose, and `changeset-provenance.test.ts` asserts how a row RENDERS, never that it describes what ships. Second stage of `release:gate` |
 | `scorer:migration` | is a schema migration open? `release:gate` runs it first and refuses while one is. `lab:inventory` also reports it, with which candidate could close it |
+| `scorer:retired-heads` | **did the candidate's head set SHRINK, and is every disappearance declared?** `3.3.2:unnamed-form-field` almost shipped absent with nothing accounting for it — a legitimate removal, fully reasoned in `case-matrix.mjs`, that still cost an evening because nothing made the reasoning travel with the change. A head present in the shipped report and absent from the candidate is a REFUSAL, never a warning, unless a `retired-heads.json` beside the shipped weights names the subtype, when, why, and where the reasoning lives — created the first time a head is actually retired, same as `schema-migration.json`. Second stage of `candidate:gate`, right after `scorer:migration` — deliberately not in `release:gate`, since the candidate is the only place the question can still change the outcome |
 | `candidate:gate` | the gate chain against a CANDIDATE rather than the shipped weights — the question `release:gate` structurally cannot ask |
 | `promote:model` | copy trained weights into `packages/scorer/models/` and write the changeset. **Refuses when a previous promotion is still uncommitted where this one would write** — this line claimed that for months and the script did not import `node:child_process` at all, so it could never look at git. It checks the TARGET paths rather than the whole tree, because this is a shared checkout and a guard that fires on somebody else's unrelated edit is one people bypass |
 | `promote:gated` | `candidate:gate` and then `promote:model`, which is what `lab:job -e job=promote` runs. Never promotes on a failed gate |
@@ -2363,7 +2403,8 @@ failure as `capture-check` being mandatory and never running once.
 | `mutate` | **mutation checking as a COMMAND, because five steps typed by hand is five steps that get typed wrong.** `npm run mutate -- --file=<path> --mutate='<shell>' --test='<shell>'`. It runs the test FIRST and refuses if it is already red; copies the file aside rather than `git checkout --`, which restores to HEAD and silently discards every uncommitted change in it; **proves the mutation actually landed**, because a shell-quoting slip makes the edit a no-op and the resulting pass reads as *the guard does not bite* when it means *nothing was broken*; requires the test to FAIL; then restores and **runs the test again**, which is what proves the restore worked rather than that `cp` exited zero. Exit codes are the contract: **0** the guard bites, **1** it did not — suspect the guard before the code, **2** refused before mutating, **3** the restore failed and the copy is left in place. Built 2026-09-06 after two agents got the sequence wrong in one day: one destroyed uncommitted work with `git checkout --` mid-check, and two guards shipped GREEN against the very defect they were written for |
 | `board:report` | **the daily board report, generated from GITHUB AND GIT rather than from what an agent said.** Issues and the milestone come from the API, merges from `git log main --merges` with the window stated — because two correct counts over different windows read as a disagreement, measured on its first edition where a peer's 17 (since 09:00) and the script's 42 (since midnight) were both right. The two figures neither source can supply — the last gate result and the fleet-hours total — are quoted from `docs/board/reported.json`, where the agent that RAN the command records its verbatim output, who ran it and when; absent or stale prints as *not reported*, never omitted and never estimated. **It deliberately does not read a gate itself**: a checkout's `runs/` is only as fresh as its last sync, and one measured here was 89 hours old and answered cleanly having examined a corpus that no longer existed. `--post --issue=<n>` publishes an edition as a comment; generating and posting are separate acts so a bad report can be seen before it is posted |
 | `board:document` | **what the BOARD reads, rendered to PDF** — the GitHub edition is the data trail, this is the answer. Same data layer (`board-data.mjs`, extracted rather than copied, and proved output-identical to the pre-split generator), same refusal, and it matters more here because a PDF that reaches a board is harder to retract than a comment. Markdown -> HTML is `board-markdown.mjs`, ours on purpose: pandoc is not installed and a dependency the board's daily document cannot be produced without is a worse risk than a plainer typeface. PDF via headless Chrome, already present because the fleet needs a Chromium. **Section 2 refuses to invent a date**: V1 is defined nowhere, so it says so and proposes a definition rather than estimating, and the track status prints the rule it was derived from — a status word whose derivation is not on the page is an opinion wearing a measurement's clothes |
-| `board:summary-check` | **is TOMORROW's hand-written board summary written?** Runs at 21:00 as a second launchd entry installed by the same command, and comments once on the board-report issue when it is not — eleven hours before the 08:00 job would refuse. **It generates no summary text**, which is the whole point: the moment it wrote one it would BE the machine-written summary the gate exists to prevent, arriving through the warning instead of through the document. One comment per date, not per run, because a warning that repeats is a warning people filter. `--post` is what the scheduled entry passes; without it the command only reports |
+| `ready:audit` | **does any open issue carry `ready` alongside a label that already means "not pickable"** — `fleet-gated`, `disputed`, `decision`, `awaiting-merge`, `blocked`, `review-only`? Filed 2026-09-06 after `dispatcher` labelled two rows `ready` to hit a floor while one was disputed and the other had no Region or Acceptance — "a floor met by a label I control is not a measurement". `review-only` is for a row filed to solicit review or a decision and never meant to be started as work (#27's shape), which had no label of its own until then |
+| `board:summary-check` | **is TOMORROW's hand-written board summary written?** Runs at 21:00 as a second launchd entry installed by the same command, and comments once on the board-report issue when it is not — eleven hours before the 08:00 job would refuse. **It generates no summary text**, which is the whole point: the moment it wrote one it would BE the machine-written summary the gate exists to prevent, arriving through the warning instead of through the document. One comment per date, not per run, because a warning that repeats is a warning people filter. `--post` is what the scheduled entry passes; without it the command only reports. **It asks the same question of `docs/board/reported.json`, which carries more** (#131): the summary is one paragraph, that file holds every number the document quotes that no gate can recompute — the gate outputs, the fleet-hours figure, the capacity note, every achievement — and both are read by the 08:00 job from `origin/main`, so both have the identical failure of a complete record sitting on the wrong side of a merge. It happened three times on 2026-09-06, each caught by a person typing `git show origin/main:...` by hand and none by a tool. It **names the entries that differ** rather than reporting that the file changed, keyed on each section's own identity field so inserting one gate does not re-label every gate after it, and it **reports rather than refuses** — editing that file and not pushing yet is a normal working state for hours; what must never happen is believing it is published |
 
 ## Make the failure bubble up, or you will dig for it every time
 
@@ -2453,7 +2494,7 @@ Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth
 - **Every `.mjs` CLI here ignored an unrecognised flag**, because they all parse argv by looking for what
   they know — so a mistyped one ran the default and reported success. `refuseUnknownFlags`
   (`cli-flags.mjs`) refuses it, names the near miss, and prints what the command does take.
-  **ALL 53 are guarded as of 2026-09-06**, and `cli-flags.test.ts` DISCOVERS every argv-reading
+  **ALL 54 are guarded as of 2026-09-06**, and `cli-flags.test.ts` DISCOVERS every argv-reading
   module and requires each to be guarded or exempted with a reason. The exemption list is empty.
   > **The flag lists are READ out of each file, never derived, and every batch proved why.**
   > `stability-gate` builds flags from a variable and `repeat-capture` reads seven through an `arg(name)`
@@ -2555,7 +2596,7 @@ release-time: a 75-minute check on `git push` gets the hook deleted within a day
 
 Verification is layered; pick the layers your change touches:
 - `npm run lint` and `npm run typecheck` — must pass. **CI gates on both**, and on `npm test`
-  (`.github/workflows/lint.yml`).
+  (`.github/workflows/ci.yml`).
 - **Run `npm test`, never `npx tsx --test <file>` directly, when you have changed another package's
   source.** Cross-package imports resolve to `dist` (every `exports` entry points there), and `npm test`
   has a `pretest` build that keeps it honest. Run the file runner on its own and you test the LAST BUILD:
@@ -2652,6 +2693,27 @@ Verification is layered; pick the layers your change touches:
 - `npm run training:check-signals` — proves every dataset `badSignal` fires on the bad page and stays silent on the good one, against captures already on disk (no worker needed). Run it after ANY change to a probe's output shape: a probe and its signal are coupled, and 8 cases once went silently blind when a probe changed. `npm run training:status` reports a long capture run; `--resume` picks up where one stopped.
 - **Worker broken? Don't debug from first principles** — `docs/nvda-worker-runbook.md` has the error-string → real-cause table (the messages are misleading: `"NVDA not installed"` usually means a version mismatch, not a missing install), and `packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1` applies it automatically. `packages/worker-fleet/src/provisioning/provision-nvda-worker.ps1` is the idempotent repair.
 - **No worker to hand?** Build one: `docs/getting-started.md` (~1.5–2 h, almost all of it downloading Windows). Validating capture changes through CI is a ~10-minute loop and should be the fallback, not the habit.
+
+## A GATE THAT READS `runs/` IS NOT YOURS TO REPORT
+
+**Ruled 2026-09-06.** `rules:gate`, `rules:coverage`, `check-signals`, `corpus:starvation`,
+`scorer:shortcuts` and anything else reading `runs/` give a VERDICT only when the agent driving the fleet
+and the lab runs them — against a corpus just fetched, or on the lab, which owns the authoritative one.
+
+**Anyone else may run one as a PRE-CHECK**, to decide whether a change is worth handing on. **Never as a
+reported result**, and never in an acceptance section as though it settled anything.
+
+The reason is measured rather than procedural. `runs/` in any checkout is a copy only as fresh as its last
+sync — one measured here was 89 hours old and carried neither `focusEvents` nor `baselineWaitedMs`, so a
+sweep across it found zero of the two keys it was written to find. **A gate run there reports cleanly
+having examined a corpus that no longer exists.** The pre-push hook already SKIPS the corpus-dependent
+checks loudly for exactly this reason, and calls that honest rather than passing quietly.
+
+**So an issue's acceptance may name a `runs/`-reading gate, and must say who runs it.**
+
+> Moved here 2026-09-06 from `docs/backlog-ready.md`, which was retired when the tracker moved to GitHub
+> Issues. That page was the only place this ruling existed, so deleting it would have deleted the rule —
+> which is why the page was read for what it uniquely held before it was replaced.
 
 ## Environment facts
 - ESM throughout (`"type": "module"`). `.ts` for the control plane, `.mjs` for the capture worker (it runs under plain Node on the VM) — see `docs/adr/0031-the-worker-ships-plain-mjs-with-no-build-step.md` for why, and what was rejected to get there.

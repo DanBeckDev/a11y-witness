@@ -28,3 +28,4 @@ section for why.
 - [Org shape: a second orchestrator](org-shape-second-orchestrator.md) — the worker-loop split, and the board decisions recorded alongside it.
 - [Worktree resolves to the primary's dist](worktree-resolves-primary-dist.md) — a shared `node_modules` makes a worktree's own build invisible to cross-package tools.
 - [Verify open against unmerged branches](verify-open-against-unmerged-branches.md) — check `origin/main` plus every unmerged `agent/*` branch, by region diff, never by branch name.
+- [A reproduction names its version](a-reproduction-names-its-version.md) — what you ran, what it said, and AS OF WHICH commit or export; missing the third retracted a correct theory.

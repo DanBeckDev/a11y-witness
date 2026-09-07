@@ -324,7 +324,7 @@ those 418 contributed transcripts from larger pages than the corpus now generate
 
 ## The red CI job is FIXED
 
-`.github/workflows/lint.yml` used to fail on 6 files under `packages/nvda-worker/src/`, and the cause was one line:
+`.github/workflows/ci.yml` (`lint.yml` until it was retired and folded in, 2026-09-06) used to fail on 6 files under `packages/nvda-worker/src/`, and the cause was one line:
 
 ```
 Error: No available supported screen readers

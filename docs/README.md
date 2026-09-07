@@ -30,6 +30,8 @@ human or agent, *working on* the repo rather than using it.
 | [reliability-plan.md](./reliability-plan.md) | the CLOSED plan (A1–A3), kept for the three refutations inside A3 — a rule that is exact on the corpus and wrong on the web, four times over |
 | [**proving-a-gate.md**](./proving-a-gate.md) | **how to take a check from BELIEVED to WATCHED FAILING** — the recipe, and the measurements behind it. Nine defects in one session were all checks that could not report themselves, and none had ever been observed to fire. `gates-are-proven.test.ts` holds the count: 5 of 16 |
 | [gate-exit-codes.md](./gate-exit-codes.md) | **what a gate's non-zero exit code actually means, per script** — read from source, because the same number means usage error, no data, or INCONCLUSIVE depending which gate returned it. Names the confirmed instances of the most dangerous shape: a code meaning "I stopped observing" read as "the thing failed" |
+| [publish-blocker.md](./publish-blocker.md) | **the npm trusted-publishing checklist (#72/#73)** — which steps need a human logged into npmjs.com or GitHub's org settings, and `npm run npm-token:check`, the push-triggered watchdog that answers "is the first-publish token gone" as present/gone/could-not-ask rather than guessing |
+| [workflow-run-liveness.md](./workflow-run-liveness.md) | **three guards prove CI is CONFIGURED; this asks whether a run actually HAPPENED (#118)** — `npm run workflow:liveness -- --sha=<commit>`, a push-triggered watchdog generalising `merge-guard.mjs` (#161) into TESTED/NOT TESTED/CANNOT TELL for any commit that has already reached `main` |
 
 ## Running the long jobs
 
@@ -51,6 +53,7 @@ human or agent, *working on* the repo rather than using it.
 |---|---|
 | [**coverage.md**](./coverage.md) | **all 55 WCAG 2.2 A/AA criteria and which of four states each is in** — assessed, partial, reachable, or out of scope. Generated from the code and pinned against it, so it cannot drift |
 | [screenreader-coverage.md](./screenreader-coverage.md) | every user behaviour we drive, the field it lands in, and — the part that matters — **what we do not drive yet**. A behaviour missing from that table is a claim this project cannot make |
+| [capture-probe-incidents.md](./capture-probe-incidents.md) | **the closed capture-probe diagnoses, moved out of the code** — how the browse-mode restore put the mode back, why  was false on every capture (two alphabets compared as strings), and why the 1.4.13 baseline was zero by construction. A RECORD: the call sites keep every sentence that constrains the next edit, and this keeps the narrative of how each fault was found. Same move, same reason, as  |
 | [probe-side-effects.md](./probe-side-effects.md) | every probe in `capture-probes.mjs`, what it DOES beyond what it reads — caret, DOM focus, NVDA mode, the page's own content — and which later probe could observe it. §43 and the §42/`focus-reset-not-logged` interaction both lived in this absence |
 | [METHODOLOGY.md](./METHODOLOGY.md) | how the numbers were produced, and why the eval figures must not be quoted as a headline |
 | [glossary.md](./glossary.md) | the vocabulary — capture, probe, sweep, signal, criterion, subtype |

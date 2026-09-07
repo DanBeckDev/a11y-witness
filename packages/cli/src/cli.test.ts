@@ -8,21 +8,40 @@
  * shapes are ones the pipeline actually produces.
  *
  * Skips honestly when the corpus is absent, as `verify.corpus.test.ts` does — CI cannot see `runs/`.
+ *
+ * REPO-ROOT AND CAPTURES-PATH COMPUTED HERE, NOT IMPORTED FROM `@a11y-witness/lab` -- #199, chairman's
+ * ruling. This file used to import `datasetRoot`/`captureRoot` straight from `@a11y-witness/lab/src/
+ * dataset-paths.mjs`, which made `a11y-witness` (published, consumer-facing) depend on `lab` (private,
+ * never published) -- a real boundary defect (ADR 0004), not merely a CI-scoping inconvenience: `lab`
+ * ALSO depends on `cli` (`public-api.test.ts` imports the published package to verify its surface), so the
+ * two depended on each other. `@a11y-witness/evidence` was considered as a shared home and rejected: ADR
+ * 0004 states its contract explicitly -- "all contract, no I/O. Deliberately no `node:fs`, no
+ * `process.env`" -- and every function this file needs reads `process.env` overrides. So this follows the
+ * EXACT pattern `worker-fleet`'s `doctor.mjs`/`compare-workers.mjs`, `nvda-worker`'s
+ * `capture-pure.corpus.test.ts` and `judge`'s `channel-tables-4.1.2.test.ts` already use for the identical
+ * reason (documented in `dataset-paths.test.ts`'s own `EXEMPT` list): a local, duplicated computation
+ * rather than an import that would create the cycle. Only the two env overrides this file's own read-only
+ * existence check plausibly needs are honoured (`RUNS_ROOT`/`A11Y_RUNS_ROOT`, `DATASET_ROOT`) -- not the
+ * full override surface `dataset-paths.mjs` supports, which this test has never needed.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { AddressInfo } from "node:net";
 import { stripComments } from "@a11y-witness/evidence/source-text";
-import { datasetRoot, captureRoot } from "@a11y-witness/lab/src/dataset-paths.mjs";
 
 import {
-  applyArg, parseArgs, conformanceFor, captureViaWorker, type CaptureResponse, type CaptureRequest,
+  applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, type CaptureResponse, type CaptureRequest,
 } from "./cli.js";
 
-const CAPTURES = captureRoot(datasetRoot());
+const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+const runsRoot = () => resolve(REPO_ROOT, process.env.RUNS_ROOT ?? process.env.A11Y_RUNS_ROOT ?? "runs");
+const datasetRoot = () =>
+  process.env.DATASET_ROOT ? resolve(REPO_ROOT, process.env.DATASET_ROOT) : resolve(runsRoot(), "screenreader-dataset");
+const CAPTURES = resolve(datasetRoot(), process.env.DATASET_CAPTURE_ROOT || "captures");
 
 /** A handful of real captures, chosen by name so a failure names a case rather than an index. */
 function realCaptures(limit = 6): { name: string; capture: CaptureResponse }[] {
@@ -201,4 +220,26 @@ test("captureViaWorker sends a captureId, without which nothing above it can rec
     assert.equal(typeof sentId, "string", "no captureId reached the worker -- recovery has nothing to ask about");
     assert.ok((sentId as string).length > 0);
   } finally { await w.close(); }
+});
+
+// `errorReason` -- a stranger's "no worker answered" message must never print a bare "()".
+test("errorReason prefers .message when the error has one", () => {
+  assert.equal(errorReason(new Error("connect timed out")), "connect timed out");
+});
+
+test("errorReason falls back to .code when .message is EMPTY -- the real shape of a raw ECONNREFUSED", () => {
+  // Measured directly against a real closed-port connection on this Node version: message is "", code is
+  // "ECONNREFUSED". A fallback that only checked `.message` produced a bare, unexplained "()".
+  const err = Object.assign(new Error(""), { code: "ECONNREFUSED" });
+  assert.equal(errorReason(err), "ECONNREFUSED");
+});
+
+test("errorReason falls back to String(error) when neither .message nor .code exists", () => {
+  assert.equal(errorReason("a plain string throw"), "a plain string throw");
+});
+
+// MUTATION: prove the reproduction is real, or the two tests above establish nothing.
+test("MUTATION: an error with a message but no code still prefers the message, not the fallback chain", () => {
+  const err = Object.assign(new Error("real reason"), { code: "SOME_CODE" });
+  assert.equal(errorReason(err), "real reason", "a present .message must win over .code, not the other way round");
 });

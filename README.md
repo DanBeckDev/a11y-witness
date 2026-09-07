@@ -6,6 +6,12 @@
 
 **a11y-witness drives a real screen reader (NVDA) through a web page and reports the barriers a screen-reader user would hit.** Every finding cites a WCAG criterion and quotes the announcement it rests on, so you can check it yourself.
 
+> **Which path is yours? If you have no Windows machine, start with the [GitHub Action](#quickstart) —
+> it needs none.** If you have one, or don't mind building a VM, the [local path](#quickstart) is likely
+> yours instead. (`npx a11y-witness` is not published yet — see
+> [`packages/cli/README.md`](./packages/cli/README.md) for why and what to use instead.) This is the one
+> decision every other doc in this repo defers to.
+
 The findings it is *for* are the ones a rule scanner structurally cannot produce, because they need a screen reader and an interaction — not markup analysis:
 
 > axe tells you an ARIA attribute is wrong. This tells you your form rejects input and **never announces why**, or your filter updates results and **says nothing**.
@@ -15,7 +21,7 @@ The findings it is *for* are the ones a rule scanner structurally cannot produce
 *Asserted* — the evidence decides it, so the tool states the criterion is not satisfied. A control that
 announced `collapsed`, was activated, and still announces `collapsed` has contradicted itself; there is no
 second reading. These come from the deterministic rule layer, which is exact on every criterion it owns with
-**zero false positives across 1,183 conformant records**, re-verified by `npm run rules:gate` on every push.
+**zero false positives across 1,405 conformant records**, re-verified by `npm run rules:gate` on every push.
 
 *Referred* — the evidence is suggestive and the judgement is a human's. Whether a link named "Details" is
 adequate depends on context WCAG itself says may be off-screen; the tool reports `cantTell` in ACT and EARL's
@@ -167,9 +173,9 @@ jobs:
 
 That is the whole thing. **No API key and no account** — `judge-backend` defaults to `local`, this
 project's own trained scorer, which ships in the repo and never sends your page anywhere. Findings appear as
-a PR comment; `fail-on` decides whether they also fail the build, and defaults to `never` so adding it
-cannot break your pipeline on day one. `.github/workflows/action-smoke.yml` runs exactly this shape against
-two W3C pages on every push, as a consumer would.
+a PR comment; `fail-on` decides whether *findings* fail the build, and defaults to `never` so adding it
+cannot break your pipeline on day one. `.github/workflows/action-smoke.yml` runs exactly this shape
+against two W3C pages on every push, as a consumer would.
 
 **→ [Full getting-started guide](./docs/getting-started.md)** — including running it locally.
 
@@ -496,9 +502,7 @@ carries the known limitations, stated plainly. `CLAUDE.md` is operational instru
      gate result recorded in docs/board/reported.json. Do not TYPE a number here: a figure the report
      cannot source is a figure that outlives its measurement, and one already did. -->
 
-**On our own corpus of 1,398 conformant records the deterministic rules asserted no failures. The trained
-component refers, it never asserts, and a referral on a conformant page is expected rather than a defect.
-The real-page figure is being re-measured and this sentence will carry it when the gate has printed it.**
+**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures. The real-page figure is under re-measurement since 2026-09-06 and this page states none: a refreshed baseline produced four findings on pages an older baseline had passed, and until each is established as an assertion or a referral there is no honest number to give. The trained component refers, it never asserts, and a referral on a conformant page is expected rather than a defect.**
 
 <!-- CLAIM:END -->
 

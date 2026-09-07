@@ -20,6 +20,50 @@
 # Nothing here mutates. The artifact is chosen from a fixed list and the model directory from the same
 # enum `lab-job.yml` uses, so a path cannot be expressed — the containment `worker`, `role` and `out`
 # already have, for the same reason: this box holds the corpus and the fleet key.
+# THE LAB MUST BE IN THE INVENTORY, AND AN EMPTY INVENTORY MUST NOT READ AS SUCCESS.
+#
+# `ansible-playbook` prints `skipping: no hosts matched`, an EMPTY PLAY RECAP, and **exits 0**. So every
+# command in this directory could fetch nothing, stop nothing, reset nothing and report success — measured
+# 2026-09-06 in a fresh worktree, where `lab:fetch` returned exit 0 having reached no host at all, and the
+# file already sitting in `runs/fetched/` from an earlier run made it look like it had worked.
+#
+# That is `fleet:deploy` exiting 0 having deployed to zero hosts, which cost this project a silent
+# no-op deploy on the same day, arriving in the lab commands by the same door: `inventory.yml` is
+# gitignored (#54), so any checkout that has not been given one resolves nothing.
+#
+# THIS PLAY RUNS ON `localhost`, which is always available, precisely so it can speak when the real play
+# cannot. A guard living inside the `a11y_lab` play would be skipped by the very condition it exists to
+# report — the bootstrap shape `inventory-install.yml` already had to solve.
+- name: The lab must be in the inventory before anything claims to have run
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Refuse an inventory that resolved no lab
+      ansible.builtin.assert:
+        that:
+          - groups['a11y_lab'] is defined
+          - groups['a11y_lab'] | length > 0
+        fail_msg: >-
+          No host matched `a11y_lab`, so this command would have done NOTHING and exited 0.
+          `inventory.yml` is gitignored, so a fresh checkout or a worktree does not have one.
+          Fix it with one of: run this from a checkout that has
+          `packages/control/ansible/inventory.yml`; or install the durable copy this machine can
+          always read, `npm run fleet:inventory-install`, which puts it at /etc/a11ign/inventory.yml
+          where `ansible.cfg` looks first.
+        # `| default([])` IS LOAD-BEARING. Ansible finalises BOTH messages before deciding which to
+        # print, so a bare `groups['a11y_lab']` here throws inside the filter when the group is absent —
+        # which is precisely the case this guard exists for — and the failure becomes
+        # "object of type 'dict' has no attribute 'a11y_lab'" instead of the sentence below it. Committed
+        # that way first, which is CLAUDE.md's own recorded shape: a guard that stops the job and explains
+        # nothing gets distrusted, then bypassed.
+        success_msg: "inventory resolved {{ groups['a11y_lab'] | default([]) | length }} lab host(s)"
+
+    # AND THE KEY THAT CONNECTS TO IT -- #255. Same play, because both are preconditions that must be
+    # settled on localhost before anything opens an SSH connection, and both fail in the same direction:
+    # a missing inventory does nothing and exits 0, a missing key connects as whatever a default guessed.
+    - name: The control-plane key must be supplied
+      ansible.builtin.include_tasks: tasks/require-control-plane-key.yml
+
 - name: Fetch an artifact from the lab
   hosts: a11y_lab
   gather_facts: false
@@ -163,6 +207,16 @@
       # made one promotion overwrite another's note. That is unguessable by design, so this resolves the
       # newest match on the lab instead of predicting a name.
       promoted-changeset: ".changeset/promote-*.md"
+      # THE NEWEST CORPUS SNAPSHOT, so it can be uploaded from the CONTROL PLANE rather than the lab.
+      #
+      # The transport is deliberately two hops: `corpus-snapshot` archives on the lab, this brings the
+      # archive here, and the upload happens from a machine that already holds GitHub credentials. **No
+      # token ever sits on the lab**, which is the whole reason for the shape — the lab is the machine with
+      # the corpus on it, and a credential there is a credential next to the thing it protects.
+      #
+      # Globbed, so `find` picks the newest on the LAB rather than this file predicting a timestamp. A
+      # snapshot's name carries seconds precisely because two in one minute is a normal thing to want.
+      corpus-archive: "backups/corpus-*.tar.gz"
       promoted-training-report: "packages/scorer/models/screenreader-scorer/training-report.json"
       promoted-acceptance-report: "packages/scorer/models/screenreader-scorer/acceptance-report.json"
       acceptance-records: "runs/screenreader-acceptance/{{ repeat | default('repeat-1') }}.jsonl"

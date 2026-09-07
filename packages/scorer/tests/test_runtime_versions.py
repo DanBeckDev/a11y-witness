@@ -21,6 +21,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[3]
 SCORER = REPO / "packages" / "scorer" / "python" / "score.py"
 
@@ -47,6 +49,15 @@ class RuntimeVersionsAreObservable(unittest.TestCase):
 
     def test_reports_the_REAL_installed_version_independently_confirmed(self) -> None:
         """Not just non-null: the exact string a second, independent call to `importlib.metadata` gets."""
+        # LAB ONLY. `RUNTIME_PACKAGES` is numpy, onnxruntime, safetensors and transformers, and
+        # `requirements-ci.txt` deliberately carries only numpy and safetensors -- the CI-side suite needs
+        # neither onnxruntime nor transformers for anything else. `test_covers_exactly_the_four_packages_
+        # action_yml_pins` above still runs in CI and proves the KEY SET is right even with two packages
+        # absent (`_runtime_versions` reports `None` rather than crashing, per
+        # `test_an_absent_package_reports_None_rather_than_crashing`); only THIS assertion needs the real
+        # values installed to mean anything. An honest skip, not a silent pass.
+        pytest.importorskip("onnxruntime")
+        pytest.importorskip("transformers")
         versions = self.scorer._runtime_versions()
         for name in self.scorer.RUNTIME_PACKAGES:
             self.assertEqual(versions[name], importlib.metadata.version(name),
