@@ -940,12 +940,12 @@ export function addressesSamePage(actual, url) {
  * INJECTABLE, because the entire defect is about WHEN the URL is read and a test that cannot control
  * time cannot see it — the same reasoning as `file-version-memo.test.ts`.
  *
- * @returns {Promise<{ok: boolean, actual: string|null, attempts: number, waitedMs: number}>}
  */
 /**
  * @param {string} url
  * @param {{ read: () => Promise<string|null>, budgetMs?: number, pollMs?: number,
  *           now?: () => number, wait?: (ms: number) => Promise<void> }} options
+ * @returns {Promise<{ok: boolean, actual: string|null, attempts: number, waitedMs: number}>}
  */
 // NO `= {}` DEFAULT: `read` has none either, so an omitted options object gives `read === undefined` and
 // the loop below calls it. Every one of the four call sites passes `{ read: ... }`. Same contradiction as
