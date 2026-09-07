@@ -10,6 +10,7 @@
 // `changed` job's classification does, and it has its own test like every other script here.
 import { filesChangedAgainstOrigin } from "./changed-packages.mjs";
 import { boardOnly, DOC_ROOT_FILES } from "./ci-changed.mjs";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 
 export function isBoardOnlyDiff(files) {
   const docsFiles = files.filter((f) => f.startsWith("docs/") || DOC_ROOT_FILES.has(f));
@@ -17,5 +18,7 @@ export function isBoardOnlyDiff(files) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  // Guarded per #164: takes no flags; it decides whether a change is board-only.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/board-only-check.mjs" });
   process.stdout.write(String(isBoardOnlyDiff(filesChangedAgainstOrigin())));
 }

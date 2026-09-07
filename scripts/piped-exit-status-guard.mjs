@@ -14,6 +14,8 @@
  * a remedy that fires on legitimate use and gets disabled.
  */
 
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+
 const STATUS_TOOLS = ["head", "tail", "grep"];
 
 /** Split a compound shell command into its top-level statements: `;`, `&&`, `||`, and newlines. */
@@ -62,6 +64,8 @@ export function checkPipedExitStatus(cmd) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  // Guarded per #164: takes the command POSITIONALLY (argv[2]) and no flags.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/piped-exit-status-guard.mjs" });
   const cmd = process.argv[2];
   if (!cmd) {
     console.error("usage: piped-exit-status-guard.mjs '<shell command string>'");
