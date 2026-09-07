@@ -27,7 +27,7 @@
     {
       "id": "weights",
       "states": ["unchanged", "changeset"],
-      "why": "ADR 0007 makes the weights the API of @a11y-witness/scorer, so a change to them is a release and must be accounted for by a changeset."
+      "why": "ADR 0007 makes the weights the API of @a11ign/scorer, so a change to them is a release and must be accounted for by a changeset."
     }
   ]
 }
