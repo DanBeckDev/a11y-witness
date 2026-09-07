@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // IS THIS PR ACTUALLY TESTED? -- asked of the check RUNS, never of `mergeStateStatus`.
 //
 // `mergeStateStatus` cannot tell "every required check passed" from "no check ever ran", and on
@@ -50,6 +51,7 @@ const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2 };
 /** A concluded context that does not block a merge. `skipped` is a path filter declining, not a failure. */
 const SATISFIED = new Set(["success", "skipped", "neutral"]);
 
+/** @param {string[]} args */
 export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
 /**
@@ -83,11 +85,18 @@ export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy }) {
 
   const notes = pr.state === "OPEN" ? []
     : [`note: #${pr.number} is ${pr.state}, so this is a post-mortem rather than a merge decision.`];
-  const reasons = [...baseReason(pr), ...checkReasons(pr, required, runs),
-    ...ancestryReason(behindBy), ...stalenessReason(runs, mainTipIso)];
+  // Already proven non-null by `missingLookups` above -- TS's narrowing does not follow a null check
+  // performed inside an array-literal expression, so the casts restate what the guard clause established.
+  const knownRequired = /** @type {string[]} */ (required);
+  const knownRuns = /** @type {{name: string, status: string, conclusion: string | null,
+    completedAt: string | null}[]} */ (runs);
+  const knownMainTipIso = /** @type {string} */ (mainTipIso);
+  const reasons = [...baseReason(pr), ...checkReasons(pr, knownRequired, knownRuns),
+    ...ancestryReason(behindBy), ...stalenessReason(knownRuns, knownMainTipIso)];
   return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons, notes };
 }
 
+/** @param {{baseRefName: string}} pr */
 function baseReason(pr) {
   if (pr.baseRefName === "main") return [];
   return [`BASE IS NOT main — it is \`${pr.baseRefName}\`.\n`
@@ -96,6 +105,12 @@ function baseReason(pr) {
     + "  base first and let this one re-open against `main`."];
 }
 
+/**
+ * @param {{headRefOid: string}} pr
+ * @param {string[]} required
+ * @param {{name: string, status: string, conclusion: string | null}[]} runs
+ * @returns {string[]}
+ */
 export function checkReasons(pr, required, runs) {
   if (runs.length === 0) {
     return [`NO CHECK RUNS EXIST for head ${pr.headRefOid.slice(0, 10)} — not one, ever.\n`
@@ -108,12 +123,14 @@ export function checkReasons(pr, required, runs) {
   const failing = runs.filter((run) => run.status === "completed" && !SATISFIED.has(run.conclusion ?? ""))
     .map((run) => `${run.name} (${run.conclusion})`);
 
+  // `.filter(Boolean)` does not narrow `(string | false)[]` to `string[]` -- a well-known TS gap, not a
+  // behaviour bug -- so the predicate says so explicitly.
   return [
     missing.length > 0 && `REQUIRED CONTEXT NEVER RAN: ${missing.join(", ")}.\n`
       + "  Present-and-failing and never-ran are different states; this is the second.",
     unfinished.length > 0 && `STILL RUNNING: ${unfinished.join(", ")}. Not a refusal forever — ask again.`,
     failing.length > 0 && `FAILING: ${failing.join(", ")}.`,
-  ].filter(Boolean);
+  ].filter(/** @returns {reason is string} */ (reason) => Boolean(reason));
 }
 
 /**
@@ -123,6 +140,10 @@ export function checkReasons(pr, required, runs) {
  * current; #135's finished 00:08:02Z against that same tip and is not. The comparison is deliberately
  * against the COMMIT DATE of `main`'s tip rather than against a run of `main`, because what matters is
  * whether this head was ever tested alongside the code it is about to join.
+ *
+ * @param {{completedAt: string | null}[]} runs
+ * @param {string} mainTipIso
+ * @returns {string[]}
  */
 function stalenessReason(runs, mainTipIso) {
   const finished = runs.map((run) => run.completedAt).filter(Boolean).sort();
@@ -195,6 +216,7 @@ function ancestryReason(behindBy) {
  * log from "nothing ever disagreed", which is exactly the failure mode this row exists to close. The git
  * common dir resolves to the SAME `.git` for the primary and every worktree.
  */
+/** @type {[RegExp, string][]} */
 const REASON_KINDS = [
   [/^BASE IS NOT main/, "BASE_NOT_MAIN"],
   [/^NO CHECK RUNS EXIST/, "NO_RUNS"],
@@ -218,12 +240,17 @@ export function reasonKind(reason) {
   return hit ? hit[1] : "UNCLASSIFIED";
 }
 
-/** Never a silent no-op: a write failure is the exact defect this mechanism exists to avoid. */
+/**
+ * Never a silent no-op: a write failure is the exact defect this mechanism exists to avoid.
+ * @param {string} path
+ * @param {object} entry
+ */
 function appendJsonl(path, entry) {
   try {
     appendFileSync(path, `${JSON.stringify(entry)}\n`);
   } catch (error) {
-    throw new Error(`could not write the merge-guard log at ${path}: ${error.message}`, { cause: error });
+    throw new Error(`could not write the merge-guard log at ${path}: `
+      + `${/** @type {Error} */ (error).message}`, { cause: error });
   }
 }
 
@@ -241,7 +268,12 @@ export function agreementLogPath() {
   return `${gitCommonDir()}/merge-guard-agreement-log.jsonl`;
 }
 
-/** Appends one verdict. Called on every live guard run against an OPEN PR. */
+/**
+ * Appends one verdict. Called on every live guard run against an OPEN PR.
+ * @param {string} logPath
+ * @param {number} prNumber
+ * @param {{code: number, reasons: string[]}} verdict
+ */
 export function recordVerdict(logPath, prNumber, verdict) {
   appendJsonl(logPath, {
     prNumber, at: new Date().toISOString(),
@@ -250,7 +282,12 @@ export function recordVerdict(logPath, prNumber, verdict) {
   });
 }
 
-/** The most recently recorded verdict for a PR, or null if none was ever recorded. */
+/**
+ * The most recently recorded verdict for a PR, or null if none was ever recorded.
+ * @param {string} logPath
+ * @param {number} prNumber
+ * @returns {{prNumber: number, at: string, code: number, reasonKinds: string[]} | null}
+ */
 export function latestVerdictFor(logPath, prNumber) {
   let text;
   try {
@@ -324,7 +361,12 @@ export function reconcile({ prNumber, recordedVerdict, realOutcome, resolvedAt }
   };
 }
 
-/** Each lookup returns null on failure rather than an empty answer — the distinction the verdict needs. */
+/**
+ * Each lookup returns null on failure rather than an empty answer — the distinction the verdict needs.
+ * @template T
+ * @param {() => T} fn
+ * @returns {T | null}
+ */
 export function lookup(fn) {
   try {
     return fn();
@@ -345,14 +387,19 @@ export function lookupRequiredContexts() {
     gh(["api", `repos/${REPO}/branches/main/protection/required_status_checks`])).contexts);
 }
 
-/** Every check run recorded against a commit sha, or `null` if the lookup failed. */
+/**
+ * Every check run recorded against a commit sha, or `null` if the lookup failed.
+ * @param {string} sha
+ * @returns {{name: string, status: string, conclusion: string | null, completedAt: string | null}[] | null}
+ */
 export function lookupCheckRuns(sha) {
   return lookup(() => JSON.parse(
     gh(["api", `repos/${REPO}/commits/${sha}/check-runs`, "--paginate"])).check_runs
-    .map((run) => ({ name: run.name, status: run.status, conclusion: run.conclusion,
-      completedAt: run.completed_at })));
+    .map((/** @type {{name: string, status: string, conclusion: string | null, completed_at: string | null}} */ run) => (
+      { name: run.name, status: run.status, conclusion: run.conclusion, completedAt: run.completed_at })));
 }
 
+/** @param {number} number */
 function facts(number) {
   // DELIBERATELY NOT REQUESTING `mergeStateStatus`. Asking for it at all would invite the next reader to
   // use it, and this tool's entire reason for existing is that its answer cannot be trusted here.
@@ -373,7 +420,10 @@ function facts(number) {
   return { pr, required, runs, mainTipIso, behindBy };
 }
 
-/** `--reconcile <n>`: compare the LAST recorded verdict for #n against its real, terminal outcome (#188). */
+/**
+ * `--reconcile <n>`: compare the LAST recorded verdict for #n against its real, terminal outcome (#188).
+ * @param {number} number
+ */
 function reconcileCommand(number) {
   const recordedVerdict = latestVerdictFor(verdictLogPath(), number);
   const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
@@ -381,7 +431,11 @@ function reconcileCommand(number) {
   const realOutcome = realOutcomeFor(pr.state);
   const resolvedAt = pr.mergedAt ?? pr.closedAt ?? null;
   const result = reconcile({ prNumber: number, recordedVerdict, realOutcome, resolvedAt });
-  if (result.code !== EXIT.READY) {
+  // NARROWED ON `record`, NEVER ON `code` -- `code` is typed as plain `number` in both branches of
+  // `reconcile`'s return union, so comparing it to `EXIT.READY` (also a plain number) cannot narrow
+  // which branch this is. `record` is the actual discriminant: null in one branch, an object in the
+  // other. Checking the wrong field type-checked as fine before #234 added `@ts-check` to this file.
+  if (result.record === null) {
     console.error(`CANNOT RECONCILE #${number}: ${result.reason}`);
     process.exit(result.code);
   }
