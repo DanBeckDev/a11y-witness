@@ -92,14 +92,14 @@ export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: 
  *
  * @param {{pr: {headRefOid: string}, behindBy: number | null,
  *          closes?: {number: number, title?: string, labels: string[]}[] | null,
- *          session?: string | null, remoteHeadOid: string | null}} facts
+ *          session?: string | null, branchTip: string | null}} facts
  * @returns {{code: number, reasons: string[]}}
  */
-export function mergeSafetyVerdict({ pr, behindBy, closes = [], session = null, remoteHeadOid }) {
+export function mergeSafetyVerdict({ pr, behindBy, closes = [], session = null, branchTip }) {
   const missingLookups = [
     behindBy === null && "whether this head contains `main`'s tip (the compare API)",
     closes === null && "which rows this PR would close (the closingIssuesReferences lookup)",
-    remoteHeadOid === null && "the branch's real tip (`git ls-remote`, #294)",
+    branchTip === null && "the branch's real tip (`git ls-remote`, #294)",
   ].filter(Boolean);
   if (missingLookups.length > 0) {
     return { code: EXIT.CANNOT_ASK, reasons: [
@@ -109,7 +109,7 @@ export function mergeSafetyVerdict({ pr, behindBy, closes = [], session = null, 
   }
   const knownCloses = /** @type {{number: number, title?: string, labels: string[]}[]} */ (closes);
   const reasons = [...ancestryReason(behindBy), ...closingClaimReasons(knownCloses, session),
-    ...headVsTipReason(pr.headRefOid, /** @type {string} */ (remoteHeadOid))];
+    ...headTipMismatchReason(pr, /** @type {string} */ (branchTip))];
   return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons };
 }
 
@@ -126,27 +126,22 @@ export function mergeSafetyVerdict({ pr, behindBy, closes = [], session = null, 
  *          runs: {name: string, status: string, conclusion: string | null, completedAt: string | null}[] | null,
  *          mainTipIso: string | null,
  *          behindBy: number | null,
+ *          branchTip: string | null,
  *          closes?: {number: number, title?: string, labels: string[]}[] | null,
- *          session?: string | null,
- *          remoteHeadOid?: string | null}} facts remoteHeadOid: omit (or pass `undefined`) to skip the
- *          #294 head-vs-tip check entirely -- every call site predating it keeps working unchanged. Pass
- *          `null` for "I looked it up and the lookup failed" (CANNOT_ASK, never silently skipped), or the
- *          real sha from `git ls-remote` to have it compared against `pr.headRefOid`.
+ *          session?: string | null}} facts
  * @returns {{code: number, reasons: string[], notes: string[]}}
  */
-export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, closes = [], session = null,
-  remoteHeadOid = undefined }) {
-  // `undefined` (the default) means the CALLER never asked for this check -- every pre-#294 call site
-  // keeps working unchanged. `null` means it was asked for and the `git ls-remote` lookup failed, which
-  // is CANNOT_ASK exactly like every other lookup here, never a silent skip.
-  const headCheckRequested = remoteHeadOid !== undefined;
+export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, branchTip, closes = [],
+  session = null }) {
   const missingLookups = [
     required === null && "the required status checks for `main` (branch protection)",
     runs === null && `the check runs for head ${pr.headRefOid.slice(0, 10)}`,
     mainTipIso === null && "the current tip of `main`",
     behindBy === null && "whether this head contains `main`'s tip (the compare API)",
+    // A FAILED tip lookup is CANNOT_ASK, never READY -- `null` and "equal to headRefOid" are different
+    // answers, the same distinction every other lookup here already draws (#294).
+    branchTip === null && "the branch's real tip (`git ls-remote`)",
     closes === null && "which rows this PR would close (the closingIssuesReferences lookup)",
-    headCheckRequested && remoteHeadOid === null && "the branch's real tip (`git ls-remote`, #294)",
   ].filter(Boolean);
   if (missingLookups.length > 0) {
     return { code: EXIT.CANNOT_ASK, notes: [], reasons: [
@@ -163,11 +158,12 @@ export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, close
   const knownRuns = /** @type {{name: string, status: string, conclusion: string | null,
     completedAt: string | null}[]} */ (runs);
   const knownMainTipIso = /** @type {string} */ (mainTipIso);
+  const knownBranchTip = /** @type {string} */ (branchTip);
   const knownCloses = /** @type {{number: number, title?: string, labels: string[]}[]} */ (closes);
-  const reasons = [...baseReason(pr), ...checkReasons(pr, knownRequired, knownRuns),
+  const reasons = [...baseReason(pr), ...headTipMismatchReason(pr, knownBranchTip),
+    ...checkReasons(pr, knownRequired, knownRuns),
     ...ancestryReason(behindBy), ...stalenessReason(knownRuns, knownMainTipIso),
-    ...closingClaimReasons(knownCloses, session),
-    ...(headCheckRequested ? headVsTipReason(pr.headRefOid, /** @type {string} */ (remoteHeadOid)) : [])];
+    ...closingClaimReasons(knownCloses, session)];
   return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons, notes };
 }
 
@@ -205,6 +201,30 @@ function baseReason(pr) {
     + "  `ci.yml` triggers on `pull_request: branches: [main]`, so NO workflow runs for this PR and the\n"
     + "  branch protection that covers `main` protects nothing here. Re-target it at `main`, or merge its\n"
     + "  base first and let this one re-open against `main`."];
+}
+
+/**
+ * GITHUB'S RECORDED HEAD CAN LAG THE BRANCH'S REAL TIP — #294, found on #195: `gh pr checks` and every
+ * check-run lookup here are keyed on `pr.headRefOid`, which is GitHub's own bookkeeping and not the
+ * branch itself. A push GitHub has not yet indexed (or any other cause) leaves `headRefOid` pointing at
+ * the tip's PARENT, and every "green" belongs to that older commit — including one whose own commit
+ * message says a later commit refuted it.
+ *
+ * Deliberately NOT folded into `ancestryReason` (which reads `behindBy`, ancestry against `main`) or
+ * `stalenessReason` (runs older than `main`'s current tip): those need opposite remedies from this one.
+ * Behind `main` — update the branch. Runs predate `main` — re-run. GitHub's head is not the tip — RE-PUSH,
+ * so GitHub picks up the commit that is already there.
+ *
+ * @param {{headRefOid: string}} pr
+ * @param {string} branchTip
+ * @returns {string[]}
+ */
+function headTipMismatchReason(pr, branchTip) {
+  if (branchTip === pr.headRefOid) return [];
+  return [`GITHUB'S HEAD IS NOT THE BRANCH TIP: GitHub recorded ${pr.headRefOid.slice(0, 10)}, the branch's `
+    + `real tip is ${branchTip.slice(0, 10)}.\n`
+    + "  Every check below belongs to the recorded head, which is not the commit that would actually merge.\n"
+    + "  Re-push the branch so GitHub picks up the real tip, then ask again."];
 }
 
 /**
@@ -294,35 +314,6 @@ export function ancestryReason(behindBy) {
 }
 
 /**
- * GITHUB'S RECORDED HEAD MUST EQUAL THE BRANCH'S REAL TIP — #294.
- *
- * Measured 2026-09-07 on #195: `gh pr view --json headRefOid` answered `ac306fe9` (9 check runs, green)
- * while `git ls-remote origin lead/prune-orphan-captures` answered `7c2e16fc` (0 runs) for the SAME
- * branch, moments apart. Every other fact this file asks — required contexts, check runs, `behind_by`,
- * `closingIssuesReferences` — is looked up FOR `pr.headRefOid`, so a stale read of that one field poisons
- * every fact built on top of it: a real, green result for a commit that is no longer on the branch.
- *
- * `git ls-remote` and GitHub's REST/GraphQL PR API are genuinely independent channels — ls-remote is the
- * git smart-HTTP ref advertisement, not a cached API read — so a disagreement between them is real
- * information, not two readings of one clock. This is the same rule this repo applies to `/health` versus
- * `exec`, and to `stat`'s checksum versus `copy`'s own `changed` flag: a verification sharing a failure
- * mode with the thing it verifies verifies nothing.
- *
- * @param {string} recordedHeadOid GitHub's `pr.headRefOid`
- * @param {string | null} remoteHeadOid `git ls-remote`'s answer for the same branch, or `null` on failure
- * @returns {string[]}
- */
-export function headVsTipReason(recordedHeadOid, remoteHeadOid) {
-  if (remoteHeadOid === null || remoteHeadOid === recordedHeadOid) return [];
-  return [`GITHUB'S RECORDED HEAD (${recordedHeadOid.slice(0, 10)}) DOES NOT MATCH THE BRANCH'S ACTUAL `
-    + `TIP (${remoteHeadOid.slice(0, 10)}) — #294.\n`
-    + "  Every other fact here (required contexts, runs, ancestry, closing issues) was looked up for the\n"
-    + "  RECORDED head, so a stale read here poisons all of it: a real, green result for a commit that is\n"
-    + "  no longer on the branch. Ask again — this is usually a transient propagation lag, not a permanent\n"
-    + "  fault, but it must never be treated as ready while it disagrees."];
-}
-
-/**
  * A GUARD WHOSE WRONG ANSWERS ARE ABSORBED BY ANOTHER MECHANISM HAS NO FAILURE SIGNAL (#188).
  *
  * #182 was caught only because strict branch protection refused what this tool passed — the guard's own
@@ -357,7 +348,7 @@ const REASON_KINDS = [
   [/^THIS HEAD DOES NOT CONTAIN main's TIP/, "ANCESTRY"],
   [/^EVERY RUN PREDATES THE CURRENT main/, "STALE"],
   [/^WOULD CLOSE #/, "CLAIMED_BY_ANOTHER_SESSION"],
-  [/^GITHUB'S RECORDED HEAD/, "HEAD_MISMATCH"],
+  [/^GITHUB'S HEAD IS NOT THE BRANCH TIP/, "HEAD_MISMATCH"],
 ];
 
 /**
@@ -525,6 +516,22 @@ export function lookupRequiredContexts() {
 }
 
 /**
+ * The real, current tip of a branch on `origin` right now — never GitHub's `headRefOid`, which is a
+ * separate piece of bookkeeping that can lag a push (#294). `null` on failure, same as every lookup here;
+ * an unparseable or empty `ls-remote` line is treated the same as a thrown error rather than as a real
+ * empty-string sha, since neither means "the branch has no tip".
+ * @param {string} branchName
+ * @returns {string | null}
+ */
+export function lookupBranchTip(branchName) {
+  return lookup(() => {
+    const line = execFileSync("git", ["ls-remote", "origin", branchName], { encoding: "utf8" }).trim();
+    const sha = line.split(/\s+/)[0];
+    return sha || null;
+  });
+}
+
+/**
  * Every check run recorded against a commit sha, or `null` if the lookup failed.
  * @param {string} sha
  * @returns {{name: string, status: string, conclusion: string | null, completedAt: string | null}[] | null}
@@ -559,23 +566,6 @@ export function lookupClosingIssues(number) {
 }
 
 /**
- * `git ls-remote`'s answer for a branch's tip -- a genuinely independent channel from GitHub's REST/
- * GraphQL PR API (the git smart-HTTP ref advertisement, not a cached API read), which is what makes it
- * able to catch #294 rather than agreeing with the very field it is checking. `null` on failure, same as
- * every other lookup here.
- * @param {string} branch
- * @returns {string | null}
- */
-export function lookupRemoteHeadOid(branch) {
-  return lookup(() => {
-    const line = execFileSync("git", ["ls-remote", `https://github.com/${REPO}.git`, `refs/heads/${branch}`],
-      { encoding: "utf8", env: sandboxGitEnv() }).trim();
-    const sha = line.split(/\s+/)[0];
-    return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
-  });
-}
-
-/**
  * `mergeSafetyVerdict`'s inputs, none of which ask about this run's own sibling check-runs -- see that
  * function's own comment for why that omission is deliberate rather than an oversight. Cheaper than
  * `facts()` too: no required-contexts or check-runs lookup at all.
@@ -584,13 +574,13 @@ export function lookupRemoteHeadOid(branch) {
 function ciGateFacts(number) {
   const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
     "--json", "number,state,baseRefName,headRefOid,headRefName"]));
-  const remoteHeadOid = lookupRemoteHeadOid(pr.headRefName);
+  const branchTip = lookupBranchTip(pr.headRefName);
   const behindBy = lookup(() => {
     const value = JSON.parse(gh(["api", `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
     return typeof value === "number" ? value : null;
   });
   const closes = lookupClosingIssues(number);
-  return { pr, behindBy, closes, remoteHeadOid };
+  return { pr, behindBy, closes, branchTip };
 }
 
 /**
@@ -617,7 +607,6 @@ function facts(number) {
   // use it, and this tool's entire reason for existing is that its answer cannot be trusted here.
   const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
     "--json", "number,state,baseRefName,headRefOid,headRefName"]));
-  const remoteHeadOid = lookupRemoteHeadOid(pr.headRefName);
   const required = lookupRequiredContexts();
   const runs = lookupCheckRuns(pr.headRefOid);
   const mainTipIso = lookup(() => gh(["api", `repos/${REPO}/commits/main`,
@@ -630,8 +619,9 @@ function facts(number) {
       `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
     return typeof value === "number" ? value : null;
   });
+  const branchTip = lookupBranchTip(pr.headRefName);
   const closes = lookupClosingIssues(number);
-  return { pr, required, runs, mainTipIso, behindBy, closes, remoteHeadOid };
+  return { pr, required, runs, mainTipIso, behindBy, branchTip, closes };
 }
 
 /**
