@@ -148,6 +148,42 @@ commit that moves it leaves the number briefly wrong on `main` AND stops the PR 
 measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
 no permission. Where prose asserts it, it does.**
 
+## A CITATION TO A RECORD THAT NO LONGER EXISTS READS LIKE ONE THAT NEVER DID — 2026-09-07
+
+Three failures in one day, and they are the same failure pointed at three sources.
+
+**A summary is not a citation.** I wrote on a tracked row that *"`CLAUDE.md` records the repository
+settings as merge commits only, PR required, force-push blocked, linear history"*. That sentence is on no
+ref: `git grep 'merge commits only' $(git rev-list --all) -- CLAUDE.md` returns nothing. It came from a
+compaction summary of my own session. **A summary is written in the same voice as a quotation** — it says
+"CLAUDE.md records" because that is what the session believed — so nothing in the text marks it as
+second-hand, and any agent resuming from one is carrying beliefs that read as citations.
+
+**A deleted record is not a missing record.** `screenreader_features.py:921` cites
+`schema-migration.json`'s `correctedBeforeTheVerdict_2026_09_05` as *"the whole record"* of a decision, and
+that file is deleted on every migration close **by design** — its absence is how `check-schema-migration`
+reports "none open". Following the citation from the working tree finds nothing, and `orchestrator` read
+that absence as "nobody recorded it" and reported a partial revert that had not happened. The record was
+one commit out of reach the whole time. Filed as #340.
+
+**And an artefact is not a design.** I relayed "ten features described, one crossed" as a narrowing. The
+comment eleven lines further down says *"four new columns … starts with the two pairs whose starvation is
+measured; the rest follow if the gates hold"* — a staged rollout, which looks exactly like a partial
+revert if you read only what shipped.
+
+**Why:** in every one of the three, the wrong thing was available and the right thing was one step away —
+a `git show`, a `git log -S`, eleven more lines of the same comment. And in the worst of them I had
+verified the OTHER half of the same message carefully, because a publish blocker turned on it. **I checked
+the load-bearing claim and forwarded the alarming one.** The alarming claim is the one that most needs the
+check, because it is the one that will travel.
+
+**How to apply:** cite a document the way this project cites a number — `file:line` AND the ref you read it
+from. `git show origin/main:<file> | grep -n` is a citation; "the file says" is a belief. When a citation
+resolves to nothing, the question is *where did this move to*, never *did this ever exist* — absence in a
+working tree is not evidence about history. And before repeating a peer's conclusion, ask whether it is
+load-bearing **or alarming**: relay neither unchecked, but never let the second travel because it felt
+urgent. Related: the mutation-check rule, and `a-number-from-the-apparatus`.
+
 ## I COUNTED WORDS WHEN THE FAULT WAS STRUCTURE — 2026-09-07
 
 A five-page document rendered a sixth page holding one word, `"discover."`. I measured length, found the

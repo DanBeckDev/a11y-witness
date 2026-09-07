@@ -34,7 +34,11 @@
 //                   in the one place it would be most expensive -- the record of what actually shipped.
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
+// RELATIVE, NOT the `@a11ign/worker-fleet/cli-flags` package specifier: that export map
+// points at `dist/`, so it needs both `node_modules` AND a completed build. This file is reachable
+// from a pre-install entry (see `pre-install-import-graph.test.ts`, which derives that population
+// rather than naming it), and there it dies on startup with ERR_MODULE_NOT_FOUND.
+import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { gh, lookup, lookupRequiredContexts, lookupCheckRuns, checkReasons } from "./merge-guard.mjs";
 
