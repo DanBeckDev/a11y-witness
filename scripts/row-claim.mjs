@@ -19,6 +19,7 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
 
 export const CLAIM_LABEL = "in-progress";
@@ -164,6 +165,11 @@ function usage() {
 }
 
 async function main() {
+  // THE PULL LOOP RESTS ON THIS COMMAND, so a flag it silently discards is the worst place for one.
+  // Measured 2026-09-07 before this guard: `row-claim.mjs check 161 --jsonn` printed the ordinary claim
+  // line and exited 0, and so did `--format=json`. Both look like a machine-readable request that was
+  // honoured. `--session` is the only flag here, and it is the one that says WHO is claiming.
+  refuseUnknownFlags(["--session"], { entry: import.meta.url, command: "node scripts/row-claim.mjs" });
   const [mode, issueArg, ...rest] = process.argv.slice(2);
   const issueNumber = Number(issueArg);
   if (!mode || !Number.isInteger(issueNumber) || issueNumber <= 0) {

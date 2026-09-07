@@ -43,6 +43,7 @@ import { existsSync, mkdtempSync, copyFileSync, readFileSync, rmSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join, resolve, basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 
 export const SMOKE = "isolation-smoke.mjs";
 
@@ -263,6 +264,8 @@ function countPrivatePackages() {
 // `node scripts/isolation-gate.mjs` invocation, but this file is ALSO imported by test files under
 // packages/, so the same guard idiom this repo now uses everywhere is worth using here too.
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
+  // Guarded per #164: --all, plus positional package dirs; npm flags go onward.
+  refuseUnknownFlags(["--all"], { entry: import.meta.url, command: "node scripts/isolation-gate.mjs" });
   const args = process.argv.slice(2);
   const targets = args.length === 0 || args[0] === "--all" ? allPackages() : args;
   if (args.length > 0 && args[0] !== "--all" && targets.length === 0) {

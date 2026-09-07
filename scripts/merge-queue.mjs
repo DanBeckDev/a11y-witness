@@ -39,6 +39,7 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { sandboxGitEnv } from "./git-env.mjs";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 
 /** @param {string[]} args */
 function gh(args) {
@@ -84,6 +85,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 }
 
 function main() {
+  // Guarded per #164: reads --merge; --json/--state go to gh.
+  refuseUnknownFlags(["--merge"], { entry: import.meta.url, command: "node scripts/merge-queue.mjs" });
   const wanted = process.argv.includes("--merge")
     ? process.argv[process.argv.indexOf("--merge") + 1] : null;
 
