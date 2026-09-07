@@ -36,7 +36,7 @@
 import { globSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
-import { refuseUnknownFlags, flagValue } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
 
 /**
  * Pure: which of the given globs resolved to fewer than `min` files, and how many each actually matched.
