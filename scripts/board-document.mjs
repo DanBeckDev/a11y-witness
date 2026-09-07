@@ -142,7 +142,14 @@ function section2() {
 }
 
 function section3(d) {
-  const L = ["## We made four things demonstrable today that were previously only claimed."];
+  // THE COUNT COMES FROM THE LIST, and this line is why the rule exists. It read "four" as a literal
+  // while the section rendered THREE bullets, and it went to the board that way on 2026-09-07 -- read
+  // by five people including the one who wrote it, caught by nobody, because a numeral in prose looks
+  // like a fact rather than a claim. Every other count in this file was already derived; this was the
+  // one that was typed. See issue #284.
+  const n = d.achievements.length;
+  const L = [`## We made ${numberWord(n).toLowerCase()} thing${n === 1 ? "" : "s"} demonstrable today `
+    + `that ${n === 1 ? "was" : "were"} previously only claimed.`];
   L.push("");
   if (d.achievements.length === 0) {
     L.push("Nothing was recorded for this period. That is a statement about our record-keeping and not "
@@ -160,58 +167,130 @@ function section3(d) {
   return L.join("\n");
 }
 
+/**
+ * THE DECISIONS ARE A LIST BECAUSE TWO SENTENCES COUNT THEM. The heading said "three decisions" and the
+ * line under it said "These three do", both typed, above a table of three rows -- correct on the day and
+ * held that way by nobody. `costsNothing` is here for the same reason: "two of them cost nothing to make"
+ * is an editorial claim about WHICH rows, so the row carries it and the sentence counts it. See #284.
+ */
+const DECISIONS = [
+  { ask: "Approve the definition of version one.", costsNothing: true,
+    ifNothing: "The question the board keeps asking stays unanswerable, and every edition repeats that." },
+  { ask: "Name one person outside the project to try the tool.", costsNothing: false,
+    ifNothing: "Version one cannot start, whatever engineering does. Open since August." },
+  { ask: "Confirm publication may proceed in September.", costsNothing: true,
+    ifNothing: "Three final steps need the owner's hands, so the engineering finishes and the release "
+      + "waits." },
+];
+
 function section4(d) {
   const blockers = d.open.filter((i) => i.milestone?.title === MILESTONE);
   return [
-    "## The board is asked for three decisions, and two of them cost nothing to make.",
+    `## The board is asked for ${numberWord(DECISIONS.length).toLowerCase()} decisions, and `
+    + `${numberWord(DECISIONS.filter((x) => x.costsNothing).length).toLowerCase()} of them cost nothing `
+    + "to make.",
     "",
     `None of the ${blockers.length} pieces of work between today and publication needs a board `
-    + "decision. These three do.",
+    + `decision. These ${numberWord(DECISIONS.length).toLowerCase()} do.`,
     "",
     "| decision | if nothing is decided |",
     "|---|---|",
-    "| **Approve the definition of version one.** | The question the board keeps asking stays "
-    + "unanswerable, and every edition repeats that. |",
-    "| **Name one person outside the project to try the tool.** | Version one cannot start, whatever "
-    + "engineering does. Open since August. |",
-    "| **Confirm publication may proceed in September.** | Three final steps need the owner's hands, so "
-    + "the engineering finishes and the release waits. |",
+    ...DECISIONS.map((x) => `| **${x.ask}** | ${x.ifNothing} |`),
     "",
     "**One rule we assess can currently be seen only on some pages**, because a page that fails it hides "
     + "its own evidence from the path a user takes. **The check now says \"cannot say\" rather than "
     + "\"nothing found\"**, which is the difference between a gap and a clean bill of health. Widening "
     + "it is tracked work. The appendix says how the failure hid.",
     "",
-    "### Four risks are live, and only the first could move the date.",
+    // COUNTED FROM THE ROWS, never typed. This read "Four risks are live" above a table of three: a
+    // sentence adjacent to a table is a claim ABOUT that table, and the only honest source for it is
+    // the table.
+    `### ${RISKS.length === 1 ? "One risk is" : `${numberWord(RISKS.length)} risks are`} live, and only the first could move the date.`,
     "",
     "| risk | state |",
     "|---|---|",
+    ...RISKS,
+  ].join("\n");
+}
+
+/** The throughput programme's stages, named ONCE.
+ *
+ * Section five said "the first of 1 stages" -- from the milestone's open-issue count, which falls as
+ * stages close -- while the appendix said "the five stages are". Two sources for one fact, and the
+ * section's was not even counting stages. The list is the fact; both places read it.
+ */
+const STAGES = [
+  "establish what a page should cost to record on the current format",
+  "measure what more machines actually give us",
+  "set a target from that",
+  "make the improvements",
+  "decide on hardware with the numbers attached",
+];
+
+/** The live risks, as a LIST so the sentence above the table can count them.
+ *
+ * The heading read "Four risks are live" above a table of three. A sentence adjacent to a table is a
+ * claim about that table, and the only honest source for it is the table.
+ */
+const RISKS = [
     "| **We may abandon the change to the trained component rather than adjust it.** | Its abandonment conditions were written in advance so the decision could not be softened, and the assumption it rests on is being measured properly for the first time now. |",
     "| **One item still has no known size.** | We published a fix this morning, measured it wrong this "
     + "afternoon, and replaced it with a theory nobody has tested. The process working — and the week we "
     + "allowed now rests on less. |",
     "| **Everything runs on one machine.** | The capture machines' credentials live on one computer. "
     + "The list of open work moved off it today; the credentials have not. |",
-  ].join("\n");
+];
+
+/** Small counts read as words in prose; the number still comes from the data. */
+function numberWord(n) {
+  return ["zero", "one", "Two", "Three", "Four", "Five", "Six", "Seven"][n] ?? String(n);
 }
 
 function section5(d) {
   const throughput = d.milestones.find((m) => m.title === THROUGHPUT);
   const fh = d.fleetHours;
-  const L = ["## We are not asking for money, and the measurement that would justify asking is "
+  // THE HEADING COMES FROM THE SAME SOURCE AS THE BODY, and the CLAIM comes before the caveats.
+  //
+  // It read "We are not asking for money" above a body recommending a purchase -- the headings test
+  // passed a heading that negated its own section, because the two were written at different times from
+  // different facts. Fixing that left a second fault the board caught: the section opened with two
+  // paragraphs saying we cannot cost the fleet and have not established what a page should cost, and
+  // only then reached the recommendation, under a second heading repeating the first. A reader met the
+  // caveats before the claim.
+  const scaling = scalingArms(d);
+  const L = [scaling
+    ? "## We are asking for the five pre-approved machines, and the measurement that justifies it is in."
+    : "## We are not asking for money, and the measurement that would justify asking is "
     + "scheduled.", ""];
-  if (!fh || fh.status === "not instrumented") {
-    L.push("**Machine time consumed by the capture fleet is not instrumented**, and the appendix says "
-      + "so rather than estimating it.");
+
+  if (scaling) {
+    const { ten, five, ratio } = scaling;
+    L.push(`**Twice the machines record a page in the same time each.** Ten take a median of `
+      + `${ten.medianSeconds} seconds per page against ${five.medianSeconds} on five — `
+      + `${(ten.medianSeconds - five.medianSeconds).toFixed(1)} seconds apart inside a spread of about `
+      + `${Math.round((ten.iqrSeconds + five.iqrSeconds) / 2)}, unchanged at this sample size. They do `
+      + `${ratio} times the work in the same hour.`);
+    L.push("");
+    L.push("**The outcome that would have argued against buying — each machine getting slower as "
+      + "machines are added — did not occur.**");
   } else {
+    L.push("**The number that would decide it is how long one page takes to record with ten machines "
+      + "against five.** Unchanged, and machines buy speed in proportion. Higher, and they do not — "
+      + "which is what happened last time, on older hardware, where they competed for one disk.");
+  }
+  L.push("");
+
+  // The fleet-hours line is NOT in the body: the appendix table carries it with its source, and a
+  // caveat about what we cannot yet measure does not belong above the thing we have measured.
+  if (fh && fh.status !== "not instrumented") {
     L.push(`**The capture machines consumed ${fh.total} on their most recent full run.** That counts `
       + "only time spent actively reading a page: not waiting between pages, setup, restarts or "
       + "electricity.");
+    L.push("");
   }
-  L.push("");
   L.push("**A capture takes about a minute at median on our last sample**, and **we have not established "
     + "what it should cost on the current recording format** — the first of "
-    + `${throughput?.open_issues ?? "several"} stages in a programme opened today, outside the release: `
+    + `${numberWord(STAGES.length).toLowerCase()} stages in a programme opened today, outside the release: `
     + "nothing in it delays September. The appendix lists them.");
   L.push("");
   L.push("**The architect's two findings are planned in; the appendix says what was done with each.**");
@@ -219,14 +298,29 @@ function section5(d) {
   L.push("**The product has a name and a home: a11ign, at a11ign.com**, and the board has decided it is "
     + "an all-in-one accessibility tool rather than a screen-reader one — so its parts are renamed "
     + "around that **before** publication. The appendix says what that costs.");
-  L.push("");
-  L.push("### We recommend buying nothing yet, and one number would change that.");
-  L.push("");
-  L.push("**The number is how long one page takes to record with ten machines against five.** "
-    + "Unchanged, and machines buy speed in proportion. Higher, and they do not — which is what happened "
-    + "last time, on older hardware, where they competed for one disk.");
-
   return L.join("\n");
+}
+
+/** The scaling measurement, read out of the recorded gate rather than restated.
+ *
+ * Returns null when no gate carries it, and the section then says the number is missing -- which is the
+ * honest state and was the TRUE state until the re-run landed. What must never happen is the section
+ * saying it is missing while the record holds it.
+ */
+function scalingArms(d) {
+  const gate = (d.gates ?? []).find((g) => /medianSeconds/.test(g.output ?? ""));
+  if (!gate) return null;
+  const arm = (name) => {
+    const line = (gate.output.split("\n").find((l) => l.trim().startsWith(name)) ?? "");
+    const json = line.slice(line.indexOf("{"));
+    try { return JSON.parse(json); } catch { return null; }
+  };
+  const ten = arm("arm-ten");
+  const five = arm("arm-five");
+  if (!ten || !five) return null;
+  const wall = /ten boxes (\d+)s,\s*five boxes (\d+)s/.exec(gate.output);
+  const ratio = wall ? (Number(wall[2]) / Number(wall[1])).toFixed(2) : null;
+  return ratio ? { ten, five, ratio } : null;
 }
 
 /** The source table: every figure the body states, with where it came from. */
@@ -353,10 +447,8 @@ function throughputBackground(L) {
   L.push("");
   L.push("The tool learns from several thousand recordings of a screen reader reading web pages. "
     + "Changing anything that alters what those recordings contain means making them all again, which "
-    + "costs hours of machine time — and that is why a list of improvements sits deferred. The five "
-    + "stages are: establish what a page should cost to record on the current format; measure what more "
-    + "machines actually give us; set a target from that; make the improvements; and decide on hardware "
-    + "with the numbers attached.");
+    + "costs hours of machine time — and that is why a list of improvements sits deferred. The "
+    + `${numberWord(STAGES.length).toLowerCase()} stages are: ${STAGES.join("; ")}.`);
   L.push("");
   L.push("### Why the capacity measure is not instrumented yet, and what the first design got wrong.");
   L.push("");
