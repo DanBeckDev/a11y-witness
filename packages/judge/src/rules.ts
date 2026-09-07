@@ -23,9 +23,9 @@
  * on spacing). Validate any new announcement-string rule against our own captures,
  * not against a book's strings.
  */
-import type { Channel, CaptureStructure } from "@a11y-witness/evidence";
-import type { PageCensus, DomCensus, ProbeStates, Completeness } from "@a11y-witness/evidence/verify";
-import { parseAnnouncement } from "@a11y-witness/evidence";
+import type { Channel, CaptureStructure } from "@a11ign/evidence";
+import type { PageCensus, DomCensus, ProbeStates, Completeness } from "@a11ign/evidence/verify";
+import { parseAnnouncement } from "@a11ign/evidence";
 // The ONE list of criteria the rules may emit. Imported rather than restated: writing a second
 // copy here is the defect this file has recorded five times, and I made it once before deleting it.
 import { RULE_CRITERIA } from "./coverage.js";

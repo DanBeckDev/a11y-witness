@@ -16,7 +16,7 @@
  * moves here; nothing here decides which criterion a finding belongs to.
  */
 import type { RuleInput } from "./rules.js";
-import { parseAnnouncement } from "@a11y-witness/evidence";
+import { parseAnnouncement } from "@a11ign/evidence";
 
 
 /**

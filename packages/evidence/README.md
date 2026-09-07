@@ -1,4 +1,4 @@
-# `@a11y-witness/evidence`
+# `@a11ign/evidence`
 
 The **shared evidence contract** for screen-reader accessibility captures: the wire types a capture backend
 implements, the pure predicates that decide whether a capture is trustworthy, and the WCAG 2.2 AA criteria
@@ -6,11 +6,11 @@ list.
 
 Zero dependencies. No `node:fs`, no `process.env`, no I/O of any kind — so it imports cleanly in a Windows
 guest, a browser, a Lambda, or someone else's CI glue. Apache-2.0, deliberately more permissive than the rest
-of [a11y-witness](https://github.com/DanBeckDev/a11y-witness) (AGPL-3.0-or-later), because a contract you must
+of [a11ign](https://github.com/a11ign/a11ign) (AGPL-3.0-or-later), because a contract you must
 agree with to interoperate is not the place for a copyleft obligation.
 
 ```bash
-npm install @a11y-witness/evidence
+npm install @a11ign/evidence
 ```
 
 ## Did the capture actually reach the page?
@@ -23,7 +23,7 @@ The oracle is the browser's own accessibility tree, carried on the capture as a 
 mark. Compare what the page *exposes* against what the screen reader could *reach*:
 
 ```js
-import { captureReachedThePage, captureDoubt } from "@a11y-witness/evidence/verify";
+import { captureReachedThePage, captureDoubt } from "@a11ign/evidence/verify";
 
 // Real numbers from theregister.com: the page exposes 463 headings; quick navigation reached one, because
 // the consent modal traps focus and will not let go.
@@ -69,13 +69,13 @@ accessible?"* — the second question needs the case definition, which lives a l
 ## The other two entry points
 
 ```js
-import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
+import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 
 // [{ num: "1.1.1", name: "Non-text Content", level: "A", since: "2.0" }, ...]  — 55 criteria, A and AA
 ```
 
 ```ts
-import type { CaptureBackend, CaptureRequest, CaptureResult } from "@a11y-witness/evidence";
+import type { CaptureBackend, CaptureRequest, CaptureResult } from "@a11ign/evidence";
 ```
 
 `CaptureBackend` is what an **alternative screen reader** implements. The reference backend drives NVDA on

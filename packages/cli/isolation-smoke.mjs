@@ -11,13 +11,13 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
-import { reportLines } from "a11y-witness";
+import { reportLines } from "a11ign";
 
 const require = createRequire(import.meta.url);
-const manifest = JSON.parse(readFileSync(require.resolve("a11y-witness/package.json"), "utf8"));
-const root = dirname(require.resolve("a11y-witness/package.json"));
+const manifest = JSON.parse(readFileSync(require.resolve("a11ign/package.json"), "utf8"));
+const root = dirname(require.resolve("a11ign/package.json"));
 
-const bin = join(root, manifest.bin["a11y-witness"]);
+const bin = join(root, manifest.bin["a11ign"]);
 assert.ok(existsSync(bin), `the bin is missing from the tarball: ${bin}`);
 assert.ok(statSync(bin).size > 0, "the bin is empty");
 
@@ -38,7 +38,7 @@ assert.ok(statSync(bin).size > 0, "the bin is empty");
  * the resolved `bin` when run outside the gate (still proves execution, just not the symlink case).
  */
 const rawConsumerDir = process.env.A11Y_ISOLATION_CONSUMER_DIR;
-const invokedBin = rawConsumerDir ? join(rawConsumerDir, "node_modules", ".bin", "a11y-witness") : bin;
+const invokedBin = rawConsumerDir ? join(rawConsumerDir, "node_modules", ".bin", "a11ign") : bin;
 assert.ok(existsSync(invokedBin), `the .bin shim is missing from the tarball: ${invokedBin}`);
 const invocation = spawnSync(invokedBin, [], { encoding: "utf8" });
 assert.equal(invocation.error, undefined,
@@ -82,8 +82,8 @@ assert.match(text, /axe|visual|not (?:been )?checked|unchecked/i,
 // The visual layer is an optional dependency on purpose: someone who only wants the screen-reader layer should
 // not download a browser engine for it.
 assert.ok(manifest.optionalDependencies?.playwright, "playwright must stay optional");
-assert.ok(!manifest.dependencies?.["@a11y-witness/nvda-worker"],
+assert.ok(!manifest.dependencies?.["@a11ign/nvda-worker"],
   "the CLI speaks HTTP to a worker; it must not depend on the Windows package");
 
-console.log(`a11y-witness works when installed: bin RUNS (exit 1, usage printed), ${lines.length} report `
+console.log(`a11ign works when installed: bin RUNS (exit 1, usage printed), ${lines.length} report `
   + "lines, layers ordered");

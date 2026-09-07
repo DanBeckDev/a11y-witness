@@ -1,4 +1,4 @@
-# a11y-witness — the road to a general release
+# a11ign — the road to a general release
 
 ## North star
 
@@ -379,7 +379,7 @@ conformant pages cannot be handed to anyone.** 2.4.3 currently fires on 71% of c
 2.1.1 on 31%. Phase 1 is what makes Phase 4 defensible rather than embarrassing.
 
 1. **B7 — publishing (ours, cheap).** ADR 0007 chose Changesets and independent per-package semver and it
-   was never built, so nobody can `npx a11y-witness`. Half the documented product is unreachable.
+   was never built, so nobody can `npx a11ign`. Half the documented product is unreachable.
    **CLOSED 2026-08-31** — see the blockers section below; kept present-tense here as the record of the
    sequencing decision at the time it was made.
 2. **B1 — the first outside user (yours).** Was partly blocked by B7; no longer is.
@@ -432,14 +432,14 @@ none of it is present:
 | a CI job that enforces the changeset rule | **none** |
 | a publish workflow | **none** |
 | git tags / GitHub releases | **zero** |
-| `npm view a11y-witness` | **E404 — nothing is published** |
+| `npm view a11ign` | **E404 — nothing is published** |
 
 Two consequences that are already visible in the documentation, and both were found by checking rather
 than reported:
 
-- `packages/cli/README.md` opens with `npx a11y-witness https://example.com` — a command that cannot
+- `packages/cli/README.md` opens with `npx a11ign https://example.com` — a command that cannot
   work for anyone, and which is what npm would show as the package's front page.
-- The Action was documented as `a11y-witness/a11y-witness@v1` in two files: the wrong owner and a tag
+- The Action was documented as `a11ign/a11ign@v1` in two files: the wrong owner and a tag
   nobody has cut. Fixed 2026-08-22 to `@main`, which resolves but moves under consumers.
 
 **Done looks like.** Changesets installed and wired, a publish workflow, and a first tag — at which point
