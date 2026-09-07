@@ -28,7 +28,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.mjs";
-// RELATIVE, NOT `@a11y-witness/worker-fleet/cli-flags`: that export map points at `dist/`, so the
+// RELATIVE, NOT `@a11ign/worker-fleet/cli-flags`: that export map points at `dist/`, so the
 // specifier needs both `node_modules` AND a completed build. This is the `prepare` script, which npm
 // runs on every plain `npm install` in a fresh checkout -- before any package's `dist/` exists.
 //

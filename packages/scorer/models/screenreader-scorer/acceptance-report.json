@@ -1,5 +1,5 @@
 {
-  "schema": "a11y-witness/screenreader-scorer-acceptance",
+  "schema": "a11ign/screenreader-scorer-acceptance",
   "data": [
     {
       "path": "runs/screenreader-acceptance/repeat-1.jsonl",

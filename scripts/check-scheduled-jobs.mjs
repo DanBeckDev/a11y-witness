@@ -14,7 +14,7 @@
 //                                                     # exit 1 if one is missing, naming it
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { checkScheduledJobs, launchctlInstalled, launchctlListA11yWitnessJobs, orphanJobs,
   platformSupportsLaunchd } from "../packages/lab/src/packaging/scheduled-jobs.mjs";
 

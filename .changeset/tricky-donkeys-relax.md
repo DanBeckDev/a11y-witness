@@ -1,8 +1,8 @@
 ---
-"@a11y-witness/judge": patch
+"@a11ign/judge": patch
 ---
 
-`CRITERION_COVERAGE["4.1.3"].status` (exported from `@a11y-witness/judge/internal`) changes from
+`CRITERION_COVERAGE["4.1.3"].status` (exported from `@a11ign/judge/internal`) changes from
 `"assessed"` to `"partial"`, with a `needs: ["screen-reader"]` field added. The criterion's note was
 already explicit that only one of its four categories (success/results of an action) is covered --
 waiting-state and progress status messages are not -- and the status field now agrees with it.

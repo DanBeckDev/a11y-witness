@@ -14,7 +14,7 @@ git log --branches='agent/*' --not origin/main --oneline --source -- <region pat
 git worktree list
 ```
 
-**Why:** measured on a11y-witness 2026-09-06. Three of six rows seeded that morning were already addressed
+**Why:** measured on a11ign 2026-09-06. Three of six rows seeded that morning were already addressed
 by branches sitting in a review queue, and every one looked open at HEAD; three units were dispatched at
 closed rows the day before. Separately, only 1 of 6 rows landed under its suggested branch name and 4 of
 the 6 names never existed, so a name-keyed check reports rows unclaimed while the work is done.

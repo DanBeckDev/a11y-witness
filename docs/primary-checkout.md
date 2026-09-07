@@ -1,7 +1,7 @@
 # Which checkout drives the fleet, and why the guards need telling
 
 One machine drives the fleet. Its checkout is special: `assertFleetRunsThisCheckout` hashes its **working
-tree**, and every worktree's `node_modules` resolves `@a11y-witness/*` through **its** `packages/*/dist`.
+tree**, and every worktree's `node_modules` resolves `@a11ign/*` through **its** `packages/*/dist`.
 So a branch parked there silently changes what every other agent compiles and tests against, and a capture
 run stamps the corpus with whatever it happens to be holding.
 

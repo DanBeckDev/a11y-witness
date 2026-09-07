@@ -25,7 +25,7 @@ Two mechanical reasons, not tidiness:
 - `expectedWorkerCode()` hashes the WORKING TREE, so anything uncommitted there changes what
   `assertFleetRunsThisCheckout` compares the fleet against. Worst case is a run stamped against code that
   never existed, **and that case passes.**
-- **Every worktree's `node_modules` can resolve `@a11y-witness/*` to the PRIMARY's `packages/*/dist`.** So a
+- **Every worktree's `node_modules` can resolve `@a11ign/*` to the PRIMARY's `packages/*/dist`.** So a
   feature branch checked out there silently changes what every other agent builds and tests against — and a
   STALE primary `dist` does the same thing passively. Both were measured on 2026-09-06, hours apart, and the
   second cost an hour and a reverted commit.

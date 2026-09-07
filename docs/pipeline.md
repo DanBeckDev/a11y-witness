@@ -1,0 +1,109 @@
+# The CI/CD pipeline
+
+Adopted by the board via `ceo` (#298). **The pipeline decides; nobody arms or merges by hand.** A worker
+owns its PR from open to merge, and the units below are what carries it there.
+
+This page exists because the units were specified in an issue thread and their environment was documented
+nowhere — which is this repository's own "a command nobody can find is a command nobody runs", applied to
+the machinery that merges everything else.
+
+## The units
+
+| | what it does | where |
+|---|---|---|
+| **1** | auto-arm every non-draft PR against `main` on `opened`/`ready_for_review` | `.github/workflows/auto-arm.yml` |
+| **1c** | sweep the PRs unit 1 structurally cannot see — the ones already open when it shipped | `scripts/auto-arm-sweep.mjs`, same workflow |
+| **1d** | close the rows a merged PR declared, because GitHub does not do it for a bot merge | `.github/workflows/close-rows.yml`, `scripts/close-rows-for-merged-pr.mjs` |
+| **2** | run the `Acceptance:`/`Mutation:` commands out of a PR body (#353) | not built |
+| **3** | revert a push that fails `gate` on `main` | `trunk-guard`, `decideRevert` |
+| **4** | continuous delivery to npm `next`, and fleet self-deploy | not built |
+
+**Arming is safe by construction, and the reason is worth keeping.** `gh pr merge --auto` only ARMS; GitHub
+still withholds the merge until every required status check is green for the head it has recorded. `main`
+runs `strict=false`, so that head need not contain `main`'s tip — which is #195's defect — and `ci.yml`'s
+`mergeSafety` job is part of the required `gate` context and refuses exactly that shape (#294).
+
+**Unit 1d exists because `issues: write` was never the lever.** Measured 2026-09-07, after the permission
+landed on `auto-arm.yml`: four of four bot merges failed to close their declared rows (#310, #321, #344),
+while two of two human merges closed theirs (#326, #331). The mechanism — whether a merge under
+`GITHUB_TOKEN` can close a referenced issue at all — is a **hypothesis nobody here has confirmed against
+GitHub's documentation**, and unit 1d works whether or not it is true. See #298.
+
+## The environment these scripts read
+
+### `GITHUB_REPOSITORY`
+
+`owner/name` of the repository to act on — `DanBeckDev/a11y-witness`. **GitHub Actions sets it
+automatically on every runner**, so no workflow here assigns it a literal; each job passes
+`${{ github.repository }}` through, which is the same value by a route that cannot drift from the repo the
+job is actually running in.
+
+Read by `scripts/auto-arm-sweep.mjs` and `scripts/close-rows-for-merged-pr.mjs`.
+
+**Both exit `2` (CANNOT_ASK) when it is unset rather than defaulting to a repo name**, and that refusal is
+the point: one of them arms merges and the other closes issues, so a guessed repository would take a real
+action against the wrong tree. *"Could not ask"* and *"asked and found nothing"* must never be the same
+answer — the rule this repository states most often.
+
+**Set it yourself when running either script by hand**, which is the normal way to rehearse one:
+
+```bash
+GITHUB_REPOSITORY=DanBeckDev/a11y-witness node scripts/auto-arm-sweep.mjs
+```
+
+Note that the sweep **arms real PRs** when it runs, so a rehearsal is not free. To see its decisions
+without acting, drive `sweepDecision` directly — it is exported for that, and takes the labels and check-run
+count rather than reaching for the API itself.
+
+### `GH_TOKEN`
+
+The token `gh` authenticates with. In CI every job that spawns `gh` declares
+`GH_TOKEN: ${{ github.token }}`, and `gh-token-jobs.test.ts` discovers each job that can reach a `gh` spawn
+— transitively, through local imports — and fails until it does. Locally, `gh auth login` covers it.
+
+The permissions each workflow grants are deliberately narrow and are pinned by tests. `close-rows.yml` has
+`issues: write`, `pull-requests: read`, `contents: read` and nothing else: **a workflow triggered by a
+merged PR must never be able to push**, and `close-rows-on-merge.test.ts` goes red if `contents` is raised.
+
+## Merging `main` into a branch now needs `npm install`, not just a build
+
+**Since #357 landed at 21:34Z on 2026-09-07, the workspace scope is `@a11ign/*` and was `@a11y-witness/*`.**
+A worktree that merges `main` in and goes straight to `npm run build` fails with roughly 35
+`TS2307: Cannot find module '@a11ign/...'` across `cli`, `judge`, `worker-fleet` and `scorer`.
+
+The cause is one step further back than the hazard this repo already records. A worktree's `node_modules`
+is a symlink to the primary checkout's, and **the workspace links under it are named after the scope**.
+`npm run build` recreates `dist/`; nothing recreates a symlink whose name changed. So:
+
+```bash
+npm run primary:update        # in the PRIMARY: fetch, detach at origin/main, nothing else
+npm install                   # in the PRIMARY: recreates node_modules/@a11ign/*
+npm run build                 # in the PRIMARY
+```
+
+Found by `worker-config` and `worker-judge` independently, within minutes, because every worktree broke at
+once. That is the one mercy here: a stale INSTALL fails loudly, where the stale BUILD it resembles produces
+a wrong answer quietly — `orchestrator` once read a two-hour-stale `dist` and was about to dispatch a
+worker at a defect that did not exist.
+
+**`node_modules/@a11y-witness` is still present alongside `@a11ign`**, because `npm install` adds the new
+scope without removing the old. Harmless in itself, and a trap in exactly one direction: a leftover
+`@a11y-witness/*` import anywhere in the tree will now RESOLVE rather than fail, so the check that would
+have caught an incomplete rename is disarmed. Grep the TREE for the old scope, never `node_modules`.
+
+**A script that runs in CI with only `actions/checkout` is immune, and that is why it imports by relative
+path.** `auto-arm-sweep.mjs` and `close-rows-for-merged-pr.mjs` both reach `cli-flags` as
+`../packages/worker-fleet/src/cli-flags.mjs` rather than by scope — a choice made for the bootstrap reason
+(#330/#331: the package specifier resolves to a `dist/` that a checkout-only job does not have), which
+turned out to make them the only things in the tree the rename could not touch.
+
+## What a stranded PR looks like
+
+The sweep refuses three shapes and prints the reason for each, because a queue-drainer that silently skips
+is one reporting success having drained nothing:
+
+- **`blocked`** — a person refused it, and a green `gate` does not answer that.
+- **a `session:*` label** — somebody is inside it; on a PR that label IS the hold (#266).
+- **no check runs at all** — nothing has ever tested it. Push to the branch to trigger `ci.yml`. This is
+  STRANDED, not slow, and it reads as CLEAN to anything asking `mergeStateStatus`, which is why
+  `merge-guard.mjs` asks the check runs instead.

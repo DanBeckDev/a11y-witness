@@ -2,7 +2,7 @@
 
 ## Recommendation
 
-Do not train a general-purpose language model for `a11y-witness`. The project
+Do not train a general-purpose language model for `a11ign`. The project
 already has a structured signal: an ordered NVDA transcript, structural
 navigation results, and interaction deltas. The useful local model should be a
 small discriminative scorer that answers questions such as:
