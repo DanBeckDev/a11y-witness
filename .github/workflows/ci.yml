@@ -15,13 +15,19 @@ name: ci
 # trigger table, so a future "just add the tests to lint" (or the equivalent here) fails a unit test rather
 # than the PR budget.
 #
-# PULL_REQUEST ONLY, AND THIS IS DELIBERATE -- chairman's direction, 2026-09-06, correcting this file's own
-# first version. The flow is PR then merge, and every check that gates code must run ON THE PR, before the
-# merge: a check that runs AFTER a merge cannot stop it, which is exactly what a `push: branches: [main]`
-# trigger was -- a gate with the barn door already open. There is no push trigger here at all now, and
-# branch protection (requiring these checks green AND the branch up to date with `main`) is what makes the
-# commit that was tested the commit that lands, via a squash or fast-forward merge, never a merge commit CI
-# never saw.
+# NO PUSH TRIGGER, EVER -- chairman's direction, 2026-09-06, correcting this file's own first version. The
+# flow is PR then merge, and every check that gates code must run before the merge: a check that runs AFTER
+# it cannot stop it, which is exactly what a `push: branches: [main]` trigger was -- a gate with the barn
+# door already open. `pull_request` and `merge_group` (#156) are both PRE-merge events; branch protection
+# (requiring these checks green AND the branch up to date with `main`) is what makes the commit that was
+# tested the commit that lands, via a squash/fast-forward merge or a merge-queue merge, never a merge
+# commit CI never saw.
+#
+# #156's OTHER HALF IS A SETTINGS CHANGE, NOT MADE HERE: branch protection on `main` must require `gate`
+# alone, not the five scoped jobs directly (see the `gate` job's own comment below for why), or a
+# merge-group run gets asked for six path-scoped contexts against a ref that most of them correctly skip --
+# multiplying the "a required check with no run blocks merge forever" exposure `gate` exists to remove. And
+# enabling the merge queue itself (a ruleset) is `ceo`'s to authorise, not a code change at all.
 #
 # THE FULL SUITE RUNS ON THE PR ITSELF, not on a separate main-only pass -- coverage, the rules fitness
 # function, `scorer:verify` and `gate:isolation` (below, in the `ts` job) used to be gated to
@@ -46,6 +52,14 @@ name: ci
 # the real logic lives in a file this repo tests, not in an assumption about how GitHub renders a skip.
 on:
   pull_request:
+    branches: [main]
+  # #156: a merge queue CANNOT be turned on without this. GitHub's own docs are explicit -- "You must use
+  # the merge_group event to trigger your GitHub Actions workflow when a pull request is added to a merge
+  # queue ... Otherwise, status checks will not be triggered" -- and an entry whose checks never report is
+  # removed for timing out, silently, with no error anywhere. `ci-changed.test.ts` pins that this key stays
+  # ALONGSIDE `pull_request`, never in place of it: the PR itself still needs its own run before it can be
+  # queued at all.
+  merge_group:
     branches: [main]
 
 concurrency:
@@ -72,8 +86,27 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
+      # `github.base_ref` is EMPTY on a merge_group event -- it exists only for pull_request. The base
+      # there is `github.event.merge_group.base_ref`, and GitHub's own payload documents that as the FULL
+      # ref (`refs/heads/main`), not the short name `pull_request` gives (`main`) -- two different shapes
+      # for "the base branch", and treating them as the same string is exactly the trap #156 was filed
+      # against. Verified rather than assumed: an unhandled empty `github.base_ref` does not hit
+      # `ci-changed.mjs`'s own named "diff returned nothing" refusal at all -- `git diff origin/...HEAD`
+      # with nothing between the dots is a `fatal: ambiguous argument`, an uncaught crash with a git error
+      # rather than this script's clear message. `${base#refs/heads/}` strips a leading `refs/heads/` if
+      # present and is a no-op otherwise, so this is correct for both shapes regardless of which one
+      # GitHub actually sends.
+      - id: base
+        run: |
+          if [ "${{ github.event_name }}" = "merge_group" ]; then
+            base="${{ github.event.merge_group.base_ref }}"
+            base="${base#refs/heads/}"
+          else
+            base="${{ github.base_ref }}"
+          fi
+          echo "ref=origin/$base" >> "$GITHUB_OUTPUT"
       - id: classify
-        run: node scripts/ci-changed.mjs --event=pull_request --base=origin/${{ github.base_ref }}
+        run: node scripts/ci-changed.mjs --event=${{ github.event_name }} --base=${{ steps.base.outputs.ref }}
 
   ts:
     needs: changed
