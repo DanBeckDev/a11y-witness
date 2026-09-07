@@ -13,6 +13,7 @@
     "npm-token:check": "node scripts/npm-token-liveness.mjs",
     "workflow:liveness": "node scripts/workflow-run-liveness.mjs",
     "ready:audit": "node scripts/ready-label-audit.mjs",
+    "branches:stranded": "node scripts/stranded-branches.mjs",
     "board:document": "node scripts/board-document.mjs",
     "board:report": "node scripts/board-report.mjs",
     "jobs:check": "node scripts/check-scheduled-jobs.mjs",
