@@ -72,10 +72,32 @@ const unique = (values) => [...new Set(values)];
  *          subjectsMissing: {name: string, refs: string[]}[] | null,
  *          heldRegions: {path: string, refs: string[]}[] | null,
  *          blockedLabel?: boolean,
+ *          state?: string | null,
+ *          closedAt?: string | null,
  *          examined: {paths: number, symbols: number}}} facts
  * @returns {{code: number, lines: string[]}}
  */
-export function startability({ row, subjectsMissing, heldRegions, examined, blockedLabel }) {
+export function startability({ row, subjectsMissing, heldRegions, examined, blockedLabel,
+  state, closedAt }) {
+  // A CLOSED ROW GETS NO VERDICT AT ALL, not a verdict with a note attached (#218).
+  //
+  // Measured 2026-09-07: #83 read `STARTABLE: no unmerged branch is in its region`, and BOTH sentences
+  // were true -- nothing held the region and every symbol was on `main`, BECAUSE THE WORK WAS DONE AND
+  // MERGED twenty-five minutes earlier. A worker was dispatched on that reading and it cost nothing only
+  // because they checked GitHub themselves.
+  //
+  // This returns EARLY rather than appending a caveat: a green light with a note beside it is still a
+  // green light, and the role file's target for units dispatched at closed rows is zero. The state was in
+  // the query being made for the labels the whole time -- one field away, which is what makes it the
+  // #208 limit reached one field earlier than the limit that sentence describes.
+  if (state && state !== "OPEN") {
+    return { code: EXIT.BLOCKED, lines: [
+      `#${row} IS ${state}${closedAt ? ` (${closedAt})` : ""} — there is nothing to start.`,
+      "  Region and symbol checks say nothing here: a finished row's region is clear and its symbols are",
+      "  on `main` BECAUSE the work landed. That reads exactly like a green light, and is why this",
+      "  refuses to print one.",
+    ] };
+  }
   if (subjectsMissing === null || heldRegions === null) {
     return { code: EXIT.CANNOT_ASK, lines: [
       `CANNOT SAY whether #${row} is startable: a lookup failed.`,
@@ -177,13 +199,16 @@ function refsCarrying(path, symbol, refs) {
 
 function facts(row) {
   const issue = JSON.parse(gh(["issue", "view", String(row), "--repo", REPO,
-    "--json", "body,labels"]));
+    "--json", "body,labels,state,closedAt"]));
   const body = issue.body ?? "";
   // THE BOARD'S OWN RECORD, not prose. A row can be blocked by another ROW -- #77 is "blocked behind
   // #35's schema migration" and carries the `blocked` label -- and neither its region nor its symbols say
   // so. Reading the LABEL is not the prose-parsing this tool refuses elsewhere: it is the same
   // authoritative record `row-claim` already trusts for `in-progress`.
   const blockedLabel = (issue.labels ?? []).some((l) => l?.name === "blocked");
+  // THE ROW'S OWN STATE, and it was in this query's reach the whole time. See `startability`.
+  const state = typeof issue.state === "string" ? issue.state : null;
+  const closedAt = typeof issue.closedAt === "string" ? issue.closedAt : null;
   const paths = unique([...body.matchAll(PATH_IN_PROSE)].map((m) => m[1]))
     .filter((p) => !p.endsWith(".md"));
   const symbols = unique([...body.matchAll(SYMBOL_IN_PROSE)].map((m) => m[1]));
@@ -229,7 +254,7 @@ function facts(row) {
       && changed(["origin/main", ref], path));
     if (holders.length > 0) heldRegions.push({ path, refs: holders });
   }
-  return { row, subjectsMissing, heldRegions, blockedLabel,
+  return { row, subjectsMissing, heldRegions, blockedLabel, state, closedAt,
     examined: { paths: paths.length, symbols: symbols.length } };
 }
 
