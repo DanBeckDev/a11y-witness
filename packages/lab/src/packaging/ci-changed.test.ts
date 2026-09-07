@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,8 +21,32 @@ import { sandboxGitEnv } from "../../../../scripts/git-env.mjs";
 const REPO = fileURLToPath(new URL("../../../../", import.meta.url));
 const WORKFLOWS = `${REPO}.github/workflows/`;
 const readWorkflow = (name: string) => readFileSync(`${WORKFLOWS}${name}`, "utf8");
-const runCli = (args: string[]) =>
-  execFileSync("node", ["scripts/ci-changed.mjs", ...args], { cwd: REPO, env: sandboxGitEnv(), encoding: "utf8" });
+/**
+ * A disposable two-commit repo, so `--base=<first commit>` has something real to diff against without
+ * depending on THIS repo's own history depth. `HEAD~1` failed exactly this way in CI (#156): the `ts` job's
+ * checkout has no `fetch-depth: 0` (only `changed` needs full history, to diff a real PR), so the runner's
+ * shallow clone has no commit before `HEAD` at all -- `git diff HEAD~1...HEAD` is `fatal: ambiguous
+ * argument`, not an empty diff. A fixture with its own two commits cannot be shallow.
+ */
+function twoCommitRepo() {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ci-changed-cli-")));
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: dir, env: sandboxGitEnv(), encoding: "utf8" });
+  git("init", "--quiet", "-b", "main");
+  git("config", "user.email", "t@example.invalid");
+  git("config", "user.name", "Fixture");
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", workspaces: ["packages/*"] }));
+  git("add", "package.json");
+  git("commit", "-q", "-m", "base");
+  const base = git("rev-parse", "HEAD").trim();
+  writeFileSync(join(dir, "README.md"), "changed\n");
+  git("add", "README.md");
+  git("commit", "-q", "-m", "a change to classify");
+  return { dir, base };
+}
+const runCliIn = (dir: string, args: string[]) =>
+  execFileSync("node", [join(REPO, "scripts/ci-changed.mjs"), `--repo=${dir}`, ...args],
+    { cwd: dir, env: sandboxGitEnv(), encoding: "utf8" });
 
 test("classify: a docs-only change fires only the docs category", () => {
   const result = classify(["docs/known-gaps.md", "README.md"], ["lab", "judge"]);
@@ -130,12 +154,12 @@ test("knownPackages finds the real repo's workspace directories, and refuses a s
 
 test("CLI: --event=merge_group classifies, it does not refuse", () => {
   // Acceptance step 3, verbatim: a merge_group event with a real base must be treated exactly like a
-  // pull_request one, not rejected for using the newer event name. `HEAD~1`, not `origin/main`: this
-  // suite runs inside a worktree that may itself sit exactly AT origin/main with nothing yet committed,
-  // and an empty diff would fail for an unrelated reason (no change to classify) rather than proving the
-  // thing this test is actually about.
-  const out = runCli(["--event=merge_group", "--base=HEAD~1"]);
-  assert.match(out, /^ts=(true|false)$/m, "expected classification output, got: " + out);
+  // pull_request one, not rejected for using the newer event name.
+  const { dir, base } = twoCommitRepo();
+  try {
+    const out = runCliIn(dir, ["--event=merge_group", `--base=${base}`]);
+    assert.match(out, /^ts=(true|false)$/m, "expected classification output, got: " + out);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("CLI: an empty base (the unhandled merge_group shape) is refused by NAME, not left to crash on git", () => {
@@ -143,13 +167,19 @@ test("CLI: an empty base (the unhandled merge_group shape) is refused by NAME, n
   // arrives here as a bare "origin/" once the workflow's own string concatenation has run. Proven against
   // the REAL CLI rather than only against `classify()`, because the guard lives in `main()`, which
   // `classify()`'s own tests structurally cannot reach.
-  assert.throws(() => runCli(["--event=merge_group", "--base=origin/"]),
-    /empty or a bare prefix/, "a bare 'origin/' base must be refused by name, not crash inside git");
+  const { dir } = twoCommitRepo();
+  try {
+    assert.throws(() => runCliIn(dir, ["--event=merge_group", "--base=origin/"]),
+      /empty or a bare prefix/, "a bare 'origin/' base must be refused by name, not crash inside git");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("CLI: --event=push is still refused -- widening to merge_group must not silently widen further", () => {
-  assert.throws(() => runCli(["--event=push", "--base=origin/main"]),
-    /--event must be "pull_request" or "merge_group"/);
+  const { dir, base } = twoCommitRepo();
+  try {
+    assert.throws(() => runCliIn(dir, ["--event=push", `--base=${base}`]),
+      /--event must be "pull_request" or "merge_group"/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 // -------------------------------------------------------------------------------------------------------
