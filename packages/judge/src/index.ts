@@ -51,3 +51,4 @@ export function taskVerdictLabel(): { question: string; isTaskClaim: boolean } {
     ? { question: "No blocking findings", isTaskClaim: false }
     : { question: "Could a screen-reader user complete the task?", isTaskClaim: true };
 }
+
