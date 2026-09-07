@@ -62,14 +62,16 @@ const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignor
  * @param {{pr: {number: number, state: string, baseRefName: string, headRefOid: string},
  *          required: string[] | null,
  *          runs: {name: string, status: string, conclusion: string | null, completedAt: string | null}[] | null,
- *          mainTipIso: string | null}} facts
+ *          mainTipIso: string | null,
+ *          behindBy: number | null}} facts
  * @returns {{code: number, reasons: string[], notes: string[]}}
  */
-export function mergeReadiness({ pr, required, runs, mainTipIso }) {
+export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy }) {
   const missingLookups = [
     required === null && "the required status checks for `main` (branch protection)",
     runs === null && `the check runs for head ${pr.headRefOid.slice(0, 10)}`,
     mainTipIso === null && "the current tip of `main`",
+    behindBy === null && "whether this head contains `main`'s tip (the compare API)",
   ].filter(Boolean);
   if (missingLookups.length > 0) {
     return { code: EXIT.CANNOT_ASK, notes: [], reasons: [
@@ -81,7 +83,7 @@ export function mergeReadiness({ pr, required, runs, mainTipIso }) {
   const notes = pr.state === "OPEN" ? []
     : [`note: #${pr.number} is ${pr.state}, so this is a post-mortem rather than a merge decision.`];
   const reasons = [...baseReason(pr), ...checkReasons(pr, required, runs),
-    ...stalenessReason(runs, mainTipIso)];
+    ...ancestryReason(behindBy), ...stalenessReason(runs, mainTipIso)];
   return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons, notes };
 }
 
@@ -130,6 +132,43 @@ function stalenessReason(runs, mainTipIso) {
     + "  a base that has since moved. Update the branch and let it re-run."];
 }
 
+/**
+ * DOES THIS HEAD CONTAIN `main`'s TIP? — an ANCESTRY fact, and the clock cannot answer it (#182).
+ *
+ * The function above compares the newest run's completion time against `main`'s tip commit DATE, and that
+ * was a proxy standing in for this question. **A run can finish AFTER `main`'s tip was committed while the
+ * branch still does not contain that commit** — which is not a corner case, it is what ordinary concurrent
+ * merging produces. Measured 2026-09-07 on #165: `main` tipped 01:31:03Z with #147, #165's run finished
+ * later, the branch had never seen #147, and this tool printed *"run against the current main"* and exited
+ * 0. GitHub refused the merge; `gh pr update-branch` then reported the branch updated.
+ *
+ * The original comment stated the right question — *"whether this head was ever tested alongside the code
+ * it is about to join"* — and then asked a different one. Two commits' timestamps say nothing about
+ * whether one contains the other.
+ *
+ * KEPT SEPARATE FROM THE CLOCK CHECK, deliberately. `PREDATES` and `DOES NOT CONTAIN` are different
+ * faults: the first says the runs are old, the second says the tree is. Collapsing them into one message
+ * would lose the diagnosis the original was built for — #135's runs genuinely predate the tip, and that
+ * sentence, with both timestamps, is still the right thing to print about it.
+ *
+ * `behind_by` FROM THE COMPARE API, NOT `mergeStateStatus`. That distinction is this tool's whole reason
+ * for existing, so it is worth being exact: `mergeStateStatus` folds together checks, conflicts and branch
+ * protection into one opinion about mergeability, which is why it reads `CLEAN` for a PR nothing ever
+ * tested. `behind_by` is arithmetic on the commit graph — how many commits `main` has that this head does
+ * not — and it is the same fact `git merge-base --is-ancestor` answers, asked of a server that has both
+ * commits without this checkout needing to fetch a PR ref it may never have seen.
+ *
+ * @param {number | null} behindBy
+ * @returns {string[]}
+ */
+function ancestryReason(behindBy) {
+  if (behindBy === null || behindBy === 0) return [];
+  return [`THIS HEAD DOES NOT CONTAIN main's TIP — it is ${behindBy} commit(s) behind.\n`
+    + "  Whatever ran, ran against a tree missing that work, so it cannot say the two go together. This is\n"
+    + "  NOT the same as the runs being old: they may be minutes fresh and still have tested a base that\n"
+    + "  no longer exists. Update the branch and let it re-run."];
+}
+
 /** Each lookup returns null on failure rather than an empty answer — the distinction the verdict needs. */
 function lookup(fn) {
   try {
@@ -153,7 +192,15 @@ function facts(number) {
       completedAt: run.completed_at })));
   const mainTipIso = lookup(() => gh(["api", `repos/${REPO}/commits/main`,
     "--jq", ".commit.committer.date"]).trim() || null);
-  return { pr, required, runs, mainTipIso };
+  // `behind_by` is how many commits `main` has that this head does not -- the ancestry fact, not a
+  // mergeability opinion. `lookup` keeps a failed call NULL so it lands as INCONCLUSIVE rather than 0,
+  // which would read as "contains main's tip" and reintroduce the false pass this replaced.
+  const behindBy = lookup(() => {
+    const value = JSON.parse(gh(["api",
+      `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
+    return typeof value === "number" ? value : null;
+  });
+  return { pr, required, runs, mainTipIso, behindBy };
 }
 
 function main() {
@@ -170,7 +217,7 @@ function main() {
   for (const note of verdict.notes) console.error(note);
   if (verdict.code === EXIT.READY) {
     console.log(`#${number} is tested: based on main, every required context present and concluded, and `
-      + "run against the current main.");
+      + "this head CONTAINS main's tip -- so what ran, ran against the code it is about to join.");
   } else {
     console.error(`REFUSING #${number}:\n${verdict.reasons.map((r) => `- ${r}`).join("\n")}`);
   }

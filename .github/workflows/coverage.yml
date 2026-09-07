@@ -1,0 +1,57 @@
+name: coverage
+
+# NIGHTLY COVERAGE, OFF THE PR PATH -- chairman's direction, 2026-09-06, follow-up to #133/#140. `npm run
+# coverage` re-runs the WHOLE suite under c8 against `.c8rc.json`'s 78% threshold, measured at 154s of
+# `ci/ts`'s 269s on a one-package PR -- most of it re-testing packages that PR could not have touched. It
+# left the PR job entirely (`ci.yml`'s own header explains the split), but the threshold still needs
+# checking regularly or it rots silently: a package could lose coverage over several PRs, each one only
+# ever measuring its own small package-scoped run, with nothing left watching the repo-wide number.
+#
+# SCHEDULED HERE, AND ALSO GATED INTO `release.yml` BEFORE ANY PUBLISH -- belt and suspenders, the same
+# shape `board-liveness.yml` and its own watchdog already use for the identical reason: a schedule ALONE
+# can be silently disabled by GitHub after 60 days with no repository activity, and a coverage regression
+# going unnoticed for that long is exactly the risk this exists to catch. It is not urgent enough to
+# justify blocking every PR merge on it (which is the whole reason it left the PR path), so it does not
+# push-trigger and is not on `push-trigger-allowlist.test.ts`'s allowlist -- nothing here is a watchdog for
+# ANOTHER schedule, this schedule IS the thing being relied on, and its own redundancy is the release-time
+# run rather than a second trigger.
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write     # the failure comment below, on #169
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      # GH_TOKEN: `board-style.test.ts` and `row-claim.test.ts`'s live `fetchLabels` shell out to real `gh`
+      # calls against this repo's own Issues -- read-only, and `github.token` already has that scope for
+      # the repo the workflow runs in. `npm run coverage` runs the whole suite under c8, so it reaches
+      # both.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run coverage
+
+      # A SCHEDULE NOBODY READS IS A GATE THAT FAILS QUIETLY -- dispatcher's review of #166, and this repo's
+      # own recorded rule ("a gate that does not exercise what ships is not a gate", four prior instances)
+      # applied to who's WATCHING rather than what's exercised. Same pattern `board-liveness.yml` already
+      # uses against #20: on a red run, comment on the tracking issue rather than trusting someone to open
+      # the Actions tab. One comment per failing run, not per day, because a repeating warning is a warning
+      # people filter -- `github.run_id` in the marker is what makes a rerun of the SAME failure distinct
+      # from tomorrow's fresh one without spamming the issue on a retry of the same commit.
+      - name: Coverage failed -- say so on the tracking issue, not just in the Actions log
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 169 --body "Nightly coverage failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
