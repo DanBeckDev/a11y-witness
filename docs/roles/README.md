@@ -39,6 +39,15 @@ filling a lane knows that lane better than anyone briefing it — and this page 
 set a SYSTEM rather than eight unrelated documents: the bring-up order, the first message for each agent,
 where state actually lives, and the enforcement that keeps the set complete.
 
+## A SUMMARY IS NOT A CITATION
+
+Every session compacts, and a compaction summary is written in the same voice as a quotation: it says
+"CLAUDE.md records…" because that is what the session believed. Measured 2026-09-07: a row instructed a
+worker to reproduce repository settings "recorded in CLAUDE.md"; the sentence existed on no ref, and came
+from the author's own summary. Anything you resume with is a BELIEF until re-read from the file at a ref.
+Cite `file:line` and the ref you read it from, the same as a number carries its command. This binds `ceo`
+first.
+
 ## The roster
 
 | role | agent name | file | reports to |
