@@ -74,6 +74,7 @@ human or agent, *working on* the repo rather than using it.
 | [stale-row-audit.md](./stale-row-audit.md) | **why a tracker row goes stale** — eight open rows re-checked by RUNNING their own `Open-check`, four distinct shapes, and the finding that three publish-blockers share one root cause no row names. Only one of the nine is `not-working.md` §26's mechanism-rot; the rest are a premise verified once at filing and never asked again |
 | [isolation-spike.md](./isolation-spike.md) | the experiment that shaped the package split, run before anything was moved |
 | [history-2026-08.md](./history-2026-08.md) | what happened, month by month, for context a diff cannot give |
+| [history-2026-09.md](./history-2026-09.md) | September's incidents and measurements, archived from `CLAUDE.md`'s 2026-09-07 split (#155) |
 
 ## A note on how these are written
 
