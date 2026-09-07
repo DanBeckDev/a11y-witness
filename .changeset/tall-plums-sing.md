@@ -1,10 +1,9 @@
 ---
-"@a11y-witness/judge": minor
 ---
 
-Added a deterministic rule for WCAG 1.3.5 Identify Input Purpose (Failure F107): a form field that
-already declares an `autocomplete` attribute, but whose value is not a recognised input-purpose token
-from the HTML autofill vocabulary, is now flagged as a `secondary` finding. Fields with no `autocomplete`
-attribute at all are not flagged — this covers only the malformed-value half of the criterion, not
-whether a purpose is declared in the first place. `1.3.5:input-purpose-invalid` is now a rule-owned
-subtype.
+Adds the `formInputs` evidence channel and its `RuleInput` field to `criterion-coverage.ts` (issue #79),
+groundwork for 1.3.5 Identify Input Purpose's F107 rule. Empty deliberately: the field is additive, no
+capture populates it yet, and no rule reads it in this change — `RULE_CRITERIA`'s runtime throw
+(`rules.ts:1584`) means registering the rule itself is a public, stranger-facing change, so it is held
+out and lands together with #170's worker-side census on one sha instead. No consumer-visible behaviour
+changes here.
