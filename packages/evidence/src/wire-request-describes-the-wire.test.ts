@@ -4,7 +4,7 @@
  * architecture-audit.md §5, item 1: until 2026-09-05 `CaptureRequest` declared `url, task, strategy?` while
  * `server.mjs`'s `POST /capture` accepted 20 fields — every probe flag, `formState`, `probeOrder`,
  * `reuseBrowser`, `browser`, `reuseScreenReader`, `captureId` and `async`. A consumer typing against
- * `@a11y-witness/evidence` could not have known a single one of them existed. This is the sibling of
+ * `@a11ign/evidence` could not have known a single one of them existed. This is the sibling of
  * `wire-types-describe-the-wire.test.ts`, same defect, the opposite side of the wire.
  *
  * `strategy` is deliberately EXCLUDED from the comparison below, the same way `meta` was excluded from

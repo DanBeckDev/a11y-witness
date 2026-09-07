@@ -1,3 +1,4 @@
+// @ts-check
 // Which `packages/<name>` directories a branch actually touched against `origin/main` -- the population
 // the pre-push hook's FAST gate (agent/*, lead/* pushes) tests, so a branch that never touched `judge` does
 // not pay for `judge`'s suite on every commit. `main` pushes are unaffected: they still run the full suite,
@@ -26,11 +27,11 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { sandboxGitEnv } from "./git-env.mjs";
-// RELATIVE, NOT `@a11y-witness/worker-fleet/cli-flags`, for the reason `ci-changed.mjs` already records
+// RELATIVE, NOT `@a11ign/worker-fleet/cli-flags`, for the reason `ci-changed.mjs` already records
 // above its own copy of this import: `ci.yml`'s `changed` job runs `checkout` and `setup-node` and NO
 // `npm ci`, because its whole job is to decide whether anything else installs or builds at all. This file
 // is imported by that script, so a package specifier here dies before the workflow starts —
-// `ERR_MODULE_NOT_FOUND: Cannot find package '@a11y-witness/worker-fleet'`, measured on #238's first run.
+// `ERR_MODULE_NOT_FOUND: Cannot find package '@a11ign/worker-fleet'`, measured on #238's first run.
 //
 // Guarding this file (#164) is what surfaced it: the census had never walked `scripts/`, so nothing had
 // ever asked whether these two could import the guard at all. The answer is yes, by the path that does
@@ -39,7 +40,10 @@ import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
-/** `packages/<name>` for every changed path, deduped and sorted -- pure, given the diff's own output. */
+/**
+ * `packages/<name>` for every changed path, deduped and sorted -- pure, given the diff's own output.
+ * @param {string} diffOutput
+ */
 export function changedPackages(diffOutput) {
   const names = new Set();
   for (const line of diffOutput.split("\n")) {

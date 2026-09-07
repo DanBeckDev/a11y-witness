@@ -19,7 +19,7 @@ boundaries. Everything below fails that test on purpose.
 
 ## Decision
 
-### `@a11y-witness/lab` — one private workspace, `"private": true`, never published
+### `@a11ign/lab` — one private workspace, `"private": true`, never published
 
 Contents: `src/eval/` (cases, fitness, fixtures, pages, `rules-check`),
 `src/training/` (the dataset generator, preflight, capture driver, cache,
@@ -45,7 +45,7 @@ things that are only ever run together, from this checkout, by us — the
   says are not quotable.
 - **The dataset pipeline's output is the model, and the model already ships.**
   `src/training/` generates 1,061 case pairs, drives 2,122 captures and exports
-  JSONL. Its product is `models/screenreader-scorer/`, which `@a11y-witness/scorer`
+  JSONL. Its product is `models/screenreader-scorer/`, which `@a11ign/scorer`
   distributes. A consumer wanting a different model needs the corpus, which we do
   not distribute; shipping the pipeline without the corpus ships a promise we cannot
   keep.
@@ -63,9 +63,9 @@ instead of hidden.
 
 ### `action.yml` stays at the repo root and is not a package
 
-The GitHub Action is distributed by git ref (`uses: owner/a11y-witness@v1`), not by
-npm. It is a composite action; it will `npm i @a11y-witness/nvda-worker` and
-`a11y-witness` rather than run files from the checkout. Two consequences to carry
+The GitHub Action is distributed by git ref (`uses: owner/a11ign@v1`), not by
+npm. It is a composite action; it will `npm i @a11ign/nvda-worker` and
+`a11ign` rather than run files from the checkout. Two consequences to carry
 into the migration: its hardcoded `node src/capture/nvda/server.mjs` breaks the
 moment the worker moves, and its release cadence is git tags on this repo, which is
 a *third* versioning scheme alongside package semver and

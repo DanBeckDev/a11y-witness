@@ -251,7 +251,12 @@ elif [ "$(node scripts/board-only-check.mjs)" = "true" ]; then
   echo "pre-push: BOARD-ONLY gate ($BRANCH) -- every file against origin/main is docs/board/reported.json"
   echo "or docs/board/summaries/*.md -- neither is source code, so lint/typecheck/the general suite have"
   echo "nothing to check. Running the board guards below is the real gate for this diff, here and in CI."
-  run "board guards" npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
+  # #355: a glob matching NOTHING is a clean, empty PASS to `tsx --test` -- checked first, outside the
+  # suite it would otherwise have silently skipped. `--run` execs `tsx --test` on the SAME argv this
+  # process just checked, rather than a second, separately-typed copy of the same globs (see
+  # assert-glob-not-empty.mjs's header for why the two-line form was provably unsafe).
+  run "board guards" node scripts/assert-glob-not-empty.mjs \
+    "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts" --run
 else
   run "lint"       npm run --silent lint
   run "typecheck"  npm run --silent typecheck
@@ -263,12 +268,14 @@ else
   changed="$(node scripts/changed-packages.mjs)"
   if [ -z "$changed" ]; then
     echo "  no packages/ file touched against origin/main -- running every package's tests"
-    run "unit tests (all packages)" npx tsx --test --test-concurrency=4 "packages/*/src/**/*.test.ts"
+    # #355: see the board-guards glob check above for why this runs before the suite it is checking.
+    run "unit tests (all packages)" node scripts/assert-glob-not-empty.mjs \
+      "packages/*/src/**/*.test.ts" --min=300 --run --test-concurrency=4
   else
     echo "  touched: $changed"
     globs=()
     for pkg in $changed; do globs+=("packages/$pkg/src/**/*.test.ts"); done
-    run "unit tests ($changed)" npx tsx --test --test-concurrency=4 "${globs[@]}"
+    run "unit tests ($changed)" node scripts/assert-glob-not-empty.mjs "${globs[@]}" --run --test-concurrency=4
   fi
 
   # #261: THE CHANGESET GATE WAS MISSING FROM THIS HOOK ENTIRELY. `changeset` is a required CI context and

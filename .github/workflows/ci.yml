@@ -76,6 +76,23 @@ name: ci
 on:
   pull_request:
     branches: [main]
+    # `edited` IS LOAD-BEARING, and its absence deadlocked the queue for eight hours -- 2026-09-07.
+    #
+    # GitHub's default `pull_request` types are `opened, synchronize, reopened`. Unit 2's `acceptance` job
+    # (#353) reads the PR BODY, so a PR whose only defect is its body -- a prose `Acceptance:` line that
+    # bash cannot run, or no line at all -- can be fixed only by editing the body, and NO DEFAULT TRIGGER
+    # FIRES ON THAT. Measured: zero merges between 13:38Z and 21:10Z, every `ci.yml` run red on
+    # `acceptance`, five open PRs written before the field existed and two whose corrected bodies could
+    # not be re-read. The gate was right and there was no way to satisfy it.
+    #
+    # A job that reads an input no trigger watches cannot be fixed by the person holding the input. That
+    # is the general shape, and it costs a whole queue rather than one PR.
+    #
+    # The cost of the fix is a full `ci.yml` run per title or body edit. Bounded by the `concurrency`
+    # block below, which cancels the previous run on the same ref, and cheap in this repo because the
+    # `changed` job gates every expensive job behind a real diff -- a body edit changes no files, so the
+    # heavy jobs skip and what actually re-runs is `changed`, `acceptance`, `mergeSafety` and `gate`.
+    types: [opened, synchronize, reopened, edited]
   # #156: a merge queue CANNOT be turned on without this. GitHub's own docs are explicit -- "You must use
   # the merge_group event to trigger your GitHub Actions workflow when a pull request is added to a merge
   # queue ... Otherwise, status checks will not be triggered" -- and an entry whose checks never report is
@@ -162,9 +179,9 @@ jobs:
       # #331: IT DOES NOT SKIP A WORKSPACE PACKAGE'S OWN `prepare` SCRIPT -- measured, not assumed. npm
       # 10.9.8 (bundled with the Node 22 this job pins) runs every workspace's `prepare` regardless of
       # `--ignore-scripts`: `npm ci --ignore-scripts --loglevel=verbose` on a fresh clone logs `npm info
-      # run @a11y-witness/worker-fleet@0.1.0 prepare packages/worker-fleet tsc --build` and leaves a real,
+      # run @a11ign/worker-fleet@0.1.0 prepare packages/worker-fleet tsc --build` and leaves a real,
       # populated `dist/` behind. That is what masked #238: `build-packages.mjs` used to import
-      # `@a11y-witness/worker-fleet/cli-flags` (a `dist/` path) at its own top level (#164), and on a cache
+      # `@a11ign/worker-fleet/cli-flags` (a `dist/` path) at its own top level (#164), and on a cache
       # MISS this step's silent side-build made that import resolve by accident, so `gate` read green on a
       # tree that could not build from a cache HIT (where this whole step, prepare included, is skipped).
       # #330 fixed the real bug (a relative import that needs no pre-built `dist/` at all); this note is
@@ -205,6 +222,12 @@ jobs:
           head -20 packages/evidence/dist/wcag.d.ts || echo "(no wcag.d.ts)"
           echo "--- does tsc consider the graph up to date? ---"
           npx tsc --build --dry $(node -e "const fs=require('fs');console.log(fs.readdirSync('packages').filter(d=>fs.existsSync('packages/'+d+'/tsconfig.json')).map(d=>'packages/'+d).join(' '))") || true
+
+      # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (issue #158) -- a fresh checkout has no
+      # copy on disk, and this job can reach `doc-references.test.ts` (packages/lab/src/packaging/**)
+      # both in the scoped run below and in the full-suite coverage run further down, either of which
+      # would otherwise report a real doc citation as broken.
+      - run: npm run docs:coverage
       - run: npm run lint
       - run: npm run typecheck
       - name: Unit tests of the touched package(s) and their workspace dependents
@@ -246,7 +269,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
-      # `@a11y-witness/worker-fleet/cli-flags` resolves through its package.json `exports` to
+      # `@a11ign/worker-fleet/cli-flags` resolves through its package.json `exports` to
       # `dist/cli-flags.mjs` -- `npm ci` alone is not enough, the same stale-dist trap CLAUDE.md already
       # names for cross-package imports in the TS suite, here reached from a Python subprocess instead.
       - run: npm run build
@@ -301,6 +324,11 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
       - run: npm run build
+      # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (issue #158) -- a fresh checkout has no
+      # copy on disk, so `doc-references.test.ts` below (which asserts every path the top-level docs cite
+      # actually exists) would report a real reference as broken. Regenerating it here keeps that citation
+      # honest without resurrecting the git conflict untracking it was meant to remove.
+      - run: npm run docs:coverage
       # The doc/tracker/board guards -- `backlog.test.ts`, `backlog-ready.test.ts`, `known-gaps-file-
       # facts.test.ts`, `board-liveness.test.ts` and their siblings, all of which read `docs/*.md` content
       # and would otherwise only ever run when `packages/lab/src/packaging/**` itself changes, never when
@@ -329,7 +357,7 @@ jobs:
   # `gh`. A BUILD IS STILL NEEDED, though the first version of this job shipped without one on the strength
   # of a grep that checked only these test files' own top-level imports: `board-liveness.test.ts`,
   # `board-markdown.test.ts`, `board-style.test.ts` and `board-summary-origin.test.ts` all drive a real
-  # `scripts/board-*.mjs` script, and those scripts import `@a11y-witness/worker-fleet/cli-flags` --
+  # `scripts/board-*.mjs` script, and those scripts import `@a11ign/worker-fleet/cli-flags` --
   # exactly the stale-dist trap CLAUDE.md names for every other job in this file, reached one hop further
   # than the grep looked. Caught by actually RUNNING the job's real command with no build present, not by
   # reading the imports -- this repo's own rule, applied to itself. Still far cheaper than the `docs` job:
@@ -452,6 +480,48 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/merge-guard.mjs --ci-gate ${{ github.event.pull_request.number }}
 
+  # #353 (pipeline unit 2): NOTHING HAS EVER RUN A ROW'S ACCEPTANCE COMMAND. Every PR body carries an
+  # `Acceptance:` line and argues its own case; the only thing that has ever executed it is the author,
+  # reporting the result in prose. `capture-check` was mandatory after any `capture-core.mjs` change and
+  # had never run once; `scorer:verify` was a security check on the one artefact this project publishes
+  # and nothing invoked it; `release:gate` was broken from the day it was written. This is the thing that
+  # actually runs it -- see `scripts/acceptance-commands.mjs`'s own header for the three outcomes
+  # (RAN/REFUSED/MISSING) and why they must never collapse into two.
+  #
+  # `pull_request`, NEVER `pull_request_target` -- this job executes commands an author wrote in a PR
+  # body. `pull_request` runs against the FORK's own checkout with a read-only token, which is the correct
+  # blast radius for "run whatever this PR says to run"; `pull_request_target` would run those same
+  # commands with the BASE repo's token and secrets, turning a line in a PR description into arbitrary
+  # code execution with write credentials. `permissions: contents: read`, explicitly, and nothing else --
+  # this job never writes anything.
+  #
+  # UNSCOPED AND UNCONDITIONAL, like `mergeSafety` -- every PR needs its acceptance verified regardless of
+  # which files changed, and a missing `Acceptance:` line must fail even a docs-only PR.
+  acceptance:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/cache@v4
+        id: node-modules-cache
+        with:
+          path: node_modules
+          key: node-modules-${{ hashFiles('package-lock.json') }}
+      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts
+      - run: npm run build
+      # PR_BODY AS AN ENV VAR, NEVER AS A SHELL ARGUMENT -- a PR body is adversarial input (anyone can open
+      # a PR), and GitHub Actions' own `env:` mapping keeps it one opaque string here rather than
+      # re-parsing it as shell. `acceptance-commands.mjs` reads it from `process.env.PR_BODY`, never argv.
+      - name: Run the PR's own stated Acceptance command(s)
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/acceptance-commands.mjs
+
   # THE ONE CONTEXT BRANCH PROTECTION REQUIRES. `if: always()` so this still runs when an upstream job
   # fails or is cancelled -- without it, a failing `ts` would skip `gate` too (the default `if` on a job
   # is `success()` on its dependencies), and a job that never reports on the one commit that most needs it
@@ -461,8 +531,41 @@ jobs:
   # in `needs:` below has an opinion here regardless of whether `ci-changed.mjs` decided it should run.
   # skipped counts as passing (the job's own `if:` decided it, correctly, that this PR does not need it);
   # anything else does not.
+  # A CHANGE TO A CORPUS-INVALIDATING PATH MUST NAME THE FACTS IT DID NOT MOVE -- #356.
+  #
+  # NOT a CODEOWNERS review, and the reason is measured: every session pushes as the same account, so
+  # `gh pr review --approve` answers "Can not approve your own pull request" -- and a review would have
+  # caught NONE of the failures these paths have actually had. Each was a correct-looking change whose
+  # consequence was invisible at the diff (a memo stale for five days; a remedy guarded on a flag nothing
+  # set; a census stripped at export). This asks for FACTS AND THEIR STATES instead, because writing the
+  # state is what makes an author look.
+  #
+  # The fact list is `docs/owned-path-facts.json`, which `orchestrator` owns -- data, so the owner can
+  # correct it without touching the mechanism, and so the mechanism cannot quietly decide what the
+  # facts are.
+  ownedPaths:
+    needs: changed
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # No `npm ci`: this script imports `cli-flags` RELATIVELY for exactly that reason, and
+      # `pre-install-import-graph.test.ts` derives this job's entry into its population automatically.
+      - name: Which paths did this PR change, and does its body sign them off?
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > /tmp/changed.txt
+          printf '%s' "$BODY" > /tmp/body.txt
+          node scripts/owned-path-signoff.mjs --diff=/tmp/changed.txt --body=/tmp/body.txt
+
   gate:
-    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness, mergeSafety]
+    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness, mergeSafety, acceptance, ownedPaths]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -477,7 +580,9 @@ jobs:
             "${{ needs.board.result }}" \
             "${{ needs.changeset.result }}" \
             "${{ needs.rulesFitness.result }}" \
-            "${{ needs.mergeSafety.result }}"
+            "${{ needs.mergeSafety.result }}" \
+            "${{ needs.acceptance.result }}" \
+            "${{ needs.ownedPaths.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"

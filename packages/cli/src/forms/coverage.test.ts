@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 
 import { formCoverage, submissionPlan, CRITERION_STATES } from "./coverage.js";
 import { parseFormsConfig } from "./config.js";
-import { CRITERION_COVERAGE } from "@a11y-witness/judge/internal";
+import { CRITERION_COVERAGE } from "@a11ign/judge/internal";
 
 const config = (states: string) => parseFormsConfig(`
 version: 1

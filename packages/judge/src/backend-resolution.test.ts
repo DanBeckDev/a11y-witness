@@ -66,7 +66,7 @@ function sources(): [string, string][] {
 /**
  * The one copy that cannot be deleted, and why.
  *
- * `doctor` is in `@a11y-witness/worker-fleet`, whose only dependency is `@a11y-witness/nvda-worker`.
+ * `doctor` is in `@a11ign/worker-fleet`, whose only dependency is `@a11ign/nvda-worker`.
  * Importing the judge would invert the layering and pull the judge/evidence/scorer graph into a fleet
  * health check — the narrow import graph `control-plane-isolation.test.ts` and `no-win32-imports.test.ts`
  * exist to protect. So it keeps its own read, and the test below pins the BEHAVIOUR equal instead, which

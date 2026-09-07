@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { classify, knownPackages } from "./ci-changed.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 

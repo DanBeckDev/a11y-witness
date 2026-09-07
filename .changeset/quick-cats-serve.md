@@ -1,5 +1,5 @@
 ---
-"@a11y-witness/judge": patch
+"@a11ign/judge": patch
 ---
 
 The 2.4.2 (Page Titled) `stale-route-title` rule no longer fires on two shapes that read identically
