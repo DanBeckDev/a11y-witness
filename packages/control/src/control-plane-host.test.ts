@@ -86,6 +86,12 @@ test("REFUSES rather than guessing when A11Y_PVE_KEY is unset", () => {
 // A hardcoded key path used as a fallback default -- `A11Y_PVE_KEY || \`${HOME}/.ssh/...\`` -- is exactly
 // the shape #85 removed. Pinned against the SOURCE TEXT of both files, so a reverted fallback fails a
 // fast, offline test rather than waiting to be found in a public repo a second time.
+//
+// JS-ONLY, DELIBERATELY: this matches the `||` spelling, never Ansible's `lookup('env', 'A11Y_PVE_KEY')
+// | default(...)`, which is the IDENTICAL fallback shape and is still live on `main` at
+// group_vars/a11y_hypervisor.yml:11 and group_vars/a11y_lab.yml:49 -- a nameable follow-up (the Ansible
+// side needs an assert task, not this pattern; `| mandatory` does not work here, see the commit message),
+// not covered by this guard, which only ever checks the two JS call sites #85 fixed.
 const FALLBACK_KEY_PATH = /A11Y_PVE_KEY\s*\|\|/;
 
 test("fleet-playbook.mjs no longer falls back to a hardcoded key path", () => {
