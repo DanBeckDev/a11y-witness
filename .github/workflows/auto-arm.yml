@@ -29,6 +29,32 @@ name: auto-arm
 # no behavioural difference, and this workflow's own job only asks "is this PR eligible to be armed at
 # all" (open, against `main`, not a draft) -- a question that does not change between commits.
 #
+# ## AND THAT IS WHY A SWEEP IS NEEDED, NOT A THIRD TRIGGER -- #344, measured 2026-09-07
+#
+# The paragraph above is correct and answers a different question from this one. A PR that was ALREADY
+# OPEN when this workflow shipped (10:38Z, 2026-09-07) has no `opened` and no `ready_for_review` event
+# left to fire, so nothing ever arms it and nothing ever will. Measured at 11:35Z, four hours later:
+#
+#   [276, 183, 181, 172]   open, base main, not draft, autoMergeRequest = null
+#
+# #183 and #181 were GREEN ON `gate` and unarmed since 01:39 and 01:27 -- six hours in a queue the
+# pipeline could not see. `synchronize` would not have fixed it either: a PR nobody pushes to produces no
+# `synchronize` event any more than it produces a second `opened`.
+#
+# ## Why the sweep rides on the EXISTING trigger and is NOT scheduled
+#
+# `board-liveness.test.ts` pins the measurement: GitHub disables scheduled workflows repository-wide after
+# 60 days of inactivity, and `board-schedule-liveness.test.ts` records `board-report.yml` firing ZERO
+# scheduled runs the day after it was added. An arming sweep on a cron therefore fails by stopping
+# silently, and its symptom -- PRs quietly not merging -- reads as workers being slow rather than as a
+# dead trigger. A sweep that rides on `pull_request` cannot have that fault: the event it needs is another
+# PR being opened, which in this repo is the most frequent event there is (11 in the hour this was
+# measured). The queue drains within one PR of any PR.
+#
+# `workflow_dispatch` is here for the case the sweep exists to cover in the first place: a quiet repo with
+# a stranded PR and no incoming event to ride. It is a manual kick, not a schedule, so nothing can disable
+# it for inactivity.
+#
 # ## Why DRAFT is excluded, explicitly, rather than left to GitHub
 #
 # `gh pr merge --auto` REFUSES a draft PR outright ("--auto is not allowed for draft PRs"), so admitting
@@ -37,6 +63,7 @@ name: auto-arm
 on:
   pull_request:
     types: [opened, ready_for_review]
+  workflow_dispatch:
 
 permissions:
   pull-requests: write
@@ -69,3 +96,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh pr merge --auto --merge "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}"
+
+  sweep:
+    # ARM EVERY PR THE `arm` JOB ABOVE CANNOT SEE -- the ones already open, #344.
+    #
+    # It runs on EVERY event this workflow takes, including the `pull_request` that just armed one PR, so
+    # it is the same question asked of the STANDING QUEUE rather than of the event's own PR. Arming is
+    # idempotent, so re-running it costs one list call and nothing else.
+    #
+    # The decision lives in `scripts/auto-arm-sweep.mjs` -- which PRs it refuses and why is documented and
+    # unit-tested there, because a predicate written in `run:` bash can only ever be checked by asserting
+    # on the text of a shell script, and a guard whose expectations are scraped out of the source it tests
+    # is this repository's own recorded defect. The script imports nothing but `node:*`, so this job needs
+    # a checkout and NOTHING else -- no `npm ci`, no build, no `dist`. #330 and #331 record what it costs
+    # when a bootstrap script reaches for a workspace package.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Arm every open, non-draft, unheld, tested PR against main that nothing has armed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/auto-arm-sweep.mjs
