@@ -944,19 +944,6 @@ export function censusTargetIsSuspect(
 const DOCUMENT_ANNOUNCEMENT = /,\s*document$/i;
 
 /**
- * Did submitting a form navigate this capture to a different document, however we can tell? See
- * `censusTargetIsSuspect`'s header for the full history of why this needs two signals rather than one.
- *
- * Reads BOTH shapes `navigatedOnSubmit` has ever had on the wire. The current shape carries `checked`;
- * its absence means a capture taken before this fix, whose only spelling of "navigated" was the field's
- * bare presence — `{ from, to }` with no `checked` key, present only when the submit actually moved the
- * document. A `checked: true` verdict is trusted outright in EITHER direction, skipping the text
- * heuristic entirely, because it is a direct reading rather than a guess about announced text; only
- * `checked: false` (we could not ask) falls through to it, exactly as an old-shape absence always did.
- *
- * @param capture a capture, unwrapped
- */
-/**
  * A GET SUBMIT RELOADS THE SAME DOCUMENT WITH A QUERY STRING, and that is not a navigation to a different
  * document — issue #30.
  *
@@ -996,6 +983,19 @@ function submitOnlyAddedAQueryString(from: unknown, to: unknown): boolean {
   }
 }
 
+/**
+ * Did submitting a form navigate this capture to a different document, however we can tell? See
+ * `censusTargetIsSuspect`'s header for the full history of why this needs two signals rather than one.
+ *
+ * Reads BOTH shapes `navigatedOnSubmit` has ever had on the wire. The current shape carries `checked`;
+ * its absence means a capture taken before this fix, whose only spelling of "navigated" was the field's
+ * bare presence — `{ from, to }` with no `checked` key, present only when the submit actually moved the
+ * document. A `checked: true` verdict is trusted outright in EITHER direction, skipping the text
+ * heuristic entirely, because it is a direct reading rather than a guess about announced text; only
+ * `checked: false` (we could not ask) falls through to it, exactly as an old-shape absence always did.
+ *
+ * @param capture a capture, unwrapped
+ */
 export function submitNavigatedTheDocument(capture: CapturedAnnouncements): boolean {
   const nav = capture.interaction?.navigatedOnSubmit;
   if (nav && typeof nav === "object" && "checked" in nav) {
