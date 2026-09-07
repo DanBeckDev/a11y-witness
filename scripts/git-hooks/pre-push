@@ -196,11 +196,16 @@ if [ "$BRANCH" = "main" ]; then
 elif [ "$(node scripts/board-only-check.mjs)" = "true" ]; then
   # BOARD-ONLY, THE SAME SHAPE `ci.yml`'s `board` job GATES ON -- chairman's direction, 2026-09-06, the
   # product manager's single largest recurring cost that night: docs/board/summaries/*.md and
-  # docs/board/reported.json are edited far more often than anything else under docs/. No lint, no
-  # typecheck, no build -- CI (ci.yml's own `board` job, which DOES build; see its header for why) is the
-  # authoritative gate. This is the fast, local first pass only.
-  echo "pre-push: BOARD-ONLY gate ($BRANCH) -- every doc-touching file against origin/main is a board file."
-  echo "Skipping lint/typecheck/the general suite; CI's board job (ci.yml) is authoritative."
+  # docs/board/reported.json are edited far more often than anything else under docs/, and neither is
+  # source code. No lint, no typecheck, no build here -- there is nothing of either KIND in a genuine
+  # board-only diff to check (`board-only-check.mjs`'s own #296 fix is what makes that true: the WHOLE
+  # diff must be board files, not just its docs/ subset, or a diff smuggling in a script took this path
+  # too). #296 ALSO REMOVED a false claim that used to stand here -- CI's `board` job builds and re-runs
+  # the board guards, but it does NOT lint or typecheck EITHER, so it was never the authority for the
+  # checks this branch skips; a guard that names a wrong authority is worse than one that names none.
+  echo "pre-push: BOARD-ONLY gate ($BRANCH) -- every file against origin/main is docs/board/reported.json"
+  echo "or docs/board/summaries/*.md -- neither is source code, so lint/typecheck/the general suite have"
+  echo "nothing to check. Running the board guards below is the real gate for this diff, here and in CI."
   run "board guards" npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
 else
   run "lint"       npm run --silent lint
@@ -219,6 +224,41 @@ else
     globs=()
     for pkg in $changed; do globs+=("packages/$pkg/src/**/*.test.ts"); done
     run "unit tests ($changed)" npx tsx --test --test-concurrency=4 "${globs[@]}"
+  fi
+
+  # #261: THE CHANGESET GATE WAS MISSING FROM THIS HOOK ENTIRELY. `changeset` is a required CI context and
+  # an input to the aggregate `gate`, so a fully green local push (this hook, above) was twice followed by
+  # a CI refusal and a round trip -- measured 2026-09-07, #252 and #258, forty minutes apart, both correct
+  # about everything they had actually run.
+  #
+  # GATED ON `changeset-precise.mjs`, never unconditional: `changeset status --since=origin/main` alone
+  # measured 3.8-7.8s (direct binary vs `npx`, this checkout, warm) -- more than the rest of this gate
+  # combined, which would more than double the hook's stated budget on every push touching a package
+  # directory, most of which are test files or a private package nothing installs. `changeset-precise.mjs`
+  # reuses `ci-changed.mjs`'s own `classify()`, real `npm pack`-backed, to ask the PRECISE question -- does
+  # this push touch a file npm actually SHIPS for a PUBLISHED package -- so a docs-only, test-only or
+  # private-package push pays nothing here at all: measured delta ~0.5s (node startup) on such a push,
+  # against ~3.9s (npm pack) + ~3.8s (changeset status) = ~7.7s on one that touches a published, packed
+  # file. THE DIRECT BINARY, NOT `npx changeset` -- measured here 3.8s against 7.8s for the identical
+  # command through `npx`'s resolution; `node_modules/.bin/changeset` is guaranteed present by the
+  # toolchain guard above, which already refuses the whole hook before this point if it is not.
+  if [ -n "$changed" ] && [ "$(node scripts/changeset-precise.mjs origin/main)" = "true" ]; then
+    if ./node_modules/.bin/changeset status --since=origin/main >/tmp/a11y-changeset.$$ 2>&1; then
+      echo "  ok      changeset"
+    else
+      echo "  FAILED  changeset"
+      tail -20 /tmp/a11y-changeset.$$ | sed 's/^/            /'
+      echo "            This push changes a file npm actually ships for a published package, with no changeset."
+      echo "            Run 'npm run changeset', pick the package(s) and bump level, and write one sentence a"
+      echo "            CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT"
+      echo "            follow from the size of the diff, and for the scorer any retrain is a MAJOR."
+      echo "            If this genuinely cannot affect a consumer: 'npx changeset add --empty' records that"
+      echo "            decision explicitly rather than leaving it to be inferred from silence."
+      failed+=("changeset")
+    fi
+    rm -f /tmp/a11y-changeset.$$
+  else
+    skipped+=("changeset (no file this push touches is one npm actually ships for a published package)")
   fi
 fi
 
