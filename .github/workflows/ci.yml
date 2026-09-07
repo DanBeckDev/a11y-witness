@@ -123,6 +123,11 @@ jobs:
       # rule: run the file runner on its own and it tests the LAST BUILD, which on a fresh checkout is no
       # build at all.
       - run: npm run build
+      # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (issue #158) -- a fresh checkout has no
+      # copy on disk, and this job can reach `doc-references.test.ts` (packages/lab/src/packaging/**)
+      # both in the scoped run below and in the full-suite coverage run further down, either of which
+      # would otherwise report a real doc citation as broken.
+      - run: npm run docs:coverage
       - run: npm run lint
       - run: npm run typecheck
       - name: Unit tests of the touched package(s)
@@ -238,6 +243,11 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
       - run: npm run build
+      # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (issue #158) -- a fresh checkout has no
+      # copy on disk, so `doc-references.test.ts` below (which asserts every path the top-level docs cite
+      # actually exists) would report a real reference as broken. Regenerating it here keeps that citation
+      # honest without resurrecting the git conflict untracking it was meant to remove.
+      - run: npm run docs:coverage
       # The doc/tracker/board guards -- `backlog.test.ts`, `backlog-ready.test.ts`, `known-gaps-file-
       # facts.test.ts`, `board-liveness.test.ts` and their siblings, all of which read `docs/*.md` content
       # and would otherwise only ever run when `packages/lab/src/packaging/**` itself changes, never when
