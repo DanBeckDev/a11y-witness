@@ -80,3 +80,4 @@ human or agent, *working on* the repo rather than using it.
 Most tables here are **measured**, and the ones that are not say so. Where a document records a mistake, it
 records the wrong theories too, so nobody pays to rediscover them. If you find a claim without a
 measurement behind it, that is a bug — please report it.
+<!-- #168 repro trigger, will be reverted before merge -->
