@@ -16,12 +16,55 @@
 // free-for-all. So `fetchLabels` refuses to guess -- any malformed, incomplete, or failed response is a
 // thrown error, never a silent empty array. See `decideClaim`'s own doc for why "unclaimed" must be
 // EARNED, not defaulted to.
+//
+// #176 (2026-09-07): a `session:` label marked who held a row AFTER they took it, but nothing marked it
+// as it went OUT -- so a row handed out in a dispatcher message and a row taken by `claim` were
+// indistinguishable from unclaimed until the SECOND of the two acted, and three real double-dispatches
+// (#156, #158, #159) were caught only by a worker's own caution, not by this tool. The fix, per
+// `dispatcher`'s 2026-09-07 ruling quoted on the row: apply `in-progress` + `session:<name>` at DISPATCH,
+// not only at claim -- so THREE states exist, not two: unclaimed, dispatched-but-not-started (in-progress
+// + session, no `started`), and started (`started` too). `dispatchRow` writes the first pair;
+// `claimRow`/`startRow` additionally writes `started`, so a worker pulling a row itself with no prior
+// dispatch goes straight from unclaimed to started, and a worker beginning a row dispatcher already
+// marked goes from dispatched to started without a second race window.
+//
+// The cost this trades for: a row dispatched and then declined would sit marked forever with nobody
+// obligated to un-label it -- `dispatcher`'s own judgement is that a STALE `in-progress` is visible and
+// costs a question, while a double-dispatch is invisible and costs a worker's evening, and that trade is
+// right. `declineRow` is the remedy: it returns a row this session holds to genuinely unclaimed, and is
+// also the general "give it back" this tool always lacked -- #186 needed it too, when `worker-audit`
+// claimed a row, found it unstartable, and had no way to release it short of a hand edit.
+//
+// #226: A WORKER FINDING A DISPATCHED ROW ALREADY CLOSED, HELD OR BUILT IS A DISAGREEMENT NOBODY RECORDS.
+// Three times on 2026-09-07 a worker ran `check`, was told a verdict, and then discovered reality was
+// different -- and every one of those reached `dispatcher` as a message and died there. This is #188 one
+// layer out: `merge-guard`'s wrong answers were absorbed by branch protection, so nothing recorded them
+// being wrong; `row-claim check`'s wrong answers are absorbed by a person being careful, which does not
+// survive the session.
+//
+// So EVERY `check` call now appends its own verdict to a log -- unconditionally, not only when something
+// later turns out wrong. That is what makes "how often is this tool wrong" answerable rather than "three
+// times that somebody happened to mention": the check-log is the DENOMINATOR, and a `conflict` entry
+// (recorded by a worker who found reality different, pairing the tool's own verdict with what they found)
+// is the NUMERATOR. A log that only ever grew on disagreement could never tell "the tool was right" from
+// "nobody checked" -- the exact trap #188's `agreementLogPath` already exists to avoid, and the reason
+// this reuses its `gitCommonDir`/`appendJsonl` (both exported from `merge-guard.mjs` for exactly this)
+// rather than inventing a second version of "append one JSON line, fail loud".
+//
+// IT RECORDS; IT NEVER GATES -- same as `reportReachability` below. A log write failing is reported and
+// never touches `process.exitCode`, for the identical reason `reportReachability`'s own failure does not:
+// "I could not tell you whether it is claimed" and "I could not log that I told you" are different
+// failures, and conflating them would make a full disk read as an unreadable board.
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { realpathSync } from "node:fs";
+import { realpathSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { REPO } from "./repo-identity.mjs";
+import { READY_LABEL } from "./ready-label-audit.mjs";
+import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
 
 export const CLAIM_LABEL = "in-progress";
+export const STARTED_LABEL = "started";
 
 /**
  * @typedef {{ number: number, title: string, labels: string[] }} IssueClaim
@@ -76,19 +119,25 @@ export function fetchLabels(issueNumber, { run = defaultRun } = {}) {
 }
 
 /**
- * Pure: does this label set say the row is claimed, and by whom?
+ * Pure: does this label set say the row is claimed, and by whom, and has work actually started?
  *
  * `sessions` can be EMPTY even when `claimed` is true -- a row moved to In progress by the dispatcher
  * before assigning it (exactly how #55 itself was claimed) has `in-progress` with no `session:*` yet.
  * That is still a claim; "claimed, owner not yet recorded" and "unclaimed" are different states and this
  * function does not conflate them.
  *
+ * `started` is a THIRD, independent bit (#176): `in-progress` alone (or with a session) means dispatched
+ * but not yet begun; `in-progress` + `started` means the assigned session is actually working it. A row
+ * can be `claimed` with `started: false` -- that is the dispatched-not-started state this function exists
+ * to make visible, not an inconsistency to normalise away.
+ *
  * @param {string[]} labels
- * @returns {{ claimed: boolean, sessions: string[] }}
+ * @returns {{ claimed: boolean, started: boolean, sessions: string[] }}
  */
 export function claimStatus(labels) {
   return {
     claimed: labels.includes(CLAIM_LABEL),
+    started: labels.includes(STARTED_LABEL),
     sessions: labels.filter((l) => l.startsWith("session:")).map((l) => l.slice("session:".length)),
   };
 }
@@ -112,12 +161,13 @@ export function decideClaim(labelsBefore, mySession) {
 }
 
 /**
- * CLAIM-THEN-VERIFY, not verify-then-claim.
+ * WRITE-THEN-VERIFY, not verify-then-write. Shared by `dispatchRow` and `claimRow`, which differ only in
+ * whether `started` is among the labels written.
  *
  * Reading labels and THEN writing them leaves the gap between the two open to another session doing the
  * same thing -- and propagation lag is measured, not hypothetical (a bulk board query reported a row
  * `Ready` moments after it was known taken, 2026-09-06). Writing first narrows that window: this session's
- * own claim lands as one atomic label-add, and the RE-READ after writing is what would catch a genuine
+ * own write lands as one atomic label-add, and the RE-READ after writing is what would catch a genuine
  * collision in the gap, not the read before it.
  *
  * NOT proven race-free, and that is stated rather than hidden: two `gh issue edit --add-label` calls a
@@ -125,46 +175,393 @@ export function decideClaim(labelsBefore, mySession) {
  * collision landing inside this function's own write-then-reread window is only DETECTED after the fact,
  * on the re-read -- via `session:*` labels both being present -- never prevented outright. GitHub's REST
  * API has no compare-and-swap primitive for labels to close that window completely; building one (an
- * external lock service, or polling the issue timeline for the eventPRECEDING commitment) is
+ * external lock service, or polling the issue timeline for the event PRECEDING commitment) is
  * disproportionate to a defect that, both times it fired today, was "nobody checked the board at all" --
  * not two sessions racing within the same second. That narrower race is refuted as a target for THIS row;
  * see the commit message for the measurement this claim rests on.
  *
+ * Re-adding a label the row already carries (e.g. `claimRow` on a row `dispatchRow` already marked for
+ * this same session) is a harmless no-op -- `--add-label` is idempotent -- so this needs no special case
+ * for "already dispatched to me, now starting".
+ *
+ * ALSO REMOVES `ready` IN THE SAME CALL. `dispatchRow`/`claimRow` only ever added labels, so a row still
+ * carrying `ready` at the moment it was dispatched came out the other side as `ready` + `in-progress` +
+ * `session:*` -- exactly the state `ready-label-audit.mjs` exists to catch (a row cannot be both
+ * "unclaimed, pickable" and "claimed"), found on #197's own review after being stripped by hand seventeen
+ * times in one evening. `--remove-label` on a label a row does not carry is a harmless no-op, so this needs
+ * no branch for "was it ready in the first place".
+ *
  * @param {number} issueNumber
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun }} [deps]
+ * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
+ *   dispatch, `[STARTED_LABEL]` for a claim/start
+ * @param {{ run?: typeof defaultRun }} deps
  * @returns {{ claimed: true } | { claimed: false, reason: string }}
  */
-export function claimRow(issueNumber, mySession, { run = defaultRun } = {}) {
+function writeRowLabels(issueNumber, mySession, extraLabels, { run = defaultRun } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
 
   const sessionLabel = `session:${mySession}`;
+  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels];
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
-    "--add-label", CLAIM_LABEL, "--add-label", sessionLabel]);
+    ...labelsToAdd.flatMap((l) => ["--add-label", l]),
+    "--remove-label", READY_LABEL]);
 
   const after = fetchLabels(issueNumber, { run });
   const afterStatus = claimStatus(after.labels);
   const otherSessions = afterStatus.sessions.filter((s) => s !== mySession);
   if (otherSessions.length > 0) {
     // LOST THE RACE, DETECTED AFTER THE FACT: back off rather than leave a contested claim standing.
-    // Removing only OUR OWN session label, never `in-progress` (which the other session's claim needs)
-    // and never the other session's label (not ours to touch).
-    run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO, "--remove-label", sessionLabel]);
+    // Removing only OUR OWN session label (and any of our extras), never `in-progress` (which the other
+    // session's claim needs) and never the other session's label (not ours to touch).
+    run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
+      ...[sessionLabel, ...extraLabels].flatMap((l) => ["--remove-label", l])]);
     return { claimed: false, reason: `lost a race to ${otherSessions.join(", ")} -- backed off` };
   }
   return { claimed: true };
 }
 
+/**
+ * Print whether the row can be STARTED today, alongside whether it is claimed (#177).
+ *
+ * A SEPARATE PROCESS on purpose. `row-reachability.mjs` walks every remote ref and shells `git` dozens of
+ * times; importing it would make every `check` pay that even when the answer is not wanted, and a slow
+ * claim tool is one people stop running before claiming -- which is the defect `row-claim` exists for.
+ *
+ * ITS FAILURE IS NOT THIS COMMAND'S FAILURE. If reachability cannot be computed, the claim answer above
+ * is still correct and is what the caller asked for; swallowing the reachability error here keeps
+ * "I could not tell you whether it is startable" from reading as "I could not tell you whether it is
+ * claimed". The exit code is set before this runs and is never touched by it.
+ *
+ * RETURNS the verdict (#226), rather than only printing it, so the caller can log the exact same answer
+ * it showed the worker -- `code: null` for the one case not even the subprocess's own exit code can name
+ * (the spawn itself failing, e.g. `node` missing), kept distinct from `row-reachability.mjs`'s own real
+ * `CANNOT_ASK` (2), which IS a code and is logged as one.
+ *
+ * @param {number} issueNumber
+ * @returns {{ code: number | null, output: string }}
+ */
+function reportReachability(issueNumber) {
+  try {
+    // `fileURLToPath`, NOT `.pathname` -- a URL's pathname is percent-ENCODED, so a checkout under a
+    // path containing a space becomes `%20` and node cannot find the file. This repo already records that
+    // exact defect for entry-point guards built by string concatenation; it is the same trap read from
+    // the other end.
+    const out = execFileSync("node",
+      [fileURLToPath(new URL("row-reachability.mjs", import.meta.url)), String(issueNumber)],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    process.stdout.write(out);
+    return { code: 0, output: out };
+  } catch (error) {
+    const spawned = /** @type {{stdout?: string, stderr?: string, status?: number}} */ (error);
+    const output = `${spawned.stdout ?? ""}${spawned.stderr ?? ""}`;
+    process.stdout.write(output);
+    return { code: typeof spawned.status === "number" ? spawned.status : null, output };
+  }
+}
+
+/**
+ * DISPATCH: mark a row taken the moment it is handed to a session, before that session has done anything.
+ * This is the fix for #176 -- called by `dispatcher`/`product-manager` in the same action as assigning a
+ * row in a message, so a second dispatch in the same window sees this one on the board rather than
+ * reading unclaimed. Writes `in-progress` + `session:<name>` only; `started` is NOT set, which is what
+ * makes `check`/`status` able to report "dispatched but not started" rather than collapsing it into
+ * "started".
+ *
+ * @param {number} issueNumber
+ * @param {string} mySession
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {{ claimed: true } | { claimed: false, reason: string }}
+ */
+export function dispatchRow(issueNumber, mySession, deps = {}) {
+  return writeRowLabels(issueNumber, mySession, [], deps);
+}
+
+/**
+ * CLAIM / START: mark a row as actually being worked. Used two ways -- a worker self-pulling a row with
+ * no prior dispatch goes straight from unclaimed to started; a worker beginning a row `dispatchRow`
+ * already marked for it goes from dispatched to started, re-adding the same `in-progress`/`session:*`
+ * labels harmlessly and adding `started`.
+ *
+ * @param {number} issueNumber
+ * @param {string} mySession
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {{ claimed: true } | { claimed: false, reason: string }}
+ */
+export function claimRow(issueNumber, mySession, deps = {}) {
+  return writeRowLabels(issueNumber, mySession, [STARTED_LABEL], deps);
+}
+
+/**
+ * DECLINE: give a row back. The second acceptance case for #176 -- a row dispatched (or claimed) and then
+ * declined must return to genuinely unclaimed and say so, not sit `in-progress` forever with nobody
+ * obligated to un-label it. Also the general "release" this tool always lacked: #186 needed exactly this
+ * when `worker-audit` claimed a row, found it unstartable, and had to be un-labelled by hand.
+ *
+ * Refuses to release a row this session does not hold -- decline is a session giving BACK its own claim,
+ * never a way to clear someone else's. A row with more than one session label (a race not yet resolved
+ * one way or the other) is also refused rather than guessed at, because removing all of them would take
+ * back a claim that may be the OTHER session's legitimate one.
+ *
+ * @param {number} issueNumber
+ * @param {string} mySession
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {{ declined: true } | { declined: false, reason: string }}
+ */
+export function declineRow(issueNumber, mySession, { run = defaultRun } = {}) {
+  const before = fetchLabels(issueNumber, { run });
+  const status = claimStatus(before.labels);
+  if (!status.claimed) {
+    return { declined: false, reason: "row is not claimed -- nothing to decline" };
+  }
+  if (status.sessions.length > 1) {
+    return { declined: false, reason: `row carries multiple session labels (${status.sessions.join(", ")})`
+      + " -- an unresolved race, not a single decline; resolve it by hand" };
+  }
+  if (!status.sessions.includes(mySession)) {
+    const by = status.sessions.length > 0 ? status.sessions.join(", ") : "someone (no session label recorded yet)";
+    return { declined: false, reason: `row is held by ${by}, not ${mySession} -- refusing to release a claim `
+      + "that is not this session's" };
+  }
+  run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
+    ...[CLAIM_LABEL, `session:${mySession}`, STARTED_LABEL].flatMap((l) => ["--remove-label", l])]);
+  return { declined: true };
+}
+
+/** @returns {string} the check/conflict log's path -- shared across every worktree, per `gitCommonDir`. */
+export function checkLogPath() {
+  return `${gitCommonDir()}/row-claim-check-log.jsonl`;
+}
+
+/**
+ * Appends ONE `check` verdict -- called on EVERY `check`/`--row=` invocation, whatever it found. This is
+ * the log's DENOMINATOR (#226): without an entry for every ask, a reader can never tell "the tool has been
+ * asked N times and wrong M of them" from "the tool has only ever been asked when someone suspected it".
+ *
+ * @param {string} logPath
+ * @param {{ issueNumber: number, claimed: boolean, started: boolean, sessions: string[],
+ *           reachability: { code: number | null, output: string } | null }} entry
+ */
+export function recordCheck(logPath, entry) {
+  appendJsonl(logPath, { kind: "check", at: new Date().toISOString(), ...entry });
+}
+
+/**
+ * Appends ONE `conflict` -- a worker's own finding, paired with the tool's most recently recorded verdict
+ * for the SAME issue. This is the log's NUMERATOR. `recordedVerdict` is whatever `latestCheckFor` returned
+ * -- `null` when nobody ever ran `check` on this issue first, which is itself worth keeping rather than
+ * inventing a verdict that was never given.
+ *
+ * @param {string} logPath
+ * @param {{ issueNumber: number, recordedVerdict: object | null, found: string }} entry
+ */
+export function recordConflict(logPath, entry) {
+  appendJsonl(logPath, { kind: "conflict", at: new Date().toISOString(), ...entry });
+}
+
+/**
+ * The most recently recorded `check` entry for an issue, or `null` if `check` was never run against it --
+ * mirrors `merge-guard.mjs`'s `latestVerdictFor` exactly, one field renamed.
+ *
+ * @param {string} logPath
+ * @param {number} issueNumber
+ * @returns {object | null}
+ */
+export function latestCheckFor(logPath, issueNumber) {
+  /** @type {string} */
+  let text;
+  try {
+    text = readFileSync(logPath, "utf8");
+  } catch (error) {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code === "ENOENT") return null;
+    throw error;
+  }
+  const entries = text.split("\n").filter(Boolean).map((line) => JSON.parse(line))
+    .filter((entry) => entry.kind === "check" && entry.issueNumber === issueNumber);
+  return entries.length > 0 ? entries[entries.length - 1] : null;
+}
+
+/**
+ * Records the `check` verdict without letting a LOGGING failure read as a CLAIM-DETERMINATION failure --
+ * the same distinction `reportReachability`'s own doc draws for reachability. A full disk should not turn
+ * a correctly-answered `check` into `COULD NOT DETERMINE`.
+ *
+ * @param {{ issueNumber: number, claimed: boolean, started: boolean, sessions: string[],
+ *           reachability: { code: number | null, output: string } | null }} entry
+ */
+function recordCheckSafely(entry) {
+  try {
+    recordCheck(checkLogPath(), entry);
+  } catch (error) {
+    process.stderr.write(`row-claim: could not record this check to the log -- the answer above is still `
+      + `correct. ${/** @type {Error} */ (error).message}\n`);
+  }
+}
+
 function usage() {
   return "Usage:\n"
-    + "  node scripts/row-claim.mjs check <issue-number>\n"
-    + "  node scripts/row-claim.mjs claim <issue-number> --session=<name>\n";
+    + "  node scripts/row-claim.mjs --row=<issue-number>                       (status: three states)\n"
+    + "  node scripts/row-claim.mjs check <issue-number>                       (alias of --row=)\n"
+    + "  node scripts/row-claim.mjs dispatch <issue-number> --session=<name>   (mark taken at dispatch)\n"
+    + "  node scripts/row-claim.mjs claim <issue-number> --session=<name>      (mark started)\n"
+    + "  node scripts/row-claim.mjs decline <issue-number> --session=<name>    (give it back)\n"
+    + "  node scripts/row-claim.mjs conflict <issue-number> --found=<text>     (#226: reality differed)\n";
+}
+
+/**
+ * Renders the three-state read `claimStatus` makes possible, shared by `--row=` and `check`. A boolean
+ * "claimed" cannot express the state #176 is about -- see the file header.
+ *
+ * UNCLAIMED IS NOT THE SAME AS STARTABLE (#177), and the labels cannot tell you which. Three rows on
+ * 2026-09-07 were `ready`, not `fleet-gated`, correctly classified, and unstartable: one held by an
+ * unmerged branch, one whose step 1 could not reproduce on `main`, and one whose SUBJECT existed on a
+ * single open PR and nowhere else. A worker should learn that here rather than at step 1, which is where
+ * the evening goes -- so an unclaimed row also gets `reportReachability`'s answer, REPORTED, NEVER
+ * ENFORCED: the exit code below is untouched, because the inference is coarse (the blocking PR may land
+ * in ten minutes, or the worker may mean to build on that branch) and a check that refuses a claim on it
+ * would be bypassed and then not consulted at all.
+ *
+ * @param {number} issueNumber
+ * @param {string} title
+ * @param {{ claimed: boolean, started: boolean, sessions: string[] }} status
+ */
+function renderStatus(issueNumber, title, status) {
+  if (!status.claimed) {
+    process.stdout.write(`UNCLAIMED -- #${issueNumber} "${title}"\n`);
+    process.exitCode = 0;
+    const reachability = reportReachability(issueNumber);
+    recordCheckSafely({ issueNumber, claimed: false, started: false, sessions: [], reachability });
+    return;
+  }
+  const by = status.sessions.length > 0 ? status.sessions.join(", ") : "someone (no session label yet)";
+  const state = status.started ? "STARTED" : "DISPATCHED (not started)";
+  process.stdout.write(`${state} by ${by} -- #${issueNumber} "${title}"\n`);
+  process.exitCode = 1;
+  recordCheckSafely({ issueNumber, claimed: true, started: status.started, sessions: status.sessions,
+    reachability: null });
+}
+
+/** @param {number} issueNumber */
+function runStatus(issueNumber) {
+  try {
+    const { labels, title } = fetchLabels(issueNumber);
+    renderStatus(issueNumber, title, claimStatus(labels));
+  } catch (error) {
+    process.stderr.write(`COULD NOT DETERMINE: ${/** @type {Error} */ (error).message}\n`);
+    process.exitCode = 2;
+  }
+}
+
+/**
+ * @param {"dispatch" | "claim"} mode
+ * @param {number} issueNumber
+ * @param {string[]} rest
+ */
+function runDispatchOrClaim(mode, issueNumber, rest) {
+  const sessionFlag = rest.find((a) => a.startsWith("--session="));
+  const mySession = sessionFlag?.slice("--session=".length);
+  if (!mySession) {
+    process.stderr.write(`row-claim ${mode}: --session=<name> is required\n${usage()}`);
+    process.exitCode = 2;
+    return;
+  }
+  try {
+    const result = mode === "dispatch" ? dispatchRow(issueNumber, mySession) : claimRow(issueNumber, mySession);
+    if (result.claimed) {
+      const label = mode === "dispatch" ? "DISPATCHED" : "STARTED";
+      const startedSuffix = mode === "claim" ? ` / ${STARTED_LABEL}` : "";
+      process.stdout.write(`${label} -- #${issueNumber} is now ${CLAIM_LABEL} / session:${mySession}`
+        + `${startedSuffix}\n`);
+      process.exitCode = 0;
+    } else {
+      process.stdout.write(`NOT CLAIMED: ${result.reason}\n`);
+      process.exitCode = 1;
+    }
+  } catch (error) {
+    process.stderr.write(`COULD NOT DETERMINE: ${/** @type {Error} */ (error).message}\n`);
+    process.exitCode = 2;
+  }
+}
+
+/**
+ * @param {number} issueNumber
+ * @param {string[]} rest
+ */
+function runDecline(issueNumber, rest) {
+  const sessionFlag = rest.find((a) => a.startsWith("--session="));
+  const mySession = sessionFlag?.slice("--session=".length);
+  if (!mySession) {
+    process.stderr.write(`row-claim decline: --session=<name> is required\n${usage()}`);
+    process.exitCode = 2;
+    return;
+  }
+  try {
+    const result = declineRow(issueNumber, mySession);
+    if (result.declined) {
+      process.stdout.write(`DECLINED -- #${issueNumber} is unclaimed again\n`);
+      process.exitCode = 0;
+    } else {
+      process.stdout.write(`NOT DECLINED: ${result.reason}\n`);
+      process.exitCode = 1;
+    }
+  } catch (error) {
+    process.stderr.write(`COULD NOT DETERMINE: ${/** @type {Error} */ (error).message}\n`);
+    process.exitCode = 2;
+  }
+}
+
+/**
+ * A worker recording that reality differed from `check`'s own last-recorded verdict for this issue (#226)
+ * -- CLOSED when it read startable, already built, a held region that turned out to matter, or the
+ * inverse. Pairs the tool's verbatim answer with what was actually found, the same way `merge-guard`'s
+ * `reconcile` pairs a recorded verdict with the real PR outcome -- except here nothing can look the real
+ * outcome up automatically, so the worker who found it IS the reconciliation.
+ *
+ * @param {number} issueNumber
+ * @param {string[]} rest
+ */
+function runConflict(issueNumber, rest) {
+  const foundFlag = rest.find((a) => a.startsWith("--found="));
+  const found = foundFlag?.slice("--found=".length);
+  if (!found) {
+    process.stderr.write(`row-claim conflict: --found=<what you found instead> is required\n${usage()}`);
+    process.exitCode = 2;
+    return;
+  }
+  try {
+    const recordedVerdict = latestCheckFor(checkLogPath(), issueNumber);
+    recordConflict(checkLogPath(), { issueNumber, recordedVerdict, found });
+    const against = recordedVerdict
+      ? `against the check recorded at ${recordedVerdict.at}`
+      : "-- no prior `check` was ever recorded for this issue, so there is nothing to pair it against, "
+        + "and that absence is itself recorded";
+    process.stdout.write(`RECORDED -- #${issueNumber} conflict logged ${against}\n`);
+    process.exitCode = 0;
+  } catch (error) {
+    process.stderr.write(`COULD NOT RECORD: ${/** @type {Error} */ (error).message}\n`);
+    process.exitCode = 2;
+  }
 }
 
 async function main() {
-  const [mode, issueArg, ...rest] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const rowFlag = argv.find((a) => a.startsWith("--row="));
+
+  // Bare `--row=<n>` (the acceptance's own invocation shape) is a status read with no mode word.
+  if (rowFlag && argv[0] === rowFlag) {
+    const issueNumber = Number(rowFlag.slice("--row=".length));
+    if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
+      process.stderr.write(usage());
+      process.exitCode = 2;
+      return;
+    }
+    runStatus(issueNumber);
+    return;
+  }
+
+  const [mode, issueArg, ...rest] = argv;
   const issueNumber = Number(issueArg);
   if (!mode || !Number.isInteger(issueNumber) || issueNumber <= 0) {
     process.stderr.write(usage());
@@ -173,45 +570,19 @@ async function main() {
   }
 
   if (mode === "check") {
-    try {
-      const { labels, title } = fetchLabels(issueNumber);
-      const status = claimStatus(labels);
-      if (status.claimed) {
-        const by = status.sessions.length > 0 ? status.sessions.join(", ") : "someone (no session label yet)";
-        process.stdout.write(`CLAIMED by ${by} -- #${issueNumber} "${title}"\n`);
-        process.exitCode = 1;
-      } else {
-        process.stdout.write(`UNCLAIMED -- #${issueNumber} "${title}"\n`);
-        process.exitCode = 0;
-      }
-    } catch (error) {
-      process.stderr.write(`COULD NOT DETERMINE: ${/** @type {Error} */ (error).message}\n`);
-      process.exitCode = 2;
-    }
+    runStatus(issueNumber);
     return;
   }
-
-  if (mode === "claim") {
-    const sessionFlag = rest.find((a) => a.startsWith("--session="));
-    const mySession = sessionFlag?.slice("--session=".length);
-    if (!mySession) {
-      process.stderr.write(`row-claim claim: --session=<name> is required\n${usage()}`);
-      process.exitCode = 2;
-      return;
-    }
-    try {
-      const result = claimRow(issueNumber, mySession);
-      if (result.claimed) {
-        process.stdout.write(`CLAIMED -- #${issueNumber} is now ${CLAIM_LABEL} / session:${mySession}\n`);
-        process.exitCode = 0;
-      } else {
-        process.stdout.write(`NOT CLAIMED: ${result.reason}\n`);
-        process.exitCode = 1;
-      }
-    } catch (error) {
-      process.stderr.write(`COULD NOT DETERMINE: ${/** @type {Error} */ (error).message}\n`);
-      process.exitCode = 2;
-    }
+  if (mode === "dispatch" || mode === "claim") {
+    runDispatchOrClaim(mode, issueNumber, rest);
+    return;
+  }
+  if (mode === "decline") {
+    runDecline(issueNumber, rest);
+    return;
+  }
+  if (mode === "conflict") {
+    runConflict(issueNumber, rest);
     return;
   }
 

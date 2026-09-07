@@ -18,8 +18,11 @@ IS_BRANCH_CHECKOUT="${3:-0}"
 
 [ "$IS_BRANCH_CHECKOUT" = "1" ] || exit 0
 
-TOPLEVEL="$(git rev-parse --show-toplevel)"
-[ -d "$TOPLEVEL/.git" ] || exit 0   # a linked worktree's `.git` is a file -- not this hook's business
+# ASKED OF AN EXPLICIT MARK, never inferred from the tree -- see `lib/is-primary-checkout.sh` for the
+# incident (#198): `.git` being a directory is true of EVERY clone, so this hook travelled to the lab with
+# a `git pull` and broke every `lab:job -e ref=<branch>`.
+. "$(dirname "$0")/lib/is-primary-checkout.sh"
+is_primary_checkout || exit 0
 
 if [ -n "${A11Y_PRIMARY_CHECKOUT_REASON:-}" ]; then
   echo "post-checkout: leaving the primary checked out as-is, overridden: $A11Y_PRIMARY_CHECKOUT_REASON" >&2

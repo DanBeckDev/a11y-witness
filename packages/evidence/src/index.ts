@@ -6,6 +6,11 @@
  * Windows, VoiceOver on macOS, Orca on Linux) and run as network services, so
  * the portable core can talk to any of them the same way. The design rationale
  * is in docs/adr/0001-capture-architecture.md.
+ *
+ * `evidence` has more workspace dependents than any other package (cli, judge, lab, nvda-worker, scorer,
+ * worker-fleet all depend on it, transitively), so a change scoped to this file is the MANY-DEPENDENTS
+ * case for `ci.yml`'s `testPackages` scoping (#175) -- the widest fan-out `testPackages` can produce from
+ * a single-package diff.
  */
 
 /** A navigation strategy hint. Backends pick a sensible default if omitted. */

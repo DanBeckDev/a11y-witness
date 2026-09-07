@@ -533,12 +533,6 @@ export const SWEEP_OF: Record<string, "headings" | "links" | "landmarks" | "grap
 };
 
 /**
- * Per-type: did the sweep announce as many distinct names as the page exposes?
- *
- * @param capture a capture, unwrapped
- * @returns one verdict per type the census counts, or `unknown` where it cannot say
- */
-/**
  * WHAT THE SWEEP FOUND, counted the way the census counts it.
  *
  * The census counts distinct NAMES for named elements and each UNNAMED element individually, so the sweep
@@ -591,12 +585,6 @@ function sweptElements(announced: string[], type: string): { names: Set<string>;
   };
 }
 
-/**
- * Per-type: did the sweep announce as many distinct names as the page exposes?
- *
- * @param capture a capture, unwrapped
- * @returns one verdict per type the census counts, or `unknown` where it cannot say
- */
 /**
  * NVDA states a table's size when the caret enters it: "table, with 3 rows and 7 columns".
  *
@@ -655,6 +643,12 @@ function tableCompleteness(capture: CapturedAnnouncements): Completeness {
   return seen >= expected * CELLS_ENOUGH ? "exact" : "truncated";
 }
 
+/**
+ * Per-type: did the sweep announce as many distinct names as the page exposes?
+ *
+ * @param capture a capture, unwrapped
+ * @returns one verdict per type the census counts, or `unknown` where it cannot say
+ */
 export function sweepCompleteness(capture: CapturedAnnouncements): Record<string, Completeness> {
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
   const census = marks.find((m) => typeof m === "object" && m !== null
@@ -944,19 +938,6 @@ export function censusTargetIsSuspect(
 const DOCUMENT_ANNOUNCEMENT = /,\s*document$/i;
 
 /**
- * Did submitting a form navigate this capture to a different document, however we can tell? See
- * `censusTargetIsSuspect`'s header for the full history of why this needs two signals rather than one.
- *
- * Reads BOTH shapes `navigatedOnSubmit` has ever had on the wire. The current shape carries `checked`;
- * its absence means a capture taken before this fix, whose only spelling of "navigated" was the field's
- * bare presence — `{ from, to }` with no `checked` key, present only when the submit actually moved the
- * document. A `checked: true` verdict is trusted outright in EITHER direction, skipping the text
- * heuristic entirely, because it is a direct reading rather than a guess about announced text; only
- * `checked: false` (we could not ask) falls through to it, exactly as an old-shape absence always did.
- *
- * @param capture a capture, unwrapped
- */
-/**
  * A GET SUBMIT RELOADS THE SAME DOCUMENT WITH A QUERY STRING, and that is not a navigation to a different
  * document — issue #30.
  *
@@ -996,6 +977,19 @@ function submitOnlyAddedAQueryString(from: unknown, to: unknown): boolean {
   }
 }
 
+/**
+ * Did submitting a form navigate this capture to a different document, however we can tell? See
+ * `censusTargetIsSuspect`'s header for the full history of why this needs two signals rather than one.
+ *
+ * Reads BOTH shapes `navigatedOnSubmit` has ever had on the wire. The current shape carries `checked`;
+ * its absence means a capture taken before this fix, whose only spelling of "navigated" was the field's
+ * bare presence — `{ from, to }` with no `checked` key, present only when the submit actually moved the
+ * document. A `checked: true` verdict is trusted outright in EITHER direction, skipping the text
+ * heuristic entirely, because it is a direct reading rather than a guess about announced text; only
+ * `checked: false` (we could not ask) falls through to it, exactly as an old-shape absence always did.
+ *
+ * @param capture a capture, unwrapped
+ */
 export function submitNavigatedTheDocument(capture: CapturedAnnouncements): boolean {
   const nav = capture.interaction?.navigatedOnSubmit;
   if (nav && typeof nav === "object" && "checked" in nav) {
