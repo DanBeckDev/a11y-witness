@@ -155,9 +155,13 @@ export const DOC_ROOT_FILES = new Set(["README.md", "CLAUDE.md", "CONTRIBUTING.m
  * react to. Exported separately from `classify` so the pre-push hook's board-only fast path can ask the
  * identical question `ci.yml`'s `board` job asks, rather than a second copy of the same two regexes.
  *
- * @param {string[]} docsFiles every file already known to be doc-touching (`f.startsWith("docs/")` or a
- *   `DOC_ROOT_FILES` member) -- callers filter first, since an EMPTY list is not "board-only", it is "no
- *   doc changed at all", and those are different questions with different callers.
+ * @param {string[]} docsFiles a list of files to check -- an EMPTY list is not "board-only", it is "no
+ *   doc changed at all", and those are different questions with different callers. Two valid shapes,
+ *   deliberately: `classify` pre-filters to doc-touching files only, because its `board`/`docs` decision
+ *   is independent of the OTHER categories (`ts`, `python`, ...) it computes over the same diff in the
+ *   same call -- a non-doc file is that diff's problem, not this function's. `isBoardOnlyDiff` (#296) is a
+ *   single yes/no gate with no sibling categories to catch anything this function lets through, so it
+ *   passes the WHOLE, unfiltered diff -- a non-doc file must fail `.every()` here, or it fails nowhere.
  */
 export function boardOnly(docsFiles) {
   return docsFiles.length > 0 && docsFiles.every((f) =>
