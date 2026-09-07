@@ -10,6 +10,7 @@
     "board:summary-check": "node scripts/board-summary-check.mjs",
     "board:liveness": "node scripts/board-schedule-liveness.mjs",
     "npm-token:check": "node scripts/npm-token-liveness.mjs",
+    "ready:audit": "node scripts/ready-label-audit.mjs",
     "board:document": "node scripts/board-document.mjs",
     "board:report": "node scripts/board-report.mjs",
     "jobs:check": "node scripts/check-scheduled-jobs.mjs",
