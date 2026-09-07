@@ -112,7 +112,7 @@ function section1(d) {
     "1. We set the date by adding up the remaining work, and every change to it is recorded — a slip "
     + "cannot arrive as a bare new date.",
     "2. **This carries most of the weight:** the date assumes the one item of unknown size finishes "
-    + "inside the week we allowed, and this afternoon that week began resting on less.",
+    + "inside the week we allowed, and today's measurement left that week resting on less.",
     "3. It is not padded against the risk most likely to move it, stated below.",
   ].join("\n");
 }
@@ -172,7 +172,13 @@ function section3(d) {
  * held that way by nobody. `costsNothing` is here for the same reason: "two of them cost nothing to make"
  * is an editorial claim about WHICH rows, so the row carries it and the sentence counts it. See #284.
  */
-const DECISIONS = [
+// EXPORTED, not restated -- #284. `board-style.test.ts`'s "no count in the prose is typed" check used to
+// hand-type the expected value beside a regex naming its sentence; the achievements/decisions/risks/stages
+// counts were never added to that list because adding a fourth entry per edition is exactly the habit
+// that let the first three drift silently. Reading these three lists' real `.length` at test time -- the
+// same value `section4`/`section5` read to render -- means a wrong count beside ANY of them fails without
+// anyone having to name the sentence.
+export const DECISIONS = [
   { ask: "Approve the definition of version one.", costsNothing: true,
     ifNothing: "The question the board keeps asking stays unanswerable, and every edition repeats that." },
   { ask: "Name one person outside the project to try the tool.", costsNothing: false,
@@ -218,7 +224,7 @@ function section4(d) {
  * stages close -- while the appendix said "the five stages are". Two sources for one fact, and the
  * section's was not even counting stages. The list is the fact; both places read it.
  */
-const STAGES = [
+export const STAGES = [
   "establish what a page should cost to record on the current format",
   "measure what more machines actually give us",
   "set a target from that",
@@ -231,17 +237,19 @@ const STAGES = [
  * The heading read "Four risks are live" above a table of three. A sentence adjacent to a table is a
  * claim about that table, and the only honest source for it is the table.
  */
-const RISKS = [
+export const RISKS = [
     "| **We may abandon the change to the trained component rather than adjust it.** | Its abandonment conditions were written in advance so the decision could not be softened, and the assumption it rests on is being measured properly for the first time now. |",
-    "| **One item still has no known size.** | We published a fix this morning, measured it wrong this "
-    + "afternoon, and replaced it with a theory nobody has tested. The process working — and the week we "
+    "| **One item still has no known size.** | We published a fix today, found by measurement that it was "
+    + "wrong, and replaced it with a theory nobody has tested. The process working — and the week we "
     + "allowed now rests on less. |",
     "| **Everything runs on one machine.** | The capture machines' credentials live on one computer. "
     + "The list of open work moved off it today; the credentials have not. |",
 ];
 
-/** Small counts read as words in prose; the number still comes from the data. */
-function numberWord(n) {
+/** Small counts read as words in prose; the number still comes from the data. Exported so
+ * `board-style.test.ts` renders the SAME word a real count produces, rather than re-deriving the mapping.
+ */
+export function numberWord(n) {
   return ["zero", "one", "Two", "Three", "Four", "Five", "Six", "Seven"][n] ?? String(n);
 }
 
