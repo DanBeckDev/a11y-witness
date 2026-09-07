@@ -136,13 +136,23 @@ run() { # run <label> <command...>
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
-run "lint"       npm run --silent lint
-run "typecheck"  npm run --silent typecheck
-
 if [ "$BRANCH" = "main" ]; then
+  run "lint"       npm run --silent lint
+  run "typecheck"  npm run --silent typecheck
   echo "pre-push: FULL suite (main). Release gates are separate: npm run release:gate"
   run "unit tests" env A11Y_TEST_CONCURRENCY=4 npm test
+elif [ "$(node scripts/board-only-check.mjs)" = "true" ]; then
+  # BOARD-ONLY, THE SAME SHAPE `ci.yml`'s `board` job GATES ON -- chairman's direction, 2026-09-06, the
+  # product manager's single largest recurring cost that night: docs/board/summaries/*.md and
+  # docs/board/reported.json are edited far more often than anything else under docs/. No lint, no
+  # typecheck, no build -- CI (ci.yml's own `board` job, which DOES build; see its header for why) is the
+  # authoritative gate. This is the fast, local first pass only.
+  echo "pre-push: BOARD-ONLY gate ($BRANCH) -- every doc-touching file against origin/main is a board file."
+  echo "Skipping lint/typecheck/the general suite; CI's board job (ci.yml) is authoritative."
+  run "board guards" npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
 else
+  run "lint"       npm run --silent lint
+  run "typecheck"  npm run --silent typecheck
   echo "pre-push: FAST gate ($BRANCH) -- lint, typecheck, and tests of the package(s) touched against"
   echo "origin/main. The full suite runs in CI on this branch's PR: .github/workflows/ci.yml"
   # A branch that breaks a package it never touched passes THIS gate and fails CI -- deliberate, not a
