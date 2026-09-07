@@ -87,6 +87,7 @@
     "lab:stop": "ANSIBLE_CONFIG=packages/control/ansible/ansible.cfg ansible-playbook packages/control/ansible/lab-stop.yml",
     "lab:reset": "ANSIBLE_CONFIG=packages/control/ansible/ansible.cfg ansible-playbook packages/control/ansible/lab-reset.yml",
     "corpus:snapshot": "node packages/lab/scripts/corpus-snapshot.mjs",
+    "corpus:prune-orphans": "node packages/lab/scripts/corpus-prune-orphans.mjs",
     "corpus:backup": "node packages/lab/scripts/corpus-backup.mjs",
     "training:repeat": "tsx packages/lab/src/training/repeat-capture.mjs",
     "rules:score": "tsx packages/lab/scripts/score-rules.ts",
