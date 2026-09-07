@@ -20,7 +20,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS, issues, outOfRelease, unclassified, achievementsWhoseWorldMoved,
-  realPageCaptureAge } from "./board-data.mjs";
+  realPageCaptureAge, worstVerdict } from "./board-data.mjs";
 import { toHtml } from "./board-markdown.mjs";
 
 // Module scope, not inside main(): `section5` reads it, and `document()` is exported for the renderer
@@ -360,6 +360,54 @@ function reconciliation(d) {
     + `${unclassifiedClause}. ${onRelease} + ${later} + ${out} + ${none} = ${sum}${disagreement}`;
 }
 
+/** What the value column says for the most recent check: the verdict, and whether it is explained.
+ *
+ * A BARE VERDICT HERE IS THE COMPRESSION `orchestrator` WARNED ABOUT, in their words: "please do not let
+ * the document compress FAIL and 0 asserted into one word. They are the two halves of the claim and the
+ * second is the one that means anything to a reader." A reader scans this column; "FAIL" alone in it says
+ * the opposite of what happened when the finding was that nothing was asserted.
+ *
+ * So a non-passing verdict that HAS an authored explanation says so -- a fact about the entry, not an
+ * interpretation of the result -- and one that does NOT stands alone deliberately, because an unexplained
+ * failure should look like one.
+ */
+function gateHeadline(gate, worst, fresh) {
+  const explained = worst && worst.verdict !== "PASS" && gate.note ? ", explained below" : "";
+  const verdict = worst ? `**${worst.verdict}**${explained} — ` : "";
+  return `${verdict}${gate.command}${fresh ? "" : " — older than this report's window"}`;
+}
+
+/** Where the most recent gate result came from, and what it said, in the gate's own words.
+ *
+ * Extracted so `sourceTable` builds a table rather than also composing prose about verdicts -- the same
+ * split as `reconciliation`, and for the same reason it kept tripping the complexity limit.
+ */
+function gateSource(gate, captureAge, worst) {
+  // Pulled from the gate's OWN printed line, never retyped -- issue #128. `rules:real-pages` prints its
+  // own capture spread, and this is the one place a human used to have to copy it by hand into the
+  // report; now it either quotes what the gate said or says nothing, never a stale guess.
+  const spread = captureAge ? `; the gate's own capture spread: ${captureAge}` : "";
+  // THE SENTENCE THE GATE PRINTED, not a word this document chose. The rule is printed with the verdict
+  // every time -- a status word whose derivation is not on the page is an opinion wearing a
+  // measurement's clothes, and that applies hardest to a verdict.
+  const said = worst ? `; the gate's own words: "${worst.line}"` : "; the gate printed no verdict line";
+  // A FAIL NOBODY HAS EXPLAINED IS NOT THE SAME AS ONE THAT IS UNDERSTOOD. Whether a failing check blocks
+  // anything is a JUDGEMENT, not derivable from the output, so it is authored on the entry as `note`.
+  // Absent, this says so -- rather than letting a bare FAIL frighten a reader, or an omission reassure one.
+  const meaning = !worst || worst.verdict === "PASS" ? ""
+    : gate.note ? `**What it means:** ${gate.note}`
+      : "**No explanation has been recorded for this result**, so this document cannot say whether it "
+        + "blocks anything.";
+  // THE MEANING LEADS, and this is not a style choice. `orchestrator`, who ran the gate: "please do not
+  // let the document compress FAIL and 0 asserted into one word. They are the two halves of the claim and
+  // the second is the one that means anything to a reader." A verdict at the head of a long paragraph
+  // whose qualification arrives four clauses later IS that compression, so the qualification goes first
+  // and the provenance follows it.
+  return (meaning ? `${meaning} ` : "")
+    + `Run by the engineer who owns the machines at ${gate.at}, output recorded word for word`
+    + spread + said;
+}
+
 function sourceTable(d) {
   const rows = [];
   const push = (what, value, source) => rows.push(`| ${what} | ${value} | ${source} |`);
@@ -395,15 +443,17 @@ function sourceTable(d) {
     `the project's own version history, over the SAME window as the merge count above (since `
     + `${d.since}); the cause is diagnosed and the record is kept by decision`);
   const captureAge = d.latestGate ? realPageCaptureAge(d.latestGate.output) : null;
+  // THE VERDICT COMES FIRST, because the board could not previously see one. This row quoted the COMMAND
+  // and the capture spread; whether the check PASSED appeared nowhere in the document, while
+  // `board-report.mjs` printed the gate's whole output into the GitHub edition. Two editions that would
+  // have disagreed about whether a check passed, with the silent one being the one the board reads.
+  const worst = d.latestGate ? worstVerdict(d.latestGate.output) : null;
   push("Most recent automated check result",
-    d.latestGate ? `${d.latestGate.command}${d.gateIsFresh ? "" : " — older than this report's window"}`
+    d.latestGate
+      ? gateHeadline(d.latestGate, worst, d.gateIsFresh)
       : "**not reported**",
     d.latestGate
-      ? `run by the engineer who owns the machines at ${d.latestGate.at}, output recorded word for word`
-        // Pulled from the gate's OWN printed line, never retyped -- issue #128. `rules:real-pages` prints
-        // its own capture spread, and this is the one place a human used to have to copy it by hand into
-        // the report; now it either quotes what the gate said or says nothing, never a stale guess.
-        + (captureAge ? `; the gate's own capture spread: ${captureAge}` : "")
+      ? gateSource(d.latestGate, captureAge, worst)
       : "no result has been recorded. This report does not run these checks itself: they read a library "
         + "of recordings, and a local copy of that library is only as current as its last synchronisation "
         + "— one measured here was 89 hours old and answered cleanly having examined a library that no "
