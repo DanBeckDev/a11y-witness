@@ -503,8 +503,41 @@ jobs:
   # in `needs:` below has an opinion here regardless of whether `ci-changed.mjs` decided it should run.
   # skipped counts as passing (the job's own `if:` decided it, correctly, that this PR does not need it);
   # anything else does not.
+  # A CHANGE TO A CORPUS-INVALIDATING PATH MUST NAME THE FACTS IT DID NOT MOVE -- #356.
+  #
+  # NOT a CODEOWNERS review, and the reason is measured: every session pushes as the same account, so
+  # `gh pr review --approve` answers "Can not approve your own pull request" -- and a review would have
+  # caught NONE of the failures these paths have actually had. Each was a correct-looking change whose
+  # consequence was invisible at the diff (a memo stale for five days; a remedy guarded on a flag nothing
+  # set; a census stripped at export). This asks for FACTS AND THEIR STATES instead, because writing the
+  # state is what makes an author look.
+  #
+  # The fact list is `docs/owned-path-facts.json`, which `orchestrator` owns -- data, so the owner can
+  # correct it without touching the mechanism, and so the mechanism cannot quietly decide what the
+  # facts are.
+  ownedPaths:
+    needs: changed
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # No `npm ci`: this script imports `cli-flags` RELATIVELY for exactly that reason, and
+      # `pre-install-import-graph.test.ts` derives this job's entry into its population automatically.
+      - name: Which paths did this PR change, and does its body sign them off?
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > /tmp/changed.txt
+          printf '%s' "$BODY" > /tmp/body.txt
+          node scripts/owned-path-signoff.mjs --diff=/tmp/changed.txt --body=/tmp/body.txt
+
   gate:
-    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness, mergeSafety, acceptance]
+    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness, mergeSafety, acceptance, ownedPaths]
     if: always()
     runs-on: ubuntu-latest
     steps:
