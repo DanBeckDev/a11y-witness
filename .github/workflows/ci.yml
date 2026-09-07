@@ -76,6 +76,23 @@ name: ci
 on:
   pull_request:
     branches: [main]
+    # `edited` IS LOAD-BEARING, and its absence deadlocked the queue for eight hours -- 2026-09-07.
+    #
+    # GitHub's default `pull_request` types are `opened, synchronize, reopened`. Unit 2's `acceptance` job
+    # (#353) reads the PR BODY, so a PR whose only defect is its body -- a prose `Acceptance:` line that
+    # bash cannot run, or no line at all -- can be fixed only by editing the body, and NO DEFAULT TRIGGER
+    # FIRES ON THAT. Measured: zero merges between 13:38Z and 21:10Z, every `ci.yml` run red on
+    # `acceptance`, five open PRs written before the field existed and two whose corrected bodies could
+    # not be re-read. The gate was right and there was no way to satisfy it.
+    #
+    # A job that reads an input no trigger watches cannot be fixed by the person holding the input. That
+    # is the general shape, and it costs a whole queue rather than one PR.
+    #
+    # The cost of the fix is a full `ci.yml` run per title or body edit. Bounded by the `concurrency`
+    # block below, which cancels the previous run on the same ref, and cheap in this repo because the
+    # `changed` job gates every expensive job behind a real diff -- a body edit changes no files, so the
+    # heavy jobs skip and what actually re-runs is `changed`, `acceptance`, `mergeSafety` and `gate`.
+    types: [opened, synchronize, reopened, edited]
   # #156: a merge queue CANNOT be turned on without this. GitHub's own docs are explicit -- "You must use
   # the merge_group event to trigger your GitHub Actions workflow when a pull request is added to a merge
   # queue ... Otherwise, status checks will not be triggered" -- and an entry whose checks never report is
@@ -452,6 +469,48 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/merge-guard.mjs --ci-gate ${{ github.event.pull_request.number }}
 
+  # #353 (pipeline unit 2): NOTHING HAS EVER RUN A ROW'S ACCEPTANCE COMMAND. Every PR body carries an
+  # `Acceptance:` line and argues its own case; the only thing that has ever executed it is the author,
+  # reporting the result in prose. `capture-check` was mandatory after any `capture-core.mjs` change and
+  # had never run once; `scorer:verify` was a security check on the one artefact this project publishes
+  # and nothing invoked it; `release:gate` was broken from the day it was written. This is the thing that
+  # actually runs it -- see `scripts/acceptance-commands.mjs`'s own header for the three outcomes
+  # (RAN/REFUSED/MISSING) and why they must never collapse into two.
+  #
+  # `pull_request`, NEVER `pull_request_target` -- this job executes commands an author wrote in a PR
+  # body. `pull_request` runs against the FORK's own checkout with a read-only token, which is the correct
+  # blast radius for "run whatever this PR says to run"; `pull_request_target` would run those same
+  # commands with the BASE repo's token and secrets, turning a line in a PR description into arbitrary
+  # code execution with write credentials. `permissions: contents: read`, explicitly, and nothing else --
+  # this job never writes anything.
+  #
+  # UNSCOPED AND UNCONDITIONAL, like `mergeSafety` -- every PR needs its acceptance verified regardless of
+  # which files changed, and a missing `Acceptance:` line must fail even a docs-only PR.
+  acceptance:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/cache@v4
+        id: node-modules-cache
+        with:
+          path: node_modules
+          key: node-modules-${{ hashFiles('package-lock.json') }}
+      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts
+      - run: npm run build
+      # PR_BODY AS AN ENV VAR, NEVER AS A SHELL ARGUMENT -- a PR body is adversarial input (anyone can open
+      # a PR), and GitHub Actions' own `env:` mapping keeps it one opaque string here rather than
+      # re-parsing it as shell. `acceptance-commands.mjs` reads it from `process.env.PR_BODY`, never argv.
+      - name: Run the PR's own stated Acceptance command(s)
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/acceptance-commands.mjs
+
   # THE ONE CONTEXT BRANCH PROTECTION REQUIRES. `if: always()` so this still runs when an upstream job
   # fails or is cancelled -- without it, a failing `ts` would skip `gate` too (the default `if` on a job
   # is `success()` on its dependencies), and a job that never reports on the one commit that most needs it
@@ -462,7 +521,7 @@ jobs:
   # skipped counts as passing (the job's own `if:` decided it, correctly, that this PR does not need it);
   # anything else does not.
   gate:
-    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness, mergeSafety]
+    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness, mergeSafety, acceptance]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -477,7 +536,8 @@ jobs:
             "${{ needs.board.result }}" \
             "${{ needs.changeset.result }}" \
             "${{ needs.rulesFitness.result }}" \
-            "${{ needs.mergeSafety.result }}"
+            "${{ needs.mergeSafety.result }}" \
+            "${{ needs.acceptance.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"
