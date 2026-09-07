@@ -389,6 +389,40 @@ something I missed"* rather than *"I did not commit what I tested"*:
 <paths>` commits from the WORKING TREE, so a staged path not listed is silently dropped"* — and this is the
 other door: stage, then edit, then commit without paths, and the edit is dropped instead.
 
+## THE STASH IS SHARED BETWEEN EVERY WORKTREE, AND AN UNLABELLED ONE IS NOW REFUSED (#290)
+
+`refs/stash` lives in the **common git directory** — the same one that makes branches shared, and the
+same fact that lets a branch survive its worktree's deletion. So a stash made in one worktree is visible
+and poppable from every other, `git stash list` shows a POSITION rather than an owner, and
+`git stash pop` takes the top of a shared pile.
+
+Measured 2026-09-07: `orchestrator` stashed their own change, checked out `origin/main` to test whether a
+failure was pre-existing, switched back, and `git stash pop` returned **somebody else's uncommitted
+work** — a 95-line diff plus a new test file, with nothing on it saying whose it was. Their own stash was
+consumed in the same operation. Nothing was lost, and only because they read a diff they did not
+recognise. A `pop` followed by `commit -a` would have put another worker's half-finished work into an
+unrelated branch.
+
+```bash
+git stash push -m "agent/my-branch: what this is"   # required — the message is the only owner record
+npm run stash:whose                                 # every stash with the branch it was made on
+A11Y_STASH_ANY=1 git stash push                     # deliberate exception, named in the refusal
+```
+
+**The hook is `reference-transaction`, not `pre-commit`.** Git has no pre-stash hook and `pre-commit`
+cannot see a stash at all — a stash is a ref update, not a commit. `reference-transaction` is the only
+hook that observes one, and exiting non-zero in its `prepared` phase aborts the transaction **with the
+working tree untouched**, so a refused stash costs nothing.
+
+**It refuses CREATION only.** The first version refused every `refs/stash` transaction and broke
+`git stash clear`, `pop` and `drop` — all three update that ref. The discriminator is that a push creates
+a commit while pop and drop move the ref to one already in its reflog. Found by running it.
+
+**`stash:whose` reads the branch out of the stash's own subject**, in both shapes: `WIP on <branch>: …`
+for an unlabelled one and `On <branch>: <message>` for a named one. Naming a stash therefore does not
+cost the ownership information — it adds to it. What no stash records is the WORKTREE, because git does
+not write it, which is why the message is the only place a human can put what git cannot derive.
+
 ## Standing rules inherited from the lead's own record
 
 - **Verify a row is OPEN by a command before briefing it.** Three units were dispatched at already-closed
