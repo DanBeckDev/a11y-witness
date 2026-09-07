@@ -1,0 +1,33 @@
+{
+  "_owner": "orchestrator",
+  "_why": "ceo's ruling 2026-09-07 (#356): 'Orchestrator writes the fact list; that is its code ownership expressed in a check.' This file IS that ownership. It is data so the owner can correct and extend it without touching scripts/owned-path-signoff.mjs, and so the mechanism cannot quietly decide what the facts are.",
+  "_starting_list": "These are ceo's starting facts, seeded so the check can run at all. They are explicitly TO BE CORRECTED AND EXTENDED by the owner -- a seeded list is not an owned one, and nothing here should be read as orchestrator having reviewed it.",
+  "owned": [
+    "packages/nvda-worker/",
+    "packages/scorer/models/",
+    "packages/lab/src/training/capture-cache.mjs",
+    "packages/evidence/src/verify.ts"
+  ],
+  "facts": [
+    {
+      "id": "CAPTURE_PROTOCOL_VERSION",
+      "states": ["unchanged", "bumped"],
+      "why": "a capture cache key. Bumping it invalidates every cached capture and forces a full recapture; the sign-off must name the recapture, not merely the bump."
+    },
+    {
+      "id": "provisionRevision",
+      "states": ["unchanged", "moved"],
+      "why": "a capture cache key AND a fleet-consistency MUST_MATCH field, so moving it splits the fleet and refuses every capture run."
+    },
+    {
+      "id": "environmentKey",
+      "states": ["unchanged", "changed"],
+      "why": "the cache-key fields: browser, browserVersion, guidepupVersion, os, architecture, screenReaderSettings, provisionRevision. Adding or moving one invalidates every capture stamped before it."
+    },
+    {
+      "id": "weights",
+      "states": ["unchanged", "changeset"],
+      "why": "ADR 0007 makes the weights the API of @a11y-witness/scorer, so a change to them is a release and must be accounted for by a changeset."
+    }
+  ]
+}
