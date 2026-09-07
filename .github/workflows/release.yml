@@ -75,6 +75,17 @@ jobs:
         with: { node-version: 22, cache: npm, registry-url: https://registry.npmjs.org }
 
       - run: npm ci
+      - run: npm run build
+
+      # THE WHOLE-REPO COVERAGE THRESHOLD, HERE AND ON A NIGHTLY SCHEDULE (`coverage.yml`) -- chairman's
+      # direction, 2026-09-06, follow-up to #133/#140. It left `ci.yml`'s per-PR job entirely (154s of a
+      # measured 269s, re-testing packages a given PR could not have touched), and a release is the other
+      # place it must still be checked: nothing else on the release path re-runs the full suite, so a
+      # threshold regression that a package-scoped PR run could not see would otherwise ship unnoticed.
+      - name: Coverage — the whole-repo threshold
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run coverage
 
       # The full gate, not a subset. `release:gate` is ordered cheapest-first so a cheap failure does not
       # wait behind an expensive one, and it starts with `scorer:shortcuts` — the one check that can see a
