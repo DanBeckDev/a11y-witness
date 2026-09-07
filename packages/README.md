@@ -14,8 +14,8 @@ decide across whichever layers exist and so name none of them.
 | `scorer` (M3) | `@a11ign/screenreader-scorer` — screen-reader layer | AGPL-3.0-or-later | the trained heads, the training report, the Python scoring program and the feature contract. The weights are the API, so a retrain is a major bump |
 | `judge` (M4) | `@a11ign/judge` — product | AGPL-3.0-or-later | `judge()` (`.`), the deterministic absence rules (`./rules`), experience-layer ordering (`./layers` — a DIFFERENT "layer" from ADR 0036's, see that ADR's own collision note), and `./internal` with no semver guarantee |
 | `nvda-worker` (M5) | `@a11ign/screenreader-worker` — screen-reader layer | AGPL-3.0-or-later | the Windows capture worker. `.mjs` ships verbatim, so no build step; the HTTP contract is the API and `CAPTURE_PROTOCOL_VERSION` versions it independently of semver |
-| `worker-fleet` (M6) | `@a11ign/screenreader-fleet` — screen-reader layer | AGPL-3.0-or-later | host-side lease/health/capacity, the `a11y-doctor` and `a11y-worker-*` bins, and the UTM provisioning scripts. Touches no NVDA |
-| `a11y-witness` (M7) | **`a11ign`, unscoped** — product | AGPL-3.0-or-later | the CLI. Stays unscoped so `npx a11ign` needs no wrapper — ADR 0036 rejected `@a11ign/cli` for exactly this reason. Exports `reportLines` only; the root package was renamed to `a11y-witness-monorepo` to free the name |
+| `worker-fleet` (M6) | `@a11ign/screenreader-fleet` — screen-reader layer | AGPL-3.0-or-later | host-side lease/health/capacity, the `a11ign-doctor` and `a11y-worker-*` bins, and the UTM provisioning scripts. Touches no NVDA |
+| `a11ign` (M7) | **`a11ign`, unscoped** — product | AGPL-3.0-or-later | the CLI. Stays unscoped so `npx a11ign` needs no wrapper — ADR 0036 rejected `@a11ign/cli` for exactly this reason. Exports `reportLines` only; the root package was renamed to `a11ign-monorepo` to free the name |
 
 **Three more exist and are deliberately absent from the migration table above** — that table is M1–M8's
 *published* split; these are `"private": true` and never reach the registry:
@@ -59,7 +59,7 @@ relative import would resolve inside the repo and prove nothing.
 ## The gate packs a package's unpublished siblings too
 
 `judge` is the first package with internal dependencies, and it exposed an omission: nothing is published, so
-npm cannot fetch `@a11y-witness/evidence` from the registry — the install fails with E404 and the gate reports
+npm cannot fetch `@a11ign/evidence` from the registry — the install fails with E404 and the gate reports
 a broken package that is fine. npm 7+ auto-installs **peer** dependencies as well, so a peer on an unpublished
 sibling fails identically.
 
@@ -80,7 +80,7 @@ This is not hypothetical here. M0 found `local-judge.ts` resolving the scorer re
 and the scorer program itself missing from the repo while every local run succeeded — because **`npm pack`
 includes untracked files**, so "it worked when I installed it" was never evidence.
 
-M2 then earned it twice over on the first real package. The gate rejected `@a11y-witness/evidence` three
+M2 then earned it twice over on the first real package. The gate rejected `@a11ign/evidence` three
 times before accepting it, and every rejection was a genuine defect in what a consumer would have received:
 the README's first example used a field name the contract does not have (`announcements`, not `transcript`),
 it asserted the wrong `Criterion` key (`id`, not `num`), and the tarball shipped no `dist` at all. A

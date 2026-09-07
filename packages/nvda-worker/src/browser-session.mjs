@@ -448,25 +448,6 @@ const ROLE_BUCKET = new Map([
 ]);
 
 /**
- * How many structural elements does the PAGE actually expose?
- *
- * This is a completeness ORACLE, never evidence. The distinction is the whole design: what a screen
- * reader announced is the evidence, and `docs/local-model.md` forbids the accessibility tree as a model
- * feature. But a sweep that under-reports is indistinguishable from a page that has nothing -- and that
- * is exactly the defect this exists to catch. `structure.landmarks` misses a `<main>` wrapping the page
- * on 2,063 of 2,064 corpus captures, because quick navigation cannot reach a landmark containing the
- * caret, and nothing could see it.
- *
- * Asking Chromium costs one CDP call on a socket that is already open: milliseconds, no keystrokes, no
- * modal dialog. The alternative -- reading NVDA's own Elements List -- is authoritative but costs ~11s
- * per capture for landmarks alone, because every keystroke waits on guidepup's 1s speech-quiet
- * debounce. At 2,122 captures that is the difference between a verification you run always and one you
- * can never afford.
- *
- * @param {Array<{role?: {value?: string}, name?: {value?: string}, ignored?: boolean}>} nodes
- *   `Accessibility.getFullAXTree`'s flat node list.
- */
-/**
  * Which bucket this node counts toward, and whether it is nameless — or null when it counts toward none.
  *
  * Split out of `censusFromAXTree` because the two jobs are separable: this one classifies a single node,
@@ -719,6 +700,22 @@ export async function bringPageToFront() {
 }
 
 /**
+ * How many structural elements does the PAGE actually expose?
+ *
+ * This is a completeness ORACLE, never evidence. The distinction is the whole design: what a screen
+ * reader announced is the evidence, and `docs/local-model.md` forbids the accessibility tree as a model
+ * feature. But a sweep that under-reports is indistinguishable from a page that has nothing -- and that
+ * is exactly the defect this exists to catch. `structure.landmarks` misses a `<main>` wrapping the page
+ * on 2,063 of 2,064 corpus captures, because quick navigation cannot reach a landmark containing the
+ * caret, and nothing could see it.
+ *
+ * Asking Chromium costs one CDP call on a socket that is already open: milliseconds, no keystrokes, no
+ * modal dialog. The alternative -- reading NVDA's own Elements List -- is authoritative but costs ~11s
+ * per capture for landmarks alone, because every keystroke waits on guidepup's 1s speech-quiet
+ * debounce. At 2,122 captures that is the difference between a verification you run always and one you
+ * can never afford.
+ */
+/**
  * @param {(Record<string, any> | null)[] | null | undefined} nodes
  *   NULL ENTRIES ARE EXPECTED. `ax-census.test.ts` passes `[null, {}]` deliberately -- 'the oracle must
  *   never be the reason a capture fails' -- so a type refusing them would describe a stricter function
@@ -873,7 +870,7 @@ export async function structuralCensus() {
       // WHERE the target actually was, and what was wanted — so a fallback's REASON can be READ, not
       // guessed. `evaluateOnPageTarget` already carries `targetUrl` for the identical reason; this census
       // went without it, and a fallback read as "a real second CDP target existed" even when `candidates`
-      // said there was only one. See `censusTargetIsSuspect` (`@a11y-witness/evidence`) for what reads
+      // said there was only one. See `censusTargetIsSuspect` (`@a11ign/evidence`) for what reads
       // these two fields.
       census.targetUrl = target.url;
       census.expectedUrl = expectedPageUrl;
@@ -1525,7 +1522,7 @@ export async function launchReusable({ exe, args, onEvent = () => {} }) {
  *
  * The caller (`navigateByStructureThenAudit`) still exports `.elements` to `result.media` unconditionally —
  * this function does not decide whether the read is trustworthy, matching `structuralCensus`/`domCensus`'s
- * own split between recording (here) and judging (`censusTargetIsSuspect`, `@a11y-witness/evidence`, which
+ * own split between recording (here) and judging (`censusTargetIsSuspect`, `@a11ign/evidence`, which
  * this worker cannot import — see `field-match.mjs`'s header for why).
  */
 export async function mediaCensus() {

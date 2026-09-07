@@ -2,7 +2,7 @@
 
 ## Why this document exists
 
-`a11y-witness` claims to be *trustworthy* AI for accessibility. That claim is
+`a11ign` claims to be *trustworthy* AI for accessibility. That claim is
 only credible if the way we use AI is itself held to the standards the field
 has established for LLM-based evaluation. This document audits our design
 against those practices, states plainly where we comply and where we do not,
@@ -23,7 +23,7 @@ ch.22): "what WCAG defines is the floor, not the ceiling." The failures that sli
 through are common, not exotic — the WebAIM Million 2024 audit found 44.6% of
 home pages with empty links, 48.6% with unlabeled inputs, and 28.2% with empty
 buttons (Matuzović 2024, ch.3/9), and 17.3% of pages used ambiguous link text
-such as "click here" or "more" (Firth 2024, ch.17). `a11y-witness` targets this
+such as "click here" or "more" (Firth 2024, ch.17). `a11ign` targets this
 gap: it judges what a real screen reader announces as a user navigates, which is
 where the unmeasured ~70% lives.
 
@@ -81,7 +81,7 @@ The approach is anchored in primary W3C material, not just our own intuition:
   subset a read-through detects is identical under 2.1 and 2.2; the version
   changes only how a finding is labelled.
 - **ATAG positioning.** Under [ATAG](https://www.w3.org/WAI/standards-guidelines/atag/),
-  `a11y-witness` is a Part B style tool: it helps authors produce content that
+  `a11ign` is a Part B style tool: it helps authors produce content that
   conforms to WCAG by giving evidence-backed feedback in their workflow. ATAG
   Part A then binds us too: the tool's own outputs (reports, CLI, any future UI)
   must themselves be accessible. We adopt that as a self-requirement.
@@ -213,7 +213,7 @@ independently-derived ground truth:
 
 ## Out of scope, and why
 
-`a11y-witness` judges only what a screen-reader read-through (plus the opt-in
+`a11ign` judges only what a screen-reader read-through (plus the opt-in
 interaction probes) can observe. The following are deliberately left to static
 scanners and other tools — a division of labour, not a blind spot:
 
@@ -227,13 +227,14 @@ scanners and other tools — a division of labour, not a blind spot:
 > of its two listed failures and is not a pixel question at all.
 >
 > **So this section no longer restates the list.** It is generated from
-> `criterion-coverage.ts` into [`coverage.md`](./coverage.md), with a per-criterion
-> reason and a test that fails when the two disagree — which is the only form of
-> this claim that cannot rot. A prose copy of a machine-readable fact is the defect
-> this repo records most often, and it had one here.
+> `criterion-coverage.ts` into `coverage.md` (`npm run docs:coverage` — deliberately
+> not committed, issue #158, so it is not a link here), with a per-criterion reason
+> and a test that fails when the generator produces nothing real — which is the only
+> form of this claim that cannot rot. A prose copy of a machine-readable fact is the
+> defect this repo records most often, and it had one here.
 
-**[`docs/coverage.md`](./coverage.md) is the answer**, all 55 criteria with the
-reason for each. The families that are out of scope, and why:
+**`docs/coverage.md` is the answer** (`npm run docs:coverage`), all 55 criteria with
+the reason for each. The families that are out of scope, and why:
 
 - **Visual / sensory** — contrast, use of colour, text spacing, reflow, target
   size. Properties of rendered output; no assistive-technology signal exists.

@@ -9,13 +9,13 @@
  * pattern: the interesting half becomes a pure function, and the half that touches the world becomes
  * too small to hold a bug.
  */
-import type { Judgment } from "@a11y-witness/judge";
-import { taskVerdictLabel, judgeBackend } from "@a11y-witness/judge";
+import type { Judgment } from "@a11ign/judge";
+import { taskVerdictLabel, judgeBackend } from "@a11ign/judge";
 import type { AxeFinding } from "./scan/axe.js";
-import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11y-witness/judge/layers";
+import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11ign/judge/layers";
 import { notAConformanceClaim, type ConformanceRequirement }
-  from "@a11y-witness/evidence/conformance";
-import { outcomeTally, type CriterionOutcome } from "@a11y-witness/judge/outcomes";
+  from "@a11ign/evidence/conformance";
+import { outcomeTally, type CriterionOutcome } from "@a11ign/judge/outcomes";
 
 /** How much offending markup to quote as evidence. Enough to recognise the element, not the page. */
 const EVIDENCE_CHARS = 100;
@@ -76,8 +76,9 @@ function howToReadThisSection(): string[] {
     "              Have a person confirm it before treating it as a failure.",
     "Per-criterion outcomes (further down) use a wider vocabulary than \"finding\":",
     "  passed        checked, and this criterion is fine",
-    "  failed        checked, and it is not -- this is where ASSERTED/INDICATOR findings above come from",
-    "  cantTell      we could not determine this one -- NOT the same as passed",
+    "  asserted      this FAILS the criterion -- the evidence establishes it directly (ACT: `failed`)",
+    "  referred      worth a person's eyes; the tool cannot decide this one on its own (ACT: `cantTell`).",
+    "                This is normal, not a malfunction -- most of what a real page produces lands here.",
     "  inapplicable  nothing of this kind is on the page to be right or wrong about",
     "  untested      nothing here checks this criterion yet",
   ];
@@ -150,6 +151,19 @@ function conformanceSection(requirements: ConformanceRequirement[] | undefined):
 }
 
 /**
+ * The tag a stranger meets on every per-criterion line below, in words rather than ACT's own vocabulary
+ * (#242, wording decided by `ceo`). `cantTell` is the correct value for a machine — ACT's own term, and
+ * what `--json` still emits unchanged — but a reader who has not read the ACT spec meets it as if it were
+ * a malfunction, when it is the tool working exactly as designed: most of what a real page produces lands
+ * here, not on `failed`. The two things a reader must be able to tell apart: `asserted` — this FAILS the
+ * criterion — and `referred` — worth a person's eyes, the tool cannot decide this one. The ACT term itself
+ * appears exactly once, in the legend's parenthetical, never repeated at each finding.
+ */
+const HUMAN_OUTCOME_TAG: Readonly<Record<"failed" | "cantTell", string>> = {
+  failed: "ASSERTED", cantTell: "REFERRED",
+};
+
+/**
  * Per-criterion outcomes in the W3C ACT vocabulary.
  *
  * The reason this is worth printing next to the findings: a findings list answers "what is wrong", and
@@ -168,8 +182,10 @@ function outcomesSection(outcomes: CriterionOutcome[] | undefined): string[] {
   const tally = outcomeTally(outcomes);
   const lines = [
     // Vocabulary explained once, in `howToReadThisSection`, before this section is ever reached.
+    // The LABEL here is presentation only — `tally.failed`/`tally.cantTell` still read the machine fields
+    // ACT and `--json` need (#242's boundary); only the words printed next to the counts change.
     "-- Per-criterion outcomes (W3C ACT vocabulary) --",
-    `  failed ${tally.failed}   cantTell ${tally.cantTell}   passed ${tally.passed}   `
+    `  asserted ${tally.failed}   referred ${tally.cantTell}   passed ${tally.passed}   `
       + `inapplicable ${tally.inapplicable}   untested ${tally.untested}`,
   ];
   // The ASSESSOR is in the tag, not left to be read out of the prose. ADR 0021 turns on which layer is
@@ -177,9 +193,12 @@ function outcomesSection(outcomes: CriterionOutcome[] | undefined): string[] {
   // it came from a DOM rule or from driving a real screen reader — and a consumer parsing these lines
   // should not have to regex a sentence to find out. Absent means the screen-reader layer, which is the
   // default assessor and does not earn a tag on every line.
-  for (const outcome of outcomes.filter((o) => o.outcome === "failed" || o.outcome === "cantTell")) {
+  for (const outcome of outcomes.filter(
+    (o): o is CriterionOutcome & { outcome: "failed" | "cantTell" } =>
+      o.outcome === "failed" || o.outcome === "cantTell",
+  )) {
     const by = outcome.assessor ? ` · ${outcome.assessor}` : "";
-    lines.push(`    [${outcome.outcome}${by}] ${outcome.criterion} — ${outcome.reason}`);
+    lines.push(`    [${HUMAN_OUTCOME_TAG[outcome.outcome]}${by}] ${outcome.criterion} — ${outcome.reason}`);
   }
   return lines;
 }
@@ -319,7 +338,7 @@ export function reportLines(
 ): string[] {
   return [
     "",
-    "a11y-witness report",
+    "a11ign report",
     "===================",
     `URL:   ${url}`,
     `Task:  ${task}`,

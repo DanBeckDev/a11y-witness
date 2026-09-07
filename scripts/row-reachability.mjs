@@ -38,7 +38,7 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 
@@ -67,6 +67,39 @@ const SYMBOL_IN_PROSE = /`([a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*|[A-Z][A-Z0-9]+_[A-
 const unique = (values) => [...new Set(values)];
 
 /**
+ * NOTHING TO CHECK — and "named nothing" and "named PROSE" are two different sentences (#228).
+ *
+ * The `.md` filter is correct: there is no symbol to verify in a README, and pretending to check one
+ * would be worse than saying nothing. But dropping prose paths silently made this tell a docs row it
+ * "names no source path" when it named one, in a Region field filled in correctly -- sending its author
+ * to fix something that is not broken.
+ *
+ * Extracted from `startability` because adding the second branch took that function past the complexity
+ * ceiling, which is the lint rule doing its job rather than an obstacle to route around.
+ *
+ * @param {number} row
+ * @param {{paths: number, symbols: number, prose?: number}} examined
+ * @returns {{code: number, lines: string[]} | null} null when there IS something to check.
+ */
+function examinedNothing(row, examined) {
+  if (examined.paths > 0 || examined.symbols > 0) return null;
+  if ((examined.prose ?? 0) > 0) {
+    return { code: EXIT.CANNOT_ASK, lines: [
+      `CANNOT SAY whether #${row} is startable: it names ${examined.prose} document(s) and no source `
+      + "path or symbol.",
+      "  Its Region is prose, and this checks code: there is no symbol to look for in a README, and",
+      "  pretending to verify one would be worse than saying nothing.",
+      "  NOT a missing Region: do not add one. Judge a docs row by reading it.",
+    ] };
+  }
+  return { code: EXIT.CANNOT_ASK, lines: [
+    `CANNOT SAY whether #${row} is startable: it names no source path and no symbol this can check.`,
+    "  A row with no Region and no backticked identifier gives this nothing to examine, and reporting",
+    "  STARTABLE having examined nothing is the defect this repo records most.",
+  ] };
+}
+
+/**
  * THE VERDICT, PURE — so every state is reachable without a network or a checkout.
  *
  * `null` for a lookup means it failed and is never read as an empty answer, the distinction this whole
@@ -78,9 +111,10 @@ const unique = (values) => [...new Set(values)];
  *          blockedLabel?: boolean,
  *          state?: string | null,
  *          closedAt?: string | null,
- *          examined: {paths: number, symbols: number}}} facts
+ *          examined: {paths: number, symbols: number, prose?: number}}} facts
  * @returns {{code: number, lines: string[]}}
  */
+
 export function startability({ row, subjectsMissing, heldRegions, examined, blockedLabel,
   state, closedAt }) {
   // A CLOSED ROW GETS NO VERDICT AT ALL, not a verdict with a note attached (#218).
@@ -109,13 +143,8 @@ export function startability({ row, subjectsMissing, heldRegions, examined, bloc
       "  evening discovering it at step 1, which is the whole reason this check exists.",
     ] };
   }
-  if (examined.paths === 0 && examined.symbols === 0) {
-    return { code: EXIT.CANNOT_ASK, lines: [
-      `CANNOT SAY whether #${row} is startable: it names no source path and no symbol this can check.`,
-      "  A row with no Region and no backticked identifier gives this nothing to examine, and reporting",
-      "  STARTABLE having examined nothing is the defect this repo records most.",
-    ] };
-  }
+  const nothingToCheck = examinedNothing(row, examined);
+  if (nothingToCheck) return nothingToCheck;
 
   const lines = [];
   if (blockedLabel) {
@@ -254,8 +283,13 @@ function facts(row) {
   // THE ROW'S OWN STATE, and it was in this query's reach the whole time. See `startability`.
   const state = typeof issue.state === "string" ? issue.state : null;
   const closedAt = typeof issue.closedAt === "string" ? issue.closedAt : null;
-  const paths = unique([...body.matchAll(PATH_IN_PROSE)].map((m) => m[1]))
-    .filter((p) => !p.endsWith(".md"));
+  // PROSE PATHS ARE COUNTED, NOT DISCARDED. The `.md` filter is correct -- there is no symbol to verify
+  // in a README, and pretending to check one would be worse than saying nothing. But dropping them
+  // SILENTLY made the verdict say a docs row "names no source path" when it named one, which sent the
+  // reader to add a Region that was already there.
+  const named = unique([...body.matchAll(PATH_IN_PROSE)].map((m) => m[1]));
+  const paths = named.filter((path) => !path.endsWith(".md"));
+  const prose = named.filter((path) => path.endsWith(".md"));
   const symbols = unique([...body.matchAll(SYMBOL_IN_PROSE)].map((m) => m[1]));
   const refs = unmergedRefs();
 
@@ -320,7 +354,7 @@ function facts(row) {
     }
   }
   return { row, subjectsMissing, heldRegions, blockedLabel, state, closedAt,
-    examined: { paths: paths.length, symbols: symbols.length } };
+    examined: { paths: paths.length, symbols: symbols.length, prose: prose.length } };
 }
 
 function main() {

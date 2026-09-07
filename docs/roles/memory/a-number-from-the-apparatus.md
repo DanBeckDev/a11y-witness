@@ -10,7 +10,7 @@ than by the world is the most plausible kind there is** — a test fixture, a pl
 figure quoted from a commit message while the artefact sat on disk. It looks like a measurement because it
 was built to.
 
-**Why:** three instances between two agents in one afternoon on a11y-witness, 2026-09-06. I typed
+**Why:** three instances between two agents in one afternoon on a11ign, 2026-09-06. I typed
 `214 h 20 m` as a mutation-check fixture and copied it into the file instructing people how to record a real
 fleet-hours total; the real figure was 54.11, and mine divided cleanly by ten workers into wall clock — the
 exact computation that had been ruled out. Had it been 900 h it would have been dismissed in a second;

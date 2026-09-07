@@ -39,7 +39,7 @@ If your app is on GitHub, this needs one workflow file and no machine of your ow
 
 ```yaml
 jobs:
-  a11y-witness:
+  a11ign:
     runs-on: windows-2022        # NVDA is Windows-only; the action fails fast anywhere else
     steps:
       - uses: DanBeckDev/a11y-witness@main
@@ -57,8 +57,8 @@ activates a **Bags** button and never a **Delete account** one.
 layer than a page of text alone — the form is where the announcements this tool exists to hear actually
 happen.
 
-Expect the run to take a few minutes. Most of it is the screen reader reading, and that time is not
-recoverable.
+How long the run takes is under re-measurement since 2026-09-07 (#311). Most of it is the screen reader
+reading, and that time is not recoverable.
 
 ## What a long marketing page will actually produce
 
@@ -106,10 +106,10 @@ point the run at the page with the form on it.
 
 ### How long a large page takes
 
-**Expect minutes, not seconds.** A capture is around a minute on an ordinary page and a long page is
-longer, because the time is a screen reader reading — it is not parallelisable and not recoverable. A very
-large page can exhaust our capture budget, and if it does you will get a partial result that **says** it
-is partial rather than a short one that looks complete.
+**Expect minutes, not seconds.** Exact per-page timing is under re-measurement since 2026-09-07 (#311); a
+long page takes longer than an ordinary one, because the time is a screen reader reading — it is not
+parallelisable and not recoverable. A very large page can exhaust our capture budget, and if it does you
+will get a partial result that **says** it is partial rather than a short one that looks complete.
 
 ## YOUR PAGE — the one section that is not written yet
 

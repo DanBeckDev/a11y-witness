@@ -146,9 +146,17 @@ function outcomeSection(outcomes: RunResult["outcomes"]): string[] {
   const undetermined = tally("cantTell");
   const untested = tally("untested");
   if (undetermined === 0 && untested === 0) return [];
-  return ["", `**Not determined:** ${undetermined} criteria we cover came back \`cantTell\` and `
-    + `${untested} are not covered by any assessor of ours. Neither is a pass — see the run artifact for `
-    + "the per-criterion reasons."];
+  // #254: this renders on a STRANGER'S pull request, with no legend and no chance to ask -- worse than
+  // #242's `report.ts` instance, which at least reaches someone who ran the CLI and can scroll up to one.
+  // `cantTell` is ACT's own vocabulary term (still what `--json`/`ActOutcome` emit, untouched); a reviewer
+  // who has never read the ACT spec reads it as a typo or an accusation. Uses #242's own wording, `ceo`'s
+  // ruling on PR #252 -- "referred" (worth a person's eyes, the tool cannot decide it) rather than a third
+  // spelling of the same distinction. UNLIKE report.ts, no legend exists here to house even one
+  // parenthetical ACT mention, so the term does not appear at all -- the acceptance for this row forbids
+  // it outright, correctly: a reader with no legend gets no term to misread.
+  return ["", `**Not determined:** ${undetermined} criteria we cover were referred — worth a person's `
+    + `eyes, the tool cannot decide these on its own — and ${untested} are not covered by any assessor `
+    + "of ours. Neither is a pass — see the run artifact for the per-criterion reasons."];
 }
 
 /**
@@ -205,7 +213,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
   // never about their page.
   if (result.captureVerified === false) {
     lines.push(
-      "## a11y-witness — **could not read this page**",
+      "## a11ign — **could not read this page**",
       "",
       `**Page:** ${result.url}`,
       "",
@@ -230,7 +238,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     return lines.join("\n");
   }
   lines.push(
-    "## a11y-witness — what a screen reader actually experienced",
+    "## a11ign — what a screen reader actually experienced",
     "",
     `**Page:** ${result.url}`,
     `**Task:** ${result.task}`,
