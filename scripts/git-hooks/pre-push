@@ -196,11 +196,16 @@ if [ "$BRANCH" = "main" ]; then
 elif [ "$(node scripts/board-only-check.mjs)" = "true" ]; then
   # BOARD-ONLY, THE SAME SHAPE `ci.yml`'s `board` job GATES ON -- chairman's direction, 2026-09-06, the
   # product manager's single largest recurring cost that night: docs/board/summaries/*.md and
-  # docs/board/reported.json are edited far more often than anything else under docs/. No lint, no
-  # typecheck, no build -- CI (ci.yml's own `board` job, which DOES build; see its header for why) is the
-  # authoritative gate. This is the fast, local first pass only.
-  echo "pre-push: BOARD-ONLY gate ($BRANCH) -- every doc-touching file against origin/main is a board file."
-  echo "Skipping lint/typecheck/the general suite; CI's board job (ci.yml) is authoritative."
+  # docs/board/reported.json are edited far more often than anything else under docs/, and neither is
+  # source code. No lint, no typecheck, no build here -- there is nothing of either KIND in a genuine
+  # board-only diff to check (`board-only-check.mjs`'s own #296 fix is what makes that true: the WHOLE
+  # diff must be board files, not just its docs/ subset, or a diff smuggling in a script took this path
+  # too). #296 ALSO REMOVED a false claim that used to stand here -- CI's `board` job builds and re-runs
+  # the board guards, but it does NOT lint or typecheck EITHER, so it was never the authority for the
+  # checks this branch skips; a guard that names a wrong authority is worse than one that names none.
+  echo "pre-push: BOARD-ONLY gate ($BRANCH) -- every file against origin/main is docs/board/reported.json"
+  echo "or docs/board/summaries/*.md -- neither is source code, so lint/typecheck/the general suite have"
+  echo "nothing to check. Running the board guards below is the real gate for this diff, here and in CI."
   run "board guards" npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
 else
   run "lint"       npm run --silent lint
