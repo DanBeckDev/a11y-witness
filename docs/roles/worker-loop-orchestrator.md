@@ -215,7 +215,22 @@ costing the worker an hour.
    is not mine to assign" — which put a claimed row back into the pull queue at the exact moment a second
    worker was looking at it. **The label is the claim; a row you know is taken must show that, whoever
    holds it.** `node scripts/row-claim.mjs check <n>` before touching a row's status, `claim` to take it.
-   No command enforces this half — it is a discipline, not a check, and it is this role's to hold.
+   > **#176 (2026-09-07): dispatch a row, don't just mention it.** "No command enforces this half" was
+   > true and it cost three real double-dispatches (#156, #158, #159) — a worker's own caution caught each
+   > one, not the board, because a row named in a dispatcher/product-manager MESSAGE carried no label at
+   > all until the assigned session got around to `claim`, and a second dispatch in that window read
+   > UNCLAIMED. **`node scripts/row-claim.mjs dispatch <n> --session=<name>` is now the first act of
+   > handing a row out, not a follow-on to it** — in the SAME turn as the message assigning it, before
+   > sending it, exactly the way `claim` is the worker's own first act rather than a follow-on to starting
+   > work. It writes `in-progress` + `session:<name>` (not `started` — that stays for the assigned session's
+   > own `claim`), so `check`/`--row=<n>` now reports three states rather than two: `UNCLAIMED`,
+   > `DISPATCHED (not started)`, and `STARTED`. **A row dispatched and then declined — the assignee finds
+   > it unstartable, or the assignment is withdrawn — is given back with `decline <n> --session=<name>`**,
+   > which returns it to genuinely `UNCLAIMED` rather than leaving a stale `in-progress` for a human to
+   > remember to clear; refuses if the row is not this session's to release. This is still a discipline a
+   > human must remember to invoke, not a check that fires on its own — the durable version (a weekly
+   > staleness pass flagging `in-progress` with no branch, commit or message for N hours) is named on the
+   > row as a follow-up, not built here.
 
 **This is what the Ready queue was always for.** A queue nobody may pull from is a list, and a list needs
 somebody to read it aloud.
