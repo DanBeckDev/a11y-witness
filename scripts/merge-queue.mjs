@@ -35,14 +35,32 @@
  * nothing" must never be the same answer. An empty queue reported as a clean read is a check that passes
  * having examined nothing.
  */
+import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { sandboxGitEnv } from "./git-env.mjs";
+import { gitCommonDir } from "./merge-guard.mjs";
+import { REPO } from "./repo-identity.mjs";
 
 /** @param {string[]} args */
 function gh(args) {
   return execFileSync("gh", args, { encoding: "utf8", env: sandboxGitEnv() });
+}
+
+/**
+ * Each lookup returns null on failure rather than an empty answer -- "could not ask" is not "found nothing".
+ * @template T
+ * @param {() => T} fn
+ * @returns {T | null}
+ */
+function lookup(fn) {
+  try {
+    return fn();
+  } catch (error) {
+    void error;
+    return null;
+  }
 }
 
 /**
@@ -108,6 +126,94 @@ export function wantedPrNumber(argv) {
   return spaceIndex === -1 ? null : (argv[spaceIndex + 1] ?? null);
 }
 
+/**
+ * A BRANCH'S POST-MERGE COMMITS ARE INVISIBLE, AND THE EVIDENCE THAT WOULD CATCH IT CAN ITSELF VANISH (#152).
+ *
+ * Found recovering #123: commit `23a2a3e2` on `agent/ci-rebuild` added real test coverage, but it landed
+ * on that branch AFTER PR #109 had already merged an earlier point of it. Nobody decided against the
+ * commit; it fell down the gap between "this branch's PR merged" and "this branch stopped moving". The
+ * obvious after-the-fact check -- `git log origin/<branch> --not origin/main` -- caught nothing on a
+ * second run, because the branch ref had ALREADY moved (a force-push, a reset, or `--delete-branch`
+ * itself), erasing the exact evidence it needs. **The check is only useful run SOON after a merge, not as
+ * a standing audit of history.**
+ *
+ * So this checks at THE ONE POINT the evidence is guaranteed reachable: right after `gh pr merge`, before
+ * the branch is deleted. `main` now contains everything the PR's head had; if the LIVE branch ref still
+ * has commits `main` does not, something landed on it that this merge never absorbed. `ahead_by` from
+ * `compare/main...<branch>` is that fact, asked of GitHub directly -- no local fetch of an arbitrary
+ * contributor's branch required.
+ *
+ * @param {{ahead_by?: number, commits?: {sha: string, commit?: {message?: string}}[]} | null} compareResult
+ * @returns {{count: number, commits: {sha: string, message: string}[]} | null} null means INCONCLUSIVE
+ */
+export function orphanedCommitsFrom(compareResult) {
+  if (!compareResult || typeof compareResult.ahead_by !== "number") return null;
+  return {
+    count: compareResult.ahead_by,
+    commits: (compareResult.commits ?? []).map((c) => (
+      { sha: c.sha, message: String(c.commit?.message ?? "").split("\n")[0] }
+    )),
+  };
+}
+
+/**
+ * Never a silent no-op -- the record is the point, exactly like #201's disagreement log.
+ * @param {string} path
+ * @param {object} entry
+ */
+function appendJsonl(path, entry) {
+  try {
+    appendFileSync(path, `${JSON.stringify(entry)}\n`);
+  } catch (error) {
+    throw new Error(`could not write the orphaned-branch log at ${path}: `
+      + `${/** @type {Error} */ (error).message}`, { cause: error });
+  }
+}
+
+export function orphanedBranchLogPath() {
+  return `${gitCommonDir()}/orphaned-branch-log.jsonl`;
+}
+
+/**
+ * Merges, then checks the branch was fully absorbed BEFORE deciding whether to delete it -- never
+ * `gh pr merge --delete-branch` in one call, which deletes the one piece of evidence that could show a
+ * later commit was left behind. Every check is recorded, clean or not, for the same reason #201 records
+ * agreement as well as disagreement: an absent line here would be indistinguishable from "never checked".
+ *
+ * @param {{number: number, headRefName: string}} pr
+ */
+function mergeAndCheckOrphans(pr) {
+  process.stdout.write(gh(["pr", "merge", String(pr.number), "--merge"]));
+
+  const compareResult = lookup(() => JSON.parse(
+    gh(["api", `repos/${REPO}/compare/main...${pr.headRefName}`])));
+  const orphaned = orphanedCommitsFrom(compareResult);
+  appendJsonl(orphanedBranchLogPath(), {
+    prNumber: pr.number, branch: pr.headRefName, at: new Date().toISOString(),
+    orphanedCommitCount: orphaned?.count ?? null,
+  });
+
+  if (orphaned === null) {
+    process.stderr.write(`could not verify \`${pr.headRefName}\` was fully absorbed by #${pr.number} -- `
+      + "leaving the branch undeleted rather than guessing.\n");
+    return;
+  }
+  if (orphaned.count > 0) {
+    process.stderr.write(`WARNING: \`${pr.headRefName}\` has ${orphaned.count} commit(s) beyond what `
+      + `#${pr.number} just merged. NOT deleting it -- someone pushed to this branch after its own PR, `
+      + "and that work needs its own PR before the branch goes away:\n"
+      + orphaned.commits.map((c) => `  ${c.sha.slice(0, 10)} ${c.message}`).join("\n") + "\n");
+    return;
+  }
+
+  try {
+    gh(["api", "-X", "DELETE", `repos/${REPO}/git/refs/heads/${pr.headRefName}`]);
+  } catch (error) {
+    process.stderr.write(`merged #${pr.number} cleanly, but could not delete \`${pr.headRefName}\`: `
+      + `${/** @type {Error} */ (error).message}\n`);
+  }
+}
+
 function main() {
   const wanted = wantedPrNumber(process.argv);
 
@@ -145,6 +251,5 @@ function main() {
     process.stderr.write(`REFUSING to merge #${pr.number}: ${why}\n`);
     process.exit(1);
   }
-  process.stdout.write(gh(["pr", "merge", String(pr.number), "--merge", "--delete-branch"]));
-
+  mergeAndCheckOrphans(pr);
 }
