@@ -33,6 +33,17 @@ name: ci
 # with `gh pr create` (the standing worker-loop flow), so the PR's own `pull_request` trigger is where a
 # branch's full check runs; a push with no PR yet gets only the local pre-push hook's fast gate. See
 # `scripts/git-hooks/pre-push`'s own header for the other half of this.
+#
+# THE `gate` JOB AT THE BOTTOM IS WHAT BRANCH PROTECTION ACTUALLY REQUIRES, not the five scoped jobs
+# above it. Every job but `changed` is conditional on `ci-changed.mjs`'s output, so a docs-only PR never
+# runs `ts`/`python`/`ansible` at all -- and a required check with no run against a given commit blocks
+# merge FOREVER, it does not pass by default. GitHub does treat a job SKIPPED by its own `if:` as
+# satisfying a required check (a real run, concluding `skipped`, distinct from never running) -- #133
+# required all five path-scoped contexts directly and it merged fine on that behaviour. But relying on an
+# implicit platform behaviour for the one thing that gates every merge is exactly this repo's own rule
+# about a verification not sharing a failure mode with what it guards: `gate` computes the same answer
+# explicitly, from `needs.*.result`, so branch protection has ONE always-reporting context to require and
+# the real logic lives in a file this repo tests, not in an assumption about how GitHub renders a skip.
 on:
   pull_request:
     branches: [main]
@@ -231,3 +242,33 @@ jobs:
             echo "that decision explicitly rather than leaving it to be inferred from silence."
             exit 1
           fi
+
+  # THE ONE CONTEXT BRANCH PROTECTION REQUIRES. `if: always()` so this still runs when an upstream job
+  # fails or is cancelled -- without it, a failing `ts` would skip `gate` too (the default `if` on a job
+  # is `success()` on its dependencies), and a job that never reports on the one commit that most needs it
+  # blocked is worse than one that reports failure.
+  #
+  # `needs.*.result` is one of success | failure | cancelled | skipped -- never absent, so every job named
+  # in `needs:` below has an opinion here regardless of whether `ci-changed.mjs` decided it should run.
+  # skipped counts as passing (the job's own `if:` decided it, correctly, that this PR does not need it);
+  # anything else does not.
+  gate:
+    needs: [changed, ts, python, ansible, docs, changeset]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job that ran, ran clean
+        run: |
+          for result in \
+            "${{ needs.changed.result }}" \
+            "${{ needs.ts.result }}" \
+            "${{ needs.python.result }}" \
+            "${{ needs.ansible.result }}" \
+            "${{ needs.docs.result }}" \
+            "${{ needs.changeset.result }}"
+          do
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "::error::a job reported '$result', which is neither success nor skipped"
+              exit 1
+            fi
+          done
