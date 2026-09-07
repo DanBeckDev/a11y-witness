@@ -84,3 +84,37 @@ test("both faults at once are reported separately, and the blocker wins the exit
   assert.doesNotMatch(text, /is STARTABLE/,
     "a blocked row must not also print the startable sentence -- one verdict per run");
 });
+
+/**
+ * THE FIFTH STATE: the blocking ref's PR is CLOSED, so nobody is coming (#177, found by `dispatcher`).
+ *
+ * Measured 2026-09-07. #171's subject lives on `agent/identify-input-purpose-79`, whose PR **#89 is
+ * CLOSED** — the work moved and that branch will never merge. #186's lives on `pm/reported-directory-159`,
+ * whose **PR #172 is OPEN**. Before this the two printed identically, and they are not the same
+ * situation: *wait for it* and *nobody is building this* are different instructions, and a reader
+ * following the first onto a closed PR learns nothing about what replaced it.
+ *
+ * The verdict deliberately does not DECIDE between them — a row blocked behind an abandoned branch is
+ * arguably not blocked at all, and that is a call for a person. It reports the state and stops.
+ */
+test("a blocking ref carries its PR state, so 'wait' and 'nobody is coming' are distinguishable", () => {
+  const abandoned = startability({
+    ...clear, row: 171,
+    subjectsMissing: [{ name: "formInputs",
+      refs: ["origin/agent/identify-input-purpose-79 (PR #89 CLOSED)"] }],
+    heldRegions: [],
+  });
+  assert.match(abandoned.lines.join("\n"), /PR #89 CLOSED/,
+    "a reader following an abandoned branch needs to know it is abandoned before they wait on it");
+
+  const waiting = startability({
+    ...clear, row: 186,
+    subjectsMissing: [{ name: "dirOnOriginMain", refs: ["origin/pm/reported-directory-159 (PR #172 OPEN)"] }],
+    heldRegions: [],
+  });
+  assert.match(waiting.lines.join("\n"), /PR #172 OPEN/);
+
+  assert.equal(abandoned.code, waiting.code,
+    "the VERDICT is the same in both -- the subject is not on main either way. Only the reader can decide "
+    + "whether an abandoned blocker is a blocker, and this tool must not decide it for them");
+});
