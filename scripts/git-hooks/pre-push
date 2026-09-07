@@ -93,6 +93,57 @@ for v in "${!GIT_@}"; do unset "$v"; done
 failed=()
 skipped=()
 
+# #129: A CHECK CAN FAIL ON SOMEONE ELSE'S TREE. Three times on 2026-09-06 a refusal named the pusher's
+# change when the real cause was another agent's mid-edit file, a stale export nobody here touched, or an
+# untracked scratch file in a shared checkout -- every one read as "your push broke the build" and the
+# documented response to that reading is A11Y_SKIP_VERIFY=1, which turns off lint, typecheck and every
+# test as collateral. The hook already knows enough to say otherwise: `origin/main...HEAD` is exactly the
+# files this push's own commits touch, and a failing check's own output already names the file it is
+# unhappy about (eslint's `path:line`, tsc's, and node's own stack-trace shape all agree on it).
+#
+# `|| true` and the separate KNOWN flag matter: a git failure (no `origin/main` fetched, a fresh clone)
+# must never be read as "this push touches nothing", which would make every failure look untouched and
+# print a false reassurance. Silence, not a wrong note, is the safe failure mode here.
+if PUSHED_FILES="$(git diff --name-only origin/main...HEAD 2>/dev/null)"; then
+  PUSHED_KNOWN=true
+else
+  PUSHED_FILES=""
+  PUSHED_KNOWN=false
+fi
+REPO_ROOT="$(pwd)"
+
+# Best-effort, not a parser: a file this check's output never mentions cannot be attributed either way, so
+# under-matching just loses the note, never produces a wrong one. Three shapes, because the three tools
+# `run()` wraps do not agree: eslint prints the path ALONE on its own line, then `line:col` on the next;
+# tsc prints `path(line,col): error ...`; node's own stack traces print `path:line:col`. A regex assuming
+# only the last shape (tried first, against a synthetic eslint fixture) matched nothing.
+mentioned_paths() {
+  {
+    grep -oE '^[[:space:]]*[A-Za-z0-9_./-]+\.(ts|tsx|mjs|js|py|sh|ya?ml|json)[[:space:]]*$' "$1" 2>/dev/null \
+      | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'
+    grep -oE '[A-Za-z0-9_./-]+\.(ts|tsx|mjs|js)\([0-9]+,[0-9]+\)' "$1" 2>/dev/null \
+      | sed -E 's/\([0-9]+,[0-9]+\)$//'
+    grep -oE '([A-Za-z0-9_./-]+\.(ts|tsx|mjs|js|py|sh|ya?ml|json)):[0-9]+' "$1" 2>/dev/null \
+      | sed -E 's/:[0-9]+$//'
+  } 2>/dev/null | sed -E "s#^${REPO_ROOT}/##" | sort -u || true
+}
+
+# Prints nothing unless EVERY path the failure's own output named is absent from this push's files -- one
+# path this push DOES touch is enough to withhold the note, because the failure may genuinely be the
+# pusher's after all.
+note_if_untouched() {
+  local output_file="$1"
+  [ "$PUSHED_KNOWN" = true ] || return 0
+  local mentioned; mentioned="$(mentioned_paths "$output_file")"
+  [ -n "$mentioned" ] || return 0
+  local p
+  for p in $mentioned; do
+    printf '%s\n' "$PUSHED_FILES" | grep -qxF "$p" && return 0
+  done
+  echo "            NOTE: this failure is in file(s) this push does not touch — probably not your change:"
+  echo "$mentioned" | sed 's/^/              /'
+}
+
 # A CHECK THAT COULD NOT RUN IS NOT A CHECK THAT FAILED, and until 2026-09-06 they printed the same.
 #
 # Pushing `main` from a worktree with no `node_modules` produced `3 check(s) failed: lint typecheck unit
@@ -129,6 +180,7 @@ run() { # run <label> <command...>
   else
     echo "  FAILED  $label"
     tail -20 /tmp/a11y-prepush.$$ | sed 's/^/            /'
+    note_if_untouched /tmp/a11y-prepush.$$
     failed+=("$label")
   fi
   rm -f /tmp/a11y-prepush.$$
