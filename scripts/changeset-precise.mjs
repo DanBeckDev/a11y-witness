@@ -17,6 +17,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { classify, knownPackages } from "./ci-changed.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -30,6 +31,11 @@ export function touchesPublishedPackedFile(files, repoRoot = REPO_ROOT) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  // GUARDED WITH AN EMPTY LIST, which is the point rather than an omission (#164): this takes its base
+  // ref POSITIONALLY and reads no flags, so a mistyped one would otherwise be dropped while the
+  // positional is read from the wrong slot -- and this command's answer decides whether the pre-push
+  // fast gate demands a changeset at all. Same shape and same reason as `merge-guard.mjs`.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/changeset-precise.mjs" });
   const base = process.argv[2];
   if (!base) {
     console.error("Usage: node scripts/changeset-precise.mjs <base-ref>   e.g. origin/main");
