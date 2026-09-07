@@ -112,6 +112,34 @@ export function startability({ row, subjectsMissing, heldRegions, examined }) {
       + `region (${examined.paths} path(s), ${examined.symbols} symbol(s) examined).`] };
 }
 
+/**
+ * THE STATE OF THE PR ON A BLOCKING REF, because "wait" and "nobody is coming" are different instructions.
+ *
+ * Measured 2026-09-07: #171's subject lives on `agent/identify-input-purpose-79`, whose PR **#89 is
+ * CLOSED** — the work moved elsewhere and that branch will never merge. #186's lives on
+ * `pm/reported-directory-159`, whose **PR #172 is OPEN**. Reported identically before this, and they are
+ * not the same situation: a row blocked behind an abandoned branch is arguably not blocked at all, it is
+ * a row whose subject nobody is currently building, which is a decision for a person rather than a wait.
+ *
+ * IT DOES NOT CHASE THE SUCCESSOR. Nothing links that branch to the row that replaced it except prose,
+ * and inferring it would be the coarse guess this tool deliberately keeps away from its own verdict.
+ * Report the state; let the reader draw the line.
+ *
+ * A ref with no PR at all is not an error — plenty of branches never open one — so it reports `no PR`
+ * rather than failing, and an unreadable answer says so instead of implying `none`.
+ */
+function prState(ref) {
+  const branch = ref.replace(/^origin\//, "");
+  try {
+    const found = JSON.parse(gh(["pr", "list", "--repo", REPO, "--head", branch, "--state", "all",
+      "--json", "number,state"]));
+    if (!Array.isArray(found) || found.length === 0) return "no PR";
+    return found.map((pr) => `PR #${pr.number} ${pr.state}`).join(", ");
+  } catch {
+    return "PR state unreadable";
+  }
+}
+
 /** Every remote branch except `main` — the population an unmerged claim is measured against. */
 function unmergedRefs() {
   return git(["for-each-ref", "--format=%(refname:short)", "refs/remotes/origin"]).split("\n")
@@ -154,7 +182,9 @@ function facts(row) {
   for (const name of symbols) {
     if (mainText.includes(name)) continue;
     const carriers = unique(present.flatMap((p) => refsCarrying(p, name, refs)));
-    if (carriers.length > 0) subjectsMissing.push({ name, refs: carriers });
+    if (carriers.length > 0) {
+      subjectsMissing.push({ name, refs: carriers.map((ref) => `${ref} (${prState(ref)})`) });
+    }
   }
 
   // BOTH DIFFS, AND EACH ALONE GIVES A WRONG ANSWER. This tool produced both wrong answers in turn, on
