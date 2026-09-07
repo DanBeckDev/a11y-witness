@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * a11y-witness CLI (control plane).
+ * a11ign CLI (control plane).
  *
  * Runs the whole pipeline in one command: ask a capture worker to drive a real
  * screen reader through the page, then judge the announcement transcript here
@@ -14,38 +14,38 @@
  * The worker URL also reads from A11Y_WORKER.
  *
  * With neither set, the run manages a local UTM worker VM on demand: it starts one if
- * needed and puts it back how it found it afterwards. See leaseWorker in @a11y-witness/worker-fleet.
+ * needed and puts it back how it found it afterwards. See leaseWorker in @a11ign/worker-fleet.
  * Set A11Y_SHADOW_MODEL=1 to run the verified local screen-reader scorer beside the existing
  * judge. Shadow output is log-only and never changes findings.
  */
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { judge } from "@a11y-witness/judge";
+import { judge } from "@a11ign/judge";
 import { scanWithAxe, axeAvailable, type AxeFinding, type AxeBrowserChannel } from "./scan/axe.js";
 import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
-import { layerOf } from "@a11y-witness/judge/layers";
+import { layerOf } from "@a11ign/judge/layers";
 import { reportLines, type Report } from "./report.js";
 import { formatFaultMessage } from "./fault-remediation.js";
-import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11y-witness/worker-fleet";
-import { CAPTURE_CLIENT_TIMEOUT_MS, requestJson } from "@a11y-witness/worker-fleet/worker-http";
-import { captureTolerantly } from "@a11y-witness/worker-fleet/capture-client";
-import { workerIsUsable } from "@a11y-witness/worker-fleet/health";
+import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ign/worker-fleet";
+import { CAPTURE_CLIENT_TIMEOUT_MS, requestJson } from "@a11ign/worker-fleet/worker-http";
+import { captureTolerantly } from "@a11ign/worker-fleet/capture-client";
+import { workerIsUsable } from "@a11ign/worker-fleet/health";
 // `annotateCapture` is a VALUE (the shadow scorer calls it); the rest are types. Split rather than
 // combined into one `import {...}` so `import type` stays type-only and cannot pull evidence into a
 // runtime graph that does not need it.
-import { annotateCapture } from "@a11y-witness/evidence";
+import { annotateCapture } from "@a11ign/evidence";
 import type { CaptureStructure, CaptureInteraction, CaptureRequest as WireCaptureRequest,
-  CaptureFormState } from "@a11y-witness/evidence";
-import type { RuleLayerCoverage } from "@a11y-witness/judge/outcomes";
-import { captureDoubt, captureMentionsTitle, oracleCounts, type CaptureDoubt } from "@a11y-witness/evidence/verify";
-import { scorerPaths as scorerArtefact } from "@a11y-witness/scorer";
+  CaptureFormState } from "@a11ign/evidence";
+import type { RuleLayerCoverage } from "@a11ign/judge/outcomes";
+import { captureDoubt, captureMentionsTitle, oracleCounts, type CaptureDoubt } from "@a11ign/evidence/verify";
+import { scorerPaths as scorerArtefact } from "@a11ign/scorer";
 import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics,
   censusCountsDistinctNames, type ConformanceRequirement }
-  from "@a11y-witness/evidence/conformance";
-import { assessedCriteria } from "@a11y-witness/judge/coverage";
-import { earlReport } from "@a11y-witness/evidence/earl";
-import { criterionOutcomes, type CriterionOutcome } from "@a11y-witness/judge/outcomes";
+  from "@a11ign/evidence/conformance";
+import { assessedCriteria } from "@a11ign/judge/coverage";
+import { earlReport } from "@a11ign/evidence/earl";
+import { criterionOutcomes, type CriterionOutcome } from "@a11ign/judge/outcomes";
 import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { parseFormsConfig, refuseIfWrongOrigin, FormsConfigError } from "./forms/config.js";
@@ -239,7 +239,7 @@ const MAX_CAPTURE_ATTEMPTS = 3;
 
 /**
  * Where the shadow scorer lives — same shape as `local-judge.ts`'s `scorerPaths()`, and for the same
- * reason: the SCRIPT comes from `@a11y-witness/scorer`, resolved from its own module, so it never
+ * reason: the SCRIPT comes from `@a11ign/scorer`, resolved from its own module, so it never
  * depended on the cwd. The INTERPRETER did: it defaulted to `packages/cli/.venv/bin/python`, a path
  * nothing ever creates — the same defect M0 found in `local-judge.ts`'s own interpreter default, here
  * one level removed. `local-judge.ts` settled on `A11Y_PYTHON` (falling back to `python3` on the PATH)
@@ -837,7 +837,7 @@ Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCover
  * rest of the wire type's fields are other callers' business), and unlike the wire type it makes each
  * field required — every construction site below names all of them explicitly, so a field silently
  * defaulting away is a mistake this type is written to catch. `Required<Pick<...>>` derives the field
- * SHAPES from `@a11y-witness/evidence` so a renamed or retyped field fails here at compile time, rather
+ * SHAPES from `@a11ign/evidence` so a renamed or retyped field fails here at compile time, rather
  * than the independent hand-typed copy that stood here until the wire-contract unit (2026-09-06,
  * architecture-audit.md §5) — same names, same types, no import, so a drift would have compiled clean.
  */
@@ -877,7 +877,7 @@ type FormStateRequest = Omit<CaptureFormState, "state"> & { state: string };
 // The SHARED ceiling, imported rather than recomputed. This was
 // `CAPTURE_HARD_TIMEOUT_DEFAULT_MS + 40_000`, which was 560_000 at the time -- byte for byte the value
 // `worker-http.mjs` already exported, arrived at a second way and paid for with an import of
-// `@a11y-witness/nvda-worker`. That package is NOT a dependency of this one (isolation-smoke.mjs asserts
+// `@a11ign/nvda-worker`. That package is NOT a dependency of this one (isolation-smoke.mjs asserts
 // it must not be, "the CLI speaks HTTP to a worker"), so the published bundle imported something npm
 // never installed -- and it reached guidepup, which throws at import wherever there is no screen reader.
 // Found by `no-win32-imports.test.ts`; `budget-ladder.test.ts` already treats an unresolvable ceiling as
@@ -892,14 +892,23 @@ type FormStateRequest = Omit<CaptureFormState, "state"> & { state: string };
  * verbatim at a person (`Worker error 429: {"error":"a capture is already in progress"}`) makes them parse
  * it themselves. 429 in particular has a real, immediate remedy that the raw body does not say out loud.
  */
-function describeWorkerError(status: number, body: unknown): string {
-  const parsed = body && typeof body === "object" ? (body as { error?: string; fault?: string }) : {};
+export function describeWorkerError(status: number, body: unknown): string {
+  const parsed = body && typeof body === "object"
+    ? (body as { error?: string; fault?: string; reachedPhase?: string; diagnostics?: unknown[] })
+    : {};
   if (status === 429) {
     return `That worker is busy with another capture right now. Wait for it to finish, or point `
       + `--worker (or A11Y_WORKER) at a different one.`;
   }
   if (parsed.fault) {
-    return formatFaultMessage(parsed.fault, parsed.error);
+    // `reachedPhase`/`diagnostics` are the worker's OWN record of how far a partial capture got --
+    // already on the wire (see server.mjs's `runCapture`), and unused here until #336 gave a caller a
+    // reason to read them: "we ran out of time after N marks" and "we could not read your page at all"
+    // are different findings, and only one of them invites a retry.
+    return formatFaultMessage(parsed.fault, parsed.error, {
+      reachedPhase: parsed.reachedPhase,
+      markCount: Array.isArray(parsed.diagnostics) ? parsed.diagnostics.length : undefined,
+    });
   }
   if (parsed.error) {
     return `The worker returned an error (HTTP ${status}): ${parsed.error}`;
@@ -911,7 +920,7 @@ function describeWorkerError(status: number, body: unknown): string {
  * THROUGH `captureTolerantly` NOW, not a bare `requestJson` POST — architecture-audit.md §5, item 6.
  *
  * This was the one caller of ten that sent no `captureId`, so the async-dispatch, poll and lost-response
- * recovery every lab client already had (see `@a11y-witness/worker-fleet/capture-client`) was unavailable
+ * recovery every lab client already had (see `@a11ign/worker-fleet/capture-client`) was unavailable
  * to the one caller that is a real user: a dropped response here used to mean the page was silently never
  * examined, on a capture that may already have completed. `captureTolerantly` mints its own id, so this
  * function's only job is the request BODY and turning a transport failure into a message about the page,
@@ -962,7 +971,7 @@ function emitDraft(cap: CaptureResponse, url: string): void {
     // Ours, and said as ours. An author cannot fix this tool's announcement grammar and must not be sent
     // looking for a defect on their page that belongs to us.
     process.stderr.write(`${draft.unparsed.length} announcement(s) could not be read by this tool's `
-      + "grammar and are listed in the draft. That is a gap in a11y-witness, not a finding about the "
+      + "grammar and are listed in the draft. That is a gap in a11ign, not a finding about the "
       + "page.\n");
   }
   if (draft.unnamed.length) {

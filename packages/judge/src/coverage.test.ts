@@ -28,8 +28,8 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { scorerPaths } from "@a11y-witness/scorer";
-import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
+import { scorerPaths } from "@a11ign/scorer";
+import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 
 import { assessedCriteria, criterionNumber, RULE_CRITERIA, SCORED_CRITERIA } from "./coverage.js";
 import { ruleFindings } from "./rules.js";

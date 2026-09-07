@@ -1,4 +1,4 @@
-# `@a11y-witness/scorer`
+# `@a11ign/scorer`
 
 The trained screen-reader accessibility scorer, as an **artefact**: 27 KB of binary heads over a frozen
 MiniLM-L6-v2 encoder, plus the Python program that runs them and the training report that says what produced
@@ -9,16 +9,16 @@ so this package's job is to tell you *where the files are*, with absolute paths,
 with an interpreter you chose.
 
 ```bash
-npm install @a11y-witness/scorer
-npx a11y-scorer-fetch-encoder          # 87 MB, once — not in the tarball
+npm install @a11ign/scorer
+npx a11ign-scorer-fetch-encoder          # 87 MB, once — not in the tarball
 ```
 
 ```js
-import { scorerPaths, encoderPresent, scorerProvenance } from "@a11y-witness/scorer";
+import { scorerPaths, encoderPresent, scorerProvenance } from "@a11ign/scorer";
 import { spawnSync } from "node:child_process";
 
 const { scoreScript, encoderDir } = scorerPaths();
-if (!encoderPresent()) throw new Error("run a11y-scorer-fetch-encoder first");
+if (!encoderPresent()) throw new Error("run a11ign-scorer-fetch-encoder first");
 
 const result = spawnSync(process.env.A11Y_PYTHON ?? "python3",
   [scoreScript, "--capture-json", "capture.json"], { encoding: "utf8" });
@@ -31,7 +31,7 @@ because development always happens at the repo root.
 
 ## The weights are the API
 
-This is why the model is a separate package rather than part of `@a11y-witness/judge`. A retrain that moves a
+This is why the model is a separate package rather than part of `@a11ign/judge`. A retrain that moves a
 score flips a consumer's pass/fail **with no code change at all**, so a retrain is a *major* version bump. The
 judge's code and the model's numbers change at different rates and for different reasons, and semver can only
 express that if they version separately.
@@ -65,5 +65,5 @@ Shipping a trainer would imply you can reproduce the training, and you cannot: t
 page pairs from a real NVDA instance and is not distributed. The AGPL obligation is met by the source being
 public in the repository, not by putting it in the tarball. See `docs/adr/0004-package-boundaries.md`.
 
-AGPL-3.0-or-later, unlike `@a11y-witness/evidence` (Apache-2.0). The contract is permissive so anyone can
+AGPL-3.0-or-later, unlike `@a11ign/evidence` (Apache-2.0). The contract is permissive so anyone can
 interoperate; the trained model is not.

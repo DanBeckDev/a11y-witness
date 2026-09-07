@@ -41,7 +41,7 @@ jobs:
       # as an unnamed role=image node, and the census counted two of them, so this tool accused a
       # conformant page of having images with no text alternative. Measured 0 rule findings after the fix,
       # with probing ON.
-      - name: Run a11y-witness as a consumer would
+      - name: Run a11ign as a consumer would
         id: witness
         uses: ./
         with:
@@ -91,7 +91,7 @@ jobs:
       # every one of the 85 consecutive red runs discarded the report that would have explained it, and
       # `if-no-files-found: ignore` meant it did so quietly even on the runs where `path` was non-empty.
       #
-      # `action.yml` writes to `$RUNNER_TEMP/a11y-witness-result.json`, a constant assigned BEFORE the CLI
+      # `action.yml` writes to `$RUNNER_TEMP/a11ign-result.json`, a constant assigned BEFORE the CLI
       # is invoked, so the file exists whatever happens next — which is the whole point of collecting it.
       # The summary rides along for the same reason. `warn` rather than `ignore`: if this now collects
       # nothing, that is itself a finding about the run, and silence is what hid the bug for 85 runs.
@@ -105,6 +105,6 @@ jobs:
         with:
           name: action-smoke-report
           path: |
-            ${{ runner.temp }}/a11y-witness-result.json
-            ${{ runner.temp }}/a11y-witness-summary.md
+            ${{ runner.temp }}/a11ign-result.json
+            ${{ runner.temp }}/a11ign-summary.md
           if-no-files-found: warn

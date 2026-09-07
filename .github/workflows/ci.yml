@@ -76,6 +76,23 @@ name: ci
 on:
   pull_request:
     branches: [main]
+    # `edited` IS LOAD-BEARING, and its absence deadlocked the queue for eight hours -- 2026-09-07.
+    #
+    # GitHub's default `pull_request` types are `opened, synchronize, reopened`. Unit 2's `acceptance` job
+    # (#353) reads the PR BODY, so a PR whose only defect is its body -- a prose `Acceptance:` line that
+    # bash cannot run, or no line at all -- can be fixed only by editing the body, and NO DEFAULT TRIGGER
+    # FIRES ON THAT. Measured: zero merges between 13:38Z and 21:10Z, every `ci.yml` run red on
+    # `acceptance`, five open PRs written before the field existed and two whose corrected bodies could
+    # not be re-read. The gate was right and there was no way to satisfy it.
+    #
+    # A job that reads an input no trigger watches cannot be fixed by the person holding the input. That
+    # is the general shape, and it costs a whole queue rather than one PR.
+    #
+    # The cost of the fix is a full `ci.yml` run per title or body edit. Bounded by the `concurrency`
+    # block below, which cancels the previous run on the same ref, and cheap in this repo because the
+    # `changed` job gates every expensive job behind a real diff -- a body edit changes no files, so the
+    # heavy jobs skip and what actually re-runs is `changed`, `acceptance`, `mergeSafety` and `gate`.
+    types: [opened, synchronize, reopened, edited]
   # #156: a merge queue CANNOT be turned on without this. GitHub's own docs are explicit -- "You must use
   # the merge_group event to trigger your GitHub Actions workflow when a pull request is added to a merge
   # queue ... Otherwise, status checks will not be triggered" -- and an entry whose checks never report is
@@ -162,9 +179,9 @@ jobs:
       # #331: IT DOES NOT SKIP A WORKSPACE PACKAGE'S OWN `prepare` SCRIPT -- measured, not assumed. npm
       # 10.9.8 (bundled with the Node 22 this job pins) runs every workspace's `prepare` regardless of
       # `--ignore-scripts`: `npm ci --ignore-scripts --loglevel=verbose` on a fresh clone logs `npm info
-      # run @a11y-witness/worker-fleet@0.1.0 prepare packages/worker-fleet tsc --build` and leaves a real,
+      # run @a11ign/worker-fleet@0.1.0 prepare packages/worker-fleet tsc --build` and leaves a real,
       # populated `dist/` behind. That is what masked #238: `build-packages.mjs` used to import
-      # `@a11y-witness/worker-fleet/cli-flags` (a `dist/` path) at its own top level (#164), and on a cache
+      # `@a11ign/worker-fleet/cli-flags` (a `dist/` path) at its own top level (#164), and on a cache
       # MISS this step's silent side-build made that import resolve by accident, so `gate` read green on a
       # tree that could not build from a cache HIT (where this whole step, prepare included, is skipped).
       # #330 fixed the real bug (a relative import that needs no pre-built `dist/` at all); this note is
@@ -246,7 +263,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
-      # `@a11y-witness/worker-fleet/cli-flags` resolves through its package.json `exports` to
+      # `@a11ign/worker-fleet/cli-flags` resolves through its package.json `exports` to
       # `dist/cli-flags.mjs` -- `npm ci` alone is not enough, the same stale-dist trap CLAUDE.md already
       # names for cross-package imports in the TS suite, here reached from a Python subprocess instead.
       - run: npm run build
@@ -329,7 +346,7 @@ jobs:
   # `gh`. A BUILD IS STILL NEEDED, though the first version of this job shipped without one on the strength
   # of a grep that checked only these test files' own top-level imports: `board-liveness.test.ts`,
   # `board-markdown.test.ts`, `board-style.test.ts` and `board-summary-origin.test.ts` all drive a real
-  # `scripts/board-*.mjs` script, and those scripts import `@a11y-witness/worker-fleet/cli-flags` --
+  # `scripts/board-*.mjs` script, and those scripts import `@a11ign/worker-fleet/cli-flags` --
   # exactly the stale-dist trap CLAUDE.md names for every other job in this file, reached one hop further
   # than the grep looked. Caught by actually RUNNING the job's real command with no build present, not by
   # reading the imports -- this repo's own rule, applied to itself. Still far cheaper than the `docs` job:

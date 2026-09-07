@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. The boundary is implemented (`@a11y-witness/scorer`'s `spawnSync`, `local-judge.ts`) and its
+Accepted. The boundary is implemented (`@a11ign/scorer`'s `spawnSync`, `local-judge.ts`) and its
 trust implications are documented in `SECURITY.md`, but the decision to draw the boundary there — rather
 than in-process, or as a compiled artefact — was never recorded on its own; ADR 0004 and ADR 0012 both
 treat "a Python venv, a scorer model" as a given input to the package/credential splits they decide, not
@@ -24,7 +24,7 @@ is used — for the secondary gate, not the primary scorer.
 
 ## Decision
 
-**The primary scorer runs out-of-process, in Python, chosen by the caller.** `@a11y-witness/scorer`
+**The primary scorer runs out-of-process, in Python, chosen by the caller.** `@a11ign/scorer`
 deliberately ships no `score()` function — its own README states this outright: "Scoring runs in Python —
 torch, transformers, an 87 MB encoder — so this package's job is to tell you *where the files are*... and
 let you spawn the program with an interpreter you chose." The package resolves paths (`scorerPaths()`,
@@ -62,7 +62,7 @@ named as such rather than presented as history.
 - `A11Y_PYTHON` is a real code-execution surface and must be treated as trusted input, never taken from a
   request or an untrusted caller — `SECURITY.md`'s scope section already draws this line.
 - The scorer package staying dependency-light (paths and provenance only, no torch/onnx pulled into
-  `@a11y-witness/scorer`'s own `package.json`) is what lets it be installed and inspected (`scorerProvenance()`)
+  `@a11ign/scorer`'s own `package.json`) is what lets it be installed and inspected (`scorerProvenance()`)
   without needing the interpreter it will eventually be spawned with.
 
 ## What would falsify this
