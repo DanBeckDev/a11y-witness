@@ -1,0 +1,12 @@
+# git filter-repo --replace-text input. #63's runbook, #310.
+#
+# ONE PATTERN TODAY: RFC 1918 private addresses (the measured defect -- 2,268 matches across 715
+# (blob, path) pairs on the pre-purge history, verified by `scripts/history-secret-scan.mjs`). Add a
+# further `regex:PATTERN==>REPLACEMENT` line here, never a second file, if a future scan finds another
+# shape worth redacting -- one file the invocation reads is one file that can go stale, and a second
+# would be the fact-stated-twice shape this project keeps finding in its own tooling.
+#
+# THE REPLACEMENT IS TEXT, DELIBERATELY NOT ANOTHER IP-SHAPED STRING. Substituting one address for
+# another (even an RFC 5737 documentation address) would still match this same pattern, so the scan used
+# to VERIFY the purge worked could never read zero -- it would just be checking its own placeholder.
+regex:\b(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b==>REDACTED-INTERNAL-ADDRESS

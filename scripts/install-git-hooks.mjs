@@ -28,7 +28,16 @@ import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.mjs";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+// RELATIVE, NOT `@a11y-witness/worker-fleet/cli-flags`: that export map points at `dist/`, so the
+// specifier needs both `node_modules` AND a completed build. This is the `prepare` script, which npm
+// runs on every plain `npm install` in a fresh checkout -- before any package's `dist/` exists.
+//
+// Two guards cover this file and they were written independently within the hour:
+// `build-bootstrap-no-workspace-imports.test.ts` DECLARES it in `ALSO_CONSTRAINED`, and
+// `pre-install-import-graph.test.ts` DERIVES it from `package.json`'s `prepare`. See the second
+// file's header for why the derived form matters: the declared list does not contain
+// `workflow-run-liveness.mjs`, which had been crashing on this same import on every run.
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 /** Relative, so it keeps working inside a `git worktree` — where `.git` is a file, not a directory. */
 export const HOOKS_PATH = "scripts/git-hooks";
