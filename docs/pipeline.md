@@ -65,6 +65,38 @@ The permissions each workflow grants are deliberately narrow and are pinned by t
 `issues: write`, `pull-requests: read`, `contents: read` and nothing else: **a workflow triggered by a
 merged PR must never be able to push**, and `close-rows-on-merge.test.ts` goes red if `contents` is raised.
 
+## Merging `main` into a branch now needs `npm install`, not just a build
+
+**Since #357 landed at 21:34Z on 2026-09-07, the workspace scope is `@a11ign/*` and was `@a11y-witness/*`.**
+A worktree that merges `main` in and goes straight to `npm run build` fails with roughly 35
+`TS2307: Cannot find module '@a11ign/...'` across `cli`, `judge`, `worker-fleet` and `scorer`.
+
+The cause is one step further back than the hazard this repo already records. A worktree's `node_modules`
+is a symlink to the primary checkout's, and **the workspace links under it are named after the scope**.
+`npm run build` recreates `dist/`; nothing recreates a symlink whose name changed. So:
+
+```bash
+npm run primary:update        # in the PRIMARY: fetch, detach at origin/main, nothing else
+npm install                   # in the PRIMARY: recreates node_modules/@a11ign/*
+npm run build                 # in the PRIMARY
+```
+
+Found by `worker-config` and `worker-judge` independently, within minutes, because every worktree broke at
+once. That is the one mercy here: a stale INSTALL fails loudly, where the stale BUILD it resembles produces
+a wrong answer quietly — `orchestrator` once read a two-hour-stale `dist` and was about to dispatch a
+worker at a defect that did not exist.
+
+**`node_modules/@a11y-witness` is still present alongside `@a11ign`**, because `npm install` adds the new
+scope without removing the old. Harmless in itself, and a trap in exactly one direction: a leftover
+`@a11y-witness/*` import anywhere in the tree will now RESOLVE rather than fail, so the check that would
+have caught an incomplete rename is disarmed. Grep the TREE for the old scope, never `node_modules`.
+
+**A script that runs in CI with only `actions/checkout` is immune, and that is why it imports by relative
+path.** `auto-arm-sweep.mjs` and `close-rows-for-merged-pr.mjs` both reach `cli-flags` as
+`../packages/worker-fleet/src/cli-flags.mjs` rather than by scope — a choice made for the bootstrap reason
+(#330/#331: the package specifier resolves to a `dist/` that a checkout-only job does not have), which
+turned out to make them the only things in the tree the rename could not touch.
+
 ## What a stranded PR looks like
 
 The sweep refuses three shapes and prints the reason for each, because a queue-drainer that silently skips
