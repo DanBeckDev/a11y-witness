@@ -360,6 +360,23 @@ function reconciliation(d) {
     + `${unclassifiedClause}. ${onRelease} + ${later} + ${out} + ${none} = ${sum}${disagreement}`;
 }
 
+/** What the value column says for the most recent check: the verdict, and whether it is explained.
+ *
+ * A BARE VERDICT HERE IS THE COMPRESSION `orchestrator` WARNED ABOUT, in their words: "please do not let
+ * the document compress FAIL and 0 asserted into one word. They are the two halves of the claim and the
+ * second is the one that means anything to a reader." A reader scans this column; "FAIL" alone in it says
+ * the opposite of what happened when the finding was that nothing was asserted.
+ *
+ * So a non-passing verdict that HAS an authored explanation says so -- a fact about the entry, not an
+ * interpretation of the result -- and one that does NOT stands alone deliberately, because an unexplained
+ * failure should look like one.
+ */
+function gateHeadline(gate, worst, fresh) {
+  const explained = worst && worst.verdict !== "PASS" && gate.note ? ", explained below" : "";
+  const verdict = worst ? `**${worst.verdict}**${explained} — ` : "";
+  return `${verdict}${gate.command}${fresh ? "" : " — older than this report's window"}`;
+}
+
 /** Where the most recent gate result came from, and what it said, in the gate's own words.
  *
  * Extracted so `sourceTable` builds a table rather than also composing prose about verdicts -- the same
@@ -378,11 +395,17 @@ function gateSource(gate, captureAge, worst) {
   // anything is a JUDGEMENT, not derivable from the output, so it is authored on the entry as `note`.
   // Absent, this says so -- rather than letting a bare FAIL frighten a reader, or an omission reassure one.
   const meaning = !worst || worst.verdict === "PASS" ? ""
-    : gate.note ? `. What it means: ${gate.note}`
-      : ". **No explanation has been recorded for this result**, so this document cannot say whether it "
-        + "blocks anything";
-  return `run by the engineer who owns the machines at ${gate.at}, output recorded word for word`
-    + spread + said + meaning;
+    : gate.note ? `**What it means:** ${gate.note}`
+      : "**No explanation has been recorded for this result**, so this document cannot say whether it "
+        + "blocks anything.";
+  // THE MEANING LEADS, and this is not a style choice. `orchestrator`, who ran the gate: "please do not
+  // let the document compress FAIL and 0 asserted into one word. They are the two halves of the claim and
+  // the second is the one that means anything to a reader." A verdict at the head of a long paragraph
+  // whose qualification arrives four clauses later IS that compression, so the qualification goes first
+  // and the provenance follows it.
+  return (meaning ? `${meaning} ` : "")
+    + `Run by the engineer who owns the machines at ${gate.at}, output recorded word for word`
+    + spread + said;
 }
 
 function sourceTable(d) {
@@ -427,8 +450,7 @@ function sourceTable(d) {
   const worst = d.latestGate ? worstVerdict(d.latestGate.output) : null;
   push("Most recent automated check result",
     d.latestGate
-      ? `${worst ? `**${worst.verdict}** — ` : ""}${d.latestGate.command}`
-        + `${d.gateIsFresh ? "" : " — older than this report's window"}`
+      ? gateHeadline(d.latestGate, worst, d.gateIsFresh)
       : "**not reported**",
     d.latestGate
       ? gateSource(d.latestGate, captureAge, worst)
