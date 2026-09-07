@@ -369,3 +369,20 @@ test("ci.yml's board job runs exactly the board guards and the claim guard, and 
     "the board job must build -- several of its test files drive a scripts/board-*.mjs script that "
     + "imports @a11y-witness/worker-fleet, which resolves to dist and does not exist unbuilt");
 });
+
+test("coverage.yml reports its own failure on the tracking issue -- a nightly nobody reads fails quietly", () => {
+  // dispatcher's review of #166: "a gate that does not exercise what ships is not a gate" applies to who
+  // is WATCHING a nightly job too, not only to what it exercises. Same pattern board-liveness.yml already
+  // uses against #20.
+  const doc = parseYaml(readWorkflow("coverage.yml")) as {
+    permissions?: Record<string, string>;
+    jobs: Record<string, { steps: Array<Record<string, unknown>> }>;
+  };
+  assert.equal(doc.permissions?.issues, "write",
+    "coverage.yml needs issues: write to comment on a failure, or the step below can never run");
+  const runLines = (doc.jobs.coverage.steps ?? []).map((s) => String(s.run ?? "")).join("\n");
+  const ifs = (doc.jobs.coverage.steps ?? []).map((s) => String(s.if ?? "")).join("\n");
+  assert.match(ifs, /failure\(\)/, "the comment step must be gated on if: failure(), or it posts every run");
+  assert.match(runLines, /gh issue comment 169/,
+    "coverage.yml must comment on #169 (the coverage tracking issue) when the nightly run fails");
+});
