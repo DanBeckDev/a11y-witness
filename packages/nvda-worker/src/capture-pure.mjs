@@ -258,19 +258,6 @@ export const dedupeKey = (/** @type {string} */ phrase) => {
 const MAX_CONTAINER_DEPTH = 4;
 
 /**
- * Given the speech log and how much of it we had already read, did the last quick-nav jump MOVE, and
- * if so what was announced?
- *
- * Extracted so the rule can be tested without NVDA. The bug it replaces was a reasoning error rather
- * than a coding one -- "the spoken phrase changed" was treated as proof of movement -- and a reasoning
- * error is only pinned down by a test that states the intended rule. `sweep-step.test.ts` asserts the
- * case that used to produce a phantom: NVDA silent, `lastSpokenPhrase` still holding older text.
- *
- * @param {{log: string[], seen: number, prev: string}} state
- * @returns {{phrase?: string, stop?: string, seen: number}} `stop` names WHY, so a diagnostic can
- *   distinguish "ran out of elements" from "the channel was rebuilt" -- previously both were `break`.
- */
-/**
  * An ANTI-SPIN BACKSTOP, not a movement detector — and the distinction is the whole lesson here.
  *
  * Identical announcement text cannot tell "the cursor did not move" from "the cursor moved to something
@@ -287,6 +274,15 @@ const MAX_CONTAINER_DEPTH = 4;
  */
 export const MAX_CONSECUTIVE_REPEATS = 25;
 
+/**
+ * Given the speech log and how much of it we had already read, did the last quick-nav jump MOVE, and
+ * if so what was announced?
+ *
+ * Extracted so the rule can be tested without NVDA. The bug it replaces was a reasoning error rather
+ * than a coding one -- "the spoken phrase changed" was treated as proof of movement -- and a reasoning
+ * error is only pinned down by a test that states the intended rule. `sweep-step.test.ts` asserts the
+ * case that used to produce a phantom: NVDA silent, `lastSpokenPhrase` still holding older text.
+ */
 /**
  * @typedef {"cap"|"channelReset"|"deadline"|"error"|"exhausted"|"focusModeStuck"|"repeat"|"silent"} SweepStop
  *   Every reason a sweep can end, enumerated. Not decoration: as a bare `string` this does not narrow at
@@ -939,7 +935,6 @@ export function addressesSamePage(actual, url) {
  *
  * INJECTABLE, because the entire defect is about WHEN the URL is read and a test that cannot control
  * time cannot see it — the same reasoning as `file-version-memo.test.ts`.
- *
  */
 /**
  * @param {string} url

@@ -533,12 +533,6 @@ export const SWEEP_OF: Record<string, "headings" | "links" | "landmarks" | "grap
 };
 
 /**
- * Per-type: did the sweep announce as many distinct names as the page exposes?
- *
- * @param capture a capture, unwrapped
- * @returns one verdict per type the census counts, or `unknown` where it cannot say
- */
-/**
  * WHAT THE SWEEP FOUND, counted the way the census counts it.
  *
  * The census counts distinct NAMES for named elements and each UNNAMED element individually, so the sweep
@@ -591,12 +585,6 @@ function sweptElements(announced: string[], type: string): { names: Set<string>;
   };
 }
 
-/**
- * Per-type: did the sweep announce as many distinct names as the page exposes?
- *
- * @param capture a capture, unwrapped
- * @returns one verdict per type the census counts, or `unknown` where it cannot say
- */
 /**
  * NVDA states a table's size when the caret enters it: "table, with 3 rows and 7 columns".
  *
@@ -655,6 +643,12 @@ function tableCompleteness(capture: CapturedAnnouncements): Completeness {
   return seen >= expected * CELLS_ENOUGH ? "exact" : "truncated";
 }
 
+/**
+ * Per-type: did the sweep announce as many distinct names as the page exposes?
+ *
+ * @param capture a capture, unwrapped
+ * @returns one verdict per type the census counts, or `unknown` where it cannot say
+ */
 export function sweepCompleteness(capture: CapturedAnnouncements): Record<string, Completeness> {
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
   const census = marks.find((m) => typeof m === "object" && m !== null
