@@ -5,6 +5,74 @@ token that covers that first publish, and getting rid of it afterwards. Like #5,
 human logged into npmjs.com or GitHub's org settings; a worker cannot do it. What a worker *can* do is
 build the check that proves it happened, which is `npm run npm-token:check` (below).
 
+## The token's scope — issue #304
+
+**Written down here so the human doing #5 step 2 or #72's configuration does not invent the answer at
+the keyboard, under time pressure, on the one step that hands out publish rights.** Every fact below is
+checkable by the command shown; none of it is typed from memory.
+
+**The six packages**, derived from the workspace rather than hand-listed — a package is publishable when
+its own `package.json` does not set `"private": true`:
+
+```
+$ npm query .workspace --json | node -e "process.stdin.resume();let d='';process.stdin.on('data',c=>d+=c);\
+process.stdin.on('end',()=>console.log(JSON.parse(d).map(p=>p.name)))"
+```
+
+| package directory | published name | publishable? |
+|---|---|---|
+| `packages/cli` | `a11y-witness` | yes |
+| `packages/evidence` | `@a11y-witness/evidence` | yes |
+| `packages/judge` | `@a11y-witness/judge` | yes |
+| `packages/nvda-worker` | `@a11y-witness/nvda-worker` | yes |
+| `packages/scorer` | `@a11y-witness/scorer` | yes |
+| `packages/worker-fleet` | `@a11y-witness/worker-fleet` | yes |
+| `packages/control` | `@a11y-witness/control` | no — `"private": true` |
+| `packages/lab` | `@a11y-witness/lab` | no — `"private": true` |
+| `packages/nvda-speech` | `@a11y-witness/nvda-speech` | no — `"private": true` |
+
+**These are today's names.** #66 (the `a11ign` rename) changes the unscoped package's name and the
+`@a11y-witness` scope before the transfer — #72's own acceptance script already writes the scope as
+`@a11ign`. **A token or trusted publisher scoped to today's six names must be re-scoped to the renamed
+ones once #66 lands, or it grants publish rights to names that no longer exist and silently denies the
+ones that do.**
+
+**The repository and workflow.** `release.yml` is the only workflow that publishes or invokes changesets
+— confirmed, not assumed:
+
+```
+$ grep -l 'npm publish\|changesets/action' .github/workflows/*.yml
+.github/workflows/release.yml
+```
+
+Its job is named `release`, triggered only by `workflow_dispatch` (never a push or a schedule), and the
+publish step itself is gated on `inputs.dry-run == false && inputs.confirm == 'publish-for-real'` — see
+the workflow's own comments for why that double gate exists. **A trusted publisher (or a granular token's
+repository restriction) must name `a11ign/a11ign`, workflow `release.yml`** — the POST-transfer, POST-
+rename location, per #72's own body — not the current `DanBeckDev/a11y-witness`, which is where the
+repository lives only until #63 and #66 land.
+
+**The two secrets this repository actually uses**, so #63's transfer re-creates exactly these and no
+more:
+
+- **`NPM_TOKEN`** — read by `release.yml`'s `Publish` step as `NODE_AUTH_TOKEN`. The one credential that
+  can actually publish. Covers the first publish only; #72 configures trusted publishing (OIDC, no
+  standing token) for all six packages afterwards and revokes it.
+- **`ORG_SECRETS_READ_TOKEN`** — read only by `npm-token-liveness.yml`, to answer "does `NPM_TOKEN` still
+  exist" without needing org-admin. Deliberately far weaker than `NPM_TOKEN`: scoped to nothing but the
+  organisation's "Secrets: read" permission, so it can list secret *names* and cannot publish anything.
+  Optional — without it the liveness check reports `CANNOT_TELL` rather than guessing.
+
+**Which of these change on the org move.** Both already do NOT need re-creating, and that is deliberate
+rather than lucky: `NPM_TOKEN` is stored as an **organisation-level** Actions secret on `github.com/
+a11ign` (not a repository secret on `DanBeckDev/a11y-witness`), specifically so the repository transfer
+in #63 does not lose it — #63's own point 2 names "Actions secrets... do not transfer" as one of the four
+silent breakages, and this secret was placed at the org level in anticipation of exactly that. Once the
+repository joins the `a11ign` organisation, it inherits the secret automatically. `ORG_SECRETS_READ_TOKEN`,
+when created, is the same shape for the same reason. **What DOES need re-doing after #63/#66 land is the
+package list and the trusted-publisher configuration above** — those name the CURRENT repository location
+and package names, not the org-level secret, and #72's own configuration step is where that happens.
+
 ## What exists today, checked 2026-09-06
 
 - `NPM_TOKEN` is an organisation-level Actions secret on `github.com/a11ign`, created 2026-09-06,
