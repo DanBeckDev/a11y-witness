@@ -45,7 +45,7 @@ const REPORTED = "docs/board/reported";
  * @param {(rel: string) => string | null} read
  * @param {string[]} paths
  */
-function assembleReported(read, paths) {
+export function assembleReported(read, paths) {
   const pick = (kind) => paths.filter((rel) => rel.includes(`/${kind}/`) && rel.endsWith(".json"))
     .map((rel) => { const text = read(rel); return text === null ? null : JSON.parse(text); })
     .filter((entry) => entry !== null)

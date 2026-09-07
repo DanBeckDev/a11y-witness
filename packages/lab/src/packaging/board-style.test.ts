@@ -399,3 +399,41 @@ test("no two recorded entries share an identity or an order", () => {
     }
   }
 });
+
+/* A KIND ON DISK THAT THE CONSTANT DOES NOT NAME IS SILENTLY DROPPED FROM THE DOCUMENT.
+ *
+ * `REPORTED_KINDS` governs which subdirectories of `docs/board/reported/` are read. Shrink it and
+ * `reported()` returns no key for the missing kind, `?? []` turns that into an empty list, and the
+ * edition renders ZERO achievements without failing anything. Measured: the full suite passes with the
+ * constant shrunk, and the document loses all five.
+ *
+ * FOUND BY MUTATION, NOT BY READING -- and the first attempt found the wrong thing. `reported()` was
+ * still hardcoding both kinds while claiming to derive them, so shrinking the constant changed nothing
+ * and looked like coverage rather than a silent no-op edit. The mutation is what separated "the guard
+ * does not bite" from "the code never read the constant".
+ *
+ * THE DIRECTION THAT MATTERS IS DISK -> CONSTANT. A kind the constant names but disk lacks is an empty
+ * list, which is honest. A kind on disk the constant does not name is evidence that exists and is never
+ * read, which is this project's oldest defect: unchecked is not clean.
+ */
+test("every entry directory on disk is named in REPORTED_KINDS", async () => {
+  const { REPORTED_KINDS, reported } = await import("../../../../scripts/board-data.mjs");
+  const root = path.join(REPO, "docs/board/reported");
+  const onDisk = readdirSync(root, { withFileTypes: true })
+    .filter((e) => e.isDirectory()).map((e) => e.name);
+
+  for (const kind of onDisk) {
+    assert.ok((REPORTED_KINDS as string[]).includes(kind),
+      `docs/board/reported/${kind}/ holds records that nothing reads: it is not in REPORTED_KINDS, so `
+      + "`reported()` returns no key for it and the edition renders that section empty without failing. "
+      + "Add it to the constant, or delete the directory — evidence that exists and is never read is "
+      + "worse than evidence that is absent, because absence is visible");
+  }
+  // AND THE OTHER DIRECTION, so the constant cannot name a kind that does not exist: a phantom kind
+  // contributes an empty list to every count and nothing ever says why it is empty.
+  const built = reported();
+  for (const kind of REPORTED_KINDS as string[]) {
+    assert.ok(onDisk.includes(kind) || (built as Record<string, unknown>)[kind] !== undefined,
+      `REPORTED_KINDS names ${kind}, which has no directory and no key in reported()`);
+  }
+});
