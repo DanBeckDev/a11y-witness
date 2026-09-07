@@ -1,4 +1,4 @@
-# `@a11y-witness/judge`
+# `@a11ign/judge`
 
 Turns a screen-reader capture into WCAG 2.2 AA findings — the **judgment-based** failures a rule scanner
 cannot see, because deciding them requires knowing what a blind user actually heard and whether they could
@@ -7,11 +7,11 @@ still finish the task.
 It sits *alongside* axe-core, never instead of it. See `docs/adr/0002-layered-coverage.md`.
 
 ```bash
-npm install @a11y-witness/judge @a11y-witness/scorer
+npm install @a11ign/judge @a11ign/scorer
 ```
 
 ```js
-import { judge } from "@a11y-witness/judge";
+import { judge } from "@a11ign/judge";
 
 const judgment = await judge({
   task: "Find the opening hours",
@@ -26,20 +26,20 @@ const judgment = await judge({
 
 ## The default backend is our own trained scorer, not a rented LLM
 
-`local` — a frozen MiniLM encoder with 27 KB of trained heads, from `@a11y-witness/scorer`. `codex`,
+`local` — a frozen MiniLM encoder with 27 KB of trained heads, from `@a11ign/scorer`. `codex`,
 `anthropic` and `openai` exist for comparison and are never the default. This matters more than it sounds: the
 backend defaulted to a hosted model for months while the GitHub Action shipped `local`, so the quality gate
 measured a model that was not the one shipping. Flipping it surfaced two real defects immediately.
 
-`@a11y-witness/scorer` is a **peer** dependency, deliberately. Its version is a semantic promise about
+`@a11ign/scorer` is a **peer** dependency, deliberately. Its version is a semantic promise about
 *scores*, so you must pin it yourself — and two copies at different versions in one tree would judge the same
 capture differently.
 
 ## The deterministic layer works with no model at all
 
 ```js
-import { ruleFindings } from "@a11y-witness/judge/rules";
-import { oracleCounts } from "@a11y-witness/evidence/verify";
+import { ruleFindings } from "@a11ign/judge/rules";
+import { oracleCounts } from "@a11ign/evidence/verify";
 
 ruleFindings({ ...capture, ...oracleCounts(capture) });   // → Finding[]
 ```
@@ -61,7 +61,7 @@ oracle a rule about absence has to agree with, or it is guessing.
 ## Findings come back in the order a user meets them
 
 ```js
-import { orderByLayer, layerOf } from "@a11y-witness/judge/layers";
+import { orderByLayer, layerOf } from "@a11ign/judge/layers";
 
 layerOf("1.1.1");   // "perceive"
 layerOf("2.4.4");   // "navigate"
