@@ -34,7 +34,8 @@ import { AddressInfo } from "node:net";
 import { stripComments } from "@a11ign/evidence/source-text";
 
 import {
-  applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, type CaptureResponse, type CaptureRequest,
+  applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, describeWorkerError,
+  type CaptureResponse, type CaptureRequest,
 } from "./cli.js";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
@@ -242,4 +243,23 @@ test("errorReason falls back to String(error) when neither .message nor .code ex
 test("MUTATION: an error with a message but no code still prefers the message, not the fallback chain", () => {
   const err = Object.assign(new Error("real reason"), { code: "SOME_CODE" });
   assert.equal(errorReason(err), "real reason", "a present .message must win over .code, not the other way round");
+});
+
+test("describeWorkerError: a hard-timeout fault reports how far the capture got -- issue #336", () => {
+  // The worker's own wire shape (server.mjs's `runCapture` catch block) -- `reachedPhase` and
+  // `diagnostics` were already being sent and were unused here until #336 gave a reason to read them.
+  const message = describeWorkerError(500, {
+    error: "capture exceeded the hard timeout of 520000 ms and was abandoned",
+    fault: "hard-timeout",
+    reachedPhase: "readingForm",
+    diagnostics: [{ event: "navigated" }, { event: "sweptHeadings" }, { event: "readingForm" }],
+  });
+  assert.match(message, /hard-timeout/, "the fault code must still be printed");
+  assert.match(message, /readingForm/, "the phase the capture actually reached must be named");
+  assert.match(message, /3 progress mark/, "how many marks were recorded must be stated, not just named");
+});
+
+test("describeWorkerError: a fault with no reachedPhase omits the progress line rather than inventing one", () => {
+  const message = describeWorkerError(500, { error: "the browser could not reach the page", fault: "page-unreachable" });
+  assert.doesNotMatch(message, /Got as far as/, "no reachedPhase was reported, so none must be claimed");
 });
