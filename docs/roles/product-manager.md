@@ -148,13 +148,30 @@ commit that moves it leaves the number briefly wrong on `main` AND stops the PR 
 measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
 no permission. Where prose asserts it, it does.**
 
+## I COUNTED WORDS WHEN THE FAULT WAS STRUCTURE — 2026-09-07
+
+A five-page document rendered a sixth page holding one word, `"discover."`. I measured length, found the
+body inside its cap, and reported the overflow as probably legitimate. `ceo` read the same document and
+diagnosed it in one line: section five opened with two caveat paragraphs before its claim, under a
+heading duplicated by a bold sub-heading below it. **Ordering, not length.** Deleting the duplicate
+heading and moving the recommendation up returned it to five pages without a word being cut.
+
+**Why:** the cap is the instrument I had, so the cap is the question I asked. A word count is the wrong
+tool for a layout fault and it answers confidently anyway — which is this repository's own rule about a
+number being only as good as what it was computed from, pointed at a document instead of a gate.
+
+**How to apply:** when an artefact is the wrong SHAPE, look at its structure before its size. Ask what
+the reader meets first and whether anything is said twice, and only then reach for a measurement. The
+same morning produced the sibling: a heading said *four* above three bullets, and no amount of counting
+words would have found it, because the defect was that a number had been typed rather than derived.
+
 ## The tracker's rules, ruled by `ceo` 2026-09-07 after the board asked why the count mattered
 
 **The honest answer was that it does not — three things it stood for do.** The total cap is withdrawn.
 
 **1. Work-in-progress limits, where they bite.** Ready holds **at least 3 and at most 6** unclaimed rows. **At most one row in progress per worker.** No cap on the total.
 
-**2. Every row carries a milestone**, and the document reports **three counts with trend, not one** — blocks publish, road to version one, capture throughput — with **epics and decisions shown separately from ordinary rows**. Read as one number, 48 looks like 48 pieces of unfinished work; read as `18 epics + 5 decisions + 25 rows`, the epics are the roadmap the board approved.
+**2. Every open row carries a milestone OR the label `out-of-release`, and there is no third state.** A row with neither is a tracker defect, not a judgement call. Amended 2026-09-07 after #290 — real work, deliberately not in the release — made the open-items total count a row the blocker count could not, so one page carried two numbers disagreeing about it and neither was wrong. The document's open-items figure now reconciles on the page (`blocks release + later milestone + out-of-release + unclassified = total`, with the sum printed and a sentence when it does not hold), and `tracker-auditor`'s hourly table asks the question. **The label means "deliberately not in this release", never "unsorted"** — which is why the unclassified count is printed rather than absorbed: tolerating it silently would rebuild the fault inside its own fix. And the document reports **three counts with trend, not one** — blocks publish, road to version one, capture throughput — with **epics and decisions shown separately from ordinary rows**. Read as one number, 48 looks like 48 pieces of unfinished work; read as `18 epics + 5 decisions + 25 rows`, the epics are the roadmap the board approved.
 
 **3. A row untouched for 14 days is re-verified by its own open-check, or closed.** A weekly pass, and it is mine.
 
