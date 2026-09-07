@@ -120,6 +120,7 @@
     "coverage": "c8 npx tsx --test \"packages/*/src/**/*.test.ts\"",
     "identity:rate": "tsx packages/lab/src/harnesses/page-identity-rate.mjs",
     "verdict:stability": "tsx packages/lab/src/harnesses/occurrence-verdict-stability.mjs",
+    "verdict:preregistered": "node packages/lab/scripts/check-preregistered-verdict.mjs",
     "training:export-acceptance:all": "REPEAT=repeat-1 npm run --silent training:export-acceptance && REPEAT=repeat-2 npm run --silent training:export-acceptance",
     "scorer:size-sensitivity": "node packages/lab/scripts/audit-size-sensitivity.mjs",
     "candidate:gate": "npm run scorer:migration -- --evaluating && npm run scorer:retired-heads && npm run scorer:shortcuts -- --model runs/model-candidate --data runs/screenreader-dataset/with-realism.jsonl && npm run gate:isolation && npm run training:check-signals:complete && npm run rules:gate && npm run rules:coverage && npm run rules:real-pages",
@@ -140,6 +141,7 @@
     "fleet:recover": "node packages/control/src/fleet-playbook.mjs --playbook=recover.yml",
     "fleet:hours": "node packages/lab/scripts/fleet-hours.mjs",
     "fleet:inventory-install": "node packages/control/src/fleet-playbook.mjs --playbook=inventory-install.yml",
+    "fleet:control-host-install": "node packages/control/src/fleet-playbook.mjs --playbook=control-host-install.yml",
     "corpus:release": "node packages/lab/scripts/corpus-release.mjs",
     "pr:hold": "node scripts/pr-hold.mjs",
     "pr:release": "node scripts/pr-hold.mjs --release"

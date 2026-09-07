@@ -15,8 +15,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
 
 import { allPackages } from "./isolation-gate.mjs";
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 
 function main() {
+  // Guarded per #164: takes no flags; `--build` in this file is passed to tsc.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/build-packages.mjs" });
   const root = fileURLToPath(new URL("../", import.meta.url));
   const buildable = allPackages().filter((dir) => existsSync(join(dir, "tsconfig.json")));
 
