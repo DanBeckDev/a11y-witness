@@ -15,6 +15,34 @@
 #   A11Y_COMMIT_ALL=1 git commit ...
 set -euo pipefail
 
+# THE PRIMARY CHECKOUT IS READ-ONLY EXCEPT FAST-FORWARD -- issue #126, ruled by `ceo` after three real
+# incidents in one night: a worktree left on a branch, `lab:collect-promotion` committed there because
+# nothing marks the boundary between producing an artefact and committing it, and a failed `cd` into a
+# deleted merge worktree silently falling back here. None was carelessness -- the rule was known and
+# written in a role file, and it broke anyway three times because nothing could REFUSE.
+#
+# It matters mechanically, not territorially. `assertFleetRunsThisCheckout` hashes the WORKING TREE, so a
+# stray branch or a half-resolved merge here makes a capture run stamp itself against code that never
+# existed -- best case a refused run, worst case one that passes and should not have. And a worktree's
+# `node_modules` may symlink to the primary's `dist`, so a branch parked here silently changes what every
+# OTHER agent compiles and tests against.
+#
+# IDENTIFIED BY WHETHER `.git` IS A DIRECTORY, never by branch name or an absolute path -- the identical
+# mechanism `prune-worktrees.mjs`'s `isPrimaryWorktree` already uses (see that function's own comment): a
+# branch is the thing that moves, and a hardcoded path breaks the moment this checkout lives somewhere
+# else. A linked worktree's `.git` is a text file (`gitdir: ...`); the primary's is a real directory.
+if [ -d "$(git rev-parse --show-toplevel)/.git" ]; then
+  if [ -n "${A11Y_PRIMARY_COMMIT_REASON:-}" ]; then
+    echo "pre-commit: committing in the PRIMARY checkout, overridden: $A11Y_PRIMARY_COMMIT_REASON" >&2
+  else
+    echo "pre-commit: REFUSING — this is the fleet-driving checkout; commit in a worktree." >&2
+    echo "If this is deliberate: A11Y_PRIMARY_COMMIT_REASON=\"<why>\" git commit ... — the reason is" >&2
+    echo "printed, not just the override, so a deliberate exception is in the log rather than in" >&2
+    echo "somebody's memory." >&2
+    exit 1
+  fi
+fi
+
 [ "${A11Y_COMMIT_ALL:-0}" = "1" ] && exit 0
 
 STALE_MIN="${A11Y_STALE_MIN:-30}"   # a staged file untouched this long is suspicious

@@ -560,6 +560,39 @@ once swept up 19 files, 16 of them another agent's half-finished work, and pushe
   makes git commit the working tree, not your staged hunk).
 - `git status` before you start. Files already modified are not yours to commit.
 
+### THE PRIMARY CHECKOUT IS READ-ONLY EXCEPT FAST-FORWARD
+
+Ruled by `ceo`, twice, in messages — and a ruling that lives only in messages is not a rule, which is
+exactly why it broke three times in one night: a worktree left parked on a branch, `lab:collect-promotion`
+committing here because nothing marked the boundary between producing an artefact and committing it, and
+a failed `cd` into a deleted merge worktree silently falling back here. None was carelessness — the rule
+was known and written in a role file, and it broke anyway because nothing could REFUSE.
+
+It matters mechanically, not territorially. `assertFleetRunsThisCheckout` hashes the WORKING TREE, so a
+stray branch or a half-resolved merge here makes a capture run stamp itself against code that never
+existed — best case a refused run, worst case one that passes and should not have. And a worktree's
+`node_modules` may symlink to the primary's `dist`, so a branch parked here silently changes what every
+OTHER agent compiles and tests against.
+
+Two hooks enforce it now, both identifying the primary the same way `worktrees:prune` already does —
+`.git` being a real directory, never a branch name or an absolute path:
+
+- **`pre-commit`** refuses any commit made in the primary outright: *"this is the fleet-driving checkout;
+  commit in a worktree."* Override with `A11Y_PRIMARY_COMMIT_REASON="<why>" git commit ...` — the reason is
+  PRINTED, so a deliberate exception is in the log rather than in somebody's memory.
+- **`post-checkout`** cannot veto a checkout that already happened (git gives it no such power), so it
+  self-corrects: the instant a checkout in the primary lands on a branch, or detaches anywhere but
+  `origin/main`, it immediately checks back out to detached `origin/main` and says why. Same override,
+  `A11Y_PRIMARY_CHECKOUT_REASON="<why>"`.
+- `npm run primary:update` is the only sanctioned way to move the primary forward — fetch, then detach at
+  `origin/main`, nothing else.
+- `lab:collect-promotion` writes its artefacts into whatever checkout it runs in, which is exactly how the
+  second incident happened. It now detects the primary the same way and prints a copy-to-worktree step
+  instead of `git commit` instructions that `pre-commit` would only refuse.
+- Both hooks are mutation-checked by attempting the forbidden thing (`primary-checkout-guard.test.ts`) — a
+  hook that has never been shown to refuse is not a verified hook, this repo's own rule, and the reason
+  four guards fired on their own authors' first real trigger rather than on a test.
+
 ### And more than one agent may be DRIVEN by another — what worked, measured 2026-09-05
 
 Three peer sessions worked units in their own worktrees while one session orchestrated and reviewed. It
@@ -2328,6 +2361,7 @@ failure as `capture-check` being mandatory and never running once.
 | command | when |
 |---|---|
 | `worktrees:prune` | after a merge, or whenever `git worktree list` looks long: removes a linked worktree only when its branch is fully merged into `origin/main` AND its working tree is clean, names every other one as DIRTY with its branch and touches nothing about it, and never the primary checkout (identified by `.git` being a real directory there, a file everywhere else). A rule maintained by hand ("prune after every merge") reached 36 worktrees and 4.4 GB the day after a 28-tree hand-prune |
+| `primary:update` | **the only way to move the primary checkout** — fetch, then detach at `origin/main`, nothing else. Built for issue #126, after three real incidents in one night where the primary ended up holding a branch by accident (a worktree left parked there, `lab:collect-promotion` writing artefacts in with nothing marking the boundary between producing and committing, and a failed `cd` into a deleted merge worktree silently falling back here). Refuses outside the primary — running it in a worktree would detach that worktree from whatever branch it holds, which defeats the point of a worktree. See the `pre-commit`/`post-checkout` entries below for the hooks that make the primary refuse to hold anything else in the first place |
 | `fleet:normalise` | bring every LOCAL UTM guest to one baseline, elevated, and prove it took. The bare-metal equivalent is `fleet:provision` |
 | `fleet:recover` | **a worker that is UP, ANSWERING and not working.** Measured 2026-09-02 on a11y-worker-6: a capture began at 03:00 and was still `current` at 06:32, with every readiness check green and `busy: true` for three and a half hours — from the run's side that is a slow page, so it waited and a corpus recapture made no progress at all. `fleet:deploy` cannot fix it: `Stop-ScheduledTask` will not end a node process wedged in a capture, the restart loses the race for port 8765, and the old process keeps serving a `/health.code` read from files the deploy just updated — so `verify-code.yml` sees a MATCH and its reboot never fires. This kills node outright and reboots, and PROVES it by requiring `vitals.uptimeMinutes` to have fallen: a worker that answers is not a worker that restarted, and that box answered perfectly for six days |
 | `guest:run` | run a script on a UTM guest elevated and actually get its output — `utmctl exec` returns exit 0 and no output whether or not it ran |
