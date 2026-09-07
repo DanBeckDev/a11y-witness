@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // THE ONE WAY TO UPDATE THE PRIMARY CHECKOUT — issue #126. Fetch, then detach at `origin/main`. Nothing
 // else: no merge, no rebase, no branch, because the primary is read-only except fast-forward and the
 // `post-checkout` hook will otherwise immediately undo anything this script leaves it on.
@@ -17,6 +18,10 @@ import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
+/**
+ * @param {string} [root]
+ * @param {(args: string[]) => string} [run]
+ */
 export function updatePrimary(root = REPO, run = (args) =>
   execFileSync("git", args, { cwd: root, env: sandboxGitEnv(), encoding: "utf8" })) {
   if (!isPrimaryWorktree(root)) {
