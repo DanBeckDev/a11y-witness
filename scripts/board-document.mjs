@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // THE BOARD DOCUMENT — what the board reads. The GitHub edition is the data trail; this is the answer.
 //
 // It shares `board-data.mjs` with the daily GitHub edition rather than re-deriving anything, so the two
@@ -40,6 +41,7 @@ function criteriaCounts(root = ROOT) {
   const file = path.join(root, "packages/judge/src/criterion-coverage.ts");
   if (!existsSync(file)) return null;
   const text = readFileSync(file, "utf8");
+  /** @param {string} status */
   const count = (status) => (text.match(new RegExp(`status: "${status}"`, "g")) ?? []).length;
   const assessed = count("assessed");
   const partial = count("partial");
@@ -65,6 +67,7 @@ export const BODY_WORD_CAP = 925;
  * which is what a reader should do about them today. So it is a file a person writes, and its absence
  * stops the edition rather than degrading it.
  */
+/** @param {string} day @param {string} [root] */
 export function summaryFor(day, root = ROOT) {
   const file = path.join(root, "docs/board/summaries", `${day}.md`);
   if (!existsSync(file)) return null;
@@ -75,6 +78,7 @@ export function summaryFor(day, root = ROOT) {
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September",
   "October", "November", "December"];
 /** "20 September 2026" -- a board reads dates, not timestamps. */
+/** @param {string} iso */
 const longDate = (iso) => {
   const d = new Date(iso);
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
@@ -85,9 +89,10 @@ const longDate = (iso) => {
  * The rule is printed with the verdict every time. A status word whose derivation is not on the page is
  * an opinion wearing a measurement's clothes, which is the exact defect this reporting was built after.
  */
+/** @param {any} release @param {any[]} open */
 function trackStatus(release, open) {
   if (!release?.due_on) return { word: "has no date", why: "no date has been set." };
-  const unbounded = open.filter((i) => i.milestone?.title === MILESTONE
+  const unbounded = open.filter((/** @type {any} */ i) => i.milestone?.title === MILESTONE
     && /INCONCLUSIVE|hypothesis|unbounded|not yet known/i.test(i.title));
   const days = Math.ceil((Date.parse(release.due_on) - Date.now()) / (24 * HOURS_MS));
   if (days < 0) return { word: "has slipped", why: "the date has passed and work remains open." };
@@ -97,6 +102,7 @@ function trackStatus(release, open) {
   return { word: "is on track", days, unbounded: 0 };
 }
 
+/** @param {any} d */
 function section1(d) {
   const { word, days, unbounded } = trackStatus(d.release, d.open);
   const due = d.release?.due_on ? longDate(d.release.due_on) : "no date";
@@ -105,7 +111,7 @@ function section1(d) {
     `## The first public release is dated ${due} and ${word}.`,
     "",
     `${count} pieces of work must finish before we can publish, and ${days} days remain. `
-    + `${unbounded > 0
+    + `${(unbounded ?? 0) > 0
       ? "One has no known size."
       : "Every one has a next step whose size we know."}`,
     "",
@@ -140,6 +146,7 @@ function section2() {
   ].join("\n");
 }
 
+/** @param {any} d */
 function section3(d) {
   // THE COUNT COMES FROM THE LIST, and this line is why the rule exists. It read "four" as a literal
   // while the section rendered THREE bullets, and it went to the board that way on 2026-09-07 -- read
@@ -188,8 +195,9 @@ export const DECISIONS = [
       + "waits." },
 ];
 
+/** @param {any} d */
 function section4(d) {
-  const blockers = d.open.filter((i) => i.milestone?.title === MILESTONE);
+  const blockers = d.open.filter((/** @type {any} */ i) => i.milestone?.title === MILESTONE);
   return [
     `## The board is asked for ${numberWord(DECISIONS.length).toLowerCase()} decisions, and `
     + `${numberWord(DECISIONS.filter((x) => x.costsNothing).length).toLowerCase()} of them cost nothing `
@@ -248,11 +256,13 @@ export const RISKS = [
 
 /** Small counts read as words in prose; the number still comes from the data. Exported so
  * `board-style.test.ts` renders the SAME word a real count produces, rather than re-deriving the mapping.
+ * @param {number} n
  */
 export function numberWord(n) {
   return ["zero", "one", "Two", "Three", "Four", "Five", "Six", "Seven"][n] ?? String(n);
 }
 
+/** @param {any} d */
 function section5(d) {
   const fh = d.fleetHours;
   // THE HEADING COMES FROM THE SAME SOURCE AS THE BODY, and the CLAIM comes before the caveats.
@@ -313,11 +323,13 @@ function section5(d) {
  * honest state and was the TRUE state until the re-run landed. What must never happen is the section
  * saying it is missing while the record holds it.
  */
+/** @param {any} d */
 function scalingArms(d) {
-  const gate = (d.gates ?? []).find((g) => /medianSeconds/.test(g.output ?? ""));
+  const gate = (d.gates ?? []).find((/** @type {any} */ g) => /medianSeconds/.test(g.output ?? ""));
   if (!gate) return null;
+  /** @param {string} name */
   const arm = (name) => {
-    const line = (gate.output.split("\n").find((l) => l.trim().startsWith(name)) ?? "");
+    const line = (gate.output.split("\n").find((/** @type {string} */ l) => l.trim().startsWith(name)) ?? "");
     const json = line.slice(line.indexOf("{"));
     try { return JSON.parse(json); } catch { return null; }
   };
@@ -329,7 +341,6 @@ function scalingArms(d) {
   return ratio ? { ten, five, ratio } : null;
 }
 
-/** The source table: every figure the body states, with where it came from. */
 /** Why the open-items total exceeds the blocker count, in buckets that add up on the page.
  *
  * #290 is the case that forced it: real work, deliberately outside the release, so the total counted it
@@ -340,12 +351,13 @@ function scalingArms(d) {
  * defined to, so it could never fail, verified nothing, and looked exactly like a check. Counting it
  * independently means the four can genuinely disagree -- and the sentence says so when they do, rather
  * than printing a total that hides it.
+ * @param {any} d
  */
 function reconciliation(d) {
-  const onRelease = d.open.filter((i) => i.milestone?.title === MILESTONE).length;
+  const onRelease = d.open.filter((/** @type {any} */ i) => i.milestone?.title === MILESTONE).length;
   const out = outOfRelease(d.open).length;
   const none = unclassified(d.open).length;
-  const later = d.open.filter((i) => i.milestone && i.milestone.title !== MILESTONE
+  const later = d.open.filter((/** @type {any} */ i) => i.milestone && i.milestone.title !== MILESTONE
     && !outOfRelease([i]).length).length;
   const sum = onRelease + later + out + none;
   const unclassifiedClause = none === 0
@@ -370,6 +382,7 @@ function reconciliation(d) {
  * So a non-passing verdict that HAS an authored explanation says so -- a fact about the entry, not an
  * interpretation of the result -- and one that does NOT stands alone deliberately, because an unexplained
  * failure should look like one.
+ * @param {any} gate @param {any} worst @param {boolean} fresh
  */
 function gateHeadline(gate, worst, fresh) {
   const explained = worst && worst.verdict !== "PASS" && gate.note ? ", explained below" : "";
@@ -381,6 +394,7 @@ function gateHeadline(gate, worst, fresh) {
  *
  * Extracted so `sourceTable` builds a table rather than also composing prose about verdicts -- the same
  * split as `reconciliation`, and for the same reason it kept tripping the complexity limit.
+ * @param {any} gate @param {string | null} captureAge @param {any} worst
  */
 function gateSource(gate, captureAge, worst) {
   // Pulled from the gate's OWN printed line, never retyped -- issue #128. `rules:real-pages` prints its
@@ -408,14 +422,18 @@ function gateSource(gate, captureAge, worst) {
     + spread + said;
 }
 
+/** The source table: every figure the body states, with where it came from.
+ * @param {any} d */
 function sourceTable(d) {
+  /** @type {string[]} */
   const rows = [];
+  /** @param {string} what @param {string} value @param {string} source */
   const push = (what, value, source) => rows.push(`| ${what} | ${value} | ${source} |`);
   push("First public release, planned date", d.release?.due_on ? longDate(d.release.due_on) : "no date",
     "the project's issue tracker, on the release milestone; every change of this date is logged against "
     + "it (GitHub milestone `v0.1.0 — first publish`)");
   push("Pieces of work blocking that release",
-    String(d.open.filter((i) => i.milestone?.title === MILESTONE).length),
+    String(d.open.filter((/** @type {any} */ i) => i.milestone?.title === MILESTONE).length),
     "the project's issue tracker (GitHub Issues API)");
   // THE EXCLUSION IS PRINTED, NEVER SILENT. A count that quietly drops rows is worse than one that
   // counts the wrong thing, because a reader cannot tell. `meta` rows are containers rather than work --
@@ -472,6 +490,7 @@ function sourceTable(d) {
 }
 
 /** What the rename costs, and why the naming rule is more than a coat of paint. */
+/** @param {string[]} L */
 function renameBackground(L) {
   const counts = criteriaCounts();
   if (counts) {
@@ -520,6 +539,7 @@ function renameBackground(L) {
 }
 
 /** Why re-reading the library is expensive, and the programme opened for it. */
+/** @param {string[]} L */
 function throughputBackground(L) {
   renameBackground(L);
   L.push("### The architect's two findings, and what was done with each.");
@@ -579,6 +599,7 @@ function throughputBackground(L) {
   L.push("");
 }
 
+/** @param {any} d */
 function appendix(d) {
   const L = [
     "## Appendix: every figure above, and where it came from.",
@@ -613,6 +634,7 @@ function appendix(d) {
   return L.join("\n");
 }
 
+/** @param {any} d @param {{text: string} | null} [summary] */
 export function document(d, summary) {
   return [
     `# a11ign — board report, ${longDate(new Date().toISOString())}`,
@@ -621,7 +643,7 @@ export function document(d, summary) {
     + "failures that automated scanners structurally cannot reach. Nothing is published yet.*",
     "",
     ...(summary ? ["## Executive summary", "", summary.text, ""] : []),
-    section1(d), "", section2(d), "", section3(d), "", section4(d), "", section5(d), "", appendix(d),
+    section1(d), "", section2(), "", section3(d), "", section4(d), "", section5(d), "", appendix(d),
   ].join("\n");
 }
 
@@ -633,6 +655,7 @@ export function document(d, summary) {
  * ask "is my own output too long" without duplicating the boundary logic a second time. One copy now feeds
  * both the test and `requireBodyWithinCap` below.
  */
+/** @param {string} md */
 export function bodyOnly(md) {
   const start = md.indexOf("\n## ", md.indexOf("## Executive summary") + 1);
   const from = start === -1 ? md.indexOf("\n## ") : start;
@@ -640,16 +663,19 @@ export function bodyOnly(md) {
   return md.slice(from === -1 ? 0 : from, to === -1 ? undefined : to);
 }
 
+/** @param {string} s */
 const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
 
-/** "2026-09-06", or the honest word for a missing one — never a guess. */
+/** "2026-09-06", or the honest word for a missing one — never a guess.
+ * @param {string | null | undefined} at */
 const dateLabel = (at) => {
   const parsed = at ? Date.parse(at) : NaN;
-  return Number.isNaN(parsed) ? "unknown date" : at.slice(0, 10);
+  return Number.isNaN(parsed) ? "unknown date" : /** @type {string} */ (at).slice(0, 10);
 };
 
 const MAX_CLAIM_PREVIEW = 70;
-/** A claim, shortened for a refusal message that has to stay scannable, not published. */
+/** A claim, shortened for a refusal message that has to stay scannable, not published.
+ * @param {string} text */
 const preview = (text) =>
   text.length > MAX_CLAIM_PREVIEW ? `${text.slice(0, MAX_CLAIM_PREVIEW - 1)}…` : text;
 
@@ -672,6 +698,7 @@ const preview = (text) =>
  * fits. Split from `requireBodyWithinCap` below purely so a test can assert on the TEXT without spawning
  * the CLI or trapping `process.exit`.
  */
+/** @param {any} d @param {string} md */
 export function bodyCapRefusal(d, md) {
   const words = wordCount(bodyOnly(md));
   if (words <= BODY_WORD_CAP) return null;
@@ -693,6 +720,7 @@ export function bodyCapRefusal(d, md) {
   return lines.join("\n");
 }
 
+/** @param {any} d @param {string} md */
 function requireBodyWithinCap(d, md) {
   const refusal = bodyCapRefusal(d, md);
   if (!refusal) return;
@@ -738,6 +766,7 @@ const PAGE_CSS = `
  * forbids, so there is no fallback to generate one -- the only way to publish is for a person to have
  * written it. Returns the summary, or exits.
  */
+/** @param {boolean} publishing */
 function requireSummary(publishing) {
   const today = new Date().toISOString().slice(0, 10);
   const summary = summaryFor(today);
@@ -767,13 +796,14 @@ function requireSummary(publishing) {
  * an investigation. `--allow-dirty-read-set` deliberately does NOT override it: that flag is about which
  * COPY of the read set is quoted, and this is about whether a quoted sentence still describes the world.
  */
+/** @param {any[]} achievements */
 function refuseIfTheWorldMoved(achievements) {
-  const cited = achievements.map((a) => a.issue).filter((n) => n !== undefined);
+  const cited = achievements.map((a) => a.issue).filter((/** @type {any} */ n) => n !== undefined);
   if (!cited.length) return;
   // CLOSED-AT, not just CLOSED. The refusal is 'nobody has looked since it moved', so the moment it
   // moved is part of the question -- see `achievementsWhoseWorldMoved`.
   const issueState = Object.fromEntries(
-    issues().map((i) => [String(i.number), { state: i.state, closedAt: i.closedAt ?? null }]));
+    issues().map((/** @type {any} */ i) => [String(i.number), { state: i.state, closedAt: i.closedAt ?? null }]));
   const moved = achievementsWhoseWorldMoved({ achievements, issueState });
   if (!moved.length) return;
 
@@ -853,6 +883,7 @@ function main() {
     { entry: import.meta.url, command: "npm run board:document" });
 
   const argv = process.argv.slice(2);
+  /** @type {(n: string) => string | undefined} */
   const flagOf = (n) => argv.find((a) => a.startsWith(`${n}=`))?.split("=").slice(1).join("=");
 
   const summary = requireSummary(argv.includes("--pdf") || argv.includes("--release"));
@@ -921,13 +952,14 @@ function main() {
  * fleet needs a Chromium; pandoc is not installed and would make the board's daily document depend on
  * an operator running `brew install`. A dependency the board's report cannot be produced without is a
  * worse risk than a slightly plainer typeface.
+ * @param {string} html @param {string} pdf
  */
 function renderPdfWithChrome(html, pdf) {
   let chrome;
   try {
     chrome = resolveChromeBinary();
   } catch (e) {
-    console.error(`REFUSING to render: ${e.message}`);
+    console.error(`REFUSING to render: ${/** @type {{ message?: string }} */ (e).message}`);
     process.exit(2);
   }
   console.error(`Using ${chrome}`);
@@ -945,6 +977,7 @@ function renderPdfWithChrome(html, pdf) {
  * no git tag until it is published, so nothing here can be mistaken for a product version or picked up by
  * the changesets machinery -- which matters in a repo whose first npm publish has not happened yet and
  * whose release workflow reads tags.
+ * @param {string} pdf
  */
 function publishToDraftRelease(pdf) {
   const tag = `board/${new Date().toISOString().slice(0, 10)}`;

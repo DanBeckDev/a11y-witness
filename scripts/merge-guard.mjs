@@ -32,7 +32,7 @@
 // reach far enough back. **Ask the authoritative source and let it tell you what it is bounded to** --
 // `/commits/<sha>/check-runs` for the head sha, never a grep over the most recent runs.
 //
-//   node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close]
+//   node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close=<name>]
 //
 // Exit codes are the contract:
 //   0  READY      -- based on main, every required context present and concluded, tested against this main
@@ -58,9 +58,24 @@
 // vouch for the asker.
 //
 // NOT A POLICY CHANGE ABOUT WHO MAY ARM. A dispatcher who has confirmed with the row's holder should be
-// able to proceed, and `--allow-claimed-close` is that escape hatch -- printed, never silent, the same
-// shape `--allow-stale-workers` already uses elsewhere in this repo, because a bypass nobody can see is
-// one that becomes the default.
+// able to proceed, and `--allow-claimed-close=<name>` is that escape hatch -- printed, never silent, the
+// same shape `--allow-stale-workers` already uses elsewhere in this repo, because a bypass nobody can see
+// is one that becomes the default.
+//
+// MEASURED 2026-09-07, the day this landed: it fires on 10 of 13 open PRs' armings, and in every one of
+// the 10 the row's claimant IS the PR's author (#262->#249, #259->#247, #258->#244, #257->#246, #232->#189,
+// #229->#223, #181->#155, #172->#159, #150->#123 -- only #238/#195/#183/#148 close nothing). The real
+// incident this row exists for was the OPPOSITE shape -- one session's branch closing a DIFFERENT session's
+// row -- and it is 0 of these 10. `--session` cannot see PR authorship (every session pushes as the same
+// GitHub identity, so there is no author field to compare against the claimant), which is why this fires
+// on the safe case as often as the dangerous one: the identity it compares is the only one that exists.
+//
+// So `--allow-claimed-close` takes a REQUIRED value naming who you confirmed with --
+// `--allow-claimed-close=<session>` -- rather than a bare boolean, and it is CHECKED, not merely printed:
+// it overrides a row's collision reason only when the named session is among that row's REAL claimant
+// sessions, read fresh off GitHub the same way `--session` is. A name that does not match any actual
+// claimant on the row being closed leaves that reason refused -- turning "I confirmed" from an honor
+// system into a claim this tool can verify against the same labels `decideClaim` already reads.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -68,7 +83,7 @@ import { pathToFileURL } from "node:url";
 // points at `dist/`, so it needs both `node_modules` AND a completed build. This file is reachable
 // from a pre-install entry (see `pre-install-import-graph.test.ts`, which derives that population
 // rather than naming it), and there it dies on startup with ERR_MODULE_NOT_FOUND.
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { claimStatus, decideClaim } from "./row-claim.mjs";
@@ -261,10 +276,73 @@ export function closingClaimReasons(closes, session) {
       reasons.push(`WOULD CLOSE #${issue.number}${issue.title ? ` "${issue.title}"` : ""}, but `
         + `${decision.reason}.\n`
         + "  Arming this PR closes that row whether or not you hold it. Confirm with whoever does, or\n"
-        + "  wait -- or pass `--allow-claimed-close` if you have already confirmed.");
+        + "  wait -- or pass `--allow-claimed-close=<their session>` if you have already confirmed.");
     }
   }
   return reasons;
+}
+
+/**
+ * WHICH rows does `--allow-claimed-close=<confirmedWith>` actually cover? -- the check that makes the
+ * flag a verifiable claim rather than an honor system.
+ *
+ * A row is covered when `confirmedWith` is among the REAL claimant sessions read from its own labels
+ * (`claimStatus`, the same reader `decideClaim` uses) -- never merely because the flag was passed. A name
+ * typed on the command line that does not match any actual claimant on the row being closed covers
+ * nothing, so that row's collision reason stays refused.
+ *
+ * @param {{number: number, labels: string[]}[]} closes
+ * @param {string} confirmedWith
+ * @returns {Set<number>} issue numbers this confirmation actually covers
+ */
+export function claimedCloseCoveredBy(closes, confirmedWith) {
+  const covered = new Set();
+  for (const issue of closes) {
+    const status = claimStatus(issue.labels);
+    if (status.claimed && status.sessions.includes(confirmedWith)) covered.add(issue.number);
+  }
+  return covered;
+}
+
+/**
+ * `--allow-claimed-close=<name>`'s value, refusing (never silently) a bare boolean -- #249's follow-up,
+ * 2026-09-07: it must be a CHECKABLE claim naming who was confirmed with, not an honor system. Split out
+ * of `main` to keep that function's own complexity within this repo's ESLint budget.
+ * @returns {string | null}
+ */
+function readAllowClaimedClose() {
+  if (process.argv.includes("--allow-claimed-close") && flagValue(process.argv, "allow-claimed-close") === undefined) {
+    console.error("--allow-claimed-close requires a value naming who you confirmed with:\n"
+      + "  --allow-claimed-close=<session>\n"
+      + "A bare boolean was refused on purpose: it must be a CHECKABLE claim, not an honor system.");
+    process.exit(EXIT.CANNOT_ASK);
+  }
+  return flagValue(process.argv, "allow-claimed-close") ?? null;
+}
+
+/**
+ * Split a verdict's reasons into what `--allow-claimed-close=<name>` overrides and what survives it --
+ * only rows `name` actually holds (`claimedCloseCoveredBy`), never any other refusal, and never applied
+ * to a CANNOT_ASK (that code carries a lookup-failure message, not a reasons list to filter).
+ *
+ * @param {{code: number, reasons: string[]}} verdict
+ * @param {{number: number, labels: string[]}[]} closes
+ * @param {string | null} allowClaimedClose
+ * @returns {{overridden: string[], remaining: string[]}}
+ */
+function applyAllowClaimedClose(verdict, closes, allowClaimedClose) {
+  const covered = allowClaimedClose && verdict.code === EXIT.REFUSED
+    ? claimedCloseCoveredBy(closes, allowClaimedClose) : new Set();
+  const issueNumberOf = (/** @type {string} */ reason) => {
+    const m = /^WOULD CLOSE #(\d+)/.exec(reason);
+    return m ? Number(m[1]) : null;
+  };
+  const isCoveredCollision = (/** @type {string} */ reason) =>
+    reasonKind(reason) === "CLAIMED_BY_ANOTHER_SESSION" && covered.has(issueNumberOf(reason));
+  return {
+    overridden: verdict.reasons.filter(isCoveredCollision),
+    remaining: verdict.reasons.filter((r) => !isCoveredCollision(r)),
+  };
 }
 
 /** @param {{baseRefName: string}} pr */
@@ -729,7 +807,7 @@ function main() {
     { entry: import.meta.url, command: "node scripts/merge-guard.mjs" });
   const number = process.argv.slice(2).find((arg) => /^\d+$/.test(arg));
   if (!number) {
-    console.error("Usage: node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close]\n"
+    console.error("Usage: node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close=<name>]\n"
       + "       node scripts/merge-guard.mjs --reconcile <pr-number>\n"
       + "       node scripts/merge-guard.mjs --ci-gate <pr-number>\n"
       + "Answers whether that PR has actually been tested, by reading its check RUNS rather than\n"
@@ -749,26 +827,17 @@ function main() {
     return;
   }
 
-  const sessionArg = process.argv.find((arg) => arg.startsWith("--session="));
-  const session = sessionArg ? sessionArg.slice("--session=".length) : null;
+  const session = flagValue(process.argv, "session") ?? null;
+  const allowClaimedClose = readAllowClaimedClose();
 
-  const allowClaimedClose = process.argv.includes("--allow-claimed-close");
-
-  const verdict = mergeReadiness({ ...facts(Number(number)), session });
+  const factsResult = facts(Number(number));
+  const verdict = mergeReadiness({ ...factsResult, session });
   recordVerdict(verdictLogPath(), Number(number), verdict);
   for (const note of verdict.notes) console.error(note);
 
-  // `--allow-claimed-close` OVERRIDES ONLY THE CLAIM-COLLISION REASON, never any other refusal, and
-  // never a CANNOT_ASK (that code carries a lookup-failure message, not a reasons list to filter) --
-  // and it PRINTS what it bypassed, following the `--allow-stale-workers` precedent: a bypass nobody
-  // can see is one that becomes the default.
-  const applyOverride = allowClaimedClose && verdict.code === EXIT.REFUSED;
-  const overridden = applyOverride
-    ? verdict.reasons.filter((r) => reasonKind(r) === "CLAIMED_BY_ANOTHER_SESSION") : [];
-  const remaining = applyOverride
-    ? verdict.reasons.filter((r) => reasonKind(r) !== "CLAIMED_BY_ANOTHER_SESSION") : verdict.reasons;
+  const { overridden, remaining } = applyAllowClaimedClose(verdict, factsResult.closes ?? [], allowClaimedClose);
   for (const reason of overridden) {
-    console.error(`OVERRIDDEN by --allow-claimed-close: ${reason}`);
+    console.error(`OVERRIDDEN by --allow-claimed-close=${allowClaimedClose}: ${reason}`);
   }
   const code = verdict.code === EXIT.CANNOT_ASK ? EXIT.CANNOT_ASK
     : (remaining.length > 0 ? EXIT.REFUSED : EXIT.READY);
