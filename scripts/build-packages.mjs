@@ -15,15 +15,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
 
 import { allPackages } from "./isolation-gate.mjs";
-// RELATIVE, NOT `@a11y-witness/worker-fleet/cli-flags` -- same rule `ci-changed.mjs`'s header already
-// states, and `isolation-gate.mjs` (imported above) already follows: this script IS the thing that
-// builds every package's `dist/`, so it cannot depend on a build having already happened. The package
-// specifier resolves to `dist/cli-flags.mjs`, which does not exist on a genuinely fresh checkout --
-// #164's own fix introduced exactly this circular bootstrap, and every worktree in this session that
-// symlinks `node_modules` to a sibling's silently inherited a STALE dist and never saw it fail locally.
-// Measured: `npm ci --ignore-scripts` (CI's own install) then `node scripts/build-packages.mjs` throws
-// `ERR_MODULE_NOT_FOUND` for `dist/cli-flags.mjs`, reproduced independently in two fresh worktrees.
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+// #331: DELIBERATELY REINTRODUCED, TEMPORARY -- #330's own circular-bootstrap bug, restored on a
+// throwaway branch to observe real CI infrastructure against it with #331's new diagnostics attached.
+// Removed once #331 closes; #330's fix (the relative import) is what actually ships.
+import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 
 function main() {
   // Guarded per #164: takes no flags; `--build` in this file is passed to tsc.

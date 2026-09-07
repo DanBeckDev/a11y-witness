@@ -160,6 +160,13 @@ jobs:
       # the unit suite do not need (keeps this fast and Linux-safe) -- carried forward from `lint.yml`.
       - if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci --ignore-scripts
+      # #331: DIAGNOSTIC, TEMPORARY -- naming the step that produced `dist` on PR #238's passing runner
+      # (45b9c232, run 34109538756), which the acceptance says must be a step quoted from a log, not a
+      # theory. Removed once #331 closes.
+      - run: ls -la node_modules/@a11y-witness/worker-fleet
+      - run: readlink -f node_modules/@a11y-witness/worker-fleet
+      - run: ls packages/worker-fleet/dist 2>&1 || echo "NO DIST"
+      - run: git status --porcelain packages/worker-fleet
       # Cross-package imports resolve to `dist` (every `exports` entry points there) -- CLAUDE.md's own
       # rule: run the file runner on its own and it tests the LAST BUILD, which on a fresh checkout is no
       # build at all.
