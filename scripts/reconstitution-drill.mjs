@@ -18,8 +18,9 @@
 // docs/roles/README.md means by "if a step needs something only this machine has, the drill has found a
 // real gap, and that is the result, not a failure of the drill."
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { join, resolve } from "node:path";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 import { sandboxGitEnv } from "./git-env.mjs";
@@ -189,4 +190,6 @@ function main() {
   process.exit(anyGaps ? 1 : 0);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
+  main();
+}
