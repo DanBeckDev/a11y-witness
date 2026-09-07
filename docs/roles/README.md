@@ -9,34 +9,50 @@
 
 ## THE HIERARCHY
 
-The chairman speaks to `ceo` and to nobody else. `ceo` decides and reports to the chairman. `orchestrator`
-(fleet, lab, gates, cross-cutting review), `dispatcher` (worker loop, PR review and merge) and
-`product-manager` (tracker, milestone, board document) report to `ceo`. Workers report to `dispatcher`.
+**2026-09-07, board decision: the company runs a CI/CD pipeline, and the organisation follows it.** The
+pipeline decides what merges; no person or agent is the merge step. A worker owns a change from branch to
+merge: the PR body carries `Closes #N`, an `Acceptance: <command>` line and a `Mutation: <command>` line,
+the pipeline runs them, a green gate merges (merge commits only), a merge that turns `main` red is reverted
+by the pipeline, and every green `main` publishes to npm under `next`. A person approves only on the owned
+paths: `packages/nvda-worker`, every cache-key input, `packages/scorer/models` and the gates, where
+`orchestrator` is code owner.
+
+The chairman speaks to `ceo` and to nobody else. `ceo` decides and reports to the chairman; routine
+decisions, including destructive ones on `runs/`, are `ceo`'s, and the board hears budget, hires, dates,
+product claims and structural questions only. `orchestrator` (platform: fleet, lab, gates, code owner),
+`dispatcher` (pipeline owner: workflows, trunk health, the Ready queue, briefing) and `product-manager`
+(product owner: Ready's contents, the release date, the board document) report to `ceo`. Workers pull from
+Ready and report to nobody; the merge is the report. `tracker-auditor` reports to `product-manager`.
+The `reviewer` role existed for one morning and was retired the same day when review became a job.
 Nobody messages the chairman; a question only the chairman can answer goes up the chain to `ceo`, who asks.
-An idle notice, a status line, a finding, a refusal: each goes to the agent above you, not sideways and not
-up two levels, unless `ceo` has asked you directly, in which case you answer `ceo` and copy your reporting
-line in one sentence.
 
+---
 
-**Board finding, 2026-09-06: no.** Every role tonight except `dispatcher` existed only in this machine's
-session history — nowhere written down, nowhere a fresh agent could read to become `ceo`, `orchestrator`,
-or any of the five workers. Lose this Mac and the git history, the tests, and the corpus survive; the
-ORGANISATION does not, because nothing states who does what, who reports to whom, or what each role must
-never touch.
+## A SUMMARY IS NOT A CITATION
 
-**This page and the eight role files it indexes are the fix.** Each agent wrote its own file — the worker
-filling a lane knows that lane better than anyone briefing it — and this page is the piece that makes the
-set a SYSTEM rather than eight unrelated documents: the bring-up order, the first message for each agent,
-where state actually lives, and the enforcement that keeps the set complete.
+Every session compacts, and a compaction summary is written in the same voice as a quotation: it says
+"CLAUDE.md records…" because that is what the session believed. Measured 2026-09-07: a row instructed a
+worker to reproduce repository settings "recorded in CLAUDE.md"; the sentence existed on no ref, and came
+from the author's own summary. Anything you resume with is a BELIEF until re-read from the file at a ref.
+Cite `file:line` and the ref you read it from, the same as a number carries its command. This binds `ceo`
+first.
+
+**The second example, same day, harder to see:** a source comment cited `schema-migration.json` as "the
+whole record" of a decision, and that file is deleted whenever a migration closes, by design. A citation to
+a record that no longer exists reads identically to one that never existed, and it sent three sessions to
+a wrong conclusion about a schema change. When a citation resolves to nothing, say "the record is gone"
+rather than "there was no record"; they need opposite work (#340).
 
 ## The roster
 
 | role | agent name | file | reports to |
 |---|---|---|---|
 | Chief | `ceo` | [`ceo.md`](./ceo.md) | — |
-| Fleet/lab driver ("the lead") | `orchestrator` | [`orchestrator.md`](./orchestrator.md) | `ceo` |
-| Worker-loop dispatcher | `dispatcher` | [`worker-loop-orchestrator.md`](./worker-loop-orchestrator.md) | `orchestrator` (utilisation line to `ceo`) |
+| Platform owner and code owner | `orchestrator` | [`orchestrator.md`](./orchestrator.md) | `ceo` |
+| Pipeline owner | `dispatcher` | [`worker-loop-orchestrator.md`](./worker-loop-orchestrator.md) | `ceo` |
 | Product loop | `product-manager` | [`product-manager.md`](./product-manager.md) | `ceo` |
+| Tracker audit | `tracker-auditor` | [`tracker-auditor.md`](./tracker-auditor.md) | `product-manager` |
+| First-pass review (RETIRED 2026-09-07) | `reviewer` | [`reviewer.md`](./reviewer.md) | — |
 | Worker | `worker-audit` | [`worker-audit.md`](./worker-audit.md) | `dispatcher` |
 | Worker | `worker-capture` | [`worker-capture.md`](./worker-capture.md) | `dispatcher` |
 | Worker | `worker-config` | [`worker-config.md`](./worker-config.md) | `dispatcher` |

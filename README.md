@@ -245,7 +245,7 @@ Running it is one command; getting value out of it is a few habits.
 
 **Already running axe? Feed it in rather than running ours.** `--axe-results ./axe.json` keeps one engine, one version, one set of rule findings — and you still get the layered report.
 
-**Where it fits.** This is not a gate to put in front of every commit — a capture takes about a minute of real screen-reader time. It earns its keep on the flows that matter (checkout, sign-up, search), before a release, or as the evidence base for an audit. Keep your rule scanner where it is, on every commit, doing the fast mechanical layer.
+**Where it fits.** This is not a gate to put in front of every commit — a capture takes real screen-reader time to run, and exact timing is under re-measurement since 2026-09-07 (#311). It earns its keep on the flows that matter (checkout, sign-up, search), before a release, or as the evidence base for an audit. Keep your rule scanner where it is, on every commit, doing the fast mechanical layer.
 
 ## Part 2: getting a real screen reader to run, repeatably
 
