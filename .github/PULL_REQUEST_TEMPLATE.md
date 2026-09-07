@@ -15,6 +15,11 @@ HOW THE BLOCK IS READ
     hand it to bash as a command. That is why all of this sits above the header.
 
 RULES WORTH KNOWING BEFORE YOU WRITE ONE
+  - DO NOT WRAP THE COMMAND IN MARKDOWN BACKTICKS. This repository's prose convention is `like this`, and
+    it is exactly wrong here: the extractor keeps the backticks, so the file check sees `npx as a token
+    and reports `fail (matched no file: `npx, ...)` for a command that runs perfectly. Measured against the
+    real checker -- the backticked form fails, the bare form passes, same command. Found by
+    `product-manager` on #370; the tokenizer gap is reported on #353.
   - It must be a RUNNABLE COMMAND, not prose about one. A line like "RAN `git grep ...` -> clean" exits 127.
   - A command whose CORRECT behaviour is a non-zero exit must say so:
         node scripts/thing.mjs --bogus; test $? -eq 2
