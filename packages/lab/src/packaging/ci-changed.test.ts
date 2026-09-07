@@ -369,6 +369,70 @@ test("CLI: --event=push is still refused -- widening to merge_group must not sil
 });
 
 // -------------------------------------------------------------------------------------------------------
+// --precise -- the `changed` job (no `npm ci`) must never actually shell out to `npm pack`, because a
+// package with a `prepack` script (`cli` and `judge` both run `tsc --build`) fails without `node_modules`.
+// `orchestrator` reproduced exactly this: `classify()` calling the real `packedFiles()` inside `changed`
+// crashed on every PR touching a published package. Reproduced here with a package whose `prepack` is
+// guaranteed to fail regardless of environment, so the property under test is "never even attempted",
+// not "happened to succeed because this dev machine has node_modules".
+// -------------------------------------------------------------------------------------------------------
+
+/** A workspace with one published package whose `prepack` script cannot succeed anywhere, ever -- the
+ *  sharpest stand-in for "a package needing `npm ci` first" available without actually deleting
+ *  `node_modules` out from under the whole test run. */
+function repoWithCrashingPrepack() {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ci-changed-prepack-")));
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: dir, env: sandboxGitEnv(), encoding: "utf8" });
+  git("init", "--quiet", "-b", "main");
+  git("config", "user.email", "t@example.invalid");
+  git("config", "user.name", "Fixture");
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", workspaces: ["packages/*"] }));
+  const pkgDir = join(dir, "packages", "foo");
+  execFileSync("mkdir", ["-p", pkgDir]);
+  writeFileSync(join(pkgDir, "package.json"), JSON.stringify({
+    name: "foo", version: "1.0.0", files: ["dist"],
+    scripts: { prepack: "definitely-not-a-real-command-ci-changed-test-xyz" },
+  }));
+  execFileSync("mkdir", ["-p", join(pkgDir, "dist")]);
+  writeFileSync(join(pkgDir, "dist", "index.js"), "module.exports = 1;\n");
+  git("add", "-A");
+  git("commit", "-q", "-m", "base");
+  const base = git("rev-parse", "HEAD").trim();
+  writeFileSync(join(pkgDir, "dist", "index.js"), "module.exports = 2;\n");
+  git("add", "-A");
+  git("commit", "-q", "-m", "touch the package with the crashing prepack");
+  return { dir, base };
+}
+
+test("CLI without --precise: a published package's own prepack script is never run", () => {
+  const { dir, base } = repoWithCrashingPrepack();
+  try {
+    // Must NOT throw. If `classify()` had called the real `packedFiles`, `npm pack --dry-run` would have
+    // run `foo`'s `prepack` and failed on the unresolvable command -- this succeeding is the proof it
+    // never tried.
+    const out = runCliIn(dir, ["--event=pull_request", `--base=${base}`]);
+    assert.match(out, /^changeset=true$/m,
+      "the cheap over-approximation must still say a published package changed, or the `changeset` job "
+      + "would never even run to find out precisely: " + out);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("CLI with --precise: the same package's prepack script DOES run, and its failure surfaces", () => {
+  // The mirror image, proving `--precise` is not a no-op: once `npm ci` has made `npm pack` safe (in the
+  // real `changeset` job, never here), the CLI must actually consult the manifest -- and this fixture's
+  // package cannot ever produce one, so this must fail rather than quietly falling back to the cheap
+  // answer. A `--precise` that silently reused `everythingIsPacked` would pass every test above and this
+  // one both, which is exactly the "guard covers nothing" shape a PROOF test exists to catch.
+  const { dir, base } = repoWithCrashingPrepack();
+  try {
+    assert.throws(() => runCliIn(dir, ["--event=pull_request", `--base=${base}`, "--precise"]),
+      /definitely-not-a-real-command-ci-changed-test-xyz/,
+      "--precise must actually call npm pack, surfacing this package's own prepack failure");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// -------------------------------------------------------------------------------------------------------
 // THE TRIGGER TABLE. `.github/workflows/on:` blocks, pinned so a future accidental trigger addition (the
 // exact shape point 5 of the CI rebuild names: "mutation-checked by adding a pull_request trigger to
 // action-smoke") fails here rather than costing real Windows minutes on every PR again.
