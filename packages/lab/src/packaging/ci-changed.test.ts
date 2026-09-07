@@ -10,20 +10,60 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
-import { classify, knownPackages } from "../../../../scripts/ci-changed.mjs";
+import { classify, knownPackages, readWorkspaceDependencyGraph, dependentsOf }
+  from "../../../../scripts/ci-changed.mjs";
+import { sandboxGitEnv } from "../../../../scripts/git-env.mjs";
 
 const REPO = fileURLToPath(new URL("../../../../", import.meta.url));
 const WORKFLOWS = `${REPO}.github/workflows/`;
 const readWorkflow = (name: string) => readFileSync(`${WORKFLOWS}${name}`, "utf8");
+/**
+ * A disposable two-commit repo, so `--base=<first commit>` has something real to diff against without
+ * depending on THIS repo's own history depth. `HEAD~1` failed exactly this way in CI (#156): the `ts` job's
+ * checkout has no `fetch-depth: 0` (only `changed` needs full history, to diff a real PR), so the runner's
+ * shallow clone has no commit before `HEAD` at all -- `git diff HEAD~1...HEAD` is `fatal: ambiguous
+ * argument`, not an empty diff. A fixture with its own two commits cannot be shallow.
+ */
+function twoCommitRepo() {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ci-changed-cli-")));
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: dir, env: sandboxGitEnv(), encoding: "utf8" });
+  git("init", "--quiet", "-b", "main");
+  git("config", "user.email", "t@example.invalid");
+  git("config", "user.name", "Fixture");
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", workspaces: ["packages/*"] }));
+  git("add", "package.json");
+  git("commit", "-q", "-m", "base");
+  const base = git("rev-parse", "HEAD").trim();
+  writeFileSync(join(dir, "README.md"), "changed\n");
+  git("add", "README.md");
+  git("commit", "-q", "-m", "a change to classify");
+  return { dir, base };
+}
+// GITHUB_OUTPUT UNSET, DELIBERATELY -- caught by CI itself running THIS test inside a real Actions job:
+// `writeOutputs()` appends to that file instead of printing to stdout whenever it is set, so a test that
+// merely inherits the ambient environment captures nothing to assert on there while passing everywhere
+// else. Deleted rather than passed as `undefined` through `sandboxGitEnv`'s `extra` (typed
+// `Record<string, string>`) -- `execFileSync` itself treats an `undefined` value as "omit this key"
+// (verified: `"X" in process.env` is false in the child), but the type would not let it in.
+const cliEnv = () => {
+  const env = sandboxGitEnv();
+  delete env.GITHUB_OUTPUT;
+  return env;
+};
+const runCliIn = (dir: string, args: string[]) =>
+  execFileSync("node", [join(REPO, "scripts/ci-changed.mjs"), `--repo=${dir}`, ...args],
+    { cwd: dir, env: cliEnv(), encoding: "utf8" });
 
 test("classify: a docs-only change fires only the docs category", () => {
   const result = classify(["docs/known-gaps.md", "README.md"], ["lab", "judge"]);
-  assert.deepEqual(result, { ts: false, python: false, ansible: false, docs: true, changeset: false, packages: [] });
+  assert.deepEqual(result, { ts: false, python: false, ansible: false, docs: true, board: false,
+    changeset: false, rulesFitness: false, packages: [], testPackages: [] });
 });
 
 test("classify: a source change under one package fires ts, names that package, and nothing else", () => {
@@ -80,7 +120,8 @@ test("classify: a scripts/*.mjs change also touches EVERY known package, for the
 
 test("classify: an unrelated file changes nothing", () => {
   const result = classify([".gitignore"], ["lab"]);
-  assert.deepEqual(result, { ts: false, python: false, ansible: false, docs: false, changeset: false, packages: [] });
+  assert.deepEqual(result, { ts: false, python: false, ansible: false, docs: false, board: false,
+    changeset: false, rulesFitness: false, packages: [], testPackages: [] });
 });
 
 test("classify: a multi-package, multi-category diff sets every category it touches, independently", () => {
@@ -106,6 +147,12 @@ test("knownPackages finds the real repo's workspace directories, and refuses a s
   // same reason: adding or retiring a package must not itself break this guard.
   assert.ok(packages.length >= 8, `found ${packages.length} package(s); the packages/* walk is broken`);
   assert.ok(packages.includes("lab") && packages.includes("judge"));
+  // `packages/README.md` is a real tracked file directly under `packages/`, two path segments deep -- not
+  // a package directory. `readWorkspaceDependencyGraph` is the first consumer that ever tried to read
+  // `packages/<name>/package.json` for every returned name, and crashed on exactly this
+  // (`ENOTDIR: not a directory, open './packages/README.md/package.json'`) the first time it ran for real.
+  assert.ok(!packages.includes("README.md"),
+    "a bare file tracked directly under packages/ must not be reported as a package directory");
 
   // NO git repo needed here: the workspace-glob check runs, and throws, before `knownPackages` ever
   // shells out to `git ls-files` -- a plain directory with a package.json proves the refusal.
@@ -121,22 +168,162 @@ test("knownPackages finds the real repo's workspace directories, and refuses a s
 });
 
 // -------------------------------------------------------------------------------------------------------
+// TESTPACKAGES AND RULESFITNESS -- chairman's follow-up, 2026-09-06, cutting `ci/ts`'s measured 269s to a
+// sixty-second budget. `testPackages` is touched packages plus every workspace DEPENDENT, transitively;
+// `rulesFitness` fires the rules-fitness gate only when packages/judge or packages/evidence changed.
+// -------------------------------------------------------------------------------------------------------
+
+test("classify: board fires, and docs does not, when EVERY doc-touching file is a board file", () => {
+  // chairman's follow-up, same day: docs/board/summaries/*.md and docs/board/reported.json are edited far
+  // more often than anything else under docs/, and each edit used to pay the full docs job.
+  const summary = classify(["docs/board/summaries/2026-09-07.md"], ["lab"]);
+  assert.equal(summary.board, true);
+  assert.equal(summary.docs, false, "board and docs are mutually exclusive -- a board-only diff must not "
+    + "also pay for the wider docs job");
+
+  const reported = classify(["docs/board/reported.json"], ["lab"]);
+  assert.equal(reported.board, true);
+  assert.equal(reported.docs, false);
+});
+
+test("classify: mixing a board file with ANY other doc file falls back to the wider docs job", () => {
+  // Narrower-than-usual needs its own argument, and a mixed diff has not made it -- the wider docs job
+  // covers the guards a non-board doc file could plausibly need.
+  const result = classify(["docs/board/summaries/2026-09-07.md", "docs/known-gaps.md"], ["lab"]);
+  assert.equal(result.docs, true);
+  assert.equal(result.board, false);
+});
+
+test("classify: rulesFitness fires on packages/judge or packages/evidence, and nothing else", () => {
+  assert.equal(classify(["packages/judge/src/rules.ts"], ["judge"]).rulesFitness, true);
+  assert.equal(classify(["packages/evidence/src/announcement.ts"], ["evidence"]).rulesFitness, true);
+  assert.equal(classify(["packages/lab/src/training/case-matrix.mjs"], ["lab"]).rulesFitness, false,
+    "a change outside judge/evidence must not fire the rules fitness gate");
+  assert.equal(classify(["package.json"], ["judge", "lab"]).rulesFitness, false,
+    "unlike ts, a root config change does NOT imply rulesFitness -- it cannot move the rule engine's or "
+    + "the announcement grammar's own behaviour");
+});
+
+test("classify: testPackages defaults to exactly packages when no dependency graph is supplied", () => {
+  // The default parameter -- every call site written before testPackages existed keeps working unchanged.
+  const result = classify(["packages/evidence/src/foo.ts"], ["evidence", "judge"]);
+  assert.deepEqual(result.testPackages, result.packages);
+});
+
+test("classify: testPackages is packages PLUS every transitive dependent, from a real dependency graph", () => {
+  const graph = { evidence: [], judge: ["evidence"], lab: ["judge"] };
+  const result = classify(["packages/evidence/src/foo.ts"], ["evidence", "judge", "lab"], graph);
+  assert.deepEqual(result.packages, ["evidence"]);
+  assert.deepEqual(result.testPackages, ["evidence", "judge", "lab"],
+    "lab depends on judge, which depends on evidence -- both must be pulled in, not just judge");
+});
+
+test("dependentsOf: a package with no dependents returns just itself", () => {
+  assert.deepEqual(dependentsOf(["standalone"], { evidence: [], judge: ["evidence"], standalone: [] }),
+    ["standalone"]);
+});
+
+test("dependentsOf: the closure is transitive, not merely direct", () => {
+  const graph = { a: [], b: ["a"], c: ["b"], d: ["c"] };
+  assert.deepEqual(dependentsOf(["a"], graph), ["a", "b", "c", "d"],
+    "d depends on c depends on b depends on a -- changing a must test the whole chain");
+});
+
+test("dependentsOf: two independently changed packages union their dependents", () => {
+  const graph = { a: [], b: [], x: ["a"], y: ["b"] };
+  assert.deepEqual(dependentsOf(["a", "b"], graph), ["a", "b", "x", "y"]);
+});
+
+test("readWorkspaceDependencyGraph: resolves by each package's REAL declared name, not by directory "
+  + "convention", () => {
+  // packages/cli's own package.json name is the UNSCOPED "a11y-witness", not "@a11y-witness/cli" -- and
+  // packages/lab genuinely depends on it. A graph builder that assumed the `@a11y-witness/<dir>` pattern
+  // would silently drop this edge.
+  const dir = mkdtempSync(join(tmpdir(), "ci-changed-graph-"));
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ workspaces: ["packages/*"] }));
+    const pkgs: Record<string, object> = {
+      cli: { name: "a11y-witness", dependencies: {} },
+      lab: { name: "@a11y-witness/lab", dependencies: { "a11y-witness": "0.1.0", "@a11y-witness/evidence": "0.1.0" } },
+      evidence: { name: "@a11y-witness/evidence", dependencies: {} },
+      // an external, non-workspace dependency must be silently DROPPED, not crash or appear as a phantom
+      // package named after an npm package this repo does not own.
+      judge: { name: "@a11y-witness/judge", dependencies: { "@a11y-witness/evidence": "0.1.0", "typescript": "^6.0.0" } },
+    };
+    for (const [name, manifest] of Object.entries(pkgs)) {
+      const pkgDir = join(dir, "packages", name);
+      mkdirSync(pkgDir, { recursive: true });
+      writeFileSync(join(pkgDir, "package.json"), JSON.stringify(manifest));
+    }
+    const graph = readWorkspaceDependencyGraph(dir, ["cli", "lab", "evidence", "judge"]);
+    assert.deepEqual([...graph.lab].sort(), ["cli", "evidence"],
+      "lab must resolve BOTH its unscoped 'a11y-witness' dependency (-> cli) and its scoped one (-> "
+      + "evidence), by reading each package's real name rather than assuming a naming convention");
+    assert.deepEqual(graph.judge, ["evidence"], "typescript is not a workspace package and must be dropped");
+    assert.deepEqual(graph.cli, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// -------------------------------------------------------------------------------------------------------
+// #156: THE CLI ITSELF, spawned for real. `classify()` above is pure and never sees `--event`/`--base` at
+// all, so the flag validation and the base-shape guard can only be proven by actually running the script.
+// -------------------------------------------------------------------------------------------------------
+
+test("CLI: --event=merge_group classifies, it does not refuse", () => {
+  // Acceptance step 3, verbatim: a merge_group event with a real base must be treated exactly like a
+  // pull_request one, not rejected for using the newer event name.
+  const { dir, base } = twoCommitRepo();
+  try {
+    const out = runCliIn(dir, ["--event=merge_group", `--base=${base}`]);
+    assert.match(out, /^ts=(true|false)$/m, "expected classification output, got: " + out);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("CLI: an empty base (the unhandled merge_group shape) is refused by NAME, not left to crash on git", () => {
+  // The exact trap ci.yml's own `base` step comment documents: an unhandled empty `github.base_ref`
+  // arrives here as a bare "origin/" once the workflow's own string concatenation has run. Proven against
+  // the REAL CLI rather than only against `classify()`, because the guard lives in `main()`, which
+  // `classify()`'s own tests structurally cannot reach.
+  const { dir } = twoCommitRepo();
+  try {
+    assert.throws(() => runCliIn(dir, ["--event=merge_group", "--base=origin/"]),
+      /empty or a bare prefix/, "a bare 'origin/' base must be refused by name, not crash inside git");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("CLI: --event=push is still refused -- widening to merge_group must not silently widen further", () => {
+  const { dir, base } = twoCommitRepo();
+  try {
+    assert.throws(() => runCliIn(dir, ["--event=push", `--base=${base}`]),
+      /--event must be "pull_request" or "merge_group"/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// -------------------------------------------------------------------------------------------------------
 // THE TRIGGER TABLE. `.github/workflows/on:` blocks, pinned so a future accidental trigger addition (the
 // exact shape point 5 of the CI rebuild names: "mutation-checked by adding a pull_request trigger to
 // action-smoke") fails here rather than costing real Windows minutes on every PR again.
 // -------------------------------------------------------------------------------------------------------
 
-test("ci.yml triggers on pull_request ONLY -- no push trigger at all, on main or anywhere else", () => {
+test("ci.yml triggers on pull_request AND merge_group -- no push trigger at all, on main or anywhere else", () => {
   // Chairman's direction, 2026-09-06: the flow is PR then merge, and a check that runs after a merge
   // cannot stop it -- a `push: branches: [main]` trigger is a gate with the barn door already open.
   // Branch protection (checks green AND up to date with main) is what makes the tested commit the one
   // that lands, so NOTHING here may run post-merge.
+  //
+  // #156: merge_group must sit ALONGSIDE pull_request, never in place of it -- a PR still needs its own
+  // run before it can be added to the queue at all, and GitHub's own docs are explicit that a merge queue
+  // whose workflow lacks this trigger times every queued entry out silently, with no error anywhere.
   const doc = parseYaml(readWorkflow("ci.yml"));
   assert.ok(doc.on.pull_request, "ci.yml must trigger on pull_request -- that is the whole of the rebuild");
+  assert.ok(doc.on.merge_group, "ci.yml must ALSO trigger on merge_group, or a merge queue times every "
+    + "entry out silently -- #156");
   assert.ok(!("push" in doc.on),
     "ci.yml must not trigger on push at all -- a check that runs after the merge cannot stop it");
-  assert.equal(Object.keys(doc.on).length, 1,
-    `ci.yml declares triggers ${Object.keys(doc.on).join(", ")} -- only pull_request is expected`);
+  assert.equal(Object.keys(doc.on).length, 2,
+    `ci.yml declares triggers ${Object.keys(doc.on).join(", ")} -- only pull_request and merge_group are expected`);
 });
 
 test("action-smoke.yml and capture-regression.yml trigger on workflow_call and workflow_dispatch only", () => {
@@ -180,12 +367,12 @@ test("lint.yml, ansible-check.yml and changeset-check.yml are retired, not merel
 });
 
 /**
- * `gate` IS THE ONE CONTEXT BRANCH PROTECTION MAY REQUIRE, not the five scoped jobs above it -- see
- * `ci.yml`'s own header. Requiring `ts`/`python`/`ansible`/`docs`/`changeset` directly means a required
- * check with no run against a docs-only PR's commit, and GitHub treats a job SKIPPED by its own `if:` as
- * satisfying a required check only because it still posts a real check run concluding `skipped` -- an
- * implicit platform behaviour, not a fact this repo's own tests can see. `gate` computes the identical
- * answer explicitly and is what these tests pin.
+ * `gate` IS THE ONE CONTEXT BRANCH PROTECTION MAY REQUIRE, not the six scoped jobs above it -- see
+ * `ci.yml`'s own header. Requiring `ts`/`python`/`ansible`/`docs`/`changeset`/`rulesFitness` directly means
+ * a required check with no run against a docs-only PR's commit, and GitHub treats a job SKIPPED by its own
+ * `if:` as satisfying a required check only because it still posts a real check run concluding `skipped`
+ * -- an implicit platform behaviour, not a fact this repo's own tests can see. `gate` computes the
+ * identical answer explicitly and is what these tests pin.
  */
 test("ci.yml has a gate job needing every scoped job, running even when one of them failed", () => {
   const doc = parseYaml(readWorkflow("ci.yml")) as { jobs: Record<string, { needs?: unknown; if?: string }> };
@@ -193,7 +380,7 @@ test("ci.yml has a gate job needing every scoped job, running even when one of t
   assert.ok(gate, "ci.yml must declare a job named 'gate' -- branch protection has nothing else it can "
     + "require that reports on every PR regardless of which path-scoped jobs a diff happened to trigger");
   assert.deepEqual([...gate.needs as string[]].sort(),
-    ["ansible", "changed", "changeset", "docs", "python", "ts"].sort(),
+    ["ansible", "board", "changed", "changeset", "docs", "python", "rulesFitness", "ts"].sort(),
     "gate must need every other job in this file, or a job could fail silently with gate still passing");
   assert.equal(gate.if, "always()",
     "gate must run with if: always() -- without it, a failing upstream job would SKIP gate too (a job's "
@@ -202,24 +389,79 @@ test("ci.yml has a gate job needing every scoped job, running even when one of t
 });
 
 test("PROOF: gate's own check fails when a needed job's result is neither success nor skipped", () => {
-  // Extracts the real shell loop from ci.yml's gate job (never re-typed) and drives it with each of the
-  // four real GitHub Actions job-result values, proving the loop actually discriminates rather than
-  // merely looking like it does.
+  // Extracts the real shell loop from ci.yml's gate job (never re-typed) and drives it with real GitHub
+  // Actions job-result values, proving the loop actually discriminates rather than merely looking like it
+  // does. The COUNT of placeholders is read off the loop itself, never hand-typed here -- a hand-typed
+  // count is exactly the "fact stated twice" shape this repo names as its most expensive recurring
+  // defect, and this file already had to bump it three times as `gate`'s own `needs:` list grew.
   const workflow = readWorkflow("ci.yml");
   const loopMatch = /for result in \\[\s\S]*?\n\s*done/.exec(workflow);
   assert.ok(loopMatch, "could not find gate's result-checking loop in the real workflow to drive");
+  const placeholderCount = (loopMatch[0].match(/\$\{\{ needs\.[\w-]+\.result \}\}/g) ?? []).length;
+  assert.ok(placeholderCount > 0, "found no needs.*.result placeholders in the loop -- the regex above no "
+    + "longer matches the real file's shape");
 
   const runWith = (results: string[]) => {
     const script = loopMatch[0]
-      .replace(/"\$\{\{ needs\.\w+\.result \}\}"/g, () => `"${results.shift()}"`)
+      .replace(/"\$\{\{ needs\.[\w-]+\.result \}\}"/g, () => `"${results.shift()}"`)
       + "\necho LOOP_OK";
     return execFileSync("bash", ["-c", script], { encoding: "utf8" });
   };
+  const allGood: string[] = Array.from({ length: placeholderCount },
+    (_, i) => (i % 2 === 0 ? "success" : "skipped"));
+  const withOneReplaced = (index: number, value: string) => {
+    const results = [...allGood];
+    results[index] = value;
+    return results;
+  };
 
-  assert.equal(runWith(["success", "success", "skipped", "success", "skipped", "success"]).trim(), "LOOP_OK",
+  assert.equal(runWith([...allGood]).trim(), "LOOP_OK",
     "all success/skipped must pass -- this is the ordinary shape of a docs-only or single-package PR");
-  assert.throws(() => runWith(["success", "failure", "skipped", "success", "skipped", "success"]),
-    /Command failed/, "a single 'failure' among the six must fail the loop, or gate cannot do its job");
-  assert.throws(() => runWith(["success", "cancelled", "skipped", "success", "skipped", "success"]),
+  assert.throws(() => runWith(withOneReplaced(1, "failure")),
+    /Command failed/, "a single 'failure' among the results must fail the loop, or gate cannot do its job");
+  assert.throws(() => runWith(withOneReplaced(1, "cancelled")),
     /Command failed/, "'cancelled' must also fail the loop -- an aborted run is not a passed one");
+});
+
+test("ci.yml's board job runs exactly the board guards and the claim guard, and DOES build", () => {
+  const doc = parseYaml(readWorkflow("ci.yml")) as {
+    jobs: Record<string, { if?: string; steps: Array<Record<string, unknown>> }>;
+  };
+  const board = doc.jobs.board;
+  assert.ok(board, "ci.yml must declare a job named 'board'");
+  assert.equal(board.if, "needs.changed.outputs.board == 'true'");
+
+  const runLines = (board.steps ?? []).map((s) => String(s.run ?? "")).join("\n");
+  assert.match(runLines, /packages\/lab\/src\/packaging\/board-\*\.test\.ts/,
+    "the board job must run the board-*.test.ts glob -- board-liveness, board-schedule, board-markdown, "
+    + "board-achievement-staleness, board-style and board-summary-origin, discovered rather than "
+    + "hand-listed");
+  assert.match(runLines, /packages\/lab\/src\/packaging\/public-claim\.test\.ts/,
+    "the board job must also run public-claim.test.ts -- \"the claim guard\", which reads "
+    + "docs/board/reported.json but does not match the board-*.test.ts glob by name");
+  // A BUILD IS NEEDED, and the first version of this test asserted the opposite on the strength of a grep
+  // that checked only these files' own top-level imports. Running the job's real command with no build
+  // present (not reading it) found that board-liveness/board-markdown/board-style/board-summary-origin
+  // each drive a scripts/board-*.mjs script that imports @a11y-witness/worker-fleet/cli-flags -- the
+  // stale-dist trap one hop further than the grep looked.
+  assert.match(runLines, /npm run build/,
+    "the board job must build -- several of its test files drive a scripts/board-*.mjs script that "
+    + "imports @a11y-witness/worker-fleet, which resolves to dist and does not exist unbuilt");
+});
+
+test("coverage.yml reports its own failure on the tracking issue -- a nightly nobody reads fails quietly", () => {
+  // dispatcher's review of #166: "a gate that does not exercise what ships is not a gate" applies to who
+  // is WATCHING a nightly job too, not only to what it exercises. Same pattern board-liveness.yml already
+  // uses against #20.
+  const doc = parseYaml(readWorkflow("coverage.yml")) as {
+    permissions?: Record<string, string>;
+    jobs: Record<string, { steps: Array<Record<string, unknown>> }>;
+  };
+  assert.equal(doc.permissions?.issues, "write",
+    "coverage.yml needs issues: write to comment on a failure, or the step below can never run");
+  const runLines = (doc.jobs.coverage.steps ?? []).map((s) => String(s.run ?? "")).join("\n");
+  const ifs = (doc.jobs.coverage.steps ?? []).map((s) => String(s.if ?? "")).join("\n");
+  assert.match(ifs, /failure\(\)/, "the comment step must be gated on if: failure(), or it posts every run");
+  assert.match(runLines, /gh issue comment 169/,
+    "coverage.yml must comment on #169 (the coverage tracking issue) when the nightly run fails");
 });

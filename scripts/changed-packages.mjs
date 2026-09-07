@@ -48,16 +48,26 @@ export function changedPackages(diffOutput) {
  * direction. Empty on any git failure (no `origin/main`, a shallow clone) -- the caller must treat that as
  * "run everything", the same as a genuinely empty diff.
  */
-export function changedPackagesAgainstOrigin() {
+/**
+ * The raw changed-file paths against `origin/main`'s merge-base with HEAD -- the same diff
+ * `changedPackagesAgainstOrigin` reduces to package names, exposed separately for a caller that needs the
+ * file list itself (the pre-push hook's board-only fast path reuses this rather than re-deriving the
+ * merge-base diff a second time). Empty on any git failure, same as its sibling.
+ */
+export function filesChangedAgainstOrigin() {
   try {
     const base = execFileSync("git", ["merge-base", "HEAD", "origin/main"],
       { cwd: REPO, env: sandboxGitEnv(), encoding: "utf8" }).trim();
     const diff = execFileSync("git", ["diff", "--name-only", base, "HEAD"],
       { cwd: REPO, env: sandboxGitEnv(), encoding: "utf8" });
-    return changedPackages(diff);
+    return diff.split("\n").filter(Boolean);
   } catch {
     return [];
   }
+}
+
+export function changedPackagesAgainstOrigin() {
+  return changedPackages(filesChangedAgainstOrigin().join("\n"));
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
