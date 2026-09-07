@@ -22,6 +22,11 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+// IMPORTED AND CALLED, which the first version of this file did not do. All three tests re-derived the
+// decision in their own bodies with raw `git`, so DELETING THE ENTIRE SCRIPT left them green — verified,
+// and it is why the PR claiming a mutation check was describing an inline probe rather than these tests.
+// A test that verifies a re-implementation verifies nothing about the implementation.
+import { contentVerdict } from "../../../../scripts/branches-without-a-pr.mjs";
 // The canonical GIT_* scrubber. Setting `GIT_DIR: ""` instead is not equivalent and git rejects it
 // outright ("The empty string is not a valid path") — the vars must be DELETED, which is what this does,
 // and it strips by prefix so a variable introduced tomorrow is handled without this file knowing its name.
@@ -49,11 +54,11 @@ test("a branch whose files still differ from main reports DIFFERS, naming them",
     git(["checkout", "-qb", "feature"]);
     writeFileSync(join(dir, "a.txt"), "two\n");
     git(["add", "a.txt"]); git(["commit", "-qm", "change"]);
-    // The property, expressed the way the script computes it: `git diff --quiet` EXITS 1 on a difference,
-    // so the STATUS is the answer and there is no output that could be misread as agreement.
-    let differs = false;
-    try { git(["diff", "--quiet", "main", "feature", "--", "a.txt"]); } catch { differs = true; }
-    assert.equal(differs, true, "a changed file must read as differing");
+    // THE REAL FUNCTION, pointed at this throwaway repo. `main`/`prefix`/`cwd` are injectable precisely
+    // so this can be a test of the shipped decision rather than of a copy of it.
+    const v = contentVerdict("feature", { main: "main", prefix: "", cwd: dir });
+    assert.equal(v.verdict, "DIFFERS");
+    assert.deepEqual(v.differing, ["a.txt"], "the finding must name the file, not just count it");
   });
 });
 
@@ -64,35 +69,29 @@ test("a branch whose content already landed reports SAME, not DIFFERS", () => {
     git(["checkout", "-qb", "feature"]);
     writeFileSync(join(dir, "a.txt"), "two\n");
     git(["add", "a.txt"]); git(["commit", "-qm", "change"]);
-    // main acquires the identical CONTENT under a different commit — a squash merge, which is why a
+    // main acquires the identical CONTENT under a different commit -- a squash merge, which is why a
     // commit count cannot answer this and the content must.
     git(["checkout", "-q", "main"]);
     writeFileSync(join(dir, "a.txt"), "two\n");
     git(["add", "a.txt"]); git(["commit", "-qm", "squashed"]);
-    let differs = false;
-    try { git(["diff", "--quiet", "main", "feature", "--", "a.txt"]); } catch { differs = true; }
-    assert.equal(differs, false, "identical content must read as SAME even though the commits differ");
+    const v = contentVerdict("feature", { main: "main", prefix: "", cwd: dir });
+    assert.equal(v.verdict, "SAME", "identical content must read as SAME though the commits differ");
     // And the screen the verdict must never be: commits ahead is still > 0 here.
-    const ahead = Number(git(["rev-list", "--count", "main..feature"]));
-    assert.ok(ahead > 0,
-      "this is the whole trap: a squash-merged branch still reports commits main 'does not have', which "
-      + "is why the commit count is a candidate screen and the content is the verdict");
+    assert.ok(Number(git(["rev-list", "--count", "main..feature"])) > 0,
+      "this is the whole trap -- a squash-merged branch still reports commits main 'does not have'");
   });
 });
 
-test("NOTHING COMPARED is a refusal, and it is not the same string as SAME", () => {
-  // The exact defect the row records. `git diff --name-only` returning nothing means there was nothing to
-  // compare; a report that prints "identical" there is clean having examined nothing.
+test("NOTHING COMPARED is a refusal, and it is not the same value as SAME", () => {
+  // The exact defect the row records: `git diff --name-only` returning nothing means there was nothing to
+  // compare, and a report printing "identical" there is clean having examined nothing.
   withRepo((dir, git) => {
     writeFileSync(join(dir, "a.txt"), "one\n");
     git(["add", "a.txt"]); git(["commit", "-qm", "base"]);
     git(["checkout", "-qb", "feature"]);   // no commits of its own
-    const files = git(["diff", "--name-only", "main", "feature"]).split("\n").filter(Boolean);
-    assert.deepEqual(files, [], "the setup must actually produce an empty file list");
-    // The script maps this to NOTHING COMPARED. Asserted as a distinct outcome so a future simplification
-    // that folds it into SAME fails here rather than in a report nobody re-reads.
-    const verdict = files.length === 0 ? "NOTHING COMPARED" : "SAME";
-    assert.equal(verdict, "NOTHING COMPARED",
-      "an empty comparison must never be reported as agreement — that is the false-clean this exists for");
+    const v = contentVerdict("feature", { main: "main", prefix: "", cwd: dir });
+    assert.equal(v.verdict, "NOTHING COMPARED",
+      "an empty comparison must never be reported as agreement -- that is the false-clean this exists for");
+    assert.equal(v.compared, 0);
   });
 });

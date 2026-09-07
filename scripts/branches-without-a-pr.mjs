@@ -46,9 +46,9 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 import { sandboxGitEnv } from "./git-env.mjs";
 
-/** @param {string[]} args */
-function git(args) {
-  return execFileSync("git", args, { encoding: "utf8", env: sandboxGitEnv() }).trim();
+/** @param {string[]} args @param {string} [cwd] */
+function git(args, cwd) {
+  return execFileSync("git", args, { encoding: "utf8", env: sandboxGitEnv(), ...(cwd ? { cwd } : {}) }).trim();
 }
 
 /** Every branch pushed to origin, `main` excluded — it is the thing being compared against. */
@@ -67,12 +67,22 @@ export function pushedBranches() {
  * has nothing to compare, and reporting that as "identical" is exactly the failure that produced eleven
  * false clean verdicts in the investigation that filed this row.
  *
+ * PARAMETERISED so a test can point it at a throwaway repository — `main`, the ref prefix and the working
+ * directory are all injectable, defaulting to the real ones. It hardcoded `origin/main` and `origin/<b>`
+ * in its first version, which made it untestable, which is why its tests re-derived the decision in their
+ * own bodies with raw `git` calls: **deleting this entire file left all three of them green.** A test that
+ * verifies a re-implementation of the logic verifies nothing about the logic, and the PR claiming a
+ * mutation check was describing an inline probe rather than the shipped test. Caught in review.
+ *
  * @param {string} branch
+ * @param {{ main?: string, prefix?: string, cwd?: string }} [where]
  * @returns {{ verdict: "DIFFERS"|"SAME"|"NOTHING COMPARED", compared: number, differing: string[] }}
  */
-export function contentVerdict(branch) {
-  const base = git(["merge-base", "origin/main", `origin/${branch}`]);
-  const files = git(["diff", "--name-only", base, `origin/${branch}`])
+export function contentVerdict(branch, where = {}) {
+  const { main = "origin/main", prefix = "origin/", cwd } = where;
+  const ref = `${prefix}${branch}`;
+  const base = git(["merge-base", main, ref], cwd);
+  const files = git(["diff", "--name-only", base, ref], cwd)
     .split("\n").map((f) => f.trim()).filter(Boolean);
   if (files.length === 0) return { verdict: "NOTHING COMPARED", compared: 0, differing: [] };
   const differing = files.filter((file) => {
@@ -80,8 +90,8 @@ export function contentVerdict(branch) {
     // there is no output to misread as agreement. A file absent on one side is a difference, which
     // `--quiet` reports the same way.
     try {
-      execFileSync("git", ["diff", "--quiet", "origin/main", `origin/${branch}`, "--", file],
-        { env: sandboxGitEnv() });
+      execFileSync("git", ["diff", "--quiet", main, ref, "--", file],
+        { env: sandboxGitEnv(), ...(cwd ? { cwd } : {}) });
       return false;
     } catch {
       return true;
@@ -90,11 +100,30 @@ export function contentVerdict(branch) {
   return { verdict: differing.length ? "DIFFERS" : "SAME", compared: files.length, differing };
 }
 
-/** Branches no pull request has ever pointed at, in any state. */
+/**
+ * Branches no pull request has ever pointed at, in any state.
+ *
+ * THE LIMIT IS A CORRECTNESS PROBLEM, NOT A PERFORMANCE ONE, and it fails in the worst possible
+ * direction. `gh pr list` returns NEWEST FIRST, so a limit that truncates drops the OLDEST pull requests
+ * — whose branches are exactly the ones most likely to be still lying around. Every dropped head then
+ * reads as "no PR ever pointed at this", turning long-landed branches into false findings and burying the
+ * real ones.
+ *
+ * So the count is checked against the total rather than assumed sufficient: `--limit` is raised until the
+ * page is not full, and a listing that comes back exactly at the cap is REFUSED rather than used. Caught
+ * in review; the first version passed `--limit 500` and hoped.
+ */
 export function branchesWithoutAPr() {
-  const heads = new Set(JSON.parse(
-    execFileSync("gh", ["pr", "list", "--state", "all", "--limit", "500", "--json", "headRefName"],
-      { encoding: "utf8" })).map((/** @type {{headRefName: string}} */ p) => p.headRefName));
+  const CAP = 1000;
+  const listed = JSON.parse(
+    execFileSync("gh", ["pr", "list", "--state", "all", "--limit", String(CAP), "--json", "headRefName"],
+      { encoding: "utf8" }));
+  if (listed.length >= CAP) {
+    throw new Error(`gh returned ${listed.length} PRs, which is the --limit — so the listing is TRUNCATED `
+      + "and `gh pr list` is newest-first, meaning the OLDEST PRs were dropped and their branches would "
+      + "read as never having had one. Raise the cap rather than trusting this.");
+  }
+  const heads = new Set(listed.map((/** @type {{headRefName: string}} */ p) => p.headRefName));
   return pushedBranches().filter((b) => !heads.has(b));
 }
 
