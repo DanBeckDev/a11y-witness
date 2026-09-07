@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // THE CONTINGENCY DRILL, AS A COMMAND -- `docs/roles/README.md`'s own acceptance test for itself, until
 // now typed by hand: clone, `cat`, copy a message, run a test. Automating the composition step is the
 // part worth having as a script: it produces every agent's actual first message, WITH the accumulated
@@ -22,7 +23,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFi
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { join, resolve } from "node:path";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { sandboxGitEnv } from "./git-env.mjs";
 
 const README_REL = "docs/roles/README.md";
@@ -34,6 +35,7 @@ const MEMORY_INDEX_REL = "docs/roles/memory/MEMORY.md";
  * the time this was written, so importing from it would couple two unrelated units' history. Kept small
  * and pinned by this script's own test against a realistic fixture, per this repo's own rule for forced
  * duplication ("pin them equal with a test" -- CLAUDE.md, "a fact stated twice").
+ * @param {string} readmeSource
  */
 function parseRoster(readmeSource) {
   const rows = [];
@@ -52,11 +54,15 @@ function parseRoster(readmeSource) {
  * "## The first message for each agent, ready to paste" section. Two header shapes exist there:
  * a single backtick-quoted agent (`` **`orchestrator`:** ``), and one shared worker template
  * (`` **Each worker** (`worker-audit`, ...): ``) whose body uses `<name>` as a placeholder.
+ * @param {string} readmeSource
  */
 function firstMessages(readmeSource) {
   const lines = readmeSource.split("\n");
+  /** @type {Map<string, string>} */
   const messages = new Map(); // agent -> message text
+  /** @type {string | null} */
   let workerTemplate = null;
+  /** @type {string[]} */
   let workerNames = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -88,8 +94,12 @@ function firstMessages(readmeSource) {
   return messages;
 }
 
-/** Reuses MEMORY.md's own `- [Title](file) — hook` index shape rather than re-deriving it. */
+/**
+ * Reuses MEMORY.md's own `- [Title](file) — hook` index shape rather than re-deriving it.
+ * @param {string} indexSource
+ */
 function memoryEntries(indexSource) {
+  /** @type {{ title: string, hook: string }[]} */
   const entries = [];
   for (const line of indexSource.split("\n")) {
     const m = line.match(/^- \[([^\]]+)\]\([^)]+\) — (.+)$/);
@@ -98,6 +108,7 @@ function memoryEntries(indexSource) {
   return entries;
 }
 
+/** @param {{ title: string, hook: string }[]} entries */
 function composeMemorySection(entries) {
   if (entries.length === 0) {
     return "\n\n(No accumulated memory found at " + MEMORY_INDEX_REL + " -- a real gap, not expected.)";
@@ -107,7 +118,10 @@ function composeMemorySection(entries) {
     + `for lessons already learned; do not re-derive them:\n${lines.join("\n")}`;
 }
 
-/** Runs the drill against one checkout path, returning a report -- gaps included, never thrown past. */
+/**
+ * Runs the drill against one checkout path, returning a report -- gaps included, never thrown past.
+ * @param {string} checkoutPath
+ */
 export function runDrill(checkoutPath) {
   const readmePath = resolve(checkoutPath, README_REL);
   const memoryIndexPath = resolve(checkoutPath, MEMORY_INDEX_REL);
@@ -139,6 +153,7 @@ export function runDrill(checkoutPath) {
   return { ok: true, memoryEntryCount: memory.length, agents };
 }
 
+/** @param {string} repoUrl */
 function cloneFresh(repoUrl) {
   const dir = mkdtempSync(join(tmpdir(), "a11y-reconstitution-drill-"));
   const target = join(dir, "checkout");
@@ -150,7 +165,9 @@ function main() {
   refuseUnknownFlags(["--checkout", "--clone", "--repo-url", "--json", "--out-dir"],
     { entry: import.meta.url, command: "node scripts/reconstitution-drill.mjs" });
   const argv = process.argv.slice(2);
+  /** @type {(name: string) => string | undefined} */
   const flag = (name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
+  /** @param {string} name */
   const has = (name) => argv.includes(name);
 
   let checkoutPath = flag("--checkout") ?? process.cwd();
@@ -168,8 +185,8 @@ function main() {
     process.exit(1);
   }
 
-  if (flag("--out-dir")) {
-    const outDir = flag("--out-dir");
+  const outDir = flag("--out-dir");
+  if (outDir) {
     mkdirSync(outDir, { recursive: true });
     for (const a of report.agents) {
       if (a.message) writeFileSync(join(outDir, `first-message-${a.agent}.md`), a.message + "\n");

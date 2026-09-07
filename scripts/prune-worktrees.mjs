@@ -1,3 +1,4 @@
+// @ts-check
 // WORKTREE LIFECYCLE, AS A COMMAND -- not a discipline somebody has to remember.
 //
 // The rule ("prune after every merge") existed as prose from 2026-09-06, `dispatcher` pruned 28 stale
@@ -336,9 +337,16 @@ function assessWorktree(repoRoot, entry, { run, now }) {
   return { merge, workingTreeClean, contentMerged, recentlyActive };
 }
 
-/** Which `PruneReport` bucket a `classify` verdict other than `"remove"` lands in. */
+/**
+ * Which `PruneReport` bucket a `classify` verdict other than `"remove"` lands in. `standing` is included
+ * for completeness against `classify`'s own declared return type, even though the `isStandingBranch`
+ * check above already intercepts that case before `classify` is ever asked.
+ * @type {Record<"dirty" | "standing" | "cherry-picked" | "inconclusive" | "active",
+ *   "dirty" | "standing" | "cherryPicked" | "inconclusive" | "active">}
+ */
 const VERDICT_BUCKET = {
   active: "active", "cherry-picked": "cherryPicked", inconclusive: "inconclusive", dirty: "dirty",
+  standing: "standing",
 };
 
 /**
@@ -381,13 +389,15 @@ export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.
   return report;
 }
 
-/** Appends a header plus one indented line per entry -- and nothing at all when `entries` is empty. */
+/** Appends a header plus one indented line per entry -- and nothing at all when `entries` is empty.
+ * @param {string[]} lines @param {ReportedWorktree[]} entries @param {string} header */
 function pushSection(lines, entries, header) {
   if (entries.length === 0) return;
   lines.push(header);
   for (const e of entries) lines.push(`  ${e.path}  (${e.branch ?? "detached"})`);
 }
 
+/** @param {PruneReport} report */
 function formatReport(report) {
   const lines = [`removed ${report.removed.length} worktree(s):`];
   for (const r of report.removed) lines.push(`  ${r.path}  (${r.branch ?? "detached"})`);
@@ -418,7 +428,7 @@ async function main() {
 
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   main();
 }

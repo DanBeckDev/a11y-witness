@@ -108,6 +108,9 @@ test("the README's quickstart workflow is one a stranger can actually paste", ()
 
   assert.match(snippet!, /runs-on:\s*windows-/,
     "NVDA needs Windows; a snippet on ubuntu-latest fails after the reader has committed it");
+  // NOT `/a11ign@/` -- #66 (the rename) deliberately keeps every `uses: DanBeckDev/a11y-witness@main`
+  // reference pointing at where the Action ACTUALLY is today; #325 (the transfer rehearsal) owns
+  // changing it once the repository really moves.
   assert.match(snippet!, /uses:\s*\S+\/a11y-witness@/, "the snippet must reference this action");
 
   const withBlock = /with:\n([\s\S]*)$/.exec(snippet!)?.[1] ?? "";

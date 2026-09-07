@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { stripComments } from "@a11y-witness/evidence/source-text";
+import { stripComments } from "@a11ign/evidence/source-text";
 import { captureFault, faultCode, FAULT } from "./capture-faults.mjs";
 
 
@@ -41,17 +41,20 @@ test("the message survives and the code is classifiable", () => {
 
 test("every captureFault call site passes the code first", () => {
   // The guard above catches it at runtime, on a Windows worker, mid-capture. This catches it here.
-  // `capture-setup.mjs`, not `capture-core.mjs`: every captureFault call site lives there since the
-  // 2026-09-05 split (neither `capture-core.mjs` nor `capture-probes.mjs` imports FAULT/captureFault).
-  const source = readFileSync(new URL("./capture-setup.mjs", import.meta.url), "utf8");
+  // `capture-setup.mjs` had every call site until #336 (2026-09-07) added one to `server.mjs`, for the
+  // hard timeout -- so this now scans BOTH rather than one file whose own comment claimed to be all of
+  // them. `capture-core.mjs` and `capture-probes.mjs` still import neither FAULT nor captureFault.
+  const files = ["capture-setup.mjs", "server.mjs"];
+  const sources = files.map((f) => readFileSync(new URL(`./${f}`, import.meta.url), "utf8"));
   // This asserts an ABSENCE, so a moved file, an empty read, or a broken regex all produce the identical
   // "0 swapped" pass -- proving the population it is checking is real, not merely that nothing bad was
-  // found in it. 5 real call sites at the time this guard was added; a floor, not a pin.
-  const realCallSites = [...source.matchAll(/captureFault\(/g)];
-  assert.ok(realCallSites.length >= 3,
-    `only found ${realCallSites.length} captureFault( call site(s) in capture-setup.mjs -- the read or `
-    + "the file moved, this is not a clean file");
-  const swapped = [...source.matchAll(/captureFault\(\s*new Error/g)];
+  // found in it. 6 real call sites (5 in capture-setup.mjs, 1 in server.mjs) at the time this guard was
+  // last updated; a floor, not a pin.
+  const realCallSites = sources.flatMap((s) => [...s.matchAll(/captureFault\(/g)]);
+  assert.ok(realCallSites.length >= 4,
+    `only found ${realCallSites.length} captureFault( call site(s) across ${files.join(", ")} -- a read `
+    + "failed, a file moved, or the population genuinely shrank below the floor");
+  const swapped = sources.flatMap((s) => [...s.matchAll(/captureFault\(\s*new Error/g)]);
   assert.equal(swapped.length, 0,
     "captureFault takes (code, message) — an Error in the first position is the swap that made seven "
     + "failures log a bare `wrong-page` and made their codes unclassifiable");
@@ -65,7 +68,7 @@ test("the settle wait is a CONDITION, not a duration, and cannot hang on an empt
   // its published HTML carries forty headings. Two WCAG findings against faults the page does not have.
   // Comments stripped before matching -- unbounded to end of file, and this file discusses
   // headings/census logic extensively in prose elsewhere, so a bare regex here risks matching a LATER,
-  // unrelated comment rather than this function's own code. See `@a11y-witness/evidence/source-text`.
+  // unrelated comment rather than this function's own code. See `@a11ign/evidence/source-text`.
   // `waitForPageToSettle` lives in `capture-setup.mjs` since the 2026-09-05 split.
   const source = stripComments(readFileSync(new URL("./capture-setup.mjs", import.meta.url), "utf8"));
   const settle = source.slice(source.indexOf("async function waitForPageToSettle"));

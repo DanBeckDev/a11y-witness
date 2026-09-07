@@ -1,2 +1,2 @@
-import { version } from "@a11y-witness-fixture/omitted-dependency";
+import { version } from "@a11ign-fixture/omitted-dependency";
 console.log(version());
