@@ -35,33 +35,44 @@ does not say anything is wrong. Rows below are marked READ only where somebody h
 
 ## The finding this census produced on its first run
 
-**`scripts/**/*.mjs` is outside the TypeScript program entirely** — 22 CLIs, including `row-claim.mjs`,
-`merge-guard.mjs`, `merge-queue.mjs` and `mutation-check.mjs`, several of which carry `@type` JSDoc
-annotations implying somebody expects them checked.
+**26 of 28 `scripts/*.mjs` files are never type-checked, and several carry `@type` JSDoc written by
+somebody expecting enforcement** — `row-claim.mjs` annotates its injected seam, `merge-guard.mjs`
+annotates its whole pure verdict. Those annotations are documentation. Filed as #189.
 
 ```
-tsconfig.json include:  packages/*/src/**/*.{ts,mjs}   packages/*/scripts/**/*.mjs
-                        packages/*/bin/**/*.mjs        packages/*/*.mjs
-                        scripts/test-support/**/*.ts        <- the ONLY top-level scripts/ entry
-```
-
-Measured, with a control, rather than read off the config:
-
-```
-deliberate `/** @type {number} */ const X = "not a number"` appended to …
+identical `/** @type {number} */ const X = "not a number"` appended to …
 
   scripts/row-claim.mjs                    npm run typecheck -> EXIT 0, clean
   packages/control/src/fleet-discover.mjs  npm run typecheck -> EXIT 2, TS2322
 ```
 
-**Same error, same repo, same command — caught inside a package, invisible in `scripts/`.** The control is
-what makes this a boundary rather than a disabled check. `typecheck-coverage.test.ts` polices
-*"every marked file"* over `packages/*/src` and `packages/*/scripts`, so it cannot see this. Filed
-separately; this document does not fix it.
+**AND THE FIRST EXPLANATION OF THAT CONTROL WAS WRONG, WHICH IS THE MOST USEFUL THING IN THIS DOCUMENT.**
 
-**That is the same directory, and the third guard blind to it** — after the guarded-CLI census (#164) and
-`entry-points.test.ts` (#174). The boundary is not drawn wrongly in one place; `scripts/` is systematically
-outside the tooling that polices `packages/`.
+`tsconfig.json` does omit top-level `scripts/` from `include`, so the obvious reading is that the
+directory is outside the program. That reading is wrong, and it was tested rather than believed:
+
+```
+include now: … scripts/test-support/**/*.ts  scripts/**/*.mjs   <- the widening landed
+npx tsc --noEmit  ->  EXIT 0, errors=0                          <- the error is STILL not caught
+```
+
+`checkJs` is set nowhere. Under `allowJs` alone a `.mjs` file is parsed and never error-checked **unless
+it opts in with `// @ts-check`**:
+
+| directory | files carrying `// @ts-check` |
+|---|---|
+| `packages/control/src/*.mjs` | 6 of 7 |
+| `scripts/*.mjs` | **2 of 28** |
+
+`fleet-discover.mjs` has the pragma; `row-claim.mjs` does not. **The two files differed in the pragma, not
+in the program** — so the fix implied by the config (an `include` line) would have shipped, changed
+nothing, and closed the row. A sizing run that stopped at the error COUNT would have reported "two lines,
+no errors" and been believed.
+
+**This document is a census of guards whose stated population is narrower than the claim about them, and
+its author then diagnosed its own first finding by reading a config instead of measuring which mechanism
+was operative.** The control caught it, and only because the widening was run as a control rather than
+applied as a fix.
 
 ## The four shapes, of which the fourth is the dangerous one
 
