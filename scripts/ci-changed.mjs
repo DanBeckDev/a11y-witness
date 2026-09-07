@@ -22,6 +22,7 @@
 // tested commit the one that lands.
 import { execFileSync } from "node:child_process";
 import { readFileSync, appendFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 // RELATIVE, NOT `@a11y-witness/worker-fleet/cli-flags` — every other root script uses the package
 // specifier, and every other root script runs after `npm run build`. This one gates whether ANYTHING
 // else in the workflow builds at all, so it cannot depend on a build having already happened; the file
@@ -186,6 +187,13 @@ async function main() {
 }
 
 // Only when invoked directly — importing `classify` for a test must not trigger a git subprocess.
-if (import.meta.url === `file://${process.argv[1]}`) {
+//
+// `pathToFileURL`, not a template literal. Concatenation does not percent-encode, so a checkout under a
+// path containing a SPACE compares false, the guard never fires, and this exits 0 having classified
+// nothing — which the workflow reads as a clean run, and every downstream job is then skipped on a PR
+// that reports green. `entry-points.test.ts` has forbidden this form for a while and could not SEE this
+// file, because it discovered entry points from `package.json` and `ci.yml` invokes this one directly.
+// Widening that discovery is the rest of this change.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main();
 }
