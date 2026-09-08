@@ -31,7 +31,6 @@ import { execFileSync } from "node:child_process";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO, ROOT, gh, git } from "./board-data.mjs";
 
-const HOURS_MS = 3600_000;
 const ISSUE = "20";
 const SUMMARY_WORDS = 120;
 const REPORTED = "docs/board/reported.json";
