@@ -5,19 +5,50 @@ name: ready-label-audit
 # three real rows sat `ready` + `in-progress` + `session:*` (claimed and started, still advertising as
 # pickable) and were found by a human reading `gh issue list --label ready` by hand, not by this check.
 #
-# SCHEDULED, LIKE `coverage.yml`, AND FOR THE SAME REASON coverage.yml GIVES FOR ITS OWN CHOICE — this is
-# not a watchdog for another schedule (that shape belongs on `push`, per `board-liveness.yml`'s header);
-# this schedule IS the thing being relied on. It audits live GitHub label state, which no commit touches,
-# so there is no "the push that broke it" to attach a red mark to and no reason to gate a merge on it.
+# IT AUDITS LIVE GITHUB LABEL STATE, which no commit touches -- so there is no "the push that broke it"
+# to attach a red mark to, and no reason to gate a merge on it.
 #
-# Runs hourly rather than daily (unlike coverage.yml): the incident this row fixes was a live multi-agent
-# dispatch mistake, caught within minutes by a human — a daily cadence would have let it stand for most of
-# a working session. This repo pushes many times a day, so the 60-day-inactivity auto-disable that makes a
-# schedule-only workflow risky elsewhere is not a live concern here.
+# THIS SECTION USED TO SAY "Runs hourly rather than daily", AND THAT WAS NEVER TRUE (#536). The cron below
+# asks for 27 runs in 27 hours. Measured 2026-09-08, it delivered SEVEN: 13:30, 18:43, 22:01, 00:25, 05:58,
+# 11:20 and 16:38 -- never at :17, and three gaps over five hours. GitHub delays and drops scheduled runs
+# on a busy repo, so a cron reading hourly delivers roughly daily: the exact cadence this header rejected
+# as too slow for the incident it was written for. A check that runs three times a day cannot be called
+# hourly, and a stated cadence nobody measured is a claim, not a schedule.
+#
+# SO THE EVENTS BELOW ARE THE MECHANISM AND THE CRON IS THE BACKSTOP. Each event is a moment the audit's
+# answer can CHANGE, which is a stronger reason to run than a clock is:
+#
+#   labeled/unlabeled  a row becomes pickable or claimed, or stops being either -- and removing a label is
+#                      when a dead claim or a debris row stops being one, so it is not merely the inverse
+#   closed             the moment a row can start carrying debris
+#   reopened           a row can come back wearing labels its closure left on it
+#   pull_request closed  how a row becomes debris without anyone touching the row
+#   push to main       how work SHIPS without closing its row -- the shape #443 was filed for
+#
+# Neither `unlabeled` nor `reopened` catches a fault the other four miss. They stop the audit answering
+# with a state that has already moved, which is the whole value of it: the count has to be current when
+# somebody READS it. The cost is a run.
+#
+# THE CRON STAYS, and it is not redundant: it is the only thing that fires when nothing happens at all,
+# which is exactly the state where a stale claim sits unnoticed.
 on:
+  issues:
+    types: [labeled, unlabeled, closed, reopened]
+  pull_request:
+    types: [closed]
+  push:
+    branches: [main]
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
+
+concurrency:
+  # Several label changes and merges land in a minute on a busy day, and six triggers make that likelier.
+  # One verdict at a time; the newest is the true one. This audit reads live state and accumulates
+  # nothing, so a cancelled run loses nothing a later one will not recompute -- same choice and same
+  # reason as board-liveness.yml.
+  group: ready-label-audit
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -40,6 +71,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
+      # WHICH EVENT WOKE THIS RUN (#536). With six triggers, "the audit is quiet because nothing changed"
+      # and "the audit is quiet because nothing fired" are different states and must never read the same.
+      # A run that cannot say why it started cannot be told apart from one that should not have.
+      - name: Say what woke this run
+        run: |
+          ACTION="${{ github.event.action }}"
+          if [ -n "$ACTION" ]; then WOKE="${{ github.event_name }}.$ACTION"; else WOKE="${{ github.event_name }}"; fi
+          echo "ready-label-audit woken by: $WOKE"
+          echo "::notice::ready-label-audit woken by $WOKE"
       # `github.token` CANNOT resolve a user-owned ProjectV2 -- measured 2026-09-08, three scheduled runs
       # died on `Could not resolve to a ProjectV2 with the number 2` -- and board membership is one of six
       # checks. The bot PAT (#416) can read it. Same shape as auto-arm.yml's own token choice, including
