@@ -68,6 +68,7 @@ import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { READY_LABEL } from "./ready-label-audit.mjs";
 import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
+import { withBoardSnapshot, PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
 
 export const CLAIM_LABEL = "in-progress";
 export const STARTED_LABEL = "started";
@@ -167,6 +168,43 @@ export function decideClaim(labelsBefore, mySession) {
 }
 
 /**
+ * Moves an issue's Project Status field -- the VIEW -- to match the label that is the RECORD. #400: a
+ * claim writing the label and leaving Status behind is what let 45 stale Status values regenerate at the
+ * rate work is claimed, measured live as `unlabeled ready / labeled in-progress` for the three minutes
+ * between a real claim and the next hourly audit.
+ *
+ * SNAPSHOTTED FIRST, via `withBoardSnapshot` (#399): the day this row was filed, a single-field Project
+ * mutation silently dropped all 112 items' Status values, and only a snapshot taken minutes earlier for
+ * an unrelated reason made recovery possible. No board write ships without one.
+ *
+ * NEVER THROWS, on purpose. A row genuinely not on the Project is a real, common state -- four existed
+ * the night this was written -- and `gh project item-edit` refuses with a real error for it; reading that
+ * as "the claim failed" would make the LABEL write itself (the actual record) unsafe to run at all. Any
+ * failure here is reported via `log` and returned, never thrown, matching `reportReachability`'s own rule
+ * a few functions up: "I could not tell you whether it is claimed" and "I could not move the view" are
+ * different failures, and conflating them is the mistake this file already avoids once elsewhere.
+ *
+ * @param {number} issueNumber
+ * @param {string} statusName exactly one of the Project's real Status option names ("Ready", "In progress", …)
+ * @param {{ run?: typeof defaultRun, log?: (line: string) => void, snapshot?: typeof withBoardSnapshot }} [deps]
+ * @returns {{ moved: true } | { moved: false, reason: string }}
+ */
+export function moveProjectStatus(issueNumber, statusName,
+  { run = defaultRun, log = (line) => process.stderr.write(`${line}\n`), snapshot = withBoardSnapshot } = {}) {
+  const url = `https://github.com/${REPO}/issues/${issueNumber}`;
+  try {
+    snapshot(() => run("gh", ["project", "item-edit", String(PROJECT_NUMBER), "--owner", PROJECT_OWNER,
+      "--url", url, "--field", "Status", "--value", statusName]), { run, log });
+    return { moved: true };
+  } catch (error) {
+    const reason = `could not move #${issueNumber}'s Status to "${statusName}" -- `
+      + `${/** @type {Error} */ (error).message}`;
+    log(`row-claim: ${reason}`);
+    return { moved: false, reason };
+  }
+}
+
+/**
  * WRITE-THEN-VERIFY, not verify-then-write. Shared by `dispatchRow` and `claimRow`, which differ only in
  * whether `started` is among the labels written.
  *
@@ -201,10 +239,10 @@ export function decideClaim(labelsBefore, mySession) {
  * @param {string} mySession
  * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
  *   dispatch, `[STARTED_LABEL]` for a claim/start
- * @param {{ run?: typeof defaultRun }} deps
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} deps
  * @returns {{ claimed: true } | { claimed: false, reason: string }}
  */
-function writeRowLabels(issueNumber, mySession, extraLabels, { run = defaultRun } = {}) {
+function writeRowLabels(issueNumber, mySession, extraLabels, { run = defaultRun, moveStatus = moveProjectStatus } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
@@ -226,6 +264,12 @@ function writeRowLabels(issueNumber, mySession, extraLabels, { run = defaultRun 
       ...[sessionLabel, ...extraLabels].flatMap((l) => ["--remove-label", l])]);
     return { claimed: false, reason: `lost a race to ${otherSessions.join(", ")} -- backed off` };
   }
+  // #400: THE LABEL IS THE RECORD; THIS MOVES THE VIEW TO MATCH IT, IN THE SAME ACT. A view corrected only
+  // by a later sweep is wrong between sweeps, and "between sweeps" is where a worker reads it -- measured
+  // live, a row read `unlabeled ready / labeled in-progress` for the three minutes between a real claim and
+  // the next audit pass. `moveStatus` never throws (see its own comment); a claim this session actually
+  // holds must complete regardless of whether the Project view could be updated to match.
+  moveStatus(issueNumber, "In progress", { run });
   return { claimed: true };
 }
 
@@ -314,10 +358,10 @@ export function claimRow(issueNumber, mySession, deps = {}) {
  *
  * @param {number} issueNumber
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun }} [deps]
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} [deps]
  * @returns {{ declined: true } | { declined: false, reason: string }}
  */
-export function declineRow(issueNumber, mySession, { run = defaultRun } = {}) {
+export function declineRow(issueNumber, mySession, { run = defaultRun, moveStatus = moveProjectStatus } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const status = claimStatus(before.labels);
   if (!status.claimed) {
@@ -334,6 +378,11 @@ export function declineRow(issueNumber, mySession, { run = defaultRun } = {}) {
   }
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
     ...[CLAIM_LABEL, `session:${mySession}`, STARTED_LABEL].flatMap((l) => ["--remove-label", l])]);
+  // #400: THE MATCHING MOVE ON RELEASE. "Genuinely unclaimed" and "Ready" are the same state in this
+  // tracker's own model (`ready-label-audit.mjs`'s definition: a row cannot be both "unclaimed, pickable"
+  // and "claimed"), so a decline moves the view back the same way a claim moved it forward. Never throws;
+  // see `moveProjectStatus`'s own comment for why.
+  moveStatus(issueNumber, "Ready", { run });
   return { declined: true };
 }
 
