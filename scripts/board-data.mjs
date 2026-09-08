@@ -36,6 +36,9 @@ export { REPO };
 export const MILESTONE = "v0.1.0 — first publish";
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const HOURS_MS = 3600_000;
+export const MINUTE_MS = 60_000;
+export const MEDIAN = 0.5;
+export const P90 = 0.9;
 
 /** THE FILES THE REPORT READS OUT OF THE WORKING TREE, and the only dirt that can change an edition.
  *
@@ -416,6 +419,176 @@ export function daysUntil(iso) {
   return Math.ceil((Date.parse(iso) - Date.now()) / (24 * HOURS_MS));
 }
 
+// #466 (C5): CONFLICT METRICS, READ FROM THE REPOSITORY -- PRs opened/merged/closed over a stated window,
+// lifetime to merge, a conflict signal, and the five most-touched files. Filed after #468 proved the
+// closing pipeline works and ceo's own done-when criteria (p90 under an hour, no PR over four hours, no
+// file touched by more than five PRs, zero conflicts, trunk green on every merge) needed a number nobody
+// asserts by hand -- "until C5 exists, nobody can say whether the conflict fix worked except by a session
+// asserting it, which is the thing the whole plan is trying to stop."
+//
+// EVERY FIGURE STATES ITS WINDOW, because two correct counts over different windows already read as a
+// disagreement once (`whatMerged`'s own 17-vs-42 lesson, above). `since` travels with every function's
+// return value rather than living only in the caller's variable name.
+//
+// A COUNT NOBODY CAN RECOMPUTE IS AN OPINION -- `conflictMetrics`'s own `method` field states the search
+// qualifiers and the git commands used, the same way `fleet-hours`'s own `method` field does, so a board
+// record copies it rather than retyping it.
+
+/** Bounded PR-listing refusal, on `issues()`'s own rule: a length at the limit MAY be truncated, and
+ * reading a partial listing as the whole window is worse than refusing.
+ */
+export const PR_SEARCH_LIMIT = 500;
+
+/**
+ * @param {"created" | "merged" | "closed"} qualifier
+ * @param {string} since ISO date/time, used verbatim as a GitHub search qualifier value
+ * @returns {any[]}
+ */
+function prsBy(qualifier, since) {
+  const fields = "number,title,createdAt,mergedAt,closedAt,mergeCommit,files";
+  const search = `${qualifier}:>=${since}`;
+  const all = JSON.parse(gh(["pr", "list", "--repo", REPO, "--state", "all", "--search", search,
+    "--limit", String(PR_SEARCH_LIMIT), "--json", fields]));
+  if (all.length >= PR_SEARCH_LIMIT) {
+    throw new Error(`board-data: the PR search "${search}" returned ${all.length} rows against a limit of `
+      + `${PR_SEARCH_LIMIT}, so it MAY BE TRUNCATED and this report would count part of the window as the `
+      + "whole. Narrow the window or raise the limit -- do not read a partial listing as complete.");
+  }
+  return all;
+}
+
+/** PRs OPENED in the window, by `createdAt`. @param {string} since */
+export function prsOpened(since) { return prsBy("created", since); }
+
+/** PRs MERGED in the window, by `mergedAt`. @param {string} since */
+export function prsMerged(since) { return prsBy("merged", since); }
+
+/** PRs CLOSED WITHOUT MERGING in the window -- `closed:>=` also returns merged PRs (GitHub sets
+ * `closedAt` on a merge too), so this filters to the ones a merge date does not explain.
+ * @param {string} since
+ */
+export function prsClosedUnmerged(since) {
+  return prsBy("closed", since).filter((/** @type {any} */ pr) => !pr.mergedAt);
+}
+
+/**
+ * @param {number[]} sortedAscending
+ * @param {number} p 0..1
+ * @returns {number | null}
+ */
+function percentile(sortedAscending, p) {
+  if (sortedAscending.length === 0) return null;
+  const index = Math.min(sortedAscending.length - 1, Math.max(0, Math.ceil(p * sortedAscending.length) - 1));
+  return sortedAscending[index];
+}
+
+/** Minutes from open to merge, one per PR that carries both timestamps, ascending.
+ * @param {any[]} mergedPRs
+ */
+export function mergeLifetimeMinutes(mergedPRs) {
+  return mergedPRs
+    .filter((pr) => pr.createdAt && pr.mergedAt)
+    .map((pr) => (Date.parse(pr.mergedAt) - Date.parse(pr.createdAt)) / MINUTE_MS)
+    .sort((a, b) => a - b);
+}
+
+/** The five (or `limit`) files touched by the most DISTINCT PRs -- a PR touching a file five times still
+ * counts once, because the hazard this measures is "how many authors converged on this file", not how
+ * much it changed.
+ * @param {any[]} prs
+ * @param {number} [limit]
+ */
+export function hotspotFiles(prs, limit = 5) {
+  /** @type {Map<string, Set<number>>} */
+  const touchedBy = new Map();
+  for (const pr of prs) {
+    for (const file of pr.files ?? []) {
+      const set = touchedBy.get(file.path) ?? new Set();
+      set.add(pr.number);
+      touchedBy.set(file.path, set);
+    }
+  }
+  return [...touchedBy.entries()]
+    .map(([path, prNumbers]) => ({ path, prCount: prNumbers.size }))
+    .sort((a, b) => b.prCount - a.prCount || a.path.localeCompare(b.path))
+    .slice(0, limit);
+}
+
+/**
+ * Did a merged PR's OWN branch history contain a merge commit bringing `main` in before it finished --
+ * the one signal git retains after the fact for "this branch needed to reconcile with a diverged main".
+ *
+ * A PROXY, NAMED AS ONE, NOT PROOF OF A TEXTUAL CONFLICT. Verified directly: a MERGED pull request's own
+ * `mergeable` field reads `"UNKNOWN"` over the API (checked live, PR #503) -- GitHub does not retain
+ * whether a closed or merged PR was ever `CONFLICTING`, only the live snapshot for an OPEN one. So the
+ * only durable signal is structural: a merge commit inside the branch's own history (between its
+ * merge-base with the previous `main` tip and its own head) means the author reconciled with `main` before
+ * finishing. A routine, conflict-FREE sync (this repo's own B3/`update-branch` practice) produces the
+ * identical shape to a real content conflict's resolution merge -- git does not distinguish them in a
+ * commit's structure -- so this answers "needed to reconcile", never "had a textual conflict", and the
+ * distinction is stated in `conflictMetrics`'s own `method` field rather than left for a reader to assume.
+ *
+ * `null`, never `false`, when the PR's own merge commit cannot be inspected -- a squash/rebase merge (one
+ * parent, nothing to compare) or a lookup failure. Folding an uninspectable PR into "no conflict" would be
+ * exactly the "refuse rather than print zero" defect this row was filed to end.
+ *
+ * @param {{ number: number, mergeCommit?: { oid?: string } }} pr
+ * @returns {boolean | null}
+ */
+export function mergedPRNeededReconciliation(pr) {
+  const sha = pr.mergeCommit?.oid;
+  if (!sha) return null;
+  /** @type {string[]} */
+  let parents;
+  try {
+    parents = git(["show", "--no-patch", "--format=%P", sha]).split(/\s+/).filter(Boolean);
+  } catch {
+    return null;
+  }
+  if (parents.length !== 2) return false; // squash/rebase: one parent, nothing to reconcile
+  const [previousMain, branchHead] = parents;
+  try {
+    const base = git(["merge-base", previousMain, branchHead]);
+    const merges = git(["log", "--merges", "--format=%H", `${base}..${branchHead}`]);
+    return merges.trim().length > 0;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * THE FOUR FIGURES #466 EXISTS FOR, in one call. Every count states the window it was read over; the
+ * conflict count separates "did not need to reconcile" from "could not tell" rather than folding an
+ * uninspectable PR into a clean zero.
+ * @param {string} since
+ */
+export function conflictMetrics(since) {
+  const opened = prsOpened(since);
+  const merged = prsMerged(since);
+  const closedUnmerged = prsClosedUnmerged(since);
+  const lifetimeMinutes = mergeLifetimeMinutes(merged);
+  const reconciliation = merged.map((pr) => mergedPRNeededReconciliation(pr));
+  const population = new Map([...opened, ...merged, ...closedUnmerged]
+    .map((/** @type {any} */ pr) => [pr.number, pr]));
+  return {
+    since,
+    method: "opened/merged/closed via `gh pr list --search <qualifier>:>=<since>` (created/merged/closed "
+      + "respectively), deduped by PR number for the hotspot table; lifetime is mergedAt-createdAt in "
+      + "minutes over PRs merged in the window; the conflict signal walks each merged PR's own merge "
+      + "commit (`git show --format=%P`, `git merge-base`, `git log --merges base..branchTip`) for a merge "
+      + "commit inside its own branch history -- a proxy for 'needed to reconcile with a diverged main', "
+      + "never a textual-conflict proof, since GitHub's mergeable/mergeStateStatus is a live snapshot and "
+      + "reports UNKNOWN for anything already merged or closed.",
+    opened: opened.length,
+    merged: merged.length,
+    closedUnmerged: closedUnmerged.length,
+    lifetimeMinutes: { count: lifetimeMinutes.length, medianMinutes: percentile(lifetimeMinutes, MEDIAN),
+      p90Minutes: percentile(lifetimeMinutes, P90) },
+    reconciliation: { neededReconciliation: reconciliation.filter((r) => r === true).length,
+      of: merged.length, unresolvable: reconciliation.filter((r) => r === null).length },
+    hotspotFiles: hotspotFiles([...population.values()]),
+  };
+}
 
 /** Refuse to publish anything assembled from a read set that is not `main`'s.
  *
