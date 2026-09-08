@@ -67,7 +67,7 @@ import { fileURLToPath } from "node:url";
 // rather than naming it), and there it dies on startup with ERR_MODULE_NOT_FOUND.
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { READY_LABEL } from "./ready-label-audit.mjs";
+import { READY_LABEL, WAS_READY_LABEL } from "./ready-label-audit.mjs";
 import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
 import { withBoardSnapshot, PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { runnerReason } from "./row-claim/runner-rule.mjs";
@@ -76,6 +76,7 @@ import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row
 
 export const CLAIM_LABEL = "in-progress";
 export const STARTED_LABEL = "started";
+export const BLOCKED_LABEL = "blocked";
 
 /**
  * @typedef {{ number: number, title: string, labels: string[] }} IssueClaim
@@ -342,7 +343,13 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   }
 
   const sessionLabel = `session:${mySession}`;
-  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels];
+  // #449: RECORD, IN THE SAME EDIT, THAT THIS ROW WAS `ready` BEFORE THE CLAIM -- `declineRow`'s only way
+  // to know whether releasing this row should restore `ready`, since removing it below is the one place
+  // that fact is ever seen. A resumed claim (dispatched -> started, `ready` already gone) computes false
+  // here and adds nothing, harmlessly -- the marker this row's own earlier dispatch already wrote stays
+  // exactly where it is.
+  const wasReady = before.labels.includes(READY_LABEL);
+  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels, ...(wasReady ? [WAS_READY_LABEL] : [])];
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
     ...labelsToAdd.flatMap((l) => ["--add-label", l]),
     "--remove-label", READY_LABEL]);
@@ -459,12 +466,28 @@ export function claimRow(issueNumber, mySession, deps = {}) {
  * one way or the other) is also refused rather than guessed at, because removing all of them would take
  * back a claim that may be the OTHER session's legitimate one.
  *
+ * #449: RESTORES THE LABEL THE ROW CARRIED BEFORE THE CLAIM, NOT ALWAYS `ready`. Measured live on #171:
+ * a row claimed then correctly declined came out `[backlog]` -- not held, not `ready`, invisible to the
+ * Ready queue, because the old code only ever stripped the claim labels and never asked what was true
+ * before them. `WAS_READY_LABEL` (written by `writeRowLabels`, in the same edit that removed `ready`) is
+ * the only place that fact survives, so this reads it rather than assuming.
+ *
+ * THE ASYMMETRY: a decline is not always a return to `ready`. `blockedReason`, when given, means the
+ * decline is itself a finding -- the row is blocked, not merely released -- and must NOT read as ready
+ * again just because it was before. It adds `BLOCKED_LABEL` instead, and records the reason as an issue
+ * comment (never a label -- a label carries no free text) so the finding survives for whoever picks the
+ * row up next. Either way the marker is removed in the same edit: its job -- carrying the fact from claim
+ * to decline -- is done the moment this function reads it.
+ *
  * @param {number} issueNumber
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} [deps]
- * @returns {{ declined: true, statusMoved: true } | { declined: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { declined: false, reason: string }}
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, blockedReason?: string }} [deps]
+ * @returns {{ declined: true, restoredReady: boolean, blocked: boolean, statusMoved: true }
+ *   | { declined: true, restoredReady: true, blocked: false, statusMoved: false, notOnBoard: boolean, statusReason: string }
+ *   | { declined: false, reason: string }}
  */
-export function declineRow(issueNumber, mySession, { run = defaultRun, moveStatus = moveProjectStatus } = {}) {
+export function declineRow(issueNumber, mySession,
+  { run = defaultRun, moveStatus = moveProjectStatus, blockedReason } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const status = claimStatus(before.labels);
   if (!status.claimed) {
@@ -479,16 +502,38 @@ export function declineRow(issueNumber, mySession, { run = defaultRun, moveStatu
     return { declined: false, reason: `row is held by ${by}, not ${mySession} -- refusing to release a claim `
       + "that is not this session's" };
   }
+
+  const wasReady = before.labels.includes(WAS_READY_LABEL);
+  const restoreReady = wasReady && !blockedReason;
+  const removeLabels = [CLAIM_LABEL, `session:${mySession}`, STARTED_LABEL, ...(wasReady ? [WAS_READY_LABEL] : [])];
+  const addLabels = blockedReason ? [BLOCKED_LABEL] : restoreReady ? [READY_LABEL] : [];
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
-    ...[CLAIM_LABEL, `session:${mySession}`, STARTED_LABEL].flatMap((l) => ["--remove-label", l])]);
+    ...removeLabels.flatMap((l) => ["--remove-label", l]),
+    ...addLabels.flatMap((l) => ["--add-label", l])]);
+
+  if (blockedReason) {
+    // A LABEL CARRIES NO FREE TEXT -- the reason has to live somewhere a future reader can see it, and an
+    // issue comment is where every other "record why" in this codebase already puts one
+    // (board-report.mjs, npm-token-liveness.mjs).
+    run("gh", ["issue", "comment", String(issueNumber), "--repo", REPO, "--body",
+      `Declined by \`${mySession}\` and marked \`blocked\`: ${blockedReason}`]);
+  }
+
+  if (!restoreReady) {
+    // Neither a genuine restore (nothing to move to "Ready" for) nor a verified "Blocked" Status option
+    // exists to move to instead -- labels only, per this row's own stated Region. `statusMoved: true` here
+    // means "nothing needed moving", not "something moved"; it reads as a clean decline either way.
+    return { declined: true, restoredReady: false, blocked: Boolean(blockedReason), statusMoved: true };
+  }
   // #400: THE MATCHING MOVE ON RELEASE. "Genuinely unclaimed" and "Ready" are the same state in this
   // tracker's own model (`ready-label-audit.mjs`'s definition: a row cannot be both "unclaimed, pickable"
   // and "claimed"), so a decline moves the view back the same way a claim moved it forward. Never throws;
   // see `moveProjectStatus`'s own comment for why an unexpected failure here is surfaced distinctly rather
   // than folded into a plain `declined: true`.
   const statusResult = moveStatus(issueNumber, "Ready", { run });
-  if (statusResult.moved) return { declined: true, statusMoved: true };
-  return { declined: true, statusMoved: false, notOnBoard: statusResult.notOnBoard, statusReason: statusResult.reason };
+  if (statusResult.moved) return { declined: true, restoredReady: true, blocked: false, statusMoved: true };
+  return { declined: true, restoredReady: true, blocked: false, statusMoved: false,
+    notOnBoard: statusResult.notOnBoard, statusReason: statusResult.reason };
 }
 
 /** @returns {string} the check/conflict log's path -- shared across every worktree, per `gitCommonDir`. */
@@ -672,19 +717,32 @@ function runDecline(issueNumber, rest) {
     process.exitCode = 2;
     return;
   }
+  const blockedFlag = rest.find((a) => a.startsWith("--blocked="));
+  const blockedReason = blockedFlag?.slice("--blocked=".length);
+  if (blockedFlag && !blockedReason) {
+    process.stderr.write(`row-claim decline: --blocked=<reason> needs a reason, not an empty string\n`);
+    process.exitCode = 2;
+    return;
+  }
   try {
-    const result = declineRow(issueNumber, mySession);
+    const result = declineRow(issueNumber, mySession, { blockedReason });
     if (result.declined) {
+      // #449: WHAT CAME BACK, NOT JUST THAT SOMETHING DID -- the three shapes read differently to a human
+      // deciding whether to re-pick the row: restored (pickable again), blocked (a finding, do not repick
+      // yet), or neither (was never `ready`, unclaimed and no more startable than that already implies).
+      const outcome = result.blocked ? "and marked `blocked`"
+        : result.restoredReady ? "and restored to `ready`"
+        : "(was not `ready` before the claim -- not restored)";
       if (result.statusMoved) {
-        process.stdout.write(`DECLINED -- #${issueNumber} is unclaimed again\n`);
+        process.stdout.write(`DECLINED -- #${issueNumber} is unclaimed again ${outcome}\n`);
         process.exitCode = 0;
       } else if (result.notOnBoard) {
-        process.stdout.write(`DECLINED -- #${issueNumber} is unclaimed again (not on the Project board -- `
-          + `Status view not applicable)\n`);
+        process.stdout.write(`DECLINED -- #${issueNumber} is unclaimed again ${outcome} (not on the Project `
+          + `board -- Status view not applicable)\n`);
         process.exitCode = 0;
       } else {
-        process.stdout.write(`DECLINED -- #${issueNumber} is unclaimed again, BUT the Project Status could `
-          + `not be moved to match: ${result.statusReason}\n`);
+        process.stdout.write(`DECLINED -- #${issueNumber} is unclaimed again ${outcome}, BUT the Project `
+          + `Status could not be moved to match: ${result.statusReason}\n`);
         process.exitCode = 3;
       }
     } else {
@@ -740,7 +798,7 @@ async function main() {
   // the bare status-read shape below, and a guard listing only `--session` would refuse the command's
   // own documented invocation. A flag guard that has not been merged forward is a guard that breaks the
   // thing it protects.
-  refuseUnknownFlags(["--session", "--row="],
+  refuseUnknownFlags(["--session", "--row=", "--found=", "--blocked="],
     { entry: import.meta.url, command: "node scripts/row-claim.mjs" });
   const argv = process.argv.slice(2);
   const rowFlag = argv.find((a) => a.startsWith("--row="));
