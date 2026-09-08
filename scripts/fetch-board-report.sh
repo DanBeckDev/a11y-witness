@@ -1,5 +1,5 @@
 #!/bin/bash
-# Fetch today's board report into ~/Documents/a11ign-board-reports/ — a CONVENIENCE, not a
+# Fetch today's board report into ~/Documents/a11y-witness-board-reports/ — a CONVENIENCE, not a
 # dependency.
 #
 # The report is published by GitHub Actions to a draft Release; that is the delivery. This copies it
