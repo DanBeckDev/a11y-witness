@@ -229,3 +229,158 @@ run as exit 0, because the shell's last statement had succeeded.
 - [`ADR 0012`](adr/0012-control-plane-split.md) — the credential split, and why exactly one machine can drive both halves
 - [`packages/control/ansible/README.md`](../packages/control/ansible/README.md) — why SSH and not WinRM, and the two Windows gotchas
 - [`CLAUDE.md`](../CLAUDE.md) — every command in the context of the problem it solves
+
+## Incidents moved from CLAUDE.md (#458)
+
+### What state is the CORPUS in — `lab:inventory`
+
+```bash
+npm run lab:job -- -e job=inventory     # the authoritative answer, on the box that holds the corpus
+npm run lab:inventory                   # against a local copy; it SAYS it is a copy
+npm run lab:inventory -- --json
+```
+
+Every other moving part had a status command — `fleet:status` for the boxes, `lab:status` for a job,
+`doctor` for the local environment, `worker:code` for what the guests run. The corpus and the artefacts
+trained from it had none, and they are what everything else exists to produce. So those questions were
+answered by opening an SSH shell and running ad-hoc Python — **about eight times on 2026-08-25**, one of
+which read the wrong field and reported `captured: 0` while `lab:status` correctly said 85. A one-off
+script has no tests, no review and no second reader.
+
+It answers four questions, each of which has cost a run:
+
+| | |
+|---|---|
+| **is the corpus homogeneous?** | the distribution of every cache-key field, with COUNTS — "split" and "split 3,168 to 42" distinguish a finished migration from a run that died halfway. An ABSENT field is counted as a value, because the key reads it as `unknown` and those captures can never match a live guest |
+| **are the exports current?** | measured against the CAPTURES each was built from, not against the clock. The featurizer reads a `parsed` block baked in at export time, so an announcement-grammar change moves the model input without touching a line of Python |
+| **what schema is each model stamped with?** | read from safetensors metadata, not `training-report.json`, which does not carry it |
+| **is a schema migration open?** | what `release:gate` refuses on, and which candidate could close it |
+
+**It reports WHERE it read from, because it lied on its first run.** From a laptop it said *"NO candidate
+carries it yet"* — true locally, false on the lab, which held a v15 candidate. `runs/` is gitignored, so a
+local copy is only as fresh as its last sync and carries no `runs/model-*` at all. "None here" and "none
+anywhere" are different answers, and it now refuses to turn the first into the second.
+
+**NVDA records almost nothing by default** — a whole session log is seven lines, identical on a healthy
+guest and a failing one. `A11Y_NVDA_LOG_LEVEL=DEBUG` raises it (applied to `nvda.ini` at boot, no
+elevation needed). Opt-in, because NVDA writes a great deal at DEBUG and this pipeline measures
+per-capture timing.
+
+**Comparing two guests:** `npm run worker:compare -- <page> <worker> <worker> [--rounds=7]`. Interleaved
+round-robin with medians and IQRs, and it refuses to declare a difference the samples do not support.
+Use it instead of reading two `bench-capture` printouts — that is how a 2x difference got attributed to
+the wrong phase for hours.
+
+**Backing up the corpus — THREE STEPS, and each verifies the one before by reading it back.** `runs/` is
+gitignored, so thousands of captures and 54 measured worker-hours exist in one place, and they are NOT
+reproducible: `browserVersion` is a cache key precisely because Edge announces differently across
+releases, so evidence taken under Edge 151 cannot be recreated now 152 ships.
+
+```bash
+npm run lab:job -- -e job=corpus-snapshot        # archive ON THE LAB, beside the corpus
+npm run lab:fetch -- -e artifact=corpus-archive  # bring the newest one to the control plane
+npm run corpus:release -- --archive=runs/fetched/<name>.tar.gz   # upload, then DOWNLOAD IT BACK
+npm run corpus:release -- --verify=corpus-<stamp>               # is an old release still restorable
+```
+
+**The transport is two hops because of CREDENTIALS.** The lab is the machine the corpus lives on, so a
+GitHub token there sits next to the thing it protects — and surviving the loss of that machine is the
+whole point. The token stays on the control plane, which already has one, and the archive travels.
+
+**Every step distrusts the one before, and each caught something real.** `corpus:snapshot` lists its own
+archive with `tar -tzf` and refuses on a shortfall, because `tar` exits 0 on a short archive — a 417 MB
+snapshot once extracted to 4,959 of 5,445 JSON files with no error anywhere. `corpus:release` downloads
+the asset back over the public API rather than trusting `gh release upload`'s exit code, because the API
+accepting bytes is not the asset being complete and readable a month from now, which is the only property
+a backup has. **A verification sharing a failure mode with the action verifies nothing** — the same rule
+as checking `/health.code` over HTTP rather than through the deploy channel.
+
+`corpus:backup` remains for an `rsync`/mounted-volume destination via `A11Y_CORPUS_REMOTE`, with
+`corpus-backup-verify` as its read-back. It **exits non-zero with no destination configured** rather than
+writing a local archive and reporting success: a backup tool that claims success while leaving one copy on
+one disk converts a known risk into an assumed safety.
+
+## Make the failure bubble up, or you will dig for it every time
+
+Three commands answer "what happened", and the third was missing for months:
+
+```bash
+npm run lab:status -- -e job=<name>   # systemd's view, the journal, and the run's own progress file
+npm run lab:log -- -e job=<name>      # the job's OWN OUTPUT, unwrapped — bytes, not YAML
+npm run lab:fetch -- -e artifact=<name>   # a report, as a file
+npm run lab:reset                         # what is dirty in the lab checkout, and is it safe to discard
+npm run lab:reset -- -e apply=true        # discard it — ONLY files origin already has
+```
+
+**`lab:reset` exists because promoting leaves the lab dirty and every later job then refuses to pull.**
+`promote:gated` runs there (it is the only box with both the candidate weights and the code) and
+deliberately does not commit, since promoting is a MAJOR release. `run-job.yml` then declines to pull into
+a dirty checkout — correctly, it cannot tell a stray artefact from work in progress — so the next job runs
+at the pre-promotion commit and the `gates` pipeline fails at stage 1 saying so.
+
+**`npm run lab:collect-promotion` does this whole dance, and exists because the paragraph below is a
+procedure a human has to remember.** It fetches all four promoted artefacts, reads the changeset's real
+name OFF THE LAB rather than guessing it, installs them, and runs `scorer:verify` and `release:provenance`
+on the result — the one check that can see weights and a changeset describing different models, which it
+found on 2026-09-01 (tree at 2,525 records, lab at 2,607). It does not commit, push or clear the lab;
+those are the deliberate steps and it prints the exact commands. Measured cost of not having it: three
+round trips on 2026-08-30 and four more on 2026-09-01, both times over the changeset's NAME.
+
+**KEEP THE NAME `promote:model` GAVE THE CHANGESET.** It names the file after the candidate it promoted
+(`promote-candidate-<hash>.md`), and the natural thing after `lab:fetch -e artifact=promoted-changeset` is
+to commit it under a name that means something to you. Do that and the LAB's copy stays untracked at a
+path origin does not have, so `run-job.yml` refuses every later job — *"the checkout is dirty, so it was
+left alone"* — and `lab:reset` will not touch it, because it deliberately never discards untracked work.
+Measured 2026-08-30: three round trips, and `-e remove=` refused it too (*"neither untracked nor a tracked
+modification"*). Renaming the committed file to match the lab's fixed it at once. Two names for one
+artefact is the fact-stated-twice shape in its cheapest form.
+
+It **refuses anything origin does not already have**, comparing each dirty path against `origin/<ref>`
+before touching it, and reports without applying unless `-e apply=true`. That containment is not decorum:
+the manual alternative is `git checkout --`, the command that once destroyed release-eligible weights in
+this repo. Untracked files are never discarded, and it says so rather than reporting a clean checkout.
+
+**`lab:log` exists because reading one audit's output took eleven hand-written `awk | sed | grep`
+pipelines in a single session, one of which silently matched nothing.** `lab:status` shows the journal
+through Ansible's `debug`, which wraps at ~90 characters, re-indents and quotes as YAML — so a table, a
+transcript or a threshold sweep arrives as fragments. The journal is now written to a file on the lab and
+fetched. That is the same remedy `lab-fetch.yml` already applied to reports, and improvising around it
+rather than reading it is itself the defect this file names.
+
+Three rules that follow, each of which cost a round trip on 2026-08-25:
+
+- **A report that exists only as stdout is one a job runner can lose.** `audit_grants.py` exited 1 with a
+  real finding and its journal read `-- No entries --`. Write the report to `runs/` and make it fetchable.
+- **Two different faults must not print the same word.** That audit reported `FAIL vague-link 0/52` for a
+  declaration naming a feature the pipeline no longer computes — nothing wrong with those 52 pages —
+  beside `FAIL fake-heading 35/48`, which is real missing evidence. They need opposite fixes and one of
+  them is not in the corpus at all. It now prints `STALE` and says why.
+- **A count is where an investigation stops.** "13 records lack it" sent me theorising twice. The report
+  now carries the TRANSCRIPT of up to three failing records, and the answer was visible in one line of it:
+  `"out of table, Borrowing books"` — NVDA's container-exit prefix, which the relation rejects as a role.
+
+### The order that would have saved the evening: AUDIT FIRST, THEN FIX
+
+Every wrong turn on 2026-08-25 came from reasoning about a MECHANISM instead of measuring the EVIDENCE,
+and every recovery came from an audit that asked "is this actually true?" over the whole corpus.
+
+| what I reasoned | what the audit said |
+|---|---|
+| `plain_heading_candidate` separates perfectly — 5 of 5 held-out positives carry it | it misses **13 of 108** on the full corpus; five positives cannot see a 12% miss rate |
+| `probeTables: false` on 62 cases means the table evidence was never captured | `table_position_only` reads the TRANSCRIPT — **49 of 49 carry it**, the corpus was fine and my check was wrong |
+| 52 `vague-link` records are missing evidence | the feature was deleted this morning; the DECLARATION is stale |
+
+Two of those three would have led to a full recapture of 62 cases for nothing. **Write the check that
+would detect the problem, run it to confirm the problem is what you think, then fix, then re-run.** Doing
+it the other way round cost two reverts and most of an evening.
+
+
+## DATASET_BASE_URL, the full computation
+
+- `DATASET_BASE_URL` — overrides the computed page-server URL outright, full origin and all
+  (`http://host:port`, no trailing slash). `hostPagesBase()` normally works this out itself: a real LAN
+  address for a remote fleet worker (a worker cannot reach `localhost` — that resolves to *itself*, not
+  the host serving pages) and a plain `localhost` when the worker and the page server are the same
+  machine. Set this when that computation is wrong for your network — no interface shares the worker's
+  subnet, or you are tunnelling through something the address guess cannot see — and `hostPagesBase`
+  says so in its own error when it cannot work it out and this is unset.
