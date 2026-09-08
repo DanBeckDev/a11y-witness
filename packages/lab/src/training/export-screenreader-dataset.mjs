@@ -2,15 +2,15 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import { modelInput, observationOf } from "@a11y-witness/scorer/evidence-units";
-import { oracleCounts } from "@a11y-witness/evidence/verify";
+import { modelInput, observationOf } from "@a11ign/scorer/evidence-units";
+import { oracleCounts } from "@a11ign/evidence/verify";
 
 import {
   CASES,
   signalMatches,
 } from "./case-matrix.mjs";
 import { hasUsableCaptureFiles, TEST_GRADE } from "./capture-resume.mjs";
-import { refuseUnknownFlags, flagValue } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
 import { readCapture as readCaptureFile, isUsableCapture } from "../capture/evidence-diff.mjs";
 import { REPO_ROOT, datasetRoot, captureRoot, refuseIfRunsReadonly } from "../dataset-paths.mjs";
 
@@ -242,9 +242,10 @@ function record(/** @type {any} */ testCase, /** @type {any} */ variant, /** @ty
     // asked" never becomes a separable signal a head can weight on its own. That distinction is the whole
     // design (known-gaps §35) and the reason this exports the observation rather than the flag.
     //
-    // Measured 2026-09-03: 61.7% of empty `formChanges`, 56.1% of empty `postSubmitFields` and 65.3% of
-    // the `formControl` sweep are "never asked" rather than "the page has none", and
-    // `float(bool(channel))` cannot tell them apart.
+    // Measured 2026-09-03: 61.7% of empty `formChanges` and 56.1% of empty `postSubmitFields` are
+    // "never asked" rather than "the page has none", and `float(bool(channel))` cannot tell them
+    // apart. `formControl` has no never-asked figure -- `emptyNotAsked` was never computed for that
+    // channel (#341; see screenreader_features.py's FEATURE_SCHEMA_VERSION comment for the full note).
     observation: observationOf(capture),
     target: {
       label: isBad ? "violation" : "clean",

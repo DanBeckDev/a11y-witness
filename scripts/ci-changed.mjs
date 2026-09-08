@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // WHAT CHANGED, CLASSIFIED — the one place `ci.yml`'s conditional jobs read to decide whether they run.
 //
 // Before this, a PR ran everything: `lint.yml` had no path filter at all, and ran lint, typecheck, the
@@ -27,13 +28,13 @@
 // alone (a PR's directly touched packages) would test the changed code but not its consumers -- a
 // contract change under `packages/evidence` breaking `packages/judge`'s use of it would pass a scoped run
 // that only ever looked at `evidence`. `testPackages` is the transitive closure of dependents, computed
-// from the real `@a11y-witness/*` `dependencies`/`devDependencies` in every package's own `package.json`
+// from the real `@a11ign/*` `dependencies`/`devDependencies` in every package's own `package.json`
 // -- never a hand-written map, for this file's own stated reason: three independent hand-written copies
 // of "what changed" is the defect this file exists to end.
 import { execFileSync } from "node:child_process";
 import { readFileSync, appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-// RELATIVE, NOT `@a11y-witness/worker-fleet/cli-flags` — every other root script uses the package
+// RELATIVE, NOT `@a11ign/worker-fleet/cli-flags` — every other root script uses the package
 // specifier, and every other root script runs after `npm run build`. This one gates whether ANYTHING
 // else in the workflow builds at all, so it cannot depend on a build having already happened; the file
 // itself is plain JS with no TypeScript syntax, so importing straight from `src` costs nothing.
@@ -51,7 +52,10 @@ import { changedPackages } from "./changed-packages.mjs";
 // question (does a consumer's install actually work), so it is the one authority now.
 import { packedFiles as packedFilesForDir } from "./isolation-gate.mjs";
 
-/** Every top-level package directory this repo has, read once rather than hardcoded twice. */
+/**
+ * Every top-level package directory this repo has, read once rather than hardcoded twice.
+ * @param {string} repoRoot
+ */
 export function knownPackages(repoRoot) {
   const pkg = JSON.parse(readFileSync(`${repoRoot}/package.json`, "utf8"));
   const patterns = pkg.workspaces ?? ["packages/*"];
@@ -79,8 +83,8 @@ export function knownPackages(repoRoot) {
 
 /**
  * Every package directory's own workspace dependencies, as directory names -- not by convention (e.g.
- * assuming `@a11y-witness/<dir>`), because `packages/cli`'s own `package.json` name is the UNSCOPED
- * `"a11y-witness"`, and `packages/lab` genuinely depends on it. Each directory's real declared `name` is
+ * assuming `@a11ign/<dir>`), because `packages/cli`'s own `package.json` name is the UNSCOPED
+ * `"a11ign"`, and `packages/lab` genuinely depends on it. Each directory's real declared `name` is
  * read and used as the lookup key, so a future package with an unconventional name is still resolved
  * correctly rather than silently dropped from the graph.
  *
@@ -89,13 +93,16 @@ export function knownPackages(repoRoot) {
  * @returns {Record<string, string[]>} directory name -> the directory names of its workspace dependencies
  */
 export function readWorkspaceDependencyGraph(repoRoot, allPackages) {
+  /** @type {Record<string, string>} */
   const nameToDir = {};
+  /** @type {Record<string, any>} */
   const manifests = {};
   for (const dir of allPackages) {
     const manifest = JSON.parse(readFileSync(`${repoRoot}/packages/${dir}/package.json`, "utf8"));
     nameToDir[manifest.name] = dir;
     manifests[dir] = manifest;
   }
+  /** @type {Record<string, string[]>} */
   const graph = {};
   for (const dir of allPackages) {
     const deps = Object.keys({ ...manifests[dir].dependencies, ...manifests[dir].devDependencies });
@@ -117,6 +124,7 @@ export function readWorkspaceDependencyGraph(repoRoot, allPackages) {
  * @returns {string[]} sorted, deduplicated
  */
 export function dependentsOf(changed, dependencyGraph) {
+  /** @type {Record<string, Set<string>>} */
   const reverse = {};
   for (const [pkg, deps] of Object.entries(dependencyGraph)) {
     for (const dep of deps) (reverse[dep] ??= new Set()).add(pkg);
@@ -125,6 +133,7 @@ export function dependentsOf(changed, dependencyGraph) {
   const queue = [...changed];
   while (queue.length > 0) {
     const pkg = queue.pop();
+    if (pkg === undefined) continue;
     for (const dependent of reverse[pkg] ?? []) {
       if (!result.has(dependent)) {
         result.add(dependent);
@@ -205,7 +214,11 @@ export function candidatePackedPaths(relPath) {
   return candidates;
 }
 
-/** Whether `packages/<pkgName>` is ever published — a `private: true` package has no changeset question. */
+/**
+ * Whether `packages/<pkgName>` is ever published — a `private: true` package has no changeset question.
+ * @param {string} repoRoot
+ * @param {string} pkgName
+ */
 function isPublished(repoRoot, pkgName) {
   return !JSON.parse(readFileSync(`${repoRoot}/packages/${pkgName}/package.json`, "utf8")).private;
 }
@@ -231,7 +244,7 @@ function isPublished(repoRoot, pkgName) {
  */
 function everythingIsPacked(repoRoot, pkgName) {
   void repoRoot; void pkgName;
-  return /** @type {Set<string>} */ ({ has: () => true });
+  return /** @type {Set<string>} */ (/** @type {unknown} */ ({ has: () => true }));
 }
 
 /**
@@ -310,7 +323,9 @@ function foldTestNamedPackages(tsPackages, { files, board, getTestDependencyMap,
  */
 export function jobsFor(files, repoRoot = process.cwd()) {
   const result = classify(files, knownPackages(repoRoot), {}, { repoRoot });
-  return ["ts", "python", "ansible", "docs", "board", "changeset", "rulesFitness"].filter((job) => result[job]);
+  /** @type {(keyof ClassifyResult)[]} */
+  const jobs = ["ts", "python", "ansible", "docs", "board", "changeset", "rulesFitness"];
+  return jobs.filter((job) => result[job]);
 }
 
 /**
@@ -326,8 +341,9 @@ export function jobsFor(files, repoRoot = process.cwd()) {
  *   `repoRoot` defaults to `process.cwd()`, `getPackedFiles` to the real `packedFiles` above,
  *   `getTestDependencyMap` to the real `testDependencyMap` above — all three injectable so `classify`
  *   itself stays testable without touching disk or git per call.
- * @returns {{ ts: boolean, python: boolean, ansible: boolean, docs: boolean, board: boolean,
- *   changeset: boolean, rulesFitness: boolean, packages: string[], testPackages: string[] }}
+ * @typedef {{ ts: boolean, python: boolean, ansible: boolean, docs: boolean, board: boolean,
+ *   changeset: boolean, rulesFitness: boolean, packages: string[], testPackages: string[] }} ClassifyResult
+ * @returns {ClassifyResult}
  */
 export function classify(files, allPackages, dependencyGraph = {},
   { repoRoot = process.cwd(), getPackedFiles = packedFiles, getTestDependencyMap = testDependencyMap } = {}) {
@@ -416,6 +432,7 @@ export function classify(files, allPackages, dependencyGraph = {},
   };
 }
 
+/** @param {ClassifyResult} result */
 function writeOutputs(result) {
   const outFile = process.env.GITHUB_OUTPUT;
   const lines = [

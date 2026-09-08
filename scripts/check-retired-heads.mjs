@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A candidate whose head set SHRINKS must name what it retired, or be refused.
  *
@@ -25,13 +26,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 export const SHIPPED_REPORT = "packages/scorer/models/screenreader-scorer/training-report.json";
 export const CANDIDATE_REPORT = "runs/model-candidate/training-report.json";
 export const DECLARATION_FILE = "packages/scorer/models/retired-heads.json";
 
-/** Every `criterion:subtype` head id a training report declares, from its own `criteria` map. */
+/**
+ * Every `criterion:subtype` head id a training report declares, from its own `criteria` map.
+ * @param {{ criteria?: Record<string, { subtypes?: Record<string, unknown> }> } | null | undefined} report
+ */
 export function headSet(report) {
   const ids = new Set();
   for (const entry of Object.values(report?.criteria ?? {})) {
@@ -87,6 +91,7 @@ export function retiredHeadsVerdict(shippedHeads, candidateHeads, declarations) 
   };
 }
 
+/** @param {string} path */
 function readJson(path) {
   return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
 }

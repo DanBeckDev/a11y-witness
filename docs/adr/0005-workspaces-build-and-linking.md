@@ -74,7 +74,7 @@ count passes roughly ten.
 
 ### 2. Inter-package dependencies are published semver ranges
 
-`"@a11y-witness/evidence": "^1.2.0"`, never `workspace:*`. Three consequences,
+`"@a11ign/evidence": "^1.2.0"`, never `workspace:*`. Three consequences,
 all wanted:
 
 - **The developed manifest is the published manifest.** There is no

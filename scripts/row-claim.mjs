@@ -1,3 +1,4 @@
+// @ts-check
 // IS THIS ROW CLAIMED? -- reads the BOARD (issue labels), never git history.
 //
 // #28 and #30 (2026-09-06) were both pulled twice in one hour. Both workers ran the documented collision
@@ -59,7 +60,7 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { realpathSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-// RELATIVE, NOT the `@a11y-witness/worker-fleet/cli-flags` package specifier: that export map
+// RELATIVE, NOT the `@a11ign/worker-fleet/cli-flags` package specifier: that export map
 // points at `dist/`, so it needs both `node_modules` AND a completed build. This file is reachable
 // from a pre-install entry (see `pre-install-import-graph.test.ts`, which derives that population
 // rather than naming it), and there it dies on startup with ERR_MODULE_NOT_FOUND.
@@ -248,6 +249,7 @@ function writeRowLabels(issueNumber, mySession, extraLabels, { run = defaultRun 
  * @param {number} issueNumber
  * @returns {{ code: number | null, output: string }}
  */
+/** @param {number} issueNumber */
 function reportReachability(issueNumber) {
   try {
     // `fileURLToPath`, NOT `.pathname` -- a URL's pathname is percent-ENCODED, so a checkout under a
@@ -372,7 +374,7 @@ export function recordConflict(logPath, entry) {
  *
  * @param {string} logPath
  * @param {number} issueNumber
- * @returns {object | null}
+ * @returns {Record<string, any> | null}
  */
 export function latestCheckFor(logPath, issueNumber) {
   /** @type {string} */

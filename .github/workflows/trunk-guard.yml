@@ -41,6 +41,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+      # #411: A MERGE CAN DELETE WORK ALREADY ON `main` WHILE EVERY OTHER CHECK STAYS GREEN -- see
+      # trunk-revert-guard.mjs's own header for the incident and why the obvious instruments (git
+      # merge-tree on the merge's two parents, GitHub's own PR file list) both fail to catch it. Pure git,
+      # no build or install needed, so it runs FIRST -- a revert-worthy push fails fast rather than
+      # waiting on a full suite that cannot see this class of defect at all. `fetch-depth: 0` above
+      # already gives it everything it needs: the merge's own parents are both within `main`'s full
+      # history, unlike a case needing another PR's unrelated branch tip.
+      - name: This push did not silently revert work already on main (#411)
+        run: node scripts/trunk-revert-guard.mjs --merge=${{ github.sha }}
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts

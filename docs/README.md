@@ -53,7 +53,7 @@ human or agent, *working on* the repo rather than using it.
 
 | doc | what it settles |
 |---|---|
-| [**coverage.md**](./coverage.md) | **all 55 WCAG 2.2 A/AA criteria and which of four states each is in** — assessed, partial, reachable, or out of scope. Generated from the code and pinned against it, so it cannot drift |
+| **coverage.md** | **all 55 WCAG 2.2 A/AA criteria and which of four states each is in** — assessed, partial, reachable, or out of scope. Generated from the code, deliberately not committed (issue #158), so there is nothing to link — run `npm run docs:coverage` |
 | [screenreader-coverage.md](./screenreader-coverage.md) | every user behaviour we drive, the field it lands in, and — the part that matters — **what we do not drive yet**. A behaviour missing from that table is a claim this project cannot make |
 | [capture-probe-incidents.md](./capture-probe-incidents.md) | **the closed capture-probe diagnoses, moved out of the code** — how the browse-mode restore put the mode back, why  was false on every capture (two alphabets compared as strings), and why the 1.4.13 baseline was zero by construction. A RECORD: the call sites keep every sentence that constrains the next edit, and this keeps the narrative of how each fault was found. Same move, same reason, as  |
 | [probe-side-effects.md](./probe-side-effects.md) | every probe in `capture-probes.mjs`, what it DOES beyond what it reads — caret, DOM focus, NVDA mode, the page's own content — and which later probe could observe it. §43 and the §42/`focus-reset-not-logged` interaction both lived in this absence |

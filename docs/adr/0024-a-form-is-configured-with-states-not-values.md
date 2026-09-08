@@ -144,7 +144,7 @@ declarative file into a script and is where Playwright ends up. That is v2 and i
 
 ## Rejected
 
-**Auto-discovery of `a11y-witness.forms.yml`.** Friendlier, and it cannot express two scenarios for one
+**Auto-discovery of `a11ign.forms.yml`.** Friendlier, and it cannot express two scenarios for one
 page. Explicitness is also the safer default for an operation that writes to somebody's system.
 
 **Submitting empty as the error case.** The proxy this ADR exists to remove. It stays as the behaviour

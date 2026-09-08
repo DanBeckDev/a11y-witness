@@ -67,10 +67,32 @@
 # PR yet open gets only this hook; a branch push followed by its PR gets this hook AND the full `ci.yml`
 # run, on the PR, before anything reaches `main` at all.
 #
-# `A11Y_TEST_CONCURRENCY=4` bounds a single suite's own tsx worker count regardless of how many other
-# suites are running elsewhere on this host -- set here, in the LOCAL hook, never in `package.json`'s
-# shared `test:ts` script, because CI runs on its own machine and capping it there only makes runs slower
-# for no memory benefit.
+# `A11Y_TEST_CONCURRENCY=4` bounded a single suite's own tsx worker count on this host. It is GONE below,
+# not stale-but-kept: its only call site (`npm test` on main) went with the UPDATE right below.
+#
+# ## UPDATE 2026-09-07: package test suites moved out of this hook entirely
+#
+# ceo's ruling: CI's acceptance job (#353, unit 2 of the pipeline) now actually RUNS a PR's stated
+# acceptance command against real code on every PR, on a fork's own read-only checkout -- so a local
+# `npm test` here duplicated a check the pipeline already makes, on every push, before this hook could
+# even finish. Measured on this checkout, warm, FAST-gate branch touching one package: BEFORE (lint,
+# typecheck, one package's `npx tsx --test`) 3m 27.85s wall (207.85s); AFTER (lint, typecheck, the mjs
+# parse check below) 13.94s wall -- a ~14.9x reduction. The unit tests were the overwhelming majority of
+# that time; lint and typecheck alone are `npm run --silent lint`/`typecheck`'s own per-package
+# `tsc --build`, which this hook was never trying to avoid.
+#
+# ONE test file survives, by name, not as a package suite: `mjs-parses.test.ts` (packages/worker-fleet/
+# src/) is the check CLAUDE.md itself names as "the only real check" for a `.mjs` file that lint and
+# `tsc --noEmit` cannot see fail -- a backtick inside a template literal holding PowerShell or shell
+# script, which broke TWICE in one session before this test existed. CI's `ci.yml` runs the FULL suite
+# (which includes this file) on every PR, so on a branch WITH an open PR it is redundant there too -- but
+# a branch push with no PR yet (the common case: this hook runs, THEN `gh pr create`) has nothing else
+# checking it before the code leaves this machine, and it is one test, not a package's worth.
+#
+# The corpus-gated block below (`check-signals`, `rules:gate`) is UNCHANGED and deliberately so: CI
+# structurally cannot run either one (`runs/` is gitignored, so a GitHub-hosted runner has no corpus to
+# read), so nothing else in the pipeline covers what they cover. Cutting them here would not move the
+# check to CI, it would delete it.
 set -euo pipefail
 
 if [ "${A11Y_SKIP_VERIFY:-0}" = "1" ]; then
@@ -92,6 +114,51 @@ for v in "${!GIT_@}"; do unset "$v"; done
 
 failed=()
 skipped=()
+
+# #348: A FAILED CHECKOUT IN AN && CHAIN LEAVES A BRANCH THAT LOOKS RIGHT. `git checkout -q main &&
+# git reset --hard origin/main` silently no-ops past the `&&` when the checkout fails (e.g. `main` is
+# already checked out in another worktree) -- the reset never runs, and a branch built off that stale
+# HEAD is a valid commit on a plausibly-named branch. Measured cost of the real incident this reproduces:
+# 65 files, 3,281 deletions, caught only by hand (`c7b1a0a0` is the surviving artefact). Twice in one day,
+# by two independent sessions, and `ceo` hit the identical trap with `git checkout -B`.
+#
+# TWO DOTS, not three. `git diff --stat origin/main...HEAD` reports only what HEAD added since the merge
+# base -- which on a stale branch IS the stale point, so it prints a clean, reassuring summary for
+# exactly the incident that motivated this check. `git merge-base --is-ancestor origin/main HEAD` is the
+# real test and needs no dot count; the two-dot diff below is a second, human-readable signal, never a
+# substitute for the ancestry check.
+#
+# A stale LOCAL `origin/main` (this hook does not fetch) makes the ancestry check pass on a branch that
+# is genuinely behind -- the guard reassuring you for the reason it exists. Fetch before trusting a green
+# result here, the same caveat every other `origin/main`-relative check in this hook already carries.
+# BEGIN #348 STALE-BASE CHECK -- extraction markers for pre-push-stale-base.test.ts; keep both if edited.
+if git rev-parse --verify -q origin/main >/dev/null; then
+  if ! git merge-base --is-ancestor origin/main HEAD; then
+    if [ -n "${A11Y_STALE_BASE_REASON:-}" ]; then
+      echo "pre-push: HEAD does not contain origin/main's tip, overridden: $A11Y_STALE_BASE_REASON" >&2
+    else
+      echo "pre-push: REFUSING — HEAD does not contain origin/main's tip (#348: a failed checkout in an" >&2
+      echo "&& chain leaves a branch that looks right). Merge origin/main in before pushing." >&2
+      echo "If this is deliberate: A11Y_STALE_BASE_REASON=\"<why>\" git push ... — the reason is printed," >&2
+      echo "not just the override, so a deliberate exception is in the log rather than in somebody's" >&2
+      echo "memory." >&2
+      exit 1
+    fi
+  fi
+  # PRINTED, never refused: a legitimate large deletion exists (a purge, a revert); a SILENT one does
+  # not. `tail -1` reads the diffstat's own summary line, e.g. "3 files changed, 1 insertion(+), 3281
+  # deletion(-)" -- absent when nothing was deleted, which `grep -oE` then reports as no match rather
+  # than a false zero.
+  stale_base_deletions="$(git diff --stat origin/main..HEAD 2>/dev/null | tail -1 \
+    | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || true)"
+  if [ -n "$stale_base_deletions" ] && [ "$stale_base_deletions" -gt 300 ]; then
+    echo "pre-push: this push deletes $stale_base_deletions line(s) against origin/main (two-dot diff)" >&2
+    echo "-- worth a second look before it lands." >&2
+  fi
+else
+  skipped+=("stale-base-check (origin/main not resolvable here)")
+fi
+# END #348 STALE-BASE CHECK
 
 # #129: A CHECK CAN FAIL ON SOMEONE ELSE'S TREE. Three times on 2026-09-06 a refusal named the pusher's
 # change when the real cause was another agent's mid-edit file, a stale export nobody here touched, or an
@@ -188,11 +255,55 @@ run() { # run <label> <command...>
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
+# #386: PUSHING TO AN ARMED, GREEN PR RACES A MERGE THAT CAN COMPLETE UNDERNEATH IT. Measured three
+# times in one evening, all by the person who wrote the rule against it -- each time the commit was
+# correct, the push succeeded, and GitHub's auto-merge bot completed the merge in the window between the
+# commit and the push. The commit then sits stranded on a branch nothing can find: `branches:stranded`
+# correctly excludes it (the branch IS merged, not orphaned), and the tracker has no record of it either.
+#
+# A CONVENIENCE GUARD AGAINST A RACE, NOT A CORRECTNESS GATE -- fails open, loudly, on anything that
+# stops it asking: no `gh`, no auth, no network, no PR yet. Never refuses a push for a reason unrelated
+# to the one specific window this exists to close (armed AND already green).
+#
+# `main` never has a PR against itself, so this is skipped there rather than paying for a lookup that
+# can only ever answer "no PR".
+# BEGIN #386 ARMED-PR PUSH GUARD -- extraction markers for pre-push-armed-pr.test.ts; keep both if edited.
+if [ "$BRANCH" != "main" ]; then
+  if ! command -v gh >/dev/null 2>&1; then
+    skipped+=("armed-pr-push-guard (no gh on PATH -- could not ask, allowing)")
+  elif [ -n "${A11Y_ALLOW_ARMED_PUSH:-}" ]; then
+    echo "pre-push: armed-pr-push-guard overridden: $A11Y_ALLOW_ARMED_PUSH" >&2
+  else
+    # `if VAR=$(cmd); then ... else ...; fi`, NEVER a bare `VAR=$(cmd); CODE=$?` -- under `set -e` a plain
+    # assignment statement IS a simple command, so a non-zero command substitution inside one aborts the
+    # script on the spot, before the next line (`CODE=$?`) ever runs. Wrapping it as an `if` condition is
+    # one of the few contexts `set -e` exempts, which is the ONLY reason this can read the exit code at
+    # all rather than dying silently with no message printed -- found by this guard's own wiring test,
+    # not by reasoning about it.
+    if ARMED_CHECK_OUT="$(node scripts/merge-guard.mjs --armed-check="$BRANCH" 2>&1)"; then
+      ARMED_CHECK_CODE=0
+    else
+      ARMED_CHECK_CODE=$?
+    fi
+    if [ "$ARMED_CHECK_CODE" -ne 0 ]; then
+      echo "$ARMED_CHECK_OUT" >&2
+      echo "If this is deliberate: A11Y_ALLOW_ARMED_PUSH=\"<why>\" git push ... -- the reason is printed," >&2
+      echo "not just the override, so a deliberate exception is in the log rather than in somebody's memory." >&2
+      exit 1
+    fi
+    if [ -n "$ARMED_CHECK_OUT" ]; then
+      echo "pre-push: $ARMED_CHECK_OUT" >&2
+    fi
+  fi
+fi
+# END #386 ARMED-PR PUSH GUARD
+
 if [ "$BRANCH" = "main" ]; then
   run "lint"       npm run --silent lint
   run "typecheck"  npm run --silent typecheck
-  echo "pre-push: FULL suite (main). Release gates are separate: npm run release:gate"
-  run "unit tests" env A11Y_TEST_CONCURRENCY=4 npm test
+  run "mjs parse check"  npx tsx --test packages/worker-fleet/src/mjs-parses.test.ts
+  echo "pre-push: gate (main). Package test suites run in CI's acceptance job now, not here -- see the"
+  echo "2026-09-07 UPDATE above. Release gates are separate: npm run release:gate"
 elif [ "$(node scripts/board-only-check.mjs)" = "true" ]; then
   # BOARD-ONLY, THE SAME SHAPE `ci.yml`'s `board` job GATES ON -- chairman's direction, 2026-09-06, the
   # product manager's single largest recurring cost that night: docs/board/summaries/*.md and
@@ -206,25 +317,22 @@ elif [ "$(node scripts/board-only-check.mjs)" = "true" ]; then
   echo "pre-push: BOARD-ONLY gate ($BRANCH) -- every file against origin/main is docs/board/reported.json"
   echo "or docs/board/summaries/*.md -- neither is source code, so lint/typecheck/the general suite have"
   echo "nothing to check. Running the board guards below is the real gate for this diff, here and in CI."
-  run "board guards" npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
+  # #355: a glob matching NOTHING is a clean, empty PASS to `tsx --test` -- checked first, outside the
+  # suite it would otherwise have silently skipped. `--run` execs `tsx --test` on the SAME argv this
+  # process just checked, rather than a second, separately-typed copy of the same globs (see
+  # assert-glob-not-empty.mjs's header for why the two-line form was provably unsafe).
+  run "board guards" node scripts/assert-glob-not-empty.mjs \
+    "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts" --run
 else
   run "lint"       npm run --silent lint
   run "typecheck"  npm run --silent typecheck
-  echo "pre-push: FAST gate ($BRANCH) -- lint, typecheck, and tests of the package(s) touched against"
-  echo "origin/main. The full suite runs in CI on this branch's PR: .github/workflows/ci.yml"
-  # A branch that breaks a package it never touched passes THIS gate and fails CI -- deliberate, not a
-  # gap: see scripts/changed-packages.mjs's header for why a real cross-package dependency graph was not
-  # built here.
+  run "mjs parse check"  npx tsx --test packages/worker-fleet/src/mjs-parses.test.ts
+  echo "pre-push: gate ($BRANCH) -- lint, typecheck, and an .mjs parse check. Package test suites run in"
+  echo "CI's acceptance job on this branch's PR now, not here -- see the 2026-09-07 UPDATE above."
+  # Still needed for the changeset gate below, which is scoped to whether this push touches a published
+  # package at all -- unrelated to which package's TESTS used to run here.
   changed="$(node scripts/changed-packages.mjs)"
-  if [ -z "$changed" ]; then
-    echo "  no packages/ file touched against origin/main -- running every package's tests"
-    run "unit tests (all packages)" npx tsx --test --test-concurrency=4 "packages/*/src/**/*.test.ts"
-  else
-    echo "  touched: $changed"
-    globs=()
-    for pkg in $changed; do globs+=("packages/$pkg/src/**/*.test.ts"); done
-    run "unit tests ($changed)" npx tsx --test --test-concurrency=4 "${globs[@]}"
-  fi
+  [ -n "$changed" ] && echo "  touched: $changed"
 
   # #261: THE CHANGESET GATE WAS MISSING FROM THIS HOOK ENTIRELY. `changeset` is a required CI context and
   # an input to the aggregate `gate`, so a fully green local push (this hook, above) was twice followed by
@@ -242,23 +350,38 @@ else
   # file. THE DIRECT BINARY, NOT `npx changeset` -- measured here 3.8s against 7.8s for the identical
   # command through `npx`'s resolution; `node_modules/.bin/changeset` is guaranteed present by the
   # toolchain guard above, which already refuses the whole hook before this point if it is not.
-  if [ -n "$changed" ] && [ "$(node scripts/changeset-precise.mjs origin/main)" = "true" ]; then
-    if ./node_modules/.bin/changeset status --since=origin/main >/tmp/a11y-changeset.$$ 2>&1; then
-      echo "  ok      changeset"
+  if [ -n "$changed" ]; then
+    # #288: `$(cmd)` DISCARDS `cmd`'s OWN EXIT STATUS -- the `if` only ever tested the STRING it printed.
+    # Measured live: an unresolvable base ref throws inside `changeset-precise.mjs`'s own `execFileSync`,
+    # uncaught, so the process exits non-zero having printed NOTHING -- and `[ "" = "true" ]` is false,
+    # so the hook took the ELSE branch and printed a POSITIVE CLAIM ("no file this push touches is one npm
+    # actually ships") from a check that had examined nothing at all. Captured into a variable first, so
+    # `$?` immediately after is `changeset-precise.mjs`'s REAL exit status, never the `[ ]` comparison's.
+    changeset_precise_out="$(node scripts/changeset-precise.mjs origin/main 2>/tmp/a11y-changeset-precise-err.$$)"
+    changeset_precise_status=$?
+    if [ "$changeset_precise_status" -ne 0 ]; then
+      echo "  COULD NOT RUN  changeset — changeset-precise.mjs could not answer whether this push touches a published package; nothing was examined"
+      tail -5 /tmp/a11y-changeset-precise-err.$$ | sed 's/^/            /'
+      skipped+=("changeset (could not run)")
+    elif [ "$changeset_precise_out" = "true" ]; then
+      if ./node_modules/.bin/changeset status --since=origin/main >/tmp/a11y-changeset.$$ 2>&1; then
+        echo "  ok      changeset"
+      else
+        echo "  FAILED  changeset"
+        tail -20 /tmp/a11y-changeset.$$ | sed 's/^/            /'
+        echo "            This push changes a file npm actually ships for a published package, with no changeset."
+        echo "            Run 'npm run changeset', pick the package(s) and bump level, and write one sentence a"
+        echo "            CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT"
+        echo "            follow from the size of the diff, and for the scorer any retrain is a MAJOR."
+        echo "            If this genuinely cannot affect a consumer: 'npx changeset add --empty' records that"
+        echo "            decision explicitly rather than leaving it to be inferred from silence."
+        failed+=("changeset")
+      fi
+      rm -f /tmp/a11y-changeset.$$
     else
-      echo "  FAILED  changeset"
-      tail -20 /tmp/a11y-changeset.$$ | sed 's/^/            /'
-      echo "            This push changes a file npm actually ships for a published package, with no changeset."
-      echo "            Run 'npm run changeset', pick the package(s) and bump level, and write one sentence a"
-      echo "            CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT"
-      echo "            follow from the size of the diff, and for the scorer any retrain is a MAJOR."
-      echo "            If this genuinely cannot affect a consumer: 'npx changeset add --empty' records that"
-      echo "            decision explicitly rather than leaving it to be inferred from silence."
-      failed+=("changeset")
+      skipped+=("changeset (no file this push touches is one npm actually ships for a published package)")
     fi
-    rm -f /tmp/a11y-changeset.$$
-  else
-    skipped+=("changeset (no file this push touches is one npm actually ships for a published package)")
+    rm -f /tmp/a11y-changeset-precise-err.$$
   fi
 fi
 

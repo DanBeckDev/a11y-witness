@@ -21,21 +21,21 @@ the exact moment adoption is decided.
 
 ### 1. Names: a scope for the libraries, the bare name for the CLI
 
-- `@a11y-witness/evidence`
-- `@a11y-witness/scorer`
-- `@a11y-witness/judge`
-- `@a11y-witness/nvda-worker`
-- `@a11y-witness/worker-fleet`
-- `a11y-witness` — **unscoped**, the CLI
+- `@a11ign/evidence`
+- `@a11ign/scorer`
+- `@a11ign/judge`
+- `@a11ign/nvda-worker`
+- `@a11ign/worker-fleet`
+- `a11ign` — **unscoped**, the CLI
 
-The CLI takes the bare name so `npx a11y-witness https://example.com` works with no
-scope to remember and no wrapper package. A `@a11y-witness/cli` that only
+The CLI takes the bare name so `npx a11ign https://example.com` works with no
+scope to remember and no wrapper package. A `@a11ign/cli` that only
 re-exports a bin would be a package whose name restates its code — the Clean Code
 test for a useless extraction (2nd ed., §"Functions"), applied to a package.
 
 Names describe the *artefact*, not a layer. `nvda-worker` rather than `worker`
 because ADR 0001 deferred VoiceOver rather than ruling it out, and a future
-`@a11y-witness/voiceover-worker` must be addable without renaming anything.
+`@a11ign/voiceover-worker` must be addable without renaming anything.
 `evidence` rather than `core`, `types` or `contracts` because "evidence" is the word
 this project already uses everywhere (`evidence:check`, "did the evidence move?",
 "a check must never reject evidence whose absence is the finding") — the package
@@ -50,7 +50,7 @@ visible from outside.
 
 ### 2. Registry: public npm
 
-Public npmjs.com, scope `@a11y-witness`. Rejected alternatives:
+Public npmjs.com, scope `@a11ign`. Rejected alternatives:
 
 - **GitHub Packages** — requires a registry-scoped auth token in `.npmrc` even for
   public reads. That is a hard stop at the adoption moment for a tool whose pitch
@@ -61,7 +61,7 @@ Public npmjs.com, scope `@a11y-witness`. Rejected alternatives:
   not need one now.
 
 Two operational requirements that are easy to forget and expensive to retrofit:
-reserve the `@a11y-witness` scope **and** the unscoped `a11y-witness` name before
+reserve the `@a11ign` scope **and** the unscoped `a11ign` name before
 M2 publishes anything, and enable npm **provenance** (`--provenance` from a trusted
 CI publish) so a consumer can verify a tarball came from this repo.
 
@@ -71,8 +71,8 @@ CI publish) so a consumer can verify a tarball came from this repo.
 > pass through. It was missing until it was looked for, which is what "easy to
 > forget" means in practice.
 >
-> The names are **still unreserved** and all three are available: `a11y-witness`,
-> `@a11y-witness/scorer` and `@a11y-witness/judge` all return 404 from the registry.
+> The names are **still unreserved** and all three are available: `a11ign`,
+> `@a11ign/scorer` and `@a11ign/judge` all return 404 from the registry.
 > Every package already carries its own `LICENSE`, so the split below is implemented
 > rather than merely decided — verified across all six publishable packages.
 >
@@ -81,9 +81,9 @@ CI publish) so a consumer can verify a tarball came from this repo.
 worth more here than usual: the whole product claim is trustworthy evidence, and a
 supply-chain story that stops at "trust us" undercuts it.
 
-### 3. Licence: AGPL everywhere except `@a11y-witness/evidence`, which is Apache-2.0
+### 3. Licence: AGPL everywhere except `@a11ign/evidence`, which is Apache-2.0
 
-`@a11y-witness/evidence` is Apache-2.0. Everything else — `scorer`, `judge`,
+`@a11ign/evidence` is Apache-2.0. Everything else — `scorer`, `judge`,
 `nvda-worker`, `worker-fleet`, the CLI, and the repo itself — stays
 AGPL-3.0-or-later. Each package carries its own `license` field and a copy of its
 own `LICENSE` file in the tarball; a scoped package inheriting the root LICENSE by
@@ -135,7 +135,7 @@ so the README's example is the thing that gets tested.
 
 ## Consequences
 
-- A consumer can `npm i @a11y-witness/judge` and read one licence that applies to
+- A consumer can `npm i @a11ign/judge` and read one licence that applies to
   it, rather than inferring from a repo root.
 - An alternative screen-reader backend becomes legally writable by a third party,
   which is the ecosystem lever ADR 0003 assumed and never enabled.
@@ -146,9 +146,9 @@ so the README's example is the thing that gets tested.
 
 ## Residual risks and open questions
 
-1. **Name availability is unverified.** Neither `a11y-witness` nor the
-   `@a11y-witness` scope has been checked on npmjs.com. If the bare name is taken,
-   the fallback is `@a11y-witness/cli` with `npx @a11y-witness/cli` — which works
+1. **Name availability is unverified.** Neither `a11ign` nor the
+   `@a11ign` scope has been checked on npmjs.com. If the bare name is taken,
+   the fallback is `@a11ign/cli` with `npx @a11ign/cli` — which works
    and is uglier. Check before M2.
 2. **AGPL will still deter some adopters of the engine packages**, and no licence
    split fixes that. If adoption stalls specifically on the licence, the lever is a

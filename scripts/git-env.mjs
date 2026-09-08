@@ -1,3 +1,4 @@
+// @ts-check
 // git EXPORTS `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` into every hook environment, and any process that
 // then spawns `git` with an inherited `env` and only a `cwd` operates on whatever `GIT_DIR` names, not on
 // `cwd` -- proven in isolation: `GIT_DIR=<real>/.git git init && git commit` lands the commit in `<real>`
@@ -12,7 +13,7 @@
 // "a fact stated twice, and the copies drifted": one copy missing one variable is silent until the day
 // that variable is the one set.
 //
-// `@a11y-witness/worker-fleet` publishes `check-worker-code.mjs`/`deploy-worker.mjs` as `bin` entries, so
+// `@a11ign/worker-fleet` publishes `check-worker-code.mjs`/`deploy-worker.mjs` as `bin` entries, so
 // its own git-spawning files (`code-drift.mjs` among them) cannot import anything outside their own
 // package -- a published tarball does not carry this repo's top-level `scripts/`. `packages/worker-fleet/
 // src/git-safe-env.mjs` is therefore a DELIBERATE, disclosed duplicate of this file for that one package,

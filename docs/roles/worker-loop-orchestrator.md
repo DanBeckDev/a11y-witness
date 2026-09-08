@@ -133,7 +133,7 @@ The standing resource ban, verbatim, and it applies to this role exactly as to a
 
 ### THE FLEET TREE, NAMED
 
-**`/Users/danielbeck/Documents/repos/personal/a11y-witness` — the primary checkout — is the tree the fleet
+**`/Users/danielbeck/Documents/repos/personal/a11ign` — the primary checkout — is the tree the fleet
 and the lab are driven from. NO OTHER AGENT MERGES IN IT.** `dispatcher` merges in
 `../a11y-wt-dispatch`; the lead's own `main`-moving work goes through `../a11y-wt-lead`.
 
@@ -148,8 +148,8 @@ sitting on `agent/product-tracker` with two files modified eleven seconds earlie
 nobody MERGES there; that was too narrow. Feature work is worktrees only, and the second reason is the one
 nobody had:
 
-**Every worktree's `node_modules` can be a symlink to the primary's, so `@a11y-witness/*` resolves to the
-PRIMARY's `packages/*/dist` — not the worktree's.** Measured: `require.resolve('@a11y-witness/judge')` from
+**Every worktree's `node_modules` can be a symlink to the primary's, so `@a11ign/*` resolves to the
+PRIMARY's `packages/*/dist` — not the worktree's.** Measured: `require.resolve('@a11ign/judge')` from
 a worktree prints a path inside the primary checkout. Two consequences, and both cost real time the day this
 was written:
 
@@ -167,8 +167,8 @@ Verified safe during a live capture: a build writes `dist/` only, `nvda-worker` 
 worker source 0 dirty either side and `worker:code` 10/10 after.
 
 **And when a tool reads stale code, resolve the module and print the PATH, not the link type.** The check
-that missed this was `ls -ld node_modules/@a11y-witness/judge`, which answered *is this a symlink* when the
-question was *to which checkout*. `node -e "console.log(require.resolve('@a11y-witness/judge'))"` answers the
+that missed this was `ls -ld node_modules/@a11ign/judge`, which answered *is this a symlink* when the
+question was *to which checkout*. `node -e "console.log(require.resolve('@a11ign/judge'))"` answers the
 right one.
 
 A corollary worth stating rather than discovering: **a merge tree cannot faithfully run the corpus-reading

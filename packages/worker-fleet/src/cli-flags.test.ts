@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { stripComments } from "@a11y-witness/evidence/source-text";
+import { stripComments } from "@a11ign/evidence/source-text";
 import { unknownFlags, didYouMean, nameOf, refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
@@ -55,6 +55,12 @@ const GUARDED: Record<string, string> = {
   "scripts/board-only-check.mjs":
     "takes no flags; it decides whether a change is board-only, and an ignored argument would answer "
     + "about a different change than the one asked about",
+  "scripts/prune-stale-workspace-scope.mjs":
+    "takes NO flags -- it runs from `prepare` on every plain `npm install` (#376) to remove a stale "
+    + "workspace scope's node_modules symlinks, and it already calls refuseUnknownFlags([]). Classified "
+    + "here so the census records it as checked rather than unseen; it predates the census widening to "
+    + "top-level scripts/ (#164) and so was invisible to this test until now, which is the shape #164's "
+    + "own header already names -- a population boundary written down and never generalised.",
   "scripts/piped-exit-status-guard.mjs":
     "takes the command to inspect POSITIONALLY (argv[2]) and no flags. It exists because a piped exit "
     + "status reads as the pipe's -- a tool built to end that class must not join it by discarding an "
@@ -63,6 +69,11 @@ const GUARDED: Record<string, string> = {
     "already guards its own flags; classified here so the census records it as checked rather than "
     + "unseen. It takes none, and audits which rows are pickable -- a discarded argument would report on "
     + "a different label set than the one asked for",
+  "scripts/board-snapshot.mjs":
+    "takes no flags at all -- run directly it only ever takes a snapshot of the Project board, and there "
+    + "is nothing for a flag to configure. Guarded anyway (#399): a mistyped flag discarded silently would "
+    + "still write a snapshot and report success, and this file exists specifically because a board "
+    + "mutation once reported success while destroying 112 rows' Status.",
   "scripts/auto-arm-sweep.mjs":
     "takes NO flags -- it arms every open, non-draft, unheld, tested PR against `main` that nothing has "
     + "armed (#344) -- so it calls refuseUnknownFlags([]) with an EMPTY list, the same case as "
@@ -83,6 +94,11 @@ const GUARDED: Record<string, string> = {
     + "-- the identical hazard `merge-guard.mjs` is guarded against, one door over. It takes "
     + "--push-sha=/--before-sha=/--run-url= and no positional argument (unlike merge-guard.mjs's PR "
     + "number), because a push event carries no PR to number.",
+  "scripts/trunk-revert-guard.mjs":
+    "decides whether a merge onto main silently deleted work already there, so a discarded --merge would "
+    + "check the wrong commit while reading as a clean pass -- the identical hazard trunk-revert.mjs is "
+    + "guarded against, and this one runs BEFORE the revert decision even exists: a false PASS here is "
+    + "how the #411 incident happened in the first place. Takes only --merge=<sha>, no positional.",
   "scripts/row-claim.mjs":
     "THE COMMAND THE PULL LOOP RESTS ON. Measured 2026-09-07, before the guard: `check 161 --jsonn` "
     + "printed the ordinary claim line and exited 0, and so did `--format=json` -- both read as a "
@@ -284,6 +300,11 @@ const GUARDED: Record<string, string> = {
   "packages/control/src/fleet-status.mjs": JSON_REPORTER,
   "packages/lab/src/training/capture-status.mjs": JSON_REPORTER,
   "packages/lab/scripts/lab-inventory.mjs": JSON_REPORTER,
+  "scripts/owned-path-signoff.mjs":
+    "it decides whether a change to a CORPUS-INVALIDATING path may merge (#356). `--diff` and `--body` "
+    + "are the two things it compares; a discarded one leaves it comparing an empty set and "
+    + "reporting SATISFIED -- a check passing having examined nothing, on the paths where a mistake "
+    + "costs a corpus rather than a revert",
   "scripts/pr-hold.mjs":
     "it WRITES a `session:` label that decides whether `merge-guard` refuses a PR (#266). `--session` "
     + "says who is taking the hold and `--steal` displaces whoever has it, so a discarded flag either "
@@ -329,6 +350,13 @@ const GUARDED: Record<string, string> = {
     + "(refuses without one) rather than silently rewriting the wrong tree, but `--clone-into` and "
     + "`--replacements` deciding the WRONG path or pattern set silently is exactly the failure this tool "
     + "exists to make impossible for a history rewrite, #310",
+  "scripts/assert-glob-not-empty.mjs":
+    "`--min` decides the floor a test glob must clear (#355); a discarded typo would silently check "
+    + "against the default of 1 instead of the real floor, passing a glob that lost most of its files. "
+    + "`--run` and `--test-concurrency` decide whether this command executes `tsx --test` on the globs it "
+    + "just checked, or only checks them -- a discarded `--run` would make a caller believe the real "
+    + "suite ran when only the vacuity check did, which is silence exactly where this tool exists to "
+    + "refuse it.",
 };
 
 
@@ -345,9 +373,9 @@ const UNGUARDED: Record<string, string> = {
   //
   // `check-schema-migration.mjs` is COPIED INTO A THROWAWAY DIRECTORY AND RUN THERE by
   // `migration-gate-refuses.test.ts`, which is how that gate is proved end to end rather than by reading
-  // its source. A copied script has no `node_modules`, so importing `@a11y-witness/worker-fleet/cli-flags`
+  // its source. A copied script has no `node_modules`, so importing `@a11ign/worker-fleet/cli-flags`
   // makes it die on startup: measured, `ERR_MODULE_NOT_FOUND: Cannot find package
-  // '@a11y-witness/worker-fleet'`, three tests red. Guarding it would trade a real proof that the
+  // '@a11ign/worker-fleet'`, three tests red. Guarding it would trade a real proof that the
   // migration gate refuses for a guard against a mistyped flag, which is the worse bargain.
   //
   // The alternative — a second copy of `refuseUnknownFlags` with no workspace import — is the

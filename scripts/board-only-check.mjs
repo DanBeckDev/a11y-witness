@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // IS THIS BRANCH'S DIFF, AGAINST origin/main, A BOARD-ONLY DIFF? -- the pre-push hook's board-only fast
 // path asks this exact question, and it must ask it the SAME WAY `ci.yml`'s `board` job does (via
 // `ci-changed.mjs`'s `boardOnly`), never a second copy of the two regexes. Prints "true" or "false" to
@@ -14,7 +15,7 @@ import { filesChangedAgainstOrigin } from "./changed-packages.mjs";
 // `DOC_ROOT_FILES` is gone rather than merged: #296 stopped filtering the diff to its docs/ subset, so
 // nothing here reads it any more and keeping the import would be an unused binding lint refuses.
 import { boardOnly } from "./ci-changed.mjs";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 // #296: THE WHOLE DIFF, NOT JUST ITS docs/ SUBSET -- this used to filter to doc-touching files first and
 // ask `boardOnly` about only those, so a diff mixing `docs/board/reported.json` with a Node script (or
@@ -23,6 +24,7 @@ import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
 // job never lints either (see the pre-push hook's own comment on that job). `boardOnly` already requires
 // EVERY member of its input to be a board file, so passing it the unfiltered diff is the fix: a diff of
 // board files alone still passes, and one member outside that set fails it, whatever kind of file it is.
+/** @param {string[]} files */
 export function isBoardOnlyDiff(files) {
   return files.length > 0 && boardOnly(files);
 }
