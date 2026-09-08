@@ -22,35 +22,54 @@ name: ready-label-audit
 #                      when a dead claim or a debris row stops being one, so it is not merely the inverse
 #   closed             the moment a row can start carrying debris
 #   reopened           a row can come back wearing labels its closure left on it
-#   pull_request closed  a merge -- how a row becomes debris, and how work SHIPS without closing its row
-#                        (the shape #443 was filed for), without anyone touching the row
 #
-# Neither `unlabeled` nor `reopened` catches a fault the other three miss. They stop the audit answering
+# THERE WAS A FOURTH, `pull_request: [closed]`, AND #579 REMOVED IT -- not because it did not work, but
+# because of where GitHub PUTS the answer. A workflow triggered by `pull_request` attaches its check-run
+# to that PR's head commit, so this audit's verdict appeared on the PR page as a check named `audit`. It
+# is not a check on a pull request: it reports the tracker's live label state, which that PR's diff did
+# not touch and cannot affect. Measured 2026-09-08 -- it failed on the board-membership call (the bot PAT
+# cannot read Projects v2, #546) and so sat RED on the last seven merged PRs for ninety minutes, which is
+# what the chairman was looking at. `audit` is not in the required `gate` context, so it blocked nothing:
+# a permanently red mark that blocks nothing is precisely the red people stop reading, which is #536's own
+# reasoning arriving through a door this trigger opened.
+#
+# WHAT IS ACTUALLY LOST, stated rather than waved away. The removed bullet claimed two moments. The first
+# -- a merge closing a row -- is fully covered, because `close-rows` closes the row the PR declares and
+# `issues: [closed]` above fires on exactly that. The second is NOT: work that SHIPS WITHOUT closing its
+# row (#443's shape) touches no issue, so no `issues` event fires and the audit does not run until the
+# cron does. That is a real reduction in cadence for one case, and the honest trade is that the cron is
+# the backstop for it. It is worth taking because the alternative is a red mark on every merged PR
+# answering a question nobody asked on that page.
+#
+# Neither `unlabeled` nor `reopened` catches a fault the other two miss. They stop the audit answering
 # with a state that has already moved, which is the whole value of it: the count has to be current when
 # somebody READS it. The cost is a run.
 #
 # NO `push: branches: [main]`, AND NOT BECAUSE IT WOULD NOT WORK. `push-trigger-allowlist.test.ts` holds
 # the chairman's rule that only a watchdog, a trunk gate or a trunk-followup may trigger on a push to
 # main, and this audit is none of the three -- it watches no schedule, builds nothing, and touches no
-# other PR. `close-rows.yml` asked the identical question and answered it in its own header: the
-# `pull_request` closed event carries exactly what is needed, scoped to one PR, so no allowlist entry is
-# required. Every merge here arrives as a merged PR, and a merged PR is a closed one. Adding a fourth
-# allowlist category to get a trigger already covered by another event would be arguing past a guard
+# other PR. Adding a fourth allowlist category to get a merge-time run would be arguing past a guard
 # rather than with it.
+#
+# THIS PARAGRAPH USED TO REST ON THE `pull_request` TRIGGER -- "no allowlist entry is required, because
+# that event carries exactly what is needed, scoped to one PR" -- and #579 removed the trigger, so that
+# reason is gone and only the rule above still stands. Rewritten rather than left, because a comment
+# whose stated reason has been deleted underneath it reads exactly like a live one: this repository's
+# most expensive recurring shape, and the whole of #543.
 #
 # THE CRON STAYS, and it is not redundant: it is the only thing that fires when nothing happens at all,
 # which is exactly the state where a stale claim sits unnoticed.
 on:
   issues:
     types: [labeled, unlabeled, closed, reopened]
-  pull_request:
-    types: [closed]
+  # NO `pull_request:` HERE -- #579. See the header: the verdict would attach to the PR's head commit as a
+  # check named `audit`, reporting tracker state the PR did not touch, and it blocks nothing.
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
 
 concurrency:
-  # Several label changes and merges land in a minute on a busy day, and five triggers make that likelier.
+  # Several label changes land in a minute on a busy day, and four triggers make that likelier.
   # One verdict at a time; the newest is the true one. This audit reads live state and accumulates
   # nothing, so a cancelled run loses nothing a later one will not recompute -- same choice and same
   # reason as board-liveness.yml.
