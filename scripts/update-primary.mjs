@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: the one sanctioned way to move the primary checkout: fetch, then detach at origin/main
 // THE ONE WAY TO UPDATE THE PRIMARY CHECKOUT — issue #126. Fetch, then detach at `origin/main`. Nothing
 // else: no merge, no rebase, no branch, because the primary is read-only except fast-forward and the
 // `post-checkout` hook will otherwise immediately undo anything this script leaves it on.
