@@ -18,7 +18,7 @@ jobs:
     runs-on: windows-2022          # NVDA needs Windows; GitHub hosts these
     steps:
       - uses: actions/checkout@v4
-      - uses: DanBeckDev/a11y-witness@71340ff55b477e6858029303720106dcdb4e2166
+      - uses: DanBeckDev/a11y-witness@b4e4263049e27220f64ea405b5fef3e9cf1f8fbe
         with:
           url: https://www.w3.org/WAI/demos/bad/before/home.html
           task: Find the main navigation and reach the survey.
