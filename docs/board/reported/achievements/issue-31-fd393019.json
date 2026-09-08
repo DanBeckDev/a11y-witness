@@ -5,5 +5,6 @@
   "reportedBy": "orchestrator",
   "at": "2026-09-07T07:40:00Z",
   "boardClaim": "A page built to prove a rule showed instead that the rule cannot see that fault.",
-  "order": 10
+  "order": 10,
+  "affirmed": "Re-read 2026-09-08 at 07:2xZ by product-manager. The claim is about a RECORDING made on 7 September and what it showed; nothing since has changed what that capture contains. #31 is still open, but the open work is the FIX for the fault the page exposed, not the finding itself \u2014 an achievement about what was demonstrated does not expire because the remedy is outstanding."
 }
