@@ -57,8 +57,9 @@ jobs:
   # check runs) and #416 (the permanent fix: arm with a real PAT so bot merges stop being invisible to
   # every `pull_request`/`push` trigger in this repository, not just this one).
 
-  # THE ONLY QUESTION THIS JOB ANSWERS: is `main`'s new tip actually green. `decideRevert` below is what
-  # decides whether that failure is this push's own, or something else -- this job just reports the fact.
+  # THE ONLY QUESTION THIS JOB ANSWERS: did this push silently revert work already on main. `trunkBuildTest`
+  # below answers the OTHER half (is main's new tip actually green); `decideRevert` decides whether either
+  # failure is this push's own, or something else.
   trunkGate:
     runs-on: ubuntu-latest
     steps:
@@ -73,34 +74,43 @@ jobs:
       # history, unlike a case needing another PR's unrelated branch tip.
       - name: This push did not silently revert work already on main (#411)
         run: node scripts/trunk-revert-guard.mjs --merge=${{ github.sha }}
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
-      - run: npm run build
-      - run: npm run lint
-      - run: npm run typecheck
-      # `npm run test:ts`, unscoped -- the whole tree, never `ci.yml`'s per-package `testPackages` slice.
-      # GH_TOKEN: several packaging tests shell out to real `gh` calls against this repo's own Issues,
-      # read-only -- the same reason `ci.yml`'s `ts`/`board`/`docs` jobs all carry it.
-      - name: Unit tests, unscoped
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: npm run test:ts
-      # DIRECT pytest, never `npm run test:python` -- that script only runs when `.venv/bin/pytest`
-      # exists (the LOCAL developer convention), which a fresh runner never has, and would silently SKIP
-      # rather than fail loud. `ci.yml`'s own `python` job makes the identical choice for the identical
-      # reason.
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12", cache: pip }
-      - run: pip install -r requirements-ci.txt
-      - run: PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider packages/*/tests -q
 
-  # RUNS ONLY WHEN `trunkGate` ACTUALLY FAILED -- `if: needs.trunkGate.result == 'failure'`, never
-  # `always()`. A green trunk needs no decision at all, and `cancelled` (someone manually cancelled the
-  # run) is not the same fact as a real failure and must not be read as one.
-  decideRevert:
+  # A1 (#452): CALLS `reusable-build-test.yml` -- see that file's own header for why (it used to duplicate
+  # `ci.yml`'s `ts`+`python` jobs independently; chairman's own comment on `ci.yml` had measured the two
+  # running "the SAME suite, on every merge"). `needs: trunkGate` preserves the original fail-fast order:
+  # this only runs once the revert-guard check (pure git, no build) has passed, exactly as it did when both
+  # were sequential steps in one job -- a revert-worthy push still fails fast rather than paying for a full
+  # suite that cannot see that class of defect at all.
+  #
+  # UNSCOPED + PYTHON, DELIBERATELY, unlike `ci.yml`'s per-package `ts`/`python` jobs -- a push to `main` is
+  # a merge, which by definition can touch anything, and pushes to `main` are far less frequent than PR
+  # commits, so there is no throughput pressure here that would justify the same path-scoping.
+  trunkBuildTest:
     needs: trunkGate
-    if: needs.trunkGate.result == 'failure'
+    uses: ./.github/workflows/reusable-build-test.yml
+    with:
+      run-lint-typecheck: true
+      run-ts-tests: true
+      ts-test-scope: unscoped
+      run-python-tests: true
+
+  # RUNS WHEN EITHER `trunkGate` OR `trunkBuildTest` ACTUALLY FAILED -- and `always() &&` IS REQUIRED, not
+  # decorative. This section used to say the opposite ("never `always()`"), and that claim was WRONG in a
+  # way that meant this job had never fired once: an `if:` with no status-check function carries an
+  # IMPLICIT `success()` (per GitHub's own expression documentation -- reasoned from the docs, not measured
+  # live), so the effective condition was `success() && needs.trunkGate.result == 'failure'`, and
+  # `success()` is false exactly when a needed job failed. Self-contradictory, and dispatcher measured it
+  # directly: 5 of the newest 40 trunk-guard runs had `trunkGate=failure`, and `decideRevert` read `skipped`
+  # in all five. `always()` LIFTS the implicit success -- it does not make the job unconditional, because
+  # the explicit `result == 'failure'` checks still do the discriminating. `cancelled` (someone manually
+  # cancelled the run) is still correctly excluded: `always()` does not turn a cancellation into a failure,
+  # it only stops a real failure from being silently treated as one. `trunkBuildTest` reads `skipped` (not
+  # `failure`) when `trunkGate` itself failed -- its own `needs:` default already stopped it from running --
+  # so checking both results here does not double-count the revert-guard's own failure as if the suite had
+  # also failed.
+  decideRevert:
+    needs: [trunkGate, trunkBuildTest]
+    if: always() && (needs.trunkGate.result == 'failure' || needs.trunkBuildTest.result == 'failure')
     runs-on: ubuntu-latest
     permissions:
       contents: write
