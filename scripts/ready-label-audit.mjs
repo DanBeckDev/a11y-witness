@@ -43,6 +43,7 @@ import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { fetchBoardItems, PROJECT_NUMBER } from "./board-snapshot.mjs";
+import { sandboxGitEnv } from "./git-env.mjs";
 
 export const READY_LABEL = "ready";
 
@@ -64,7 +65,7 @@ export const MUTEX_LABELS =
  */
 
 /** @type {(cmd: string, args: string[]) => string} */
-const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8" });
+const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", env: sandboxGitEnv() });
 
 /**
  * Reads every OPEN issue's labels from the real board. Same discipline as `row-claim.mjs`'s `fetchLabels`:
