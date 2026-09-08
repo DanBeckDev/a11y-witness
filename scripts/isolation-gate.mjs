@@ -49,7 +49,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // `ci.yml`'s `changed` job runs no `npm ci` — it decides whether anything else installs at all. A package
 // specifier here dies before the workflow starts.
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
-import { npmCliExecutable } from "./npm-cli-executable.mjs";
+import { npmCliInvocation } from "./npm-cli-executable.mjs";
 
 export const SMOKE = "isolation-smoke.mjs";
 
@@ -65,6 +65,17 @@ const consumerDir = () => mkdtempSync(join(tmpdir(), "a11y-isolation-"));
 function run(command, args, cwd, env) {
   return execFileSync(command, args,
     { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: env ? { ...process.env, ...env } : undefined });
+}
+
+/**
+ * `npm <args>`, via `run` above, WITHOUT ever spawning `npm` itself -- #492.
+ * @param {string[]} args
+ * @param {string} cwd
+ * @param {Record<string, string | undefined>} [env]
+ */
+function runNpm(args, cwd, env) {
+  const npm = npmCliInvocation("npm", args);
+  return run(npm.command, npm.args, cwd, env);
 }
 
 /**
@@ -116,7 +127,7 @@ export function packedFiles(dir) {
   // even though this spawns `npm`, not `git` — `npm pack` walks the package looking for a `.git` to
   // decide what "untracked" means for its own purposes, so an inherited `GIT_DIR` is the identical
   // redirection risk `git-env.mjs`'s own header names, one process removed.
-  const listing = JSON.parse(run(npmCliExecutable("npm"), ["pack", "--dry-run", "--json"], dir, sandboxGitEnv()));
+  const listing = JSON.parse(runNpm(["pack", "--dry-run", "--json"], dir, sandboxGitEnv()));
   return new Set((listing?.[0]?.files ?? []).map((/** @type {{path: string}} */ f) => f.path));
 }
 
@@ -211,8 +222,8 @@ export function checkIsolation(packageDir) {
     // consumer installs `judge` AND the `scorer` it peers on, and the two have to work together outside the
     // workspace. `evidence` and `scorer` are leaves, so the omission was invisible until `judge` arrived.
     const tarballs = [dir, ...internalDependencies(dir)].map((source) =>
-      join(consumer, basename(run(npmCliExecutable("npm"), ["pack", "--silent", "--pack-destination", consumer], source).trim().split("\n").pop() ?? "")));
-    run(npmCliExecutable("npm"), ["init", "-y"], consumer);
+      join(consumer, basename(runNpm(["pack", "--silent", "--pack-destination", consumer], source).trim().split("\n").pop() ?? "")));
+    runNpm(["init", "-y"], consumer);
     // `--no-workspaces` and absolute tarball paths: without them npm can walk UP from the temp directory
     // and re-attach to a workspace root, which would reintroduce exactly the symlink resolution the gate
     // exists to avoid.
@@ -223,7 +234,7 @@ export function checkIsolation(packageDir) {
     // Measured: 7.1 s for the CLI against 2.2 s for a leaf package, and the gate could not run offline at all,
     // which is a Fast/Repeatable failure for no coverage in return. A package that genuinely NEEDS a dependency
     // must declare it as a dependency, and this gate exists to catch exactly that mistake.
-    run(npmCliExecutable("npm"), ["install", "--silent", "--no-workspaces", "--omit=optional", ...tarballs], consumer);
+    runNpm(["install", "--silent", "--no-workspaces", "--omit=optional", ...tarballs], consumer);
     copyFileSync(smoke, join(consumer, SMOKE));
     // `A11Y_ISOLATION_CONSUMER_DIR` carries the RAW `consumer` path — never realpath'd — because both
     // `execFileSync`'s `cwd` option and `require.resolve()` resolve symlinks, so a smoke test cannot
