@@ -40,6 +40,18 @@
  * SKIPPED, NOT REFUSED, WHEN THE DECLARATION ITSELF IS MISSING/MALFORMED -- `closesDeclarationReport`
  * (the `acceptance` job's own gate) already refuses those; re-litigating them here would be a second,
  * independently-drifting opinion about the same fact rather than a new one.
+ *
+ * A PR ABOUT "TEXT THAT PARSES AS AN INSTRUCTION" CANNOT DESCRIBE ITSELF WITHOUT BECOMING AN INSTANCE --
+ * expect this, do not read it as having broken something. The PR that built this check tripped its own
+ * two example patterns while drafting the body that explains them: `Closes: none` inside a sentence
+ * describing the bug matched `extractClosesDeclaration`'s own whole-body regex, and backticked
+ * `closes #494`/`closes #492` examples matched its list pattern too -- neither this file's own scan nor
+ * `acceptance-commands.mjs`'s parser is line-anchored or fence-aware, so quoting the trigger phrase
+ * anywhere in prose (even inside backticks) can still fire it. The same shape hit #508's own body when
+ * hard-wrapping put `Acceptance:` at a line start inside a paragraph explaining #506. Break the adjacency
+ * when writing about this mechanism -- a word between the keyword and the `#number` is enough (`closes`
+ * issue `#494`, not `closes #494`) -- and verify with `extractClosesDeclaration`/`extractAcceptanceSection`
+ * directly before pushing, the way #522 and this PR both did, rather than trusting that quoting looks safe.
  */
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
@@ -141,6 +153,16 @@ function main() {
   const resolved = closing === null ? null : closing.map((issue) => issue.number);
   const report = closesMismatchReport(declaration, resolved, body);
   if (report.ok === null) {
+    // FAIL CLOSED, DELIBERATELY, ON A LOOKUP FAILURE -- "could not ask" must never read as "they
+    // matched". This job runs in `mergeSafety`, a required `gate` context, so this blocks every merge on
+    // a GraphQL blip, not just this one PR -- a real cost, weighed and accepted anyway: the alternative
+    // (allow on `null`) makes the check go silent EXACTLY when the API is unwell, which is the one moment
+    // an author is least able to notice its absence. This repo's own rule throughout `merge-guard/
+    // lookups.mjs` is that "could not ask" and "asked and got nothing" are different states and neither
+    // may read as clean -- the same choice `merge-guard.mjs --ci-gate` already makes (exit 2, CANNOT ASK,
+    // never treated as READY). A transient GraphQL failure is rare and retriable (push again, or the
+    // `update-branch` sweep's own re-push re-runs this); a real accidental closure sailing through
+    // silently is not.
     console.log(`CLOSES MISMATCH: CANNOT ASK -- ${report.reason}`);
     process.exit(2);
   }
