@@ -739,31 +739,56 @@ export function lookupClosingIssues(number) {
  * `green: null` (armed, but green-ness itself could not be determined) is folded into "does not race" by
  * `racesAnArmedMerge`, the same fail-open direction as the top-level `null`.
  *
+ * `behindBy`, #442: the race this guards against can only happen while the merge can actually FIRE, and
+ * under strict branch protection (restored 02:15Z) a merge cannot fire while the head is behind `main` --
+ * so a PR that is armed, green AND behind is not a race, it is the FROZEN state #442 exists to unfreeze.
+ * Read via `repos/.../compare/main...<oid>`'s `behind_by`, the identical ancestry fact `facts()` already
+ * reads for `ancestryReason` -- never `mergeStateStatus`, for the reason at the top of this file. Only
+ * asked when green: an armed-but-not-green PR never races (see `racesAnArmedMerge`), so a behind-by
+ * lookup there would be a round trip for a value nothing reads. `null` (could not determine) folds into
+ * "does not race" the same fail-open direction as everything else here.
+ *
  * @param {string} branchName
- * @returns {{ number: number, armed: boolean, green: boolean | null } | null}
+ * @returns {{ number: number, armed: boolean, green: boolean | null, behindBy: number | null } | null}
  */
 export function lookupArmedPrStatus(branchName) {
   return lookup(() => {
     const prs = JSON.parse(gh(["pr", "list", "--repo", REPO, "--head", branchName, "--state", "open",
       "--json", "number,autoMergeRequest,headRefOid"]));
-    if (prs.length === 0) return { number: null, armed: false, green: false };
+    if (prs.length === 0) return { number: null, armed: false, green: false, behindBy: null };
     const pr = prs[0];
     const armed = pr.autoMergeRequest != null;
-    if (!armed) return { number: pr.number, armed: false, green: false };
+    if (!armed) return { number: pr.number, armed: false, green: false, behindBy: null };
     const required = lookupRequiredContexts();
     const runs = lookupCheckRuns(pr.headRefOid);
-    if (required === null || runs === null) return { number: pr.number, armed: true, green: null };
+    if (required === null || runs === null) {
+      return { number: pr.number, armed: true, green: null, behindBy: null };
+    }
     const reasons = checkReasons({ headRefOid: pr.headRefOid }, required, runs);
-    return { number: pr.number, armed: true, green: reasons.length === 0 };
+    const green = reasons.length === 0;
+    const behindBy = green ? lookup(() => {
+      const value = JSON.parse(gh(["api", `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
+      return typeof value === "number" ? value : null;
+    }) : null;
+    return { number: pr.number, armed: true, green, behindBy };
   });
 }
 
 /**
- * Should THIS push be refused because it would race a merge that could complete underneath it? Only
- * armed AND already-green refuses -- everything else is the sanctioned route and must stay silent:
- * no PR yet (the first push is how one gets opened), a PR whose gate is FAILURE or still PENDING
- * (pushing before green is normal), `green: null` (armed, but could not confirm green), and top-level
- * `null` (could not ask at all).
+ * Should THIS push be refused because it would race a merge that could complete underneath it? Armed,
+ * already-green AND up-to-date with `main` refuses -- everything else is the sanctioned route and must
+ * stay silent: no PR yet (the first push is how one gets opened), a PR whose gate is FAILURE or still
+ * PENDING (pushing before green is normal), `green: null` (armed, but could not confirm green), armed +
+ * green + BEHIND (#442, below), and top-level `null` (could not ask at all).
+ *
+ * #442: ARMED + GREEN + BEHIND ALLOWS, and this is the one case that changed. Strict branch protection
+ * (restored 02:15Z) blocks a merge from completing while the head is behind `main`'s tip -- so a merge
+ * this push could race CANNOT FIRE, and the premise `racesAnArmedMerge` was built on (a push might lose a
+ * race to a merge that lands underneath it) is simply false here. Refusing anyway froze every PR that
+ * went green and then fell behind -- which under strict protection is the NORMAL state, since every merge
+ * to `main` puts every other open PR behind again -- with the sync that would un-freeze it refused by the
+ * very guard whose premise had moved. `behindBy === 0` is the up-to-date case (#386's real one, unchanged);
+ * anything else -- a positive count, or `null` because it could not be determined -- does not race.
  *
  * FAILS OPEN, DELIBERATELY, and this is the opposite of this file's own "could not ask is not clean"
  * rule elsewhere: that rule protects a VERDICT about evidence; this protects a developer's ability to
@@ -771,12 +796,13 @@ export function lookupArmedPrStatus(branchName) {
  * when the network is down or `gh` is unauthenticated gets deleted within a day (CLAUDE.md already
  * records `A11Y_SKIP_VERIFY=1` reached for six times in one evening for exactly that reason).
  *
- * @param {{ armed: boolean, green: boolean | null } | null} status
+ * @param {{ armed: boolean, green: boolean | null, behindBy?: number | null } | null} status
  * @returns {boolean}
  */
 export function racesAnArmedMerge(status) {
   if (!status) return false;
-  return status.armed && status.green === true;
+  if (!(status.armed && status.green === true)) return false;
+  return status.behindBy === 0;
 }
 
 /**
