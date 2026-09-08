@@ -247,6 +247,51 @@ export function readyRowsAlreadyMerged(readyIssues, closingRefsByIssue) {
   return flagged;
 }
 
+
+/** A row that ADVERTISES A LIVE STATE -- pickable or claimed. Both are claims about the present, and both
+ * are falsified the same way: by the work already being on main.
+ * @param {string[]} labels */
+export function livesStateLabels(labels) {
+  return labels.includes(READY_LABEL) || labels.includes("in-progress");
+}
+
+/**
+ * Pure: which `in-progress` rows have no open pull request and no push behind them?
+ *
+ * THE CLAIM IS ABOUT THE PRESENT AND NOTHING CHECKED IT. `in-progress` says a session is working this
+ * row right now. Measured 2026-09-08, after the chairman read the board: 24 open rows carried it and
+ * 15 were finished or dead -- one claimed THIRTY HOURS earlier with no branch ever pushed. A claim
+ * nobody can falsify is not a status, it is a decoration.
+ *
+ * WHY BOTH SIGNALS, AND WHY NEITHER ALONE. An open PR is proof of work in flight. A recent push is proof
+ * of work in progress that has not opened one yet. Requiring a PR alone would flag every session in its
+ * first hour; requiring a push alone would flag a session whose PR is green and waiting on CI. A row is
+ * only stale when NEITHER holds.
+ *
+ * `behind` is deliberately NOT a signal here: during a drain every merge puts every branch behind, and
+ * #406 sat at behind=55 while entirely healthy.
+ *
+ * @param {{ number: number, title: string, labels: string[] }[]} issues
+ * @param {Map<number, boolean>} hasOpenPr
+ * @param {Map<number, number>} lastPushMinutes  absent = no branch found at all
+ * @param {number} staleAfterMinutes
+ */
+export function claimsNobodyIsWorking(issues, hasOpenPr, lastPushMinutes, staleAfterMinutes = 240) {
+  const stale = [];
+  for (const issue of issues) {
+    if (!issue.labels.includes("in-progress")) continue;
+    if (hasOpenPr.get(issue.number)) continue;
+    const age = lastPushMinutes.get(issue.number);
+    // NO BRANCH AT ALL is not "age zero" -- it is the strongest evidence of an unworked claim, and
+    // reading an absent value as fresh is how this check would report cleanly on its worst case.
+    if (age !== undefined && age < staleAfterMinutes) continue;
+    stale.push({ number: issue.number, title: issue.title,
+      sessions: issue.labels.filter((l) => l.startsWith("session:")),
+      minutes: age ?? null });
+  }
+  return stale;
+}
+
 /**
  * One GraphQL round trip for every `ready` issue's closing PR references, via aliased sub-queries rather
  * than one call per issue -- the Ready lane is small (single digits to low tens), but N separate `gh api`
@@ -392,19 +437,24 @@ function reportAbsentFromBoard() {
  */
 function reportAlreadyMerged() {
   const issues = fetchOpenIssues();
-  const readyIssues = issues.filter((i) => i.labels.includes(READY_LABEL));
-  const refsByIssue = fetchClosingPrRefs(readyIssues.map((i) => i.number));
-  const flagged = readyRowsAlreadyMerged(readyIssues, refsByIssue);
+  // EVERY ROW ADVERTISING A LIVE STATE, not just `ready`. This filtered on `ready` alone, so on
+  // 2026-09-08 it reported OK while FIFTEEN `in-progress` rows were finished or dead -- eleven of them
+  // closed by a merged PR that declared `Closes #N`. The check was right and its population was half the
+  // question, which is the shape this file exists to catch, turned on the file itself.
+  const liveRows = issues.filter((i) => livesStateLabels(i.labels));
+  const refsByIssue = fetchClosingPrRefs(liveRows.map((i) => i.number));
+  const flagged = readyRowsAlreadyMerged(liveRows, refsByIssue);
   if (flagged.length === 0) {
-    process.stdout.write(`OK  no \`ready\` issue is already closed by a merged PR\n`);
+    process.stdout.write(`OK  no \`ready\` or \`in-progress\` issue is already closed by a merged PR\n`);
     return 0;
   }
   for (const { number, title, closedBy } of flagged) {
     process.stdout.write(`ALREADY-MERGED  #${number} "${title}" -- PR #${closedBy} merged and declares `
-      + `\`Closes #${number}\`, but the row is still \`ready\`\n`);
+      + `\`Closes #${number}\`, but the row is still open and claims a live state\n`);
   }
-  process.stderr.write(`\n${flagged.length} \`ready\` row(s) already shipped on main via a merged PR -- `
-    + `picking one would mean discovering the fix already exists.\n`);
+  process.stderr.write(`\n${flagged.length} open row(s) already shipped on main via a merged PR -- `
+    + `picking one would mean discovering the fix already exists, and a claimed one is a session `
+    + `credited with work that is done.\n`);
   return flagged.length;
 }
 
