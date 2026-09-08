@@ -16,7 +16,7 @@
 // was on disk. Every one of those was true of something; none was true of the thing being reported.
 //
 // So: issues, the milestone and merges are READ, from GitHub and from git. A gate result and the
-// fleet-hours total cannot be read from either, so they come from `docs/board/reported.json`, where the
+// fleet-hours total cannot be read from either, so they come from `docs/board/reported/`, where the
 // agent that RAN the command records its verbatim output, who ran it and when. An entry that is absent or
 // older than `staleAfterHours` is printed as "not reported since <date>" — never omitted, and never
 // estimated. Where the report cannot verify something it says so; that is the whole design.
@@ -25,7 +25,7 @@
 // generating and the publishing are separate acts and a bad report can be seen before it is posted.
 import { execFileSync } from "node:child_process";
 import { sandboxGitEnv } from "./git-env.mjs";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync} from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { REPO } from "./repo-identity.mjs";
@@ -50,7 +50,7 @@ export const HOURS_MS = 3600_000;
  * `reported.json` nobody reviewed. "Uncommitted" and "committed on another branch" are different states
  * and both change what gets published, so both refuse.
  */
-export const READ_SET = ["docs/board/reported.json", "scripts/board-report.mjs"];
+export const READ_SET = ["docs/board/reported", "scripts/board-report.mjs"];
 
 // EVERY SPAWN SCRUBS `GIT_*`, and this file is the one where getting it wrong is worst.
 //
@@ -197,8 +197,53 @@ export function milestone() {
 }
 
 /** The two numbers this report cannot compute, and how it refuses to invent them. */
+/** The recorded numbers, ONE FILE PER ENTRY (#159).
+ *
+ * It was a single JSON file that several agents record into, so two recorders appending two entries that
+ * do not disagree about anything still produced a textual conflict -- JSON is line-oriented to git and
+ * semantic to a reader. `git log` on it showed six different subjects moving the same 14,924 bytes, and
+ * hand-resolving a conflict there risks precisely what the file exists to prevent: a number surviving
+ * into the board document from a run nobody can name.
+ *
+ * NAMED BY THE ENTRY'S OWN IDENTITY, NEVER BY POSITION -- `ARRAY_IDENTITY` in board-summary-check.mjs
+ * already keys gates on `command` and achievements on `issue`, and this follows it rather than inventing
+ * a second scheme. Position-keyed names are the defect `withRealisticScale` paid for: inserting one entry
+ * re-labels every entry after it.
+ */
+const REPORTED_DIR = "docs/board/reported";
+
+/** WHICH SUBDIRECTORIES HOLD ENTRIES — declared ONCE and exported.
+ *
+ * `board-summary-check` built the same list inline, so adding a third kind meant remembering two places
+ * and the second would be forgotten silently. Found in review of #159; it is the fact-stated-twice shape
+ * that this very migration's commit message cites, reintroduced by the migration itself.
+ */
+export const REPORTED_KINDS = ["gates", "achievements"];
+
+/** @param {string} kind */
+function readEntries(kind) {
+  const dir = path.join(ROOT, REPORTED_DIR, kind);
+  if (!existsSync(dir)) return [];
+  // ORDERED BY AN EXPLICIT SPARSE KEY, never by filename and never by date. The authored order is not
+  // chronological -- checked, not assumed -- and the document renders in it, so filename order silently
+  // reordered what the board reads. `order` is spaced by tens: inserting between two entries picks a
+  // value between them and re-labels nothing, which is the property this whole change is for.
+  const entries = readdirSync(dir).filter((f) => f.endsWith(".json"))
+    .map((f) => ({ file: f, body: JSON.parse(readFileSync(path.join(dir, f), "utf8")) }));
+  return entries
+    .sort((a, b) => (a.body.order ?? Infinity) - (b.body.order ?? Infinity)
+      || a.file.localeCompare(b.file))
+    .map((e) => e.body);
+}
+
 export function reported() {
-  const raw = JSON.parse(readFileSync(path.join(ROOT, "docs/board/reported.json"), "utf8"));
+  const metaPath = path.join(ROOT, REPORTED_DIR, "meta.json");
+  // DERIVED FROM `REPORTED_KINDS`, not repeated. This line read `gates: readEntries("gates"),
+  // achievements: readEntries("achievements")` until 2026-09-07 -- so the constant governed one call site
+  // and this one restated it, which is the fact-stated-twice shape the constant was introduced to remove.
+  // Caught by mutation: shrinking `REPORTED_KINDS` changed nothing here, because nothing here read it.
+  const raw = { ...(existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, "utf8")) : {}),
+    ...Object.fromEntries(REPORTED_KINDS.map((kind) => [kind, readEntries(kind)])) };
   const staleMs = (raw.staleAfterHours ?? 24) * HOURS_MS;
   /** @param {any} entry */
   const fresh = (entry) => Date.now() - Date.parse(entry.at) < staleMs;
