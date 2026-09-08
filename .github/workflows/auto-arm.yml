@@ -194,3 +194,34 @@ jobs:
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
           node scripts/auto-arm-sweep.mjs
+
+  stalled:
+    # NAME THE ARMED, GREEN PRs THAT CAN NEVER MERGE -- #361, the gap `sweep` above closes at the OTHER
+    # end. `sweep` reports every PR it will NOT arm, with a reason; it says nothing about a PR it DID arm,
+    # because from its side arming succeeded. GitHub then declines to complete the merge (a real content
+    # conflict against the current `main`) and tells nobody -- measured 12.5 PR-hours of two workers'
+    # finished work, invisible, found only by a dispatcher who happened to ask.
+    #
+    # REPORTS, NEVER ACTS -- no rebase, no branch update, no close. `scripts/queue-stalled.mjs`'s own
+    # header has the full derivation, the incident, and why `git merge-tree` rather than GitHub's own
+    # (lazily-computed, and read `UNKNOWN` on both real PRs at the moment of measurement) `mergeable`.
+    #
+    # RIDES THE SAME `pull_request` TRIGGER `sweep` DOES, for the identical reason: a scheduled sweep
+    # fails by going quiet after GitHub disables it for 60 days of repo inactivity, and a stall reporter
+    # that fails by going quiet has the disease it watches for.
+    #
+    # `fetch-depth: 0` (full history), THEN an explicit fetch of every branch tip -- `actions/checkout@v4`
+    # only brings the triggering PR's own head, and `git merge-tree` needs a real merge-base with EVERY
+    # other open PR's head, which a shallow clone cannot supply. `queue-stalled.mjs`'s own `main()` does
+    # the branch-tip fetch; this step only needs enough history depth for `git merge-tree` to find a
+    # common ancestor at all.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Report every armed, green PR that cannot merge as-is against main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/queue-stalled.mjs
