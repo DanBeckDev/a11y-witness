@@ -31,7 +31,6 @@ import { execFileSync } from "node:child_process";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO, ROOT, gh, git } from "./board-data.mjs";
 
-const HOURS_MS = 3600_000;
 const ISSUE = "20";
 const SUMMARY_WORDS = 120;
 const REPORTED = "docs/board/reported.json";
@@ -341,12 +340,52 @@ export function reportedVerdict({ localText, remote }) {
 }
 
 /** The date the NEXT 08:00 edition will render for. */
+/**
+ * THE EDITION BEING CHECKED IS TODAY'S, because this now runs on the MORNING of the edition rather than
+ * the evening before. It used to return tomorrow, and that was correct for a 21:00 check: at 21:00 the
+ * next edition is tomorrow's. At 07:15 the next edition is in forty-five minutes, and it is today's.
+ *
+ * The board asked for this: "it should be 30 mins before as it should be as fresh as possible as a lot
+ * happens over night." A summary written the evening before is a forecast about a night that has not
+ * happened, and every overnight merge makes it staler. Written at 07:30 it describes the state the
+ * document will actually render from.
+ */
 function nextEditionDay(now = new Date()) {
-  return new Date(now.getTime() + 24 * HOURS_MS).toISOString().slice(0, 10);
+  return londonDay(now);
+}
+
+/** The date in LONDON, not UTC -- the edition's day is the board's day, and between 00:00 and 01:00 BST
+ * those differ. A UTC date here would ask for yesterday's summary for the first hour of every summer
+ * morning, which is exactly the kind of small untruth this pipeline refuses elsewhere. */
+export function londonDay(now = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit",
+    day: "2-digit" }).format(now);
+}
+
+
+/**
+ * Pure: the writing time the summary CLAIMS, and how far it is from the moment given.
+ *
+ * EXPORTED SO IT CAN BE SHOWN TO FAIL. The style test reads TODAY's summary, so on any day before the
+ * rule takes effect it returns early and the assertion inside it is never exercised -- a guard that
+ * cannot be demonstrated on the day you write it is the shape this repository has shipped green four
+ * times. Driving this function directly with fixtures is what makes the freshness check verified rather
+ * than merely present.
+ *
+ * @param {string} text the summary's own text
+ * @param {string} londonNow "HH:MM" in Europe/London at render time
+ * @returns {{ stated: string, driftMinutes: number } | null} null when no time is stated at all
+ */
+export function statedWritingTime(text, londonNow) {
+  const m = /written at (\d{2}):(\d{2})/i.exec(text);
+  if (!m) return null;
+  const [, hh, mm] = m;
+  const [nowH, nowM] = londonNow.split(":").map(Number);
+  return { stated: `${hh}:${mm}`, driftMinutes: Math.abs((nowH * 60 + nowM) - (Number(hh) * 60 + Number(mm))) };
 }
 
 function main() {
-  refuseUnknownFlags(["--post", "--issue", "--day"],
+  refuseUnknownFlags(["--post", "--issue", "--day", "--reminder"],
     { entry: import.meta.url, command: "npm run board:summary-check" });
   const argv = process.argv.slice(2);
   /** @type {(n: string) => string | undefined} */
@@ -385,7 +424,16 @@ function main() {
     + "date, what changed since yesterday, what must the board decide today.\n"
     + "Do not restate a count the document computes -- it goes stale between writing this and rendering.");
 
-  if (!argv.includes("--post")) process.exit(1);
+  // TWO MODES, AND THEY MUST EXIT DIFFERENTLY. `--reminder` (07:15) reports the absence and exits 0: at
+  // 07:15 the summary is not late, it is simply not written yet, and a red mark every morning for a
+  // normal working state is how a signal gets ignored -- this file's own reasoning about the wrong-half
+  // run, applied to the right-half one. Without `--reminder` (07:45) the absence is a REFUSAL, because
+  // the 08:00 edition is fifteen minutes away and will refuse anyway; failing here says so while there
+  // is still time to act.
+  const reminder = argv.includes("--reminder");
+  const exitCode = reminder ? 0 : 1;
+
+  if (!argv.includes("--post")) process.exit(exitCode);
 
   // ONE COMMENT PER DAY, not one per run. A warning that repeats is a warning people filter.
   const marker = `no summary for ${day}`;
@@ -394,20 +442,21 @@ function main() {
     "--jq", ".comments[].body"]);
   if (existing.includes(marker)) {
     console.error("(already reported for this date; not commenting again)");
-    process.exit(1);
+    process.exit(exitCode);
   }
   gh(["issue", "comment", issue, "--repo", REPO, "--body",
     `**There is ${marker} (${day}), so tomorrow's 08:00 edition will refuse and no document will be `
     + "published.**\n\nThe summary is written by hand, by design: a summary a machine assembled from the "
     + "sections below it is what the board explicitly forbade, so there is no fallback and this warning "
-    + "does not write one. It reports the absence eleven hours early so a person can close it.\n\n"
+    + `does not write one. It reports the absence ${reminder ? "forty-five minutes" : "fifteen minutes"} `
+    + "before the edition renders, so a person can close it.\n\n"
     + `Write at most 120 words in \`docs/board/summaries/${day}.md\`, answering: are we on the date, what `
     + "changed since yesterday, what must the board decide today. **Do not restate a count the document "
     + "computes** — it goes stale between writing the summary and rendering the edition, which happened "
-    + "on the first day.\n\n*Posted automatically at 21:00 by the summary check. It generates no summary "
-    + "text.*"]);
+    + `on the first day.\n\n*Posted automatically at ${reminder ? "07:15" : "07:45"} London by the summary `
+    + "check. It generates no summary text.*"]);
   console.error(`reported on https://github.com/${REPO}/issues/${issue}`);
-  process.exit(1);
+  process.exit(exitCode);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
