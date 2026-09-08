@@ -23,7 +23,8 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import {
   REPO, MILESTONE, HOURS_MS, READ_SET,
-  gh, git, issues, milestone, mergeState, misAuthored, reported, daysUntil, readSetIsNotMain, countable} from "./board-data.mjs";
+  gh, git, issues, milestone, mergeState, misAuthored, reported, daysUntil, readSetIsNotMain, countable,
+  conflictMetrics} from "./board-data.mjs";
 
 const argv = process.argv.slice(2);
 /** @type {(name: string) => string | undefined} */
@@ -200,6 +201,51 @@ export function fleetHoursSection(d, L) {
 }
 
 /** @param {any} d @param {string[]} L */
+export function conflictMetricsSection(d, L) {
+  const { conflict, since } = d;
+  L.push("## Conflict metrics");
+  L.push(`Since \`${since}\`. Method: ${conflict.method}`);
+  L.push("");
+  L.push(`**${conflict.opened}** opened · **${conflict.merged}** merged · `
+    + `**${conflict.closedUnmerged}** closed unmerged.`);
+  L.push("");
+  const { count, medianMinutes, p90Minutes } = conflict.lifetimeMinutes;
+  if (count === 0) {
+    L.push("**Lifetime to merge: not measured** — no PR merged in this window.");
+  } else {
+    L.push(`**Lifetime to merge** (${count} merged PR${count === 1 ? "" : "s"}): median `
+      + `${medianMinutes.toFixed(0)} min, p90 ${p90Minutes.toFixed(0)} min.`);
+  }
+  L.push("");
+  const { neededReconciliation, of, unresolvable } = conflict.reconciliation;
+  if (of === 0) {
+    L.push("**Conflicts: not measured** — no PR merged in this window.");
+  } else {
+    L.push(`**${neededReconciliation} of ${of}** merged PRs needed to reconcile with a diverged `
+      + `\`main\` (the closest signal git retains after the fact — see method above; this is not the `
+      + "same claim as \"hit a textual conflict\").");
+    // REFUSED RATHER THAN FOLDED IN: an uninspectable PR (no merge commit to read, a lookup failure) is
+    // never silently counted as "no conflict" -- "no conflicts found" and "could not look" must not
+    // print the same line.
+    if (unresolvable > 0) {
+      L.push(`**${unresolvable}** of those merges could not be inspected (no readable merge commit) and `
+        + "are excluded from both sides of that count, not folded into the zero.");
+    }
+  }
+  L.push("");
+  if (conflict.hotspotFiles.length === 0) {
+    L.push("No file was touched by more than one PR in this window.");
+  } else {
+    L.push("Most-touched files (by distinct PR, not by commit):");
+    L.push("");
+    L.push("| file | PRs |");
+    L.push("|---|---|");
+    for (const h of conflict.hotspotFiles) L.push(`| \`${h.path}\` | ${h.prCount} |`);
+  }
+  L.push("");
+}
+
+/** @param {any} d @param {string[]} L */
 export function queue(d, L) {
   const { open, ready, awaiting } = d;
   L.push("## Queue");
@@ -222,6 +268,7 @@ function facts(since, sinceLabel) {
   const { merges, unpushed } = mergeState(since);
   const strays = misAuthored(since);
   const { latestGate, gateIsFresh, fleetHours } = reported();
+  const conflict = conflictMetrics(since);
 
   const closed = all.filter((/** @type {any} */ i) => i.state === "CLOSED" && i.closedAt && Date.parse(i.closedAt) >= Date.parse(since));
   // Meta rows are containers, not work -- see `countable` in board-data.mjs, and section 6 prints the rule.
@@ -231,7 +278,7 @@ function facts(since, sinceLabel) {
   const awaiting = open.filter((/** @type {any} */ i) => i.labelNames.includes("awaiting-merge"));
 
   return { since, sinceLabel, all, ms, merges, unpushed, strays, latestGate, gateIsFresh,
-    fleetHours, closed, open, blockers, ready, awaiting };
+    fleetHours, closed, open, blockers, ready, awaiting, conflict };
 }
 
 /** @param {any} d */
@@ -252,6 +299,7 @@ export function render(d) {
   authorship(d, L);
   lastGate(d, L);
   fleetHoursSection(d, L);
+  conflictMetricsSection(d, L);
   queue(d, L);
   return L.join("\n");
 }
