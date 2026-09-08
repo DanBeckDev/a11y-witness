@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: push every armed, green-or-running PR up to main's new tip after a merge lands
 // AFTER A MERGE, PUSH EVERY ARMED, GREEN-OR-RUNNING PR UP TO main's NEW TIP -- C2, #416's sibling.
 //
 // `main`'s branch protection runs with `strict=false` (#277), so GitHub completes an armed merge the

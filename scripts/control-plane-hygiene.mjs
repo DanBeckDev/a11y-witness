@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: print every control-plane hygiene number fresh, measured by command, never typed once
 // THE MEASUREMENT THIS ROW EXISTS TO REPLACE: a table typed once, from numbers somebody had to go and
 // find. Every row below is measured fresh, by command, and printed beside the RULE or recorded DECISION
 // for that accumulator -- never "we should clean this up" on its own, which #58 names as a failed

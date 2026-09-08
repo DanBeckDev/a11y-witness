@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: arm auto-merge on open PRs that predate auto-arm.yml and were never armed
 // ARM THE PRs `auto-arm.yml` STRUCTURALLY CANNOT SEE -- the ones that were already open. #344.
 //
 // `auto-arm.yml` triggers on `pull_request: [opened, ready_for_review]`. A PR that was already open when

@@ -1,4 +1,5 @@
 // @ts-check
+// command: run tsc --build across every package under packages/ in dependency order
 // Build every package under `packages/` — `npm run build`.
 //
 // `tsc --build` is given all the package directories at once, so it resolves their `references` itself and
