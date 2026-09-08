@@ -48,6 +48,14 @@ import { sandboxGitEnv } from "./git-env.mjs";
 
 export const READY_LABEL = "ready";
 
+// #449: THE RECORD THAT A ROW WAS `ready` IMMEDIATELY BEFORE A CLAIM REMOVED IT. `declineRow`
+// (row-claim.mjs) is the only writer of this label -- it always removes it in the same edit that
+// restores `ready`, mirroring `session:<name>`/`runner:<name>`'s own shape: a label recording a FACT
+// about the row's history, not a state a human sets by hand. See `strandedByIncompleteDecline` below for
+// the audit this enables: a row carrying it while neither `ready` nor claimed is the #171 shape --
+// a correct decline whose restore silently did not happen.
+export const WAS_READY_LABEL = "was-ready";
+
 /**
  * Every label that already means "not actually pickable", independent of `ready`.
  *
@@ -410,6 +418,29 @@ function reportMutexViolations() {
 }
 
 /**
+ * #449: A ROW THAT SHOULD BE `ready` AND IS NOT -- the population no existing check here can see, since
+ * `mutexViolations` only ever compares labels the row DOES carry against each other, and an absent label
+ * has nothing to conflict with. `WAS_READY_LABEL` is the marker that makes this population expressible:
+ * a row carrying it while neither `ready` nor `in-progress` is exactly #171's shape -- claimed, then
+ * correctly declined, and the restore that should have put `ready` back silently did not happen.
+ *
+ * `declineRow` is the ONLY writer of `WAS_READY_LABEL`, and it always removes it in the same edit that
+ * restores `ready` (or, on a `--blocked` decline, in the same edit that adds `blocked` instead --
+ * deliberately, since a blocked row is a genuine finding and must not ALSO read as stranded). So a row
+ * matching this filter is either a live instance of the restore failing, or a hand-edited label; either
+ * way, worth a look rather than a silent gap.
+ *
+ * @param {LabelledIssue[]} issues open issues
+ * @returns {LabelledIssue[]}
+ */
+export function strandedByIncompleteDecline(issues) {
+  return issues.filter((issue) =>
+    issue.labels.includes(WAS_READY_LABEL)
+    && !issue.labels.includes(READY_LABEL)
+    && !issue.labels.includes("in-progress"));
+}
+
+/**
  * Report the CLOSED-row debris population #378 exists for -- a SEPARATE listing with separate wording, so
  * it is never read as a contradiction to resolve. Reports only; the tracker's labels are
  * `product-manager`'s to strip, deliberately.
@@ -430,6 +461,26 @@ function reportClosedDebris() {
     + `${readyOnClosed} because of them. Not a contradiction to resolve: stale bookkeeping for the `
     + `tracker owner to clear.\n`);
   return debris.length;
+}
+
+/**
+ * Report the #449 population: an open row a correct decline should have made `ready` again, and did not.
+ */
+function reportStrandedByIncompleteDecline() {
+  const issues = fetchOpenIssues();
+  const stranded = strandedByIncompleteDecline(issues);
+  if (stranded.length === 0) {
+    process.stdout.write(`OK  ${issues.length} open issue(s) checked, none are stranded by an incomplete `
+      + "decline\n");
+    return 0;
+  }
+  for (const { number, title } of stranded) {
+    process.stdout.write(`STRANDED  #${number} "${title}" -- was ready before a claim, declined, `
+      + `never restored to \`ready\`\n`);
+  }
+  process.stderr.write(`\n${stranded.length} row(s) were ready, got claimed and correctly declined, and `
+    + "the restore did not happen -- invisible to the Ready queue. See #449.\n");
+  return stranded.length;
 }
 
 /**
@@ -575,11 +626,19 @@ function reportAlreadyMerged() {
 
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "ready-label-audit" });
-  let mutexCount, debrisCount, absentCount, alreadyMergedCount, deadClaimCount;
+  let mutexCount, strandedCount, debrisCount, absentCount, alreadyMergedCount, deadClaimCount;
   try {
     mutexCount = reportMutexViolations();
   } catch (error) {
     process.stderr.write(`COULD NOT AUDIT open issues: ${/** @type {Error} */ (error).message}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  process.stdout.write("\n");
+  try {
+    strandedCount = reportStrandedByIncompleteDecline();
+  } catch (error) {
+    process.stderr.write(`COULD NOT AUDIT declined rows: ${/** @type {Error} */ (error).message}\n`);
     process.exitCode = 2;
     return;
   }
@@ -615,7 +674,7 @@ function main() {
     process.exitCode = 2;
     return;
   }
-  if (mutexCount > 0 || debrisCount > 0 || absentCount > 0 || alreadyMergedCount > 0
+  if (mutexCount > 0 || strandedCount > 0 || debrisCount > 0 || absentCount > 0 || alreadyMergedCount > 0
     || deadClaimCount > 0) process.exitCode = 1;
 }
 
