@@ -94,6 +94,66 @@ test("KNOWN LIMITATION: a comment inside a template literal's ${} interpolation 
       + "this function's own comment, not a silent gap");
 });
 
+// FIXED, having stopped being hypothetical -- A2/#453. A nested template literal inside an interpolation
+// used to corrupt the OUTER literal's own end, silently swallowing real code after it -- but only when the
+// TOTAL backtick count inside the interpolation is ODD. An even count (one simple `` `a` : `b` `` ternary,
+// say) happens to resynchronise by luck: each misidentified boundary just shifts which characters read as
+// "inside" a string, and with an even number of delimiters the drift cancels out by the true end anyway.
+// So the naive regression case is not a regression case at all -- verified before trusting it, by running
+// the OLD (unfixed) scanner against it and finding it survived unchanged. The real incident had an ODD
+// count, from string CONCATENATION (`` `a` + `b` ``) mixed into the ternary, which does not resynchronise.
+test("MUTATION TARGET: the exact shape measured on scripts/select-changed-tests.mjs -- concatenated "
+  + "template literals inside a ternary inside one interpolation, ODD backtick count, real code after it", () => {
+  const source = "function report(result) {\n"
+    + "  console.log(`select-changed-tests: ${result.broad.length > 0\n"
+    + "    ? `BROAD -- ${result.broad.length} file(s) outside packages/*/src/ (${result.broad.slice(0, 5)"
+    + ".join(\", \")}` + `${result.broad.length > 5 ? \", ...\" : \"\"}), falling back`\n"
+    + "    : `${result.selectedTests.length} test file(s) selected precisely` + (result.fallbackPackages"
+    + ".length > 0\n"
+    + "      ? `, plus the full suite of ${result.fallbackPackages.length} package(s)`\n"
+    + "      : \"\")}`);\n"
+    + "}\n"
+    + "function main() {\n"
+    + "  refuseUnknownFlags([], { entry: import.meta.url });\n"
+    + "}\n";
+  const stripped = stripComments(source);
+  assert.ok(stripped.includes("refuseUnknownFlags("),
+    "the real call after the corrupting template literal must survive stripping -- this is the exact "
+      + "shape that made a guarded file (select-changed-tests.mjs) read as unguarded");
+});
+
+test("a comment INSIDE a nested-template interpolation is still not stripped -- the KNOWN LIMITATION "
+  + "above is unchanged by the nesting fix, only the outer literal's END is now found correctly", () => {
+  const source = "const s = `${cond ? `/* not stripped */a` : `b`}`;";
+  assert.equal(stripComments(source), source);
+});
+
+// FIXED, having stopped being hypothetical a second time in the same fix -- the FIRST version of
+// `skipInterpolation` (walking an interpolation as full code, comments included) reproduced this repo's
+// own already-documented, accepted limitation ("a regex literal is not distinguished from a division") in
+// a MUCH more damaging place. `/^https?:\/\//` (stripping a URL scheme -- a real, common pattern in this
+// codebase) contains an escaped slash immediately followed by the regex's own closing slash, which reads
+// as a line-comment start. At the top level that costs one unstripped line; INSIDE an interpolation it
+// swallowed the interpolation's own closing `}` (and the outer literal's closing backtick with it),
+// corrupting everything scanned afterward -- measured for real on `calibrate-abstention.mjs`, where it
+// misread three later, unrelated `//` comments as still being inside the first string.
+test("MUTATION TARGET: a regex literal inside an interpolation does not corrupt the outer literal's end", () => {
+  const source = "function report(item) {\n"
+    + "  process.stdout.write(`    ${item.criterion}  `\n"
+    + "    + `${String(item.url).replace(/^https?:\\/\\//, \"\").slice(0, 52)}\\n`);\n"
+    + "}\n"
+    + "function main() {\n"
+    + "  // a real comment that must still be stripped\n"
+    + "  refuseUnknownFlags([], { entry: import.meta.url });\n"
+    + "}\n";
+  const stripped = stripComments(source);
+  assert.ok(stripped.includes("refuseUnknownFlags("),
+    "the real call after the corrupting regex-in-interpolation must survive stripping");
+  assert.ok(!stripped.includes("a real comment"),
+    "a genuine top-level comment AFTER the interpolation must still be stripped normally -- proving the "
+      + "scanner's state was not left corrupted");
+});
+
 test("KNOWN LIMITATION: a regex literal is not distinguished from a division, so `//` inside one can "
   + "be misread as a comment start", () => {
   // Written to PIN the limitation, not to endorse it: if a guard this helper serves ever needs a regex
