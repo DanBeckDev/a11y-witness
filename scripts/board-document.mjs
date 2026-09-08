@@ -932,17 +932,17 @@ function main() {
 
     // WHERE THE CHAIRMAN LOOKS, which is the only requirement this path has.
     //
-    // It was `~/Library/Logs/a11ign`, beside the scheduled job's log, on the reasoning that a
+    // It was `~/Library/Logs/a11y-witness`, beside the scheduled job's log, on the reasoning that a
     // LaunchAgent's output belongs there on macOS. That reasoning was about the LOG. A board document is
     // not a log -- it is a deliverable a person opens, and a deliverable filed where its reader does not
-    // look has not been delivered. So: `~/Documents/a11ign-board-reports/`, one file per date. The
-    // log stays in `~/Library/Logs/a11ign/`, where the original reasoning does still hold.
+    // look has not been delivered. So: `~/Documents/a11y-witness-board-reports/`, one file per date. The
+    // log stays in `~/Library/Logs/a11y-witness/`, where the original reasoning does still hold.
     //
     // NOT in the repository, and deliberately: `runs/` is shared -- often a symlink to the corpus tree --
     // and a guard is landing that makes every `runs/` writer askable, so a PDF written every morning
     // would be a writer nobody remembered when that guard was designed.
     const outDir = flagOf("--out")
-      ?? path.join(process.env.HOME ?? ROOT, "Documents", "a11ign-board-reports");
+      ?? path.join(process.env.HOME ?? ROOT, "Documents", "a11y-witness-board-reports");
     mkdirSync(outDir, { recursive: true });
     const stem = `a11ign-board-${new Date().toISOString().slice(0, 10)}`;
     // THE INTERMEDIATE HTML DOES NOT GO WHERE THE CHAIRMAN LOOKS. It is Chrome's input, not a
