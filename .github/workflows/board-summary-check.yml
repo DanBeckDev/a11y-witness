@@ -11,8 +11,12 @@ name: Board summary check
 on:
   schedule:
     # Both, gated on London's actual hour -- see board-report.yml for the full reasoning.
-    - cron: "0 20 * * *"
-    - cron: "0 21 * * *"
+    # 07:15 London (the reminder) and 07:45 London (the refusal), each scheduled twice so one is
+    # correct under BST and the other under GMT -- see board-report.yml for the full reasoning.
+    - cron: "15 6 * * *"
+    - cron: "15 7 * * *"
+    - cron: "45 6 * * *"
+    - cron: "45 7 * * *"
   workflow_dispatch:
 
 permissions:
@@ -23,7 +27,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      # 21:00 LONDON, YEAR ROUND. GitHub schedules in UTC only, so a single cron is the right hour
+      # 07:15 AND 07:45 LONDON, YEAR ROUND. GitHub schedules in UTC only, so a single cron is the right hour
       # for half the year and an hour out for the other half. Both are scheduled and every step below is
       # gated on London's actual clock: the stated hour is then true in summer and in winter, rather than
       # true in summer and quietly wrong from October.
@@ -32,36 +36,55 @@ jobs:
       # everywhere else. The wrong-half run exits SUCCESSFULLY and says so in its log -- a failed run
       # would put a red mark on the repository every day for behaving correctly, which is how a signal
       # gets ignored.
+      # THE MINUTE MATTERS NOW, not just the hour: 07:15 is a reminder and 07:45 is a refusal, and they
+      # differ only in their exit code. Reading the hour alone would make the two indistinguishable and
+      # every morning would end in a red mark at 07:15 for a summary that is not yet late.
       - id: hour
-        name: Is it 21:00 in London?
+        name: Which run is this in London?
         run: |
-          LONDON=$(TZ=Europe/London date +%H)
+          LONDON=$(TZ=Europe/London date +%H:%M)
+          case "$LONDON" in
+            07:1*) MODE=reminder ;;
+            07:4*) MODE=refuse ;;
+            *)     MODE=none ;;
+          esac
           echo "london=$LONDON" >> "$GITHUB_OUTPUT"
-          if [ "$LONDON" = "21" ]; then
-            echo "London reads $LONDON:00 - this is the 21:00 run."
-          else
-            echo "London reads $LONDON:00, not 21:00 - the other half of the year's pair."
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          if [ "$MODE" = "none" ]; then
+            echo "London reads $LONDON - neither the 07:15 nor the 07:45 run."
             echo "Doing nothing, successfully."
+          else
+            echo "London reads $LONDON - this is the $MODE run."
           fi
 
       - name: Check out main
-        if: steps.hour.outputs.london == '21'
+        if: steps.hour.outputs.mode != 'none'
         uses: actions/checkout@v4
         with:
           ref: main
 
       - name: Set up node
-        if: steps.hour.outputs.london == '21'
+        if: steps.hour.outputs.mode != 'none'
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install
-        if: steps.hour.outputs.london == '21'
+        if: steps.hour.outputs.mode != 'none'
         run: npm ci
 
-      - name: Is tomorrow's summary committed?
-        if: steps.hour.outputs.london == '21'
+      # 07:15 -- REPORTS AND EXITS 0. At 07:15 the summary is not late, it is not written yet, and a red
+      # mark every morning for a normal working state is how a signal gets ignored.
+      - name: 07:15 reminder -- is today's summary written?
+        if: steps.hour.outputs.mode == 'reminder'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/board-summary-check.mjs --post --reminder
+
+      # 07:45 -- REFUSES. The edition is fifteen minutes away and will refuse anyway; failing here says
+      # so while there is still time to act.
+      - name: 07:45 refusal -- today's summary must exist
+        if: steps.hour.outputs.mode == 'refuse'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/board-summary-check.mjs --post
