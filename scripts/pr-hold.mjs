@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: take or release a hold on a pull request, the record merge-guard reads before treating it as free
 /**
  * TAKE OR RELEASE A HOLD ON A PULL REQUEST — the record `merge-guard` reads (#266).
  *

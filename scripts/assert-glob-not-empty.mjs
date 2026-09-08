@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: refuse a test glob that resolves to zero files instead of passing silently
 // `npm test` PASSES, exit 0, if the glob it hands to `tsx --test` resolves to zero files (#355) --
 //
 //   $ npx tsx --test "packages/lab/src/packaging/nothing-matches-*.test.ts"; echo "EXIT=$?"

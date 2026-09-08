@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
 // #417: THE INTERIM COVER WHILE THE TRUNK IS UNGUARDED AFTER EVERY PIPELINE MERGE.
 //
 // GITHUB_TOKEN events trigger no workflows (#394's overnight measurement, 37 data points, no exceptions):
