@@ -52,9 +52,130 @@ import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { newestConclusion, headQuietSeconds } from "./update-branch-sweep.mjs";
 
 export const EXIT = { EXAMINED: 0, CANNOT_ASK: 2 };
 export const DEFAULT_STALL_THRESHOLD_MS = 30 * 60 * 1000;
+
+// C5a, #509 -- FILED AFTER #500 AND #517, WHICH FIXED THE MECHANISM THAT KEEPS AN ARMED PR CURRENT.
+// THIS IS THE WATCHDOG THAT WOULD HAVE SAID SO WHILE THE MECHANISM WAS STILL BROKEN.
+//
+// #500 was #498's own defect surviving its own fix (`newestConclusion` reading the FIRST `gate` run
+// rather than the newest by timestamp): every armed, green PR sat behind main, invisible, because the
+// sweep's own skip line named the AUTHOR as the person who must act -- "a failing PR needs a fix, not a
+// stale-main push" -- when nothing was wrong with either PR. #500 and #485 sat at 14 and 30 commits
+// behind for hours, found by a person reading `behind_by` by hand, because nothing else was watching.
+//
+// This does not fix anything -- `update-branch-sweep.mjs` already does, and re-implementing that here
+// would be the shape #498/#500 already cost this repo once (a fact re-derived instead of read). It
+// REPORTS: if the mechanism that keeps a PR current breaks again, this is what says so before an hour of
+// hand-reading `behind_by` does.
+export const DEFAULT_BEHIND_STALL_THRESHOLD_SECONDS = 15 * 60;
+
+/**
+ * PURE. Is this PR armed, green and stuck behind `main` long enough to be a watchdog concern?
+ *
+ * Reuses `update-branch-sweep.mjs`'s own `newestConclusion`/`headQuietSeconds` rather than a second
+ * reading of the same rollup -- the "fact stated twice, and the copies drifted" shape this repo has paid
+ * for repeatedly, most recently in the mechanism this row watches.
+ *
+ * @param {{ armed: boolean, gateConclusion: string | null, behindBy: number, quietSeconds: number | null,
+ *   thresholdSeconds?: number }} input
+ * @returns {{ stalled: boolean, code: string, reason: string }}
+ */
+export function armedBehindVerdict({
+  armed, gateConclusion, behindBy, quietSeconds, thresholdSeconds = DEFAULT_BEHIND_STALL_THRESHOLD_SECONDS,
+}) {
+  if (!armed) {
+    return { stalled: false, code: "NOT_ARMED", reason: "not armed for auto-merge -- not this check's concern" };
+  }
+  if (gateConclusion !== "SUCCESS") {
+    return {
+      stalled: false, code: "WAITING",
+      reason: `gate has not concluded SUCCESS (${gateConclusion ?? "no conclusion yet"}) -- healthy, still `
+        + "running or not yet checked",
+    };
+  }
+  if (behindBy === 0) {
+    return { stalled: false, code: "HEALTHY", reason: "armed, green, current with main -- waiting its turn" };
+  }
+  if (quietSeconds === null) {
+    // REFUSE RATHER THAN PRINT ZERO. A behind, armed, green PR with no timed check run on its head is
+    // not "healthy" -- it is a case this watchdog cannot ask about, and reporting nothing here must not
+    // read the same as reporting nothing because there was genuinely nothing to report.
+    return {
+      stalled: false, code: "UNRESOLVABLE",
+      reason: `${behindBy} commit(s) behind main, but no timed check run on this head -- cannot tell how `
+        + "long it has been stuck",
+    };
+  }
+  if (quietSeconds < thresholdSeconds) {
+    return {
+      stalled: false, code: "TOO_RECENT",
+      reason: `${behindBy} commit(s) behind, but the head is only ${Math.round(quietSeconds / 60)}m quiet -- `
+        + `below the ${Math.round(thresholdSeconds / 60)}m floor, update-branch-sweep.mjs may not have run yet`,
+    };
+  }
+  return {
+    stalled: true, code: "BEHIND",
+    reason: `armed and green, ${behindBy} commit(s) behind main, head quiet for `
+      + `${Math.round(quietSeconds / 60)}m -- past the ${Math.round(thresholdSeconds / 60)}m floor`,
+  };
+}
+
+/**
+ * PURE. The one-line watchdog summary for C5a/#509, printed in the dispatcher's hourly table and the
+ * daily document's conflict metrics.
+ *
+ * EVERY NUMBER STATES ITS WINDOW. `examinedCount` says how many open, armed, green PRs this line's
+ * silence actually covers -- "0 stalled" over 40 PRs and "0 stalled" over 2 read as the same word and
+ * are not the same claim. And REFUSE RATHER THAN PRINT ZERO: an `unresolvable` PR (behind, but no timed
+ * check run to say for how long) is named on its own line, never folded into "0 stalled" -- "nothing is
+ * stalled" and "I could not ask about one of them" must never be the same output, #518's own distinction
+ * applied to this row.
+ *
+ * @param {{ number: number, behindBy?: number, reason: string }[]} stalledList
+ * @param {{ number: number, reason: string }[]} unresolvableList
+ * @param {number} examinedCount
+ * @param {number} thresholdSeconds
+ * @returns {string}
+ */
+export function formatBehindWatchdogLine(stalledList, unresolvableList, examinedCount, thresholdSeconds) {
+  const thresholdMin = Math.round(thresholdSeconds / 60);
+  const lines = [];
+  if (stalledList.length === 0) {
+    lines.push(`WATCHDOG: 0 of ${examinedCount} armed, green PR(s) behind main for more than `
+      + `${thresholdMin}m.`);
+  } else {
+    const names = stalledList.map((s) => `#${s.number}`).join(", ");
+    lines.push(`WATCHDOG: ${stalledList.length} of ${examinedCount} armed, green PR(s) behind main for `
+      + `more than ${thresholdMin}m: ${names}`);
+    for (const s of stalledList) lines.push(`  #${s.number}: ${s.reason}`);
+  }
+  if (unresolvableList.length > 0) {
+    const names = unresolvableList.map((u) => `#${u.number}`).join(", ");
+    lines.push(`WATCHDOG: ${unresolvableList.length} UNRESOLVABLE (behind main, no timed check run to `
+      + `say for how long) -- not counted above, not counted as healthy: ${names}`);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * PURE-ish (injectable git). Exactly how many commits on `base` are not yet on `headSha` -- the real
+ * count `gh pr list` does not expose, computed locally the same way `mergeTreeConflict` computes
+ * conflicts rather than trusting GitHub's lazily-computed `mergeable`/`mergeStateStatus`.
+ *
+ * @param {string} base
+ * @param {string} headSha
+ * @param {(args: string[]) => { status: number, stdout: string }} runGit
+ * @returns {number}
+ */
+export function behindByCount(base, headSha, runGit) {
+  const { status, stdout } = runGit(["rev-list", "--count", `${headSha}..${base}`]);
+  if (status !== 0) return 0;
+  const n = Number.parseInt(stdout.trim(), 10);
+  return Number.isFinite(n) ? n : 0;
+}
 
 /**
  * PURE. Does this PR need reporting, and why? Never decides to act -- only to speak.
@@ -125,6 +246,65 @@ function runGitForReal(args) {
 /** @param {string[]} args */
 const gh = (args) => execFileSync("gh", args, { encoding: "utf8" }).trim();
 
+/**
+ * @typedef {{ name?: string, conclusion?: string | null, completedAt?: string | null,
+ *   startedAt?: string | null }} CheckRun
+ * @typedef {{ number: number, headRefOid: string, autoMergeRequest?: { enabledAt: string } | null,
+ *   statusCheckRollup?: CheckRun[] }} QueuedPr
+ */
+
+/**
+ * C5a, #509's per-PR behind check, pulled out of `main()`'s loop to keep complexity within this repo's
+ * own ESLint ceiling.
+ *
+ * @param {QueuedPr} pr
+ * @param {string | null} gateConclusion
+ * @param {Date} now
+ * @returns {{ stalled?: { number: number, behindBy: number, reason: string },
+ *   unresolvable?: { number: number, reason: string } }}
+ */
+function checkArmedBehind(pr, gateConclusion, now) {
+  const behindBy = behindByCount("origin/main", pr.headRefOid, runGitForReal);
+  const quietSeconds = headQuietSeconds(pr.statusCheckRollup, now);
+  const verdict = armedBehindVerdict({ armed: true, gateConclusion, behindBy, quietSeconds });
+  if (verdict.stalled) return { stalled: { number: pr.number, behindBy, reason: verdict.reason } };
+  if (verdict.code === "UNRESOLVABLE") return { unresolvable: { number: pr.number, reason: verdict.reason } };
+  return {};
+}
+
+/**
+ * The whole per-PR examination `main()`'s loop used to inline -- both the #361 conflict check and the
+ * #509 behind check share the same armed/gate-green precondition, so pulling the pair out together (not
+ * behind check alone) is what brings the caller's complexity back under this repo's ceiling.
+ *
+ * @param {QueuedPr} pr
+ * @param {number} now
+ * @returns {{ conflicting?: { number: number, reason: string, files: string[] },
+ *   behind?: { stalled?: { number: number, behindBy: number, reason: string },
+ *     unresolvable?: { number: number, reason: string } }, examined: boolean }}
+ */
+function examinePr(pr, now) {
+  const armed = pr.autoMergeRequest != null;
+  // #498's own bug: the FIRST matching run in the rollup, not the newest by timestamp. Fixed here the
+  // same way `update-branch-sweep.mjs` fixed it for its own read of the identical field -- one function,
+  // imported, not a second hand-rolled `.find()` that can drift from the first.
+  const gateConclusion = newestConclusion(pr.statusCheckRollup, "gate");
+  const ageMs = armed && pr.autoMergeRequest ? now - Date.parse(pr.autoMergeRequest.enabledAt) : 0;
+  const green = armed && gateConclusion === "SUCCESS";
+
+  if (!green) return { examined: false };
+
+  const { conflict, files } = mergeTreeConflict("origin/main", pr.headRefOid, runGitForReal);
+  const verdict = stalledVerdict({ armed, gateConclusion, conflict, ageMs });
+  const conflicting = verdict.stalled ? { number: pr.number, reason: verdict.reason, files } : undefined;
+
+  // C5a, #509: armed, green, and stuck behind main -- the signal #500/#517's fix protects, watched
+  // independently so a regression in THAT mechanism is visible here rather than found by hand again.
+  const behind = checkArmedBehind(pr, gateConclusion, new Date(now));
+
+  return { conflicting, behind, examined: true };
+}
+
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/queue-stalled.mjs" });
 
@@ -155,23 +335,19 @@ function main() {
 
   const now = Date.now();
   const stalled = [];
+  const behindStalled = [];
+  const behindUnresolvable = [];
+  let behindExamined = 0;
   for (const pr of prs) {
-    const armed = pr.autoMergeRequest != null;
-    const gateConclusion = (pr.statusCheckRollup ?? []).find((/** @type {{name?:string}} */ c) => c.name === "gate")
-      ?.conclusion ?? null;
-    const ageMs = armed ? now - Date.parse(pr.autoMergeRequest.enabledAt) : 0;
-
-    let conflict = false, files = /** @type {string[]} */ ([]);
-    if (armed && gateConclusion === "SUCCESS") {
-      ({ conflict, files } = mergeTreeConflict("origin/main", pr.headRefOid, runGitForReal));
+    const result = examinePr(pr, now);
+    if (result.conflicting) {
+      console.log(`#${result.conflicting.number} STALLED -- ${result.conflicting.reason}`);
+      console.log(`  conflicting: ${result.conflicting.files.join(", ")}`);
+      stalled.push(result.conflicting.number);
     }
-
-    const verdict = stalledVerdict({ armed, gateConclusion, conflict, ageMs });
-    if (verdict.stalled) {
-      console.log(`#${pr.number} STALLED -- ${verdict.reason}`);
-      console.log(`  conflicting: ${files.join(", ")}`);
-      stalled.push(pr.number);
-    }
+    if (result.examined) behindExamined += 1;
+    if (result.behind?.stalled) behindStalled.push(result.behind.stalled);
+    if (result.behind?.unresolvable) behindUnresolvable.push(result.behind.unresolvable);
   }
 
   if (stalled.length === 0) {
@@ -179,6 +355,8 @@ function main() {
   } else {
     console.log(`QUEUE: ${stalled.length} stalled: ${stalled.join(" ")}`);
   }
+  console.log(formatBehindWatchdogLine(behindStalled, behindUnresolvable, behindExamined,
+    DEFAULT_BEHIND_STALL_THRESHOLD_SECONDS));
   process.exit(EXIT.EXAMINED);
 }
 
