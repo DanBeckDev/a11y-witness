@@ -44,4 +44,9 @@ export const COMMANDS = {
   "close-rows-for-merged-pr": { argv: ["node", "scripts/close-rows-for-merged-pr.mjs"] },
   "reconstitution-drill": { argv: ["node", "scripts/reconstitution-drill.mjs"] },
   "select-changed-tests": { argv: ["node", "scripts/select-changed-tests.mjs"] },
+  // #478 (A6b): registered here rather than as a new `package.json` script, on purpose -- this file
+  // exists so a new command does not mean editing that one. `docs/commands.md` is committed and checked
+  // deliberately (see generate-commands-doc.mjs's own header, and generated-paths.test.ts's
+  // TRACKED_EXEMPT), so regenerating it after a header changes is itself a command a person types.
+  "docs-commands": { argv: ["node", "scripts/generate-commands-doc.mjs"] },
 };

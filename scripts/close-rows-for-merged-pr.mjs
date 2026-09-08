@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: close the issues a merged PR declared, because a bot merge does not close them itself
 // CLOSE THE ROWS A MERGED PR DECLARED, BECAUSE GITHUB DOES NOT DO IT FOR A BOT MERGE -- #298, unit 1d.
 //
 // ## The measurement

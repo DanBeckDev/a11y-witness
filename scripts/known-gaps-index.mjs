@@ -1,4 +1,5 @@
 // @ts-check
+// command: regenerate docs/known-gaps.md's own index of open sections from its headings
 /**
  * `docs/known-gaps.md` sends every agent there to check what this project cannot do "before claiming a
  * thing is finished" — the moment they are least likely to read 450 lines of closed history first. 31 of

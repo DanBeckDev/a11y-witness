@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: classify what a PR's diff touches, so CI's conditional jobs know whether to run
 // WHAT CHANGED, CLASSIFIED — the one place `ci.yml`'s conditional jobs read to decide whether they run.
 //
 // Before this, a PR ran everything: `lint.yml` had no path filter at all, and ran lint, typecheck, the

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: detect a piped command whose exit status was read from the wrong side of the pipe
 /**
  * Detects the shape behind issue #180: `cmd | head` (or `| tail`, `| grep`) reports the STATUS TOOL's
  * exit code, not the piped command's — so `$?` read afterward names the wrong thing. Measured twice in

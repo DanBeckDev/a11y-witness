@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: rehearse deleting non-standard refs and rewriting git history ahead of the org transfer
 // ONE COMMAND FOR THE REHEARSAL -- delete non-standard refs, run the `git filter-repo` rewrite, rescan.
 // #310, preparation for #63's org transfer and the repository going public.
 //
