@@ -1,9 +1,0 @@
-{
-  "issue": 494,
-  "claim": "All four blockers the version-one rehearsal found are closed, and the joint proof ran on a real Windows machine.",
-  "evidence": "The rehearsal against a clean Windows runner found four defects that every existing check had missed, because each one only appears on the path a first-time reader takes rather than the path this project's own tests take. All four are now closed: #491 at 18:17:18Z, #493 at 18:41:00Z, #494 at 18:49:36Z and #492 at 19:49:04Z on 8 September. Their joint proof is run 34271745842 (consumer-gate, dispatched 19:55:10Z): the `a11y` job ran on a windows-2022 runner and succeeded, and the separate `verify-report` job's step -- 'A report must exist, refuse rather than pass on absence' -- also succeeded, so the Action both built and produced its report. TWO PRECISIONS a reader needs: the run's head commit cc8120bd sits on the branch `agent/consumer-gate-pin-refresh` and is NOT on main, so the proof exists and its commit has not yet landed; and the Action version it exercised, 6e1b5a52, WAS main's tip when the run was dispatched and is no longer -- main moved to e66df437 by 20:14:48Z. Verified 2026-09-08 20:19Z by product-manager from the run's own jobs API and from git.",
-  "boardClaim": "Every defect the version-one rehearsal found is fixed, and the fixes were proved together on a real Windows machine.",
-  "reportedBy": "product-manager",
-  "at": "2026-09-08T20:20:00Z",
-  "order": 1
-}
