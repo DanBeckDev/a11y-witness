@@ -213,6 +213,142 @@ export function discoverTestFiles(repoRoot, pkgDirs) {
     });
 }
 
+// #A1D: A TREE-WALKING GUARD IMPORTS NOTHING FROM THE FILE IT GOVERNS, so no amount of import-closure
+// precision can ever select it. MEASURED, on main going red at `9c20dc99`:
+// `git-spawn-classification.test.ts` -- a guard that walks the whole tree for files spawning `git` --
+// fails on `packages/lab/src/packaging/acceptance-prose.test.ts`, which landed in a DIFFERENT PR. Run
+// `34202041349` on #496 printed `select-changed-tests: 4 test file(s) selected precisely`, and the guard
+// was not among the four: its population is the TREE, and the new file joined that population without
+// creating a single import edge. Each PR was green alone; the merge was red. B4's intersection cannot see
+// it either -- the two PRs share no file.
+//
+// So a whole CLASS of test is structurally unreachable by selection, and the remedy is to run that class
+// unconditionally. THE SET IS DERIVED, NEVER TYPED. A hand-written "the guards that walk the tree" list
+// is precisely the list a new guard slips past -- this repo's own most-recorded shape, and the reason
+// `worker-code-check.test.ts` DISCOVERS its capture clients and `cli-flags.test.ts` DISCOVERS its command
+// lines rather than naming them. A list here would have the same defect as the selection it is patching.
+//
+// TWO LEGS, and the difference between them is not fussiness -- it is the difference between a walk that
+// IS a test's population and a walk that is merely the BEHAVIOUR of the module under test:
+//
+//   the TEST walks       any `git` enumeration, or any `readdirSync`/`globSync` -- in a test, a
+//                        directory read IS the population it then asserts over.
+//   a HELPER it imports  the same, but a bare `readdirSync` is not enough: the walk must NAME
+//                        `node_modules`, which is the signature of walking this repository's own source
+//                        and is what separates `command-line-census.mjs` and `source-walk.mjs` (shared
+//                        discovery walkers, whose consumers ARE guards over the tree) from
+//                        `capture-cache.mjs` and `board-data.mjs` (production modules that read one flat
+//                        data directory, whose consumers are ordinary unit tests). Without that
+//                        distinction the always-run set is 120 files instead of 88 and a third of it is
+//                        there for the wrong reason.
+//
+// A WALK ROOTED IN THE CORPUS IS SUBTRACTED FROM BOTH. `runs/` is gitignored, so nothing in it can ever
+// be a changed file in a PR, and a corpus reader is therefore not a guard this row is about. The
+// accessors are `corpus-readers-are-guarded.test.ts`'s own (`runsRoot`, `datasetRoot`, `captureRoot`,
+// `realCorpusRoot`, `repeatCapturesRoot`) rather than a second spelling of the same fact.
+//
+// ERRS TOWARD RUNNING TOO MUCH, deliberately. A fixture string inside a test that merely LOOKS like a git
+// enumeration adds one fast file to a set of 88; a guard missed adds a red trunk that every check was
+// blind to. Only one of those two failures is visible from the outside.
+//
+// WHAT IT DOES NOT REACH, said plainly rather than left to be discovered: a guard that walks ONE fixed
+// tracked directory (`adr-index.test.ts` over `docs/adr/`, `commands-documented.test.ts` over the docs)
+// IS in this set, because the test itself calls `readdirSync` -- but it is here as a member of the class,
+// not because the selector understands its root. The sharper fix for those -- select a directory-walking
+// guard when the diff touches the directory it walks -- is a different row and is not attempted here.
+
+/**
+ * Any git subcommand that ENUMERATES a population out of the repository itself. Matched as
+ * `<identifier>("git", [...])` rather than `execFileSync`/`spawnSync` by name, which is the SAME
+ * broadening `git-spawn-classification.test.ts` already had to make and for the same measured reason:
+ * `isolation-gate.mjs` spawns through a local `run()` seam, and a list of function names is exactly what
+ * a new wrapper slips past.
+ */
+const ENUMERATES_TRACKED =
+  /\b[A-Za-z_$][\w$]*\(\s*["']git["'],\s*\[\s*["'](?:ls-files|grep|for-each-ref|branch|tag|log)["']/;
+
+/** A directory walk of any kind -- the other way a population is discovered from disk. */
+const WALKS_A_DIRECTORY = /\b(?:readdirSync|globSync)\s*\(/;
+
+/**
+ * A read rooted in the corpus -- BOTH spellings `corpus-readers-are-guarded.test.ts` already uses, the
+ * accessors and the literal path, rather than a second version of the same fact. Using only the
+ * accessors was tried first and let `announcement.corpus.test.ts` in, which roots its walk on the
+ * literal `runs/screenreader-dataset/captures/`: the pair exists in that file because ONE of them is not
+ * enough, and taking half of a settled pair is how a check comes to answer about the wrong population.
+ * `runs/` is gitignored, so nothing under it can ever be a changed file in a PR.
+ */
+const CORPUS_ROOTED = /\b(?:runsRoot|datasetRoot|captureRoot|realCorpusRoot|repeatCapturesRoot)\s*\(|runs\/(?:screenreader-dataset|real-page-corpus|acceptance)/;
+
+/**
+ * A walk that names `node_modules` is walking this repository's own source tree; one that does not is
+ * reading a single directory. It is the strict rule for a HELPER, and it also OVERRIDES the corpus
+ * subtraction above for a test -- `real-page-corpus-freshness.test.ts` walks the tracked tree
+ * (`SKIP_DIRS = node_modules, dist, .git`) to find corpus readers, so it names corpus paths constantly
+ * while being exactly the kind of guard this row exists to keep running. Subtracting on a corpus mention
+ * alone would have dropped it, which is the under-inclusion this whole row is about.
+ */
+const SKIPS_BUILD_OUTPUT = /["']node_modules["']/;
+
+/**
+ * Does this source DISCOVER a population from the repository, rather than from its own imports?
+ * Comments are stripped first, for the reason every other discovery in this repo strips them: a file that
+ * merely DESCRIBES a tree walk in prose has not performed one, and this file's own header would otherwise
+ * classify the selector as a guard about six times over.
+ *
+ * @param {string} source
+ * @param {{ asHelper?: boolean }} [options] `asHelper` -- apply the stricter directory-walk rule used for
+ *   a module a test IMPORTS, where a flat data read must not count. Defaults to the test's own rule.
+ * @returns {boolean}
+ */
+export function discoversFromTree(source, { asHelper = false } = {}) {
+  const text = stripComments(source);
+  if (ENUMERATES_TRACKED.test(text)) return true;
+  if (!WALKS_A_DIRECTORY.test(text)) return false;
+  // A walk that skips build output is walking this repository, whatever else the file mentions -- this
+  // branch is FIRST so a tracked-tree walker is never subtracted for naming a corpus path.
+  if (SKIPS_BUILD_OUTPUT.test(text)) return true;
+  // A helper's flat directory read is the BEHAVIOUR of the module under test, not a population its
+  // consumers assert over: `capture-cache.mjs` and `board-data.mjs` read one data directory each, and
+  // their consumers are ordinary unit tests.
+  if (asHelper) return false;
+  // In a TEST, a flat directory read IS the population -- unless that directory is the corpus.
+  return !CORPUS_ROOTED.test(text);
+}
+
+/**
+ * Every test whose population is the TREE, and therefore must run whatever the diff touched -- with the
+ * reason it qualified, so "we ran 88 guards" and "we ran 88 guards BECAUSE" are not the same output.
+ *
+ * The population is EVERY test file in the repository, never the implicated packages' own: a file added
+ * anywhere can join the population of a guard living anywhere else, which is the whole defect.
+ *
+ * @param {string[]} testFiles repo-relative, every test file in the repo
+ * @param {{ closureOf: (testFile: string) => Set<string>, repoRoot: string,
+ *   readSource?: (rel: string) => string }} options
+ * @returns {Array<{ test: string, why: string }>} sorted by test path
+ */
+export function alwaysRunTests(testFiles, { closureOf, repoRoot, readSource }) {
+  const read = readSource ?? ((/** @type {string} */ rel) => readFileSync(join(repoRoot, rel), "utf8"));
+  /** @type {Array<{ test: string, why: string }>} */
+  const guards = [];
+  for (const testFile of testFiles) {
+    if (discoversFromTree(read(testFile))) {
+      guards.push({ test: testFile, why: "walks the tree itself" });
+      continue;
+    }
+    for (const abs of closureOf(testFile)) {
+      const rel = relative(repoRoot, abs);
+      if (rel === testFile) continue;
+      if (discoversFromTree(read(rel), { asHelper: true })) {
+        guards.push({ test: testFile, why: `imports the tree walker ${rel}` });
+        break;
+      }
+    }
+  }
+  return guards.sort((a, b) => a.test.localeCompare(b.test));
+}
+
 // #A1c: `.github/workflows/ci.yml` itself -- a job definition can affect anything the job runs, so
 // narrowing it would mean reasoning about what the CHANGE to the job does, not what it touches.
 const BROAD_ALWAYS = new Set([".github/workflows/ci.yml"]);
@@ -366,26 +502,66 @@ export function selectTests(changedFiles, options) {
   return { selectedTests: [...selected].sort(), fallbackPackages: [...fallbackPackages].sort(), uncoveredFiles };
 }
 
-/** @param {{ selectedTests: string[], fallbackPackages: string[], uncoveredFiles: string[], broad: string[] }} result */
+/**
+ * The always-run guards this run ADDED -- the ones selection did not already reach -- named with the
+ * reason each qualified. Capped at `SAMPLE`, because "88 guards, here are the eight of them selection
+ * missed" is a diagnostic and 88 filenames is a wall. The COUNTS are never capped.
+ *
+ * @param {Array<{ test: string, why: string }>} alwaysRun
+ * @param {string[]} selectedTests
+ * @returns {string}
+ */
+function describeAlwaysRun(alwaysRun, selectedTests) {
+  const SAMPLE = 8;
+  const already = new Set(selectedTests);
+  const added = alwaysRun.filter((g) => !already.has(g.test));
+  if (alwaysRun.length === 0) return "";
+  const shown = added.slice(0, SAMPLE).map((g) => `${g.test} (${g.why})`);
+  return `, plus ${alwaysRun.length} always-run discovery guard(s) -- a guard whose population is the `
+    + `tree imports nothing from the file it governs, so no selection can reach it -- of which `
+    + `${added.length} were not already selected`
+    + (shown.length > 0 ? `: ${shown.join("; ")}${added.length > SAMPLE ? ", ..." : ""}` : "");
+}
+
+/**
+ * What the `ts` job actually runs: the precisely-selected tests, the always-run guards, and a full-suite
+ * glob per package with an uncovered change -- UNIONED and DEDUPLICATED, because a guard that selection
+ * already reached must not be handed to `tsx --test` twice.
+ *
+ * @param {{ selectedTests: string[], alwaysRun: Array<{ test: string, why: string }>,
+ *   fallbackPackages: string[] }} result
+ * @returns {string[]}
+ */
+export function testFilesToRun({ selectedTests, alwaysRun, fallbackPackages }) {
+  const files = [...new Set([...selectedTests, ...alwaysRun.map((g) => g.test)])].sort();
+  return [...files, ...fallbackPackages.map((p) => `packages/${p}/src/**/*.test.ts`)];
+}
+
+/** @param {{ selectedTests: string[], fallbackPackages: string[], uncoveredFiles: string[],
+ *   broad: string[], alwaysRun: Array<{ test: string, why: string }> }} result */
 function writeOutputs(result) {
-  const globsForFallback = result.fallbackPackages.map((p) => `packages/${p}/src/**/*.test.ts`);
-  const testFiles = result.broad.length > 0 ? [] : [...result.selectedTests, ...globsForFallback];
+  const testFiles = result.broad.length > 0 ? [] : testFilesToRun(result);
   const count = result.broad.length > 0 ? -1 : result.selectedTests.length;
   const outFile = process.env.GITHUB_OUTPUT;
   const lines = [
     `testFiles=${testFiles.join(" ")}`,
     `selectedCount=${count}`,
+    // SEPARATE from `selectedCount` on purpose: "this diff reaches four tests" and "the repository has 88
+    // guards that no diff can ever reach" are different facts, and one summed number would hide both.
+    `alwaysRunCount=${result.broad.length > 0 ? -1 : result.alwaysRun.length}`,
     `fallbackPackages=${result.fallbackPackages.join(" ")}`,
     `broad=${result.broad.length > 0}`,
   ];
   console.log(`select-changed-tests: ${result.broad.length > 0
     ? `BROAD -- ${result.broad.length} file(s) outside the by-reference search (ci.yml itself or a root `
       + `config): (${result.broad.slice(0, 5).join(", ")}${result.broad.length > 5 ? ", ..." : ""}), `
-      + "falling back to ci-changed.mjs's existing package-level scope"
-    : `${result.selectedTests.length} test file(s) selected precisely` + (result.fallbackPackages.length > 0
-      ? `, plus the full suite of ${result.fallbackPackages.length} package(s) with an uncovered change `
-        + `(${result.uncoveredFiles.join(", ")})`
-      : "")}`);
+      + "falling back to ci-changed.mjs's existing package-level scope, which already runs every guard"
+    : `${result.selectedTests.length} test file(s) selected precisely`
+      + describeAlwaysRun(result.alwaysRun, result.selectedTests)
+      + (result.fallbackPackages.length > 0
+        ? `, plus the full suite of ${result.fallbackPackages.length} package(s) with an uncovered change `
+          + `(${result.uncoveredFiles.join(", ")})`
+        : "")}`);
   if (!outFile) { console.log(lines.join("\n")); return; }
   appendFileSync(outFile, `${lines.join("\n")}\n`);
 }
@@ -412,7 +588,10 @@ async function main() {
   const broad = broadReasons(files);
 
   if (broad.length > 0) {
-    writeOutputs({ selectedTests: [], fallbackPackages: testPackages, uncoveredFiles: [], broad });
+    // BROAD is deliberately unaffected by #A1d: it already runs every test in every implicated package,
+    // which is a superset of the always-run set. Adding guards here would be a second answer to a
+    // question that already has one.
+    writeOutputs({ selectedTests: [], fallbackPackages: testPackages, uncoveredFiles: [], broad, alwaysRun: [] });
     return;
   }
 
@@ -421,7 +600,12 @@ async function main() {
   const closureOf = (/** @type {string} */ testFile) =>
     sourceClosure(join(repoRoot, testFile), repoRoot, packages);
   const result = selectTests(files, { closureOf, testFiles, repoRoot, testPackages });
-  writeOutputs({ ...result, broad: [] });
+  // EVERY test file in the repository, not `testFiles` -- that one is scoped to the implicated packages,
+  // and a guard in `packages/worker-fleet` governs a file added to `packages/judge`. Measured at ~0.7s
+  // for all 453 test files, which is why the whole population is affordable to walk here.
+  const everyTestFile = discoverTestFiles(repoRoot, allPackages);
+  const alwaysRun = alwaysRunTests(everyTestFile, { closureOf, repoRoot });
+  writeOutputs({ ...result, broad: [], alwaysRun });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
