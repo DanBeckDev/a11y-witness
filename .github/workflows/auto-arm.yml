@@ -120,9 +120,20 @@ name: auto-arm
 # same fallback -- a silent reversion to today's defect, not a loud one. Record the expiry wherever this
 # repository already tracks dated obligations once the token exists; this workflow cannot see its own
 # secret's expiry date to warn about it in advance.
+#
+# ## `push: [main]`, AND `update-branch` BELOW -- C2, #416's sibling
+#
+# Arming a PR does not keep it current: `main`'s branch protection runs with `strict=false` (#277), so an
+# armed PR merges the instant its OWN `gate` is green, with no requirement that its head still contains
+# whatever landed on `main` since. Every merge this pipeline completes therefore leaves every OTHER open,
+# armed PR one merge further behind -- and nothing was pushing them back up, which is `queue-stalled.mjs`'s
+# entire subject: it REPORTS a PR that has drifted into a real conflict, it does not fix one. `update-branch`
+# is the fix half, riding the one event that means "the queue just moved": a push to `main`.
 on:
   pull_request:
     types: [opened, ready_for_review, reopened, synchronize]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -225,3 +236,50 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node scripts/queue-stalled.mjs
+
+  update-branch:
+    # PUSH EVERY ARMED, GREEN-OR-RUNNING PR UP TO main's NEW TIP -- C2, #416's sibling.
+    #
+    # `arm` and `sweep` above get a PR INTO the queue; nothing pushed one back up once `main` moved past
+    # it, which is `queue-stalled.mjs`'s entire subject one step further along -- it only ever REPORTS a
+    # drifted PR. This job runs `gh pr update-branch` itself, on the one event that means "the queue just
+    # moved": a merge landing on `main`. `scripts/update-branch-sweep.mjs` has the full decision and why
+    # `git merge-base --is-ancestor` is used instead of GitHub's lazily-computed `mergeStateStatus`.
+    #
+    # ONLY ON `push`, never on the `pull_request` events the jobs above ride -- a fresh PR being opened or
+    # synchronized has not moved `main`, so there is nothing here for it to do.
+    #
+    # NO `GITHUB_TOKEN` FALLBACK, unlike `arm`/`sweep` -- see the script's own header. GitHub does not fire
+    # `pull_request: synchronize` for a push made with `GITHUB_TOKEN`, so updating a branch under it would
+    # give a PR a new head with no check run ever triggered for it and its required checks waiting forever
+    # -- worse than leaving it alone at its old, already-checked head. The step SKIPS outright rather than
+    # degrading, the one case in this file where a missing secret means "do nothing" instead of "do it
+    # anyway and warn". Failing loudly and doing nothing beats succeeding quietly -- and it means this job
+    # degrades SAFELY if the token is ever revoked: PRs simply stay visibly behind, rather than
+    # accumulating untested heads nobody can see.
+    #
+    # `TRUNK_FOLLOWUP_ALLOWLIST` (`push-trigger-allowlist.test.ts`) -- ceo's ruling, 2026-09-08. This is
+    # neither of the two shapes that file's chairman-derived rule already recognised: not a schedule
+    # watchdog (there is no cron here for GitHub to silently disable), and not `trunk-guard.yml`'s reactive
+    # check on main's OWN tip. It is a third, narrower shape: a push-to-main job that acts on OTHER open
+    # PRs after a merge, never on main's own tip, and can never gate anything because the merge it reacts
+    # to already happened. `continue-on-error: true` is REQUIRED by that category's own definition, not
+    # optional here -- a red run must never read as a gate failure when nothing downstream waits on it.
+    if: github.event_name == 'push'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Update every armed, green-or-running, behind PR to main's current tip
+        env:
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ -z "$A11IGN_BOT_TOKEN" ]; then
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- SKIPPING update-branch entirely, not falling back to GITHUB_TOKEN. A push made with GITHUB_TOKEN fires no pull_request: synchronize, so an updated PR would get a new head with no check run ever triggered for it -- worse than leaving it alone. See #416/C2."
+            exit 0
+          fi
+          export GH_TOKEN="$A11IGN_BOT_TOKEN"
+          node scripts/update-branch-sweep.mjs
