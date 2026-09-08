@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: snapshot every Project item before any board-mutating call, so a bad mutation is recoverable
 // EVERY BOARD MUTATION GOES THROUGH ONE WRAPPER, AND IT SNAPSHOTS FIRST -- issue #399.
 //
 // 2026-09-08, 00:0xZ: adding one Status option with `updateProjectV2Field` and a full

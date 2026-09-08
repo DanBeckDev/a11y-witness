@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: close the tracker rows a merge landed, or refuse and say why
 /**
  * CLOSE THE ISSUES A MERGE LANDED, OR REFUSE — because a routine that lives in a conversation is lost
  * with it.

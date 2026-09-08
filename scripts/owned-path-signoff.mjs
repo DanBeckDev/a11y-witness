@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: check a PR touching a corpus-invalidating path named the facts its own body must state
 /**
  * A CHANGE TO A CORPUS-INVALIDATING PATH MUST NAME THE FACTS IT DID NOT MOVE — #356.
  *

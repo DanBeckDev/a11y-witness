@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: ask whether a PR's checks actually ran and passed, never trusting mergeStateStatus alone
 // IS THIS PR ACTUALLY TESTED? -- asked of the check RUNS, never of `mergeStateStatus`.
 //
 // `mergeStateStatus` cannot tell "every required check passed" from "no check ever ran", and on
