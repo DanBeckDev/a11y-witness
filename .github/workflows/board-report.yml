@@ -19,6 +19,14 @@ on:
     - cron: "0 7 * * *"
     - cron: "0 8 * * *"
   workflow_dispatch:
+    inputs:
+      republish:
+        description: >-
+          Re-render TODAY'S edition outside the 08:00 London hour. Only permitted when today's release
+          already exists -- this REPLACES a document the board has, and can never create one they should
+          not have yet.
+        type: boolean
+        default: false
 
 permissions:
   contents: write        # the Release draft that carries the PDF
@@ -54,8 +62,37 @@ jobs:
             echo "Doing nothing, successfully."
           fi
 
+      # REPUBLISH: THE ONE WAY PAST THE HOUR GATE, AND IT CANNOT CREATE AN EDITION.
+      #
+      # The hour gate treats two different acts identically: replacing today's already-published document,
+      # and publishing one at the wrong hour. Only the second needs preventing -- on 8 September three
+      # corrections the board itself asked for could not reach the document they were for, because the
+      # only path was gated on an hour that had passed.
+      #
+      # So this is permitted ONLY when today's release ALREADY EXISTS. That single precondition is what
+      # makes it safe rather than an override: with it, the worst this can do is replace a document the
+      # board already has; without it, it would be a way to publish at 03:00.
+      #
+      # UNREACHABLE FROM THE SCHEDULE by construction: `inputs.republish` is empty on a `schedule` event,
+      # so the condition is false there whatever the hour. It is not a flag the cron can trip.
+      - id: republish
+        if: github.event_name == 'workflow_dispatch' && inputs.republish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DAY=$(TZ=Europe/London date +%Y-%m-%d)
+          if gh release view "board/$DAY" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "board/$DAY exists - republishing today's edition over it."
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "REFUSING: board/$DAY does not exist, so this would CREATE an edition outside 08:00" >&2
+            echo "London rather than replace one. Wait for the schedule." >&2
+            exit 1
+          fi
+
       - name: Check out main
-        if: steps.hour.outputs.london == '08'
+        if: steps.hour.outputs.london == '08' || steps.republish.outputs.ok == 'true'
         uses: actions/checkout@v4
         with:
           # THE MERGE COUNT NEEDS HISTORY. A shallow checkout makes `git log --merges --since` report
@@ -64,19 +101,19 @@ jobs:
           ref: main
 
       - name: Set up node
-        if: steps.hour.outputs.london == '08'
+        if: steps.hour.outputs.london == '08' || steps.republish.outputs.ok == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install
-        if: steps.hour.outputs.london == '08'
+        if: steps.hour.outputs.london == '08' || steps.republish.outputs.ok == 'true'
         run: npm ci
 
       # THE SUMMARY GATES THE EDITION, exactly as it did locally. A summary assembled from the sections is
       # what the board forbade, so there is no fallback: no committed summary for today, no edition.
       - name: Publish the edition
-        if: steps.hour.outputs.london == '08'
+        if: steps.hour.outputs.london == '08' || steps.republish.outputs.ok == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

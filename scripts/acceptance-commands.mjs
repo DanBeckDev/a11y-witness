@@ -31,6 +31,12 @@
 // region names `scripts/acceptance-commands.mjs`, not a mutation runner, and folding the two together
 // would make "did the acceptance command pass" wait on something with a different risk profile and cost.
 //
+// #471: THIS JOB ALSO REQUIRES A `Closes:` DECLARATION, on the identical shape -- `Closes #N`,
+// `Closes: none — <reason>`, or the job FAILS. Built after #468 (the first PAT-armed merge) proved the
+// closing pipeline works and, in the same run, exposed that a PR is allowed to declare nothing at all: its
+// row stayed open while the work that closed it landed on main, and nothing said so. See
+// `closesDeclarationReport` below; it NEVER infers a row from a branch name or title.
+//
 // `pull_request`, NEVER `pull_request_target` -- wired in `ci.yml`, not here, but the reason belongs next
 // to the code that makes it safe: this module runs the AUTHOR'S OWN commands from a PR body, so it must
 // only ever run under the fork's read-only token and the fork's own checked-out code. Nothing in this
@@ -43,6 +49,7 @@ import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 /** @typedef {{ verdict: "runnable" } | { verdict: "refused", reason: string } | { verdict: "prose", reason: string }} Classification */
 /** @typedef {{ kind: "missing" } | { kind: "none", reason: string } | { kind: "commands", commands: string[] }} Section */
+/** @typedef {{ kind: "missing" } | { kind: "malformed", detail: string } | { kind: "none", reason: string } | { kind: "closes", numbers: number[] }} ClosesDeclaration */
 
 // `npm run fleet:*` and its siblings -- the resource ban every worker/agent role file below `ceo` and
 // `orchestrator` carries, verbatim, elsewhere in this repo. A GitHub-hosted runner is not one of the
@@ -496,6 +503,79 @@ function runForReal(command) {
   }
 }
 
+// #471: A PR MUST DECLARE WHAT IT CLOSES, and an unrecognised body must not read as an honest opt-out.
+// #468 -- the first merge armed under the PAT -- proved the pipeline works and produced this gap in the
+// same run: `close-rows` correctly closed nothing, because the PR body declared nothing, and A0's own row
+// stayed open while the work that closes it landed on main. The fix is the same shape #446 already built
+// for `Acceptance:` -- "nobody wrote one" and "this deliberately has none" must read as different states --
+// applied to the other half of the body.
+//
+// `Closes: none` with NO reason is MALFORMED, never folded into the opt-out -- the identical rule
+// `extractSection`'s own `noneMatch` applies to `Acceptance:`, reused rather than re-derived.
+//
+// NEVER INFERS. Guessing the row from a branch name or a title would close the wrong issue the day the
+// guess is wrong, and a wrongly-closed row is worse than an open one -- it leaves work that looks done.
+// The declaration is the author's, in the body, or this reports MISSING/MALFORMED and the job fails.
+const CLOSES_NONE_PATTERN = /\bCloses:\s*none\b([^\n]*)/i;
+const CLOSES_LIST_PATTERN = /\bCloses:?\s*(#\d+(?:\s*(?:,|and)\s*#\d+)*)/i;
+const CLOSES_MENTIONED_PATTERN = /\bCloses\b/i;
+
+/**
+ * Pure. Never infers a row from anything but the words the author wrote.
+ *
+ * Three shapes, and only three: `Closes #451` (also `Closes #451, #452`), `Closes: none — <reason>` (a
+ * deliberate opt-out, reason required), and neither -- MISSING. A fourth shape exists and must not be
+ * folded into any of those: the word "Closes" present but unparseable (prose with no number, or a number
+ * that isn't digits) is MALFORMED, distinct from MISSING for the same reason `Acceptance:`'s own malformed
+ * "none" is distinct from silence -- a check that cannot tell "wrote something wrong" from "wrote nothing"
+ * cannot tell an author who tried from one who never noticed the field.
+ *
+ * @param {string | null | undefined} body
+ * @returns {ClosesDeclaration}
+ */
+export function extractClosesDeclaration(body) {
+  const text = body ?? "";
+  const noneMatch = CLOSES_NONE_PATTERN.exec(text);
+  if (noneMatch) {
+    const reason = noneMatch[1].replace(/^[\s:—-]+/, "").trim();
+    return reason.length > 0
+      ? { kind: "none", reason }
+      : { kind: "malformed", detail: "`Closes: none` names no reason" };
+  }
+  const listMatch = CLOSES_LIST_PATTERN.exec(text);
+  if (listMatch) {
+    const numbers = [...listMatch[1].matchAll(/#(\d+)/g)].map((m) => Number(m[1]));
+    return { kind: "closes", numbers };
+  }
+  if (CLOSES_MENTIONED_PATTERN.test(text)) {
+    return { kind: "malformed",
+      detail: "mentions \"Closes\" but names no `#<number>` and no `none — <reason>` opt-out" };
+  }
+  return { kind: "missing" };
+}
+
+/**
+ * THE VERDICT. `ok: false` on both MISSING and MALFORMED -- deliberately the same boolean, because both
+ * mean this job cannot tell what the PR closes, and a job that fails on one but not the other invites an
+ * author to reach for the vaguer of the two whenever the precise one is inconvenient.
+ * @param {string | null | undefined} body
+ * @returns {{ ok: boolean, line: string }}
+ */
+export function closesDeclarationReport(body) {
+  const declaration = extractClosesDeclaration(body);
+  if (declaration.kind === "missing") {
+    return { ok: false,
+      line: "CLOSES: MISSING -- no `Closes #N` or `Closes: none — <reason>` declaration" };
+  }
+  if (declaration.kind === "malformed") {
+    return { ok: false, line: `CLOSES: MALFORMED -- ${declaration.detail}` };
+  }
+  if (declaration.kind === "none") {
+    return { ok: true, line: `CLOSES: NONE -> ${declaration.reason}` };
+  }
+  return { ok: true, line: `CLOSES: #${declaration.numbers.join(", #")}` };
+}
+
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/acceptance-commands.mjs" });
   // FROM AN ENV VAR, NEVER ARGV -- a PR body is adversarial input (anyone can open a PR), and passing it
@@ -504,7 +584,9 @@ function main() {
   const body = process.env.PR_BODY ?? "";
   const report = acceptanceReport(body, runForReal);
   for (const line of report.lines) console.log(line);
-  process.exit(report.ok ? 0 : 1);
+  const closes = closesDeclarationReport(body);
+  console.log(closes.line);
+  process.exit(report.ok && closes.ok ? 0 : 1);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
