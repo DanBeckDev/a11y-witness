@@ -1,0 +1,7 @@
+{
+  "command": "npm run lab:job -- -e job=promote -e ref=main",
+  "reportedBy": "orchestrator",
+  "at": "2026-09-06T19:30:00Z",
+  "output": "1652 discriminating, 0 blind, 0 contaminated, 0 uncaptured, 0 stale, 5 provisional (not yet proven, not blocking)\nPASS \u2014 all 1652 case(s) discriminate, and the corpus is complete. (5 provisional case(s) still BLIND, not counted either way)\n# conformant records\n  1405 scored, 0 false positive(s)\n  2810 of 2810 record(s) carry ruleEvidence; 2810 carry a census\nRULES: PASS \u2014 all 21 of 21 from rule-ownership.json, against 2810 record(s) in /opt/a11y/runs/screenreader-dataset/screenreader-evidence.jsonl examined and clean\n  PASS \u2014 every RULE-ONLY criterion has fired on a real page, or declares why it cannot. Nothing this project claims rests solely on an untested rule.\n  PASS \u2014 all 84 of 84 from conformant real pages scored against the baseline examined and clean\nPromoted candidate.\n  weights   -> /opt/a11y/packages/scorer/models/screenreader-scorer\n  changeset -> /opt/a11y/.changeset/promote-candidate-0d498ef6.md",
+  "order": 10
+}
