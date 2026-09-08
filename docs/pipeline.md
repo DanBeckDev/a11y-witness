@@ -278,6 +278,14 @@ inline command (#506): before #446 that prose was *executed*, and a heading begi
 follows a **colon**. Fixed in #508; the general rule is worth keeping — put the explanation on its own
 line, not in the heading.
 
+**`npm run mutate` and `Refutation:` have OPPOSITE exit conventions (#516).** `mutate`'s own contract is
+exit 0 = the guard bites — the good outcome. `Refutation:` reads success as any non-zero exit (#438), so
+naming `mutate` on a `Refutation:` line inverts the verdict, and the dangerous half is silent: a guard that
+did **not** bite exits 1, which `Refutation:` reads as *refused* — the passing state. It produces a green
+for the exact case the section exists to catch. `classifyCommand` now refuses this at parse time rather
+than misreading it — paste `mutate`'s real output under an unparsed heading instead, the way #504 already
+does, or move the line to `Acceptance:` if exit-0-is-good is genuinely what you mean.
+
 ## "I will hold it open" is not a state the pipeline offers — a draft is
 
 A PR that must not merge until something outside CI happens is opened as a **draft**, and its body names what un-drafts it. Nobody disarms, and nobody asks anyone to wait.
