@@ -86,6 +86,20 @@ const CORPUS_PATTERNS = /** @type {[RegExp, string][]} */ ([
   [/\bscorer:shortcuts\b/, "reads runs/, which is gitignored and absent in CI"],
 ]);
 
+// #516: `npm run mutate` (`scripts/mutation-check.mjs`) AND `Refutation:` HAVE OPPOSITE EXIT CONVENTIONS.
+// `mutate`'s own contract (see that file's header) is exit 0 = the guard BITES -- the GOOD outcome.
+// `Refutation:` reads success as any NON-ZERO exit (#438) -- so a `Refutation:` line naming `mutate`
+// inverts the verdict, and the dangerous half is not the confusing red: a guard that DID NOT bite exits 1,
+// which `Refutation:` reads as REFUSED -- the passing state. It produces a green for the exact case the
+// section exists to catch. Neither convention changes -- each is right on its own terms -- so the fix is
+// to make the collision unwalkable rather than to unify them: refuse to interpret the exit code at all,
+// naming the inversion and pointing at the alternative #504 already established (drop the parsed section,
+// paste `mutate`'s real output under an unparsed heading). Classified `"refused"`, the SAME mechanism as
+// the fleet/lab/corpus patterns above -- this is a command whose exit code this job cannot honestly
+// interpret, not a claim the PR body failed to support, so it never runs and never fails the job on its
+// own (#516's own stated acceptance).
+const MUTATE_PATTERN = /\bnpm run mutate\b|\bmutation-check\.mjs\b/;
+
 // #446: A LEADING `VAR=value` ASSIGNMENT IS NOT THE COMMAND. This repo's own Acceptance/Mutation lines
 // routinely start with one -- `A11Y_ALLOW_ARMED_PUSH="..." git push`, `GH_TOKEN=... gh pr view`,
 // `PYTHONDONTWRITEBYTECODE=1 pytest ...` -- and the executable check below must look PAST it, or every
@@ -287,12 +301,29 @@ function anyCommandUsesHistory(commands) {
  * new parameter keeps behaving exactly as before, because nothing is unmet against a job that can do
  * everything. `main()` passes the REAL job's capabilities; a test passes whatever it wants to exercise.
  *
+ * #516: `section` IS OPTIONAL AND DEFAULTS TO `undefined` -- naming `mutate` is perfectly valid on an
+ * `Acceptance:` line, where success-is-exit-0 already agrees with `mutate`'s own contract; the inversion
+ * (see `MUTATE_PATTERN`'s own comment) exists only under `Refutation:`. Checked FIRST, alongside the
+ * fleet/lab/corpus refusals and with the identical verdict (`"refused"`, `ok: true`) -- #516's own stated
+ * acceptance is that this is the SAME mechanism, a new pattern in the seam that already refuses a command
+ * this job cannot honestly interpret, not a new one. `UNNEGATED` only: `! npm run mutate ...` already
+ * un-inverts the exit code at the shell level, so it is left alone -- refusing it too would be enforcing
+ * an opinion about the rejected #386/#440 idiom rather than catching the actual collision.
+ *
  * @param {string} command
- * @param {{ commandExists?: (token: string) => boolean, capabilities?: JobCapabilities }} [deps]
+ * @param {{ commandExists?: (token: string) => boolean, capabilities?: JobCapabilities,
+ *           section?: "ACCEPTANCE" | "REFUTATION" }} [deps]
  * @returns {Classification}
  */
 export function classifyCommand(command,
-  { commandExists: exists = commandExists, capabilities = FULL_CAPABILITIES } = {}) {
+  { commandExists: exists = commandExists, capabilities = FULL_CAPABILITIES, section } = {}) {
+  if (section === "REFUTATION" && MUTATE_PATTERN.test(command) && !/^!\s/.test(command.trim())) {
+    return { verdict: "refused",
+      reason: "inverts the Refutation: verdict -- mutate's exit 0 means the guard BITES, but Refutation: "
+        + "reads success as any NON-ZERO exit (#438), so a guard that did NOT bite (exit 1) would read as "
+        + "REFUSED, the passing state. Paste mutate's real output under an unparsed heading instead "
+        + "(#504), or move this line to Acceptance: if exit-0-is-good is genuinely what you mean" };
+  }
   for (const [pattern, reason] of [...FLEET_LAB_PATTERNS, ...CORPUS_PATTERNS]) {
     if (pattern.test(command)) return { verdict: "refused", reason };
   }
@@ -607,7 +638,7 @@ function commandLinesAfter(lines, headerIndex) {
  * @returns {{ line: string, ok: boolean }}
  */
 function runOneCommand(command, run, { prefix, isPass, commandExists: exists, capabilities }) {
-  const classification = classifyCommand(command, { commandExists: exists, capabilities });
+  const classification = classifyCommand(command, { commandExists: exists, capabilities, section: prefix });
   if (classification.verdict === "refused") {
     return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
   }
