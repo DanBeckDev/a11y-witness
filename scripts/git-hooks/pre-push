@@ -160,6 +160,86 @@ else
 fi
 # END #348 STALE-BASE CHECK
 
+# BEGIN B5 RESOLVE-TOWARD-MAIN -- extraction markers for pre-push-resolve-toward-main.test.ts.
+#
+# ONE RESOLUTION THAT KEPT ITS OWN SIDE REMOVED FOUR MERGED UNITS AND PASSED EVERY CHECK -- #232, and it
+# is the reason this block exists. A branch merged `main` in, answered the conflicts with its own side,
+# and deleted #363, #183, a schema-migration unit and a workspace-scope unit on the way through. Source
+# and tests went together, CONSISTENTLY, so nothing dangled: every test passed, `gate` was green, and the
+# loss was invisible for hours.
+#
+# ## THE PATH LIST IS PRINTED. THE SYMBOL CHECK IS WHAT REFUSES.
+#
+# A path list cannot tell a legitimate edit from a wholesale revert -- `M check-real-page-findings.ts`
+# looks identical either way, and that file was the centre of #232. Worse, a path list cannot see a
+# resolution that keeps BOTH sides: A5's merge concatenated two hunks sharing a trailing `});` into one
+# unterminated function, and BOTH diffs were clean because no path changed. A syntax error is not a
+# deleted path.
+#
+# So the question this asks is CONTENT: does every symbol `main` exports from a file this branch touched
+# still resolve after the merge? No list to maintain, and it answers for the two cases a path list cannot.
+#
+# ## IT PRINTS THE SIZE OF THE SET IT EXAMINED
+#
+# A guard reporting "nothing lost" over an empty set is worse than no guard, because #232 proved the
+# failure is silent -- nobody goes looking. So the count is printed whether or not anything is wrong, and
+# a zero population is stated rather than read as a pass.
+#
+# ## RUN ONLY WHEN `main` IS AN ANCESTOR, which the block above has already established
+#
+# On a branch that has not merged `main`, every symbol `main` gained since would read as LOST -- the
+# same false-positive flood that makes the two-dot path diff useless there. The refusal above is this
+# check's precondition, not merely its neighbour.
+if git rev-parse --verify -q origin/main >/dev/null && git merge-base --is-ancestor origin/main HEAD; then
+  resolve_checked=0
+  resolve_lost=()
+  # `git diff --name-only` on the two-dot form: files that DIFFER from main, which is the population a
+  # revert lives in. A file identical to main's cannot have dropped anything.
+  while IFS= read -r changed_file; do
+    case "$changed_file" in *.ts|*.mjs|*.js) ;; *) continue ;; esac
+    git cat-file -e "origin/main:$changed_file" 2>/dev/null || continue   # new file: nothing to lose
+    # `|| true` BECAUSE grep EXITS 1 ON NO MATCH, and under `set -o pipefail` that status becomes the
+    # assignment's, which `set -e` then treats as a failure and kills the hook on. A file with no exports
+    # is the ordinary case -- every test file in the repository -- so without this the guard aborts the
+    # push on the first such file, silently, having checked almost nothing. Second instance of this shape
+    # in one block: a command whose "found nothing" is indistinguishable from its "went wrong".
+    exported="$(git show "origin/main:$changed_file" \
+      | grep -oE '^export (async )?(function|const|class) [A-Za-z0-9_]+' \
+      | awk '{print $NF}' | sort -u || true)"
+    # `if`, NOT `[ -z ... ] && continue`. Under `set -e` a `&&` list whose LAST command does not run
+    # takes the condition's non-zero status and kills the hook -- so with a non-empty `$exported` the
+    # whole push died silently, mid-loop, with no message. A guard that aborts the hook is worse than no
+    # guard: it fails every push for a reason that looks like nothing at all.
+    if [ -z "$exported" ]; then continue; fi
+    after="$(git show "HEAD:$changed_file" 2>/dev/null || true)"
+    while IFS= read -r symbol; do
+      if [ -z "$symbol" ]; then continue; fi
+      resolve_checked=$((resolve_checked + 1))
+      printf '%s' "$after" | grep -q "\b${symbol}\b" || resolve_lost+=("$changed_file :: $symbol")
+    done <<< "$exported"
+  done < <(git diff --name-only origin/main..HEAD)
+
+  echo "pre-push: resolve-toward-main — $resolve_checked exported symbol(s) checked across the files this" >&2
+  echo "branch changes; ${#resolve_lost[@]} missing." >&2
+  if [ "${#resolve_lost[@]}" -gt 0 ]; then
+    if [ -n "${A11Y_RESOLVE_REASON:-}" ]; then
+      echo "pre-push: symbols main exports are missing here, overridden: $A11Y_RESOLVE_REASON" >&2
+    else
+      echo "pre-push: REFUSING — these are exported by origin/main and do not resolve after your merge:" >&2
+      for missing in "${resolve_lost[@]}"; do echo "    $missing" >&2; done
+      echo "That is what #232 looked like: a conflict resolved toward this branch removed four merged" >&2
+      echo "units, source and tests together, and every check stayed green. Re-resolve taking main's side" >&2
+      echo "for files you did not touch." >&2
+      echo "If you are deliberately removing them: A11Y_RESOLVE_REASON=\"<why>\" git push ... — the" >&2
+      echo "reason is printed, so a deliberate removal is in the log rather than in somebody's memory." >&2
+      exit 1
+    fi
+  fi
+else
+  skipped+=("resolve-toward-main (origin/main not resolvable, or not an ancestor — see the refusal above)")
+fi
+# END B5 RESOLVE-TOWARD-MAIN
+
 # #129: A CHECK CAN FAIL ON SOMEONE ELSE'S TREE. Three times on 2026-09-06 a refusal named the pusher's
 # change when the real cause was another agent's mid-edit file, a stale export nobody here touched, or an
 # untracked scratch file in a shared checkout -- every one read as "your push broke the build" and the
