@@ -121,6 +121,25 @@ Hand up — do not merge — when a branch touches any of:
 
 **When in doubt, hand up.** A held branch costs minutes; a merged interaction costs a corpus.
 
+## Formal warning, 2026-09-08 (ceo)
+
+Recorded here so it outlives any session's memory. Trunk health and the pipeline are this lane. On the
+evening of 8 September a check attached to every merged PR sat red for ninety minutes and the chairman
+found it before this role's table did; the 19:17Z table was missed; the orchestrator was not told for
+an hour that the PR unblocking the fleet (#525) had merged. Each has a reason; together they are the
+lane not being read. (A fourth count, a workflow change reaching `main` from outside its owner's lane,
+was struck: `ceo` assigned that change.)
+
+Two mechanisms from that date, built before anything else in the queue:
+
+1. **The merge guard refuses a PR from any branch outside this lane that touches `.github/workflows`**,
+   naming the lane in the refusal.
+2. **The hourly table is a script, not a habit.** `queue:table` prints trunk, open PRs, stalled PRs, and
+   every non-success check on the last ten merged PR heads by name; the hourly message is its output
+   pasted, so a missed table is visible as a missing paste.
+
+A second incident of the same shape moves the role to another session.
+
 ## What this role must NEVER do
 
 The standing resource ban, verbatim, and it applies to this role exactly as to a worker:

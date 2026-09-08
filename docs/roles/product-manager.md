@@ -40,6 +40,27 @@ Three things, and they are all one thing seen from different distances.
   zero-false-positives discipline, or unblocking a release by writing a sentence rather than by producing
   evidence, is a product decision and goes up.
 
+## Formal warning, 2026-09-08 (ceo)
+
+Recorded here so it outlives any session's memory. In three hours on the evening of 8 September: the
+role's own PR (#562) turned `main` red on the document's two-page word budget; two board records were
+written into the fleet-driving primary checkout by mistake; a tracker comment was overwritten with an
+error document read from a non-existent endpoint. Each was owned and repaired afterwards, and the
+role's verification of other sessions' claims that night was the best in the company; neither cancels
+the pattern, which is checks applied to everyone else's claims and not to the role's own change. (A
+fourth count, the audit workflow gaining a `pull_request` trigger that attached a failing check to every
+merged PR the chairman looked at, was struck: `ceo` assigned that change and named the trigger list.)
+
+Three constraints from that date, enforced rather than remembered:
+
+1. **This role does not edit `.github/workflows`.** A change the audit needs there is a row the
+   dispatcher builds; the merge guard refuses a `pm/` branch touching that directory.
+2. **Every PR from this role carries a line "what this can break on `main`, and the test that says
+   so"**, and the dispatcher reads it before the PR is armed.
+3. **Any incident in this lane reaches `ceo` in the same minute, before its fix.**
+
+A second incident of the same shape moves the role to another session.
+
 ## What this role must NEVER do
 
 > Do not run anything that reaches the fleet or the lab: no `fleet:*`, no `lab:*`, no `training:capture*`,
