@@ -334,3 +334,140 @@ not a wrong assertion.
 Fixing it costs one re-export, measured at **13 s** in `known-gaps.md` §1, and the captures are cached, so
 it does not re-capture. Do it with the next deliberate export rather than restarting nine hours of fleet
 time for a field with no consumer.
+
+## Moved from CLAUDE.md (#458)
+
+## A capture survives a lost socket — name it, then ask for it again
+
+`send(res, 200, {...})` wrote the result to a socket and the worker then kept **nothing**, so any socket
+loss between "NVDA finished reading the page" and "the host parsed the JSON" destroyed 12–520 s of real
+screen-reader work. The host cannot tell that from a worker that never answered, so it retried and paid
+for the whole capture again — and three failures in a row on one worker **evicts a machine that was never
+faulty**.
+
+On three UTM guests sharing one Mac the socket was a virtual bridge and effectively lossless, which is why
+this never mattered. A fleet of bare-metal mini PCs is real Ethernet with real power management, and the
+incident is already in provisioning: a worker answered `EHOSTUNREACH` for **48 straight requests** in one
+evidence-check run, then answered a curl thirty seconds later.
+
+```
+POST /capture  { url, ..., captureId }     # the host NAMES the capture
+GET  /capture/<captureId>                  # 404 unknown | 202 running | the original response, verbatim
+```
+
+- **The id comes from the CLIENT, and it has to.** A worker-minted id would be returned in the response —
+  the very thing being lost. This is the idempotency-key shape, for the reason payment APIs use it.
+- **404 and 202 are different answers and must stay that way.** 202 ("still running") means wait, do not
+  start a second capture. Producing one where the other is true is this repo's most expensive recurring
+  shape.
+- **A failed capture is stored exactly like a successful one**, with its original status, so a replay is
+  indistinguishable from the original response and the worker's `fault` code survives. Losing that
+  response replaces a diagnosis with "no answer" — which this project has repeatedly misread as a dead
+  machine.
+- **The host asks only after `waitForWorker` returns**, which waits for `busy` to clear. So the capture it
+  lost the socket to has necessarily finished and its outcome is stored. One request, no polling loop.
+- **In memory, bounded at 8, never persisted.** Eviction skips anything still running — dropping a live
+  capture would recreate the bug at the moment the store exists to prevent it. Persisting would mean
+  serving results captured under a different `codeVersion` after a restart.
+- **404 IS BOUNDED RESULT RECALL, NOT "NEVER STARTED" — architecture-audit.md §14.4, corrected 2026-09-05.**
+  This used to say "never heard of it" means the capture never started and to re-issue the case. That is
+  the common cause and re-issuing is still the right recovery, but it is not the only cause: the bound
+  directly above means a capture that finished and was EVICTED reads exactly the same 404, and a worker
+  RESTART loses the whole store the same way. So 404 means "not retained here", not "never ran" — a claim
+  this in-memory, 8-entry, non-persisted store was never positioned to make. Deliberately not closed with
+  payload-fingerprint duplicate suppression instead: that would still fall short of exactly-once across a
+  restart, so naming the bound honestly is more useful than a mechanism that promises more than it can
+  keep. Reusing an id after its result is retained (whether the SAME request or a different one) silently
+  executes again with no conflict check — a caller must mint a fresh id per logical capture, which every
+  real call site already does via `randomUUID()`.
+
+This adds a route and an optional request field, so it does **not** bump `CAPTURE_PROTOCOL_VERSION` —
+nothing about what the evidence *means* changed, and a bump would invalidate 2,122 captures for a
+recovery path. It does change `codeVersion()`, so redeploy. An older worker ignores `captureId`
+(`captureOptions` reads known fields only) and 404s the GET from its router fallback, which the host reads
+as "nothing to recover" and captures again — the behaviour it had before. Additive, exactly like `fault`.
+
+
+### A canary that cannot express the fault is worthless
+
+This was got wrong three times in one day, and each time the clean result was read as confirmation:
+
+- verified an autofill fix on `field-followup-date`, which does **not** auto-focus its input — so the
+  affordance never appeared and 12 clean captures proved nothing. `form-unlabelled/good` auto-focuses,
+  and still failed.
+- measured the artefact on `form-unlabelled/bad`, which has no date field at all.
+- compared guest `.4` at 4096 MB against `.6` at 3072 MB and read the difference as a code change.
+
+**Reproduce the fault with your test before trusting the test's verdict.** Every canary in
+`stability-gate.mjs` records the mechanism it exercises; add new ones the same way.
+
+
+## `evidence:check`, 2 of 48, and the `examinedNothing` guard
+
+- `npm run evidence:check <worker>` — after ANY change to the capture pipeline, asks whether the
+  evidence moved rather than whether the timing did. Exit 0 = ship without invalidating the cache,
+  1 = evidence CHANGED, bump `CAPTURE_PROTOCOL_VERSION` and recapture, **2 = INCONCLUSIVE, which now
+  includes PARTIAL coverage and not only zero**. It reported `2 compared: 2 same ... evidence unchanged —
+  safe to ship` and exited 0 on 2 of 48, because a concurrent run stopped the page server two captures in.
+  The `examinedNothing` guard's own comment named the general rule and then covered only `compared === 0`,
+  calling that "the extreme case rather than a different one" — 2 of 48 is the middle it left open. The
+  sample is stratified one case per family, so an uncompared capture is a FAMILY with no opinion attached,
+  while the question being answered is "may I keep 2,122 cached captures?". This is what makes a capture
+  optimisation affordable to evaluate; before it, every one "cost a full recapture" to find out.
+
+## Count-based checks cannot see content rot
+
+- **Count-based checks cannot see content rot — assert what was heard, not how much.** capture-check now gates on probe *values* (`disclosure-good` must reach `expanded`, `disclosure-bad` must stay `collapsed`) and on the read-through still carrying roles, because both lessons were learned the hard way. A readiness gate once overwrote the first line of every page with the document title, deleting the h1's `"heading, level 1, ..."` announcement everywhere: `"heading, level N"` phrases fell from 105 to 15 across 90 captures and **every check stayed green**, because the phrase count had not moved. If you change capture, compare evidence quality against a previous run, not just line counts.
+
+## npm run identity:rate
+
+- `npm run identity:rate -- --worker=<url> [--rounds=20]` — **does a capture ever read the wrong page?**
+  Rotates three pages with mutually exclusive signatures so a stale read names which page it came from, and
+  every capture after the first navigates an already-open window, because a freshly launched browser has no
+  previous document and therefore cannot express the fault. Reports wrong-page, silent and unrecognised
+  separately — collapsing the first two is what sent an afternoon after a stale buffer that was really a mute
+  screen reader. Exits 1 on any wrong page. A zero count is printed as a 95% upper bound (rule of three), not
+  as proof of absence.
+
+## Five canary pages, and the U+FFFC autofill incident
+
+Five canary pages, captured repeatedly, compared by CONTENT. It fails closed, and a corpus run must not
+start until it passes.
+
+It exists because the corpus carried a nondeterministic artefact for weeks with every check green.
+Edge's autofill draws a suggestion icon inside recognised inputs; NVDA announces it as an embedded
+object appended to the field:
+
+```
+"Recipient name, edit, ￼"      <- U+FFFC, OBJECT REPLACEMENT CHARACTER
+```
+
+**And `probeForms` submits forms, so the profile LEARNS**, and the rate climbs as a run proceeds —
+measured at 3%, then 8%, then 31% of affected captures, with **26 good/bad pairs disagreeing about it**.
+A pair where one side carries a stray character and the other does not is comparing two things that
+differ for a reason unrelated to accessibility, which is the one defect this project cannot tolerate.
+
+Every existing check stayed green because they all count, and the counts never moved: one form field
+before, one form field after. Content comparison is the only thing that could see it.
+
+Suppressed now with **command-line flags, not Edge policies** (`AutofillServerCommunication`,
+`AutofillAddressProfileSavePrompt`, `--disable-save-password-bubble`). The policy equivalents were set
+by provisioning and had *already drifted* — `StartupBoostEnabled` read 1 on two guests and 0 on a third
+for weeks. A flag is in git, applied at every launch, and cannot differ between guests. Note Chromium
+honours only the **last** `--disable-features`, so new features go in the existing list; a second flag
+silently disables only half of what you asked for.
+
+## eval and eval:gate, what cannot run in CI
+
+- **Pre-release, and not covered by CI:** `npm run eval:gate` for judge quality, and
+  `verify.corpus.test.ts` for the capture gates. Neither can run in CI — eval needs the Python venv
+  login, the corpus test needs `runs/`. Note also that `capture-regression.yml` is path-filtered to
+  `packages/lab/src/capture/**`, so it does **not** fire for changes under `packages/lab/src/training/**` — which is exactly
+  where the guard bug above lived.
+- `npm run eval [-- <substring>]` — judge quality against 34 labelled fixtures, **against our own scorer** (`JUDGE_BACKEND` defaults to `local`). Needs the Python venv, so it **cannot run in CI**; run it when you touch the judge, prompts, criteria, or fixtures. Do **not** quote its numbers as a headline: `docs/METHODOLOGY.md` records that the guards were tuned against these cases, scoring is single-run, and there is no expert baseline yet. Report with those caveats or not at all.
+
+## training:check-signals and worker-troubleshooting pointers
+
+- `npm run training:check-signals` — proves every dataset `badSignal` fires on the bad page and stays silent on the good one, against captures already on disk (no worker needed). Run it after ANY change to a probe's output shape: a probe and its signal are coupled, and 8 cases once went silently blind when a probe changed. `npm run training:status` reports a long capture run; `--resume` picks up where one stopped.
+- **Worker broken? Don't debug from first principles** — `docs/nvda-worker-runbook.md` has the error-string → real-cause table (the messages are misleading: `"NVDA not installed"` usually means a version mismatch, not a missing install), and `packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1` applies it automatically. `packages/worker-fleet/src/provisioning/provision-nvda-worker.ps1` is the idempotent repair.
+- **No worker to hand?** Build one: `docs/getting-started.md` (~1.5–2 h, almost all of it downloading Windows). Validating capture changes through CI is a ~10-minute loop and should be the fallback, not the habit.
