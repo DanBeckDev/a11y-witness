@@ -717,6 +717,69 @@ export function lookupClosingIssues(number) {
 }
 
 /**
+ * Is `branchName`'s open PR armed with auto-merge AND already green? #386: pushing a follow-up commit to
+ * a branch in that state races a merge that can complete in the window between the commit and the push --
+ * measured three times in one evening, each time the commit landed stranded on a branch GitHub had
+ * already merged, findable by nothing (`branches:stranded` correctly excludes a merged branch).
+ *
+ * `null` on ANY failure -- no PR, `gh` missing or unauthenticated, a network error -- same convention as
+ * every other lookup here. The caller decides what null means; for this one specifically it must mean
+ * ALLOW, loudly, never refuse (see `racesAnArmedMerge`'s own comment).
+ *
+ * GREEN IS ANSWERED THE SAME WAY `facts()`/`mergeReadiness` ANSWER IT -- `lookupRequiredContexts()` +
+ * `lookupCheckRuns()` fed to `checkReasons()`, empty reasons meaning nothing is missing, unfinished or
+ * failing -- never a second, independently-invented reading of "green" off `statusCheckRollup`. That
+ * field is GitHub's own rolled-up combined-status object, a different aggregation from the check-runs
+ * this file already reads and already distrusts `mergeStateStatus` for the identical reason; a first
+ * draft of this function read `statusCheckRollup` directly and it read `FAILURE` on a real, live PR
+ * (#359) at the same moment `gh pr checks` -- a different command, reading check-runs -- showed the
+ * `gate` job PASSING on that PR's latest run. Whichever is right, reading two sources and trusting the
+ * one nothing else in this file has ever vouched for is exactly the "two spellings of is this PR green"
+ * shape this issue's own acceptance names -- so this reuses the reading `mergeReadiness` already trusts.
+ * `green: null` (armed, but green-ness itself could not be determined) is folded into "does not race" by
+ * `racesAnArmedMerge`, the same fail-open direction as the top-level `null`.
+ *
+ * @param {string} branchName
+ * @returns {{ number: number, armed: boolean, green: boolean | null } | null}
+ */
+export function lookupArmedPrStatus(branchName) {
+  return lookup(() => {
+    const prs = JSON.parse(gh(["pr", "list", "--repo", REPO, "--head", branchName, "--state", "open",
+      "--json", "number,autoMergeRequest,headRefOid"]));
+    if (prs.length === 0) return { number: null, armed: false, green: false };
+    const pr = prs[0];
+    const armed = pr.autoMergeRequest != null;
+    if (!armed) return { number: pr.number, armed: false, green: false };
+    const required = lookupRequiredContexts();
+    const runs = lookupCheckRuns(pr.headRefOid);
+    if (required === null || runs === null) return { number: pr.number, armed: true, green: null };
+    const reasons = checkReasons({ headRefOid: pr.headRefOid }, required, runs);
+    return { number: pr.number, armed: true, green: reasons.length === 0 };
+  });
+}
+
+/**
+ * Should THIS push be refused because it would race a merge that could complete underneath it? Only
+ * armed AND already-green refuses -- everything else is the sanctioned route and must stay silent:
+ * no PR yet (the first push is how one gets opened), a PR whose gate is FAILURE or still PENDING
+ * (pushing before green is normal), `green: null` (armed, but could not confirm green), and top-level
+ * `null` (could not ask at all).
+ *
+ * FAILS OPEN, DELIBERATELY, and this is the opposite of this file's own "could not ask is not clean"
+ * rule elsewhere: that rule protects a VERDICT about evidence; this protects a developer's ability to
+ * push at all. A convenience guard against a race is not a correctness gate, and a hook that blocks work
+ * when the network is down or `gh` is unauthenticated gets deleted within a day (CLAUDE.md already
+ * records `A11Y_SKIP_VERIFY=1` reached for six times in one evening for exactly that reason).
+ *
+ * @param {{ armed: boolean, green: boolean | null } | null} status
+ * @returns {boolean}
+ */
+export function racesAnArmedMerge(status) {
+  if (!status) return false;
+  return status.armed && status.green === true;
+}
+
+/**
  * `mergeSafetyVerdict`'s inputs, none of which ask about this run's own sibling check-runs -- see that
  * function's own comment for why that omission is deliberate rather than an oversight. Cheaper than
  * `facts()` too: no required-contexts or check-runs lookup at all.
@@ -802,18 +865,50 @@ function reconcileCommand(number) {
   process.exit(EXIT.READY);
 }
 
+/**
+ * `--armed-check=<branch>`: is THIS branch's own open PR armed with auto-merge AND already green?
+ * #386's pre-push wiring calls this on the pushing branch itself -- never a PR number, since the hook
+ * only ever knows its own branch, not whether a PR exists for it yet.
+ * @param {string} branch
+ */
+function armedCheckCommand(branch) {
+  const status = lookupArmedPrStatus(branch);
+  if (racesAnArmedMerge(status)) {
+    // `status` is non-null here (racesAnArmedMerge(null) is false), so `.number` is safe.
+    console.error(`REFUSING: #${/** @type {{number: number}} */ (status).number} is armed and its gate `
+      + "is already green -- pushing now risks racing a merge that can complete before this push "
+      + "finishes (#386), stranding the commit on a branch nothing can find afterward. Wait a moment "
+      + "and push again once the merge has landed, or if this is deliberate:\n"
+      + '  A11Y_ALLOW_ARMED_PUSH="<why>" git push ...');
+    process.exit(EXIT.REFUSED);
+  }
+  if (status === null) {
+    console.log("could not ask GitHub about this branch's PR -- allowing (a race guard fails open).");
+  }
+  process.exit(EXIT.READY);
+}
+
 function main() {
-  refuseUnknownFlags(["--reconcile", "--session", "--allow-claimed-close", "--ci-gate"],
+  refuseUnknownFlags(["--reconcile", "--session", "--allow-claimed-close", "--ci-gate", "--armed-check"],
     { entry: import.meta.url, command: "node scripts/merge-guard.mjs" });
+
+  if (flagValue(process.argv, "armed-check") !== undefined) {
+    armedCheckCommand(/** @type {string} */ (flagValue(process.argv, "armed-check")));
+    return;
+  }
+
   const number = process.argv.slice(2).find((arg) => /^\d+$/.test(arg));
   if (!number) {
     console.error("Usage: node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close=<name>]\n"
       + "       node scripts/merge-guard.mjs --reconcile <pr-number>\n"
       + "       node scripts/merge-guard.mjs --ci-gate <pr-number>\n"
+      + "       node scripts/merge-guard.mjs --armed-check=<branch>\n"
       + "Answers whether that PR has actually been tested, by reading its check RUNS rather than\n"
       + "`mergeStateStatus` -- which reports CLEAN for a PR that has never run a check. `--reconcile`\n"
       + "compares the last recorded verdict against the PR's real, terminal outcome (#188). `--ci-gate` is\n"
-      + "the narrower, self-reference-safe check a required CI job runs against its own commit (#298).");
+      + "the narrower, self-reference-safe check a required CI job runs against its own commit (#298).\n"
+      + "`--armed-check` asks whether pushing to this branch right now would race an already-green,\n"
+      + "already-armed merge (#386).");
     process.exit(EXIT.CANNOT_ASK);
   }
 
