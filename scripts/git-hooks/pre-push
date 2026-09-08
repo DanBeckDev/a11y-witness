@@ -67,10 +67,32 @@
 # PR yet open gets only this hook; a branch push followed by its PR gets this hook AND the full `ci.yml`
 # run, on the PR, before anything reaches `main` at all.
 #
-# `A11Y_TEST_CONCURRENCY=4` bounds a single suite's own tsx worker count regardless of how many other
-# suites are running elsewhere on this host -- set here, in the LOCAL hook, never in `package.json`'s
-# shared `test:ts` script, because CI runs on its own machine and capping it there only makes runs slower
-# for no memory benefit.
+# `A11Y_TEST_CONCURRENCY=4` bounded a single suite's own tsx worker count on this host. It is GONE below,
+# not stale-but-kept: its only call site (`npm test` on main) went with the UPDATE right below.
+#
+# ## UPDATE 2026-09-07: package test suites moved out of this hook entirely
+#
+# ceo's ruling: CI's acceptance job (#353, unit 2 of the pipeline) now actually RUNS a PR's stated
+# acceptance command against real code on every PR, on a fork's own read-only checkout -- so a local
+# `npm test` here duplicated a check the pipeline already makes, on every push, before this hook could
+# even finish. Measured on this checkout, warm, FAST-gate branch touching one package: BEFORE (lint,
+# typecheck, one package's `npx tsx --test`) 3m 27.85s wall (207.85s); AFTER (lint, typecheck, the mjs
+# parse check below) 13.94s wall -- a ~14.9x reduction. The unit tests were the overwhelming majority of
+# that time; lint and typecheck alone are `npm run --silent lint`/`typecheck`'s own per-package
+# `tsc --build`, which this hook was never trying to avoid.
+#
+# ONE test file survives, by name, not as a package suite: `mjs-parses.test.ts` (packages/worker-fleet/
+# src/) is the check CLAUDE.md itself names as "the only real check" for a `.mjs` file that lint and
+# `tsc --noEmit` cannot see fail -- a backtick inside a template literal holding PowerShell or shell
+# script, which broke TWICE in one session before this test existed. CI's `ci.yml` runs the FULL suite
+# (which includes this file) on every PR, so on a branch WITH an open PR it is redundant there too -- but
+# a branch push with no PR yet (the common case: this hook runs, THEN `gh pr create`) has nothing else
+# checking it before the code leaves this machine, and it is one test, not a package's worth.
+#
+# The corpus-gated block below (`check-signals`, `rules:gate`) is UNCHANGED and deliberately so: CI
+# structurally cannot run either one (`runs/` is gitignored, so a GitHub-hosted runner has no corpus to
+# read), so nothing else in the pipeline covers what they cover. Cutting them here would not move the
+# check to CI, it would delete it.
 set -euo pipefail
 
 if [ "${A11Y_SKIP_VERIFY:-0}" = "1" ]; then
@@ -236,8 +258,9 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [ "$BRANCH" = "main" ]; then
   run "lint"       npm run --silent lint
   run "typecheck"  npm run --silent typecheck
-  echo "pre-push: FULL suite (main). Release gates are separate: npm run release:gate"
-  run "unit tests" env A11Y_TEST_CONCURRENCY=4 npm test
+  run "mjs parse check"  npx tsx --test packages/worker-fleet/src/mjs-parses.test.ts
+  echo "pre-push: gate (main). Package test suites run in CI's acceptance job now, not here -- see the"
+  echo "2026-09-07 UPDATE above. Release gates are separate: npm run release:gate"
 elif [ "$(node scripts/board-only-check.mjs)" = "true" ]; then
   # BOARD-ONLY, THE SAME SHAPE `ci.yml`'s `board` job GATES ON -- chairman's direction, 2026-09-06, the
   # product manager's single largest recurring cost that night: docs/board/summaries/*.md and
@@ -260,23 +283,13 @@ elif [ "$(node scripts/board-only-check.mjs)" = "true" ]; then
 else
   run "lint"       npm run --silent lint
   run "typecheck"  npm run --silent typecheck
-  echo "pre-push: FAST gate ($BRANCH) -- lint, typecheck, and tests of the package(s) touched against"
-  echo "origin/main. The full suite runs in CI on this branch's PR: .github/workflows/ci.yml"
-  # A branch that breaks a package it never touched passes THIS gate and fails CI -- deliberate, not a
-  # gap: see scripts/changed-packages.mjs's header for why a real cross-package dependency graph was not
-  # built here.
+  run "mjs parse check"  npx tsx --test packages/worker-fleet/src/mjs-parses.test.ts
+  echo "pre-push: gate ($BRANCH) -- lint, typecheck, and an .mjs parse check. Package test suites run in"
+  echo "CI's acceptance job on this branch's PR now, not here -- see the 2026-09-07 UPDATE above."
+  # Still needed for the changeset gate below, which is scoped to whether this push touches a published
+  # package at all -- unrelated to which package's TESTS used to run here.
   changed="$(node scripts/changed-packages.mjs)"
-  if [ -z "$changed" ]; then
-    echo "  no packages/ file touched against origin/main -- running every package's tests"
-    # #355: see the board-guards glob check above for why this runs before the suite it is checking.
-    run "unit tests (all packages)" node scripts/assert-glob-not-empty.mjs \
-      "packages/*/src/**/*.test.ts" --min=300 --run --test-concurrency=4
-  else
-    echo "  touched: $changed"
-    globs=()
-    for pkg in $changed; do globs+=("packages/$pkg/src/**/*.test.ts"); done
-    run "unit tests ($changed)" node scripts/assert-glob-not-empty.mjs "${globs[@]}" --run --test-concurrency=4
-  fi
+  [ -n "$changed" ] && echo "  touched: $changed"
 
   # #261: THE CHANGESET GATE WAS MISSING FROM THIS HOOK ENTIRELY. `changeset` is a required CI context and
   # an input to the aggregate `gate`, so a fully green local push (this hook, above) was twice followed by
