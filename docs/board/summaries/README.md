@@ -21,7 +21,23 @@ still act. Found by writing a 122-word summary and watching every check pass.
 
 ## The dateline is for when nobody is there, not a licence
 
-A summary written the evening before is a **forecast**, and it says so in its own first line. **If you are
+A summary is written at **07:30 London on the morning of its edition**, and it says so in its own first
+line: **"Written at 07:30 on 8 September."**
+
+**The board asked for this directly:** *"it should be 30 mins before as it should be as fresh as possible
+as a lot happens over night."* A summary written the evening before is a forecast about a night that has
+not happened. On 8 September the queue went from twelve open pull requests to zero between the summary
+being written and the edition rendering, and the forecast opening — *"if the overnight run changes the
+answer, rewrite it"* — was an instruction to a person who would not be there.
+
+The stated time is **checked, not decorative**: `statedWritingTime` in `board-summary-check.mjs` is
+asserted by the style suite to be within 60 minutes of the render. A stated time nothing verifies is the
+same shape as a gate that reports cleanly having examined nothing.
+
+The schedule around it: **07:15** a reminder that exits 0 (at 07:15 the summary is not late, it is not
+written yet, and a red mark every morning for a normal working state is how a signal gets ignored);
+**07:45** a refusal; **08:00** the edition, reading `main` as it stands then, so anything landed overnight
+is in.
 running before 08:00, re-read the overnight outcome and rewrite the file if it changed the answer.** The
 dateline exists for the mornings when nobody is awake to do that; it is not an excuse for a summary that
 was overtaken and left standing.
