@@ -172,3 +172,66 @@ Two consequences worth knowing before they surprise you:
   made with `GITHUB_TOKEN` fires no `pull_request: synchronize`, so an updated branch would get a new head
   with no check run ever triggered for it and its required checks waiting forever — worse than leaving it
   visibly behind. If PRs stop being pushed up, check the secret before suspecting the sweep's decision.
+
+## The `acceptance` job is SHALLOW and its token reads CONTENTS ONLY — name a command it can actually run
+
+Three PRs failed `acceptance` in one morning (2026-09-08) for reasons that had nothing to do with the
+change under review. In each case the author named a command that passes locally and cannot run in that
+job. The job is doing its work — it refuses rather than reporting success — but nothing said what
+environment it offers, so authors were discovering it one failed run at a time.
+
+`ci.yml`'s `acceptance` job, quoted:
+
+```yaml
+  acceptance:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4          # <- NO fetch-depth. Depth 1.
+```
+
+**Depth 1, and `actions/checkout` fetches the PR ref, not the branch.** So `refs/remotes/origin/main`
+**does not exist** on that runner and there is no history behind the head. Anything of the shape
+`git diff origin/main...HEAD`, `git show origin/main:<path>`, `git merge-base`, or a test that reads what a
+branch changed will fail with `fatal: invalid object name 'origin/main'` or `no commits in common`.
+
+**Compare `ts`, which declares `fetch-depth: 0`.** The asymmetry is deliberate and both halves are
+load-bearing: `ts` needs full history because A1b's `select-changed-tests.mjs` runs `git diff <base>...HEAD`
+in that same job. So **the identical test can pass in `ts` and fail in `acceptance`**, which is exactly what
+happened to A6 (#505): `ok 668` in `ts`, `not ok 3` in `acceptance`, same file, same commit.
+
+**The token is scoped `contents: read` and nothing else.** A test that calls the GitHub API for issues,
+pull requests, labels or check runs fails there. `row-claim.test.ts` carries a deliberate live smoke test —
+`fetchLabels against the real #55 succeeds structurally, live` — and #504 named that whole file as its
+acceptance command; every one of its own assertions passed and the live one could not.
+
+**And no fleet, no lab, no corpus.** `runs/` is gitignored, so every corpus-reading gate skips there; the
+standing resource ban applies to this job by construction rather than by policy.
+
+### What to name instead
+
+| you want to prove | name this |
+|---|---|
+| a unit test | the specific test file, or `--test-name-pattern` for your cases |
+| something needing history | run it in `ts` and say so in the body; do not name it here |
+| something needing the API | run it locally, paste the output, and name a non-live command here |
+| a guard bites | `npm run mutate -- --file=… --mutate=… --test=…` on a file the job has |
+
+**Say which job runs each command.** *"It passed"* and *"it passed in the one job with full history"* are
+different claims, and only the second survives being read a week later.
+
+### Two traps inside the job itself
+
+**`PR_BODY` is the LIVE payload; the parser is the STALE checkout.** `ci.yml` passes
+`${{ github.event.pull_request.body }}`, so editing a body re-runs `acceptance` against the *new* body and
+the *old* `acceptance-commands.mjs` from that PR's own checkout. A parser fix therefore does not reach any
+PR opened before it merges — but a body edit does re-trigger the run, because `ci.yml` lists `edited` among
+its `pull_request` types.
+
+**A heading is a title, not a command.** `## Acceptance — some prose` had the trailing text taken as an
+inline command (#506): before #446 that prose was *executed*, and a heading beginning with a real builtin
+(`## Acceptance: test the new thing`) produced a green acceptance that ran nothing. The inline form is what
+follows a **colon**. Fixed in #508; the general rule is worth keeping — put the explanation on its own
+line, not in the heading.
