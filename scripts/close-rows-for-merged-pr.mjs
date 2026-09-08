@@ -100,9 +100,23 @@ function main() {
   let issues, sha;
   try {
     const query = `{repository(owner:"${owner}",name:"${name}"){pullRequest(number:${number}){`
-      + `mergeCommit{oid} closingIssuesReferences(first:20){nodes{number state}}}}}`;
+      + `merged baseRefName mergeCommit{oid} closingIssuesReferences(first:20){nodes{number state}}}}}`;
     const pr = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`,
       "--jq", ".data.repository.pullRequest"]));
+    // Enforced HERE, not only in the workflow's `if:` -- `workflow_dispatch` (#394) takes an arbitrary
+    // PR number with no event to gate on, so a manual run against an unmerged PR, or one merged into a
+    // branch other than `main`, must refuse the same way the `pull_request` path's own `if:` already
+    // does. `close-merged-rows.mjs`'s own header names the risk this closes: "a tool that closed rows
+    // automatically would eventually close one whose work did not actually land."
+    if (pr.merged !== true) {
+      console.error(`CANNOT ASK: #${number} is not merged -- refusing to close rows for a PR whose work `
+        + "may not have landed.");
+      process.exit(EXIT.CANNOT_ASK);
+    }
+    if (pr.baseRefName !== "main") {
+      console.error(`CANNOT ASK: #${number} merged into \`${pr.baseRefName}\`, not \`main\` -- refusing.`);
+      process.exit(EXIT.CANNOT_ASK);
+    }
     issues = pr.closingIssuesReferences.nodes;
     sha = pr.mergeCommit?.oid ?? "unknown";
   } catch (cause) {
