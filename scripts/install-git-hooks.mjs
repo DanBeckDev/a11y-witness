@@ -1,3 +1,4 @@
+// @ts-check
 // Point git at this repo's tracked hooks. Run by `prepare`, so `npm install` installs them.
 //
 // ## The hole this closes

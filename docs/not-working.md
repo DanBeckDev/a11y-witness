@@ -1029,10 +1029,21 @@ inferred."* Run over the authoritative corpus (`job=observation-ambiguity`):
 |---|---|---|
 | `formChanges` | 5,148 | **3,177 — 61.7%** |
 | `postSubmitFields` | 5,862 | **3,289 — 56.1%** |
-| `formControl` sweep | 2,865 | **1,872 "cannot say" — 65.3%**, against 950 (33.2%) where the page genuinely has none |
+| `formControl` sweep | 2,865 | 1,872 "cannot say" — 65.3%, against 950 (33.2%) where the page genuinely has none |
+
+**CORRECTED [#341](https://github.com/DanBeckDev/a11y-witness/issues/341): the `formControl` row's own
+column header is the defect.** "Cannot say" is `cannotSay/empty` — *"no census to compare against", a
+statement about the corpus's AGE, not about any page* (`observation-ambiguity.mjs`) — a different quantity
+from `emptyNotAsked`, which `formChanges` and `postSubmitFields` genuinely carry. `emptyNotAsked` has never
+been computed for `formControl`, in any commit of that file. This table's own header put "cannot say"
+under "NEVER ASKED" and is the origin of a false sentence that then propagated into
+`screenreader_features.py`, `docs/known-gaps.md` and two test files. Kept here, corrected rather than
+rewritten, as the record of the mistake — see the other three files for the honest statement of what
+`formControl` actually has.
 
 **So the majority of these zeros are artefacts, not page facts** — which is what §11 asserted and nobody
-had counted. It does not by itself overturn §14: that decision rests on the SHORTCUT risk (a feature
+had counted. True for `formChanges` and `postSubmitFields`; `formControl`'s own share of that claim rests
+on the corrected reading above, not on a never-asked figure that does not exist. It does not by itself overturn §14: that decision rests on the SHORTCUT risk (a feature
 correlated with capture conditions is ADR 0015's whole subject), and a number showing the problem is real
 is not a design that avoids creating a worse one. What it removes is the option of leaving the question
 open on the grounds that the size was unknown.
