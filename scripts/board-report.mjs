@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // The daily board report, GENERATED FROM GITHUB AND GIT — never from what an agent said.
 //
 // The rule this file exists to enforce, and the reason it is a script rather than a habit: a report
@@ -18,12 +19,13 @@
 // generating and the publishing are separate acts and a bad report can be seen before it is posted.
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "@a11y-witness/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import {
   REPO, MILESTONE, HOURS_MS, READ_SET,
   gh, git, issues, milestone, mergeState, misAuthored, reported, daysUntil, readSetIsNotMain, countable} from "./board-data.mjs";
 
 const argv = process.argv.slice(2);
+/** @type {(name: string) => string | undefined} */
 const flag = (name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
 
 /** ONE FUNCTION PER SECTION, and not as a style preference.
@@ -36,6 +38,7 @@ const flag = (name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").sl
  * Each section takes the whole fact set and destructures only what it reads, so what a section depends on
  * is visible in its first line rather than inferred from its body.
  */
+/** @param {any} d @param {string[]} L */
 export function release(d, L) {
   const { ms } = d;
   L.push("## Release");
@@ -54,6 +57,7 @@ export function release(d, L) {
   L.push("");
 }
 
+/** @param {any} d @param {string[]} L */
 export function blockerTable(d, L) {
   const { blockers } = d;
   L.push("## Blockers");
@@ -70,6 +74,7 @@ export function blockerTable(d, L) {
   L.push("");
 }
 
+/** @param {any} d @param {string[]} L */
 export function issuesClosed(d, L) {
   const { merges, closed } = d;
   L.push("## Issues closed");
@@ -82,6 +87,7 @@ export function issuesClosed(d, L) {
   L.push("");
 }
 
+/** @param {any} d @param {string[]} L */
 export function whatMerged(d, L) {
   const { merges, unpushed, since } = d;
   L.push("## What merged");
@@ -116,12 +122,13 @@ export function whatMerged(d, L) {
   L.push("");
 }
 
+/** @param {any} d @param {string[]} L */
 export function authorship(d, L) {
   const { strays } = d;
   if (strays.length > 0) {
     L.push("## Commit authorship — a known defect, not a discovery");
     L.push(`${strays.length} commit${strays.length === 1 ? "" : "s"} in this window are authored by an `
-      + `address that is not the repository owner's: ${[...new Set(strays.map((s) => s.email))].join(", ")}.`);
+      + `address that is not the repository owner's: ${[...new Set(strays.map((/** @type {any} */ s) => s.email))].join(", ")}.`);
     L.push("");
     L.push("Cause, measured: a test spawned git with `cwd: tmpdir` but no sanitised `env`, and under the "
       + "pre-push hook `GIT_DIR` beats `cwd`, so it wrote its identity into the real config. **cwd is not "
@@ -132,6 +139,7 @@ export function authorship(d, L) {
   }
 }
 
+/** @param {any} d @param {string[]} L */
 export function lastGate(d, L) {
   const { latestGate, gateIsFresh } = d;
   L.push("## Last gate result");
@@ -152,6 +160,7 @@ export function lastGate(d, L) {
   L.push("");
 }
 
+/** @param {any} d @param {string[]} L */
 export function fleetHoursSection(d, L) {
   const { fleetHours } = d;
   L.push("## Fleet hours");
@@ -189,6 +198,7 @@ export function fleetHoursSection(d, L) {
   L.push("");
 }
 
+/** @param {any} d @param {string[]} L */
 export function queue(d, L) {
   const { open, ready, awaiting } = d;
   L.push("## Queue");
@@ -200,7 +210,11 @@ export function queue(d, L) {
   }
 }
 
-/** Everything the sections read, gathered once. */
+/**
+ * Everything the sections read, gathered once.
+ * @param {string} since
+ * @param {string} sinceLabel
+ */
 function facts(since, sinceLabel) {
   const all = issues();
   const ms = milestone();
@@ -208,17 +222,18 @@ function facts(since, sinceLabel) {
   const strays = misAuthored(since);
   const { latestGate, gateIsFresh, fleetHours } = reported();
 
-  const closed = all.filter((i) => i.state === "CLOSED" && i.closedAt && Date.parse(i.closedAt) >= Date.parse(since));
+  const closed = all.filter((/** @type {any} */ i) => i.state === "CLOSED" && i.closedAt && Date.parse(i.closedAt) >= Date.parse(since));
   // Meta rows are containers, not work -- see `countable` in board-data.mjs, and section 6 prints the rule.
-  const open = countable(all.filter((i) => i.state === "OPEN"));
-  const blockers = open.filter((i) => i.milestone?.title === MILESTONE);
-  const ready = open.filter((i) => i.labelNames.includes("ready"));
-  const awaiting = open.filter((i) => i.labelNames.includes("awaiting-merge"));
+  const open = countable(all.filter((/** @type {any} */ i) => i.state === "OPEN"));
+  const blockers = open.filter((/** @type {any} */ i) => i.milestone?.title === MILESTONE);
+  const ready = open.filter((/** @type {any} */ i) => i.labelNames.includes("ready"));
+  const awaiting = open.filter((/** @type {any} */ i) => i.labelNames.includes("awaiting-merge"));
 
   return { since, sinceLabel, all, ms, merges, unpushed, strays, latestGate, gateIsFresh,
     fleetHours, closed, open, blockers, ready, awaiting };
 }
 
+/** @param {any} d */
 export function render(d) {
   const { sinceLabel } = d;
   const L = [];

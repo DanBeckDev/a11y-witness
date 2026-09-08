@@ -9,12 +9,12 @@
  *
  * Skips honestly when the corpus is absent, as `verify.corpus.test.ts` does — CI cannot see `runs/`.
  *
- * REPO-ROOT AND CAPTURES-PATH COMPUTED HERE, NOT IMPORTED FROM `@a11y-witness/lab` -- #199, chairman's
- * ruling. This file used to import `datasetRoot`/`captureRoot` straight from `@a11y-witness/lab/src/
- * dataset-paths.mjs`, which made `a11y-witness` (published, consumer-facing) depend on `lab` (private,
+ * REPO-ROOT AND CAPTURES-PATH COMPUTED HERE, NOT IMPORTED FROM `@a11ign/lab` -- #199, chairman's
+ * ruling. This file used to import `datasetRoot`/`captureRoot` straight from `@a11ign/lab/src/
+ * dataset-paths.mjs`, which made `a11ign` (published, consumer-facing) depend on `lab` (private,
  * never published) -- a real boundary defect (ADR 0004), not merely a CI-scoping inconvenience: `lab`
  * ALSO depends on `cli` (`public-api.test.ts` imports the published package to verify its surface), so the
- * two depended on each other. `@a11y-witness/evidence` was considered as a shared home and rejected: ADR
+ * two depended on each other. `@a11ign/evidence` was considered as a shared home and rejected: ADR
  * 0004 states its contract explicitly -- "all contract, no I/O. Deliberately no `node:fs`, no
  * `process.env`" -- and every function this file needs reads `process.env` overrides. So this follows the
  * EXACT pattern `worker-fleet`'s `doctor.mjs`/`compare-workers.mjs`, `nvda-worker`'s
@@ -31,10 +31,11 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { AddressInfo } from "node:net";
-import { stripComments } from "@a11y-witness/evidence/source-text";
+import { stripComments } from "@a11ign/evidence/source-text";
 
 import {
-  applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, type CaptureResponse, type CaptureRequest,
+  applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, describeWorkerError, warnUnverified,
+  type CaptureResponse, type CaptureRequest,
 } from "./cli.js";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
@@ -153,7 +154,7 @@ test("A FAILED AXE SCAN IS NOT '0 violations' — pageContext decides nullness",
  *
  * `captureViaWorker` used to POST synchronously with no `captureId`, so a response lost in transit meant
  * the page was reported as never examined even when the worker had already finished it. It now goes
- * through `captureTolerantly` (`@a11y-witness/worker-fleet/capture-client`), the same client every lab
+ * through `captureTolerantly` (`@a11ign/worker-fleet/capture-client`), the same client every lab
  * capture already uses, which mints its own id and reconciles a lost acknowledgement or poll by asking
  * about that SAME id before ever giving up. Reproduced against a loopback worker exactly like
  * `capture-async.test.ts` does, at the real function this package calls rather than at a lower-level
@@ -242,4 +243,51 @@ test("errorReason falls back to String(error) when neither .message nor .code ex
 test("MUTATION: an error with a message but no code still prefers the message, not the fallback chain", () => {
   const err = Object.assign(new Error("real reason"), { code: "SOME_CODE" });
   assert.equal(errorReason(err), "real reason", "a present .message must win over .code, not the other way round");
+});
+
+test("describeWorkerError: a hard-timeout fault reports how far the capture got -- issue #336", () => {
+  // The worker's own wire shape (server.mjs's `runCapture` catch block) -- `reachedPhase` and
+  // `diagnostics` were already being sent and were unused here until #336 gave a reason to read them.
+  const message = describeWorkerError(500, {
+    error: "capture exceeded the hard timeout of 520000 ms and was abandoned",
+    fault: "hard-timeout",
+    reachedPhase: "readingForm",
+    diagnostics: [{ event: "navigated" }, { event: "sweptHeadings" }, { event: "readingForm" }],
+  });
+  assert.match(message, /hard-timeout/, "the fault code must still be printed");
+  assert.match(message, /readingForm/, "the phase the capture actually reached must be named");
+  assert.match(message, /3 progress mark/, "how many marks were recorded must be stated, not just named");
+});
+
+test("describeWorkerError: a fault with no reachedPhase omits the progress line rather than inventing one", () => {
+  const message = describeWorkerError(500, { error: "the browser could not reach the page", fault: "page-unreachable" });
+  assert.doesNotMatch(message, /Got as far as/, "no reachedPhase was reported, so none must be claimed");
+});
+
+/** `warnUnverified` writes straight to `process.stderr`, so capturing its output means stubbing the write
+ *  method for the duration of one call and restoring it immediately after -- never left stubbed across
+ *  tests, or a later test's own diagnostics would silently vanish too. */
+function capturedStderr(run: () => void): string {
+  const original = process.stderr.write.bind(process.stderr);
+  let out = "";
+  process.stderr.write = ((chunk: string) => { out += chunk; return true; }) as typeof process.stderr.write;
+  try {
+    run();
+  } finally {
+    process.stderr.write = original;
+  }
+  return out;
+}
+
+test("warnUnverified: a 'contained' doubt gets the full WHAT/TRY/WHERE treatment -- issue #398", () => {
+  const out = capturedStderr(() => warnUnverified("contained", "Order details"));
+  assert.match(out, /reached almost none of this page/i, "the doubt itself must still be named");
+  assert.match(out, /Try:/, "#398: a bare doubt with no remediation sends the reader nowhere");
+  assert.match(out, /docs\/try-it\.md/i, "the same consent-banner guidance a first reader is already sent");
+});
+
+test("warnUnverified: a 'wrong-content' doubt names the title it expected", () => {
+  const out = capturedStderr(() => warnUnverified("wrong-content", "Order details"));
+  assert.match(out, /Order details/, "the expected title must still be printed");
+  assert.match(out, /Try:/, "this doubt also gets actionable remediation, not a bare sentence");
 });

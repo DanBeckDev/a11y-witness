@@ -612,7 +612,7 @@ def main() -> None:
         raise RuntimeError("no screen-reader evidence supplied")
     report, weights, artifact = verify_artifact(args, training)
     result = {
-        "schema": "a11y-witness/screenreader-scorer-shadow",
+        "schema": "a11ign/screenreader-scorer-shadow",
         "mode": "shadow" if args.shadow else "score-only",
         "decisionAction": "log-only" if args.shadow else "scores-only",
         "artifact": artifact,

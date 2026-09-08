@@ -39,7 +39,7 @@ If your app is on GitHub, this needs one workflow file and no machine of your ow
 
 ```yaml
 jobs:
-  a11y-witness:
+  a11ign:
     runs-on: windows-2022        # NVDA is Windows-only; the action fails fast anywhere else
     steps:
       - uses: DanBeckDev/a11y-witness@main
@@ -57,8 +57,12 @@ activates a **Bags** button and never a **Delete account** one.
 layer than a page of text alone — the form is where the announcements this tool exists to hear actually
 happen.
 
-How long the run takes is under re-measurement since 2026-09-07 (#311). Most of it is the screen reader
-reading, and that time is not recoverable.
+**Expect five to eight minutes for a real page.** Measured on three dissimilar real pages (#311): 4 m 38 s,
+4 m 50 s and 7 m 54 s, none of which timed out — three different page shapes landing within a few percent
+of each other, which is the finding that matters more than any one number: this is a fixed floor per page,
+not something a simpler page makes faster. Most of it is the screen reader reading, and that time is not
+recoverable. The one thing that can make it far longer than that range is a consent banner the tool cannot
+get past — see below, before you judge how long your own run took.
 
 ## What a long marketing page will actually produce
 
@@ -75,7 +79,11 @@ simply vanished.
 
 We handle it — the tool reads the page structure before anything can trap focus, and it presses Escape,
 which dismisses most banners. **It does not always work.** On a batch of real public-sector pages, 24
-captures opened on a consent overlay and never reached a heading.
+captures opened on a consent overlay and never reached a heading. In one real run (#398) the page this
+guide recommends pointing at — your own contact-form page — returned nothing but a consent-overlay
+warning, after the full five minutes: the judgement was correct (it genuinely could not get past the
+banner), but that is the worst-case shape the timing range above does not cover, and it is why the check
+below matters more than the number.
 
 **So check one thing before you judge the output:** if the report shows almost nothing — a handful of
 elements on a page you know is large — you are looking at the banner, not at your site. Tell us; that is a
@@ -106,10 +114,11 @@ point the run at the page with the form on it.
 
 ### How long a large page takes
 
-**Expect minutes, not seconds.** Exact per-page timing is under re-measurement since 2026-09-07 (#311); a
-long page takes longer than an ordinary one, because the time is a screen reader reading — it is not
-parallelisable and not recoverable. A very large page can exhaust our capture budget, and if it does you
-will get a partial result that **says** it is partial rather than a short one that looks complete.
+**Expect five to eight minutes**, per the measurement above (#311) — not because a bigger page is slower,
+but because the floor is fixed regardless of shape and the time is a screen reader reading: it is not
+parallelisable and not recoverable. A very large page can still exhaust our capture budget beyond that
+range, and if it does you will get a partial result that **says** it is partial rather than a short one
+that looks complete.
 
 ## YOUR PAGE — the one section that is not written yet
 

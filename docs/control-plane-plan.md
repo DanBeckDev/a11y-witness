@@ -210,7 +210,7 @@ ADR 0012's guarantee intact, which giving the LAB a fleet key would not be.
 Looking for what control was missing turned up what it should not have:
 
 ```
-/root/a11y-witness/node_modules   56M, 121 packages
+/root/a11ign/node_modules   56M, 121 packages
 /root/.ssh/<fleet key filename>   the fleet key
 ```
 
@@ -231,7 +231,7 @@ So the split described in the ADR is not implemented on either machine that matt
 dependencies it was designed to exclude, and every operator laptop carries both credentials AND the whole
 workspace. The document is accurate about the intent and describes a system that does not exist.
 
-**The remedy is a deletion, and it is one command** — `rm -rf /root/a11y-witness/node_modules`, recoverable
+**The remedy is a deletion, and it is one command** — `rm -rf /root/a11ign/node_modules`, recoverable
 with `npm install` if something unexpected turns out to need it. It is NOT done in this plan because
 deleting 56 MB on a live box is the operator's call, not a side effect of a documentation change.
 

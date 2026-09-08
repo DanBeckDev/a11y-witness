@@ -15,7 +15,7 @@
  * announced around them — which is how a screen reader user tells them apart — and `nth:` only when there
  * is no group to name.
  */
-import { parseAnnouncement } from "@a11y-witness/evidence";
+import { parseAnnouncement } from "@a11ign/evidence";
 
 /** What a draft found, so a caller can report on it rather than only print it. */
 export interface FormsDraft {
@@ -147,7 +147,7 @@ function unnamedLines(unnamed: FormsDraft["unnamed"]): string[] {
 function unparsedLines(unparsed: FormsDraft["unparsed"]): string[] {
   return unparsed.flatMap((field) => [
     "",
-    `      # NOT UNDERSTOOD by a11y-witness, ${field.position} in reading order:`,
+    `      # NOT UNDERSTOOD by a11ign, ${field.position} in reading order:`,
     `      #   ${field.announced}`,
     "      # This is a gap in THIS TOOL's announcement grammar, not a finding about your page.",
     "      # Add the field by hand if you need it configured.",
@@ -193,7 +193,7 @@ export function draftFormsConfig(
     .map((f) => ({ name: f.name, verb: VERB_FOR_ROLE[f.role], group: f.group })));
 
   const yaml = [
-    "# Drafted by a11y-witness from what NVDA announced. Fill in the values; the names are already right.",
+    "# Drafted by a11ign from what NVDA announced. Fill in the values; the names are already right.",
     "#",
     "# A `success` state COMPLETES the form. Supplying one is how you say that is acceptable — leave it out",
     "# and nothing is submitted with valid data. Run with --plan to see exactly what would be submitted.",

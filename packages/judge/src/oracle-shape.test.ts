@@ -1,7 +1,7 @@
 /**
  * EVERY ORACLE `oracleCounts` PRODUCES MUST BE READABLE BY THE RULES.
  *
- * The oracle set is declared once, as `OracleCounts` in `@a11y-witness/evidence/verify`, and two
+ * The oracle set is declared once, as `OracleCounts` in `@a11ign/evidence/verify`, and two
  * interfaces used to restate parts of it: `JudgeInput` listed `census` and `dom`, and `RuleInput` lists
  * each field with its own rationale.
  *
@@ -18,7 +18,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { oracleCounts } from "@a11y-witness/evidence/verify";
+import { oracleCounts } from "@a11ign/evidence/verify";
 import type { RuleInput } from "./rules.js";
 import type { JudgeInput } from "./judge.js";
 

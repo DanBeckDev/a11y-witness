@@ -22,7 +22,7 @@
  *
  * Specification: https://www.w3.org/TR/act-rules-format/
  */
-import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
+import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 
 import { assessedCriteria, criterionNumber } from "./coverage.js";
 import { hasEvidenceFor, type CaptureEvidence } from "./local-judge.js";

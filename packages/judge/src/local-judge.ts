@@ -39,11 +39,11 @@
  */
 import { spawn } from "node:child_process";
 
-import type { CaptureStructure } from "@a11y-witness/evidence";
-import { annotateCapture } from "@a11y-witness/evidence";
-import { scorerPaths as artefact } from "@a11y-witness/scorer";
+import type { CaptureStructure } from "@a11ign/evidence";
+import { annotateCapture } from "@a11ign/evidence";
+import { scorerPaths as artefact } from "@a11ign/scorer";
 
-import { WCAG_22_AA } from "@a11y-witness/evidence/wcag";
+import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 import { SCORED_CRITERIA, RULE_CRITERIA, assessedCriteria } from "./coverage.js";
 import type { Judgment, Finding, Severity } from "./judge.js";
 
@@ -459,7 +459,7 @@ export function findingsFromScores(
 /**
  * Where the scorer lives.
  *
- * The SCRIPT path comes from `@a11y-witness/scorer`, which resolves it from its own module, so this function
+ * The SCRIPT path comes from `@a11ign/scorer`, which resolves it from its own module, so this function
  * does not have to know any layout.
  *
  * The INTERPRETER defaults to `python3` on the PATH. It used to default to `<repo>/.venv/bin/python`, which
