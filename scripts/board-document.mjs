@@ -501,7 +501,12 @@ function renameBackground(L) {
       + `assesses**, **${counts.partial} it assesses in part**, and **${counts.reachable} it could reach `
       + "and does not yet.**");
     L.push("");
-    L.push("**None of those numbers moved today, and one nearly did.** Content on hover or focus is "
+    // THE CLAIM IS GONE RATHER THAN RE-DERIVED. It read "None of those numbers moved today" beside three
+    // numbers computed from the source -- and one HAD moved (yesterday's edition said 13/9/6 against
+    // today's 12/10/6, #251's 4.1.3 partial). Prose asserting a diff nobody computed is the failure this
+    // document exists to prevent, and the honest fix is to stop asserting it: nothing records yesterday's
+    // counts, so the day's diff cannot be derived here without inventing the comparison.
+    L.push("**One of them nearly moved.** Content on hover or focus is "
       + "claimed as partly assessed. Downgrading it to *reachable* was ruled and then **refused by our "
       + "own coverage test**: the rule still produces findings, and calling it unassessed would document "
       + "a criterion we report on as one we do not. **Partial is true as written**, and it stays.");
@@ -607,7 +612,7 @@ function appendix(d) {
     "",
     "**No number in this report is estimated.** Where something is not measured it says so, in those "
     + "words. That discipline exists because this project's own record is a catalogue of correct values "
-    + "read from the wrong place, and today alone produced three more: a figure quoted from a summary "
+    + "read from the wrong place, and three of them arrived in a single day: a figure quoted from a summary "
     + "note while the real measurement sat on disk, an example number invented for a test that was then "
     + "copied into documentation, and a proposed fix inferred from an error message without checking "
     + "whether the cause it named existed. All three were caught by asking where a number came from, "
@@ -745,8 +750,15 @@ const PAGE_CSS = `
   p, li { margin: 0 0 2mm; }
   ul, ol { margin: 0 0 3mm; padding-left: 5mm; }
   strong { font-weight: 650; }
-  table { border-collapse: collapse; width: 100%; margin: 2mm 0 4mm; font-size: 9pt;
-          break-inside: avoid; }
+  /* LET A LONG TABLE FLOW. break-inside:avoid pushes a table that will not fit ENTIRELY onto the next
+     page, which on 8 September left page three as one heading and one paragraph with the appendix table
+     stranded overleaf. Rows are individually short, so breaking between them costs a reader nothing and
+     keeps the page full. The header repeats across the break.
+     NO BACKTICKS IN THIS COMMENT: it lives inside a template literal, and a backtick here ends the
+     string. CLAUDE.md records that exact defect twice, ten minutes apart; this is the third. */
+  table { border-collapse: collapse; width: 100%; margin: 2mm 0 4mm; font-size: 9pt; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
   th { text-align: left; border-bottom: 1.2px solid #16191d; padding: 1.3mm 2mm; vertical-align: top; }
   td { border-bottom: 0.4px solid #ccd2da; padding: 1.3mm 2mm; vertical-align: top; }
   code { font: 9pt/1.4 ui-monospace, "SF Mono", Menlo, monospace; background: #f1f3f6;

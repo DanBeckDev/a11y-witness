@@ -29,6 +29,34 @@ while two of two human merges closed theirs (#326, #331). The mechanism — whet
 `GITHUB_TOKEN` can close a referenced issue at all — is a **hypothesis nobody here has confirmed against
 GitHub's documentation**, and unit 1d works whether or not it is true. See #298.
 
+## The PR `ts` job runs only what a diff actually reaches (A1b, A1c)
+
+Chairman, verbatim: *"the trunk guard is running all of the unit tests. this takes just as long as the
+pr one. so we should change the pr unit tests to only run on the files changed for pr efficiency and ci
+efficiency."* Measured: PR `ts` 83-155s, `trunk-guard` 144-155s — the same suite, twice, on every merge.
+
+`scripts/select-changed-tests.mjs` narrows `ci.yml`'s `ts` job to the test files that actually reference
+what changed, by three mechanisms depending on where the changed file lives:
+
+| changed file | reference kind | fallback when zero found |
+|---|---|---|
+| `packages/*/src/*` | by IMPORT (transitive) | that file's own package, full suite |
+| `scripts/*.mjs` | by IMPORT (the SAME reverse index) | every implicated package, full suite |
+| a hook, or a workflow other than `ci.yml` | by PATH STRING, in a real quoted literal (comments stripped first) | every implicated package, full suite |
+| `ci.yml` itself, or a root config (`ci-changed.mjs`'s `ROOT_TS_FILES`) | none — genuinely `BROAD` | (the whole search is skipped) |
+
+`ci-changed.mjs`'s package-level `testPackages` (the transitive closure of dependent packages) stays the
+search scope and the safety net underneath all of this — narrower than before, never wider.
+
+**The zero-tests fallback is the point, not the narrowing.** A changed file with no reference anywhere
+falls back to a named full-package run rather than silently selecting nothing — this is the job that
+gates every PR, and a check that passes having run nothing is this repository's most-recorded defect.
+
+**The path-string search must not match a mere mention in prose.** A doc comment discussing
+`` `scripts/foo.mjs` `` in this repo's own markdown convention is not a quoted JS string literal, so
+comments are stripped (`@a11ign/evidence/source-text`'s `stripComments`) before the search runs — a test
+that DISCUSSES a file is not a test that exercises it.
+
 ## The environment these scripts read
 
 ### `GITHUB_REPOSITORY`
@@ -107,3 +135,40 @@ is one reporting success having drained nothing:
 - **no check runs at all** — nothing has ever tested it. Push to the branch to trigger `ci.yml`. This is
   STRANDED, not slow, and it reads as CLEAN to anything asking `mergeStateStatus`, which is why
   `merge-guard.mjs` asks the check runs instead.
+
+## `update-branch` moves your branch under you — a non-fast-forward is the train, not a violation
+
+The `update-branch` job in `.github/workflows/auto-arm.yml` runs `scripts/update-branch-sweep.mjs` on
+**every push to `main`**, and it pushes to *other people's branches*: `main`'s protection runs with
+`strict=false` (#277), so an armed PR merges the instant its own `gate` is green without containing
+whatever landed since, and every merge therefore leaves every other open PR one commit further behind.
+`queue-stalled.mjs` only ever REPORTS that drift; this job is the half that fixes it.
+
+**So a `git push` to your own branch can be rejected as non-fast-forward while you did nothing wrong.**
+The sequence is: `main` moves, the sweep merges it into your branch and pushes, and meanwhile you were
+doing the identical merge locally. Two independent merge commits, usually with identical trees, and your
+push is refused. Measured 2026-09-08 on #486 — the author reconciled with a merge-of-merges (no
+conflicts) at `fa29ea00`, and by the time they re-verified, the sweep's push had already carried the PR
+to green and it had merged. `main` moves fast enough for this to recur inside one branch's life:
+`agent/commands-doc-478` carries two `Merge origin/main` commits 4m45s apart (`7e9fcc1d` 06:58:18Z,
+`41567103` 07:03:03Z), with different trees, because `main` moved twice while the branch was being
+prepared.
+
+**The recovery is `git pull` and merge, never `git push --force`.** Both trees are real work: the
+sweep's push is what keeps your PR mergeable under `strict=false`, and force-pushing over it silently
+discards a merge the pipeline made on your behalf, putting the PR back behind `main` with a head no
+check run has seen. `--force-with-lease` is not the fix either, but it is not the hazard — it REFUSES,
+because the remote moved, which is the same answer a plain `push` already gave you. Merge the two, push, and let the sweep and your own
+merge coexist — a duplicated merge of `main` with an identical tree costs a commit in the graph and
+nothing else.
+
+Two consequences worth knowing before they surprise you:
+
+- **The job is `continue-on-error: true` by category, not by accident** — it is a push-to-`main` job
+  acting on OTHER open PRs after a merge that already happened, so it can never gate anything, and a red
+  run of it must never read as a gate failure. It is allowlisted in `push-trigger-allowlist.test.ts` as
+  `TRUNK_FOLLOWUP_ALLOWLIST` for that reason (ceo's ruling, 2026-09-08).
+- **With no `A11IGN_BOT_TOKEN` the job SKIPS outright and does not fall back to `GITHUB_TOKEN`.** A push
+  made with `GITHUB_TOKEN` fires no `pull_request: synchronize`, so an updated branch would get a new head
+  with no check run ever triggered for it and its required checks waiting forever — worse than leaving it
+  visibly behind. If PRs stop being pushed up, check the secret before suspecting the sweep's decision.
