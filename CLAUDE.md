@@ -354,7 +354,7 @@ Verification is layered; pick the layers your change touches:
   (`.github/workflows/ci.yml`).
 **Run `npm test`, never `npx tsx --test <file>` directly, when you have changed another package's source** — cross-package imports resolve to `dist`, and only `npm test`'s `pretest` build keeps that honest.
 
-"Resolves to `dist`" does not say WHOSE — a symlinked worktree can silently resolve to the PRIMARY's `dist`. Verify with `node -e "console.log(require.resolve(...))"`. [Incident →](docs/operational-lessons.md#resolves-to-dist-does-not-say-whose)
+"Resolves to `dist`" does not say WHOSE — a symlinked worktree can silently resolve to the PRIMARY's `dist`. Verify WHOSE by resolving the exact specifier: `node -e "console.log(require.resolve(...))"`. [Incident →](docs/operational-lessons.md#resolves-to-dist-does-not-say-whose)
 
 **RESTORE FROM A COPY, NEVER `git checkout --`.** Mutation checking means editing a file you are about to restore, and `git checkout -- <file>` silently discards every uncommitted change in it, not just the mutation — it has destroyed a feature mid-build twice. `cp <file> /tmp/x && <mutate> && <run> && cp /tmp/x <file>` cannot do this. [Full incident →](docs/operational-lessons.md#restore-from-a-copy-never-git-checkout-------the-incidents)
 
