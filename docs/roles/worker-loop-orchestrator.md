@@ -133,7 +133,7 @@ The standing resource ban, verbatim, and it applies to this role exactly as to a
 
 ### THE FLEET TREE, NAMED
 
-**`/Users/danielbeck/Documents/repos/personal/a11ign` — the primary checkout — is the tree the fleet
+**`/Users/danielbeck/Documents/repos/personal/a11y-witness` — the primary checkout — is the tree the fleet
 and the lab are driven from. NO OTHER AGENT MERGES IN IT.** `dispatcher` merges in
 `../a11y-wt-dispatch`; the lead's own `main`-moving work goes through `../a11y-wt-lead`.
 
