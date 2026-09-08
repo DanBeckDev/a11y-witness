@@ -50,6 +50,24 @@ jobs:
       - if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci --ignore-scripts
       - run: npm run build
+      # #497: DEEPEN THE CHECKOUT ONLY WHEN THE PR BODY ASKS FOR IT, via the SAME function
+      # `acceptance-commands.mjs` uses to decide what to refuse -- `hasFullHistoryDeclaration`, imported
+      # from the already-built module rather than re-typing the `History: full` regex a second time in
+      # shell. Placed AFTER checkout+build, deliberately: it needs `npm ci`/`npm run build` to have already
+      # produced a working tree, and it must run BEFORE the final step so a test declaring `requires:
+      # history` sees real history rather than this job's default depth-1 clone (#510). `git fetch` needs
+      # no more than this job's own `contents: read` -- it never writes anything.
+      - name: Deepen the checkout if the PR asks for full history (#497)
+        env:
+          PR_BODY: ${{ inputs.pr-body }}
+        run: |
+          if node -e "
+            import('./scripts/acceptance-commands.mjs').then((m) => {
+              process.exit(m.hasFullHistoryDeclaration(process.env.PR_BODY) ? 0 : 1);
+            });
+          "; then
+            git fetch --unshallow origin main
+          fi
       # PR_BODY AS AN ENV VAR, NEVER AS A SHELL ARGUMENT -- a PR body is adversarial input (anyone can open
       # a PR), and GitHub Actions' own `env:` mapping keeps it one opaque string here rather than
       # re-parsing it as shell. `acceptance-commands.mjs` reads it from `process.env.PR_BODY`, never argv.
