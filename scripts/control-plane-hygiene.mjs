@@ -55,11 +55,11 @@ export function linkState(path) {
   return lstatSync(path).isSymbolicLink() ? "symlink" : "real";
 }
 
-/** Every workspace package name, whether it declares its own `prepare` build step, and whether its OWN
- * root export actually resolves into `dist/` at all -- read from each package's own package.json under
- * `packages/`, never hand-listed. The third field matters: `nvda-worker`'s bare import resolves through
- * `exports["."]` straight to `src/index.mjs` (ADR 0031, no build step by design), so it has no `prepare`
- * and needs none -- flagging it on "no prepare" alone was this check's own first false positive.
+/** Every workspace package name, and whether its OWN root export actually resolves into `dist/` at all --
+ * read from each package's own package.json under `packages/`, never hand-listed. The second field
+ * matters: `nvda-worker`'s bare import resolves through `exports["."]` straight to `src/index.mjs`
+ * (ADR 0031, no build step by design), so it needs no install-time build guarantee at all -- flagging it
+ * on "resolves into dist/" alone was this check's own first false positive.
  * @param {string} repoRoot
  */
 export function workspacePackages(repoRoot) {
@@ -70,8 +70,28 @@ export function workspacePackages(repoRoot) {
     const pkg = JSON.parse(readFileSync(join(dir, e.name, "package.json"), "utf8"));
     const rootExport = pkg.exports?.["."] ?? pkg.main ?? "";
     const rootExportsDist = /(^|\/)dist\//.test(typeof rootExport === "string" ? rootExport : JSON.stringify(rootExport));
-    return { dir: e.name, name: pkg.name, hasPrepare: Boolean(pkg.scripts?.prepare), rootExportsDist };
+    return { dir: e.name, name: pkg.name, rootExportsDist };
   });
+}
+
+/** Does the REPO ROOT's own `prepare` script build every workspace package? #168: per-package
+ * `prepare: tsc --build` scripts used to provide the "dist/ exists after a plain npm install" guarantee
+ * this check verifies -- and they RACED against each other during `npm ci`, because three packages
+ * (`cli`, `judge`, `scorer`) all reference `evidence` in their own `tsconfig.json`, so npm firing all
+ * five workspaces' `prepare` scripts at once could start multiple CONCURRENT `tsc --build` processes all
+ * writing to `packages/evidence/dist/*` -- reproducing exactly `ci/ts`'s "wcag.d.ts is not a module"
+ * symptom, a declaration file caught mid-write by a second process. The guarantee now comes from ONE
+ * place instead: the root's own `prepare` (which npm also runs automatically on `npm install`, the
+ * identical lifecycle hook, just at the top level rather than per-workspace) runs the SAME coordinated
+ * `tsc --build` `npm run build` already uses everywhere else -- one process, so there is nothing left to
+ * race with itself.
+ * @param {string} repoRoot
+ */
+export function rootPrepareBuildsEverything(repoRoot) {
+  const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+  const prepare = pkg.scripts?.prepare ?? "";
+  const build = pkg.scripts?.build ?? "";
+  return Boolean(build) && (prepare.includes("npm run build") || prepare.includes(build));
 }
 
 /** Which packages are imported by their BARE root specifier (`from "@a11ign/name"`, no subpath)
@@ -82,7 +102,7 @@ export function workspacePackages(repoRoot) {
  * to reach raw `.mjs` source with no build step at all (ADR 0031), so flagging it would be a false
  * positive -- checked against the real repo while building this, which is what found the false positives
  * a cruder "does the name appear" search produced first.
- * @typedef {{ dir: string, name: string, hasPrepare: boolean, rootExportsDist: boolean }} WorkspacePackage
+ * @typedef {{ dir: string, name: string, rootExportsDist: boolean }} WorkspacePackage
  * @param {string} repoRoot
  * @param {WorkspacePackage[]} packages
  */
@@ -113,8 +133,13 @@ export function packagesImportedByName(repoRoot, packages) {
 export function distTrapReport(repoRoot) {
   const packages = workspacePackages(repoRoot);
   const needed = packagesImportedByName(repoRoot, packages);
-  const exposed = packages.filter((p) => needed.has(p.name) && p.rootExportsDist && !p.hasPrepare);
-  return { checked: packages.length, importedByOthers: needed.size, exposed };
+  // #168: the guarantee is now GLOBAL (the root's own prepare builds every package, once, coordinated --
+  // see rootPrepareBuildsEverything's own header), not per-package -- so a package can only be exposed
+  // if that global guarantee itself is missing, never by lacking an individual prepare script that would
+  // have raced its siblings.
+  const protectedByRoot = rootPrepareBuildsEverything(repoRoot);
+  const exposed = protectedByRoot ? [] : packages.filter((p) => needed.has(p.name) && p.rootExportsDist);
+  return { checked: packages.length, importedByOthers: needed.size, exposed, protectedByRoot };
 }
 
 function main() {
@@ -155,13 +180,14 @@ function main() {
       + "ever exceeds 1."],
     ["Per-worktree `dist`, for packages another package imports by name",
       `${trap.exposed.length} of ${trap.importedByOthers} exposed (${trap.checked} packages checked)`,
-      trap.exposed.length === 0
-        ? "VERIFIED, not assumed: every package imported by name from elsewhere already declares its own "
-          + "`prepare: tsc --build`, run automatically by `npm install` (npm workspaces run each "
-          + "package's own lifecycle scripts). RE-CHECKED for this row rather than trusted from the "
-          + "original report, which named packages/scorer specifically -- it already has the hook and "
-          + "the failure does not currently reproduce on a fresh `npm install`."
-        : `RULE VIOLATED — add a "prepare": "tsc --build" to: ${trap.exposed.map((p) => p.name).join(", ")}`],
+      trap.protectedByRoot
+        ? "VERIFIED, not assumed: the repo ROOT's own `prepare` script builds every package (#168) -- one "
+          + "coordinated `tsc --build`, run automatically by `npm install` the identical way a per-package "
+          + "`prepare` used to, but as ONE process instead of five racing each other. That guarantee is "
+          + "global, so no individual package can be exposed while it holds."
+        : `RULE VIOLATED — the root's own prepare no longer builds everything (#168's own guarantee is `
+          + `broken): ${trap.exposed.map((p) => p.name).join(", ")} resolve into dist/ and are imported `
+          + "by name elsewhere, with nothing left to build them at install time."],
     ["Local `runs/` copy", humanMb(runsBytes),
       "RULE (already the answer, restated so nobody re-derives it): KEEP — it is what lets this machine "
       + "read the corpus at all. Staleness, not size, is the risk; `npm run lab:inventory` reports how "
