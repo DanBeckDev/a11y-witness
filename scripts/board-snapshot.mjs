@@ -26,6 +26,8 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
+import { graphqlErrorsIn, graphqlErrorsFromThrown, describeGraphqlErrors }
+  from "./graphql-errors.mjs";
 
 export const PROJECT_OWNER = REPO.split("/")[0];
 export const PROJECT_NUMBER = 2;
@@ -78,6 +80,15 @@ function parsePage(raw) {
   } catch (cause) {
     throw new Error(`board-snapshot: gh's response was not JSON -- refusing to guess. `
       + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
+  }
+  // AN `errors` ARRAY IS A REFUSAL EVEN WITH `data` PRESENT AND EXIT 0. GitHub answers 200 carrying both:
+  // the token may COUNT what it may not READ, so `totalCount: 3` arrives beside three `null` nodes and
+  // an `errors` array. Checked BEFORE the shape check, because the shape can be perfectly valid and the
+  // content still be a partial board -- which is the one thing this file exists to refuse.
+  const errors = graphqlErrorsIn(parsed);
+  if (errors.length > 0) {
+    throw new Error(`board-snapshot: GitHub answered with errors -- refusing to snapshot a partial `
+      + `board. ${describeGraphqlErrors(errors)}`);
   }
   const itemsNode = /** @type {any} */ (parsed)?.data?.user?.projectV2?.items;
   if (!itemsNode || !Array.isArray(itemsNode.nodes) || !itemsNode.pageInfo) {
@@ -132,8 +143,14 @@ export function fetchBoardItems({ run = defaultRun } = {}) {
     try {
       raw = run("gh", args);
     } catch (cause) {
+      // THE MACHINE-READABLE ANSWER IS ON STDOUT OF A COMMAND THAT THREW, which is where nobody looks:
+      // `cause.message` is only `Command failed: gh api graphql ...`, a sentence compatible with no
+      // permission, a wrong project number, a user-vs-org shape mismatch and a schema rejection alike.
+      // #546 sat on exactly that for three hours. The remedy it already names is kept; this adds the
+      // cause rather than replacing the advice.
+      const described = describeGraphqlErrors(graphqlErrorsFromThrown(cause));
       throw new Error(`board-snapshot: could not read Project ${PROJECT_NUMBER} items -- refusing to `
-        + `snapshot a partial board. ${/** @type {Error} */ (cause).message}`, { cause });
+        + `snapshot a partial board. ${described || /** @type {Error} */ (cause).message}`, { cause });
     }
     const page = parsePage(raw);
     items.push(...page.items);
