@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: a backstop sweep for close-rows.yml, which fires for some merges and silently not others
 // #394: A BACKSTOP FOR close-rows.yml, WHICH FIRES FOR SOME MERGES AND NOT OTHERS AND NOBODY KNOWS WHY.
 //
 // Measured 2026-09-07: two PRs met every condition `close-rows.yml` needs -- bot merge, base `main`, the

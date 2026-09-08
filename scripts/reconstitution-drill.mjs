@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: run the contingency drill: clone, compose each agent's first message, from nothing but a checkout
 // THE CONTINGENCY DRILL, AS A COMMAND -- `docs/roles/README.md`'s own acceptance test for itself, until
 // now typed by hand: clone, `cat`, copy a message, run a test. Automating the composition step is the
 // part worth having as a script: it produces every agent's actual first message, WITH the accumulated

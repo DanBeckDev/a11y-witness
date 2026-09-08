@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: say whether the board report's cron is still arriving, and comment once if not
 // HAS THE BOARD EDITION STOPPED ARRIVING? — the check that does not live inside the job being checked.
 //
 //   npm run board:liveness            say whether editions are still arriving

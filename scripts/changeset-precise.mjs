@@ -1,4 +1,5 @@
 // @ts-check
+// command: say whether this diff touches a file npm pack actually ships for a published package
 // Does this diff touch a file `npm pack` actually SHIPS for a PUBLISHED package? — #261.
 //
 // The pre-push hook's FAST gate needed this precise a question, not `changed-packages.mjs`'s blunt "any

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: pick only the test files that import a changed source file, narrower than package scoping
 // A1B: THE PR `ts` JOB AND `trunk-guard` RAN THE SAME SUITE, TWICE, ON EVERY MERGE.
 //
 // Chairman, verbatim: "the trunk guard is running all of the unit tests. this takes just as long as the

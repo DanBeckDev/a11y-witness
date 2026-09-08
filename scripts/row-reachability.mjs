@@ -1,4 +1,5 @@
 // @ts-check
+// command: compute whether a row is actually startable from the tree, never from a label alone
 // IS THIS ROW STARTABLE? -- computed from the tree, never from a label.
 //
 // Ready showed four unclaimed rows, none `fleet-gated`, so by every label the lane read fully pickable.

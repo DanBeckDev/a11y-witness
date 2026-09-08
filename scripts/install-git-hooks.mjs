@@ -1,4 +1,5 @@
 // @ts-check
+// command: point git at this repo's tracked hooks; run automatically by npm install via prepare
 // Point git at this repo's tracked hooks. Run by `prepare`, so `npm install` installs them.
 //
 // ## The hole this closes
