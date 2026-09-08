@@ -22,19 +22,40 @@
 //
 //   npm run board:summary-check            say whether tomorrow's summary exists
 //   npm run board:summary-check -- --post  and comment on the report issue if it does not
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync} from "node:fs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { execFileSync } from "node:child_process";
 import { sandboxGitEnv } from "./git-env.mjs";
-import { REPO, ROOT, gh, git } from "./board-data.mjs";
+import { REPO, ROOT, gh, git, REPORTED_KINDS } from "./board-data.mjs";
 
 const HOURS_MS = 3600_000;
 const ISSUE = "20";
 const SUMMARY_WORDS = 120;
-const REPORTED = "docs/board/reported.json";
+const REPORTED = "docs/board/reported";
+
+/** Reassemble the directory into the ONE OBJECT the differ already understands (#159).
+ *
+ * `reportedDifferences` takes two JSON texts and names the entries that differ, keyed on `command` and
+ * `issue`. That contract is right and its tests are the ones worth keeping green, so the directory is
+ * assembled back into that shape rather than the differ being rewritten around a new one. The migration
+ * changes where entries are STORED; it must not change what a reader is told.
+ *
+ * @param {(rel: string) => string | null} read
+ * @param {string[]} paths
+ */
+export function assembleReported(read, paths) {
+  const pick = (kind) => paths.filter((rel) => rel.includes(`/${kind}/`) && rel.endsWith(".json"))
+    .map((rel) => { const text = read(rel); return text === null ? null : JSON.parse(text); })
+    .filter((entry) => entry !== null)
+    .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
+  const metaPath = paths.find((rel) => rel.endsWith("/meta.json"));
+  const metaText = metaPath ? read(metaPath) : null;
+  return { ...(metaText ? JSON.parse(metaText) : {}), gates: pick("gates"),
+    achievements: pick("achievements") };
+}
 
 /** Refused, but for a cause a person can act on tonight. */
 const EXIT = { WILL_RENDER: 0, ACT_TONIGHT: 1, CANNOT_ASK: 2 };
@@ -86,6 +107,49 @@ function fetchOriginMain() {
  * @param {string} relPath
  * @returns {{ text: string | null, asked: boolean, why: string }}
  */
+/** The SAME question of a DIRECTORY, which `git show` cannot answer (#159).
+ *
+ * `reported.json` became `reported/`, one file per entry, because several agents record into it and
+ * JSON is line-oriented to git -- two entries that disagree about nothing still conflicted. The
+ * comparison this file exists for must survive that change, and it must survive it in the form that
+ * makes it useful: naming WHICH ENTRIES differ, not that "the directory differs".
+ *
+ * `git show origin/main:<dir>` prints a tree listing, not content, so it would have compared two
+ * listings and reported nothing when an entry's CONTENT moved. `ls-tree -r` then one `show` per blob is
+ * the only shape that answers the real question.
+ *
+ * A FILE PRESENT ON ONE SIDE ONLY IS THE POINT, not an edge case: an entry recorded locally and never
+ * pushed is exactly the state that reached the board three times on 2026-09-06.
+ *
+ * @param {string} relDir
+ * @returns {{ files: Map<string, string> | null, asked: boolean, why: string }}
+ */
+function dirOnOriginMain(relDir) {
+  const fetch = fetchOriginMain();
+  if (!fetch.ok) return { files: null, asked: false, why: fetch.why };
+  try {
+    const listing = execFileSync("git", ["ls-tree", "-r", "--name-only", "origin/main", "--", relDir],
+      { encoding: "utf8", cwd: ROOT, env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
+    const paths = listing.split("\n").map((l) => l.trim()).filter((l) => l.endsWith(".json"));
+    // AN EMPTY LISTING IS ABSENCE, and `ls-tree` reports it with exit 0 and no output rather than by
+    // failing -- so the catch below never sees the commonest case: the directory is not on origin/main
+    // at all. Found in review by running it against the real remote during this migration's own
+    // aftermath, where it produced a fourteen-line wall of "X — in your tree, NOT on origin/main"
+    // instead of the one line worth acting on. Git cannot track an empty directory, so "no entries" and
+    // "no such path" are the same fact, and the honest answer is the shorter one.
+    if (paths.length === 0) {
+      return { files: null, asked: true, why: `no such directory on origin/main (origin/main:${relDir})` };
+    }
+    const files = new Map(paths.map((rel) => [rel,
+      execFileSync("git", ["show", `origin/main:${rel}`],
+        { encoding: "utf8", cwd: ROOT, env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] })]));
+    return { files, asked: true, why: "read from origin/main" };
+  } catch (error) {
+    void error;
+    return { files: null, asked: true, why: `no such directory on origin/main (origin/main:${relDir})` };
+  }
+}
+
 function fileOnOriginMain(relPath) {
   const ref = `origin/main:${relPath}`;
   const fetch = fetchOriginMain();
@@ -365,10 +429,23 @@ function main() {
   // summary that will render says nothing about whether the figures beside it are published, and a
   // missing summary does not make an unpushed gate result any less unpushed. Reporting only one of them
   // is how the other stays invisible, which is the whole of #131.
-  const reportedFile = path.join(ROOT, REPORTED);
+  const localDir = path.join(ROOT, REPORTED);
+  const localPaths = existsSync(localDir)
+    ? REPORTED_KINDS.flatMap((kind) => (existsSync(path.join(localDir, kind))
+      ? readdirSync(path.join(localDir, kind)).map((f) => `${REPORTED}/${kind}/${f}`) : []))
+      .concat(existsSync(path.join(localDir, "meta.json")) ? [`${REPORTED}/meta.json`] : [])
+    : [];
+  const remoteDir = dirOnOriginMain(REPORTED);
   const reported = reportedVerdict({
-    localText: existsSync(reportedFile) ? readFileSync(reportedFile, "utf8") : null,
-    remote: fileOnOriginMain(REPORTED),
+    localText: existsSync(localDir)
+      ? JSON.stringify(assembleReported((rel) => readFileSync(path.join(ROOT, rel), "utf8"), localPaths))
+      : null,
+    remote: {
+      asked: remoteDir.asked, why: remoteDir.why,
+      text: remoteDir.files === null ? null
+        : JSON.stringify(assembleReported((rel) => remoteDir.files.get(rel) ?? null,
+          [...remoteDir.files.keys()])),
+    },
   });
 
   if (verdict.message) {
