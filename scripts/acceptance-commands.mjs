@@ -41,11 +41,20 @@
 // DECIDE EXPLICITLY WHETHER IT TAKES THE FIRST MATCH OR ALL OF THEM -- the default of "first" has now
 // been wrong twice, in two different functions, on two different fields of the same document. #527:
 // `extractClosesDeclaration`'s single `.exec()` reported only the first of two separate `Closes` lines,
-// silently truncating a fact GitHub itself still honoured in full. #540: `extractSection`'s
-// `lines.findIndex()` does the identical thing to a second `## Acceptance` header, except it fails
-// SILENTLY rather than truncating -- fed `"Closes #510\nCloses #497"`, `extractAcceptanceSection` reports
-// `MISSING`, not a partial result, because that text is not the field it is looking for at all. Neither
+// silently truncating a fact GitHub itself still honoured in full. #540 was the second: `extractSection`'s
+// `lines.findIndex()` did the identical thing to a second `Acceptance:`/`Refutation:` header, except it
+// failed SILENTLY rather than truncating -- fed `"Acceptance: npm test\n\ntext\n\nAcceptance: npm run
+// lint"`, it reported `{commands: ["npm test"]}` with no trace the second header ever existed. Neither
 // function chose "first" on purpose; it fell out of `findIndex`/`.exec()` being the obvious call, twice.
+//
+// #527 AND #540 CHOSE DIFFERENT REMEDIES, DELIBERATELY -- read `headerIndices`' own comment before
+// assuming the fix here is "do what #527 did". `Closes #A`/`Closes #B` is a form GitHub itself accepts and
+// closes both for, so concatenating every match was the honest reading of an established convention.
+// Two `Acceptance:` blocks is not an established convention in this repo at all, so #540 does not guess
+// that the author meant "run every command from every section" -- it reports the ambiguity as a DUPLICATE
+// and fails the job, naming every occurrence, and leaves concatenation as a decision nobody has actually
+// asked for yet.
+//
 // Read this before adding a fourth section reader.
 //
 // `pull_request`, NEVER `pull_request_target` -- wired in `ci.yml`, not here, but the reason belongs next
@@ -59,7 +68,7 @@ import { delimiter, join } from "node:path";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 /** @typedef {{ verdict: "runnable" } | { verdict: "refused", reason: string } | { verdict: "prose", reason: string }} Classification */
-/** @typedef {{ kind: "missing" } | { kind: "none", reason: string } | { kind: "commands", commands: string[] }} Section */
+/** @typedef {{ kind: "missing" } | { kind: "none", reason: string } | { kind: "commands", commands: string[] } | { kind: "duplicate", occurrences: { line: number, text: string }[] }} Section */
 /** @typedef {{ kind: "missing" } | { kind: "malformed", detail: string } | { kind: "none", reason: string } | { kind: "closes", numbers: number[] }} ClosesDeclaration */
 /** @typedef {{ history: boolean, token: boolean, fleet: boolean }} JobCapabilities */
 
@@ -452,6 +461,22 @@ function matchSectionHeader(fieldName, line) {
 }
 
 /**
+ * Every line index where `fieldName`'s header matches -- ALL of them, never just the first. #540:
+ * `extractSection` used to stop at `lines.findIndex`'s first hit, so a second `Acceptance:`/`Refutation:`
+ * header was invisible -- not truncated, not warned about, simply never looked at again. See this file's
+ * own header comment for why the remedy here is to report the ambiguity (a new DUPLICATE outcome) rather
+ * than to concatenate every section the way #527 concatenates repeated `Closes:` lines.
+ * @param {string} fieldName
+ * @param {string[]} lines
+ * @returns {number[]}
+ */
+function headerIndices(fieldName, lines) {
+  return lines
+    .map((line, index) => (matchSectionHeader(fieldName, line).matched ? index : -1))
+    .filter((index) => index !== -1);
+}
+
+/**
  * Pure. Finds a named section (`Acceptance:` or `Refutation:`) of a PR body and returns what it says,
  * never what it should say. One parser for both fields -- #438's own rule, because this parser has
  * already been fixed five times for forms authors keep writing (#419, #424, #432), and a second dialect
@@ -470,6 +495,10 @@ function matchSectionHeader(fieldName, line) {
  * which `## Acceptance` means something other than the field, so it is accepted rather than warned about --
  * "anything relying on a human to remember does not happen" applied to a parser instead of a person.
  *
+ * #540: MORE THAN ONE HEADER RETURNS `{ kind: "duplicate" }` -- naming every occurrence's line number and
+ * raw text -- rather than picking one silently. THE JOB FAILS on it, same as MISSING, because a body this
+ * parser cannot read unambiguously is not one it should guess at.
+ *
  * @param {string} fieldName
  * @param {string | null | undefined} body
  * @returns {Section}
@@ -477,8 +506,13 @@ function matchSectionHeader(fieldName, line) {
 function extractSection(fieldName, body) {
   const text = body ?? "";
   const lines = text.split(/\r\n|\r|\n/);
-  const headerIndex = lines.findIndex((line) => matchSectionHeader(fieldName, line).matched);
-  if (headerIndex === -1) return { kind: "missing" };
+  const indices = headerIndices(fieldName, lines);
+  if (indices.length === 0) return { kind: "missing" };
+  if (indices.length > 1) {
+    return { kind: "duplicate",
+      occurrences: indices.map((index) => ({ line: index + 1, text: lines[index].trim() })) };
+  }
+  const [headerIndex] = indices;
 
   const headerMatch = matchSectionHeader(fieldName, lines[headerIndex]);
   // `inline === null` is a title-only heading (#506) -- there is nothing here to run, and it must fall
@@ -669,12 +703,51 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists, ca
 }
 
 /**
+ * #540: the report line for a DUPLICATE section -- every occurrence's line number and raw text, so an
+ * author can find and consolidate them without re-reading the whole body to work out where "the" header
+ * even is anymore. Shared between `Acceptance:` and `Refutation:` for the same reason `runOneCommand` is:
+ * one wording, never two independently-drifting ones.
+ * @param {"ACCEPTANCE" | "REFUTATION"} prefix
+ * @param {{ occurrences: { line: number, text: string }[] }} section
+ * @returns {string}
+ */
+function duplicateSectionLine(prefix, section) {
+  const named = section.occurrences.map((o) => `line ${o.line}: "${o.text}"`).join(", ");
+  return `${prefix}: DUPLICATE -- ${section.occurrences.length} sections found (${named}) -- consolidate `
+    + "into one; this parser refuses to guess whether you meant to run every one of them (see this file's "
+    + "own header comment for why #540 is not #527's remedy)";
+}
+
+/**
+ * Runs every command in a `{ kind: "commands" }` section and reports each line, folding failures into
+ * `ok`. Split out of `acceptanceReport` purely to keep that function's complexity within this repo's
+ * ESLint budget -- the Acceptance and Refutation branches were one algorithm with a different `isPass`,
+ * duplicated as two loops.
+ * @param {string[]} commands
+ * @param {(command: string) => number} run
+ * @param {{ prefix: "ACCEPTANCE" | "REFUTATION", isPass: (code: number) => boolean,
+ *           commandExists?: (token: string) => boolean, capabilities?: JobCapabilities }} options
+ * @returns {{ lines: string[], ok: boolean }}
+ */
+function runSectionCommands(commands, run, options) {
+  let ok = true;
+  const lines = [];
+  for (const command of commands) {
+    const result = runOneCommand(command, run, options);
+    lines.push(result.line);
+    if (!result.ok) ok = false;
+  }
+  return { lines, ok };
+}
+
+/**
  * THE VERDICT, driven by an injectable `run` so every outcome (including a real exit code) is testable
  * without a subprocess. `run` returns the exit code; it is never asked to interpret one.
  *
  * `Acceptance:` is mandatory -- its absence is the MISSING verdict this whole job exists to catch.
  * `Refutation:` is optional (#438): most PRs demonstrate nothing refusing, so its absence just means
- * there is nothing more to run, never a failure in its own right.
+ * there is nothing more to run, never a failure in its own right. A DUPLICATE of either (#540) fails the
+ * job exactly like MISSING does -- an ambiguous body is not one this parser should guess at.
  *
  * @param {string | null | undefined} body
  * @param {(command: string) => number} run
@@ -691,30 +764,32 @@ export function acceptanceReport(body, run, deps = {}) {
   if (section.kind === "missing") {
     return { ok: false, lines: ["ACCEPTANCE: MISSING"] };
   }
+  if (section.kind === "duplicate") {
+    return { ok: false, lines: [duplicateSectionLine("ACCEPTANCE", section)] };
+  }
 
   let ok = true;
   const lines = [];
   if (section.kind === "none") {
     lines.push(`ACCEPTANCE: NONE -> ${section.reason}`);
   } else {
-    for (const command of section.commands) {
-      const result = runOneCommand(command, run,
-        { prefix: "ACCEPTANCE", isPass: (code) => code === 0, ...resolvedDeps });
-      lines.push(result.line);
-      if (!result.ok) ok = false;
-    }
+    const result = runSectionCommands(section.commands, run,
+      { prefix: "ACCEPTANCE", isPass: (code) => code === 0, ...resolvedDeps });
+    lines.push(...result.lines);
+    if (!result.ok) ok = false;
   }
 
   const refutation = extractRefutationSection(body);
-  if (refutation.kind === "none") {
+  if (refutation.kind === "duplicate") {
+    lines.push(duplicateSectionLine("REFUTATION", refutation));
+    ok = false;
+  } else if (refutation.kind === "none") {
     lines.push(`REFUTATION: NONE -> ${refutation.reason}`);
   } else if (refutation.kind === "commands") {
-    for (const command of refutation.commands) {
-      const result = runOneCommand(command, run,
-        { prefix: "REFUTATION", isPass: (code) => code !== 0, ...resolvedDeps });
-      lines.push(result.line);
-      if (!result.ok) ok = false;
-    }
+    const result = runSectionCommands(refutation.commands, run,
+      { prefix: "REFUTATION", isPass: (code) => code !== 0, ...resolvedDeps });
+    lines.push(...result.lines);
+    if (!result.ok) ok = false;
   }
   // refutation.kind === "missing" -> nothing to report; the section is optional.
 
