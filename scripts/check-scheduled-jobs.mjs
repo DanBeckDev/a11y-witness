@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: compare every job this repo claims to schedule against its actual installed state
 // Names every job this repo CLAIMS to schedule and its ACTUAL installed state -- the question nothing
 // asked before this, because every existing signal for a broken schedule is the job itself telling you,
 // and a job that was never installed (or was silently removed) tells you nothing.

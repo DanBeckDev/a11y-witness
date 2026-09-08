@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: revert a push to main that fails its own gate, unattended, since nothing else runs after it lands
 // A PUSH TO `main` THAT FAILS ITS OWN GATE IS REVERTED, UNATTENDED -- pipeline unit 3, #316.
 //
 // `ci.yml` gates every PR BEFORE it merges, and its own header rules out a `push: branches: [main]`

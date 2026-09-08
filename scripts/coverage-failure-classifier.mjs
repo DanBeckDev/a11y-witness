@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// command: turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
 // A NIGHTLY FAILURE COMMENT THAT SAYS "coverage failed" IS NOT A FINDING -- #169, coverage.yml's own
 // reader.
 //

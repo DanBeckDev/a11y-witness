@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: scan every blob reachable from every ref for internal addresses and secret-shaped strings
 // SCANS THE FULL GIT HISTORY -- every blob ever reachable from every ref -- for internal addresses,
 // key-shaped filenames, and secret-shaped strings. #310, preparation for #63's org transfer and the
 // repository going public: the dispatcher measured 72 files on an old branch and 48 on main carrying
