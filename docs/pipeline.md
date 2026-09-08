@@ -278,6 +278,40 @@ inline command (#506): before #446 that prose was *executed*, and a heading begi
 follows a **colon**. Fixed in #508; the general rule is worth keeping — put the explanation on its own
 line, not in the heading.
 
+## `mergeSafety` also checks what you DECLARED against what GitHub RESOLVED (#549)
+
+A PR body can carry `Closes: none — <reason>` and still close two other issues, because GitHub's own
+closing-keyword scan (`close(s/d)`, `fix(es/ed)`, `resolve(s/d)` immediately followed by `#N`) runs over
+the WHOLE body, not just a `Closes:` line — and it fires on an explanation exactly as readily as a real
+declaration. Measured the same day, twice: a PR that said, mid-sentence, *"the wiring PR (#530) closes
+#494"* closed #494 while declaring `none`; a PR that said *"whose acceptance now says it \`closes #492\`"*
+closed #492 the same way. Both had to be reopened by hand.
+
+**`scripts/closes-mismatch-check.mjs` compares two facts this pipeline already holds**, rather than
+trusting either alone: what the body DECLARED (`extractClosesDeclaration`, B7's own gate, already run in
+`acceptance`) against what GitHub actually RESOLVES (`lookupClosingIssues`, the same
+`closingIssuesReferences` query `close-rows-for-merged-pr.mjs` already relies on). Neither is new work —
+the check is one comparison.
+
+**It runs as a new step in `mergeSafety`, never inside `merge-guard.mjs --ci-gate`'s own composition.**
+Two reasons: `mergeSafetyVerdict` is deliberately scoped to head-vs-tip ONLY, because its sibling rules
+(ancestry, closing-claim) were measured refusing the NORMAL case when asked unconditionally in CI — see
+that function's own header — and this check has the opposite property (silent on every well-formed PR),
+so folding it in would blur a boundary that exists for a real reason. And it needs the same
+`closingIssuesReferences` GraphQL query and `GH_TOKEN` `merge-guard`'s lookups already use, which the
+`acceptance` job structurally cannot have (see above — it runs an untrusted PR body's own commands).
+
+**Refused in both directions, because they are different faults**: a number GitHub resolves that the body
+never declared is an accidental closure (both incidents above); a number the body declares that GitHub
+never resolves is the `Closes A1c (#487)` shape from the same morning — a well-intentioned declaration
+GitHub's own matcher never picked up, so the row silently stayed open. The refusal names the actual line
+and phrase (`findClosingPhrase`), not just the number, so an author goes to the sentence rather than
+re-reading the whole body.
+
+**Skipped, not refused, when the declaration itself is `missing`/`malformed`** — `closesDeclarationReport`
+(the `acceptance` job's own gate) already refuses those; this check would only be a second, independently
+drifting opinion about the identical fact.
+
 ## "I will hold it open" is not a state the pipeline offers — a draft is
 
 A PR that must not merge until something outside CI happens is opened as a **draft**, and its body names what un-drafts it. Nobody disarms, and nobody asks anyone to wait.
