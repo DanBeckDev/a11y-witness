@@ -1703,8 +1703,15 @@ it was written. Until those gates run, this is an implemented hypothesis and not
 
 **The problem, now sized.** Ten of the 28 structured features are `float(bool(channel))`, and `any([])` is
 `False`, so `0` means both *the page has none* and *nothing looked*. Measured 2026-09-03 on the
-authoritative corpus: **61.7%** of empty `formChanges`, **56.1%** of empty `postSubmitFields` and **65.3%**
-of the `formControl` sweep are "never asked". So the majority of those zeros are artefacts.
+authoritative corpus: **61.7%** of empty `formChanges` and **56.1%** of empty `postSubmitFields` are
+"never asked" (`emptyNotAsked`). So the majority of those zeros are artefacts.
+
+**`formControl` has no never-asked figure, and 65.3% was previously — falsely — quoted here as one
+([#341](https://github.com/DanBeckDev/a11y-witness/issues/341)).** `emptyNotAsked` is computed only for
+`formChanges` and `postSubmitFields`; `formControl` has never been among them, in any commit of
+`observation-ambiguity.mjs`. The real 65.3% figure is `cannotSay/empty` for `formControl`, which answers a
+different question — "no census to compare against", a statement about the corpus's AGE, not about any
+page. Where that number came from is not recoverable; guessing at it would be worse than admitting the gap.
 
 **Two routes are closed.** Masking was REFUTED — [§15](./not-working.md), it cost a real finding. Feeding
 `observed` to the featurizer as its own column was DECIDED AGAINST — [§14](./not-working.md), because a
