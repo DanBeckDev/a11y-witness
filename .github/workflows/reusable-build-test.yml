@@ -1,0 +1,193 @@
+name: reusable-build-test
+
+# A1 (#452): ONE definition of "build, lint, typecheck, test" shared by TWO callers that used to carry two
+# independent, hand-maintained copies of the same steps -- `ci.yml`'s `ts`/`python` jobs and
+# `trunk-guard.yml`'s `trunkGate`. Chairman's own comment on `ci.yml` already measured the two running
+# "the SAME suite, on every merge, close enough in wall time" -- the fact-stated-twice shape this repo's
+# own rule says to end by deletion or derivation, never by a third reader trusting the two stay equal.
+#
+# `workflow_call` ONLY -- this file has no `on: push`/`on: pull_request` of its own, so it cannot appear on
+# push-trigger-allowlist.test.ts's radar as a push-triggered file; it only ever runs when a caller invokes
+# it, and the caller's own trigger is what that guard examines.
+#
+# THREE INDEPENDENT AXES, because the two real callers are NOT step-identical -- verified against
+# `origin/main` before writing this, not assumed:
+#
+#   ci.yml's `ts` job:        build, docs:coverage, lint, typecheck, SCOPED tests, node_modules cache -- no python
+#   ci.yml's `python` job:    build only (a prerequisite for a python test that shells to node) -- no lint/
+#                             typecheck/ts-tests, no docs:coverage, no dedicated node_modules cache step
+#   trunk-guard's `trunkGate`: build, lint, typecheck, UNSCOPED tests, python -- no docs:coverage, no
+#                              dedicated node_modules cache step (relies on setup-node's own npm cache only)
+#
+# So parameterizing on "scope" ALONE would either give trunk-guard `docs:coverage` it never had (new work
+# on every merge to `main`) or silently drop it from `ci.yml` (a check deleted without anyone deciding to).
+# Each input's default below is chosen to match the ORIGINAL, narrowest-scoped caller (`python`'s job),
+# so a caller must opt IN to the extra work rather than opt out of it -- the same "additive, not a silent
+# widening" instinct as `permissions:` below.
+on:
+  workflow_call:
+    inputs:
+      run-lint-typecheck:
+        description: "Run npm run lint and npm run typecheck. On for ci.yml's ts and trunk-guard's trunkGate; off for ci.yml's python (which never ran either)."
+        type: boolean
+        default: false
+      run-docs-coverage:
+        description: "Run npm run docs:coverage before lint/typecheck, so doc-references.test.ts sees the generated file. ONLY ci.yml's ts job had this -- neither python nor trunkGate ever ran it."
+        type: boolean
+        default: false
+      run-ts-tests:
+        description: "Run the TypeScript unit suite at all. Off for ci.yml's python job, which never ran any TS tests of its own."
+        type: boolean
+        default: false
+      ts-test-scope:
+        description: "'scoped' (select-changed-tests.mjs, with a per-package fallback) or 'unscoped' (npm run test:ts, the whole suite). Only meaningful when run-ts-tests is true. ci.yml's ts job is 'scoped'; trunk-guard's trunkGate is 'unscoped', matching its own unconditional, every-merge trigger rather than a diff."
+        type: string
+        default: scoped
+      base-ref:
+        description: "origin/<base> for select-changed-tests.mjs's git diff. Required when ts-test-scope is 'scoped'; ignored otherwise."
+        type: string
+        default: ""
+      test-packages:
+        description: "Space-separated package names for the broad-path fallback glob (packages/<pkg>/src/**/*.test.ts). Same value ci.yml's changed job already computes; unused when ts-test-scope is 'unscoped'."
+        type: string
+        default: ""
+      run-python-tests:
+        description: "Run the Python setup + pytest suite. On for ci.yml's python job and trunk-guard's trunkGate; off for ci.yml's ts job, which never touched Python."
+        type: boolean
+        default: false
+      use-node-modules-cache:
+        description: "Add the dedicated actions/cache@v4 node_modules step, keyed on package-lock.json, on top of setup-node's own npm-download cache. Only ci.yml's ts job had this -- python and trunkGate rely on setup-node's cache alone."
+        type: boolean
+        default: false
+      # NOT AN INPUT, DELIBERATELY -- checkout depth is DERIVED below from run-ts-tests/ts-test-scope, not
+      # taken from the caller. A `fetch-depth` input here would let a caller pass `scoped` with the default
+      # shallow depth by accident, and the failure is not loud: `select-changed-tests.mjs` runs
+      # `git diff <base>...HEAD`, which fails "no commits in common" on a shallow clone -- or worse,
+      # depending on how the selector's own fallback handles that, silently selects the wrong (too narrow)
+      # test set and reports green. A selector that picks too few tests is indistinguishable from a
+      # passing suite, which this repo's own CLAUDE.md names as its signature failure shape. Deriving the
+      # depth internally makes that misconfiguration structurally impossible rather than a caller
+      # discipline this file cannot enforce.
+
+# READ-ONLY, EXPLICITLY -- a `workflow_call` file that omits `permissions` inherits the CALLER's, which
+# would be a widening invisible in this file's own diff. Nothing here writes anything: build, lint,
+# typecheck and the test suites only read the checked-out tree and (for a handful of packaging tests that
+# shell out to `gh issue list`/`gh pr view`) this repo's own Issues/PRs, using the ambient `github.token`
+# that every job already carries -- no `secrets:` block needed to reach it.
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      # `fetch-depth: 0` (full history) IS REQUIRED WHENEVER THE SCOPED PATH RUNS -- carried verbatim
+      # from `ci.yml`'s own `ts` job (`origin/main`, before this split): A1b's `select-changed-tests.mjs`
+      # runs `git diff <base>...HEAD` in this same job, and a shallow clone fails that with "no commits in
+      # common", exactly the trap the `changed` job's own checkout comment already names for the identical
+      # command. Computed here rather than taken as a caller input -- see this file's own header for why.
+      #
+      # TWO GUARDED STEPS, NOT ONE STEP WITH A TERNARY EXPRESSION -- found by mutation while writing this:
+      # GitHub Actions expressions treat `0` as FALSY, so `cond && 0 || 1` silently becomes `1` even when
+      # `cond` is true, because `0 || 1` evaluates the right side. There is no way to write "0 when true,
+      # 1 when false" as a single `&&`/`||` expression when one of the two values IS zero. Exactly one of
+      # these two steps runs, `if:`-guarded on the identical condition in both directions, so there is
+      # only ever one real checkout per job -- never two, never zero.
+      - name: Checkout (full history -- the scoped test selector needs git diff <base>...HEAD)
+        if: inputs.run-ts-tests && inputs.ts-test-scope == 'scoped'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Checkout (shallow -- no path here runs a diff against history)
+        if: '!(inputs.run-ts-tests && inputs.ts-test-scope == ''scoped'')'
+        uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      # Same key, same reasoning as the original `ts` job's step: keyed on the lockfile because that is
+      # the only thing that can make a previously-installed `node_modules` wrong. Only ci.yml's `ts` job
+      # ever carried this dedicated step; python and trunkGate relied on setup-node's own npm cache alone,
+      # preserved here as `use-node-modules-cache: false` by default.
+      - if: inputs.use-node-modules-cache
+        uses: actions/cache@v4
+        id: node-modules-cache
+        with:
+          path: node_modules
+          key: node-modules-${{ hashFiles('package-lock.json') }}
+      - if: inputs.use-node-modules-cache && steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts
+      - if: '!inputs.use-node-modules-cache'
+        run: npm ci --ignore-scripts
+      - run: npm run build
+      # #168: WHAT THE BUILD ACTUALLY PRODUCED, kept only when something after it fails. See the ORIGINAL
+      # comment in ci.yml's history for the full incident (an intermittent cross-package dist race) --
+      # kept here verbatim in spirit: cheap on a green run, and the thing that would tell a future reader
+      # plainly if a build-order race reappears through some other door.
+      - name: "#168: what the build produced, if anything below fails"
+        if: failure()
+        run: |
+          echo "--- packages/evidence/dist ---"
+          ls -la packages/evidence/dist/ || echo "(no dist directory at all)"
+          echo "--- wcag.d.ts, first 20 lines ---"
+          head -20 packages/evidence/dist/wcag.d.ts || echo "(no wcag.d.ts)"
+          echo "--- does tsc consider the graph up to date? ---"
+          npx tsc --build --dry $(node -e "const fs=require('fs');console.log(fs.readdirSync('packages').filter(d=>fs.existsSync('packages/'+d+'/tsconfig.json')).map(d=>'packages/'+d).join(' '))") || true
+      # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (#158) -- a fresh checkout has no copy, so
+      # doc-references.test.ts (reached by the unscoped suite, and by a scoped run whenever
+      # select-changed-tests.mjs picks it) would otherwise report a real citation as broken. Only the
+      # original `ts` job ever paid for this; kept opt-in so trunkGate does not gain a step it never had.
+      - if: inputs.run-docs-coverage
+        run: npm run docs:coverage
+      - if: inputs.run-lint-typecheck
+        run: npm run lint
+      - if: inputs.run-lint-typecheck
+        run: npm run typecheck
+      # A1B: WHICH TEST FILES DOES THIS DIFF ACTUALLY REACH -- unchanged from ci.yml's own `ts` job. Only
+      # relevant when ts-test-scope is 'scoped'; the unscoped path below is trunk-guard's own long-standing
+      # "test everything, on every merge" choice, which needs no diff at all.
+      - if: inputs.run-ts-tests && inputs.ts-test-scope == 'scoped'
+        id: select
+        run: node scripts/select-changed-tests.mjs --base=${{ inputs.base-ref }} --repo="$PWD"
+      - name: Unit tests of the changed test files (transitively), with a per-package fallback for anything uncovered
+        if: inputs.run-ts-tests && inputs.ts-test-scope == 'scoped'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ steps.select.outputs.broad }}" = "true" ]; then
+            globs=()
+            for pkg in ${{ inputs.test-packages }}; do
+              globs+=("packages/$pkg/src/**/*.test.ts")
+            done
+            if [ "${#globs[@]}" -eq 0 ]; then
+              echo "run-ts-tests=true but no package was implicated -- ci-changed.mjs's own rule is that this"
+              echo "should never happen (a root config or scripts/*.mjs change adds every package); failing"
+              echo "loudly rather than silently running nothing."
+              exit 1
+            fi
+            npx tsx --test "${globs[@]}"
+          else
+            files=(${{ steps.select.outputs.testFiles }})
+            if [ "${#files[@]}" -eq 0 ]; then
+              echo "run-ts-tests=true but select-changed-tests.mjs selected nothing and named no fallback --"
+              echo "its own rule is that this should never happen; failing loudly rather than silently"
+              echo "running nothing, this job's whole reason for existing."
+              exit 1
+            fi
+            npx tsx --test "${files[@]}"
+          fi
+      # UNSCOPED path -- trunk-guard's own choice, unchanged: the whole tree, never a per-package slice,
+      # because every merge to main needs the full answer regardless of what that merge's own diff touched.
+      - name: Unit tests, unscoped
+        if: inputs.run-ts-tests && inputs.ts-test-scope == 'unscoped'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run test:ts
+      - if: inputs.run-python-tests
+        uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - if: inputs.run-python-tests
+        run: pip install -r requirements-ci.txt
+      # Same two flags as the root `test:python` script and both original callers, deliberately:
+      # `spec_from_file_location` honours `__pycache__`, and a stale compile has decided a mutation check
+      # wrongly in this repo before.
+      - if: inputs.run-python-tests
+        run: PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider packages/*/tests -q
