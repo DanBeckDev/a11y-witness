@@ -612,3 +612,69 @@ session** (via a scheduled task, not bare SSH — SSH has no interactive desktop
 - [Creating a UTM VM from CLI](https://blog.vkhitrin.com/creating-a-utm-virtual-machine-from-cli/) — `.utm` bundle layout.
 - UTM's scripting dictionary: `/Applications/UTM.app/Contents/Resources/UTM.sdef` — the
   authoritative reference for `make new virtual machine` and the `qemu configuration` record.
+
+## Five utmctl quirks, moved from CLAUDE.md (#458)
+
+**Do not restart with `utmctl exec` and believe it.** `Stop-ScheduledTask` + `Start-ScheduledTask`
+silently did nothing on two cloned guests: they served the previous node process — and therefore
+the previous code — for another hour. `exec` returns success and no output whether or not it ran.
+Rebooting the guest always picks up a pushed file. Also note `utmctl stop --request` is sometimes
+ignored outright; `worker-ctl.sh stop` uses a guest-agent shutdown and waits for it.
+
+**Verify through `/health`, not through `exec`.** The old advice was "hash-check both sides", but
+reading the guest's hash goes through `exec` too — so when `exec` is broken the check returns
+*empty*, not *mismatched*, and empty reads as a flaky tool rather than a failed deploy. A
+verification that shares a failure mode with the action verifies nothing. `npm run worker:code`
+asks each worker over the channel it serves on, which is reachable exactly when it is usable.
+
+**This shell is zsh.** `for U in $UUIDS` does **not** word-split a scalar — it iterates once with
+the whole string, and `utmctl` answers `Virtual machine not found`, which reads like a
+deregistered VM. Use literal word lists or an array.
+
+**`utmctl` needs the UTM app running.** With UTM closed, a perfectly healthy VM reports its
+state as `unknown` and the worker looks unreachable — the bundle being present makes it read
+like corruption. `worker-ctl.sh` launches UTM and waits. Also: there is **one** VM and **one**
+NVDA on this machine, so two shells or two agents driving the worker will see each other's
+restarts as breakage. Check `worker-ctl.sh status` before concluding the guest is broken.
+
+**`utmctl exec` and SSH land in session 0 and cannot run a capture.** Guidepup needs an
+interactive desktop and reports its absence as `nvda.start failed: NVDA is not supported`,
+which reads like a broken install and is not one. Run captures through a scheduled task with
+`LogonType Interactive` — see the runbook.
+
+## For a long run, use more than one worker (moved from CLAUDE.md, #458)
+
+The only worker states that are actually broken are: a VM **running but not answering**
+`/health` (restart `a11ysrv` on that guest), and **no VM registered at all** (build or clone
+one). If `doctor` says READY, the environment is fine.
+
+It answers VM state, worker health, page server, judge backend and whether a previous run
+was left mid-flight — the last one being the difference between `capture` and
+`capture -- --resume`, which is hours either way if you guess wrong.
+
+For a long run, use more than one worker. **Set nothing** — with neither `A11Y_WORKER` nor
+`A11Y_WORKERS` set, a run finds every local worker VM, starts what is stopped, dispatches
+cases across them, and **puts each one back as it found it**: stopped stays stopped, and a VM
+you had already started is left running. Measured 1.90x on two, 2.36x on three — on a quiet host,
+and **how many actually start is capped by host memory** (next section).
+
+```bash
+npm run training:capture                            # uses every local worker, releases them after
+packages/worker-fleet/src/local-worker/clone-worker.sh              # add one (handles utmctl's MAC copying)
+npm run worker:ctl -- pool           # what have I got, as JSON
+npm run worker:ctl -- pool-up        # start them all
+npm run worker:ctl -- pool-stop      # release the lot (~13 s for three)
+A11Y_WORKERS=url1,url2 npm run training:capture     # explicit pool: yours to manage, no lifecycle
+```
+
+`A11Y_WORKERS` is the escape hatch, not the normal path: naming workers means you are managing
+them, so nothing is started or stopped for you. `--after stop|pause|leave` overrides the
+restore behaviour; `A11Y_VM_AFTER` is the same choice as an env var, for a caller that cannot pass a
+flag (a lab job, a scheduled task). Same three values, same default (`restore`), and the CLI reads
+whichever is set — set the flag when you are typing the command yourself, the env var when something
+else is invoking it for you.
+
+`A11Y_LOCAL_VM=0` skips the local-UTM-VM fallback entirely: with no explicit worker and no
+`inventory.yml` entry, `leaseWorker` normally probes for a local VM before giving up and guessing
+`http://localhost:8765`. Setting this to `0` goes straight to the guess, skipping the UTM detection
+work (and its side effects) for anyone who does not use the local VM setup at all.
