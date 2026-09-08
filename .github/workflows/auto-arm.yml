@@ -42,6 +42,9 @@ name: auto-arm
 # unarmed from 00:22 until swept by hand. `synchronize` bounds this to the fix itself: the moment the
 # conflict is resolved, `arm` sees it directly instead of waiting on someone else's PR.
 #
+# LIVE VERIFICATION IN PROGRESS (#415 step 2): a follow-up commit to this PR is about to test whether an
+# `auto-arm` run appears for its own `synchronize` event. Placeholder pending that result.
+#
 # ## AND THAT IS WHY A SWEEP IS NEEDED, NOT A THIRD TRIGGER -- #344, measured 2026-09-07
 #
 # The paragraph above is correct and answers a different question from this one. A PR that was ALREADY
