@@ -63,10 +63,48 @@ const ITEMS_QUERY = `
  */
 
 /**
+ * @typedef {{ type: string, message: string, path: string | null }} GraphqlError
+ */
+
+/**
+ * Extracts GraphQL's own `errors` array from a parsed response, if present -- #555. `type`/`message`/
+ * `path` are the three fields that distinguish FOUR different causes (no permission, wrong project id,
+ * user-vs-org shape, a query the schema rejects) which otherwise all read as the identical, unactionable
+ * "could not read Project N items" -- #546 sat three hours on exactly that sentence.
+ *
+ * Returns `null` for an absent, non-array, or empty `errors` field -- so a caller can `if (errors)` rather
+ * than checking `.length` itself at every call site.
+ *
+ * @param {unknown} parsed
+ * @returns {GraphqlError[] | null}
+ */
+function graphqlErrors(parsed) {
+  const errors = /** @type {any} */ (parsed)?.errors;
+  if (!Array.isArray(errors) || errors.length === 0) return null;
+  return errors.map((/** @type {any} */ e) => ({
+    type: typeof e?.type === "string" ? e.type : "UNKNOWN",
+    message: typeof e?.message === "string" ? e.message : JSON.stringify(e).slice(0, 200),
+    path: Array.isArray(e?.path) ? e.path.join(".") : null,
+  }));
+}
+
+/** One `type: message (path)` line per error, joined -- the string every refusal below actually prints. */
+function describeGraphqlErrors(/** @type {GraphqlError[]} */ errors) {
+  return errors.map((e) => `${e.type}${e.path ? ` (${e.path})` : ""}: ${e.message}`).join("; ");
+}
+
+/**
  * One page of `gh api graphql`'s response, parsed into `BoardItem[]` plus pagination state. THROWS on any
  * shape it does not recognise -- same discipline as `ready-label-audit.mjs`'s `fetchIssues`: a snapshot
  * that silently records fewer items than the board actually holds is worse than one that refuses outright,
  * because it looks complete.
+ *
+ * #555: CHECKS FOR `errors` BEFORE TRUSTING `data` AT ALL, even on the exit-0 path that reaches this
+ * function -- GraphQL can return a 200 carrying `data` AND `errors` together, with `nodes` full of `null`
+ * exactly where the token could count an item but not read it. A caller checking only for `data` being
+ * present would read that as "N items, all empty", which is the partial-board-wearing-a-complete-one's-
+ * clothes shape this whole file exists to prevent, arriving through the `errors` array instead of a
+ * non-zero exit -- so this is checked whether or not `run()` itself threw.
  * @param {string} raw
  * @returns {{ items: BoardItem[], hasNextPage: boolean, endCursor: string | null }}
  */
@@ -78,6 +116,12 @@ function parsePage(raw) {
   } catch (cause) {
     throw new Error(`board-snapshot: gh's response was not JSON -- refusing to guess. `
       + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
+  }
+  const errors = graphqlErrors(parsed);
+  if (errors) {
+    throw new Error(`board-snapshot: GraphQL returned an error alongside its response -- refusing to `
+      + `treat a partial answer as complete, even though the request otherwise succeeded. `
+      + `${describeGraphqlErrors(errors)}`);
   }
   const itemsNode = /** @type {any} */ (parsed)?.data?.user?.projectV2?.items;
   if (!itemsNode || !Array.isArray(itemsNode.nodes) || !itemsNode.pageInfo) {
@@ -111,6 +155,31 @@ function parsePage(raw) {
 }
 
 /**
+ * `execFileSync` throws on a non-zero exit, but `gh api graphql` still writes the full response body --
+ * `errors` included -- to stdout first, and Node's thrown error carries it verbatim on `.stdout` (a plain
+ * string, since `defaultRun` passes `encoding: "utf8"`). Measured directly: a request naming a repository
+ * that does not resolve exits 1 with `{"data":{...},"bad":null},"errors":[{"type":"NOT_FOUND",...}]}` on
+ * `.stdout`. So a non-zero exit does not mean the API's own answer is lost -- only that nobody had read it
+ * yet. Returns `null` (never throws) for anything that is not a parseable GraphQL error body, so the
+ * caller can fall back to the plain exit failure honestly rather than inventing a cause.
+ * @param {unknown} failure the thrown value from a failed `run()` call
+ * @returns {string | null}
+ */
+function graphqlErrorFromFailedRun(failure) {
+  const stdout = /** @type {any} */ (failure)?.stdout;
+  if (typeof stdout !== "string" || stdout.length === 0) return null;
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  const errors = graphqlErrors(parsed);
+  return errors ? describeGraphqlErrors(errors) : null;
+}
+
+/**
  * Every item currently on the board. Paginated -- #399 measured 117 items on Project 2, comfortably past
  * one page of 100. `gh` failing, or answering with a shape this function does not recognise, THROWS: it
  * never falls through to a partial or empty list, which would let a snapshot claim completeness having
@@ -132,8 +201,13 @@ export function fetchBoardItems({ run = defaultRun } = {}) {
     try {
       raw = run("gh", args);
     } catch (cause) {
+      // #555: THE GRAPHQL ERROR, WHEN ONE EXISTS, NOT JUST THE COMMAND'S EXIT MESSAGE -- "could not read
+      // Project 2 items" is compatible with no permission, a wrong project number, a user-vs-org shape
+      // mismatch, or a query the schema rejects, and #546 sat three hours on that ambiguity. `gh`'s own
+      // exit message never carries the API's answer; the FAILED PROCESS's stdout does.
+      const graphqlDetail = graphqlErrorFromFailedRun(cause);
       throw new Error(`board-snapshot: could not read Project ${PROJECT_NUMBER} items -- refusing to `
-        + `snapshot a partial board. ${/** @type {Error} */ (cause).message}`, { cause });
+        + `snapshot a partial board. ${graphqlDetail ?? /** @type {Error} */ (cause).message}`, { cause });
     }
     const page = parsePage(raw);
     items.push(...page.items);
