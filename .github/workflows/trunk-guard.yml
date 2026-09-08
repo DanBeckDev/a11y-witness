@@ -32,6 +32,12 @@ name: trunk-guard
 on:
   push:
     branches: [main]
+  # #417: `workflow_dispatch`, so `trunk-sweep.yml` can trigger a real gate RUN against `main`'s current
+  # tip when a bot merge (GITHUB_TOKEN-authored, so `push` never fires -- #394's overnight measurement)
+  # left it with zero check runs. No `ref` input needed: `workflow_dispatch` with none given runs against
+  # the repository's DEFAULT branch, which is `main`, so `github.sha` inside the run correctly resolves
+  # to main's tip either way.
+  workflow_dispatch:
 
 jobs:
   # THE ONLY QUESTION THIS JOB ANSWERS: is `main`'s new tip actually green. `decideRevert` below is what
@@ -93,7 +99,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # `github.event.before` only exists on a real `push` event. #417's sweep triggers this workflow
+          # via `workflow_dispatch` (no such field), so fall back to the checked-out commit's own parent
+          # -- `fetch-depth: 0` above already makes that a real, resolvable commit, and it is the same
+          # value a `push` event would have carried for an ordinary single-commit push.
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ]; then BEFORE="$(git rev-parse HEAD^1)"; fi
           node scripts/trunk-revert.mjs \
             --push-sha=${{ github.sha }} \
-            --before-sha=${{ github.event.before }} \
+            --before-sha="$BEFORE" \
             --run-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
