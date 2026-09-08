@@ -44,6 +44,7 @@ import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { fetchBoardItems, PROJECT_NUMBER } from "./board-snapshot.mjs";
+import { sandboxGitEnv } from "./git-env.mjs";
 
 export const READY_LABEL = "ready";
 
@@ -73,7 +74,7 @@ export const MUTEX_LABELS =
  */
 
 /** @type {(cmd: string, args: string[]) => string} */
-const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8" });
+const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", env: sandboxGitEnv() });
 
 /**
  * Reads every OPEN issue's labels from the real board. Same discipline as `row-claim.mjs`'s `fetchLabels`:
@@ -262,6 +263,61 @@ export function readyRowsAlreadyMerged(readyIssues, closingRefsByIssue) {
   return flagged;
 }
 
+
+/** A row that ADVERTISES A LIVE STATE -- pickable or claimed. Both are claims about the present, and both
+ * are falsified the same way: by the work already being on main.
+ * @param {string[]} labels */
+export function livesStateLabels(labels) {
+  return labels.includes(READY_LABEL) || labels.includes("in-progress");
+}
+
+/**
+ * Pure: which `in-progress` rows have no open pull request and no push behind them?
+ *
+ * THE CLAIM IS ABOUT THE PRESENT AND NOTHING CHECKED IT. `in-progress` says a session is working this
+ * row right now. Measured 2026-09-08, after the chairman read the board: 24 open rows carried it and
+ * 15 were finished or dead -- one claimed THIRTY HOURS earlier with no branch ever pushed. A claim
+ * nobody can falsify is not a status, it is a decoration.
+ *
+ * WHY BOTH SIGNALS, AND WHY NEITHER ALONE. An open PR is proof of work in flight. A recent push is proof
+ * of work in progress that has not opened one yet. Requiring a PR alone would flag every session in its
+ * first hour; requiring a push alone would flag a session whose PR is green and waiting on CI. A row is
+ * only stale when NEITHER holds.
+ *
+ * `behind` is deliberately NOT a signal here: during a drain every merge puts every branch behind, and
+ * #406 sat at behind=55 while entirely healthy.
+ *
+ * @param {{ number: number, title: string, labels: string[] }[]} issues
+ * @param {{ hasOpenPr: Map<number, boolean>, lastPushMinutes: Map<number, number>,
+ *           claimedMinutes: Map<number, number> }} activity  the three facts, which travel together
+ * @param {number} staleAfterMinutes
+ */
+export function claimsNobodyIsWorking(issues, activity, staleAfterMinutes = 240) {
+  const { hasOpenPr, lastPushMinutes, claimedMinutes } = activity;
+  const stale = [];
+  for (const issue of issues) {
+    if (!issue.labels.includes("in-progress")) continue;
+    if (hasOpenPr.get(issue.number)) continue;
+
+    // THE CLAIM'S OWN AGE IS THE CLOCK, not the branch's. A row claimed ten minutes ago has no branch
+    // because the session has not pushed yet, and a row claimed thirty hours ago has none because
+    // nobody ever started -- identical evidence, opposite meanings, and only the claim time separates
+    // them. MEASURED: the first live run of this check flagged five rows claimed within the hour,
+    // because "no branch at all" was treated as the strongest signal regardless of when the claim was
+    // made. It fired, and its first firing was five false positives, which is why it was wired before
+    // it was trusted.
+    const claimAge = claimedMinutes.get(issue.number);
+    if (claimAge !== undefined && claimAge < staleAfterMinutes) continue;
+
+    const age = lastPushMinutes.get(issue.number);
+    if (age !== undefined && age < staleAfterMinutes) continue;
+    stale.push({ number: issue.number, title: issue.title,
+      sessions: issue.labels.filter((l) => l.startsWith("session:")),
+      minutes: age ?? null, claimedMinutesAgo: claimAge ?? null });
+  }
+  return stale;
+}
+
 /**
  * One GraphQL round trip for every `ready` issue's closing PR references, via aliased sub-queries rather
  * than one call per issue -- the Ready lane is small (single digits to low tens), but N separate `gh api`
@@ -405,27 +461,121 @@ function reportAbsentFromBoard() {
  * survives every earlier check (nobody holds it, no mutex label, it is on the board) and is still the
  * wrong thing to pick, because a merged PR already declares `Closes #N` on it.
  */
+
+/**
+ * The two facts `claimsNobodyIsWorking` needs, read from the real repository.
+ *
+ * SEPARATED FROM THE DECISION so the decision can be driven by fixtures -- the live tracker is clean
+ * most of the time, so a check exercised only against it is one that has never been seen to fire.
+ *
+ * @param {number[]} numbers
+ * @param {{ run?: typeof defaultRun }} [deps]
+ */
+export function fetchClaimActivity(numbers, { run = defaultRun } = {}) {
+  /** @type {Map<number, boolean>} */
+  const hasOpenPr = new Map();
+  /** @type {Map<number, number>} */
+  const lastPushMinutes = new Map();
+  /** @type {Map<number, number>} */
+  const claimedMinutes = new Map();
+  if (numbers.length === 0) return { hasOpenPr, lastPushMinutes, claimedMinutes };
+
+  const open = run("gh", ["pr", "list", "--repo", REPO, "--state", "open", "--limit", "100",
+    "--json", "number,body,headRefName"]);
+  /** @type {{number: number, body: string, headRefName: string}[]} */
+  const prs = JSON.parse(open);
+  for (const n of numbers) {
+    // `Closes #N` in an OPEN PR is work in flight. Matching the row number anywhere in the body would
+    // count a passing mention, which is the distinction #446 is about.
+    if (prs.some((pr) => new RegExp(`[Cc]loses:?\\s+#${n}(?![0-9])`).test(pr.body ?? ""))) {
+      hasOpenPr.set(n, true);
+    }
+  }
+
+  for (const [n, minutes] of branchAges(numbers, run)) lastPushMinutes.set(n, minutes);
+  // WHEN THE CLAIM WAS MADE, from the label event -- the only clock that separates "not started yet"
+  // from "never started".
+  for (const n of numbers) {
+    try {
+      const at = run("gh", ["api", `repos/${REPO}/issues/${n}/timeline`, "--paginate", "--jq",
+        '[.[]|select(.event=="labeled" and .label.name=="in-progress")]|last|.created_at']).trim();
+      if (at) claimedMinutes.set(n, Math.floor((Date.now() - Date.parse(at)) / 60000));
+    } catch { /* a row whose timeline cannot be read is left absent, never assumed fresh */ }
+  }
+  return { hasOpenPr, lastPushMinutes, claimedMinutes };
+}
+
+/**
+ * A branch whose name ends in the row number, newest first. ABSENT means no branch at all, and stays
+ * absent rather than becoming a large age -- the caller must tell "not pushed yet" from "never existed".
+ * @param {number[]} numbers
+ * @param {typeof defaultRun} run
+ * @returns {Map<number, number>}
+ */
+function branchAges(numbers, run) {
+  /** @type {Map<number, number>} */
+  const ages = new Map();
+  const refs = run("git", ["for-each-ref", "--format=%(refname:short) %(committerdate:unix)",
+    "refs/remotes/origin"]);
+  const now = Math.floor(Date.now() / 1000);
+  for (const line of refs.split("\n")) {
+    const [name, when] = line.trim().split(/\s+/);
+    if (!name || !when) continue;
+    const m = /-(\d+)$/.exec(name);
+    if (!m || !numbers.includes(Number(m[1]))) continue;
+    const n = Number(m[1]);
+    const minutes = Math.floor((now - Number(when)) / 60);
+    const prev = ages.get(n);
+    if (prev === undefined || minutes < prev) ages.set(n, minutes);
+  }
+  return ages;
+}
+
+/** Reports the claims nobody is working. Returns the count, so the caller decides severity. */
+function reportDeadClaims() {
+  const issues = fetchOpenIssues();
+  const claimed = issues.filter((i) => i.labels.includes("in-progress"));
+  const stale = claimsNobodyIsWorking(claimed, fetchClaimActivity(claimed.map((i) => i.number)));
+  if (stale.length === 0) {
+    process.stdout.write("OK  every `in-progress` row has an open PR or a push in the last four hours\n");
+    return 0;
+  }
+  for (const { number, title, sessions, minutes } of stale) {
+    const held = sessions.length > 0 ? sessions.join(", ") : "nobody (no session label)";
+    const age = minutes === null ? "no branch at all" : `last push ${minutes} min ago`;
+    process.stdout.write(`DEAD-CLAIM  #${number} "${title}" -- held by ${held}, no open PR, ${age}\n`);
+  }
+  process.stderr.write(`\n${stale.length} \`in-progress\` row(s) nobody is working. A claim with no `
+    + "holder is invisible to everyone reading the board.\n");
+  return stale.length;
+}
+
 function reportAlreadyMerged() {
   const issues = fetchOpenIssues();
-  const readyIssues = issues.filter((i) => i.labels.includes(READY_LABEL));
-  const refsByIssue = fetchClosingPrRefs(readyIssues.map((i) => i.number));
-  const flagged = readyRowsAlreadyMerged(readyIssues, refsByIssue);
+  // EVERY ROW ADVERTISING A LIVE STATE, not just `ready`. This filtered on `ready` alone, so on
+  // 2026-09-08 it reported OK while FIFTEEN `in-progress` rows were finished or dead -- eleven of them
+  // closed by a merged PR that declared `Closes #N`. The check was right and its population was half the
+  // question, which is the shape this file exists to catch, turned on the file itself.
+  const liveRows = issues.filter((i) => livesStateLabels(i.labels));
+  const refsByIssue = fetchClosingPrRefs(liveRows.map((i) => i.number));
+  const flagged = readyRowsAlreadyMerged(liveRows, refsByIssue);
   if (flagged.length === 0) {
-    process.stdout.write(`OK  no \`ready\` issue is already closed by a merged PR\n`);
+    process.stdout.write(`OK  no \`ready\` or \`in-progress\` issue is already closed by a merged PR\n`);
     return 0;
   }
   for (const { number, title, closedBy } of flagged) {
     process.stdout.write(`ALREADY-MERGED  #${number} "${title}" -- PR #${closedBy} merged and declares `
-      + `\`Closes #${number}\`, but the row is still \`ready\`\n`);
+      + `\`Closes #${number}\`, but the row is still open and claims a live state\n`);
   }
-  process.stderr.write(`\n${flagged.length} \`ready\` row(s) already shipped on main via a merged PR -- `
-    + `picking one would mean discovering the fix already exists.\n`);
+  process.stderr.write(`\n${flagged.length} open row(s) already shipped on main via a merged PR -- `
+    + `picking one would mean discovering the fix already exists, and a claimed one is a session `
+    + `credited with work that is done.\n`);
   return flagged.length;
 }
 
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "ready-label-audit" });
-  let mutexCount, debrisCount, absentCount, alreadyMergedCount;
+  let mutexCount, debrisCount, absentCount, alreadyMergedCount, deadClaimCount;
   try {
     mutexCount = reportMutexViolations();
   } catch (error) {
@@ -457,7 +607,16 @@ function main() {
     process.exitCode = 2;
     return;
   }
-  if (mutexCount > 0 || debrisCount > 0 || absentCount > 0 || alreadyMergedCount > 0) process.exitCode = 1;
+  process.stdout.write("\n");
+  try {
+    deadClaimCount = reportDeadClaims();
+  } catch (error) {
+    process.stderr.write(`COULD NOT AUDIT claim activity: ${/** @type {Error} */ (error).message}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  if (mutexCount > 0 || debrisCount > 0 || absentCount > 0 || alreadyMergedCount > 0
+    || deadClaimCount > 0) process.exitCode = 1;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
