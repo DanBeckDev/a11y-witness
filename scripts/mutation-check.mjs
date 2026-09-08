@@ -47,6 +47,11 @@
 //   1  the guard DID NOT BITE -- it passed while the code was broken
 //   2  refused before mutating -- the test was already failing, or the arguments are unusable
 //   3  THE RESTORE FAILED -- the file on disk is not what it was. Loud, and the copy is left in place.
+//
+// #516: DO NOT NAME THIS SCRIPT ON A `Refutation:` LINE. `Refutation:` (scripts/acceptance-commands.mjs)
+// reads success as any NON-ZERO exit (#438) -- the OPPOSITE of exit 0 above meaning the guard bites. That
+// parser now refuses (rather than misreads) a `Refutation:` line naming `mutate`; paste this script's real
+// output under an unparsed heading instead (#504).
 import { execSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync, mkdtempSync } from "node:fs";
 import { realpathSync } from "node:fs";
