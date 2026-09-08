@@ -44,17 +44,22 @@
  * token expects a value, which is real parsing — so `/\/\// ` read as a regex literal containing two
  * slashes would be misread as comment syntax.
  *
- * WHAT IS NOW HANDLED, having stopped being hypothetical: a NESTED template literal inside an
- * interpolation (`` `${cond ? `a` : `b`}` ``) used to corrupt the OUTER literal's own end — the scan for
- * its closing backtick stopped at the inner literal's opening one instead, silently swallowing every real
- * line of code after it into what the scanner believed was still string content. Measured for real on
- * `scripts/select-changed-tests.mjs`'s `console.log`, whose interpolation was a ternary between two
+ * WHAT IS NOW HANDLED, having stopped being hypothetical: a NESTED template literal (or a `'`/`"` string)
+ * inside an interpolation (`` `${cond ? `a` : `b`}` ``) used to corrupt the OUTER literal's own end — the
+ * scan for its closing backtick stopped at the inner literal's opening one instead, silently swallowing
+ * every real line of code after it into what the scanner believed was still string content. Measured for
+ * real on `scripts/select-changed-tests.mjs`'s `console.log`, whose interpolation was a ternary between two
  * template literals: the rest of `main()`, including a real `refuseUnknownFlags(` call, vanished from the
  * stripped output, and a census reading it reported an already-guarded file as unguarded. `skipInterpolation`
- * now walks an interpolation as real code — strings, nested templates and comments included — so brace
- * depth is counted only where it is genuinely code, and the outer literal's true end is found regardless
- * of what its interpolation contains. This is exactly the shape a guard's own anti-vacuity assertion
- * exists to catch, and it did: on the first real file shaped this way, not by review.
+ * now walks an interpolation's brace depth, honouring any nested string/template it meets, so the outer
+ * literal's true end is found regardless of what nested strings its interpolation contains.
+ *
+ * DELIBERATELY STOPS THERE and does not also go looking for COMMENTS inside an interpolation — see
+ * `skipInterpolation`'s own comment for why extending into that territory reproduces the regex-vs-division
+ * limitation above in a far more damaging place (measured for real on `calibrate-abstention.mjs`, which
+ * corrupted the rest of the file after a `/^https?:\/\//` regex inside an interpolation). This is exactly
+ * the shape a guard's own anti-vacuity assertion exists to catch, and it caught it twice on the first real
+ * files shaped either way, not by review.
  *
  * Line comments are recognised only where `//` is not inside a string, matching what every guard that used
  * to hand-roll this actually needed — including a `//` that follows real code on the same line, which one
@@ -84,21 +89,32 @@ function endOfBlockComment(source: string, i: number): number {
  * real on `select-changed-tests.mjs`'s `console.log` call (a ternary of two template literals inside one
  * interpolation): the entire `main()` function body after it — including a real `refuseUnknownFlags(` call
  * — was swallowed into what the scanner believed was still inside the FIRST string, and a census reading
- * the stripped output reported an already-guarded file as unguarded. This walks the interpolation as real
- * code — honouring nested strings/templates (recursively, via `copyStringLiteral` itself) and comments —
- * so brace depth is only counted OUTSIDE of them, and the true matching `}` is found regardless of what it
- * contains.
+ * the stripped output reported an already-guarded file as unguarded.
+ *
+ * DELIBERATELY DOES NOT TREAT `//` OR `/* ... *\/` AS COMMENTS HERE, unlike the top-level loop — that is
+ * not an oversight, it is what keeps this fix inside its own scope. Nested strings and template literals
+ * ARE honoured (recursively, via `copyStringLiteral` itself), because that is the exact bug this function
+ * exists to fix. But treating an interpolation's contents as full code to find COMMENTS in it collides
+ * with this file's own already-documented, accepted limitation: a regex literal is not distinguished from
+ * a division operator. `/^https?:\/\//` — a real, common regex in this codebase for stripping a URL
+ * scheme — contains an escaped slash immediately followed by the regex's own closing slash (`\/\/`), which
+ * a naive scan misreads as a line-comment START. At the TOP LEVEL that misreading is bounded: it eats one
+ * line and the main loop recovers at the next newline, unstripped, which is the documented, accepted cost.
+ * INSIDE an interpolation it is not bounded the same way: swallowing to the next newline also swallows the
+ * interpolation's own closing `}` (and often the template literal's closing backtick with it), so the
+ * OUTER literal never finds its true end and everything after it is corrupted — measured for real on
+ * `calibrate-abstention.mjs`, whose `` `${...}` `` interpolation contains exactly this regex shape, and
+ * which cascaded into misreading three later, unrelated comments as string content. Depth is counted only
+ * where it is genuinely brace syntax OUTSIDE a nested string/template, and nothing here goes looking for a
+ * comment that might not be one.
  */
 function skipInterpolation(source: string, i: number): number {
   let depth = 1;
   let j = i + 1;
   while (j < source.length && depth > 0) {
     const ch = source[j];
-    const next = source[j + 1];
     if (ch === "{") { depth += 1; j += 1; continue; }
     if (ch === "}") { depth -= 1; j += 1; continue; }
-    if (ch === "/" && next === "/") { j = endOfLineComment(source, j); continue; }
-    if (ch === "/" && next === "*") { j = endOfBlockComment(source, j); continue; }
     if (ch === "'" || ch === "\"" || ch === "`") { j = copyStringLiteral(source, j).end; continue; }
     j += 1;
   }
