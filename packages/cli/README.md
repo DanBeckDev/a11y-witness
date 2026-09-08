@@ -11,10 +11,11 @@ workflow:
 ```yaml
 runs-on: windows-2022          # NVDA is Windows-only; the action fails fast and says so otherwise
 steps:
+  - uses: actions/checkout@v4
   - uses: DanBeckDev/a11y-witness@main
     with:
-      url: https://example.com/checkout
-      task: Complete the checkout with a saved card
+      url: https://example.com/contact
+      task: Send an enquiry
       fail-on: never           # report first; gate when your team asks for it
 ```
 
