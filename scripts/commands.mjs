@@ -49,4 +49,8 @@ export const COMMANDS = {
   // deliberately (see generate-commands-doc.mjs's own header, and generated-paths.test.ts's
   // TRACKED_EXEMPT), so regenerating it after a header changes is itself a command a person types.
   "docs-commands": { argv: ["node", "scripts/generate-commands-doc.mjs"] },
+  // #494: regenerates .github/workflows/consumer-gate.yml from README.md's own Quickstart fence, pinned
+  // to the current HEAD sha. Run this as the last step before a release, the same discipline
+  // docs-commands already established for a generated-and-tracked file.
+  "consumer-gate": { argv: ["node", "scripts/generate-consumer-gate.mjs"] },
 };
