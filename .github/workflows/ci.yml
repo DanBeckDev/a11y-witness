@@ -160,7 +160,11 @@ jobs:
     if: needs.changed.outputs.ts == 'true'
     runs-on: ubuntu-latest
     steps:
+      # `fetch-depth: 0` (full history) -- A1b's `select-changed-tests.mjs` runs `git diff <base>...HEAD`
+      # in this same job now, and a shallow clone fails that with "no commits in common", exactly the
+      # trap the `changed` job's own checkout comment already names for the identical command.
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       # CACHE node_modules ITSELF, KEYED ON THE LOCKFILE -- `setup-node`'s own `cache: npm` above caches
@@ -253,10 +257,22 @@ jobs:
       - run: npm run docs:coverage
       - run: npm run lint
       - run: npm run typecheck
-      - name: Unit tests of the touched package(s) and their workspace dependents
-        # `testPackages`, NOT `packages` -- see `ci-changed.mjs`'s own header. A change under
-        # `packages/evidence` must still test `packages/judge` (depends on it) and everything downstream
-        # of judge, not just evidence's own tests.
+      # A1B: WHICH TEST FILES DOES THIS DIFF ACTUALLY REACH? -- chairman, measured: this job and
+      # `trunk-guard` ran the SAME suite, on every merge, close enough in wall time (83-155s here,
+      # 144-155s there) that PACKAGE-level scoping (`testPackages` above) was not narrowing enough on its
+      # own. `select-changed-tests.mjs` narrows one step further, to FILES, by walking every candidate
+      # test's own transitive import closure -- see that file's own header for the mechanism and why the
+      # zero-tests fallback (a changed file no test reaches falls back to ITS OWN PACKAGE's full suite) is
+      # the load-bearing half. `testPackages` stays the SEARCH SCOPE and the safety net for anything
+      # outside `packages/*/src/` (a root config, `scripts/*.mjs`) -- this only refines what runs within
+      # it, never widens what `ci-changed.mjs` already decided must run.
+      - id: select
+        run: node scripts/select-changed-tests.mjs --base=${{ needs.changed.outputs.base }} --repo="$PWD"
+      - name: Unit tests of the changed test files (transitively), with a per-package fallback for anything uncovered
+        # `testPackages`, NOT `packages`, feeds the BROAD path above -- see `ci-changed.mjs`'s own header.
+        # A change under `packages/evidence` must still test `packages/judge` (depends on it) and
+        # everything downstream of judge, not just evidence's own tests; the broad path preserves that
+        # exactly, unchanged, for anything `select-changed-tests.mjs` steps aside for.
         #
         # GH_TOKEN: `packages/lab/src/packaging/*` (board-style.test.ts, row-claim.test.ts's live
         # fetchLabels) shells out to real `gh` calls against this repo's own Issues -- read-only, and
@@ -264,17 +280,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          globs=()
-          for pkg in ${{ needs.changed.outputs.testPackages }}; do
-            globs+=("packages/$pkg/src/**/*.test.ts")
-          done
-          if [ "${#globs[@]}" -eq 0 ]; then
-            echo "ts=true but no package was implicated -- ci-changed.mjs's own rule is that this should"
-            echo "never happen (a root config or scripts/*.mjs change adds every package); failing loudly"
-            echo "rather than silently running nothing."
-            exit 1
+          if [ "${{ steps.select.outputs.broad }}" = "true" ]; then
+            globs=()
+            for pkg in ${{ needs.changed.outputs.testPackages }}; do
+              globs+=("packages/$pkg/src/**/*.test.ts")
+            done
+            if [ "${#globs[@]}" -eq 0 ]; then
+              echo "ts=true but no package was implicated -- ci-changed.mjs's own rule is that this should"
+              echo "never happen (a root config or scripts/*.mjs change adds every package); failing loudly"
+              echo "rather than silently running nothing."
+              exit 1
+            fi
+            npx tsx --test "${globs[@]}"
+          else
+            files=(${{ steps.select.outputs.testFiles }})
+            if [ "${#files[@]}" -eq 0 ]; then
+              echo "ts=true but select-changed-tests.mjs selected nothing and named no fallback -- its own"
+              echo "rule is that this should never happen; failing loudly rather than silently running"
+              echo "nothing, this job's whole reason for existing."
+              exit 1
+            fi
+            npx tsx --test "${files[@]}"
           fi
-          npx tsx --test "${globs[@]}"
 
   python:
     needs: changed
