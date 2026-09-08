@@ -2,10 +2,11 @@
 
 Every structured feature is `float(bool(channel))` and `any([])` is `False`, so an empty channel reads
 identically whether the page genuinely had nothing or the probe never ran. Measured on the authoritative
-corpus by `corpus:observation-ambiguity`: **61.7% of empty `formChanges`, 56.1% of empty `postSubmitFields`
-and 65.3% of the `formControl` sweep are the second**. A head can therefore take a large negative weight on
-a CAPTURE CONDITION at no cost, which is ADR 0015's whole subject -- and `landmark_present` was DELETED for
-exactly this, 16 of its 16 zeros being truncated sweeps.
+corpus by `corpus:observation-ambiguity`: **61.7% of empty `formChanges` and 56.1% of empty
+`postSubmitFields` are the second** (`emptyNotAsked`; `formControl` has no such figure -- see #341 and
+`screenreader_features.py`'s FEATURE_SCHEMA_VERSION comment). A head can therefore take a large negative
+weight on a CAPTURE CONDITION at no cost, which is ADR 0015's whole subject -- and `landmark_present` was
+DELETED for exactly this, 16 of its 16 zeros being truncated sweeps.
 
 Two routes were closed before this one, and the tests below are written to refuse both:
 
