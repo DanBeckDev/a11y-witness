@@ -46,8 +46,9 @@ import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics
 import { assessedCriteria } from "@a11ign/judge/coverage";
 import { earlReport } from "@a11ign/evidence/earl";
 import { criterionOutcomes, type CriterionOutcome } from "@a11ign/judge/outcomes";
-import { realpathSync } from "node:fs";
+import { realpathSync, mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { relative, resolve as resolvePath } from "node:path";
 import { parseFormsConfig, refuseIfWrongOrigin, FormsConfigError } from "./forms/config.js";
 import { submissionPlan, formCoverage } from "./forms/coverage.js";
 import { draftFormsConfig } from "./forms/draft.js";
@@ -89,6 +90,14 @@ interface Args {
   plan: boolean;
   /** Path to axe results produced elsewhere, used instead of running our own scan. */
   axeResults: string | null;
+  /**
+   * Write the capture to `runs/witness/<stamp>-<slug>.json` after this run, and print the path. ON by
+   * default -- #431: a `witness` run kept nothing, so the reader whose run went wrong (a consent overlay,
+   * a short read, a timing that surprised them) had a printed report and no file to send anybody, and the
+   * evidence behind #311's own timing numbers was gone by the time anyone asked what they were made of.
+   * `--no-keep` is for a reader capturing their own site who does not want a transcript of it on disk.
+   */
+  keep: boolean;
 }
 
 function parsedAfterRun(): AfterRun {
@@ -104,7 +113,7 @@ const USAGE =
   "[--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms] [--no-probe-focus] "
   + "[--no-probe-navigation] [--no-probe-focus-context] "
   + "[--forms <file>] [--emit-form-config] [--plan] "
-  + "[--no-axe] [--axe-results <file>]";
+  + "[--no-axe] [--axe-results <file>] [--no-keep]";
 
 function defaultArgs(): Args {
   return {
@@ -154,6 +163,7 @@ function defaultArgs(): Args {
     plan: false,
     axe: process.env.A11Y_AXE !== "0",
     axeResults: process.env.A11Y_AXE_RESULTS ?? null,
+    keep: true,
   };
 }
 
@@ -180,6 +190,7 @@ const BOOLEAN_FLAGS: Readonly<Record<string, (args: Args) => void>> = Object.fre
   "--no-axe": (a) => { a.axe = false; },
   "--emit-form-config": (a) => { a.emitFormConfig = true; },
   "--plan": (a) => { a.plan = true; },
+  "--no-keep": (a) => { a.keep = false; },
 });
 
 export function applyArg(args: Args, argv: string[], i: number): number {
@@ -579,18 +590,77 @@ function reportOnTheCapture(cap: CaptureResponse, debug: boolean): void {
   }
 }
 
+/**
+ * `runs/witness/`, resolved LOCALLY rather than imported from `@a11ign/lab`'s `dataset-paths.mjs` -- the
+ * identical cycle `cli.test.ts`'s own header documents (#199, chairman's ruling): `@a11ign/lab` depends on
+ * the published `a11ign` package (`public-api.test.ts` imports it), so `cli` importing `dataset-paths.mjs`
+ * the other way would recreate the boundary defect ADR 0004 exists to prevent. See `dataset-paths.test.ts`'s
+ * `EXEMPT` entry for this file, added alongside this function.
+ *
+ * Anchored on `process.cwd()`, not this module's own location -- unlike `worker-fleet`'s `doctor.mjs`
+ * exemption a few files over. Those are internal tools that run inside this checkout; `witness` is the
+ * PUBLISHED, consumer-facing command #431 is about, run by someone outside this repo entirely, and their
+ * `runs/` is wherever they typed the command, not wherever npm happened to install the package.
+ */
+export function witnessArtifactRoot(): string {
+  const override = process.env.RUNS_ROOT ?? process.env.A11Y_RUNS_ROOT;
+  return resolvePath(process.cwd(), override ?? "runs", "witness");
+}
+
+/** The `<slug>` half of `<stamp>-<slug>.json` -- the URL with nothing a filesystem would reject. */
+export function witnessArtifactSlug(url: string): string {
+  const host = url.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/[/?#].*$/, "");
+  const slug = host.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || "page";
+}
+
+/**
+ * #431: the ONLY artefact a `witness` run produces besides its own printed report -- so the reader whose
+ * run went wrong has something to send, and `capture:explain` (built to answer "what actually happened on
+ * a page" from a capture's own diagnostic marks) has a real product-path file to open rather than only the
+ * synthetic corpus under `runs/real-page-corpus`.
+ *
+ * Written BEFORE judging, not after: the raw capture is real evidence the moment the screen reader
+ * finishes, and a judge crash or a doubtful capture must not cost the one thing a bad run could otherwise
+ * still hand somebody. THROWS on a write failure rather than reporting a path that is not really there --
+ * the acceptance's own mutation is "delete the write and confirm `capture:explain` has nothing to open",
+ * because a path that is printed but not written is worse than no path.
+ */
+export function writeWitnessArtifact(cap: CaptureResponse, task: string): string {
+  const dir = witnessArtifactRoot();
+  mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const path = resolvePath(dir, `${stamp}-${witnessArtifactSlug(cap.url)}.json`);
+  writeFileSync(path, `${JSON.stringify({ capturedAt: new Date().toISOString(), task, capture: cap }, null, 2)}\n`);
+  return path;
+}
+
+/** The path line, printed relative to where the reader is standing rather than an absolute machine path. */
+export function reportWitnessArtifact(path: string | null): void {
+  console.log(path
+    ? `capture written to ${relative(process.cwd(), path)}`
+    : "capture not written (--no-keep)");
+}
+
 async function runWitness(
   { url, task, worker, json, debug, probeForms, probeFocus, probeNavigation, probeFocusContext,
-    probeFocusReveal, emitFormConfig, formState, axe: wantAxe, axeResults }: RunOptions,
+    probeFocusReveal, emitFormConfig, formState, axe: wantAxe, axeResults, keep }: RunOptions,
 ): Promise<void> {
   const { cap, axe } = await captureAndScan(
     { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
       wantAxe, axeResults, formState });
+  const artifactPath = keep ? writeWitnessArtifact(cap, task) : null;
   const ruleFindings = axe.findings;
   // A draft needs the ANNOUNCEMENTS and nothing downstream of them, so it returns before the judge runs.
   // Scoring a page in order to print a config skeleton would spend a model pass on an answer nobody asked
-  // for, and would make `--emit-form-config` fail on a page the scorer abstains from.
-  if (emitFormConfig) return emitDraft(cap, url);
+  // for, and would make `--emit-form-config` fail on a page the scorer abstains from. The capture is
+  // written above regardless of this early return -- a draft run is still a real capture -- so this still
+  // says where, rather than leaving a file on disk nobody was told about.
+  if (emitFormConfig) {
+    emitDraft(cap, url);
+    reportWitnessArtifact(artifactPath);
+    return;
+  }
   // Carry the verdict, do not just warn about it.
   //
   // This wrote a WARNING and carried on. On gov.uk the capture read Edge's image-magnifier overlay
@@ -646,12 +716,17 @@ async function runWitness(
   if (json) {
     printJson({
       url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
+      artifactPath: artifactPath ? relative(process.cwd(), artifactPath) : null,
     });
   } else {
     printReport({
       url, task, screenReader: cap.screenReader, announcements: cap.transcript.length,
       verdict, axe: ruleFindings, conformance, outcomes, environment: cap.environment,
     });
+    // THE LAST LINE, per #431's acceptance -- printed after the report, never folded into `--json`'s one
+    // JSON blob, which carries `artifactPath` as a field instead so a machine consumer still gets one
+    // parseable value on stdout.
+    reportWitnessArtifact(artifactPath);
   }
 }
 
@@ -716,16 +791,20 @@ export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): 
  * and the local judge's evidence guard, given exactly that, suppressed a correct 4.1.2 finding scored at 0.993.
  */
 function printJson(
-  { url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes }: {
+  { url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
+    artifactPath }: {
     url: string; task: string; cap: CaptureResponse; verdict: Report["verdict"];
     ruleFindings: AxeFinding[] | null; captureVerified: boolean; unverifiedReason?: CaptureDoubt;
-    conformance: ConformanceRequirement[]; outcomes: CriterionOutcome[];
+    conformance: ConformanceRequirement[]; outcomes: CriterionOutcome[]; artifactPath: string | null;
   },
 ): void {
   const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
   console.log(JSON.stringify({
     url, task, screenReader: cap.screenReader, transcript: cap.transcript,
     structure: cap.structure, interaction: cap.interaction,
+    // #431: where the capture behind this JSON was written, or `null` under `--no-keep` -- a machine
+    // consumer's equivalent of the plain-text report's last line, so it never has to scrape stdout for it.
+    artifactPath,
     // The RUNNING capture's own environment (screenReaderVersion, guidepupVersion, browserVersion, ...),
     // never a pin or an installer manifest — publish blocker B4. A disputed finding has to be traceable
     // to the NVDA build and client that actually produced it, the same principle the scorer's own
