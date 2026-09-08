@@ -146,7 +146,9 @@ export function dependentsOf(changed, dependencyGraph) {
 }
 
 /** Root-level files a change to which must be treated as "every TS/JS package changed". */
-const ROOT_TS_FILES = new Set([
+// EXPORTED for select-changed-tests.mjs (A1c): "root configuration" is one fact, not two hand-typed
+// lists that could silently disagree about what counts.
+export const ROOT_TS_FILES = new Set([
   "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json",
   ".eslintrc.json", ".eslintrc.cjs", "eslint.config.js", "eslint.config.mjs",
 ]);
