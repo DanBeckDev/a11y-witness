@@ -38,6 +38,7 @@ import { globSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
+import { npmCliExecutable } from "./npm-cli-executable.mjs";
 
 /**
  * Pure: which of the given globs resolved to fewer than `min` files, and how many each actually matched.
@@ -86,7 +87,7 @@ function main() {
   // normal, top-level test run regardless of what process happened to launch this script.
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
-  const result = spawnSync("npx", args, { stdio: "inherit", env });
+  const result = spawnSync(npmCliExecutable("npx"), args, { stdio: "inherit", env });
   process.exitCode = result.status ?? 1;
 }
 
