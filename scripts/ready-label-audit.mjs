@@ -624,58 +624,56 @@ function reportAlreadyMerged() {
   return flagged.length;
 }
 
+/**
+ * Every check this audit performs, in the order it runs them. A LIST rather than six hand-written
+ * `try` blocks, because those blocks each ended in `return` -- so ONE check that could not ask its
+ * question silenced every check after it. Measured 2026-09-08: the board query needs a token that can
+ * read Projects v2 and the workflow supplies `github.token`, which cannot, so three scheduled runs
+ * reported nothing at all about closing PR references or dead claims -- questions that need no board
+ * and would have answered fine.
+ */
+/** @type {[string, () => number][]} */
+export const CHECKS = [
+  ["open issues", reportMutexViolations],
+  ["declined rows", reportStrandedByIncompleteDecline],
+  ["closed issues", reportClosedDebris],
+  ["board membership", reportAbsentFromBoard],
+  ["closing PR references", reportAlreadyMerged],
+  ["claim activity", reportDeadClaims],
+];
+
+/**
+ * Runs one check. A check that THREW could not ask its question, which is a different answer from
+ * "asked and found nothing" -- so it is recorded as a refusal and never counted as a clean zero.
+ * @param {string} what @param {() => number} check @param {string[]} refused
+ */
+export function runCheck(what, check, refused) {
+  try {
+    return check();
+  } catch (error) {
+    process.stderr.write(`COULD NOT AUDIT ${what}: ${/** @type {Error} */ (error).message}\n`);
+    refused.push(what);
+    return 0;
+  }
+}
+
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "ready-label-audit" });
-  let mutexCount, strandedCount, debrisCount, absentCount, alreadyMergedCount, deadClaimCount;
-  try {
-    mutexCount = reportMutexViolations();
-  } catch (error) {
-    process.stderr.write(`COULD NOT AUDIT open issues: ${/** @type {Error} */ (error).message}\n`);
+  /** @type {string[]} */
+  const refused = [];
+  let findings = 0;
+  for (const [index, [what, check]] of CHECKS.entries()) {
+    if (index > 0) process.stdout.write("\n");
+    findings += runCheck(what, check, refused);
+  }
+  if (refused.length > 0) {
+    process.stderr.write(`\n${refused.length} of ${CHECKS.length} check(s) could not run: `
+      + `${refused.join(", ")}. The count above is a PARTIAL audit and must not be read as a clean `
+      + "one -- an unasked question and a question answered `none` are different states.\n");
     process.exitCode = 2;
     return;
   }
-  process.stdout.write("\n");
-  try {
-    strandedCount = reportStrandedByIncompleteDecline();
-  } catch (error) {
-    process.stderr.write(`COULD NOT AUDIT declined rows: ${/** @type {Error} */ (error).message}\n`);
-    process.exitCode = 2;
-    return;
-  }
-  process.stdout.write("\n");
-  try {
-    debrisCount = reportClosedDebris();
-  } catch (error) {
-    process.stderr.write(`COULD NOT AUDIT closed issues: ${/** @type {Error} */ (error).message}\n`);
-    process.exitCode = 2;
-    return;
-  }
-  process.stdout.write("\n");
-  try {
-    absentCount = reportAbsentFromBoard();
-  } catch (error) {
-    process.stderr.write(`COULD NOT AUDIT board membership: ${/** @type {Error} */ (error).message}\n`);
-    process.exitCode = 2;
-    return;
-  }
-  process.stdout.write("\n");
-  try {
-    alreadyMergedCount = reportAlreadyMerged();
-  } catch (error) {
-    process.stderr.write(`COULD NOT AUDIT closing PR references: ${/** @type {Error} */ (error).message}\n`);
-    process.exitCode = 2;
-    return;
-  }
-  process.stdout.write("\n");
-  try {
-    deadClaimCount = reportDeadClaims();
-  } catch (error) {
-    process.stderr.write(`COULD NOT AUDIT claim activity: ${/** @type {Error} */ (error).message}\n`);
-    process.exitCode = 2;
-    return;
-  }
-  if (mutexCount > 0 || strandedCount > 0 || debrisCount > 0 || absentCount > 0 || alreadyMergedCount > 0
-    || deadClaimCount > 0) process.exitCode = 1;
+  if (findings > 0) process.exitCode = 1;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
