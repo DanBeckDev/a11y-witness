@@ -21,17 +21,6 @@
 // A verification that shares a failure mode with the action verifies nothing -- the same rule as checking
 // `/health` over HTTP rather than through the deploy channel that just failed.
 //
-// THERE ARE TWO SHAPES AND THEY NEED OPPOSITE FIXES. Conflating them is how the first draft of this
-// finding went wrong:
-//
-//   | stacked PR (#148)     | check-run list EMPTY          | nothing has ever tested this           |
-//   | conflicting PR (#137) | runs WITH conclusions          | real results, against a base that moved |
-//
-// The second reads as evidence, which is worse. And a bounded listing turns the second into the first if
-// you let it: that draft claimed #137 had zero runs, from a `gh run list --limit 25 | grep` that did not
-// reach far enough back. **Ask the authoritative source and let it tell you what it is bounded to** --
-// `/commits/<sha>/check-runs` for the head sha, never a grep over the most recent runs.
-//
 //   node scripts/merge-guard.mjs <pr-number> [--session=<name>] [--allow-claimed-close=<name>]
 //
 // Exit codes are the contract:
@@ -40,61 +29,76 @@
 //   2  CANNOT ASK -- a lookup failed. INCONCLUSIVE, never "fine": reporting an unaskable question as
 //                    clean is how "verified" comes to mean "unexamined"
 //
-// #249: ARMING CLOSES ROWS, AND NOTHING AT THAT END EVER CHECKED WHETHER SOMEBODY ELSE WAS INSIDE ONE.
-// `row-claim check` runs before a worker DISPATCHES or STARTS a row; nothing ran before a PR closing that
-// row was ARMED, and arming is the act that actually closes it. Measured 2026-09-07: PR #245 was armed
-// while the row it closed (#237) carried `in-progress`, `session:worker-judge`, `started` -- a second,
-// independent fix on that row was discarded. Ninth dispatch collision that night, seventh from the
-// dispatcher, who had been the one running `row-claim check` correctly at the OTHER end of the loop every
-// time.
+// #455 (A4 of the merge-conflict-prevention plan): ONE MODULE PER RULE, THIS FILE KEEPS THE ENTRY POINT.
 //
-// So this guard now asks GitHub what a PR would close (`closingIssuesReferences` -- resolved server-side,
-// never a `Closes #N` regex over the PR body) and reuses `row-claim.mjs`'s own claim predicate,
-// `decideClaim`, rather than re-deriving "is this row somebody else's" a second time. `decideClaim`
-// already draws the one line this needs: resuming your OWN claimed row is not a collision, which is why
-// `--session=<name>` exists here -- the identity of whoever is running this check, compared against the
-// `session:*` label on each row it would close. Omit it and every claimed row it would close reads as
-// somebody else's, which is the conservative default: a check that does not know who is asking cannot
-// vouch for the asker.
+// Three changes to this one file in one night produced two conflicts and a deadlock between rules nobody
+// read together (#442, the armed-race rule and the ancestry rule interacting under strict protection --
+// see `scripts/merge-guard/armed-race-rule.mjs` for the full account). Each check now lives in its own
+// file under `scripts/merge-guard/`, with its own test, so a rule can be read, changed and
+// mutation-checked without touching the seven others:
 //
-// NOT A POLICY CHANGE ABOUT WHO MAY ARM. A dispatcher who has confirmed with the row's holder should be
-// able to proceed, and `--allow-claimed-close=<name>` is that escape hatch -- printed, never silent, the
-// same shape `--allow-stale-workers` already uses elsewhere in this repo, because a bypass nobody can see
-// is one that becomes the default.
+//   scripts/merge-guard/base-rule.mjs          is the PR based on `main`?               (#148)
+//   scripts/merge-guard/head-tip-rule.mjs       does GitHub's recorded head match the tip? (#294/#195)
+//   scripts/merge-guard/checks-rule.mjs         did every required context run and conclude? (#148)
+//   scripts/merge-guard/staleness-rule.mjs      did every run finish after main's CURRENT tip? (#100/#135)
+//   scripts/merge-guard/ancestry-rule.mjs       does this head CONTAIN main's tip?        (#182/#165)
+//   scripts/merge-guard/claimed-row-rule.mjs    would arming close a row someone else holds? (#249)
+//   scripts/merge-guard/pr-hold-rule.mjs        is somebody else actively working this PR?  (#266/#258)
+//   scripts/merge-guard/armed-race-rule.mjs     would a push race an already-armed merge?    (#386/#442)
 //
-// MEASURED 2026-09-07, the day this landed: it fires on 10 of 13 open PRs' armings, and in every one of
-// the 10 the row's claimant IS the PR's author (#262->#249, #259->#247, #258->#244, #257->#246, #232->#189,
-// #229->#223, #181->#155, #172->#159, #150->#123 -- only #238/#195/#183/#148 close nothing). The real
-// incident this row exists for was the OPPOSITE shape -- one session's branch closing a DIFFERENT session's
-// row -- and it is 0 of these 10. `--session` cannot see PR authorship (every session pushes as the same
-// GitHub identity, so there is no author field to compare against the claimant), which is why this fires
-// on the safe case as often as the dangerous one: the identity it compares is the only one that exists.
+// Two more modules hold shared machinery that is not itself a refusal rule, so splitting it per-rule
+// would recreate the fact-stated-twice shape rather than fix it:
 //
-// So `--allow-claimed-close` takes a REQUIRED value naming who you confirmed with --
-// `--allow-claimed-close=<session>` -- rather than a bare boolean, and it is CHECKED, not merely printed:
-// it overrides a row's collision reason only when the named session is among that row's REAL claimant
-// sessions, read fresh off GitHub the same way `--session` is. A name that does not match any actual
-// claimant on the row being closed leaves that reason refused -- turning "I confirmed" from an honor
-// system into a claim this tool can verify against the same labels `decideClaim` already reads.
-import { execFileSync } from "node:child_process";
-import { appendFileSync, readFileSync, realpathSync } from "node:fs";
+//   scripts/merge-guard/reason-kind.mjs         classifies a reason string -- read by every rule's own
+//                                                test AND by the reconciliation log below
+//   scripts/merge-guard/lookups.mjs             the network/process calls every rule's facts come from
+//   scripts/merge-guard/reconciliation.mjs      #188's verdict log and its `--reconcile` comparison
+//
+// This file composes them (`mergeReadiness`, the full composition; `mergeSafetyVerdict`, the narrower
+// self-reference-safe one), re-exports every name a rule module owns (so the five existing importers --
+// `merge-queue.mjs`, `trunk-revert.mjs`, `row-claim.mjs`, `workflow-run-liveness.mjs`, and
+// `pre-push-armed-pr.test.ts` -- need no changes at all), and runs the CLI.
 import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
 // RELATIVE, NOT the `@a11ign/worker-fleet/cli-flags` package specifier: that export map
 // points at `dist/`, so it needs both `node_modules` AND a completed build. This file is reachable
 // from a pre-install entry (see `pre-install-import-graph.test.ts`, which derives that population
 // rather than naming it), and there it dies on startup with ERR_MODULE_NOT_FOUND.
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { claimStatus, decideClaim } from "./row-claim.mjs";
+
+import { reasonKind } from "./merge-guard/reason-kind.mjs";
+import { gh, lookup, lookupRequiredContexts, lookupBranchTip, lookupCheckRuns, lookupClosingIssues }
+  from "./merge-guard/lookups.mjs";
+import { baseReason } from "./merge-guard/base-rule.mjs";
+import { headTipMismatchReason } from "./merge-guard/head-tip-rule.mjs";
+import { SATISFIED, checkReasons } from "./merge-guard/checks-rule.mjs";
+import { stalenessReason } from "./merge-guard/staleness-rule.mjs";
+import { ancestryReason } from "./merge-guard/ancestry-rule.mjs";
+import {
+  closingClaimReasons, claimedCloseCoveredBy, applyAllowClaimedClose,
+} from "./merge-guard/claimed-row-rule.mjs";
+import { prHoldReasons } from "./merge-guard/pr-hold-rule.mjs";
+import { racesAnArmedMerge, lookupArmedPrStatus } from "./merge-guard/armed-race-rule.mjs";
+import {
+  appendJsonl, gitCommonDir, verdictLogPath, agreementLogPath, recordVerdict, latestVerdictFor,
+  realOutcomeFor, reconcile,
+} from "./merge-guard/reconciliation.mjs";
+
+// RE-EXPORTED so every existing importer keeps working unchanged -- see the header above for who reads
+// which. Each name is now DEFINED in its own rule/shared module; this is the one place all of them are
+// visible together, which is what an entry point is for.
+export {
+  reasonKind,
+  gh, lookup, lookupRequiredContexts, lookupBranchTip, lookupCheckRuns, lookupClosingIssues,
+  baseReason, headTipMismatchReason, SATISFIED, checkReasons, stalenessReason, ancestryReason,
+  closingClaimReasons, claimedCloseCoveredBy, prHoldReasons,
+  racesAnArmedMerge, lookupArmedPrStatus,
+  appendJsonl, gitCommonDir, verdictLogPath, agreementLogPath, recordVerdict, latestVerdictFor,
+  realOutcomeFor, reconcile,
+};
 
 const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2 };
-
-/** A concluded context that does not block a merge. `skipped` is a path filter declining, not a failure. */
-const SATISFIED = new Set(["success", "skipped", "neutral"]);
-
-/** @param {string[]} args */
-export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
 /**
  * THE SUBSET OF `mergeReadiness` THAT NEVER ASKS ABOUT THIS RUN'S OWN SIBLING CHECKS — #298 (unit 1).
@@ -106,30 +110,14 @@ export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: 
  * permanently rather than only the unsafe ones. `gate` already answers "did CI pass" by construction
  * (branch protection requires it, and it is `if: always()` over every sibling's `result`) — this answers
  * the one question `strict=false` (#277) left nobody answering that does not depend on whether CI has
- * finished: does this head match what the platform thinks it is (head-vs-tip, #294).
+ * finished: does this head match what the platform thinks it is (`head-tip-rule.mjs`, #294).
  *
- * TWO REASONS `mergeReadiness` CARRIES ARE DELIBERATELY NOT HERE, and both cost a live near-miss to find
- * before they shipped — `dispatcher` drove this function against the real, moving queue and measured both
- * refusing the NORMAL case:
- *
- * - **Ancestry (behind-`main`, #182).** `ceo` has ruled staleness out as a refusal reason now that
- *   `strict` is off, and the reason is throughput, not principle: with merges landing roughly one a
- *   minute, almost every open PR is behind `main` almost all the time. A required job refusing on
- *   behind-ness would recreate the update-then-fall-behind treadmill #277 exists to end, as a HARD block
- *   — measured: `dispatcher` found 13 of 13 checked PRs behind in one pass. Ancestry stays in
- *   `mergeReadiness`, which is still useful ADVICE to a person deciding whether to update a branch by hand;
- *   it must never be something CI enforces.
- * - **Closing-claim (#262).** It needs `session` — who is ARMING this PR — to tell "this is my own
- *   claimed row" apart from "I am discarding someone else's work"; `decideClaim` treats every session it
- *   cannot recognise as a stranger, the conservative default everywhere else in this file. A CI job has no
- *   session identity at all: every push here lands as the same GitHub account, so passing no `--session=`
- *   makes `decideClaim` read a WORKER'S OWN PR — closing the exact row it was built for, the normal case —
- *   as somebody else's claim. Measured: `dispatcher` found 10 of 13 open PRs in exactly that state, and on
- *   #309 itself (closes #298, which still carries `session:worker-config` — the label does not clear until
- *   merge) a required CI job asking this with no real session would have refused its own PR's merge, and
- *   every ordinary worker-owned PR behind it. #262's protection stays CLI-only
- *   (`merge-guard.mjs <n> --session=<name>`, for a human — usually `dispatcher` — to run before arming a
- *   PR they did not author themselves); CI asks only what it can answer authoritatively.
+ * TWO RULES ARE DELIBERATELY NOT COMPOSED HERE, and both cost a live near-miss to find before they
+ * shipped — `dispatcher` drove this function against the real, moving queue and measured both refusing
+ * the NORMAL case. See `ancestry-rule.mjs` and `claimed-row-rule.mjs` for the full account of each; in
+ * short, ancestry refuses almost every open PR under `strict=false`'s normal throughput, and the claimed-
+ * row rule needs a `session` identity a CI job does not have and would otherwise refuse its own PR's
+ * merge as "closing a stranger's row".
  *
  * **What must NOT happen is a required job refusing the normal case** — `dispatcher`'s own words — because
  * the response to an unmergeable-by-default queue is to bypass the gate, and this repository's record on
@@ -150,8 +138,8 @@ export function mergeSafetyVerdict({ pr, branchTip }) {
 }
 
 /**
- * THE VERDICT, PURE — so every state can be exercised without a network, including the one no fixture
- * gives you for free (a real run against a base that has since moved).
+ * THE VERDICT, PURE — composes all eight rules so every state can be exercised without a network,
+ * including the one no fixture gives you for free (a real run against a base that has since moved).
  *
  * Each input is a FACT somebody looked up; `null` means the lookup failed and is never treated as an
  * empty answer. `[]` and `null` are the difference between "nothing ran" and "I could not ask", and this
@@ -205,604 +193,6 @@ export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, branc
     ...ancestryReason(behindBy), ...stalenessReason(knownRuns, knownMainTipIso),
     ...closingClaimReasons(knownCloses, session), ...prHoldReasons(pr, knownPrLabels, session)];
   return { code: reasons.length > 0 ? EXIT.REFUSED : EXIT.READY, reasons, notes };
-}
-
-/**
- * IS SOMEBODY ELSE HOLDING THIS PR? — #266, and it is #197's finding one object along.
- *
- * The split between the dispatcher and a PR's author lived entirely in messages: *the dispatcher updates
- * and arms, the author pushes.* Measured 2026-09-07 on PR #258 — the dispatcher said "arming on green"
- * and ran `update-branch`; the author ran this very guard, saw `7 commit(s) behind`, rebased, and pushed
- * into it. `--force-with-lease` refused, which is the only reason nothing was lost: a plain `--force`
- * would have taken the branch to a base fetched before #229 merged and silently reverted that PR's
- * README and changeset inside a branch nobody would think to check for them.
- *
- * **The boundary was wrong rather than ignored.** The stated rule named *armed* PRs; #258 was UNARMED,
- * so by that rule it was the author's — while the dispatcher was updating it in preparation for arming.
- * The real predicate is "a PR somebody is actively working on", and **the other party cannot see that
- * state from outside**. So the collision was invisible, not careless, which is a property of the rule.
- *
- * WHY A LABEL AND NOT AN AGREEMENT. The agreed remedy was a sentence — *once the dispatcher says they
- * will arm it, it is theirs.* Better than what it replaced, and this repo has already MEASURED that shape
- * and found it wanting: #197 is the identical experiment on rows, where a claim that existed only as a
- * sentence in a dispatch message produced **three double-dispatches (#156, #158, #159), each caught by a
- * worker's own caution and never by the tool.** `row-claim.mjs`'s header states the principle this
- * inherits: the Project Status field is a VIEW; the label, on the object and timestamped by GitHub's own
- * timeline, is the RECORD.
- *
- * READS `session:*` OFF THE PR, the same field `closingClaimReasons` reads off a ROW, because two
- * spellings of one fact is the shape half this repo's defects share. It deliberately does NOT reuse
- * `decideClaim`: that predicate requires the `in-progress` label, which is a row's vocabulary — on a PR
- * the `session:` label IS the hold, and passing PR labels through a row's predicate would report every
- * held PR as unheld.
- *
- * NO `--allow-held` ESCAPE HATCH, unlike #249's `--allow-claimed-close`, and the asymmetry is the point:
- * a row you do not hold cannot be taken from its owner, so confirming and passing a flag is the only
- * route. A PR hold CAN be handed over — `npm run pr:release` then `pr:hold` — so a flag here would be a
- * silent bypass standing in for an action that leaves a record. The escape hatch is taking the hold.
- *
- * @param {{number: number}} pr
- * @param {string[]} prLabels
- * @param {string | null} session  who is running this check; omitted means every holder is somebody else
- * @returns {string[]}
- */
-function prHoldReasons(pr, prLabels, session) {
-  const holders = claimStatus(prLabels).sessions.filter((held) => held !== session);
-  if (holders.length === 0) return [];
-  return [`#${pr.number} IS HELD by ${holders.join(", ")}${session ? `, and you are ${session}` : ""}.\n`
-    + "  They are working on it now -- updating, rebasing or about to arm it. Pushing into a PR somebody\n"
-    + "  else holds is how #258 nearly reverted a merged PR's content inside an unrelated branch.\n"
-    + "  Ask them to hand it back, or take it with `npm run pr:hold` once they have released it."];
-}
-
-/**
- * WOULD ARMING THIS PR CLOSE A ROW SOMEBODY ELSE IS INSIDE? — #249.
- *
- * Reuses `row-claim.mjs`'s own claim predicate rather than re-deriving "is this row somebody else's" a
- * second time in this file: `decideClaim` already draws the line that resuming your OWN claimed row is
- * not a collision (row-claim.mjs, `decideClaim`'s own doc comment). `session` is who is running THIS
- * check, never inferred from the PR -- omit it and every claimed row this PR would close reads as
- * somebody else's, which is the safe default when the asker has not said who they are.
- *
- * @param {{number: number, title?: string, labels: string[]}[]} closes
- * @param {string | null} session
- * @returns {string[]}
- */
-export function closingClaimReasons(closes, session) {
-  const reasons = [];
-  for (const issue of closes) {
-    const decision = decideClaim(issue.labels, session ?? "");
-    if (!decision.proceed) {
-      reasons.push(`WOULD CLOSE #${issue.number}${issue.title ? ` "${issue.title}"` : ""}, but `
-        + `${decision.reason}.\n`
-        + "  Arming this PR closes that row whether or not you hold it. Confirm with whoever does, or\n"
-        + "  wait -- or pass `--allow-claimed-close=<their session>` if you have already confirmed.");
-    }
-  }
-  return reasons;
-}
-
-/**
- * WHICH rows does `--allow-claimed-close=<confirmedWith>` actually cover? -- the check that makes the
- * flag a verifiable claim rather than an honor system.
- *
- * A row is covered when `confirmedWith` is among the REAL claimant sessions read from its own labels
- * (`claimStatus`, the same reader `decideClaim` uses) -- never merely because the flag was passed. A name
- * typed on the command line that does not match any actual claimant on the row being closed covers
- * nothing, so that row's collision reason stays refused.
- *
- * @param {{number: number, labels: string[]}[]} closes
- * @param {string} confirmedWith
- * @returns {Set<number>} issue numbers this confirmation actually covers
- */
-export function claimedCloseCoveredBy(closes, confirmedWith) {
-  const covered = new Set();
-  for (const issue of closes) {
-    const status = claimStatus(issue.labels);
-    if (status.claimed && status.sessions.includes(confirmedWith)) covered.add(issue.number);
-  }
-  return covered;
-}
-
-/**
- * `--allow-claimed-close=<name>`'s value, refusing (never silently) a bare boolean -- #249's follow-up,
- * 2026-09-07: it must be a CHECKABLE claim naming who was confirmed with, not an honor system. Split out
- * of `main` to keep that function's own complexity within this repo's ESLint budget.
- * @returns {string | null}
- */
-function readAllowClaimedClose() {
-  if (process.argv.includes("--allow-claimed-close") && flagValue(process.argv, "allow-claimed-close") === undefined) {
-    console.error("--allow-claimed-close requires a value naming who you confirmed with:\n"
-      + "  --allow-claimed-close=<session>\n"
-      + "A bare boolean was refused on purpose: it must be a CHECKABLE claim, not an honor system.");
-    process.exit(EXIT.CANNOT_ASK);
-  }
-  return flagValue(process.argv, "allow-claimed-close") ?? null;
-}
-
-/**
- * Split a verdict's reasons into what `--allow-claimed-close=<name>` overrides and what survives it --
- * only rows `name` actually holds (`claimedCloseCoveredBy`), never any other refusal, and never applied
- * to a CANNOT_ASK (that code carries a lookup-failure message, not a reasons list to filter).
- *
- * @param {{code: number, reasons: string[]}} verdict
- * @param {{number: number, labels: string[]}[]} closes
- * @param {string | null} allowClaimedClose
- * @returns {{overridden: string[], remaining: string[]}}
- */
-function applyAllowClaimedClose(verdict, closes, allowClaimedClose) {
-  const covered = allowClaimedClose && verdict.code === EXIT.REFUSED
-    ? claimedCloseCoveredBy(closes, allowClaimedClose) : new Set();
-  const issueNumberOf = (/** @type {string} */ reason) => {
-    const m = /^WOULD CLOSE #(\d+)/.exec(reason);
-    return m ? Number(m[1]) : null;
-  };
-  const isCoveredCollision = (/** @type {string} */ reason) =>
-    reasonKind(reason) === "CLAIMED_BY_ANOTHER_SESSION" && covered.has(issueNumberOf(reason));
-  return {
-    overridden: verdict.reasons.filter(isCoveredCollision),
-    remaining: verdict.reasons.filter((r) => !isCoveredCollision(r)),
-  };
-}
-
-/** @param {{baseRefName: string}} pr */
-function baseReason(pr) {
-  if (pr.baseRefName === "main") return [];
-  return [`BASE IS NOT main — it is \`${pr.baseRefName}\`.\n`
-    + "  `ci.yml` triggers on `pull_request: branches: [main]`, so NO workflow runs for this PR and the\n"
-    + "  branch protection that covers `main` protects nothing here. Re-target it at `main`, or merge its\n"
-    + "  base first and let this one re-open against `main`."];
-}
-
-/**
- * GITHUB'S RECORDED HEAD CAN LAG THE BRANCH'S REAL TIP — #294, found on #195: `gh pr checks` and every
- * check-run lookup here are keyed on `pr.headRefOid`, which is GitHub's own bookkeeping and not the
- * branch itself. A push GitHub has not yet indexed (or any other cause) leaves `headRefOid` pointing at
- * the tip's PARENT, and every "green" belongs to that older commit — including one whose own commit
- * message says a later commit refuted it.
- *
- * Deliberately NOT folded into `ancestryReason` (which reads `behindBy`, ancestry against `main`) or
- * `stalenessReason` (runs older than `main`'s current tip): those need opposite remedies from this one.
- * Behind `main` — update the branch. Runs predate `main` — re-run. GitHub's head is not the tip — RE-PUSH,
- * so GitHub picks up the commit that is already there.
- *
- * @param {{headRefOid: string}} pr
- * @param {string} branchTip
- * @returns {string[]}
- */
-function headTipMismatchReason(pr, branchTip) {
-  if (branchTip === pr.headRefOid) return [];
-  return [`GITHUB'S HEAD IS NOT THE BRANCH TIP: GitHub recorded ${pr.headRefOid.slice(0, 10)}, the branch's `
-    + `real tip is ${branchTip.slice(0, 10)}.\n`
-    + "  Every check below belongs to the recorded head, which is not the commit that would actually merge.\n"
-    + "  Re-push the branch so GitHub picks up the real tip, then ask again."];
-}
-
-/**
- * @param {{headRefOid: string}} pr
- * @param {string[]} required
- * @param {{name: string, status: string, conclusion: string | null}[]} runs
- * @returns {string[]}
- */
-export function checkReasons(pr, required, runs) {
-  if (runs.length === 0) {
-    return [`NO CHECK RUNS EXIST for head ${pr.headRefOid.slice(0, 10)} — not one, ever.\n`
-      + "  Nothing has tested this code. This is the state that reads as `CLEAN`, because a required\n"
-      + "  context that never ran is not a failing check; it is the absence of one."];
-  }
-  const byName = new Map(runs.map((run) => [run.name, run]));
-  const missing = required.filter((context) => !byName.has(context));
-  const unfinished = runs.filter((run) => run.status !== "completed").map((run) => run.name);
-  const failing = runs.filter((run) => run.status === "completed" && !SATISFIED.has(run.conclusion ?? ""))
-    .map((run) => `${run.name} (${run.conclusion})`);
-
-  // `.filter(Boolean)` does not narrow `(string | false)[]` to `string[]` -- a well-known TS gap, not a
-  // behaviour bug -- so the predicate says so explicitly.
-  return [
-    missing.length > 0 && `REQUIRED CONTEXT NEVER RAN: ${missing.join(", ")}.\n`
-      + "  Present-and-failing and never-ran are different states; this is the second.",
-    unfinished.length > 0 && `STILL RUNNING: ${unfinished.join(", ")}. Not a refusal forever — ask again.`,
-    failing.length > 0 && `FAILING: ${failing.join(", ")}.`,
-  ].filter(/** @returns {reason is string} */ (reason) => Boolean(reason));
-}
-
-/**
- * A REAL RESULT AGAINST A BASE THAT HAS MOVED — the shape that looks like evidence.
- *
- * Measured 2026-09-07: #100's newest run finished 00:45:35Z against a `main` tipped 00:41:07Z and is
- * current; #135's finished 00:08:02Z against that same tip and is not. The comparison is deliberately
- * against the COMMIT DATE of `main`'s tip rather than against a run of `main`, because what matters is
- * whether this head was ever tested alongside the code it is about to join.
- *
- * @param {{completedAt: string | null}[]} runs
- * @param {string} mainTipIso
- * @returns {string[]}
- */
-function stalenessReason(runs, mainTipIso) {
-  const finished = runs.map((run) => run.completedAt).filter(Boolean).sort();
-  const newest = finished[finished.length - 1];
-  if (!newest || newest >= mainTipIso) return [];
-  return [`EVERY RUN PREDATES THE CURRENT main. Newest run ${newest}, \`main\` tipped ${mainTipIso}.\n`
-    + "  These runs are real results, which is what makes them misleading: they tested this head against\n"
-    + "  a base that has since moved. Update the branch and let it re-run."];
-}
-
-/**
- * DOES THIS HEAD CONTAIN `main`'s TIP? — an ANCESTRY fact, and the clock cannot answer it (#182).
- *
- * The function above compares the newest run's completion time against `main`'s tip commit DATE, and that
- * was a proxy standing in for this question. **A run can finish AFTER `main`'s tip was committed while the
- * branch still does not contain that commit** — which is not a corner case, it is what ordinary concurrent
- * merging produces. Measured 2026-09-07 on #165: `main` tipped 01:31:03Z with #147, #165's run finished
- * later, the branch had never seen #147, and this tool printed *"run against the current main"* and exited
- * 0. GitHub refused the merge; `gh pr update-branch` then reported the branch updated.
- *
- * The original comment stated the right question — *"whether this head was ever tested alongside the code
- * it is about to join"* — and then asked a different one. Two commits' timestamps say nothing about
- * whether one contains the other.
- *
- * KEPT SEPARATE FROM THE CLOCK CHECK, deliberately. `PREDATES` and `DOES NOT CONTAIN` are different
- * faults: the first says the runs are old, the second says the tree is. Collapsing them into one message
- * would lose the diagnosis the original was built for — #135's runs genuinely predate the tip, and that
- * sentence, with both timestamps, is still the right thing to print about it.
- *
- * `behind_by` FROM THE COMPARE API, NOT `mergeStateStatus`. That distinction is this tool's whole reason
- * for existing, so it is worth being exact: `mergeStateStatus` folds together checks, conflicts and branch
- * protection into one opinion about mergeability, which is why it reads `CLEAN` for a PR nothing ever
- * tested. `behind_by` is arithmetic on the commit graph — how many commits `main` has that this head does
- * not — and it is the same fact `git merge-base --is-ancestor` answers, asked of a server that has both
- * commits without this checkout needing to fetch a PR ref it may never have seen.
- *
- * @param {number | null} behindBy
- * @returns {string[]}
- */
-export function ancestryReason(behindBy) {
-  if (behindBy === null || behindBy === 0) return [];
-  return [`THIS HEAD DOES NOT CONTAIN main's TIP — it is ${behindBy} commit(s) behind.\n`
-    + "  Whatever ran, ran against a tree missing that work, so it cannot say the two go together. This is\n"
-    + "  NOT the same as the runs being old: they may be minutes fresh and still have tested a base that\n"
-    + "  no longer exists. Update the branch and let it re-run."];
-}
-
-/**
- * A GUARD WHOSE WRONG ANSWERS ARE ABSORBED BY ANOTHER MECHANISM HAS NO FAILURE SIGNAL (#188).
- *
- * #182 was caught only because strict branch protection refused what this tool passed — the guard's own
- * wrongness was invisible until somebody happened to run `gh pr update-branch` right after. Nothing
- * compared the guard's verdict to what actually happened, so the disagreement left no record anywhere.
- *
- * So: every verdict this tool computes for an OPEN PR is appended to a log. Once a PR is terminal (merged
- * or closed), `--reconcile` compares the LAST recorded verdict against the real outcome and records
- * whether they AGREED or DISAGREED — always, not only on conflict, because a log that only records
- * disagreements cannot tell "the two agreed" from "the two were never compared" (`worker-capture`'s
- * constraint on this row).
- *
- * THE COMPARISON TARGET IS `pr.state` (MERGED / CLOSED), NEVER `mergeStateStatus`. The issue is explicit
- * that this must be an OUTCOME, not an opinion — the same distinction the rest of this file exists for.
- * There is deliberately no attempt to reconstruct history for PRs that resolved before this shipped:
- * "did this merge need an update first" is not reliably decidable from git alone after the fact, so
- * reconciliation is forward-only rather than producing a plausible retro-verdict.
- *
- * THE LOG LIVES AT THE GIT COMMON DIR, NEVER `runs/`. `runs/` exists only in the primary checkout (it is
- * gitignored, and absent from every worktree) — a worker running this from its own worktree would write
- * this log nowhere, silently, and an empty log from "nothing ran here" is indistinguishable from an empty
- * log from "nothing ever disagreed", which is exactly the failure mode this row exists to close. The git
- * common dir resolves to the SAME `.git` for the primary and every worktree.
- */
-/** @type {[RegExp, string][]} */
-const REASON_KINDS = [
-  [/^BASE IS NOT main/, "BASE_NOT_MAIN"],
-  [/^NO CHECK RUNS EXIST/, "NO_RUNS"],
-  [/^REQUIRED CONTEXT NEVER RAN/, "MISSING_REQUIRED_CONTEXT"],
-  [/^STILL RUNNING/, "STILL_RUNNING"],
-  [/^FAILING/, "FAILING"],
-  [/^THIS HEAD DOES NOT CONTAIN main's TIP/, "ANCESTRY"],
-  [/^EVERY RUN PREDATES THE CURRENT main/, "STALE"],
-  [/^WOULD CLOSE #/, "CLAIMED_BY_ANOTHER_SESSION"],
-  [/^GITHUB'S HEAD IS NOT THE BRANCH TIP/, "HEAD_MISMATCH"],
-];
-
-/**
- * WHICH reason a refusal is, not just that there was one — because "the guard refused for ancestry and
- * GitHub merged it" and "the guard refused for a missing check and GitHub merged it" are different bugs,
- * and a bare verdict cannot distinguish them.
- *
- * @param {string} reason
- * @returns {string}
- */
-export function reasonKind(reason) {
-  const hit = REASON_KINDS.find(([pattern]) => pattern.test(reason));
-  return hit ? hit[1] : "UNCLASSIFIED";
-}
-
-/**
- * Never a silent no-op: a write failure is the exact defect this mechanism exists to avoid.
- *
- * Exported (#226) so a second log -- `row-claim`'s check/conflict log -- reuses this rather than
- * re-deriving "append one JSON line, fail loud" a second time in this repo.
- *
- * @param {string} path
- * @param {object} entry
- */
-export function appendJsonl(path, entry) {
-  try {
-    appendFileSync(path, `${JSON.stringify(entry)}\n`);
-  } catch (error) {
-    throw new Error(`could not write the log at ${path}: ${/** @type {Error} */ (error).message}`,
-      { cause: error });
-  }
-}
-
-/** @returns {string} the `.git` directory shared by the primary checkout and every worktree. */
-export function gitCommonDir() {
-  return execFileSync("git", ["rev-parse", "--git-common-dir"],
-    { encoding: "utf8", env: sandboxGitEnv() }).trim();
-}
-
-export function verdictLogPath() {
-  return `${gitCommonDir()}/merge-guard-log.jsonl`;
-}
-
-export function agreementLogPath() {
-  return `${gitCommonDir()}/merge-guard-agreement-log.jsonl`;
-}
-
-/**
- * Appends one verdict. Called on every live guard run against an OPEN PR.
- * @param {string} logPath
- * @param {number} prNumber
- * @param {{code: number, reasons: string[]}} verdict
- */
-export function recordVerdict(logPath, prNumber, verdict) {
-  appendJsonl(logPath, {
-    prNumber, at: new Date().toISOString(),
-    code: verdict.code,
-    reasonKinds: verdict.reasons.map(reasonKind),
-  });
-}
-
-/**
- * The most recently recorded verdict for a PR, or null if none was ever recorded.
- * @param {string} logPath
- * @param {number} prNumber
- * @returns {{prNumber: number, at: string, code: number, reasonKinds: string[]} | null}
- */
-export function latestVerdictFor(logPath, prNumber) {
-  let text;
-  try {
-    text = readFileSync(logPath, "utf8");
-  } catch (error) {
-    if (/** @type {NodeJS.ErrnoException} */ (error).code === "ENOENT") return null;
-    throw error;
-  }
-  const entries = text.split("\n").filter(Boolean).map((line) => JSON.parse(line))
-    .filter((entry) => entry.prNumber === prNumber);
-  return entries.length > 0 ? entries[entries.length - 1] : null;
-}
-
-/**
- * `pr.state` -> a real outcome, or null when there isn't one yet. Never `mergeStateStatus` — see the
- * header above this section.
- *
- * @param {string} state
- * @returns {"ACCEPTED" | "REFUSED" | null}
- */
-export function realOutcomeFor(state) {
-  if (state === "MERGED") return "ACCEPTED";
-  if (state === "CLOSED") return "REFUSED";
-  return null; // OPEN, or anything not yet terminal
-}
-
-/**
- * THE COMPARISON, PURE. Records AGREEMENT as explicitly as DISAGREEMENT — an absent line here is
- * indistinguishable from "never compared", which is the trap this row exists to close.
- *
- * `resolvedAt` guards a real trap, found by running this live against an already-merged PR: recomputing
- * the guard's verdict AFTER a PR has resolved almost always reads REFUSED, because `main` has kept moving
- * and the merged head is now "behind" a tip it was never tested against and never needed to be — that is
- * not a disagreement, it is a stale question asked of a settled outcome. So a verdict recorded AFTER the
- * PR's own resolution timestamp is refused here rather than reconciled: it was never a live, pre-decision
- * check, and treating it as one would flood this log with false DISAGREED entries for every merged PR
- * anyone runs the guard against after the fact.
- *
- * @param {{prNumber: number, recordedVerdict: {code: number, reasonKinds: string[], at: string} | null,
- *          realOutcome: "ACCEPTED" | "REFUSED" | null, resolvedAt: string | null}} args
- * @returns {{code: number, reason: string, record: null} | {code: number, reason: null, record:
- *   {prNumber: number, at: string, guardVerdict: "READY" | "REFUSED", guardReasonKinds: string[],
- *    realOutcome: "ACCEPTED" | "REFUSED", agreement: "AGREED" | "DISAGREED"}}}
- */
-export function reconcile({ prNumber, recordedVerdict, realOutcome, resolvedAt }) {
-  if (recordedVerdict === null) {
-    return { code: EXIT.CANNOT_ASK, record: null,
-      reason: `no recorded guard verdict for #${prNumber} — nothing to reconcile against.` };
-  }
-  if (realOutcome === null) {
-    return { code: EXIT.CANNOT_ASK, record: null,
-      reason: `#${prNumber} has no outcome yet — reconciliation is forward-only and never invents one ` +
-        "for a PR that is still OPEN." };
-  }
-  if (resolvedAt != null && recordedVerdict.at > resolvedAt) {
-    return { code: EXIT.CANNOT_ASK, record: null,
-      reason: `the recorded verdict for #${prNumber} (${recordedVerdict.at}) was made AFTER it resolved ` +
-        `(${resolvedAt}) — that is a stale post-mortem question, not a live pre-decision check, and ` +
-        "comparing it would read as a disagreement for a reason that has nothing to do with the merge." };
-  }
-  const guardVerdict = recordedVerdict.code === EXIT.READY ? "READY" : "REFUSED";
-  const platformAccepted = realOutcome === "ACCEPTED";
-  const agreement = (guardVerdict === "READY") === platformAccepted ? "AGREED" : "DISAGREED";
-  return {
-    code: EXIT.READY,
-    reason: null,
-    record: {
-      prNumber, at: new Date().toISOString(), guardVerdict,
-      guardReasonKinds: recordedVerdict.reasonKinds, realOutcome, agreement,
-    },
-  };
-}
-
-/**
- * Each lookup returns null on failure rather than an empty answer — the distinction the verdict needs.
- * @template T
- * @param {() => T} fn
- * @returns {T | null}
- */
-export function lookup(fn) {
-  try {
-    return fn();
-  } catch (error) {
-    void error;
-    return null;
-  }
-}
-
-// EXPORTED SO `workflow-run-liveness.mjs` (#118) DOES NOT RE-DERIVE THESE — the same
-// fact-stated-twice shape this repo's own CLAUDE.md names most often, one call away from happening here.
-// Both return `null` on failure, never an empty answer: `lookup`'s whole point is that "could not ask" and
-// "asked and got nothing" must stay distinguishable.
-
-/** The branch-protection required status-check contexts for `main`, or `null` if the lookup failed. */
-export function lookupRequiredContexts() {
-  return lookup(() => JSON.parse(
-    gh(["api", `repos/${REPO}/branches/main/protection/required_status_checks`])).contexts);
-}
-
-/**
- * The real, current tip of a branch on `origin` right now — never GitHub's `headRefOid`, which is a
- * separate piece of bookkeeping that can lag a push (#294). `null` on failure, same as every lookup here;
- * an unparseable or empty `ls-remote` line is treated the same as a thrown error rather than as a real
- * empty-string sha, since neither means "the branch has no tip".
- * @param {string} branchName
- * @returns {string | null}
- */
-export function lookupBranchTip(branchName) {
-  return lookup(() => {
-    const line = execFileSync("git", ["ls-remote", "origin", branchName], { encoding: "utf8" }).trim();
-    const sha = line.split(/\s+/)[0];
-    return sha || null;
-  });
-}
-
-/**
- * Every check run recorded against a commit sha, or `null` if the lookup failed.
- * @param {string} sha
- * @returns {{name: string, status: string, conclusion: string | null, completedAt: string | null}[] | null}
- */
-export function lookupCheckRuns(sha) {
-  return lookup(() => JSON.parse(
-    gh(["api", `repos/${REPO}/commits/${sha}/check-runs`, "--paginate"])).check_runs
-    .map((/** @type {{name: string, status: string, conclusion: string | null, completed_at: string | null}} */ run) => (
-      { name: run.name, status: run.status, conclusion: run.conclusion, completedAt: run.completed_at })));
-}
-
-/**
- * Which issues arming PR `number` would close, resolved by GitHub itself (never a `Closes #N` regex over
- * the PR body) -- #249. `null` on failure, same as every other lookup here.
- * @param {number} number
- * @returns {{number: number, title?: string, labels: string[]}[] | null}
- */
-export function lookupClosingIssues(number) {
-  return lookup(() => {
-    const [owner, name] = REPO.split("/");
-    const query = "query($owner:String!,$name:String!,$number:Int!){"
-      + "repository(owner:$owner,name:$name){pullRequest(number:$number){"
-      + "closingIssuesReferences(first:20){nodes{number title labels(first:20){nodes{name}}}}}}}";
-    const data = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`,
-      "-F", `owner=${owner}`, "-F", `name=${name}`, "-F", `number=${number}`]));
-    return data.data.repository.pullRequest.closingIssuesReferences.nodes.map(
-      (/** @type {{number: number, title: string, labels: {nodes: {name: string}[]}}} */ issue) => ({
-        number: issue.number, title: issue.title,
-        labels: issue.labels.nodes.map((/** @type {{name: string}} */ l) => l.name),
-      }));
-  });
-}
-
-/**
- * Is `branchName`'s open PR armed with auto-merge AND already green? #386: pushing a follow-up commit to
- * a branch in that state races a merge that can complete in the window between the commit and the push --
- * measured three times in one evening, each time the commit landed stranded on a branch GitHub had
- * already merged, findable by nothing (`branches:stranded` correctly excludes a merged branch).
- *
- * `null` on ANY failure -- no PR, `gh` missing or unauthenticated, a network error -- same convention as
- * every other lookup here. The caller decides what null means; for this one specifically it must mean
- * ALLOW, loudly, never refuse (see `racesAnArmedMerge`'s own comment).
- *
- * GREEN IS ANSWERED THE SAME WAY `facts()`/`mergeReadiness` ANSWER IT -- `lookupRequiredContexts()` +
- * `lookupCheckRuns()` fed to `checkReasons()`, empty reasons meaning nothing is missing, unfinished or
- * failing -- never a second, independently-invented reading of "green" off `statusCheckRollup`. That
- * field is GitHub's own rolled-up combined-status object, a different aggregation from the check-runs
- * this file already reads and already distrusts `mergeStateStatus` for the identical reason; a first
- * draft of this function read `statusCheckRollup` directly and it read `FAILURE` on a real, live PR
- * (#359) at the same moment `gh pr checks` -- a different command, reading check-runs -- showed the
- * `gate` job PASSING on that PR's latest run. Whichever is right, reading two sources and trusting the
- * one nothing else in this file has ever vouched for is exactly the "two spellings of is this PR green"
- * shape this issue's own acceptance names -- so this reuses the reading `mergeReadiness` already trusts.
- * `green: null` (armed, but green-ness itself could not be determined) is folded into "does not race" by
- * `racesAnArmedMerge`, the same fail-open direction as the top-level `null`.
- *
- * `behindBy`, #442: the race this guards against can only happen while the merge can actually FIRE, and
- * under strict branch protection (restored 02:15Z) a merge cannot fire while the head is behind `main` --
- * so a PR that is armed, green AND behind is not a race, it is the FROZEN state #442 exists to unfreeze.
- * Read via `repos/.../compare/main...<oid>`'s `behind_by`, the identical ancestry fact `facts()` already
- * reads for `ancestryReason` -- never `mergeStateStatus`, for the reason at the top of this file. Only
- * asked when green: an armed-but-not-green PR never races (see `racesAnArmedMerge`), so a behind-by
- * lookup there would be a round trip for a value nothing reads. `null` (could not determine) folds into
- * "does not race" the same fail-open direction as everything else here.
- *
- * @param {string} branchName
- * @returns {{ number: number, armed: boolean, green: boolean | null, behindBy: number | null } | null}
- */
-export function lookupArmedPrStatus(branchName) {
-  return lookup(() => {
-    const prs = JSON.parse(gh(["pr", "list", "--repo", REPO, "--head", branchName, "--state", "open",
-      "--json", "number,autoMergeRequest,headRefOid"]));
-    if (prs.length === 0) return { number: null, armed: false, green: false, behindBy: null };
-    const pr = prs[0];
-    const armed = pr.autoMergeRequest != null;
-    if (!armed) return { number: pr.number, armed: false, green: false, behindBy: null };
-    const required = lookupRequiredContexts();
-    const runs = lookupCheckRuns(pr.headRefOid);
-    if (required === null || runs === null) {
-      return { number: pr.number, armed: true, green: null, behindBy: null };
-    }
-    const reasons = checkReasons({ headRefOid: pr.headRefOid }, required, runs);
-    const green = reasons.length === 0;
-    const behindBy = green ? lookup(() => {
-      const value = JSON.parse(gh(["api", `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
-      return typeof value === "number" ? value : null;
-    }) : null;
-    return { number: pr.number, armed: true, green, behindBy };
-  });
-}
-
-/**
- * Should THIS push be refused because it would race a merge that could complete underneath it? Armed,
- * already-green AND up-to-date with `main` refuses -- everything else is the sanctioned route and must
- * stay silent: no PR yet (the first push is how one gets opened), a PR whose gate is FAILURE or still
- * PENDING (pushing before green is normal), `green: null` (armed, but could not confirm green), armed +
- * green + BEHIND (#442, below), and top-level `null` (could not ask at all).
- *
- * #442: ARMED + GREEN + BEHIND ALLOWS, and this is the one case that changed. Strict branch protection
- * (restored 02:15Z) blocks a merge from completing while the head is behind `main`'s tip -- so a merge
- * this push could race CANNOT FIRE, and the premise `racesAnArmedMerge` was built on (a push might lose a
- * race to a merge that lands underneath it) is simply false here. Refusing anyway froze every PR that
- * went green and then fell behind -- which under strict protection is the NORMAL state, since every merge
- * to `main` puts every other open PR behind again -- with the sync that would un-freeze it refused by the
- * very guard whose premise had moved. `behindBy === 0` is the up-to-date case (#386's real one, unchanged);
- * anything else -- a positive count, or `null` because it could not be determined -- does not race.
- *
- * FAILS OPEN, DELIBERATELY, and this is the opposite of this file's own "could not ask is not clean"
- * rule elsewhere: that rule protects a VERDICT about evidence; this protects a developer's ability to
- * push at all. A convenience guard against a race is not a correctness gate, and a hook that blocks work
- * when the network is down or `gh` is unauthenticated gets deleted within a day (CLAUDE.md already
- * records `A11Y_SKIP_VERIFY=1` reached for six times in one evening for exactly that reason).
- *
- * @param {{ armed: boolean, green: boolean | null, behindBy?: number | null } | null} status
- * @returns {boolean}
- */
-export function racesAnArmedMerge(status) {
-  if (!status) return false;
-  if (!(status.armed && status.green === true)) return false;
-  return status.behindBy === 0;
 }
 
 /**
@@ -912,6 +302,27 @@ function armedCheckCommand(branch) {
     console.log("could not ask GitHub about this branch's PR -- allowing (a race guard fails open).");
   }
   process.exit(EXIT.READY);
+}
+
+/**
+ * `--allow-claimed-close=<name>`'s value, refusing (never silently) a bare boolean -- #249's follow-up,
+ * 2026-09-07: it must be a CHECKABLE claim naming who was confirmed with, not an honor system.
+ *
+ * KEPT HERE, not in `claimed-row-rule.mjs`, deliberately -- #455: this is the one place in that rule's
+ * whole surface that touches `process.argv` directly, and this file already reads argv and already calls
+ * `refuseUnknownFlags` for the entire command. Moving it into the rule module would make that module a
+ * second, untracked CLI entry point -- `cli-flags.test.ts`'s argv-reading census discovers exactly this
+ * shape and failed on it the first time this was tried, correctly.
+ * @returns {string | null}
+ */
+function readAllowClaimedClose() {
+  if (process.argv.includes("--allow-claimed-close") && flagValue(process.argv, "allow-claimed-close") === undefined) {
+    console.error("--allow-claimed-close requires a value naming who you confirmed with:\n"
+      + "  --allow-claimed-close=<session>\n"
+      + "A bare boolean was refused on purpose: it must be a CHECKABLE claim, not an honor system.");
+    process.exit(EXIT.CANNOT_ASK);
+  }
+  return flagValue(process.argv, "allow-claimed-close") ?? null;
 }
 
 function main() {
