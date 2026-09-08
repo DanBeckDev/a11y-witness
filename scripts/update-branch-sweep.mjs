@@ -51,6 +51,17 @@ import { pathToFileURL } from "node:url";
 export const EXIT = { EXAMINED: 0, COULD_NOT_UPDATE: 1, CANNOT_ASK: 2 };
 
 /**
+ * What GitHub sends instead of a null timestamp on a check run that has not finished.
+ *
+ * ONE CONST, because this file spent a morning on one fact written in two places. It was defined twice --
+ * once in `headQuietSeconds`, once in `newestConclusion` -- and the two readers answer the same question:
+ * *has this run finished?* The next person to learn that GitHub emits some other sentinel would fix one
+ * and not the other, and the two would then disagree about whether a run is running, which is the exact
+ * shape (#498, #500) that made a green PR invisible for hours.
+ */
+export const ZERO_DATE = "0001-01-01T00:00:00Z";
+
+/**
  * HOW LONG SINCE GITHUB SAW THIS HEAD, in seconds — or `null` when nothing on the head can say.
  *
  * ## The source is the OLDEST check run's start, and it is named rather than assumed
@@ -82,7 +93,6 @@ export const EXIT = { EXAMINED: 0, COULD_NOT_UPDATE: 1, CANNOT_ASK: 2 };
  * @returns {number | null}
  */
 export function headQuietSeconds(runs, now) {
-  const ZERO_DATE = "0001-01-01T00:00:00Z";
   const starts = (runs ?? [])
     .map((run) => run?.startedAt)
     .filter((at) => Boolean(at) && at !== ZERO_DATE)
@@ -155,7 +165,16 @@ export function updateBranchDecision({ armed, gateConclusion, behind, quietSecon
           + `under the ${HEAD_QUIET_SECONDS}s quiet window. An author mid-push holds their own branch` };
     }
   }
-  return { update: true, reason: "armed, gate green or still running, and behind main's current tip" };
+  // THE SUCCESS PATH NAMES THE QUIET WINDOW WHEN THAT IS WHY IT IS ELIGIBLE. The window is this change's
+  // whole subject, so a sync that happens BECAUSE of it must say so -- otherwise a future wrong sync
+  // cannot be diagnosed from the log, which is precisely #498's failure read from the other side: there
+  // the skip line named the author instead of the reading. This is the line somebody will be looking at
+  // when they ask "why did it push under me?".
+  const quietNote = gateConclusion === null && typeof quietSeconds === "number"
+    ? `; the head has been quiet ${Math.round(quietSeconds)}s, over the ${HEAD_QUIET_SECONDS}s window`
+    : "";
+  return { update: true,
+    reason: `armed, gate green or still running, and behind main's current tip${quietNote}` };
 }
 
 /**
@@ -206,7 +225,6 @@ export function newestConclusion(runs, name) {
   //
   // That is #498's own defect surviving its own fix, and it lands exactly where this row lives: an author
   // who has just pushed HAS a running gate, which is the case #488 is about.
-  const ZERO_DATE = "0001-01-01T00:00:00Z";
   const real = (/** @type {string | null | undefined} */ value) =>
     (value && value !== ZERO_DATE ? value : null);
   const stamp = (/** @type {{completedAt?: string | null, startedAt?: string | null}} */ run) =>
