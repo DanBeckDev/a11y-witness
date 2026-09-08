@@ -39,7 +39,7 @@ what they expected.
 1,061-pair corpus. It scores **eight criteria** and is silent on everything else — narrower than an LLM.
 
 <!-- CLAIM:BEGIN — every figure between these markers must be sourceable from a recorded gate result in
-     docs/board/reported.json. `public-claim.test.ts` enforces it across every file in CLAIM_FILES.
+     docs/board/reported/. `public-claim.test.ts` enforces it across every file in CLAIM_FILES.
 
      THE FIGURES THIS PAGE USED TO CARRY, kept here rather than published: it said "zero false positives
      across 1,034 conformant records", the README said 1,183, and the guarded claim said 1,405. Only

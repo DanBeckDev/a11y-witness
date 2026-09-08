@@ -1,0 +1,9 @@
+{
+  "claim": "The page written to prove a rule was recorded, and did not prove it.",
+  "evidence": "A rule could previously only be demonstrated on pages we wrote ourselves, which cannot falsify the assumptions behind it. A page exercising it was written and has now been recorded \u2014 and the recording showed the opposite of what was expected. The conformant version was measured correctly and the FAILING version was not, because the same property that makes a page fail this rule also prevents the tool from observing it. The tool now reports 'cannot say' on those pages instead of reporting them as clean, and the underlying fix is scheduled. Superseded issue #2, now tracked as #31. (`focus-panel-undismissable-help` in `packages/lab/src/training/real-page-corpus.mjs`; measured 2026-09-06 by orchestrator on both halves of the pair, same fleet, minutes apart.)",
+  "issue": 31,
+  "reportedBy": "orchestrator",
+  "at": "2026-09-07T07:40:00Z",
+  "boardClaim": "A page built to prove a rule showed instead that the rule cannot see that fault.",
+  "order": 10
+}
