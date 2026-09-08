@@ -37,6 +37,17 @@
 // row stayed open while the work that closed it landed on main, and nothing said so. See
 // `closesDeclarationReport` below; it NEVER infers a row from a branch name or title.
 //
+// THIS PARSER READS SEVERAL NAMED SECTIONS OUT OF AUTHOR-WRITTEN PROSE, AND EVERY READER OF IT MUST
+// DECIDE EXPLICITLY WHETHER IT TAKES THE FIRST MATCH OR ALL OF THEM -- the default of "first" has now
+// been wrong twice, in two different functions, on two different fields of the same document. #527:
+// `extractClosesDeclaration`'s single `.exec()` reported only the first of two separate `Closes` lines,
+// silently truncating a fact GitHub itself still honoured in full. #540: `extractSection`'s
+// `lines.findIndex()` does the identical thing to a second `## Acceptance` header, except it fails
+// SILENTLY rather than truncating -- fed `"Closes #510\nCloses #497"`, `extractAcceptanceSection` reports
+// `MISSING`, not a partial result, because that text is not the field it is looking for at all. Neither
+// function chose "first" on purpose; it fell out of `findIndex`/`.exec()` being the obvious call, twice.
+// Read this before adding a fourth section reader.
+//
 // `pull_request`, NEVER `pull_request_target` -- wired in `ci.yml`, not here, but the reason belongs next
 // to the code that makes it safe: this module runs the AUTHOR'S OWN commands from a PR body, so it must
 // only ever run under the fork's read-only token and the fork's own checked-out code. Nothing in this
@@ -727,6 +738,11 @@ function runForReal(command) {
 // The declaration is the author's, in the body, or this reports MISSING/MALFORMED and the job fails.
 const CLOSES_NONE_PATTERN = /\bCloses:\s*none\b([^\n]*)/i;
 const CLOSES_LIST_PATTERN = /\bCloses:?\s*(#\d+(?:\s*(?:,|and)\s*#\d+)*)/i;
+// #527: GLOBAL, because an author writing `Closes #510` on one line and `Closes #497` on another -- a
+// form GitHub itself accepts and closes both for -- is a SECOND, independent match of the same pattern,
+// not a continuation of the first. `CLOSES_LIST_PATTERN` stays singular (`.exec()` reads naturally as
+// "does this line have one"); this is the walk that must never stop after the first hit.
+const CLOSES_LIST_PATTERN_GLOBAL = new RegExp(CLOSES_LIST_PATTERN.source, `${CLOSES_LIST_PATTERN.flags}g`);
 const CLOSES_MENTIONED_PATTERN = /\bCloses\b/i;
 
 /**
@@ -751,9 +767,13 @@ export function extractClosesDeclaration(body) {
       ? { kind: "none", reason }
       : { kind: "malformed", detail: "`Closes: none` names no reason" };
   }
-  const listMatch = CLOSES_LIST_PATTERN.exec(text);
-  if (listMatch) {
-    const numbers = [...listMatch[1].matchAll(/#(\d+)/g)].map((m) => Number(m[1]));
+  // #527: EVERY match, not the first. `.exec()` once made `Closes #510\nCloses #497` report only #510 --
+  // both close for real (`close-rows-for-merged-pr.mjs` reads GitHub's own `closingIssuesReferences`,
+  // never this regex), so the gate was silently under-reporting a fact GitHub and this file both see.
+  const listMatches = [...text.matchAll(CLOSES_LIST_PATTERN_GLOBAL)];
+  if (listMatches.length > 0) {
+    const numbers = listMatches.flatMap((match) =>
+      [...match[1].matchAll(/#(\d+)/g)].map((m) => Number(m[1])));
     return { kind: "closes", numbers };
   }
   if (CLOSES_MENTIONED_PATTERN.test(text)) {
