@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: name the armed, green PRs that can never merge because they are behind and conflicting
 // #361: AN ARMED, GREEN, CONFLICTING PR SITS FOREVER, AND NOTHING SAYS WHY.
 //
 // Measured 2026-09-07 12:40Z, two of the eight open PRs:

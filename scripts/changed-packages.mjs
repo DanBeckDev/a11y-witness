@@ -1,4 +1,5 @@
 // @ts-check
+// command: list which packages/<name> directories a branch touched against origin/main
 // Which `packages/<name>` directories a branch actually touched against `origin/main` -- the population
 // the pre-push hook's FAST gate (agent/*, lead/* pushes) tests, so a branch that never touched `judge` does
 // not pay for `judge`'s suite on every commit. `main` pushes are unaffected: they still run the full suite,

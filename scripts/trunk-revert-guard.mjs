@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: compare main's before/after state on a merge and refuse one that silently deletes prior work
 // #411: A MERGE CAN DELETE WORK ALREADY ON `main`, AND EVERY CHECK PASSES.
 //
 // 2026-09-07: PR #232's branch merged `main` in, resolved conflicts by taking its own side, and reverted

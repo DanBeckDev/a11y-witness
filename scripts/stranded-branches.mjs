@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// command: find pushed branches with no open PR, which are otherwise invisible to CI and review
 // A PUSHED BRANCH WITH NO PR IS INVISIBLE, and nothing in this repo could find one (#247).
 //
 // `agent/ssh-key-defaults` sat pushed for ELEVEN HOURS carrying a finished security fix. No PR was ever

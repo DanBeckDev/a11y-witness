@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
 /**
  * THE ONE-LINE DISPATCHER — A3.
  *

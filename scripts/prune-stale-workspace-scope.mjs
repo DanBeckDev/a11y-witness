@@ -1,3 +1,4 @@
+// command: remove a stale workspace-scope's node_modules symlinks a rename left behind
 // #376: `npm install` ADDS a new workspace scope's node_modules symlinks and does not remove an old one,
 // so after a rename both scopes resolve to the same packages -- a leftover `@old-scope/*` import does not
 // throw `ERR_MODULE_NOT_FOUND` on a machine that has ever installed the previous scope, it works. It fails

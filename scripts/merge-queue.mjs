@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: refuse any route onto main other than the open-PR merge queue
 /**
  * THE MERGE QUEUE IS THE OPEN PRs, AND THIS REFUSES ANY OTHER ROUTE TO `main`.
  *
