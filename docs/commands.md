@@ -24,6 +24,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/close-merged-rows.mjs` — close the tracker rows a merge landed, or refuse and say why
 - `node scripts/close-rows-for-merged-pr.mjs` — close the issues a merged PR declared, because a bot merge does not close them itself
 - `node scripts/close-rows-sweep.mjs` — a backstop sweep for close-rows.yml, which fires for some merges and silently not others
+- `node scripts/closes-mismatch-check.mjs` — refuse when a PR's declared Closes line disagrees with what GitHub will actually close
 - `node scripts/control-plane-hygiene.mjs` — print every control-plane hygiene number fresh, measured by command, never typed once
 - `node scripts/coverage-failure-classifier.mjs` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
 - `node scripts/generate-commands-doc.mjs` — regenerate docs/commands.md from every script's own `// command:` header
