@@ -251,6 +251,14 @@ export function discoverTestFiles(repoRoot, pkgDirs) {
 // enumeration adds one fast file to a set of 88; a guard missed adds a red trunk that every check was
 // blind to. Only one of those two failures is visible from the outside.
 //
+// AND IT CANNOT SEE A GUARD THAT IS NOT COMMITTED YET, which every author of a new tree-walking guard
+// will meet exactly once. `discoverTestFiles` walks `git ls-files`, so an UNTRACKED test file is not in
+// the population at all -- measured 2026-09-08 while building #534's provenance guard, which read
+// `always-run: 111 | mine: NOT IN SET` before `git add` and `always-run: 112 | mine: walks the tree
+// itself` after, with no change to its content. The natural reading of that first result is "the
+// derivation is broken"; it is not, and CI never sees the state because CI reads a commit. Commit the
+// file, then ask again.
+//
 // WHAT IT DOES NOT REACH, said plainly rather than left to be discovered: a guard that walks ONE fixed
 // tracked directory (`adr-index.test.ts` over `docs/adr/`, `commands-documented.test.ts` over the docs)
 // IS in this set, because the test itself calls `readdirSync` -- but it is here as a member of the class,
