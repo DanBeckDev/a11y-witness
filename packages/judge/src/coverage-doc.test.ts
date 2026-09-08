@@ -22,6 +22,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import { npmCliExecutable } from "../../../scripts/npm-cli-executable.mjs";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 const PAGE = resolve(REPO, "docs/coverage.md");
@@ -30,7 +31,7 @@ const PAGE = resolve(REPO, "docs/coverage.md");
  *  contributor's own working tree — the whole point of untracking is that nothing here trusts a copy
  *  already on disk. */
 function regenerate(): string {
-  execFileSync("npx", ["tsx", "packages/lab/scripts/generate-coverage-doc.ts"],
+  execFileSync(npmCliExecutable("npx"), ["tsx", "packages/lab/scripts/generate-coverage-doc.ts"],
     { cwd: REPO, encoding: "utf8", stdio: "pipe" });
   return readFileSync(PAGE, "utf8");
 }
