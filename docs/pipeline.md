@@ -29,6 +29,34 @@ while two of two human merges closed theirs (#326, #331). The mechanism — whet
 `GITHUB_TOKEN` can close a referenced issue at all — is a **hypothesis nobody here has confirmed against
 GitHub's documentation**, and unit 1d works whether or not it is true. See #298.
 
+## The PR `ts` job runs only what a diff actually reaches (A1b, A1c)
+
+Chairman, verbatim: *"the trunk guard is running all of the unit tests. this takes just as long as the
+pr one. so we should change the pr unit tests to only run on the files changed for pr efficiency and ci
+efficiency."* Measured: PR `ts` 83-155s, `trunk-guard` 144-155s — the same suite, twice, on every merge.
+
+`scripts/select-changed-tests.mjs` narrows `ci.yml`'s `ts` job to the test files that actually reference
+what changed, by three mechanisms depending on where the changed file lives:
+
+| changed file | reference kind | fallback when zero found |
+|---|---|---|
+| `packages/*/src/*` | by IMPORT (transitive) | that file's own package, full suite |
+| `scripts/*.mjs` | by IMPORT (the SAME reverse index) | every implicated package, full suite |
+| a hook, or a workflow other than `ci.yml` | by PATH STRING, in a real quoted literal (comments stripped first) | every implicated package, full suite |
+| `ci.yml` itself, or a root config (`ci-changed.mjs`'s `ROOT_TS_FILES`) | none — genuinely `BROAD` | (the whole search is skipped) |
+
+`ci-changed.mjs`'s package-level `testPackages` (the transitive closure of dependent packages) stays the
+search scope and the safety net underneath all of this — narrower than before, never wider.
+
+**The zero-tests fallback is the point, not the narrowing.** A changed file with no reference anywhere
+falls back to a named full-package run rather than silently selecting nothing — this is the job that
+gates every PR, and a check that passes having run nothing is this repository's most-recorded defect.
+
+**The path-string search must not match a mere mention in prose.** A doc comment discussing
+`` `scripts/foo.mjs` `` in this repo's own markdown convention is not a quoted JS string literal, so
+comments are stripped (`@a11ign/evidence/source-text`'s `stripComments`) before the search runs — a test
+that DISCUSSES a file is not a test that exercises it.
+
 ## The environment these scripts read
 
 ### `GITHUB_REPOSITORY`
