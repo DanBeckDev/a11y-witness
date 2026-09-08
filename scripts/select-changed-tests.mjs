@@ -251,6 +251,28 @@ export function discoverTestFiles(repoRoot, pkgDirs) {
 // enumeration adds one fast file to a set of 88; a guard missed adds a red trunk that every check was
 // blind to. Only one of those two failures is visible from the outside.
 //
+// A DISCOVERY GUARD MUST BE RUN AGAIN AFTER COMMITTING IT. THE FIRST RUN IS THE ONE THAT TELLS YOU
+// NOTHING.
+//
+// `discoverTestFiles` walks `git ls-files`, so an UNTRACKED file is not in the population at all -- and
+// that is true of every discovery in this repository, not only this one. **Every local run before
+// `git add` examines a set that excludes the very file being added**, so a new guard reports cleanly on
+// a population without its own subject, and CI (which reads a commit) then disagrees.
+//
+// Measured twice on 2026-09-08, an hour apart, by the same author:
+//
+//   #534's provenance guard read `always-run: 111 | mine: NOT IN SET` before `git add` and
+//   `always-run: 112 | mine: walks the tree itself` after, with no change to its content.
+//
+//   `control-plane-checkout-is-one-fact.test.ts` passed locally 3/3 and failed in CI, because its own
+//   pattern matches its own definition -- invisible while untracked, discovered the moment it was not.
+//
+// THE SECOND ONE HAPPENED AFTER THIS PARAGRAPH WAS WRITTEN, which is the argument for phrasing it as a
+// procedure rather than a fact: knowing that `git ls-files` cannot see an untracked file did not prevent
+// it, and only re-running after `git add` would have. It is the stale-`dist` lesson at a third layer --
+// *"my test is weak"* and *"my test is old"* read the same, and here *"my guard passes"* and *"my guard
+// cannot see the file"* read the same. The discriminator is a `git add`.
+//
 // WHAT IT DOES NOT REACH, said plainly rather than left to be discovered: a guard that walks ONE fixed
 // tracked directory (`adr-index.test.ts` over `docs/adr/`, `commands-documented.test.ts` over the docs)
 // IS in this set, because the test itself calls `readdirSync` -- but it is here as a member of the class,
