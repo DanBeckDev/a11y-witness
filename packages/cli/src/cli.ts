@@ -26,7 +26,7 @@ import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "@a11ign/judge/layers";
 import { reportLines, type Report } from "./report.js";
-import { formatFaultMessage } from "./fault-remediation.js";
+import { formatFaultMessage, formatDoubtMessage } from "./fault-remediation.js";
 import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ign/worker-fleet";
 import { CAPTURE_CLIENT_TIMEOUT_MS, requestJson } from "@a11ign/worker-fleet/worker-http";
 import { captureTolerantly } from "@a11ign/worker-fleet/capture-client";
@@ -473,18 +473,17 @@ async function shadowScreenReaderCapture(capture: CaptureResponse): Promise<void
 }
 
 /**
- * Say which kind of doubt it is, in words that match the cause.
- *
- * Telling someone their page "read browser chrome" when a consent dialog held the screen reader inside
- * their page sends them looking in the wrong place entirely.
+ * Say which kind of doubt it is, in words that match the cause — and #398, say what to DO about it, the
+ * same WHAT/TRY/WHERE treatment a worker fault gets (`formatDoubtMessage`), not a bare sentence. Telling
+ * someone their page "read browser chrome" when a consent dialog held the screen reader inside their page
+ * sends them looking in the wrong place entirely; leaving it at that sends them nowhere at all.
  */
-function warnUnverified(reason: CaptureDoubt, title: string | undefined): void {
-  if (reason === "wrong-content") {
-    process.stderr.write(`WARNING: after ${MAX_CAPTURE_ATTEMPTS} attempts the capture still doesn't match the page title "${title ?? ""}" — results may reflect browser chrome, not the page.\n`);
-    return;
-  }
-  process.stderr.write("WARNING: the screen reader reached almost none of this page — most likely held inside a "
-    + "modal such as a cookie or consent dialog. Reporting no findings rather than describing the dialog.\n");
+export function warnUnverified(reason: CaptureDoubt, title: string | undefined): void {
+  const detail = reason === "wrong-content"
+    ? `after ${MAX_CAPTURE_ATTEMPTS} attempts the capture still doesn't match the page title `
+      + `"${title ?? ""}"`
+    : "the screen reader reached almost none of this page";
+  process.stderr.write(`WARNING: ${formatDoubtMessage(reason, detail)}\n`);
 }
 
 /**
