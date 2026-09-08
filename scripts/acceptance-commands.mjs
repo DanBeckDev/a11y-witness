@@ -43,13 +43,14 @@
 // file grants itself write access; it doesn't need to.
 import { execSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { existsSync, globSync, realpathSync, statSync } from "node:fs";
+import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 /** @typedef {{ verdict: "runnable" } | { verdict: "refused", reason: string } | { verdict: "prose", reason: string }} Classification */
 /** @typedef {{ kind: "missing" } | { kind: "none", reason: string } | { kind: "commands", commands: string[] }} Section */
 /** @typedef {{ kind: "missing" } | { kind: "malformed", detail: string } | { kind: "none", reason: string } | { kind: "closes", numbers: number[] }} ClosesDeclaration */
+/** @typedef {{ history: boolean, token: boolean, fleet: boolean }} JobCapabilities */
 
 // `npm run fleet:*` and its siblings -- the resource ban every worker/agent role file below `ceo` and
 // `orchestrator` carries, verbatim, elsewhere in this repo. A GitHub-hosted runner is not one of the
@@ -123,6 +124,140 @@ function commandExists(token) {
   return dirs.some((dir) => isExecutableFile(join(dir, token)));
 }
 
+// #497/#510: THIS JOB'S ENVIRONMENT IS DECLARED IN ONE PLACE, per docs/pipeline.md, and this constant
+// describes the `acceptance` job SPECIFICALLY -- it is never read by `reusable-build-test.yml`'s `ts` or
+// `trunkGate` invocations, both of which DO carry a real `GH_TOKEN: github.token` (row-claim-live.test.ts's
+// live call runs for real there). `fleet` is the only one of the two that is a runner-level fact true of
+// EVERY job in this repo -- a GitHub-hosted ubuntu runner has no Windows worker, full stop. `token` is not
+// that: it is a DELIBERATE, job-specific security choice (this job alone executes an untrusted PR body's
+// own commands, so it alone is given no token at all -- see this file's own header). Read this as "false in
+// the one job that consults it," never as "false on any GitHub runner" -- a future caller of this same
+// mechanism from `ts`/`trunkGate` would need its own, differently-true `token` value, not this one.
+// `history` is the one axis a PR itself controls, via `History: full` in the body (#497).
+const FULL_CAPABILITIES = /** @type {JobCapabilities} */ ({ history: true, token: true, fleet: true });
+
+// A bare line, deliberately -- `History: full` names nothing else the way `Acceptance:`/`Closes:` name a
+// command or an issue, so this needs no section parser, just a marker this PR's checkout should deepen
+// before anything else runs.
+const HISTORY_FULL_PATTERN = /^\s*History:\s*full\s*$/im;
+
+/**
+ * Does the PR body ask for this run's checkout to carry full history (#497)? A PR carrying the line with
+ * no historical fixture in its Acceptance command pays only time, never a wrong verdict -- see this
+ * file's own header and #497's own "what it must not become" for why that asymmetry is deliberate.
+ * @param {string | null | undefined} body
+ * @returns {boolean}
+ */
+export function hasFullHistoryDeclaration(body) {
+  return HISTORY_FULL_PATTERN.test(body ?? "");
+}
+
+/**
+ * What THIS acceptance job can offer a test that names a requirement (#510). `token`/`fleet` are fixed
+ * facts about the job itself; `history` is the one thing a PR body can change. `docs/pipeline.md` states
+ * this in prose (#511); this is the same fact read by code, never re-typed.
+ * @param {string | null | undefined} body
+ * @returns {JobCapabilities}
+ */
+export function jobCapabilities(body) {
+  return { history: hasFullHistoryDeclaration(body), token: false, fleet: false };
+}
+
+// The header convention `generate-commands-doc.mjs`'s `commandHeader` already uses for `// command:`,
+// applied to a different question on a different population (a TEST FILE's own environment needs, not a
+// SCRIPT's description). No line-count window here, unlike that one -- a script's header sits in its
+// first few lines by convention, but this repo's own test files often carry long doc-comment headers
+// (see `pre-push-resolve-toward-main.test.ts`), so the marker is found anywhere in the file rather than
+// assuming how far down it landed.
+const REQUIRES_HEADER = /^\/\/\s*requires:\s*(.+)$/m;
+
+/**
+ * A test file's own declared requirements, split on commas, UNFILTERED against any known vocabulary --
+ * an unrecognised word (a typo, a future capability this job has not learned) must never be silently
+ * dropped, because that would make a mistyped requirement read as "needs nothing," exactly the silent-pass
+ * shape this row exists to end. `unmetRequirements` below is where an unknown word is judged, not here.
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function testFileRequirements(text) {
+  const match = REQUIRES_HEADER.exec(text);
+  if (!match) return [];
+  return match[1].split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * Which of `requirements` this job's `capabilities` do NOT satisfy -- named, not counted, because "needs
+ * history" and "needs a token" send an author to opposite fixes (#510's own acceptance). A requirement
+ * word `capabilities` has no key for reads as unmet, never as satisfied by default.
+ * @param {string[]} requirements
+ * @param {JobCapabilities} capabilities
+ * @returns {string[]}
+ */
+export function unmetRequirements(requirements, capabilities) {
+  return requirements.filter((req) => /** @type {Record<string, boolean>} */ (capabilities)[req] !== true);
+}
+
+/**
+ * The literal file/glob arguments of a `tsx --test <...>` command, in order -- split out of
+ * `testFileArgumentsResolve` so the #510 requirements check below reads the SAME tokenisation rather than
+ * risking a second, independently-written answer to "what files does this command name" (this file's own
+ * most-repeated lesson, one row up).
+ * @param {string} command
+ * @returns {string[]}
+ */
+function tsxTestFileArgs(command) {
+  const withoutTrailingComment = command.replace(/(?:^|\s)#.*$/, "");
+  const tokens = withoutTrailingComment.split(/\s+/).filter(Boolean);
+  return tokens
+    .filter((token) => token !== "npx" && token !== "tsx" && token !== "--test" && !token.startsWith("-"))
+    .map((token) => token.replace(/^['"]|['"]$/g, ""));
+}
+
+/**
+ * For a `tsx --test <file(s)>` command, every requirement a REAL file it names declares that this job's
+ * `capabilities` do not satisfy -- grouped by requirement, naming every declaring file, so a refusal reads
+ * as a fact about the tests rather than an opaque code. Glob arguments and files that do not exist are
+ * skipped here on purpose: whether a file exists at all is `testFileArgumentsResolve`'s own question, and
+ * a glob's members are not individually readable without expanding it, which this check does not attempt.
+ * @param {string} command
+ * @param {JobCapabilities} capabilities
+ * @returns {{ requirement: string, files: string[] }[]}
+ */
+export function unmetCommandRequirements(command, capabilities) {
+  if (!/\btsx\s+--test\b/.test(command)) return [];
+  /** @type {Map<string, string[]>} */
+  const byRequirement = new Map();
+  for (const fileArg of tsxTestFileArgs(command)) {
+    if (/[*?[{]/.test(fileArg) || !existsSync(fileArg)) continue;
+    const text = readFileSync(fileArg, "utf8");
+    for (const req of unmetRequirements(testFileRequirements(text), capabilities)) {
+      if (!byRequirement.has(req)) byRequirement.set(req, []);
+      /** @type {string[]} */ (byRequirement.get(req)).push(fileArg);
+    }
+  }
+  return [...byRequirement.entries()].map(([requirement, files]) => ({ requirement, files }));
+}
+
+/**
+ * Does ANY real `tsx --test` file named across `commands` actually declare `// requires: history`? #497's
+ * own stated boundary: "a PR carrying `History: full` and no historical fixture is asking for something it
+ * does not use -- worth a warning, not a refusal, since the cost is only time." So this is checked
+ * independent of `unmetCommandRequirements` (which asks whether a declared requirement is SATISFIED, not
+ * whether the declaration exists at all) -- a file naming `requires: history` always counts as "used" here,
+ * whether or not `capabilities.history` happens to be true.
+ * @param {string[]} commands
+ * @returns {boolean}
+ */
+function anyCommandUsesHistory(commands) {
+  return commands.some((command) => {
+    if (!/\btsx\s+--test\b/.test(command)) return false;
+    return tsxTestFileArgs(command).some((fileArg) => {
+      if (/[*?[{]/.test(fileArg) || !existsSync(fileArg)) return false;
+      return testFileRequirements(readFileSync(fileArg, "utf8")).includes("history");
+    });
+  });
+}
+
 /**
  * Pure. Never executes anything -- just decides whether this command is this job's to run.
  *
@@ -137,13 +272,24 @@ function commandExists(token) {
  * check above -- so a test can assert on a specific token resolving or not without depending on what
  * happens to be installed on whichever machine runs the suite.
  *
+ * #510: `capabilities` defaults to `FULL_CAPABILITIES` -- every existing caller that never mentions the
+ * new parameter keeps behaving exactly as before, because nothing is unmet against a job that can do
+ * everything. `main()` passes the REAL job's capabilities; a test passes whatever it wants to exercise.
+ *
  * @param {string} command
- * @param {{ commandExists?: (token: string) => boolean }} [deps]
+ * @param {{ commandExists?: (token: string) => boolean, capabilities?: JobCapabilities }} [deps]
  * @returns {Classification}
  */
-export function classifyCommand(command, { commandExists: exists = commandExists } = {}) {
+export function classifyCommand(command,
+  { commandExists: exists = commandExists, capabilities = FULL_CAPABILITIES } = {}) {
   for (const [pattern, reason] of [...FLEET_LAB_PATTERNS, ...CORPUS_PATTERNS]) {
     if (pattern.test(command)) return { verdict: "refused", reason };
+  }
+  const [firstUnmet] = unmetCommandRequirements(command, capabilities);
+  if (firstUnmet) {
+    return { verdict: "refused",
+      reason: `needs \`${firstUnmet.requirement}\`, which this job does not have -- declared by `
+        + firstUnmet.files.join(", ") };
   }
   const token = firstRealToken(command);
   if (!token) {
@@ -186,12 +332,7 @@ export function classifyCommand(command, { commandExists: exists = commandExists
  */
 export function testFileArgumentsResolve(command) {
   if (!/\btsx\s+--test\b/.test(command)) return { ok: true };
-  const withoutTrailingComment = command.replace(/(?:^|\s)#.*$/, "");
-  const tokens = withoutTrailingComment.split(/\s+/).filter(Boolean);
-  const fileArgs = tokens
-    .filter((token) => token !== "npx" && token !== "tsx" && token !== "--test" && !token.startsWith("-"))
-    .map((token) => token.replace(/^['"]|['"]$/g, ""));
-  const missing = fileArgs.filter((pattern) => {
+  const missing = tsxTestFileArgs(command).filter((pattern) => {
     if (/[*?[{]/.test(pattern)) {
       try {
         return globSync(pattern).length === 0;
@@ -228,6 +369,15 @@ const SECTION_FIELD_NAMES = ["Acceptance", "Refutation", "Mutation"];
  * lines below" shape, so a heading with prose after it and no colon must read the identical way, never as
  * a command. The bold/plain form has no such ambiguity -- `Acceptance:` always requires the colon to match
  * at all, so anything it captures was always meant as inline.
+ *
+ * THE LINE-START ANCHOR (`^\s*`) IS DELIBERATE, AND #522 IS THE PROOF -- both directions at once. #506
+ * (above) is a heading whose trailing text was wrongly taken as a command; the mirror fault is prose
+ * ABOUT the field being wrongly taken as its header. #522's own PR body says "an Acceptance/Refutation
+ * command's file actually declares..." mid-sentence, and this parser correctly reads that as prose, not a
+ * header -- which is also why that same PR shipped with no real `Acceptance:` section at all (a body full
+ * of correctly-ignored mentions is indistinguishable, to an author skimming it, from one that declares a
+ * real command). Widening the match to be more forgiving of one direction reliably breaks the other; both
+ * behaviours are currently correct and in tension, which is why the anchor stays exactly this strict.
  * @param {string} fieldName
  * @returns {{ heading: RegExp, plain: RegExp }}
  */
@@ -442,11 +592,11 @@ function commandLinesAfter(lines, headerIndex) {
  * @param {string} command
  * @param {(command: string) => number} run
  * @param {{ prefix: "ACCEPTANCE" | "REFUTATION", isPass: (code: number) => boolean,
- *           commandExists?: (token: string) => boolean }} options
+ *           commandExists?: (token: string) => boolean, capabilities?: JobCapabilities }} options
  * @returns {{ line: string, ok: boolean }}
  */
-function runOneCommand(command, run, { prefix, isPass, commandExists: exists }) {
-  const classification = classifyCommand(command, { commandExists: exists });
+function runOneCommand(command, run, { prefix, isPass, commandExists: exists, capabilities }) {
+  const classification = classifyCommand(command, { commandExists: exists, capabilities });
   if (classification.verdict === "refused") {
     return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
   }
@@ -486,12 +636,15 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists }) 
  *
  * @param {string | null | undefined} body
  * @param {(command: string) => number} run
- * @param {{ commandExists?: (token: string) => boolean }} [deps] forwarded to `classifyCommand` (#446) --
- *   defaults to the real `$PATH` check; a test overrides it to stay independent of what happens to be
- *   installed on whichever machine runs the suite.
+ * @param {{ commandExists?: (token: string) => boolean, capabilities?: JobCapabilities }} [deps] forwarded
+ *   to `classifyCommand` (#446/#510) -- `commandExists` defaults to the real `$PATH` check; `capabilities`
+ *   defaults to `jobCapabilities(body)`, so `main()` needs no changes at all to pick up the real job's
+ *   environment, and a test overrides either to stay independent of what happens to be true of the machine
+ *   or body the suite runs against.
  * @returns {{ ok: boolean, lines: string[] }}
  */
 export function acceptanceReport(body, run, deps = {}) {
+  const resolvedDeps = { capabilities: jobCapabilities(body), ...deps };
   const section = extractAcceptanceSection(body);
   if (section.kind === "missing") {
     return { ok: false, lines: ["ACCEPTANCE: MISSING"] };
@@ -504,7 +657,7 @@ export function acceptanceReport(body, run, deps = {}) {
   } else {
     for (const command of section.commands) {
       const result = runOneCommand(command, run,
-        { prefix: "ACCEPTANCE", isPass: (code) => code === 0, ...deps });
+        { prefix: "ACCEPTANCE", isPass: (code) => code === 0, ...resolvedDeps });
       lines.push(result.line);
       if (!result.ok) ok = false;
     }
@@ -516,12 +669,27 @@ export function acceptanceReport(body, run, deps = {}) {
   } else if (refutation.kind === "commands") {
     for (const command of refutation.commands) {
       const result = runOneCommand(command, run,
-        { prefix: "REFUTATION", isPass: (code) => code !== 0, ...deps });
+        { prefix: "REFUTATION", isPass: (code) => code !== 0, ...resolvedDeps });
       lines.push(result.line);
       if (!result.ok) ok = false;
     }
   }
   // refutation.kind === "missing" -> nothing to report; the section is optional.
+
+  // #497's OWN STATED BOUNDARY: "a PR carrying `History: full` and no historical fixture is asking for
+  // something it does not use -- worth a warning, not a refusal, since the cost is only time." So this
+  // never touches `ok` -- the one thing it must not become is a flag people add to make a red check green,
+  // and a warning that could fail the job would be exactly that in the other direction.
+  if (hasFullHistoryDeclaration(body)) {
+    const allCommands = [
+      ...(section.kind === "commands" ? section.commands : []),
+      ...(refutation.kind === "commands" ? refutation.commands : []),
+    ];
+    if (!anyCommandUsesHistory(allCommands)) {
+      lines.push("WARNING: `History: full` is declared, but no named test file declares "
+        + "`// requires: history` -- this checkout is being deepened for nothing this PR uses.");
+    }
+  }
 
   return { ok, lines };
 }
