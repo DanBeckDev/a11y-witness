@@ -60,9 +60,22 @@ name: auto-arm
 # `gh pr merge --auto` REFUSES a draft PR outright ("--auto is not allowed for draft PRs"), so admitting
 # one here would just fail loudly. Excluding it here means the run reports `SKIPPED (draft)` instead of a
 # needless GitHub API error on every draft PR opened in this repo.
+#
+# ## `reopened` -- #404, found resuming #232 and #281
+#
+# Without it, a REOPENED PR fires neither `opened` nor `ready_for_review`, so `arm` never sees it. The
+# `sweep` job below still picks it up eventually (it runs on every event this workflow takes), but only
+# on the NEXT PR event anywhere in the repo -- an unbounded wait in a quiet repo. Worse than the delay:
+# `ceo`'s ruling is that nobody re-arms a PR auto-arm has already armed, because the merge is attributed
+# to whoever last enabled auto-merge, and a `github-actions`-attributed merge does not apply `Closes #N`
+# while a PAT merge does (12 for 12 measured 2026-09-07) -- so a PR this trigger never armed is the ONE
+# case where a worker must legitimately arm it by hand, an exception nobody but the person who hit it
+# could be expected to know exists. Adding `reopened` removes the exception rather than documenting it,
+# which is this repo's own preference: a rule that asks a human to remember something is a rule that
+# gets broken.
 on:
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, ready_for_review, reopened]
   workflow_dispatch:
 
 permissions:
