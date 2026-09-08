@@ -101,6 +101,7 @@ if [ "${A11Y_ALLOW_PIPED_EXIT_STATUS:-0}" != "1" ]; then
   # the guard script only exists here.
   guard_script="$(cd "$(dirname "$0")/.." && pwd)/piped-exit-status-guard.mjs"
   hazard_hits=""
+  guard_errors=""
   while IFS= read -r f; do
     case "$f" in
       *.sh|*.yml|*.yaml|package.json|scripts/git-hooks/*) ;;
@@ -113,13 +114,53 @@ if [ "${A11Y_ALLOW_PIPED_EXIT_STATUS:-0}" != "1" ]; then
         +*)
           added="${line#+}"
           [ -z "$added" ] && continue
-          if ! node "$guard_script" "$added" >/dev/null 2>&1; then
-            hazard_hits="$hazard_hits  $f: $added"$'\n'
-          fi
+          # #535: "A HAZARD" AND "I COULD NOT TELL" ARE DIFFERENT STATES AND MUST NOT COLLAPSE, and the
+          # guard's own EXIT CODE alone cannot be trusted to keep them apart. An import that fails to
+          # resolve throws before the guard's own code ever runs -- verified directly: Node exits 1 for an
+          # unresolvable ESM import, the IDENTICAL code the guard uses for a real HAZARD verdict, and no
+          # try/catch inside the guard's entry point can intercept a failure that happens before that entry
+          # point is reached. So the discriminator here is the guard's own OUTPUT TEXT, not its exit code:
+          # a real verdict is a `console.log` this repo controls and can rely on, always starting with
+          # `ALLOW:` or `REFUSE:`; anything else -- a stack trace, `GUARD ERROR:`, `usage:`, empty output --
+          # is "I could not tell", regardless of what exit code produced it. Captured rather than discarded
+          # (`>/dev/null 2>&1` used to throw away exactly the text that would have named the real cause the
+          # first time this broke: an unresolved `@a11ign/worker-fleet` import in a fresh worktree with no
+          # `node_modules`, reported as a hazard on every single staged line).
+          guard_status=0
+          guard_output="$(node "$guard_script" "$added" 2>&1)" || guard_status=$?
+          case "$guard_output" in
+            REFUSE:*)
+              hazard_hits="$hazard_hits  $f: $added"$'\n'
+              ;;
+            ALLOW:*)
+              : # a real, well-formed pass -- nothing to record
+              ;;
+            *)
+              guard_errors="$guard_errors  $f: $added"$'\n''    -> '"$guard_output (exit $guard_status)"$'\n'
+              ;;
+          esac
           ;;
       esac
     done <<< "$(git diff --cached -U0 --no-color -- "$f")"
   done <<< "$staged"
+
+  # A GUARD THAT CANNOT RUN FAILS CLOSED HERE, DELIBERATELY -- checked first, before the hazard report, so
+  # a broken guard never gets read as "no hazards found" either. This is a judgment call, not a fact: the
+  # pre-push hook's corpus-dependent checks SKIP LOUDLY when `runs/` is absent, and that is right for THEM
+  # because a fresh worktree with no corpus is an EXPECTED, permanent shape, not a defect to fix. This
+  # guard's own trigger (no `node_modules` yet) was expected too, but the underlying #180 hazard it exists
+  # to catch is a real, if rare, correctness bug -- and a guard whose failure mode is "silently stop
+  # checking" is worse than one that stops the commit and says so loudly. `A11Y_ALLOW_PIPED_EXIT_STATUS=1`
+  # is the same override either way, since a broken guard and a false-positive guard cost the committer the
+  # identical thing: time spent on something that is not actually blocking their work.
+  if [ -n "$guard_errors" ]; then
+    echo "pre-commit: refusing — the piped-exit-status guard could not examine a staged line" >&2
+    echo "(this is a GUARD FAILURE, not a hazard finding):" >&2
+    printf '%s' "$guard_errors" >&2
+    echo "Fix the guard (scripts/piped-exit-status-guard.mjs), or set" >&2
+    echo "A11Y_ALLOW_PIPED_EXIT_STATUS=1 if you must commit before it is fixed." >&2
+    exit 1
+  fi
 
   if [ -n "$hazard_hits" ]; then
     echo "pre-commit: refusing — a newly staged line pipes into head/tail/grep and then reads \$?," >&2
