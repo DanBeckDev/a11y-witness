@@ -22,16 +22,37 @@ on:
 permissions:
   contents: read
   issues: read
+  # `fetchClaimActivity` runs `gh pr list` to find each claimed row's open PR, so without this the
+  # dead-claim check fails on the GITHUB_TOKEN fallback path too -- and the warning below would then be
+  # wrong about which check the missing PAT costs. The PAT carries its own scopes; this is for the
+  # fallback, which is the path nobody watches.
+  pull-requests: read
 
 jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth 0 because the dead-claim check reads `git for-each-ref refs/remotes/origin` to date
+      # each row's branch, and the default single-branch fetch leaves only origin/main -- so every claimed
+      # row would read "no branch at all", which is the strongest DEAD-CLAIM sentence this audit prints.
       - uses: actions/checkout@v4
-        with: { ref: main }
+        with: { ref: main, fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
+      # `github.token` CANNOT resolve a user-owned ProjectV2 -- measured 2026-09-08, three scheduled runs
+      # died on `Could not resolve to a ProjectV2 with the number 2` -- and board membership is one of six
+      # checks. The bot PAT (#416) can read it. Same shape as auto-arm.yml's own token choice, including
+      # the warning: falling back silently would leave five checks answering and nothing saying why the
+      # sixth did not, which is the state this whole change exists to end.
       - env:
-          GH_TOKEN: ${{ github.token }}
-        run: npm run ready:audit
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "$A11IGN_BOT_TOKEN" ]; then
+            export GH_TOKEN="$A11IGN_BOT_TOKEN"
+          else
+            export GH_TOKEN="$GITHUB_TOKEN"
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- GITHUB_TOKEN cannot resolve a user-owned ProjectV2, so the board-membership check will report as unable to run. See #416."
+          fi
+          npm run ready:audit
