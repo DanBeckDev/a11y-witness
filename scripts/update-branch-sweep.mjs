@@ -63,13 +63,66 @@ export function updateBranchDecision({ armed, gateConclusion, behind }) {
   if (gateConclusion !== null && gateConclusion !== "SUCCESS") {
     return {
       update: false,
-      reason: `gate concluded ${gateConclusion} -- a failing PR needs a fix, not a stale-main push`,
+      // #498: NAME THE READING, NOT JUST THE VERDICT. This line used to say only "a failing PR needs a
+      // fix", which addresses the AUTHOR -- so when the sweep skipped two green PRs on a stale
+      // conclusion, the log read as work correctly handed back rather than as the sweep being wrong.
+      // Saying which run this conclusion came from means the next wrong skip is falsifiable from the log
+      // alone: open that run and see whether it is the newest.
+      reason: `this sweep read gate = ${gateConclusion} as the NEWEST gate run on the head`
+        + " -- a failing PR needs a fix, not a stale-main push."
+        + " If that PR looks green, check whether a newer gate run exists and report it (#498's shape)",
     };
   }
   if (!behind) {
     return { update: false, reason: "already contains main's current tip -- nothing to update" };
   }
   return { update: true, reason: "armed, gate green or still running, and behind main's current tip" };
+}
+
+/**
+ * PURE. The conclusion of the NEWEST check run named `name` on a head, or `null` if there is none.
+ *
+ * #498: A SUPERSEDED CHECK RUN STAYS ATTACHED TO THE HEAD FOREVER, AND THIS READ TOOK THE FIRST ONE.
+ * The previous line was `runs.find((c) => c.name === "gate")?.conclusion ?? null`, and GitHub's
+ * `statusCheckRollup` UNIONS every check run recorded against the head -- superseded ones included. A
+ * `ci.yml` run is cancelled whenever a second push supersedes it, which is the ordinary shape of an
+ * active branch, and a cancelled run leaves a FAILED `gate` on that head permanently. So `.find()`
+ * returned that stale failure at every later sweep and the PR was skipped as failing for ever.
+ *
+ * Measured 2026-09-08 08:01:14Z, on the only two open PRs at the time -- both green, both skipped:
+ *
+ *   #490 head 10e010ed   07:52:28 failure (ci CANCELLED) | 07:55:07 failure (ci CANCELLED) | 07:58:10 SUCCESS
+ *   #485 head b9b9a0ee   07:32:35 failure (ci CANCELLED) | 07:35:34 SUCCESS
+ *
+ * #485 was 16 commits behind `main` and #490 was 6, with nothing for either author to fix, while the
+ * skip line named the AUTHOR as the person who must act. That is the failure this repository calls a
+ * silent wrong answer: not a stall anyone can see, but work reassigned to somebody with nothing to do.
+ * And it degrades with load -- the busier the queue, the more runs are cancelled, the more PRs go
+ * invisible to the one mechanism that keeps them current.
+ *
+ * ORDER IS NOT ASSUMED. A rollup's array order is not documented to be chronological; it merely happened
+ * to put the oldest first here, which is the only reason this was visible at all. So the newest is
+ * chosen by TIMESTAMP -- `completedAt` when present, else `startedAt` -- and a run carrying neither
+ * loses to any run that has one, because an untimed entry cannot be shown to be newer than a timed one.
+ * With no timestamps anywhere the last entry wins, which is at least the opposite of the old behaviour
+ * and is pinned by a test rather than left to chance.
+ *
+ * A STILL-RUNNING newest run reports `null`, exactly as an absent one does, and `updateBranchDecision`
+ * already treats `null` as "green or not yet answered" -- a push under it is harmless. That branch is
+ * deliberately unchanged by this fix; it is #488's subject, not this one's.
+ *
+ * @param {{name?: string, conclusion?: string | null, completedAt?: string | null,
+ *          startedAt?: string | null}[] | null | undefined} runs
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function newestConclusion(runs, name) {
+  const matching = (runs ?? []).filter((run) => run?.name === name);
+  if (matching.length === 0) return null;
+  const stamp = (/** @type {{completedAt?: string | null, startedAt?: string | null}} */ run) =>
+    run.completedAt ?? run.startedAt ?? "";
+  const newest = matching.reduce((best, run) => (stamp(run) >= stamp(best) ? run : best));
+  return newest.conclusion ?? null;
 }
 
 /**
@@ -136,8 +189,7 @@ function main() {
   let updated = 0;
   for (const pr of prs) {
     const armed = pr.autoMergeRequest != null;
-    const gateConclusion = (pr.statusCheckRollup ?? []).find((/** @type {{name?:string}} */ c) => c.name === "gate")
-      ?.conclusion ?? null;
+    const gateConclusion = newestConclusion(pr.statusCheckRollup, "gate");
     const behind = isBehind("origin/main", pr.headRefOid, runGitForReal);
 
     const { update, reason } = updateBranchDecision({ armed, gateConclusion, behind });
