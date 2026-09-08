@@ -70,6 +70,9 @@ import { REPO } from "./repo-identity.mjs";
 import { READY_LABEL } from "./ready-label-audit.mjs";
 import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
 import { withBoardSnapshot, PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
+import { runnerReason } from "./row-claim/runner-rule.mjs";
+import { ownPrHealthReason, lookupOwnPrHealth } from "./row-claim/own-pr-health-rule.mjs";
+import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
 
 export const CLAIM_LABEL = "in-progress";
 export const STARTED_LABEL = "started";
@@ -161,6 +164,11 @@ export function claimStatus(labels) {
  * @returns {{ proceed: true } | { proceed: false, reason: string }}
  */
 export function decideClaim(labelsBefore, mySession) {
+  // #444: a RESERVATION check, ahead of the CLAIM check -- a row can be `ready` (not yet `in-progress`)
+  // and still reserved for a specific session, which is #324's own shape before anyone claims it.
+  const reserved = runnerReason(labelsBefore, mySession);
+  if (reserved) return { proceed: false, reason: reserved };
+
   const status = claimStatus(labelsBefore);
   if (!status.claimed) return { proceed: true };
   if (status.sessions.includes(mySession)) return { proceed: true };
@@ -252,17 +260,86 @@ export function moveProjectStatus(issueNumber, statusName,
  * times in one evening. `--remove-label` on a label a row does not carry is a harmless no-op, so this needs
  * no branch for "was it ready in the first place".
  *
+ * `runner:*` (#444) IS DELIBERATELY NEVER REMOVED HERE -- it survives a claim, unlike `ready`. It records
+ * WHO the row was reserved for, and that fact does not stop being true once the reservation is honoured;
+ * removing it would lose the record of why a specific session took this row rather than another. A closed
+ * row still carrying it is handled separately, as debris (`ready-label-audit.mjs`'s `isClosedDebrisLabel`).
+ */
+
+/**
+ * B2 (#476) + B4 (#462), COMPOSED: should `mySession` start a NEW row right now, independent of whether
+ * this particular row is claimed by someone else? `null` means proceed; a string is the refusal reason.
+ *
+ * BOTH FAIL OPEN ON A LOOKUP FAILURE, deliberately -- the opposite of `decideClaim`'s own "unclaimed must
+ * be EARNED, not defaulted to" rule a few functions up. That rule protects a VERDICT about who holds a
+ * row; this protects a session's ability to claim ANYTHING at all when the network is down or `gh` is
+ * unauthenticated -- the identical reasoning `merge-guard.mjs`'s `racesAnArmedMerge` states for the same
+ * choice made the other way: a convenience guard that blocks all work on a lookup failure gets bypassed
+ * and then never consulted again, which is worse than the rare miss it would have caught.
+ *
+ * `requiredContexts`/`checkRuns` are separately injectable (rather than folded into `run`) because
+ * `own-pr-health-rule.mjs`'s own lookup reads them through `merge-guard/lookups.mjs`'s dedicated helpers,
+ * not through an arbitrary `gh` argv -- a test overriding only `run` would otherwise reach a real network
+ * call the moment a fixture's own PR reads OPEN, which is exactly the trap `lookupClosingPrHealth`'s own
+ * comment names.
+ *
+ * @param {number} issueNumber the row about to be claimed -- excluded from B2's "other held rows" check
+ * @param {string} mySession
+ * @param {{ run?: typeof defaultRun,
+ *           requiredContexts?: () => (string[] | null),
+ *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
+ *             completedAt: string | null}[] | null) }} deps
+ * @returns {string | null}
+ */
+export function sessionEligibilityReason(issueNumber, mySession,
+  { run = defaultRun, requiredContexts, checkRuns } = {}) {
+  const ghRun = (/** @type {string[]} */ args) => run("gh", args);
+
+  const ownPr = lookupOwnPrHealth(mySession, issueNumber, { run: ghRun, requiredContexts, checkRuns });
+  const health = ownPrHealthReason(ownPr);
+  if (health) return health;
+
+  const myFiles = lookupMyRegionFiles(issueNumber, { run: ghRun });
+  const otherPrFiles = lookupOpenPrFiles({ run: ghRun });
+  if (myFiles !== null && otherPrFiles !== null) {
+    const { reason, emptyOtherPrs } = fileOverlapReason(myFiles, otherPrFiles);
+    for (const prNumber of emptyOtherPrs) {
+      process.stderr.write(`row-claim: #${prNumber} is open and reports ZERO changed files -- not folded `
+        + "into \"no overlap\", just nothing to compare against right now. Worth a look if that surprises "
+        + "you (B4, #462).\n");
+    }
+    if (reason) return reason;
+  }
+  return null;
+}
+
+/**
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
  *   dispatch, `[STARTED_LABEL]` for a claim/start
- * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} deps
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus,
+ *           requiredContexts?: () => (string[] | null),
+ *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
+ *             completedAt: string | null}[] | null) }} deps
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
-function writeRowLabels(issueNumber, mySession, extraLabels, { run = defaultRun, moveStatus = moveProjectStatus } = {}) {
+function writeRowLabels(issueNumber, mySession, extraLabels,
+  { run = defaultRun, moveStatus = moveProjectStatus, requiredContexts, checkRuns } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
+
+  // B2 (#476) + B4 (#462): SESSION ELIGIBILITY, not row ownership -- `decideClaim` above already answered
+  // "is this row somebody else's"; these ask "should THIS session start ANY new row right now", which is
+  // why they are skipped entirely when resuming a row this session already holds (the `dispatched -> started`
+  // transition is not a NEW front, and re-running these lookups on every resume would be pure cost for a
+  // question already answered the first time this row was claimed).
+  const alreadyMine = claimStatus(before.labels).sessions.includes(mySession);
+  if (!alreadyMine) {
+    const ineligible = sessionEligibilityReason(issueNumber, mySession, { run, requiredContexts, checkRuns });
+    if (ineligible) return { claimed: false, reason: ineligible };
+  }
 
   const sessionLabel = `session:${mySession}`;
   const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels];
@@ -343,7 +420,10 @@ function reportReachability(issueNumber) {
  *
  * @param {number} issueNumber
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} [deps]
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus,
+ *           requiredContexts?: () => (string[] | null),
+ *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
+ *             completedAt: string | null}[] | null) }} [deps]
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 export function dispatchRow(issueNumber, mySession, deps = {}) {
@@ -358,7 +438,10 @@ export function dispatchRow(issueNumber, mySession, deps = {}) {
  *
  * @param {number} issueNumber
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} [deps]
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus,
+ *           requiredContexts?: () => (string[] | null),
+ *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
+ *             completedAt: string | null}[] | null) }} [deps]
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 export function claimRow(issueNumber, mySession, deps = {}) {

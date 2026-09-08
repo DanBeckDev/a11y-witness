@@ -56,6 +56,14 @@ export const READY_LABEL = "ready";
  * pickable. #246: three real rows sat in exactly that state and this list could not see any of them,
  * because the string `in-progress` was never in it -- a correct predicate fed a list that cannot express
  * the fault, the `fleet-consistency`/`browserVersion` shape (CLAUDE.md).
+ *
+ * `runner:*` DELIBERATELY DOES NOT JOIN THIS LIST (#444). A row reserved for a specific session
+ * (`ready` + `runner:worker-audit`) is still genuinely pickable -- BY ITS RUNNER -- so it is not a
+ * contradiction the way `ready` + `blocked` is. Adding `runner:` here would make every reserved row read
+ * as a violation nobody can resolve, since the "fix" `mutexViolations` implies (remove one of the two
+ * labels) is wrong for a reservation that is working exactly as designed. See `isClosedDebrisLabel`
+ * below for the state `runner:` genuinely DOES belong to: a reservation nobody is left to honour, once
+ * the row is closed.
  */
 export const MUTEX_LABELS =
   ["fleet-gated", "disputed", "decision", "awaiting-merge", "blocked", "review-only", "in-progress"];
@@ -178,11 +186,17 @@ export function mutexViolations(issues) {
  * nobody is going to act on. `ready`, `in-progress`, or any `session:*` label: a `session:` label on a
  * closed row is a claim with no holder, the exact state `decline` (#266/#268) exists for and which
  * nothing here prompts.
+ *
+ * `runner:*` joins this list (#444): a reservation is the same family as `session:*` -- a claim on a row
+ * with nobody left to honour it once the row is closed. A closed, runner-reserved row is not a
+ * contradiction (see `mutexViolations`'s own doc for why `runner:` must NOT join `MUTEX_LABELS` instead),
+ * it is the identical stale-bookkeeping shape `session:*` debris already is.
  * @param {string} label
  * @returns {boolean}
  */
 export function isClosedDebrisLabel(label) {
-  return label === READY_LABEL || label === "in-progress" || label.startsWith("session:");
+  return label === READY_LABEL || label === "in-progress" || label.startsWith("session:")
+    || label.startsWith("runner:");
 }
 
 /**

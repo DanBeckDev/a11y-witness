@@ -42,6 +42,7 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { regionPathsFromBody } from "./region-paths.mjs";
 
 const EXIT = { STARTABLE: 0, BLOCKED: 1, CANNOT_ASK: 2 };
 
@@ -51,8 +52,10 @@ const git = (args) => execFileSync("git", args,
 /** @type {(args: string[]) => string} */
 const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
-/** Repo-relative source paths named anywhere in the row — its region, and whatever else it cites. */
-const PATH_IN_PROSE = /(?:^|[\s`"'(])((?:packages|scripts|docs|\.github)\/[A-Za-z0-9/_.-]+\.[A-Za-z]{2,4})/g;
+// PATH extraction moved to `./region-paths.mjs` (#462, B4) -- a leaf module with no further imports, so
+// `row-claim/file-overlap-rule.mjs` can read the SAME extraction this file uses without dragging this
+// file's own `@a11ign/worker-fleet/cli-flags` import (fine for THIS file's `main()`, fatal before
+// `npm ci`/`npm run build` if reached from a pre-install entry) into its import graph.
 
 /**
  * IDENTIFIERS THE ROW IS ABOUT — the subject, as opposed to the region.
@@ -288,7 +291,7 @@ function facts(row) {
   // in a README, and pretending to check one would be worse than saying nothing. But dropping them
   // SILENTLY made the verdict say a docs row "names no source path" when it named one, which sent the
   // reader to add a Region that was already there.
-  const named = unique([...body.matchAll(PATH_IN_PROSE)].map((m) => m[1]));
+  const named = regionPathsFromBody(body);
   const paths = named.filter((path) => !path.endsWith(".md"));
   const prose = named.filter((path) => path.endsWith(".md"));
   const symbols = unique([...body.matchAll(SYMBOL_IN_PROSE)].map((m) => m[1]));
