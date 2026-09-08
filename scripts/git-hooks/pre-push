@@ -115,6 +115,51 @@ for v in "${!GIT_@}"; do unset "$v"; done
 failed=()
 skipped=()
 
+# #348: A FAILED CHECKOUT IN AN && CHAIN LEAVES A BRANCH THAT LOOKS RIGHT. `git checkout -q main &&
+# git reset --hard origin/main` silently no-ops past the `&&` when the checkout fails (e.g. `main` is
+# already checked out in another worktree) -- the reset never runs, and a branch built off that stale
+# HEAD is a valid commit on a plausibly-named branch. Measured cost of the real incident this reproduces:
+# 65 files, 3,281 deletions, caught only by hand (`c7b1a0a0` is the surviving artefact). Twice in one day,
+# by two independent sessions, and `ceo` hit the identical trap with `git checkout -B`.
+#
+# TWO DOTS, not three. `git diff --stat origin/main...HEAD` reports only what HEAD added since the merge
+# base -- which on a stale branch IS the stale point, so it prints a clean, reassuring summary for
+# exactly the incident that motivated this check. `git merge-base --is-ancestor origin/main HEAD` is the
+# real test and needs no dot count; the two-dot diff below is a second, human-readable signal, never a
+# substitute for the ancestry check.
+#
+# A stale LOCAL `origin/main` (this hook does not fetch) makes the ancestry check pass on a branch that
+# is genuinely behind -- the guard reassuring you for the reason it exists. Fetch before trusting a green
+# result here, the same caveat every other `origin/main`-relative check in this hook already carries.
+# BEGIN #348 STALE-BASE CHECK -- extraction markers for pre-push-stale-base.test.ts; keep both if edited.
+if git rev-parse --verify -q origin/main >/dev/null; then
+  if ! git merge-base --is-ancestor origin/main HEAD; then
+    if [ -n "${A11Y_STALE_BASE_REASON:-}" ]; then
+      echo "pre-push: HEAD does not contain origin/main's tip, overridden: $A11Y_STALE_BASE_REASON" >&2
+    else
+      echo "pre-push: REFUSING — HEAD does not contain origin/main's tip (#348: a failed checkout in an" >&2
+      echo "&& chain leaves a branch that looks right). Merge origin/main in before pushing." >&2
+      echo "If this is deliberate: A11Y_STALE_BASE_REASON=\"<why>\" git push ... — the reason is printed," >&2
+      echo "not just the override, so a deliberate exception is in the log rather than in somebody's" >&2
+      echo "memory." >&2
+      exit 1
+    fi
+  fi
+  # PRINTED, never refused: a legitimate large deletion exists (a purge, a revert); a SILENT one does
+  # not. `tail -1` reads the diffstat's own summary line, e.g. "3 files changed, 1 insertion(+), 3281
+  # deletion(-)" -- absent when nothing was deleted, which `grep -oE` then reports as no match rather
+  # than a false zero.
+  stale_base_deletions="$(git diff --stat origin/main..HEAD 2>/dev/null | tail -1 \
+    | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || true)"
+  if [ -n "$stale_base_deletions" ] && [ "$stale_base_deletions" -gt 300 ]; then
+    echo "pre-push: this push deletes $stale_base_deletions line(s) against origin/main (two-dot diff)" >&2
+    echo "-- worth a second look before it lands." >&2
+  fi
+else
+  skipped+=("stale-base-check (origin/main not resolvable here)")
+fi
+# END #348 STALE-BASE CHECK
+
 # #129: A CHECK CAN FAIL ON SOMEONE ELSE'S TREE. Three times on 2026-09-06 a refusal named the pusher's
 # change when the real cause was another agent's mid-edit file, a stale export nobody here touched, or an
 # untracked scratch file in a shared checkout -- every one read as "your push broke the build" and the

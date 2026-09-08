@@ -55,6 +55,12 @@ const GUARDED: Record<string, string> = {
   "scripts/board-only-check.mjs":
     "takes no flags; it decides whether a change is board-only, and an ignored argument would answer "
     + "about a different change than the one asked about",
+  "scripts/prune-stale-workspace-scope.mjs":
+    "takes NO flags -- it runs from `prepare` on every plain `npm install` (#376) to remove a stale "
+    + "workspace scope's node_modules symlinks, and it already calls refuseUnknownFlags([]). Classified "
+    + "here so the census records it as checked rather than unseen; it predates the census widening to "
+    + "top-level scripts/ (#164) and so was invisible to this test until now, which is the shape #164's "
+    + "own header already names -- a population boundary written down and never generalised.",
   "scripts/piped-exit-status-guard.mjs":
     "takes the command to inspect POSITIONALLY (argv[2]) and no flags. It exists because a piped exit "
     + "status reads as the pipe's -- a tool built to end that class must not join it by discarding an "
@@ -63,6 +69,11 @@ const GUARDED: Record<string, string> = {
     "already guards its own flags; classified here so the census records it as checked rather than "
     + "unseen. It takes none, and audits which rows are pickable -- a discarded argument would report on "
     + "a different label set than the one asked for",
+  "scripts/board-snapshot.mjs":
+    "takes no flags at all -- run directly it only ever takes a snapshot of the Project board, and there "
+    + "is nothing for a flag to configure. Guarded anyway (#399): a mistyped flag discarded silently would "
+    + "still write a snapshot and report success, and this file exists specifically because a board "
+    + "mutation once reported success while destroying 112 rows' Status.",
   "scripts/auto-arm-sweep.mjs":
     "takes NO flags -- it arms every open, non-draft, unheld, tested PR against `main` that nothing has "
     + "armed (#344) -- so it calls refuseUnknownFlags([]) with an EMPTY list, the same case as "
