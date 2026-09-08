@@ -1,3 +1,4 @@
+// @ts-check
 // Can a consumer install this package and use it? Answered by doing it.
 //
 //   node scripts/isolation-gate.mjs packages/evidence [more...]
@@ -53,6 +54,12 @@ export const SMOKE = "isolation-smoke.mjs";
 /** Somewhere that is definitively not inside the repo, so nothing can resolve by accident. */
 const consumerDir = () => mkdtempSync(join(tmpdir(), "a11y-isolation-"));
 
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {string} cwd
+ * @param {Record<string, string | undefined>} [env]
+ */
 function run(command, args, cwd, env) {
   return execFileSync(command, args,
     { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: env ? { ...process.env, ...env } : undefined });
@@ -63,11 +70,15 @@ function run(command, args, cwd, env) {
  *
  * Only `@a11ign/*` — everything else comes from the registry, which is the point of the gate: a
  * dependency npm can actually resolve is not the failure mode being tested.
+ * @param {string} packageDir
+ * @param {Set<string>} [seen]
+ * @returns {string[]}
  */
 export function internalDependencies(packageDir, seen = new Set()) {
   const manifest = JSON.parse(readFileSync(join(resolve(packageDir), "package.json"), "utf8"));
   const wanted = { ...manifest.dependencies, ...manifest.peerDependencies };
   const optional = manifest.peerDependenciesMeta ?? {};
+  /** @type {string[]} */
   const dirs = [];
   for (const dependency of Object.keys(wanted)) {
     if (!dependency.startsWith("@a11ign/") || seen.has(dependency)) continue;
@@ -82,7 +93,8 @@ export function internalDependencies(packageDir, seen = new Set()) {
   return dirs;
 }
 
-/** `@a11ign/foo` lives at `packages/foo`, beside the package asking for it. */
+/** `@a11ign/foo` lives at `packages/foo`, beside the package asking for it.
+ * @type {(packageDir: string, dependency: string) => string} */
 const siblingDir = (packageDir, dependency) =>
   join(resolve(packageDir), "..", dependency.slice("@a11ign/".length));
 
@@ -160,6 +172,7 @@ function packedButUntracked(dir) {
   // `git check-ignore` answers it directly rather than by matching path prefixes, so a change to
   // `.gitignore` cannot silently widen or narrow this. Exit 1 means "none of these are ignored", which is
   // the all-forgotten case rather than an error.
+  /** @type {Set<string>} */
   let ignored;
   try {
     ignored = new Set(run("git", ["check-ignore", "--", ...candidates], dir, sandboxGitEnv()).split("\n").filter(Boolean));
@@ -172,6 +185,7 @@ function packedButUntracked(dir) {
 /**
  * Pack, install outside the repo, run the smoke test. Returns a verdict rather than throwing, because the
  * caller needs to report every package rather than stop at the first bad one.
+ * @param {string} packageDir
  */
 export function checkIsolation(packageDir) {
   const dir = resolve(packageDir);
@@ -195,7 +209,7 @@ export function checkIsolation(packageDir) {
     // consumer installs `judge` AND the `scorer` it peers on, and the two have to work together outside the
     // workspace. `evidence` and `scorer` are leaves, so the omission was invisible until `judge` arrived.
     const tarballs = [dir, ...internalDependencies(dir)].map((source) =>
-      join(consumer, basename(run("npm", ["pack", "--silent", "--pack-destination", consumer], source).trim().split("\n").pop())));
+      join(consumer, basename(run("npm", ["pack", "--silent", "--pack-destination", consumer], source).trim().split("\n").pop() ?? "")));
     run("npm", ["init", "-y"], consumer);
     // `--no-workspaces` and absolute tarball paths: without them npm can walk UP from the temp directory
     // and re-attach to a workspace root, which would reintroduce exactly the symlink resolution the gate
@@ -231,7 +245,8 @@ export function checkIsolation(packageDir) {
     }
     return { ok: true, stage: "smoke", name, detail: output.trim().split("\n").slice(-1)[0] ?? "" };
   } catch (error) {
-    const stderr = String(error.stderr ?? error.stdout ?? error.message);
+    const e = /** @type {{ stderr?: string, stdout?: string, message?: string, status?: number }} */ (error);
+    const stderr = String(e.stderr ?? e.stdout ?? e.message);
     // Exit 3 is the smoke test DECLINING a check this machine cannot make: guidepup refusing to import where
     // there is no screen reader, a macOS-only host-capacity read on Linux. That is a platform limit, not a
     // packaging defect, and it gets the same treatment private packages already get here — announced, not
@@ -240,7 +255,7 @@ export function checkIsolation(packageDir) {
     // It was a failure until 2026-08-21, and the cost was not cosmetic: `gate:isolation` is the FIRST leg of
     // `release:gate`, so on the Linux control plane — the only machine with the Python venv the judge needs —
     // its failure stopped the chain and every model-quality gate behind it silently never ran.
-    if (error.status === 3) {
+    if (e.status === 3) {
       return { skipped: true, stage: "smoke", name, detail: stderr.trim().split("\n").slice(-1)[0] ?? "declined" };
     }
     // The first line that looks like a cause, not the whole npm essay.

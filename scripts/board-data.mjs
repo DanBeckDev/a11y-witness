@@ -1,3 +1,4 @@
+// @ts-check
 // THE DATA LAYER BOTH BOARD OUTPUTS READ, and the only place that talks to GitHub or git.
 //
 // Extracted from `board-report.mjs` when the weekly board document was added, rather than letting the
@@ -63,10 +64,12 @@ export const READ_SET = ["docs/board/reported.json", "scripts/board-report.mjs"]
 // `gh` is scrubbed too. Every call here passes `--repo` explicitly so it does not resolve from git
 // remotes, but `gh` shells git internally and the scrub costs nothing -- the defence should not depend on
 // knowing which subprocess reads which variable.
+/** @param {string[]} args */
 export function gh(args) {
   return execFileSync("gh", args,
     { encoding: "utf8", cwd: ROOT, env: sandboxGitEnv(), maxBuffer: 32 * 1024 * 1024 });
 }
+/** @param {string[]} args */
 export function git(args) {
   return execFileSync("git", args,
     { encoding: "utf8", cwd: ROOT, env: sandboxGitEnv(), maxBuffer: 32 * 1024 * 1024 }).trim();
@@ -79,10 +82,11 @@ export function git(args) {
  * report saying "0 merges" would have been a correct reading of the wrong ref. So the count comes from
  * local `main` and the divergence is stated rather than hidden — a flat origin/main is a hold, not a stall,
  * and the two look identical from GitHub.
+ * @param {string} since
  */
 export function mergeState(since) {
   const log = git(["log", "main", "--merges", `--since=${since}`, "--format=%h\t%aI\t%s"]);
-  const merges = log ? log.split("\n").map((l) => {
+  const merges = log ? log.split("\n").map((/** @type {string} */ l) => {
     const [sha, at, ...rest] = l.split("\t");
     return { sha, at, subject: rest.join("\t") };
   }) : [];
@@ -98,7 +102,8 @@ export function mergeState(since) {
 }
 
 /** Commits whose author is not the repository owner — a KNOWN DEFECT, printed so the board reads it as
- * one rather than discovering it. Issue #7 carries the cause and the decision (history stays). */
+ * one rather than discovering it. Issue #7 carries the cause and the decision (history stays).
+ * @param {string} since */
 export function misAuthored(since) {
   const log = git(["log", "main", `--since=${since}`, "--format=%h\t%ae"]);
   if (!log) return [];
@@ -109,9 +114,28 @@ export function misAuthored(since) {
 
 export function issues() {
   const fields = "number,title,state,labels,closedAt,milestone,url";
+  // AND IT REFUSES A LISTING THAT MAY BE TRUNCATED, rather than reporting on part of the tracker.
+  //
+  // This read `--limit 200`. On 2026-09-08 the repository passed 200 issues, and #31 -- open, fine, and
+  // cited by a section-three achievement -- fell outside the window. The freshness guard did exactly the
+  // right thing with that ("whether it is still open COULD NOT BE ASKED; do not assume") and REFUSED the
+  // edition. So a bound nobody had revisited became, silently and on a Tuesday, the thing that stopped
+  // the board getting a document.
+  //
+  // A HIGHER NUMBER ALONE JUST MOVES THE CLIFF. `gh issue list --limit N` returns AT MOST N and says
+  // nothing about what it dropped, so `length === limit` is indistinguishable from "there were exactly
+  // N" -- the bounded-listing defect this repository has now met in `branches:stranded` (#321), in
+  // `ready-label-audit` (#378) and here. The limit is raised AND the ambiguous case is refused, because
+  // the refusal is the part that cannot rot.
+  const LIMIT = 1000;
   const all = JSON.parse(gh(["issue", "list", "--repo", REPO, "--state", "all",
-    "--limit", "200", "--json", fields]));
-  return all.map((i) => ({ ...i, labelNames: i.labels.map((l) => l.name) }));
+    "--limit", String(LIMIT), "--json", fields]));
+  if (all.length >= LIMIT) {
+    throw new Error(`board-data: the issue listing returned ${all.length} rows against a limit of `
+      + `${LIMIT}, so it MAY BE TRUNCATED and this document would report on part of the tracker. `
+      + "Raise the limit or page the query -- do not read a partial listing as the whole.");
+  }
+  return all.map((/** @type {any} */ i) => ({ ...i, labelNames: i.labels.map((/** @type {any} */ l) => l.name) }));
 }
 
 /** A row that is not work: a container, or a process row. NOT counted, and the document says so.
@@ -140,8 +164,9 @@ export const META_LABEL = "meta";
  */
 export const OUT_OF_RELEASE_LABEL = "out-of-release";
 
+/** @param {any[]} list */
 export function outOfRelease(list) {
-  return list.filter((i) => labelsOf(i).includes(OUT_OF_RELEASE_LABEL));
+  return list.filter((/** @type {any} */ i) => labelsOf(i).includes(OUT_OF_RELEASE_LABEL));
 }
 
 /** Open rows carrying NEITHER a milestone nor `out-of-release` -- the state the rule forbids.
@@ -149,38 +174,80 @@ export function outOfRelease(list) {
  * Reported rather than absorbed. A row here is counted in the total and invisible to every milestone
  * figure, which is exactly the disagreement this pair of functions exists to end -- so silently tolerating
  * it would rebuild the fault inside the fix.
+ * @param {any[]} list
  */
 export function unclassified(list) {
-  return list.filter((i) => !i.milestone && !labelsOf(i).includes(OUT_OF_RELEASE_LABEL));
+  return list.filter((/** @type {any} */ i) => !i.milestone && !labelsOf(i).includes(OUT_OF_RELEASE_LABEL));
 }
 
+/** @param {any} i */
 function labelsOf(i) {
-  return i.labelNames ?? i.labels?.map((l) => l.name) ?? [];
+  return i.labelNames ?? i.labels?.map((/** @type {any} */ l) => l.name) ?? [];
 }
 
-/** The rows the document COUNTS. `issues()` stays complete -- a meta row still needs its state resolved. */
+/** The rows the document COUNTS. `issues()` stays complete -- a meta row still needs its state resolved.
+ * @param {any[]} list */
 export function countable(list) {
-  return list.filter((i) => !(i.labelNames ?? i.labels?.map((l) => l.name) ?? []).includes(META_LABEL));
+  return list.filter((i) => !(i.labelNames ?? i.labels?.map((/** @type {any} */ l) => l.name) ?? []).includes(META_LABEL));
 }
 
 export function milestone() {
   const all = JSON.parse(gh(["api", `repos/${REPO}/milestones?state=all`]));
-  return all.find((m) => m.title === MILESTONE) ?? null;
+  return all.find((/** @type {any} */ m) => m.title === MILESTONE) ?? null;
 }
 
 /** The two numbers this report cannot compute, and how it refuses to invent them. */
 export function reported() {
   const raw = JSON.parse(readFileSync(path.join(ROOT, "docs/board/reported.json"), "utf8"));
   const staleMs = (raw.staleAfterHours ?? 24) * HOURS_MS;
+  /** @param {any} entry */
   const fresh = (entry) => Date.now() - Date.parse(entry.at) < staleMs;
-  const gates = (raw.gates ?? []).filter((g) => g.at && Number.isFinite(Date.parse(g.at)));
-  const latest = gates.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
+  const gates = (raw.gates ?? []).filter((/** @type {any} */ g) => g.at && Number.isFinite(Date.parse(g.at)));
+  const latest = gates.sort((/** @type {any} */ a, /** @type {any} */ b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
   // EVERY GATE, not just the newest. Section five recommended "buying nothing yet" while the record held
   // the measurement that answered it, because the document could not SEE any gate but the latest -- so
   // the prose was hand-written and went stale the moment the re-run landed. A section that states a
   // figure is absent while `reported.json` carries it is the failure this file exists to prevent.
   return { latestGate: latest, gateIsFresh: latest ? fresh(latest) : false, fleetHours: raw.fleetHours,
     gates, achievements: raw.achievements ?? [] };
+}
+
+/** The verdicts a gate PRINTED, quoted from its own output and never retyped.
+ *
+ * THE BOARD'S DOCUMENT COULD NOT SAY WHETHER A CHECK PASSED. `board-report.mjs` prints the gate's whole
+ * output verbatim into the GitHub edition; the PDF quoted only the COMMAND and the capture spread. So the
+ * two editions would have disagreed about whether a check passed, and the silent one is the one the board
+ * reads -- found 2026-09-07, the day before the first FAIL was due to be recorded.
+ *
+ * Quoted, never classified. A gate states its own verdict in its own sentence; this returns those
+ * sentences. Deciding whether a FAIL blocks anything is a JUDGEMENT and is not derivable from the output,
+ * which is why `note` on the entry carries it and why an unexplained FAIL renders as unexplained rather
+ * than as an opinion this file invented.
+ *
+ * @param {string | undefined} gateOutput
+ */
+export function gateVerdicts(gateOutput) {
+  const lines = String(gateOutput ?? "").split("\n");
+  /** @type {{ verdict: string, line: string }[]} */
+  const found = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    // A verdict is the word at the head of its own clause, so `RULES: PASS -- ...` and `PASS -- ...`
+    // both count and the word inside a sentence ("a page that FAILS this rule") does not.
+    const m = /^(?:[A-Za-z: ]{0,24}?\b)?(PASS|FAIL|BLOCKED|INCONCLUSIVE)\b\s*(?:[—-]\s*(.*))?$/.exec(line);
+    if (m) found.push({ verdict: m[1], line });
+  }
+  return found;
+}
+
+/** The single worst verdict a gate printed, or null when it printed none.
+ * @param {string | undefined} gateOutput */
+export function worstVerdict(gateOutput) {
+  /** @type {Record<string, number>} */
+  const order = { PASS: 0, INCONCLUSIVE: 1, BLOCKED: 2, FAIL: 3 };
+  const all = gateVerdicts(gateOutput);
+  if (all.length === 0) return null;
+  return all.reduce((w, v) => (order[v.verdict] > order[w.verdict] ? v : w), all[0]);
 }
 
 /**
@@ -196,39 +263,6 @@ export function reported() {
  * @returns {string | null} the gate's own spread sentence, or null when it printed none (not a real-page
  *   result, or an older recording taken before the gate stated its spread)
  */
-/** The verdicts a gate PRINTED, quoted from its own output and never retyped.
- *
- * THE BOARD'S DOCUMENT COULD NOT SAY WHETHER A CHECK PASSED. `board-report.mjs` prints the gate's whole
- * output verbatim into the GitHub edition; the PDF quoted only the COMMAND and the capture spread. So the
- * two editions would have disagreed about whether a check passed, and the silent one is the one the board
- * reads -- found 2026-09-07, the day before the first FAIL was due to be recorded.
- *
- * Quoted, never classified. A gate states its own verdict in its own sentence; this returns those
- * sentences. Deciding whether a FAIL blocks anything is a JUDGEMENT and is not derivable from the output,
- * which is why `note` on the entry carries it and why an unexplained FAIL renders as unexplained rather
- * than as an opinion this file invented.
- */
-export function gateVerdicts(gateOutput) {
-  const lines = String(gateOutput ?? "").split("\n");
-  const found = [];
-  for (const raw of lines) {
-    const line = raw.trim();
-    // A verdict is the word at the head of its own clause, so `RULES: PASS -- ...` and `PASS -- ...`
-    // both count and the word inside a sentence ("a page that FAILS this rule") does not.
-    const m = /^(?:[A-Za-z: ]{0,24}?\b)?(PASS|FAIL|BLOCKED|INCONCLUSIVE)\b\s*(?:[—-]\s*(.*))?$/.exec(line);
-    if (m) found.push({ verdict: m[1], line });
-  }
-  return found;
-}
-
-/** The single worst verdict a gate printed, or null when it printed none. */
-export function worstVerdict(gateOutput) {
-  const order = { PASS: 0, INCONCLUSIVE: 1, BLOCKED: 2, FAIL: 3 };
-  const all = gateVerdicts(gateOutput);
-  if (all.length === 0) return null;
-  return all.reduce((w, v) => (order[v.verdict] > order[w.verdict] ? v : w), all[0]);
-}
-
 export function realPageCaptureAge(gateOutput) {
   if (!gateOutput) return null;
   const spread = gateOutput.match(/\*{0,3}\s*\d+\s*hour\(s\)\s*between the oldest and newest[^\n]*/i);
@@ -247,7 +281,8 @@ export function realPageCaptureAge(gateOutput) {
   return computedCaptureSpread(gateOutput);
 }
 
-/** The spread computed from the per-role capture ranges the gate always prints, or null if it printed none. */
+/** The spread computed from the per-role capture ranges the gate always prints, or null if it printed none.
+ * @param {string | undefined} gateOutput */
 function computedCaptureSpread(gateOutput) {
   const stamps = [...String(gateOutput).matchAll(/(\d{4}-\d{2}-\d{2}T[\d:.]+Z)/g)].map((m) => Date.parse(m[1]));
   const usable = stamps.filter((t) => Number.isFinite(t));
@@ -298,6 +333,7 @@ function computedCaptureSpread(gateOutput) {
  */
 export function achievementsWhoseWorldMoved({ achievements, issueState, now = Date.now(),
   staleAfterHours = 24 }) {
+  /** @type {{index: number, claim: string, why: string}[]} */
   const findings = [];
   achievements.forEach((entry, index) => {
     const claim = String(entry.boardClaim ?? entry.claim ?? "(no claim text)").slice(0, 90);
@@ -330,6 +366,7 @@ export function achievementsWhoseWorldMoved({ achievements, issueState, now = Da
   return findings;
 }
 
+/** @param {string} iso */
 export function daysUntil(iso) {
   return Math.ceil((Date.parse(iso) - Date.now()) / (24 * HOURS_MS));
 }
@@ -352,16 +389,17 @@ export function readSetIsNotMain() {
   return lines.join("\n");
 }
 
-/** Everything both outputs need, read once. */
+/** Everything both outputs need, read once.
+ * @param {string} since */
 export function collect(since) {
   const all = issues();
   // Counted rows only. `all` stays complete for state lookups; `open` is what the document reports.
-  const open = countable(all.filter((i) => i.state === "OPEN"));
+  const open = countable(all.filter((/** @type {any} */ i) => i.state === "OPEN"));
   return {
     since,
     all,
     open,
-    closed: all.filter((i) => i.state === "CLOSED" && i.closedAt
+    closed: all.filter((/** @type {any} */ i) => i.state === "CLOSED" && i.closedAt
       && Date.parse(i.closedAt) >= Date.parse(since)),
     milestones: JSON.parse(gh(["api", `repos/${REPO}/milestones?state=all`])),
     release: milestone(),
