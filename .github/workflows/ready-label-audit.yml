@@ -22,6 +22,11 @@ on:
 permissions:
   contents: read
   issues: read
+  # `fetchClaimActivity` runs `gh pr list` to find each claimed row's open PR, so without this the
+  # dead-claim check fails on the GITHUB_TOKEN fallback path too -- and the warning below would then be
+  # wrong about which check the missing PAT costs. The PAT carries its own scopes; this is for the
+  # fallback, which is the path nobody watches.
+  pull-requests: read
 
 jobs:
   audit:
