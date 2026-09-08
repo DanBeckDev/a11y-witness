@@ -90,12 +90,20 @@ export function classifyCommand(command) {
  * would produce false refusals on the many acceptance commands that take URLs, flags, or option values
  * that merely look like paths.
  *
+ * #419: A TRAILING `# comment` IS NOT A FILE ARGUMENT. Bash itself already treats an unquoted `#` as
+ * starting a comment, so `npx tsx --test foo.test.ts  # 2/2, pass` runs perfectly for real -- but this
+ * check tokenised the whole line and read `#`, `2/2` and `pass` as file arguments nothing on disk could
+ * ever match. Stripped for TOKEN EXTRACTION only, never from the command that actually runs: bash was
+ * always going to ignore it, so removing it here only makes this check agree with what execution already
+ * does.
+ *
  * @param {string} command
  * @returns {{ ok: true } | { ok: false, missing: string[] }}
  */
 export function testFileArgumentsResolve(command) {
   if (!/\btsx\s+--test\b/.test(command)) return { ok: true };
-  const tokens = command.split(/\s+/).filter(Boolean);
+  const withoutTrailingComment = command.replace(/(?:^|\s)#.*$/, "");
+  const tokens = withoutTrailingComment.split(/\s+/).filter(Boolean);
   const fileArgs = tokens
     .filter((token) => token !== "npx" && token !== "tsx" && token !== "--test" && !token.startsWith("-"))
     .map((token) => token.replace(/^['"]|['"]$/g, ""));
@@ -121,13 +129,20 @@ export function testFileArgumentsResolve(command) {
  * blank line, a markdown heading, a fenced-code delimiter (stripped, not treated as a command), or a
  * `Mutation:` header, whichever comes first.
  *
+ * #419: A MARKDOWN HEADING IS THE HEADER TOO. `## Acceptance`, `## Acceptance:` and `### Acceptance:` all
+ * used to parse as MISSING, because the pattern was anchored at the START of the line with no notion of a
+ * `#` prefix -- and every OTHER section in this repo's own PR template uses `## ` headings, so that is the
+ * natural shape an author reaches for. Four of seven open PRs failed on it at once. There is no reading in
+ * which `## Acceptance` means something other than the field, so it is accepted rather than warned about --
+ * "anything relying on a human to remember does not happen" applied to a parser instead of a person.
+ *
  * @param {string | null | undefined} body
  * @returns {Section}
  */
 export function extractAcceptanceSection(body) {
   const text = body ?? "";
   const lines = text.split(/\r\n|\r|\n/);
-  const headerPattern = /^\s*(?:\*\*|__)?Acceptance:(?:\*\*|__)?\s*(.*)$/;
+  const headerPattern = /^\s*(?:#{1,6}\s+Acceptance:?|(?:\*\*|__)?Acceptance:(?:\*\*|__)?)\s*(.*)$/;
   const headerIndex = lines.findIndex((line) => headerPattern.test(line));
   if (headerIndex === -1) return { kind: "missing" };
 
@@ -142,10 +157,44 @@ export function extractAcceptanceSection(body) {
     return reason.length > 0 ? { kind: "none", reason } : { kind: "missing" };
   }
 
-  if (inline.length > 0) return { kind: "commands", commands: [inline] };
+  if (inline.length > 0) return { kind: "commands", commands: [unwrapBackticks(inline)] };
 
   const commands = commandLinesAfter(lines, headerIndex);
   return commands.length > 0 ? { kind: "commands", commands } : { kind: "missing" };
+}
+
+/**
+ * #419: A BACKTICKED COMMAND IS STILL THE COMMAND. This repository's own prose convention wraps a command
+ * in single backticks (`` `like this` ``), and that is exactly wrong for a line the extractor hands
+ * verbatim to bash -- the backticks stayed attached, so the file check saw `` `npx `` as a token and
+ * reported it missing for a command that runs perfectly. Stripped only when they wrap the WHOLE command
+ * (start and end), never partial backticks inside one, which are the author's own quoting to preserve.
+ * @param {string} command
+ * @returns {string}
+ */
+function unwrapBackticks(command) {
+  return /^`[^`]+`$/.test(command) ? command.slice(1, -1) : command;
+}
+
+/**
+ * #419: A `\` LINE CONTINUATION IS ONE COMMAND, NOT TWO. Read line by line, a shell continuation split the
+ * command in half: the first half ended in a dangling backslash and the second half became its OWN
+ * "command" -- a bare filename or flag that fails the moment it is run on its own. Joins forward from
+ * `startIndex` while the accumulated text still ends in `\`, so an author can chain any number of
+ * continuation lines exactly as they would in a real shell script.
+ * @param {string[]} lines
+ * @param {number} startIndex
+ * @param {string} firstLine
+ * @returns {{ command: string, consumed: number }}
+ */
+function joinContinuations(lines, startIndex, firstLine) {
+  let command = firstLine;
+  let consumed = 0;
+  while (/\\\s*$/.test(command) && startIndex + consumed + 1 < lines.length) {
+    consumed += 1;
+    command = `${command.replace(/\\\s*$/, "").trimEnd()} ${lines[startIndex + consumed].trim()}`;
+  }
+  return { command, consumed };
 }
 
 /**
@@ -187,13 +236,21 @@ function commandLinesAfter(lines, headerIndex) {
     }
     if (trimmed.startsWith("```")) { inFence = !inFence; continue; }
     if (inFence) {
-      if (trimmed !== "" && !trimmed.startsWith("#")) commands.push(trimmed);
+      if (trimmed !== "" && !trimmed.startsWith("#")) {
+        // A continuation is understood to still be part of the command that started it, whatever it looks
+        // like on its own -- the stop rules below apply only to where a command BEGINS.
+        const { command, consumed } = joinContinuations(lines, i, trimmed);
+        commands.push(unwrapBackticks(command));
+        i += consumed;
+      }
       continue;
     }
     if (trimmed === "") break;
     if (/^#{1,6}\s/.test(trimmed)) break;
     if (/^(?:\*\*|__)?Mutation:(?:\*\*|__)?/i.test(trimmed)) break;
-    commands.push(trimmed);
+    const { command, consumed } = joinContinuations(lines, i, trimmed);
+    commands.push(unwrapBackticks(command));
+    i += consumed;
   }
   return commands;
 }
