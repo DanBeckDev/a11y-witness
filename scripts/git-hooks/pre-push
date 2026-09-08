@@ -210,6 +210,49 @@ run() { # run <label> <command...>
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
+# #386: PUSHING TO AN ARMED, GREEN PR RACES A MERGE THAT CAN COMPLETE UNDERNEATH IT. Measured three
+# times in one evening, all by the person who wrote the rule against it -- each time the commit was
+# correct, the push succeeded, and GitHub's auto-merge bot completed the merge in the window between the
+# commit and the push. The commit then sits stranded on a branch nothing can find: `branches:stranded`
+# correctly excludes it (the branch IS merged, not orphaned), and the tracker has no record of it either.
+#
+# A CONVENIENCE GUARD AGAINST A RACE, NOT A CORRECTNESS GATE -- fails open, loudly, on anything that
+# stops it asking: no `gh`, no auth, no network, no PR yet. Never refuses a push for a reason unrelated
+# to the one specific window this exists to close (armed AND already green).
+#
+# `main` never has a PR against itself, so this is skipped there rather than paying for a lookup that
+# can only ever answer "no PR".
+# BEGIN #386 ARMED-PR PUSH GUARD -- extraction markers for pre-push-armed-pr.test.ts; keep both if edited.
+if [ "$BRANCH" != "main" ]; then
+  if ! command -v gh >/dev/null 2>&1; then
+    skipped+=("armed-pr-push-guard (no gh on PATH -- could not ask, allowing)")
+  elif [ -n "${A11Y_ALLOW_ARMED_PUSH:-}" ]; then
+    echo "pre-push: armed-pr-push-guard overridden: $A11Y_ALLOW_ARMED_PUSH" >&2
+  else
+    # `if VAR=$(cmd); then ... else ...; fi`, NEVER a bare `VAR=$(cmd); CODE=$?` -- under `set -e` a plain
+    # assignment statement IS a simple command, so a non-zero command substitution inside one aborts the
+    # script on the spot, before the next line (`CODE=$?`) ever runs. Wrapping it as an `if` condition is
+    # one of the few contexts `set -e` exempts, which is the ONLY reason this can read the exit code at
+    # all rather than dying silently with no message printed -- found by this guard's own wiring test,
+    # not by reasoning about it.
+    if ARMED_CHECK_OUT="$(node scripts/merge-guard.mjs --armed-check="$BRANCH" 2>&1)"; then
+      ARMED_CHECK_CODE=0
+    else
+      ARMED_CHECK_CODE=$?
+    fi
+    if [ "$ARMED_CHECK_CODE" -ne 0 ]; then
+      echo "$ARMED_CHECK_OUT" >&2
+      echo "If this is deliberate: A11Y_ALLOW_ARMED_PUSH=\"<why>\" git push ... -- the reason is printed," >&2
+      echo "not just the override, so a deliberate exception is in the log rather than in somebody's memory." >&2
+      exit 1
+    fi
+    if [ -n "$ARMED_CHECK_OUT" ]; then
+      echo "pre-push: $ARMED_CHECK_OUT" >&2
+    fi
+  fi
+fi
+# END #386 ARMED-PR PUSH GUARD
+
 if [ "$BRANCH" = "main" ]; then
   run "lint"       npm run --silent lint
   run "typecheck"  npm run --silent typecheck
