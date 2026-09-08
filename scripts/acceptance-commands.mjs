@@ -124,8 +124,15 @@ function commandExists(token) {
   return dirs.some((dir) => isExecutableFile(join(dir, token)));
 }
 
-// #497/#510: THIS JOB'S ENVIRONMENT IS DECLARED IN ONE PLACE, per docs/pipeline.md. Structural facts
-// (`token`, `fleet`) never vary -- a GitHub-hosted runner has no way to hold either, ever, in this job.
+// #497/#510: THIS JOB'S ENVIRONMENT IS DECLARED IN ONE PLACE, per docs/pipeline.md, and this constant
+// describes the `acceptance` job SPECIFICALLY -- it is never read by `reusable-build-test.yml`'s `ts` or
+// `trunkGate` invocations, both of which DO carry a real `GH_TOKEN: github.token` (row-claim-live.test.ts's
+// live call runs for real there). `fleet` is the only one of the two that is a runner-level fact true of
+// EVERY job in this repo -- a GitHub-hosted ubuntu runner has no Windows worker, full stop. `token` is not
+// that: it is a DELIBERATE, job-specific security choice (this job alone executes an untrusted PR body's
+// own commands, so it alone is given no token at all -- see this file's own header). Read this as "false in
+// the one job that consults it," never as "false on any GitHub runner" -- a future caller of this same
+// mechanism from `ts`/`trunkGate` would need its own, differently-true `token` value, not this one.
 // `history` is the one axis a PR itself controls, via `History: full` in the body (#497).
 const FULL_CAPABILITIES = /** @type {JobCapabilities} */ ({ history: true, token: true, fleet: true });
 

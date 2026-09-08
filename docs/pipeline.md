@@ -243,6 +243,13 @@ named, exactly like the fleet/lab/corpus refusals above — never silently run a
 `t.skip()`s itself out from under a shallow checkout. `token` and `fleet` are structurally always false in
 this job (the same two facts this whole page already documents); `history` is the one axis a PR controls.
 
+**This is `acceptance`-specific, deliberately.** `reusable-build-test.yml`'s `ts` and `trunkGate`
+invocations never read `jobCapabilities` — and unlike `acceptance`, both genuinely carry a real
+`GH_TOKEN: github.token`, which is why `row-claim-live.test.ts`'s live call passes there. `fleet` is a
+runner-level fact true of every job here; `token` is not — it is `acceptance`'s own deliberate no-token
+choice (this is the one job that executes an untrusted PR body's own commands), so a future caller of this
+same mechanism from `ts`/`trunkGate` would need its own, differently-true `token` value, never this one.
+
 **A bare `History: full` line in the PR body** (its own line, nothing else) asks the job to deepen its
 checkout before running Acceptance/Refutation commands. `reusable-acceptance.yml` (this job's actual steps,
 since #452 split it out of `ci.yml`) reads the identical `hasFullHistoryDeclaration` function
