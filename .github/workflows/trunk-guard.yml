@@ -32,8 +32,31 @@ name: trunk-guard
 on:
   push:
     branches: [main]
+  # #417: `workflow_dispatch`, so `trunk-sweep.yml` can trigger a real gate RUN against `main`'s current
+  # tip when a bot merge (GITHUB_TOKEN-authored, so `push` never fires -- #394's overnight measurement)
+  # left it with zero check runs. No `ref` input needed: `workflow_dispatch` with none given runs against
+  # the repository's DEFAULT branch, which is `main`, so `github.sha` inside the run correctly resolves
+  # to main's tip either way.
+  workflow_dispatch:
 
 jobs:
+  # #394 UPDATE, 2026-09-08: A `closeRowsSweep` JOB USED TO STAND HERE, RIDING THIS WORKFLOW'S OWN
+  # `push: branches: [main]` TRIGGER. IT WAS DEAD ON ARRIVAL AND HAS BEEN REMOVED.
+  #
+  # Measured: GitHub does not trigger workflows from events created with `GITHUB_TOKEN` -- a merge
+  # completed by `github-actions[bot]` (every merge `auto-arm.yml` completes) produces a `pull_request:
+  # closed` event AND a push to `main` that start NOTHING. 19 of 19 bot-merged PRs never ran `close-
+  # rows.yml`; 5 of 5 sampled bot-merge SHAs never ran `trunk-guard.yml` at all -- not "ran and passed",
+  # never ran. So a job riding THIS workflow's push trigger, built specifically to backstop bot merges,
+  # could never fire for the one case it existed to catch: a guard that structurally cannot run for its
+  # own target is worse than no guard, because it reads as coverage that was never real.
+  #
+  # `close-rows.yml`'s own `workflow_dispatch` (added in the same PR as the now-removed sweep) stays --
+  # it is how the workflow can be exercised deliberately regardless of which identity merged. The
+  # backstop this row needed is #417 (an interim scheduled sweep, gated on `main`'s tip carrying zero
+  # check runs) and #416 (the permanent fix: arm with a real PAT so bot merges stop being invisible to
+  # every `pull_request`/`push` trigger in this repository, not just this one).
+
   # THE ONLY QUESTION THIS JOB ANSWERS: is `main`'s new tip actually green. `decideRevert` below is what
   # decides whether that failure is this push's own, or something else -- this job just reports the fact.
   trunkGate:
@@ -93,7 +116,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # `github.event.before` only exists on a real `push` event. #417's sweep triggers this workflow
+          # via `workflow_dispatch` (no such field), so fall back to the checked-out commit's own parent
+          # -- `fetch-depth: 0` above already makes that a real, resolvable commit, and it is the same
+          # value a `push` event would have carried for an ordinary single-commit push.
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ]; then BEFORE="$(git rev-parse HEAD^1)"; fi
           node scripts/trunk-revert.mjs \
             --push-sha=${{ github.sha }} \
-            --before-sha=${{ github.event.before }} \
+            --before-sha="$BEFORE" \
             --run-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
