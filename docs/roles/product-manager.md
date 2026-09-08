@@ -32,7 +32,7 @@ Three things, and they are all one thing seen from different distances.
 ## What this role hands up, and to whom
 
 - **`orchestrator`** — every gate result and the fleet-hours total, recorded by *them* into
-  `docs/board/reported.json` with the command's verbatim output. This role never runs a gate and never
+  `docs/board/reported/` with the command's verbatim output. This role never runs a gate and never
   quotes one it was told about in prose.
 - **`dispatcher`** — the Ready column. It pulls; this role stocks. A row that is claimed, disputed, or
   finished-but-unmerged is moved OUT of Ready rather than left in it.
