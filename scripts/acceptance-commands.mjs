@@ -120,14 +120,32 @@ export function testFileArgumentsResolve(command) {
   return missing.length === 0 ? { ok: true } : { ok: false, missing };
 }
 
+// The full set of field names this parser recognises as SECTION HEADERS -- shared between the header
+// pattern (where a section starts) and the stop pattern (where it ends), so the two can never disagree
+// about what a header looks like. #438 added "Refutation" here rather than inventing a second parser: a
+// bare `Refutation:` line has to end an in-progress `Acceptance:` block exactly the way `Mutation:`
+// already did, or the refutation commands would be silently swallowed as more acceptance commands.
+const SECTION_FIELD_NAMES = ["Acceptance", "Refutation", "Mutation"];
+
 /**
- * Pure. Finds the `Acceptance:` section of a PR body and returns what it says, never what it should say.
+ * @param {string} fieldName
+ * @returns {RegExp}
+ */
+function sectionHeaderPattern(fieldName) {
+  return new RegExp(`^\\s*(?:#{1,6}\\s+${fieldName}:?|(?:\\*\\*|__)?${fieldName}:(?:\\*\\*|__)?)\\s*(.*)$`);
+}
+
+/**
+ * Pure. Finds a named section (`Acceptance:` or `Refutation:`) of a PR body and returns what it says,
+ * never what it should say. One parser for both fields -- #438's own rule, because this parser has
+ * already been fixed five times for forms authors keep writing (#419, #424, #432), and a second dialect
+ * would need every one of those fixes again, silently, one form at a time.
  *
  * Supports two shapes, both seen in real PR bodies in this repo: the command INLINE on the header's own
  * line (`Acceptance: node -e "process.exit(1)"` -- the exact shape #353's own acceptance test uses), or a
- * bare `Acceptance:` header followed by one command per subsequent non-empty, non-comment line, up to a
- * blank line, a markdown heading, a fenced-code delimiter (stripped, not treated as a command), or a
- * `Mutation:` header, whichever comes first.
+ * bare header followed by one command per subsequent non-empty, non-comment line, up to a blank line, a
+ * markdown heading, a fenced-code delimiter (stripped, not treated as a command), or another section's
+ * header, whichever comes first.
  *
  * #419: A MARKDOWN HEADING IS THE HEADER TOO. `## Acceptance`, `## Acceptance:` and `### Acceptance:` all
  * used to parse as MISSING, because the pattern was anchored at the START of the line with no notion of a
@@ -136,13 +154,14 @@ export function testFileArgumentsResolve(command) {
  * which `## Acceptance` means something other than the field, so it is accepted rather than warned about --
  * "anything relying on a human to remember does not happen" applied to a parser instead of a person.
  *
+ * @param {string} fieldName
  * @param {string | null | undefined} body
  * @returns {Section}
  */
-export function extractAcceptanceSection(body) {
+function extractSection(fieldName, body) {
   const text = body ?? "";
   const lines = text.split(/\r\n|\r|\n/);
-  const headerPattern = /^\s*(?:#{1,6}\s+Acceptance:?|(?:\*\*|__)?Acceptance:(?:\*\*|__)?)\s*(.*)$/;
+  const headerPattern = sectionHeaderPattern(fieldName);
   const headerIndex = lines.findIndex((line) => headerPattern.test(line));
   if (headerIndex === -1) return { kind: "missing" };
 
@@ -161,6 +180,27 @@ export function extractAcceptanceSection(body) {
 
   const commands = commandLinesAfter(lines, headerIndex);
   return commands.length > 0 ? { kind: "commands", commands } : { kind: "missing" };
+}
+
+/**
+ * @param {string | null | undefined} body
+ * @returns {Section}
+ */
+export function extractAcceptanceSection(body) {
+  return extractSection("Acceptance", body);
+}
+
+/**
+ * #438: A GUARD CAN ONLY BE SHOWN TO BITE BY A COMMAND WHOSE SUCCESS IS A NON-ZERO EXIT, and
+ * `acceptanceReport` hardcoded `passed = code === 0` -- so a PR demonstrating a refusal (the guard
+ * correctly refusing a known-bad input) was reported as this job's own failure for doing exactly what it
+ * set out to prove. Optional, unlike `Acceptance:` -- most PRs never refuse anything, so its absence is
+ * not a MISSING verdict, it just means there is nothing more to run.
+ * @param {string | null | undefined} body
+ * @returns {Section}
+ */
+export function extractRefutationSection(body) {
+  return extractSection("Refutation", body);
 }
 
 /**
@@ -259,7 +299,9 @@ function commandLinesAfter(lines, headerIndex) {
       break;
     }
     if (/^#{1,6}\s/.test(trimmed)) break;
-    if (/^(?:\*\*|__)?Mutation:(?:\*\*|__)?/i.test(trimmed)) break;
+    // #438: stops on ANY of the three known section headers, not just Mutation:, so a bare (non-heading)
+    // `Refutation:` line ends an in-progress Acceptance: block instead of being read as one more command.
+    if (SECTION_FIELD_NAMES.some((name) => new RegExp(`^(?:\\*\\*|__)?${name}:(?:\\*\\*|__)?`, "i").test(trimmed))) break;
     const { command, consumed } = joinContinuations(lines, i, trimmed);
     commands.push(unwrapBackticks(command));
     i += consumed;
@@ -268,8 +310,45 @@ function commandLinesAfter(lines, headerIndex) {
 }
 
 /**
+ * Runs one command and produces its report line and pass/fail -- shared between `Acceptance:` (success is
+ * exit 0) and `Refutation:` (success is any NON-zero exit, #438), so classification and the file-argument
+ * check cannot drift between the two the way a second, independently-written parser would risk.
+ *
+ * @param {string} command
+ * @param {(command: string) => number} run
+ * @param {"ACCEPTANCE" | "REFUTATION"} prefix
+ * @param {(code: number) => boolean} isPass
+ * @returns {{ line: string, ok: boolean }}
+ */
+function runOneCommand(command, run, prefix, isPass) {
+  const classification = classifyCommand(command);
+  if (classification.verdict === "refused") {
+    return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
+  }
+  // CHECKED BEFORE RUNNING, never inferred from the exit code -- an unresolved test file/glob is
+  // exactly the shape whose exit code cannot be trusted (#353's fifth hazard). Failing this here means
+  // the real command never runs at all: there is nothing honest it could report.
+  const fileCheck = testFileArgumentsResolve(command);
+  if (!fileCheck.ok) {
+    return { line: `${prefix}: RAN ${command} -> fail (matched no file: ${fileCheck.missing.join(", ")})`, ok: false };
+  }
+  const code = run(command);
+  const passed = isPass(code);
+  const verb = prefix === "ACCEPTANCE"
+    ? (passed ? "pass" : "fail")
+    // #438's own point: a Refutation: command that exits 0 is the FAILURE that matters -- the guard was
+    // never shown to bite. "fail" here, not "pass", is what makes that absence loud instead of quiet.
+    : (passed ? "refused" : "fail (did not refuse)");
+  return { line: `${prefix}: RAN ${command} -> ${verb} (exit ${code})`, ok: passed };
+}
+
+/**
  * THE VERDICT, driven by an injectable `run` so every outcome (including a real exit code) is testable
  * without a subprocess. `run` returns the exit code; it is never asked to interpret one.
+ *
+ * `Acceptance:` is mandatory -- its absence is the MISSING verdict this whole job exists to catch.
+ * `Refutation:` is optional (#438): most PRs demonstrate nothing refusing, so its absence just means
+ * there is nothing more to run, never a failure in its own right.
  *
  * @param {string | null | undefined} body
  * @param {(command: string) => number} run
@@ -277,36 +356,34 @@ function commandLinesAfter(lines, headerIndex) {
  */
 export function acceptanceReport(body, run) {
   const section = extractAcceptanceSection(body);
-
   if (section.kind === "missing") {
     return { ok: false, lines: ["ACCEPTANCE: MISSING"] };
-  }
-  if (section.kind === "none") {
-    return { ok: true, lines: [`ACCEPTANCE: NONE -> ${section.reason}`] };
   }
 
   let ok = true;
   const lines = [];
-  for (const command of section.commands) {
-    const classification = classifyCommand(command);
-    if (classification.verdict === "refused") {
-      lines.push(`ACCEPTANCE: REFUSED ${command} -> ${classification.reason}`);
-      continue;
+  if (section.kind === "none") {
+    lines.push(`ACCEPTANCE: NONE -> ${section.reason}`);
+  } else {
+    for (const command of section.commands) {
+      const result = runOneCommand(command, run, "ACCEPTANCE", (code) => code === 0);
+      lines.push(result.line);
+      if (!result.ok) ok = false;
     }
-    // CHECKED BEFORE RUNNING, never inferred from the exit code -- an unresolved test file/glob is
-    // exactly the shape whose exit code cannot be trusted (#353's fifth hazard). Failing this here means
-    // the real command never runs at all: there is nothing honest it could report.
-    const fileCheck = testFileArgumentsResolve(command);
-    if (!fileCheck.ok) {
-      ok = false;
-      lines.push(`ACCEPTANCE: RAN ${command} -> fail (matched no file: ${fileCheck.missing.join(", ")})`);
-      continue;
-    }
-    const code = run(command);
-    const passed = code === 0;
-    if (!passed) ok = false;
-    lines.push(`ACCEPTANCE: RAN ${command} -> ${passed ? "pass" : "fail"} (exit ${code})`);
   }
+
+  const refutation = extractRefutationSection(body);
+  if (refutation.kind === "none") {
+    lines.push(`REFUTATION: NONE -> ${refutation.reason}`);
+  } else if (refutation.kind === "commands") {
+    for (const command of refutation.commands) {
+      const result = runOneCommand(command, run, "REFUTATION", (code) => code !== 0);
+      lines.push(result.line);
+      if (!result.ok) ok = false;
+    }
+  }
+  // refutation.kind === "missing" -> nothing to report; the section is optional.
+
   return { ok, lines };
 }
 
