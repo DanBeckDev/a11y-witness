@@ -278,6 +278,29 @@ inline command (#506): before #446 that prose was *executed*, and a heading begi
 follows a **colon**. Fixed in #508; the general rule is worth keeping — put the explanation on its own
 line, not in the heading.
 
+## "I will hold it open" is not a state the pipeline offers — a draft is
+
+A PR that must not merge until something outside CI happens is opened as a **draft**, and its body names what un-drafts it. Nobody disarms, and nobody asks anyone to wait.
+
+**This was learned by the pipeline overriding a considered decision, 2026-09-08.** #530 wired the consumer gate, and its author said they would hold it open until a third `windows-2022` dispatch went green — the acceptance `ceo` had set for #494. **It merged 18:49:35Z anyway**, armed and green, and closed #494 two seconds later, with the acceptance unmet and only two dispatches on record, both red.
+
+**Nobody did anything wrong.** `auto-arm` armed it on `opened`, `gate` went green, GitHub completed the merge. The pipeline did exactly what this page's first line says it does — and an author's intention is not a thing it can see.
+
+**So there is no "hold" to ask for.** The two states that actually prevent a merge are:
+
+| | |
+|---|---|
+| **draft** | `auto-arm.yml:73` refuses a draft outright — `gh pr merge --auto` is "not allowed for draft PRs". This is the sanctioned hold, and it is the same mechanism used to run CI against a branch without racing anything |
+| disarm | contradicts *the pipeline decides; nobody arms or merges by hand*. **Not available** |
+
+**The body must say what un-drafts it**, because a draft with no stated condition is indistinguishable from one somebody forgot. `Closes: none — <reason>` carries the same rule for the same reason: *"nobody wrote one"* and *"this deliberately has none"* must never read the same.
+
+**The pipeline still decides everything it can see.** A draft is not a veto over the queue; it is an author declaring that the evidence this PR closes on does not exist yet. Once it does, un-draft and the pipeline takes it from there.
+
+### The corollary: what closes a row is not what proves it
+
+#494's deliverable merged and the row closed correctly; its **proof** — the third Windows dispatch green through `verify-report` — lives on #492, and #492's acceptance says so. **A closed row whose acceptance is unmet must say where the acceptance went**, or the closure gets read as the proof by the next person.
+
 ## Waiting on a PR's checks: scope to the SHA and the workflow, and require a COMPLETED run
 
 **`gh pr checks` polled for "zero pending" reports a PR settled in the gap before GitHub has created
