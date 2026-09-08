@@ -220,6 +220,7 @@ const REPORTED_DIR = "docs/board/reported";
  */
 export const REPORTED_KINDS = ["gates", "achievements"];
 
+/** @param {string} kind */
 function readEntries(kind) {
   const dir = path.join(ROOT, REPORTED_DIR, kind);
   if (!existsSync(dir)) return [];

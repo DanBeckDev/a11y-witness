@@ -46,6 +46,7 @@ const REPORTED = "docs/board/reported";
  * @param {string[]} paths
  */
 export function assembleReported(read, paths) {
+  /** @param {string} kind */
   const pick = (kind) => paths.filter((rel) => rel.includes(`/${kind}/`) && rel.endsWith(".json"))
     .map((rel) => { const text = read(rel); return text === null ? null : JSON.parse(text); })
     .filter((entry) => entry !== null)
@@ -149,6 +150,7 @@ function dirOnOriginMain(relDir) {
   }
 }
 
+/** @param {string} relPath */
 function fileOnOriginMain(relPath) {
   const ref = `origin/main:${relPath}`;
   const fetch = fetchOriginMain();
@@ -448,6 +450,41 @@ export function statedWritingTime(text, londonNow) {
   return { stated: `${hh}:${mm}`, driftMinutes: Math.abs((nowH * 60 + nowM) - (Number(hh) * 60 + Number(mm))) };
 }
 
+/**
+ * Post the "no summary" comment, once per DAY rather than once per run -- a warning that repeats is a
+ * warning people filter.
+ *
+ * EXTRACTED because `main` reached a complexity of 18 once the 07:15/07:45 modes were added on top of the
+ * directory restructure: two changes each reasonable alone, and the limit is what noticed they had landed
+ * in the same function. It does one thing at one level of abstraction, which is the rule the limit exists
+ * to enforce rather than the number itself.
+ *
+ * @param {{ day: string, issue: string, reminder: boolean }} arg
+ * @returns {boolean} whether a comment was written (false = already reported for this date)
+ */
+function postAbsence({ day, issue, reminder }) {
+  const marker = `no summary for ${day}`;
+  const existing = gh(["issue", "view", issue, "--repo", REPO, "--json", "comments",
+    "--jq", ".comments[].body"]);
+  if (existing.includes(marker)) {
+    console.error("(already reported for this date; not commenting again)");
+    return false;
+  }
+  gh(["issue", "comment", issue, "--repo", REPO, "--body",
+    `**There is ${marker} (${day}), so today's 08:00 edition will refuse and no document will be `
+    + "published.**\n\nThe summary is written by hand, by design: a summary a machine assembled from the "
+    + "sections below it is what the board explicitly forbade, so there is no fallback and this warning "
+    + `does not write one. It reports the absence ${reminder ? "forty-five minutes" : "fifteen minutes"} `
+    + "before the edition renders, so a person can close it.\n\n"
+    + `Write at most 120 words in \`docs/board/summaries/${day}.md\`, answering: are we on the date, what `
+    + "changed since yesterday, what must the board decide today. **Do not restate a count the document "
+    + "computes** — it goes stale between writing the summary and rendering the edition, which happened "
+    + `on the first day.\n\n*Posted automatically at ${reminder ? "07:15" : "07:45"} London by the summary `
+    + "check. It generates no summary text.*"]);
+  console.error(`reported on https://github.com/${REPO}/issues/${issue}`);
+  return true;
+}
+
 function main() {
   refuseUnknownFlags(["--post", "--issue", "--day", "--reminder"],
     { entry: import.meta.url, command: "npm run board:summary-check" });
@@ -475,15 +512,17 @@ function main() {
       .concat(existsSync(path.join(localDir, "meta.json")) ? [`${REPORTED}/meta.json`] : [])
     : [];
   const remoteDir = dirOnOriginMain(REPORTED);
+  const files = remoteDir.files;
   const reported = reportedVerdict({
     localText: existsSync(localDir)
       ? JSON.stringify(assembleReported((rel) => readFileSync(path.join(ROOT, rel), "utf8"), localPaths))
       : null,
     remote: {
       asked: remoteDir.asked, why: remoteDir.why,
-      text: remoteDir.files === null ? null
-        : JSON.stringify(assembleReported((rel) => remoteDir.files.get(rel) ?? null,
-          [...remoteDir.files.keys()])),
+      // BOUND ONCE. `remoteDir.files` was read three times inside one ternary, so `tsc` could not narrow
+      // it past the null check -- and a reader cannot see that the three reads are the same object.
+      text: files === null ? null
+        : JSON.stringify(assembleReported((rel) => files.get(rel) ?? null, [...files.keys()])),
     },
   });
 
@@ -512,27 +551,8 @@ function main() {
 
   if (!argv.includes("--post")) process.exit(exitCode);
 
-  // ONE COMMENT PER DAY, not one per run. A warning that repeats is a warning people filter.
-  const marker = `no summary for ${day}`;
   const issue = flag("--issue") ?? ISSUE;
-  const existing = gh(["issue", "view", issue, "--repo", REPO, "--json", "comments",
-    "--jq", ".comments[].body"]);
-  if (existing.includes(marker)) {
-    console.error("(already reported for this date; not commenting again)");
-    process.exit(exitCode);
-  }
-  gh(["issue", "comment", issue, "--repo", REPO, "--body",
-    `**There is ${marker} (${day}), so tomorrow's 08:00 edition will refuse and no document will be `
-    + "published.**\n\nThe summary is written by hand, by design: a summary a machine assembled from the "
-    + "sections below it is what the board explicitly forbade, so there is no fallback and this warning "
-    + `does not write one. It reports the absence ${reminder ? "forty-five minutes" : "fifteen minutes"} `
-    + "before the edition renders, so a person can close it.\n\n"
-    + `Write at most 120 words in \`docs/board/summaries/${day}.md\`, answering: are we on the date, what `
-    + "changed since yesterday, what must the board decide today. **Do not restate a count the document "
-    + "computes** — it goes stale between writing the summary and rendering the edition, which happened "
-    + `on the first day.\n\n*Posted automatically at ${reminder ? "07:15" : "07:45"} London by the summary `
-    + "check. It generates no summary text.*"]);
-  console.error(`reported on https://github.com/${REPO}/issues/${issue}`);
+  postAbsence({ day, issue, reminder });
   process.exit(exitCode);
 }
 
