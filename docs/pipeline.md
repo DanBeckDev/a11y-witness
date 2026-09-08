@@ -215,12 +215,46 @@ standing resource ban applies to this job by construction rather than by policy.
 | you want to prove | name this |
 |---|---|
 | a unit test | the specific test file, or `--test-name-pattern` for your cases |
-| something needing history | run it in `ts` and say so in the body; do not name it here |
+| something needing history | declare `// requires: history` in the test and `History: full` in the PR body (below) — or run it in `ts` and say so in the body instead |
 | something needing the API | run it locally, paste the output, and name a non-live command here |
 | a guard bites | `npm run mutate -- --file=… --mutate=… --test=…` on a file the job has |
 
 **Say which job runs each command.** *"It passed"* and *"it passed in the one job with full history"* are
 different claims, and only the second survives being read a week later.
+
+### A test can declare what it needs, and the PR body can supply it (#510, #497)
+
+The table row above used to be the only answer for a history-needing test: run it in `ts` instead, and say
+so. That is still fine, but it means the `acceptance` job can never actually prove that specific command —
+it can only refuse to run it and trust the author's word about a different job. #510 makes the refusal
+itself the mechanism, and #497 gives a PR body a way to lift it when the command genuinely needs it.
+
+**A test file declares what it needs, anywhere in the file, as its own header:**
+
+```js
+// requires: history
+```
+
+`acceptance-commands.mjs` reads this off any `.test.ts`/`.test.mjs` file a `tsx --test` Acceptance or
+Refutation command names (not windowed to the first few lines — this repo's own test files, like
+`pre-push-resolve-toward-main.test.ts`, commonly carry a long doc-comment header before the first `//`
+line). If the job's own capabilities do not satisfy the declared requirement, the command is **REFUSED**,
+named, exactly like the fleet/lab/corpus refusals above — never silently run against a guard that quietly
+`t.skip()`s itself out from under a shallow checkout. `token` and `fleet` are structurally always false in
+this job (the same two facts this whole page already documents); `history` is the one axis a PR controls.
+
+**A bare `History: full` line in the PR body** (its own line, nothing else) asks the job to deepen its
+checkout before running Acceptance/Refutation commands. `ci.yml` reads the identical
+`hasFullHistoryDeclaration` function `acceptance-commands.mjs` itself uses — never a second, hand-written
+copy of the regex in YAML — and runs `git fetch --unshallow origin main` when it is present, after
+`npm ci`/`npm run build` and before the command actually runs. With it declared, a `// requires: history`
+test runs for real, in `acceptance`, on this job's own token; without it, the command is refused and named.
+
+**The declaration is deliberately cheap to get wrong in one direction only.** `History: full` with no
+command that actually uses it is not an error — the job prints a `WARNING:` line and keeps its `ok:true`,
+because the only cost of an unused declaration is the time the extra fetch takes. The one thing it must
+never become is a flag added to turn a red check green: it has no effect on which commands are refused
+or on their exit codes, only on how deep the checkout is before they run.
 
 ### Two traps inside the job itself
 
