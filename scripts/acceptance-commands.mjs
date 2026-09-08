@@ -37,10 +37,11 @@
 // file grants itself write access; it doesn't need to.
 import { execSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { existsSync, globSync, realpathSync } from "node:fs";
+import { existsSync, globSync, realpathSync, statSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
-/** @typedef {{ verdict: "runnable" } | { verdict: "refused", reason: string }} Classification */
+/** @typedef {{ verdict: "runnable" } | { verdict: "refused", reason: string } | { verdict: "prose", reason: string }} Classification */
 /** @typedef {{ kind: "missing" } | { kind: "none", reason: string } | { kind: "commands", commands: string[] }} Section */
 
 // `npm run fleet:*` and its siblings -- the resource ban every worker/agent role file below `ceo` and
@@ -66,14 +67,89 @@ const CORPUS_PATTERNS = /** @type {[RegExp, string][]} */ ([
   [/\bscorer:shortcuts\b/, "reads runs/, which is gitignored and absent in CI"],
 ]);
 
+// #446: A LEADING `VAR=value` ASSIGNMENT IS NOT THE COMMAND. This repo's own Acceptance/Mutation lines
+// routinely start with one -- `A11Y_ALLOW_ARMED_PUSH="..." git push`, `GH_TOKEN=... gh pr view`,
+// `PYTHONDONTWRITEBYTECODE=1 pytest ...` -- and the executable check below must look PAST it, or every
+// one of those legitimate, real commands would misclassify as prose over an assignment that was never
+// meant to be looked up on `$PATH`.
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=\S*$/;
+
+// #446's OWN STATED SECOND HALF: `command -v` finds these because they genuinely ARE executable, so no
+// existence check can catch a line that merely starts with one. Flagged by name instead -- the identical
+// shape `FLEET_LAB_PATTERNS`/`CORPUS_PATTERNS` already use, for the identical reason: a check that can
+// answer "is this refusable" cannot also answer "is this claim supportable", so it needs its own list.
+const UNVERIFIABLE_BUILTINS = new Set(["echo", "true", ":", "test", "time", "["]);
+
+/**
+ * The first token of a command that could plausibly BE the command -- skipping any leading `VAR=value`
+ * assignments (#446). `undefined` for an empty or whitespace-only line.
+ * @param {string} command
+ * @returns {string | undefined}
+ */
+function firstRealToken(command) {
+  const tokens = command.trim().split(/\s+/).filter(Boolean);
+  return tokens.find((token) => !ENV_ASSIGNMENT.test(token));
+}
+
+// The three "execute" bits of a POSIX mode (owner+group+other) -- named because `0o111` reads as an
+// arbitrary octal constant otherwise.
+const EXECUTE_BITS = 0o111;
+
+/**
+ * Does `token` resolve to something executable -- the same question `command -v` answers, computed
+ * without a subprocess so `classifyCommand` stays pure (this file's own stated invariant) even for this
+ * check. A token containing `/` is checked directly as a path (a relative or absolute script, never
+ * `$PATH`-searched); anything else is searched across `$PATH`'s own directories, exactly as a shell would.
+ * @param {string} token
+ * @returns {boolean}
+ */
+function commandExists(token) {
+  const isExecutableFile = (/** @type {string} */ path) => {
+    try {
+      return (statSync(path).mode & EXECUTE_BITS) !== 0;
+    } catch {
+      return false;
+    }
+  };
+  if (token.includes("/")) return isExecutableFile(token);
+  const dirs = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+  return dirs.some((dir) => isExecutableFile(join(dir, token)));
+}
+
 /**
  * Pure. Never executes anything -- just decides whether this command is this job's to run.
+ *
+ * #446: A THIRD VERDICT, "prose", for a line that was never a command at all -- either its first token
+ * resolves to no executable anywhere (`"full suite green, 3306 pass 0 fail"` -> no `full`), or it resolves
+ * to one of a small set of builtins whose exit code can never verify anything (`echo`, `true`, `:`, `test`,
+ * `time`, `[`). Checked AFTER the existing fleet/lab/corpus refusals, deliberately: `npm run fleet:deploy`
+ * has a perfectly real executable (`npm`) as its first token, and must still be REFUSED for the reason
+ * already named there, not reclassified as prose for having a valid executable.
+ *
+ * `commandExists` IS INJECTABLE (`deps.commandExists`), defaulting to the real, subprocess-free `$PATH`
+ * check above -- so a test can assert on a specific token resolving or not without depending on what
+ * happens to be installed on whichever machine runs the suite.
+ *
  * @param {string} command
+ * @param {{ commandExists?: (token: string) => boolean }} [deps]
  * @returns {Classification}
  */
-export function classifyCommand(command) {
+export function classifyCommand(command, { commandExists: exists = commandExists } = {}) {
   for (const [pattern, reason] of [...FLEET_LAB_PATTERNS, ...CORPUS_PATTERNS]) {
     if (pattern.test(command)) return { verdict: "refused", reason };
+  }
+  const token = firstRealToken(command);
+  if (!token) {
+    return { verdict: "prose", reason: "is not a command (the line is empty)" };
+  }
+  const bareToken = token.replace(/^['"]|['"]$/g, "");
+  if (UNVERIFIABLE_BUILTINS.has(bareToken)) {
+    return { verdict: "prose",
+      reason: `cannot verify anything -- \`${bareToken}\`'s exit code says nothing about whether the `
+        + "claim in this line is true" };
+  }
+  if (!exists(token)) {
+    return { verdict: "prose", reason: `is not a command (no executable "${token}")` };
   }
   return { verdict: "runnable" };
 }
@@ -317,14 +393,23 @@ function commandLinesAfter(lines, headerIndex) {
  *
  * @param {string} command
  * @param {(command: string) => number} run
- * @param {"ACCEPTANCE" | "REFUTATION"} prefix
- * @param {(code: number) => boolean} isPass
+ * @param {{ prefix: "ACCEPTANCE" | "REFUTATION", isPass: (code: number) => boolean,
+ *           commandExists?: (token: string) => boolean }} options
  * @returns {{ line: string, ok: boolean }}
  */
-function runOneCommand(command, run, prefix, isPass) {
-  const classification = classifyCommand(command);
+function runOneCommand(command, run, { prefix, isPass, commandExists: exists }) {
+  const classification = classifyCommand(command, { commandExists: exists });
   if (classification.verdict === "refused") {
     return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
+  }
+  // #446: A THIRD, DISTINCT LINE SHAPE -- neither RAN nor REFUSED, so it cannot be mistaken for either.
+  // Unlike REFUSED (`ok: true`, a legitimate "not this job's to run"), this IS a failure: the line made a
+  // claim the PR body cannot support, and CLAUDE.md's own rule applies -- two different faults ("your
+  // command failed" and "that line was never a command") must not print the same word, because they need
+  // opposite fixes. Never run -- there is nothing honest a line that was never a command could report by
+  // being executed anyway.
+  if (classification.verdict === "prose") {
+    return { line: `${prefix}: "${command}" ${classification.reason}`, ok: false };
   }
   // CHECKED BEFORE RUNNING, never inferred from the exit code -- an unresolved test file/glob is
   // exactly the shape whose exit code cannot be trusted (#353's fifth hazard). Failing this here means
@@ -353,9 +438,12 @@ function runOneCommand(command, run, prefix, isPass) {
  *
  * @param {string | null | undefined} body
  * @param {(command: string) => number} run
+ * @param {{ commandExists?: (token: string) => boolean }} [deps] forwarded to `classifyCommand` (#446) --
+ *   defaults to the real `$PATH` check; a test overrides it to stay independent of what happens to be
+ *   installed on whichever machine runs the suite.
  * @returns {{ ok: boolean, lines: string[] }}
  */
-export function acceptanceReport(body, run) {
+export function acceptanceReport(body, run, deps = {}) {
   const section = extractAcceptanceSection(body);
   if (section.kind === "missing") {
     return { ok: false, lines: ["ACCEPTANCE: MISSING"] };
@@ -367,7 +455,8 @@ export function acceptanceReport(body, run) {
     lines.push(`ACCEPTANCE: NONE -> ${section.reason}`);
   } else {
     for (const command of section.commands) {
-      const result = runOneCommand(command, run, "ACCEPTANCE", (code) => code === 0);
+      const result = runOneCommand(command, run,
+        { prefix: "ACCEPTANCE", isPass: (code) => code === 0, ...deps });
       lines.push(result.line);
       if (!result.ok) ok = false;
     }
@@ -378,7 +467,8 @@ export function acceptanceReport(body, run) {
     lines.push(`REFUTATION: NONE -> ${refutation.reason}`);
   } else if (refutation.kind === "commands") {
     for (const command of refutation.commands) {
-      const result = runOneCommand(command, run, "REFUTATION", (code) => code !== 0);
+      const result = runOneCommand(command, run,
+        { prefix: "REFUTATION", isPass: (code) => code !== 0, ...deps });
       lines.push(result.line);
       if (!result.ok) ok = false;
     }
