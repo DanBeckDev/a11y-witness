@@ -300,3 +300,38 @@ A PR that must not merge until something outside CI happens is opened as a **dra
 ### The corollary: what closes a row is not what proves it
 
 #494's deliverable merged and the row closed correctly; its **proof** — the third Windows dispatch green through `verify-report` — lives on #492, and #492's acceptance says so. **A closed row whose acceptance is unmet must say where the acceptance went**, or the closure gets read as the proof by the next person.
+
+## Waiting on a PR's checks: scope to the SHA and the workflow, and require a COMPLETED run
+
+**`gh pr checks` polled for "zero pending" reports a PR settled in the gap before GitHub has created
+any check runs.** Measured 2026-09-08 on #532: thirteen seconds after a push, the waiter reported
+three passing checks and exited. They were `auto-arm`'s — `arm`, `stalled`, `sweep` — and `ci` had
+not started. *Everything finished* and *nothing started* both satisfy "no pending", and they need
+opposite responses.
+
+This is CLAUDE.md's own systemd rule — **exit on a positive verdict, never on the absence of a
+marker** — reaching a source it had not been applied to. The same misread produced #401's
+`armed "ten seconds after open"` the same morning.
+
+```bash
+SHA=$(git rev-parse origin/<branch>)
+R=$(gh run list -c "$SHA" -w ci --limit 5 --json status,conclusion,databaseId)
+LIVE=$(echo "$R" | jq '[.[]|select(.conclusion!="cancelled")]')
+# settled when: length > 0, and every remaining status == "completed"
+```
+
+Four things, and each one has been wrong here:
+
+- **Scope to the head SHA**, not to the branch or the PR number. A branch-scoped query answers with
+  a run against the commit the sweep has since replaced.
+- **Name the workflow.** `ci` is the one that gates; `auto-arm` answers seconds after any push and
+  will happily satisfy a loose condition on its own.
+- **Drop `cancelled` runs.** `ci.yml`'s concurrency group is `ci-${{ github.ref }}` with
+  `cancel-in-progress: true`, so two events in quick succession — a `synchronize` and an `edited`,
+  which is what a push plus a body fix produces — leave a cancelled run beside the live one. A
+  cancelled run is not a verdict, and `statusCheckRollup` unions it into the rollup anyway (#500).
+- **Require at least one COMPLETED run.** `length > 0` is the half that stops an empty result — no
+  runs created yet — from reading as "all of them finished".
+
+And give the loop a second exit: the PR may be **merged** out from under it, which is a terminal
+state the run list will never report.
