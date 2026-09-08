@@ -109,7 +109,7 @@ name: auto-arm
 # secret's expiry date to warn about it in advance.
 on:
   pull_request:
-    types: [opened, ready_for_review, synchronize]
+    types: [opened, ready_for_review, synchronize, labeled]
   workflow_dispatch:
 
 permissions:
