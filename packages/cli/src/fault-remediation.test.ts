@@ -13,15 +13,25 @@
  * imported (this package cannot `import` Python) — `score.py`'s `FAULT = "..."` class attribute, pulled
  * out with a regex rather than hand-copied, so a renamed fault code fails this discovery instead of
  * silently leaving a stale string here.
+ *
+ * PLUS the two `CaptureDoubt` values (#398) — CLIENT-SIDE judgements about an otherwise-successful
+ * capture, not a worker-reported fault, but they share this table's WHAT/TRY/WHERE shape (see
+ * `fault-remediation.ts`'s header for why). `packages/cli` already depends on `@a11ign/evidence` (`cli.ts`
+ * imports `captureDoubt` from it directly), so this COULD import the type — but `CaptureDoubt` is a
+ * TypeScript union, gone at runtime, and there is no runtime list to import. Scraped from source text
+ * instead, the identical technique `judgeLayerFaultCodes` already uses one line below for the same reason.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { FAULT } from "../../nvda-worker/src/capture-faults.mjs";
-import { FAULT_REMEDIATION, remediationFor, formatFaultMessage, type FaultRemediation } from "./fault-remediation.js";
+import {
+  FAULT_REMEDIATION, remediationFor, formatFaultMessage, formatDoubtMessage, type FaultRemediation,
+} from "./fault-remediation.js";
 
 const SCORE_PY_PATH = fileURLToPath(new URL("../../scorer/python/score.py", import.meta.url));
+const VERIFY_TS_PATH = fileURLToPath(new URL("../../evidence/src/verify.ts", import.meta.url));
 
 function judgeLayerFaultCodes(): string[] {
   const source = readFileSync(SCORE_PY_PATH, "utf8");
@@ -29,12 +39,27 @@ function judgeLayerFaultCodes(): string[] {
   return match ? [match[1]] : [];
 }
 
-const KNOWN_FAULTS: string[] = [...Object.values(FAULT), ...judgeLayerFaultCodes()];
+/** `export type CaptureDoubt = "wrong-content" | "contained";` -- the union members, by regex, per this
+ *  file's own rule above: no runtime value survives compilation for `Object.values` to walk. */
+function captureDoubtCodes(): string[] {
+  const source = readFileSync(VERIFY_TS_PATH, "utf8");
+  const match = source.match(/type CaptureDoubt = ([^;]+);/);
+  return match ? [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
+}
+
+const KNOWN_FAULTS: string[] = [...Object.values(FAULT), ...judgeLayerFaultCodes(), ...captureDoubtCodes()];
 
 test("the discovery finds a non-trivial population -- vacuity guard for the walk itself", () => {
   assert.ok(KNOWN_FAULTS.length >= 5,
     `only found ${KNOWN_FAULTS.length} fault code(s) across capture-faults.mjs and score.py -- a `
     + "discovery is broken, not the fault list shrinking");
+});
+
+test("the CaptureDoubt scrape finds both known values -- vacuity guard for #398's addition", () => {
+  const doubts = captureDoubtCodes();
+  assert.deepEqual([...doubts].sort(), ["contained", "wrong-content"],
+    `found ${JSON.stringify(doubts)} -- either verify.ts's CaptureDoubt union changed shape or the regex `
+    + "broke; both are worth knowing about before trusting KNOWN_FAULTS");
 });
 
 test("every declared fault code has a remediation entry with all three fields, non-empty", () => {
@@ -86,6 +111,19 @@ test("hard-timeout gets the full WHAT/TRY/WHERE treatment, like any other known 
   assert.match(message, /\(fault: hard-timeout\)/);
   const remediation = remediationFor("hard-timeout")!;
   assert.match(message, new RegExp(remediation.what.slice(0, 40).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("#398: a CaptureDoubt gets the full WHAT/TRY/WHERE treatment, worded as a doubt not a failure", () => {
+  const message = formatDoubtMessage("contained", "the screen reader reached almost none of this page");
+  assert.match(message, /the screen reader reached almost none of this page/, "the detail must survive");
+  assert.match(message, /\(contained\)/, "the doubt code itself must still be printed");
+  assert.doesNotMatch(message, /worker's capture failed/i,
+    "a doubt is about a SUCCESSFUL capture's content -- 'the worker's capture failed' would misdescribe "
+    + "the 200 OK response this tool is doubting");
+  const remediation = remediationFor("contained")!;
+  assert.match(message, new RegExp(remediation.what.slice(0, 40).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(message, new RegExp(remediation.tryThis.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(message, new RegExp(remediation.whereToLook.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("#336: the progress argument reports how far a PARTIAL capture got, when the worker said", () => {
