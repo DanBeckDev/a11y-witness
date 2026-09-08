@@ -6,8 +6,17 @@
 // "could not ask" and "asked and got nothing" are different states and a rule needs to tell them apart
 // (`[]` reads as "nobody holds this row"; `null` reads as "I could not ask" -- collapsing them is this
 // repo's oldest defect).
+//
+// `lookupBranchTip`'s `git ls-remote` spawn runs under `sandboxGitEnv()` -- a leaked `GIT_DIR` redirects
+// a spawned git call onto the wrong repository (2026-09-06, "a closed row created the exposure"), and
+// `git-spawn-classification.test.ts` discovers every git-spawning FILE and requires it. #455's own split
+// found this gap: the original monolith's `lookupBranchTip` never used the helper either, and the check's
+// per-file granularity was blind to it because a SIBLING function in that same file (the #188
+// reconciliation log's `gitCommonDir`) happened to import and call it -- moving the two into separate
+// files made the omission visible rather than introducing it.
 import { execFileSync } from "node:child_process";
 import { REPO } from "../repo-identity.mjs";
+import { sandboxGitEnv } from "../git-env.mjs";
 
 /** @param {string[]} args */
 export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -43,7 +52,8 @@ export function lookupRequiredContexts() {
  */
 export function lookupBranchTip(branchName) {
   return lookup(() => {
-    const line = execFileSync("git", ["ls-remote", "origin", branchName], { encoding: "utf8" }).trim();
+    const line = execFileSync("git", ["ls-remote", "origin", branchName],
+      { encoding: "utf8", env: sandboxGitEnv() }).trim();
     const sha = line.split(/\s+/)[0];
     return sha || null;
   });
