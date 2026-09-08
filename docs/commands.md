@@ -19,6 +19,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/check-retired-heads.mjs` — refuse a candidate whose scorer head set shrank without declaring what it retired
 - `node scripts/check-scheduled-jobs.mjs` — compare every job this repo claims to schedule against its actual installed state
 - `node scripts/check-schema-migration.mjs` — refuse a release while a declared schema migration is still open
+- `node scripts/check-transfer-urls.mjs` — check-transfer-urls -- walk the tree for every URL naming PRODUCT_REPO (a11ign/a11ign) and
 - `node scripts/ci-changed.mjs` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
 - `node scripts/close-merged-rows.mjs` — close the tracker rows a merge landed, or refuse and say why
 - `node scripts/close-rows-for-merged-pr.mjs` — close the issues a merged PR declared, because a bot merge does not close them itself
