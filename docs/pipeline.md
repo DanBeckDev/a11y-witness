@@ -244,11 +244,12 @@ named, exactly like the fleet/lab/corpus refusals above — never silently run a
 this job (the same two facts this whole page already documents); `history` is the one axis a PR controls.
 
 **A bare `History: full` line in the PR body** (its own line, nothing else) asks the job to deepen its
-checkout before running Acceptance/Refutation commands. `ci.yml` reads the identical
-`hasFullHistoryDeclaration` function `acceptance-commands.mjs` itself uses — never a second, hand-written
-copy of the regex in YAML — and runs `git fetch --unshallow origin main` when it is present, after
-`npm ci`/`npm run build` and before the command actually runs. With it declared, a `// requires: history`
-test runs for real, in `acceptance`, on this job's own token; without it, the command is refused and named.
+checkout before running Acceptance/Refutation commands. `reusable-acceptance.yml` (this job's actual steps,
+since #452 split it out of `ci.yml`) reads the identical `hasFullHistoryDeclaration` function
+`acceptance-commands.mjs` itself uses — never a second, hand-written copy of the regex in YAML — and runs
+`git fetch --unshallow origin main` when it is present, after `npm ci`/`npm run build` and before the
+command actually runs. With it declared, a `// requires: history` test runs for real, in `acceptance`, on
+this job's own token; without it, the command is refused and named.
 
 **The declaration is deliberately cheap to get wrong in one direction only.** `History: full` with no
 command that actually uses it is not an error — the job prints a `WARNING:` line and keeps its `ok:true`,

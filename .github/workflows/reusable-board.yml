@@ -1,0 +1,46 @@
+name: reusable-board
+
+# A1 (#452): `ci.yml`'s `board` job, extracted so a future edit to the board-check steps touches one file
+# with one job in it rather than one job buried in `ci.yml`'s 600+ lines -- the same "22 PRs touched this
+# file in 48 hours" collision rate the whole split exists to lower. `workflow_call` only, no trigger of its
+# own, so `push-trigger-allowlist.test.ts` has nothing to say about it.
+#
+# BOARD-ONLY, THE NARROWEST JOB IN THE ORIGINAL FILE -- chairman's direction, 2026-09-06: board summaries
+# and `docs/board/reported.json` are edited far more often than anything else under `docs/`, and every such
+# edit used to pay the full `docs` job (a build, then the whole packaging directory) for a change no rule
+# outside the board guards could react to. NO TYPECHECK, NO LINT -- verified, not assumed, in the original:
+# none of the files this job runs need either.
+on:
+  workflow_call: {}
+
+# READ-ONLY. This job's own steps use `github.token` for its real `gh issue list` reads (transitively, via
+# `board-data.mjs`) -- the same ambient token every job carries, not a secret this file needs passed in.
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      # A BUILD IS STILL NEEDED, though the first version of this job shipped without one on the strength
+      # of a grep that checked only these test files' own top-level imports: `board-liveness.test.ts`,
+      # `board-markdown.test.ts`, `board-style.test.ts` and `board-summary-origin.test.ts` all drive a real
+      # `scripts/board-*.mjs` script, and those scripts import `@a11ign/worker-fleet/cli-flags` -- exactly
+      # the stale-dist trap CLAUDE.md names for every other job in this repo's CI, reached one hop further
+      # than the grep looked. Caught by actually RUNNING the job's real command with no build present, not
+      # by reading the imports.
+      - run: npm run build
+      # GH_TOKEN: `board-*.test.ts` reach real `gh` calls TRANSITIVELY -- `board-style.test.ts` imports
+      # `scripts/board-data.mjs`, whose `collect()` shells out to `gh issue list`. Read-only;
+      # `github.token` already has that scope for the repo the workflow runs in.
+      #
+      # `gh-token-jobs.test.ts` pins the CLASS: it walks each job's test glob and every LOCAL import
+      # beneath it, and requires GH_TOKEN on any job that can reach a `gh` spawn. A test grepping the test
+      # FILES alone would have found nothing here -- neither board test names `gh` at all.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
