@@ -55,6 +55,12 @@ const GUARDED: Record<string, string> = {
   "scripts/board-only-check.mjs":
     "takes no flags; it decides whether a change is board-only, and an ignored argument would answer "
     + "about a different change than the one asked about",
+  "scripts/prune-stale-workspace-scope.mjs":
+    "takes NO flags -- it runs from `prepare` on every plain `npm install` (#376) to remove a stale "
+    + "workspace scope's node_modules symlinks, and it already calls refuseUnknownFlags([]). Classified "
+    + "here so the census records it as checked rather than unseen; it predates the census widening to "
+    + "top-level scripts/ (#164) and so was invisible to this test until now, which is the shape #164's "
+    + "own header already names -- a population boundary written down and never generalised.",
   "scripts/piped-exit-status-guard.mjs":
     "takes the command to inspect POSITIONALLY (argv[2]) and no flags. It exists because a piped exit "
     + "status reads as the pipe's -- a tool built to end that class must not join it by discarding an "
@@ -334,11 +340,6 @@ const GUARDED: Record<string, string> = {
     + "(refuses without one) rather than silently rewriting the wrong tree, but `--clone-into` and "
     + "`--replacements` deciding the WRONG path or pattern set silently is exactly the failure this tool "
     + "exists to make impossible for a history rewrite, #310",
-  "scripts/prune-stale-workspace-scope.mjs":
-    "takes NO flags -- it removes a stale `node_modules/@*` workspace scope on every `npm install` (#376) "
-    + "-- so it calls refuseUnknownFlags([]) with an EMPTY list, the same case as "
-    + "check-preregistered-verdict.mjs. It runs from `prepare`, on every plain install, so a discarded "
-    + "flag here would silently change what gets removed on a machine nobody is watching.",
   "scripts/assert-glob-not-empty.mjs":
     "`--min` decides the floor a test glob must clear (#355); a discarded typo would silently check "
     + "against the default of 1 instead of the real floor, passing a glob that lost most of its files. "

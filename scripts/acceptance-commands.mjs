@@ -158,6 +158,15 @@ export function extractAcceptanceSection(body) {
  * used exactly this). The same character means opposite things depending on where it sits, so this has to
  * track that rather than guess from the character alone.
  *
+ * HTML-COMMENT-AWARE, for the same reason and a sharper cost. GitHub's own PR-template convention is an
+ * HTML comment (`<!-- one command per line -->`) left under a field as unfilled guidance, so a template
+ * built from this repo's own `.github/pull_request_template.md` produces exactly that shape under
+ * `Acceptance:`. Unlike `#`, `<!--` is never ambiguous with a heading -- it is always a comment, fenced or
+ * not -- so it is stripped in both places rather than only inside a fence. Left unstripped, that line
+ * reached `execSync` with `shell: "/bin/bash"`: bash reads `<!--` as a redirect from a file named `--`,
+ * which errors loudly rather than doing something silent -- but the failure was baffling to an author who
+ * never wrote a command at all, on the exact PR-body shape GitHub's own convention encourages.
+ *
  * @param {string[]} lines
  * @param {number} headerIndex
  * @returns {string[]}
@@ -165,8 +174,17 @@ export function extractAcceptanceSection(body) {
 function commandLinesAfter(lines, headerIndex) {
   const commands = [];
   let inFence = false;
+  let inHtmlComment = false;
   for (let i = headerIndex + 1; i < lines.length; i++) {
     const trimmed = lines[i].trim();
+    if (inHtmlComment) {
+      if (trimmed.includes("-->")) inHtmlComment = false;
+      continue;
+    }
+    if (trimmed.startsWith("<!--")) {
+      if (!trimmed.includes("-->")) inHtmlComment = true;
+      continue;
+    }
     if (trimmed.startsWith("```")) { inFence = !inFence; continue; }
     if (inFence) {
       if (trimmed !== "" && !trimmed.startsWith("#")) commands.push(trimmed);
