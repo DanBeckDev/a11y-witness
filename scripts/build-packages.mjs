@@ -17,7 +17,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
 
 import { allPackages } from "./isolation-gate.mjs";
-import { npmCliExecutable } from "./npm-cli-executable.mjs";
+import { npmCliInvocation } from "./npm-cli-executable.mjs";
 // RELATIVE, NOT `@a11ign/worker-fleet/cli-flags` -- same rule `ci-changed.mjs`'s header already
 // states, and `isolation-gate.mjs` (imported above) already follows: this script IS the thing that
 // builds every package's `dist/`, so it cannot depend on a build having already happened. The package
@@ -44,7 +44,8 @@ function main() {
   }
 
   process.stdout.write(`building ${buildable.length} package(s)\n`);
-  execFileSync(npmCliExecutable("npx"), ["tsc", "--build", ...buildable], { cwd: root, stdio: "inherit" });
+  const { command, args } = npmCliInvocation("npx", ["tsc", "--build", ...buildable]);
+  execFileSync(command, args, { cwd: root, stdio: "inherit" });
 }
 
 // Every top-level statement used to run unconditionally, so importing this file (from a test, or from
