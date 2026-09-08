@@ -31,17 +31,25 @@
 // region names `scripts/acceptance-commands.mjs`, not a mutation runner, and folding the two together
 // would make "did the acceptance command pass" wait on something with a different risk profile and cost.
 //
+// #471: THIS JOB ALSO REQUIRES A `Closes:` DECLARATION, on the identical shape -- `Closes #N`,
+// `Closes: none — <reason>`, or the job FAILS. Built after #468 (the first PAT-armed merge) proved the
+// closing pipeline works and, in the same run, exposed that a PR is allowed to declare nothing at all: its
+// row stayed open while the work that closed it landed on main, and nothing said so. See
+// `closesDeclarationReport` below; it NEVER infers a row from a branch name or title.
+//
 // `pull_request`, NEVER `pull_request_target` -- wired in `ci.yml`, not here, but the reason belongs next
 // to the code that makes it safe: this module runs the AUTHOR'S OWN commands from a PR body, so it must
 // only ever run under the fork's read-only token and the fork's own checked-out code. Nothing in this
 // file grants itself write access; it doesn't need to.
 import { execSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { existsSync, globSync, realpathSync } from "node:fs";
+import { existsSync, globSync, realpathSync, statSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
-/** @typedef {{ verdict: "runnable" } | { verdict: "refused", reason: string }} Classification */
+/** @typedef {{ verdict: "runnable" } | { verdict: "refused", reason: string } | { verdict: "prose", reason: string }} Classification */
 /** @typedef {{ kind: "missing" } | { kind: "none", reason: string } | { kind: "commands", commands: string[] }} Section */
+/** @typedef {{ kind: "missing" } | { kind: "malformed", detail: string } | { kind: "none", reason: string } | { kind: "closes", numbers: number[] }} ClosesDeclaration */
 
 // `npm run fleet:*` and its siblings -- the resource ban every worker/agent role file below `ceo` and
 // `orchestrator` carries, verbatim, elsewhere in this repo. A GitHub-hosted runner is not one of the
@@ -66,14 +74,89 @@ const CORPUS_PATTERNS = /** @type {[RegExp, string][]} */ ([
   [/\bscorer:shortcuts\b/, "reads runs/, which is gitignored and absent in CI"],
 ]);
 
+// #446: A LEADING `VAR=value` ASSIGNMENT IS NOT THE COMMAND. This repo's own Acceptance/Mutation lines
+// routinely start with one -- `A11Y_ALLOW_ARMED_PUSH="..." git push`, `GH_TOKEN=... gh pr view`,
+// `PYTHONDONTWRITEBYTECODE=1 pytest ...` -- and the executable check below must look PAST it, or every
+// one of those legitimate, real commands would misclassify as prose over an assignment that was never
+// meant to be looked up on `$PATH`.
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=\S*$/;
+
+// #446's OWN STATED SECOND HALF: `command -v` finds these because they genuinely ARE executable, so no
+// existence check can catch a line that merely starts with one. Flagged by name instead -- the identical
+// shape `FLEET_LAB_PATTERNS`/`CORPUS_PATTERNS` already use, for the identical reason: a check that can
+// answer "is this refusable" cannot also answer "is this claim supportable", so it needs its own list.
+const UNVERIFIABLE_BUILTINS = new Set(["echo", "true", ":", "test", "time", "["]);
+
+/**
+ * The first token of a command that could plausibly BE the command -- skipping any leading `VAR=value`
+ * assignments (#446). `undefined` for an empty or whitespace-only line.
+ * @param {string} command
+ * @returns {string | undefined}
+ */
+function firstRealToken(command) {
+  const tokens = command.trim().split(/\s+/).filter(Boolean);
+  return tokens.find((token) => !ENV_ASSIGNMENT.test(token));
+}
+
+// The three "execute" bits of a POSIX mode (owner+group+other) -- named because `0o111` reads as an
+// arbitrary octal constant otherwise.
+const EXECUTE_BITS = 0o111;
+
+/**
+ * Does `token` resolve to something executable -- the same question `command -v` answers, computed
+ * without a subprocess so `classifyCommand` stays pure (this file's own stated invariant) even for this
+ * check. A token containing `/` is checked directly as a path (a relative or absolute script, never
+ * `$PATH`-searched); anything else is searched across `$PATH`'s own directories, exactly as a shell would.
+ * @param {string} token
+ * @returns {boolean}
+ */
+function commandExists(token) {
+  const isExecutableFile = (/** @type {string} */ path) => {
+    try {
+      return (statSync(path).mode & EXECUTE_BITS) !== 0;
+    } catch {
+      return false;
+    }
+  };
+  if (token.includes("/")) return isExecutableFile(token);
+  const dirs = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+  return dirs.some((dir) => isExecutableFile(join(dir, token)));
+}
+
 /**
  * Pure. Never executes anything -- just decides whether this command is this job's to run.
+ *
+ * #446: A THIRD VERDICT, "prose", for a line that was never a command at all -- either its first token
+ * resolves to no executable anywhere (`"full suite green, 3306 pass 0 fail"` -> no `full`), or it resolves
+ * to one of a small set of builtins whose exit code can never verify anything (`echo`, `true`, `:`, `test`,
+ * `time`, `[`). Checked AFTER the existing fleet/lab/corpus refusals, deliberately: `npm run fleet:deploy`
+ * has a perfectly real executable (`npm`) as its first token, and must still be REFUSED for the reason
+ * already named there, not reclassified as prose for having a valid executable.
+ *
+ * `commandExists` IS INJECTABLE (`deps.commandExists`), defaulting to the real, subprocess-free `$PATH`
+ * check above -- so a test can assert on a specific token resolving or not without depending on what
+ * happens to be installed on whichever machine runs the suite.
+ *
  * @param {string} command
+ * @param {{ commandExists?: (token: string) => boolean }} [deps]
  * @returns {Classification}
  */
-export function classifyCommand(command) {
+export function classifyCommand(command, { commandExists: exists = commandExists } = {}) {
   for (const [pattern, reason] of [...FLEET_LAB_PATTERNS, ...CORPUS_PATTERNS]) {
     if (pattern.test(command)) return { verdict: "refused", reason };
+  }
+  const token = firstRealToken(command);
+  if (!token) {
+    return { verdict: "prose", reason: "is not a command (the line is empty)" };
+  }
+  const bareToken = token.replace(/^['"]|['"]$/g, "");
+  if (UNVERIFIABLE_BUILTINS.has(bareToken)) {
+    return { verdict: "prose",
+      reason: `cannot verify anything -- \`${bareToken}\`'s exit code says nothing about whether the `
+        + "claim in this line is true" };
+  }
+  if (!exists(token)) {
+    return { verdict: "prose", reason: `is not a command (no executable "${token}")` };
   }
   return { verdict: "runnable" };
 }
@@ -317,14 +400,23 @@ function commandLinesAfter(lines, headerIndex) {
  *
  * @param {string} command
  * @param {(command: string) => number} run
- * @param {"ACCEPTANCE" | "REFUTATION"} prefix
- * @param {(code: number) => boolean} isPass
+ * @param {{ prefix: "ACCEPTANCE" | "REFUTATION", isPass: (code: number) => boolean,
+ *           commandExists?: (token: string) => boolean }} options
  * @returns {{ line: string, ok: boolean }}
  */
-function runOneCommand(command, run, prefix, isPass) {
-  const classification = classifyCommand(command);
+function runOneCommand(command, run, { prefix, isPass, commandExists: exists }) {
+  const classification = classifyCommand(command, { commandExists: exists });
   if (classification.verdict === "refused") {
     return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
+  }
+  // #446: A THIRD, DISTINCT LINE SHAPE -- neither RAN nor REFUSED, so it cannot be mistaken for either.
+  // Unlike REFUSED (`ok: true`, a legitimate "not this job's to run"), this IS a failure: the line made a
+  // claim the PR body cannot support, and CLAUDE.md's own rule applies -- two different faults ("your
+  // command failed" and "that line was never a command") must not print the same word, because they need
+  // opposite fixes. Never run -- there is nothing honest a line that was never a command could report by
+  // being executed anyway.
+  if (classification.verdict === "prose") {
+    return { line: `${prefix}: "${command}" ${classification.reason}`, ok: false };
   }
   // CHECKED BEFORE RUNNING, never inferred from the exit code -- an unresolved test file/glob is
   // exactly the shape whose exit code cannot be trusted (#353's fifth hazard). Failing this here means
@@ -353,9 +445,12 @@ function runOneCommand(command, run, prefix, isPass) {
  *
  * @param {string | null | undefined} body
  * @param {(command: string) => number} run
+ * @param {{ commandExists?: (token: string) => boolean }} [deps] forwarded to `classifyCommand` (#446) --
+ *   defaults to the real `$PATH` check; a test overrides it to stay independent of what happens to be
+ *   installed on whichever machine runs the suite.
  * @returns {{ ok: boolean, lines: string[] }}
  */
-export function acceptanceReport(body, run) {
+export function acceptanceReport(body, run, deps = {}) {
   const section = extractAcceptanceSection(body);
   if (section.kind === "missing") {
     return { ok: false, lines: ["ACCEPTANCE: MISSING"] };
@@ -367,7 +462,8 @@ export function acceptanceReport(body, run) {
     lines.push(`ACCEPTANCE: NONE -> ${section.reason}`);
   } else {
     for (const command of section.commands) {
-      const result = runOneCommand(command, run, "ACCEPTANCE", (code) => code === 0);
+      const result = runOneCommand(command, run,
+        { prefix: "ACCEPTANCE", isPass: (code) => code === 0, ...deps });
       lines.push(result.line);
       if (!result.ok) ok = false;
     }
@@ -378,7 +474,8 @@ export function acceptanceReport(body, run) {
     lines.push(`REFUTATION: NONE -> ${refutation.reason}`);
   } else if (refutation.kind === "commands") {
     for (const command of refutation.commands) {
-      const result = runOneCommand(command, run, "REFUTATION", (code) => code !== 0);
+      const result = runOneCommand(command, run,
+        { prefix: "REFUTATION", isPass: (code) => code !== 0, ...deps });
       lines.push(result.line);
       if (!result.ok) ok = false;
     }
@@ -406,6 +503,79 @@ function runForReal(command) {
   }
 }
 
+// #471: A PR MUST DECLARE WHAT IT CLOSES, and an unrecognised body must not read as an honest opt-out.
+// #468 -- the first merge armed under the PAT -- proved the pipeline works and produced this gap in the
+// same run: `close-rows` correctly closed nothing, because the PR body declared nothing, and A0's own row
+// stayed open while the work that closes it landed on main. The fix is the same shape #446 already built
+// for `Acceptance:` -- "nobody wrote one" and "this deliberately has none" must read as different states --
+// applied to the other half of the body.
+//
+// `Closes: none` with NO reason is MALFORMED, never folded into the opt-out -- the identical rule
+// `extractSection`'s own `noneMatch` applies to `Acceptance:`, reused rather than re-derived.
+//
+// NEVER INFERS. Guessing the row from a branch name or a title would close the wrong issue the day the
+// guess is wrong, and a wrongly-closed row is worse than an open one -- it leaves work that looks done.
+// The declaration is the author's, in the body, or this reports MISSING/MALFORMED and the job fails.
+const CLOSES_NONE_PATTERN = /\bCloses:\s*none\b([^\n]*)/i;
+const CLOSES_LIST_PATTERN = /\bCloses:?\s*(#\d+(?:\s*(?:,|and)\s*#\d+)*)/i;
+const CLOSES_MENTIONED_PATTERN = /\bCloses\b/i;
+
+/**
+ * Pure. Never infers a row from anything but the words the author wrote.
+ *
+ * Three shapes, and only three: `Closes #451` (also `Closes #451, #452`), `Closes: none — <reason>` (a
+ * deliberate opt-out, reason required), and neither -- MISSING. A fourth shape exists and must not be
+ * folded into any of those: the word "Closes" present but unparseable (prose with no number, or a number
+ * that isn't digits) is MALFORMED, distinct from MISSING for the same reason `Acceptance:`'s own malformed
+ * "none" is distinct from silence -- a check that cannot tell "wrote something wrong" from "wrote nothing"
+ * cannot tell an author who tried from one who never noticed the field.
+ *
+ * @param {string | null | undefined} body
+ * @returns {ClosesDeclaration}
+ */
+export function extractClosesDeclaration(body) {
+  const text = body ?? "";
+  const noneMatch = CLOSES_NONE_PATTERN.exec(text);
+  if (noneMatch) {
+    const reason = noneMatch[1].replace(/^[\s:—-]+/, "").trim();
+    return reason.length > 0
+      ? { kind: "none", reason }
+      : { kind: "malformed", detail: "`Closes: none` names no reason" };
+  }
+  const listMatch = CLOSES_LIST_PATTERN.exec(text);
+  if (listMatch) {
+    const numbers = [...listMatch[1].matchAll(/#(\d+)/g)].map((m) => Number(m[1]));
+    return { kind: "closes", numbers };
+  }
+  if (CLOSES_MENTIONED_PATTERN.test(text)) {
+    return { kind: "malformed",
+      detail: "mentions \"Closes\" but names no `#<number>` and no `none — <reason>` opt-out" };
+  }
+  return { kind: "missing" };
+}
+
+/**
+ * THE VERDICT. `ok: false` on both MISSING and MALFORMED -- deliberately the same boolean, because both
+ * mean this job cannot tell what the PR closes, and a job that fails on one but not the other invites an
+ * author to reach for the vaguer of the two whenever the precise one is inconvenient.
+ * @param {string | null | undefined} body
+ * @returns {{ ok: boolean, line: string }}
+ */
+export function closesDeclarationReport(body) {
+  const declaration = extractClosesDeclaration(body);
+  if (declaration.kind === "missing") {
+    return { ok: false,
+      line: "CLOSES: MISSING -- no `Closes #N` or `Closes: none — <reason>` declaration" };
+  }
+  if (declaration.kind === "malformed") {
+    return { ok: false, line: `CLOSES: MALFORMED -- ${declaration.detail}` };
+  }
+  if (declaration.kind === "none") {
+    return { ok: true, line: `CLOSES: NONE -> ${declaration.reason}` };
+  }
+  return { ok: true, line: `CLOSES: #${declaration.numbers.join(", #")}` };
+}
+
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/acceptance-commands.mjs" });
   // FROM AN ENV VAR, NEVER ARGV -- a PR body is adversarial input (anyone can open a PR), and passing it
@@ -414,7 +584,9 @@ function main() {
   const body = process.env.PR_BODY ?? "";
   const report = acceptanceReport(body, runForReal);
   for (const line of report.lines) console.log(line);
-  process.exit(report.ok ? 0 : 1);
+  const closes = closesDeclarationReport(body);
+  console.log(closes.line);
+  process.exit(report.ok && closes.ok ? 0 : 1);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
