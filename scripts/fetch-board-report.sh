@@ -16,7 +16,18 @@ set -euo pipefail
 # wrong before the date arrived.
 REPO="$(node -e 'import("./scripts/repo-identity.mjs").then(m => console.log(m.REPO))')"
 DAY="${1:-$(date -u +%Y-%m-%d)}"
-DEST="$HOME/Documents/a11ign-board-reports"
+# A DESTINATION ON SOMEBODY'S MACHINE IS THEIRS, AND IT DOES NOT MOVE WITH A PRODUCT RENAME.
+# The rename (#66) carried this folder from `a11y-witness-board-reports` to `a11ign-board-reports`
+# along with every other occurrence of the old name -- correctly for the tree, and wrongly for this one
+# line, because the chairman has read every edition out of the old folder and nobody asked them.
+#
+# A rename sweep is exactly the change that cannot tell a name we own from a name we do not. This is the
+# one path in the repository that writes to a person's own filesystem, so it is the one that had to be
+# excluded, and it was the one nobody looked at.
+#
+# Overridable, defaulting to the folder that has always been there: the default is the chairman's, and
+# anyone wanting it elsewhere says so rather than being moved.
+DEST="${A11Y_BOARD_REPORTS_DIR:-$HOME/Documents/a11y-witness-board-reports}"
 mkdir -p "$DEST"
 
 # `gh release download` exits non-zero when the draft does not exist, which is the honest answer on a day
