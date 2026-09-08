@@ -417,3 +417,272 @@ loop counted its sleeps and not utmctl's latency.
 
 Stops now also ask Windows directly through the guest agent (`shutdown /s /t 0`) with ACPI as
 the fallback, since the guest agent needs neither the network nor a working power-button mapping.
+
+## Incidents moved from CLAUDE.md (#458)
+
+### The speech channel is a socket, and a dead one looks exactly like a healthy NVDA
+
+See `docs/adr/0034-the-speech-channel-is-a-socket-forced-to-fail-loud.md` for the decision and the two
+rejected alternatives (restarting NVDA; a bare `socket.destroy()`). This is the incident that forced it.
+
+This is the root cause of the pool's most expensive fault, and the fix is one round trip.
+
+Guidepup reaches NVDA over a **TLS socket to NVDA Remote on 127.0.0.1:6837**, and speech is *pushed*
+back over it. Keystrokes are writes; speech is a read. So when that socket goes half-open:
+
+- `nvda.next()` still succeeds — the write is accepted
+- nothing is ever spoken back
+- NVDA looks completely healthy and says nothing
+
+Guidepup cannot notice. Checked in 0.29.2: it reconnects only on a socket `error` event, a half-open
+TCP connection raises none, and there is **no keepalive, no read timeout and no heartbeat** in its
+client. (Guidepup also has **no debug mode**: two env vars, no logging. Its config was identical on
+healthy and failing guests, so misconfiguration was never the cause.)
+
+> **This section used to say the only way to rebuild the channel was `stop()` + `start()`, because
+> `NVDAClient` "is not exported". That is wrong and it cost real time.** `NVDAClient.js` ends with
+> `exports.NVDAClient = NVDAClient` — it is absent from the package *index*, not from the module. More
+> importantly, **guidepup's reconnect logic already works; it is starved of its trigger.** Lines 99-110
+> disconnect, reconnect, re-join the channel and reset the failure counter — all of it hanging off an
+> `error` event that a half-open socket never emits.
+>
+> So `speech-channel.mjs` hands it that event: `socket.destroy(err)` emits `'error'` and guidepup
+> recovers itself, in **under a second instead of ~23 s**, without touching NVDA. Note `destroy()` with
+> no argument emits only `'close'`, which guidepup ignores — that distinction is the whole trick and is
+> asserted in the tests. The socket is captured by wrapping `tls.connect`, because `NVDA#client` and
+> `NVDAClient#socket` are genuine `#private` fields and unreachable by reflection.
+>
+> This matters beyond speed: **repeated NVDA restarts are what produce the `nvdaHelperRemote
+> (injection_terminate)` modal that wedges a guest**, so the expensive remedy was feeding the fault it
+> was treating. `ensureSpeechChannel` now rebuilds the socket first and only restarts NVDA if the probe
+> still hears nothing.
+>
+> When reading a dependency's behaviour, read the dependency. Both wrong claims above came from its
+> public API surface rather than its source, which is in `node_modules` and is 316 lines.
+
+So `ensureSpeechChannel` probes it *before* committing a capture: clear the log, `readLine`, check a
+phrase came back. Measured across all three guests, 7 interleaved rounds each, same page, same tool:
+
+| | median | IQR | recoveries |
+|---|---|---|---|
+| before | 36.7 / 42.0 / **93.7 s** | 9.1 / 9.0 / 20.7 | 0/7 / 1/7 / **5/7** |
+| after | **12.4 / 12.4 / 12.3 s** | **0.1 / 0.6 / 0.3** | **0/7 all three** |
+
+The probe costs 0.7 s and **never had to restart NVDA once** — so the gain is not from proactive
+restarts, it is that exercising the channel early stops the bad state arising. `windowsActivate` also
+fell 12.8 s → 2.1 s, which suggests a half-dead NVDA was contending for the foreground and slowing
+Edge's grab for it.
+
+Two caveats worth keeping: the mechanism is inferred rather than proven, and 21 captures cannot prove an
+intermittent fault is *eliminated* — only that it did not occur once across a pool that was averaging
+6 of 21 before. Watch `/health.vitals.recoveries`; if it climbs again, the theory is wrong.
+
+### A guest whose NVDA is broken looks perfectly healthy — watch `recoveries`
+
+The worst worker fault this pool has had produced **zero failures**. One guest's NVDA went mute on
+**4 of 4 captures**; the worker's retry absorbed every one, so every capture succeeded, `failures`
+stayed at 0, and the eviction rule (three consecutive *failures*) could never fire. The only symptom
+was that it ran at **122.9 s per capture against a healthy peer's 40.6 s**, and wall-clock time says
+"slower" without saying where.
+
+**`npm run worker:compare <page> <worker> <worker>`** is how you find it. It puts the phases side by
+side, which took the diagnosis from hours to one command:
+
+```
+phase              w1      w2   spread
+nvdaStart        19.1     0.0     19.1   <- the whole gap. 0 = NVDA reused; 19s = cold-started every time
+windowsActivate  11.6    14.4      2.8
+sweep             6.3     6.6      0.3   <- identical
+```
+
+Before that tool existed I attributed this to Edge's launch, then the Edge profile, then the sweep — all
+three wrong, because `bench-capture` prints one worker at a time and I compared wall times. It also shows
+the per-sweep detail capture-core already recorded and nothing displayed: **ms up with round-trips flat
+means each trip is slower; trips up means the sweep is walking more.** Different causes.
+
+The signal is now acted on, not just printed:
+
+- `/health.vitals.recoveries` — faults the worker papered over. The one number that rises while
+  everything still appears to work.
+- `npm run doctor` reports `DEGRADED` with the repair command.
+- **A run retires a degraded worker automatically** (`shouldRetireWorker`): it stops taking cases, nothing
+  is requeued (its captures were fine), and the run summary names it. Never the last worker standing —
+  a slow run beats no run.
+
+The repair for a guest in this state is `provision-nvda-worker.ps1`, which reinstalls NVDA.
+
+### A freshly booted worker used to fail its first capture, every time
+
+Reproduced on two guests in one session: cold boot, capture 1 fails `NVDA is running but not speaking`,
+capture 2 succeeds. Since a run **starts the workers it needs**, that cost one case per worker on most
+runs — and it was invisible because the run classified it transient and quietly retried.
+
+The worker now **retries once itself**, on a fresh screen reader, before answering the caller
+(`worker-recovery.mjs`). capture-core already stops NVDA on any failure, so the retry necessarily
+cold-starts a clean one — the same work it was going to do on the next request; the only change is who
+pays for it. It is bounded at one extra attempt and only ever follows a real fault, which is what
+separates it from the idle warm-up loop that broke the pool. The hard timeout is excluded: it has
+already spent its whole budget, so the run reissues that one instead.
+
+`/health.vitals` now reports `uptimeMinutes`, `freeMemoryMb`, `captures`, `failures` and
+**`recoveries`**. Watch `recoveries`: it counts faults the worker papered over, so a guest that is
+degrading shows up there while every capture still succeeds.
+
+### What degrades is NVDA's speech channel, not the VM — and it fails on a survival curve
+
+NVDA can stop speaking while still answering keystrokes. It is **stochastic, not a counter**, and the
+rate depends on how loaded the host is. Two datasets, and the difference between them is the point.
+
+**The corpus — 1,939 captures carrying a reuse counter, across real dataset runs:**
+
+```
+reuse count:  2-5   6-10  11-15  16-20  21-24   25
+captures:     480   460    382    321    242    54     nvdaRecycle fired 51 times
+```
+
+That is a survival curve — about 120 NVDA instances per count early on, ~54 reaching 25 — so roughly
+**45% of instances do survive to the `MAX_CAPTURES_PER_NVDA = 25` recycle**, and the recycle is live
+code, not dead. (`screenReaderMute` appears in 0 captures on disk because a mute *throws*, so it is
+never written. Absence there is not evidence.)
+
+**A tight loop on a memory-pressured host — 30 back-to-back captures of one page:**
+
+```
+1 2 3 4 5 [6] 7 8 9 10 [11] 12 13 14 15 [16] ... [25] [26]
+lifespans: 6, 5, 5, 9, 1     30/30 succeeded, 5 recoveries, 0 failures
+```
+
+**Do not generalise from the second dataset — an earlier version of this section did, claiming NVDA
+"dies about every 5 captures" and that the 25-recycle "never fires". The corpus refutes both.** Those
+lifespans are the low tail, measured while the host was swapping and one page was being hammered at
+maximum rate. The plausible reading — consistent with both datasets but **not proven** — is that a
+short NVDA lifespan is itself a *symptom* of host memory pressure, which would mean the capacity cap
+above reduces mute frequency as a side effect. Worth testing on a quiet host before anyone relies on it.
+
+What follows for the constant: **leave `MAX_CAPTURES_PER_NVDA` at 25.** Lowering it to ~4 would force a
+~23 s recycle on the ~45% of instances that would otherwise run to 25 — a net loss. The earlier estimate
+that this was "worth ~9 s per capture" came from the unrepresentative loop.
+
+Reuse is nonetheless causal: with `reuseScreenReader:false`, **8 of 8 captures ran clean with no mute at
+all** — but a fresh NVDA per capture costs ~48 s against ~25 s reused, because stopping and starting
+NVDA is most of the difference. So reuse stays, and the retry below is what makes it *correct*.
+
+A mute **used** to cost ~150 s to recover, because a silent NVDA answers all 150 advances with nothing
+and the read-through was then retried in full — 300 wasted round trips before
+`failIfScreenReaderIsMute` even ran. The read now stops after `MAX_SILENT_STEPS` (8) consecutive silent
+advances, and `readWithRetry` refuses to re-read a screen reader already found silent.
+
+**That rule needs two signals, and the reason is asymmetry.** An empty read is unremarkable on its own
+(the warning at the top of capture-core says so), so silence only ends a read when NVDA *also* said
+nothing at startup AND nothing substantive has been heard yet. When NVDA spoke at startup the branch is
+unreachable and a read-through behaves exactly as before. Getting this wrong would silently *shorten*
+transcripts, which is the evidence rot that once deleted the h1 announcement from 90 captures while
+every check stayed green — hence `read-through.test.ts`, whose first assertion is that 40 consecutive
+empty reads on a healthy capture change nothing.
+
+### Recovery is keyed on fault CODES, never on message text
+
+`capture-faults.mjs` defines `FAULT.SCREEN_READER_MUTE` and `FAULT.SCREEN_READER_START_FAILED`;
+`captureFault()` attaches one to the thrown Error, the worker returns it as `fault` in the 500 body, and
+both `worker-recovery.mjs` (guest) and `capture-decisions.mjs` (host) match on it.
+
+This replaced a regex over `error.message`, which was a check that could not discriminate: reword the
+message in capture-core and recovery stops working in production, while the unit tests keep passing
+because the string they assert on lives in the test file rather than at the throw site. The tests now
+drive the real gate — `failIfScreenReaderIsMute` is exported for exactly that.
+
+Two references argue the same point, and they are worth reading before adding another string match:
+*Secure by Design* §9.2.2 ("Designing for failures") — model expected domain failures as explicit
+results, not exceptions to be parsed; and *The Product-Minded Engineer* ("Repackage Errors") — make
+errors programmable through specific types and structured metadata "rather than forcing callers to
+parse messages". A mute NVDA recurs often enough across a run — ~55% of NVDA instances die before
+their recycle — to be an expected domain failure rather than an exception.
+
+`fault` on the wire is **additive**: an older host ignores it and keeps matching text, so the host and
+guest can be deployed independently.
+
+### "The worker is dead" is usually a wedge, not a death
+
+If `/health` answers but **every capture returns 429 `a capture is already in progress`**, the worker
+is *wedged*, not dead: a previous capture hung, so `busy` was never released. This cost two days of
+misdiagnosis — bad clones, a stub NVDA install, guest-agent failures — because from outside it is
+indistinguishable from a dead machine. A hard capture timeout now abandons the hung capture, releases
+`busy`, and cold-starts NVDA, so it recovers on its own.
+
+**What put it there: restarting NVDA repeatedly.** NVDA responds to that with a modal dialog on the
+guest desktop — `nvdaHelperRemote (injection_terminate): Error waiting for local thread to die` — and
+a modal dialog blocks input, so the next capture hangs. One guest took QEMU down with it. Hence the
+rule: **nothing may restart NVDA while a worker is idle.** Warm-up happens once at boot; after that
+NVDA is the capture's business, and `startScreenReader` already cold-starts a dead one. If you find
+yourself adding a health-driven NVDA restart, this is the loop you are rebuilding.
+
+Two related facts worth not rediscovering:
+
+- **`utmctl exec` and `file pull` need the guest's logged-on session.** They fail before auto-logon
+  completes and work afterwards, which is one cause for two symptoms — not a broken guest agent. If
+  `exec` is silent, the guest has not finished logging on; wait rather than diagnose.
+- **`server.log` persists on the guest.** You cannot pull it while the worker is down (see above), so
+  read it *after* it recovers — the record of the death is still there.
+
+## Diagnosing a guest without `utmctl exec`
+
+`utmctl exec` wraps QEMU's `guest-exec`, which is **known-unreliable on Windows** — upstream reports
+qemu-ga stopping at random and failing to open its own channel. Observed here in one session on one
+guest: it worked, silently wrote nothing, returned OSStatus -2700, then worked again. Do not build a
+diagnosis on it.
+
+Everything you would have reached for it is served over HTTP instead:
+
+```bash
+curl -s http://<guest-ip>:8765/diagnostics | jq .
+```
+
+- `edgeProfile` + `edgeProfileBreakdown` — the per-subtree sizes that found 348 MB of `BrowserMetrics`
+- `processes` — orphaned `msedge` counts, the load that used to make the next `nvda.start` time out
+- `edgePolicy` — drift from what provisioning set, reported rather than silently re-applied
+- `screenReader` — NVDA's config (synth, Speech Viewer) plus its log **and `previousLog`**; NVDA rotates
+  on every start, so a session that went mute only exists in the old file
+- `disk`, `serverLog`
+
+`GUIDEPUP_SCREEN_READERS_PATH` is guidepup's own env var (not this project's `A11Y_*` convention), read
+by the worker to find NVDA on disk. It defaults to `%LOCALAPPDATA%\guidepup`, which is where guidepup
+installs NVDA on a guest it provisioned itself. Set it if a guest's NVDA lives somewhere else — a
+custom Windows image, or a portable install — and `nvdaRoot` in `/diagnostics` reports what the worker
+is actually looking under, so a missing-NVDA symptom there is a real place to start.
+
+`/health` stays cheap because it is polled; `/diagnostics` walks directories and shells out, so it is
+on-demand only.
+
+### Capture timing and the `windowsActivate` cost analysis (from Environment facts)
+
+- **A capture is ~12.4 s**, measured across all three guests over 7 interleaved rounds each (medians
+  12.4 / 12.4 / 12.3, IQR ≤ 0.6, statistically indistinguishable). That is *after* the speech-channel
+  probe; before it the same pool measured 36.7 / 42.0 / 93.7 s with IQRs up to 20.7. If you see anything
+  like the older numbers, check `/health.vitals.recoveries` first — that is the fault returning, not the
+  host being busy. Historic figures in this repo of "13–19 s", "27 s", and "45 s" all predate the fix.
+- Quote the host state with any timing number. Your own `npm test` or a browser competes with the guests.
+- **The largest single phase is `windowsActivate`, at ~10 s, and it is Edge starting.** Edge is
+  launched *and quit* for every capture, so its cold start is on the critical path every time —
+  `waitedMs: 10784` against an 800 ms settle. That is ~37% of a capture, and it is the biggest
+  remaining cost. Three routes were evaluated; **two of them are dead ends, and the analysis is worth
+  keeping so nobody re-derives it.**
+
+  | route | verdict |
+  |---|---|
+  | Overlap NVDA's start with the wait for Edge's window | **worthless.** `nvdaStart` is ~0 s on a warm capture, and ~83% of captures reuse NVDA. There is nothing to overlap on the path that matters. |
+  | Re-enable Edge's startup boost | **cannot work alone.** Cleanup calls `windowsQuit("msedge.exe")` with a `taskkill /im msedge.exe /f` fallback, so it kills Edge *by image name* — including the pre-warmed background process. The next capture cold-starts anyway. |
+  | Keep Edge alive between captures | **the only real option**, and it subsumes startup boost. |
+
+  The third needs care, not courage. Do **not** navigate an existing window via the address bar:
+  captures run `--app`, which has no address bar, and abandoning `--app` resurfaces the browser chrome
+  that `"Welcome to Microsoft Edge"` phantoms came from. The shape that should work is *keep the Edge
+  process, open a fresh `--app` window per capture, and close only that window* — Chromium reuses the
+  process, so the window appears fast and the announcements stay identical. It touches window focus,
+  which this project's own notes call "the #1 flakiness fix", and it is testable only on the VM.
+
+  **Mitigating the recapture cost.** This is why `npm run evidence:check` exists: it compares evidence
+  field by field on a stratified sample and says whether the change is evidence-neutral. If it reports
+  SAME, the change ships without invalidating the cache — the key is a proxy, the diff is the direct
+  measurement. If it reports CHANGED, the recapture is genuinely required, and the cheap moment to pay
+  it is **bundled with any other pending `CAPTURE_PROTOCOL_VERSION` bump**, so 2,122 captures are
+  recaptured once rather than twice.
