@@ -15,6 +15,15 @@
  * head/tail/grep sites across .sh/.mjs/.yml on 2026-09-07, none of them this hazard) rather than shipping
  * a remedy that fires on legitimate use and gets disabled.
  *
+ * #535: NO WORKSPACE IMPORT, DELIBERATELY. This file used to import `@a11ign/worker-fleet/cli-flags` for
+ * its own unknown-flag guard, and that import is exactly what broke it: `pre-commit` invokes this script
+ * in EVERY worktree, including one created before `node_modules` is symlinked in, and there the import
+ * throws `ERR_MODULE_NOT_FOUND` -- which pre-commit's `>/dev/null 2>&1` swallowed and misread as a hazard
+ * on every single staged line (`fi`, `else`, `run: |`, prose comments -- none of them pipe anything).
+ * `scripts/check-schema-migration.mjs` is this repo's own precedent for the identical bind (it is copied
+ * into a throwaway directory with no `node_modules` by its own gate test) -- its one flag is checked with
+ * a bare `process.argv.includes(...)`, no workspace import, and this file now does the same.
+ *
  * #375: `checkPipedExitStatus` alone is WHOLE-TEXT — it flattens every `;`/`&&`/`||`/newline-separated
  * statement in whatever text it is given into ONE list and asks "does ANY of them read `$?`", with no
  * notion of which FUNCTION a statement lives in. Fine for a single diff LINE (pre-commit's own use, one
@@ -30,7 +39,6 @@
 
 import { realpathSync, readFileSync, existsSync, statSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 const STATUS_TOOLS = ["head", "tail", "grep"];
 
@@ -132,31 +140,54 @@ export function checkPipedExitStatusInText(text) {
   return { hazard: false, reason: "no block pipes into a status tool with a $? read in the same function" };
 }
 
+// #535: THREE DISTINCT EXIT CODES, so the caller can tell "a real hazard" apart from "I could not decide"
+// -- the same three-outcome discipline `acceptance-commands.mjs` already applies to RAN/REFUSED/MISSING
+// (#353). `0` ALLOW, `1` REFUSE (a genuine hazard, this guard's own verdict), `2` ERROR (usage, or an
+// unexpected exception -- this guard could not examine the input at all). Node's OWN default for an
+// uncaught exception is exit code 1, which would collide with REFUSE and reproduce this exact bug one
+// layer further in -- caught here explicitly so that collision can never happen again, regardless of what
+// throws.
+const EXIT_ALLOW = 0;
+const EXIT_HAZARD = 1;
+const EXIT_ERROR = 2;
+
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
-  // Guarded per #164: takes the command POSITIONALLY (argv[2]) and no flags. The check is scoped to
-  // `process.argv.slice(3)` -- everything AFTER that positional -- never the default `.slice(2)`.
-  // The positional is arbitrary shell/YAML text and routinely starts with `-` or `--` on its own merits
-  // (`---`, a YAML doc marker; `--foo` inside a shell command being checked) -- checking it for
-  // flag-shape misreads the PAYLOAD as an unknown flag on this CLI's own command line (#349). Found the
-  // day this guard shipped, false-flagging on its own pre-commit hook: `node ... "---"` (the line the
-  // pre-commit hook feeds it for any newly-staged YAML file) refused with "unknown flag ---".
-  refuseUnknownFlags([], {
-    entry: import.meta.url,
-    command: "node scripts/piped-exit-status-guard.mjs",
-    argv: process.argv.slice(3),
-  });
-  const cmd = process.argv[2];
-  if (!cmd) {
-    console.error("usage: piped-exit-status-guard.mjs '<shell command string>'");
-    process.exit(2);
+  try {
+    // Guarded per #164, WITHOUT a workspace import (#535, this file's own header) -- takes the command
+    // POSITIONALLY (argv[2]) and no flags. Checked against `process.argv.slice(3)` -- everything AFTER
+    // that positional -- never the default `.slice(2)`. The positional is arbitrary shell/YAML text and
+    // routinely starts with `-` or `--` on its own merits (`---`, a YAML doc marker; `--foo` inside a
+    // shell command being checked) -- checking IT for flag-shape misreads the PAYLOAD as an unknown flag
+    // on this CLI's own command line (#349). Found the day this guard shipped, false-flagging on its own
+    // pre-commit hook: `node ... "---"` (the line pre-commit feeds it for any newly-staged YAML file)
+    // refused with "unknown flag ---".
+    const extraArgs = process.argv.slice(3);
+    if (extraArgs.length > 0) {
+      console.error(`piped-exit-status-guard.mjs takes no flags; unexpected argument(s): ${extraArgs.join(", ")}`);
+      process.exit(EXIT_ERROR);
+    }
+    const cmd = process.argv[2];
+    if (!cmd) {
+      console.error("usage: piped-exit-status-guard.mjs '<shell command string>'");
+      process.exit(EXIT_ERROR);
+    }
+    // #375's own acceptance shape: a FILE PATH, checked whole-file and function-boundary-aware. Everything
+    // pre-commit ever passes is a single staged LINE, which is never an existing path on disk, so this
+    // never changes that call's behaviour -- `checkPipedExitStatus` alone still runs for it, unchanged.
+    const isFile = existsSync(cmd) && statSync(cmd).isFile();
+    const { hazard, reason } = isFile
+      ? checkPipedExitStatusInText(readFileSync(cmd, "utf8"))
+      : checkPipedExitStatus(cmd);
+    console.log(`${hazard ? "REFUSE" : "ALLOW"}: ${reason}`);
+    process.exit(hazard ? EXIT_HAZARD : EXIT_ALLOW);
+  } catch (error) {
+    // #535: THE WHOLE REASON THIS BLOCK EXISTS. A checker that returns the same verdict for every input
+    // is broken, not thorough (measured live: 18 unrelated lines all reported REFUSE) -- so an unexpected
+    // exception must never fall through to node's default exit-1 handling, which this guard's caller reads
+    // as a real hazard. "GUARD ERROR" on stderr, and a code neither ALLOW nor HAZARD can produce any other
+    // way, so `pre-commit` can tell the two apart without parsing this message's text.
+    console.error(`GUARD ERROR: piped-exit-status-guard.mjs could not examine its input: `
+      + `${/** @type {Error} */ (error).message}`);
+    process.exit(EXIT_ERROR);
   }
-  // #375's own acceptance shape: a FILE PATH, checked whole-file and function-boundary-aware. Everything
-  // pre-commit ever passes is a single staged LINE, which is never an existing path on disk, so this
-  // never changes that call's behaviour -- `checkPipedExitStatus` alone still runs for it, unchanged.
-  const isFile = existsSync(cmd) && statSync(cmd).isFile();
-  const { hazard, reason } = isFile
-    ? checkPipedExitStatusInText(readFileSync(cmd, "utf8"))
-    : checkPipedExitStatus(cmd);
-  console.log(`${hazard ? "REFUSE" : "ALLOW"}: ${reason}`);
-  process.exit(hazard ? 1 : 0);
 }
