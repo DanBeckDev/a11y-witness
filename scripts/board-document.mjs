@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: render the board's PDF from the same data the daily GitHub report reads
 // THE BOARD DOCUMENT — what the board reads. The GitHub edition is the data trail; this is the answer.
 //
 // It shares `board-data.mjs` with the daily GitHub edition rather than re-deriving anything, so the two

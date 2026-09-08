@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: print true/false: is this branch's diff against origin/main board-only
 // IS THIS BRANCH'S DIFF, AGAINST origin/main, A BOARD-ONLY DIFF? -- the pre-push hook's board-only fast
 // path asks this exact question, and it must ask it the SAME WAY `ci.yml`'s `board` job does (via
 // `ci-changed.mjs`'s `boardOnly`), never a second copy of the two regexes. Prints "true" or "false" to
