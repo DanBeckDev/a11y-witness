@@ -1,0 +1,62 @@
+name: reusable-acceptance
+
+# A1 (#452): `ci.yml`'s `acceptance` job (pipeline unit 2, #353), extracted on its own into a `workflow_call`
+# file. `push-trigger-allowlist.test.ts` has nothing to say about it -- no trigger of its own.
+#
+# #353's own reason for existing: NOTHING HAS EVER RUN A ROW'S ACCEPTANCE COMMAND before this job.
+# Every PR body carries an `Acceptance:` line and its own PR argues its case; the only thing that used to
+# execute it was the author, reporting the result in prose. See `scripts/acceptance-commands.mjs`'s own
+# header for the three outcomes (RAN/REFUSED/MISSING) and why they must never collapse into two.
+#
+# `pull_request`, NEVER `pull_request_target` -- stated here again deliberately, because after this split
+# that guarantee is visible ONLY at the caller's own trigger, not beside these steps. This job executes
+# commands an author wrote in a PR body. `pull_request` runs against the FORK's own checkout with a
+# read-only token, which is the correct blast radius for "run whatever this PR says to run";
+# `pull_request_target` would run those same commands with the BASE repo's token and secrets, turning a
+# line in a PR description into arbitrary code execution with write credentials.
+on:
+  workflow_call:
+    inputs:
+      pr-body:
+        description: "The PR's own body text, containing its stated Acceptance: command(s). Adversarial input -- an author-controlled string, never trusted with write credentials. NOT required: GitHub's API returns null for an empty PR body, and a required workflow_call input rejects null -- defaulting to '' preserves the original job's MISSING outcome (acceptance-commands.mjs's own three-way contract) instead of failing the call itself before that script ever runs."
+        type: string
+        default: ""
+
+# CONTENTS: READ, AND NOTHING ELSE -- EXPLICITLY, not inherited. A `workflow_call` file that omits
+# `permissions` inherits the CALLER's, which would be a widening invisible in THIS file's own diff -- the
+# sharpest new hazard this split introduces, because before it this job's permissions sat visibly beside
+# its steps in one file; after it they are visible only here, at the one place a reader would think to
+# look for the blast radius of "run whatever a stranger's PR body says". This job never writes anything.
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # NO `fetch-depth: 0` HERE, DELIBERATELY -- unlike `ts`, this job never runs `git diff`, so the
+      # default shallow clone (depth 1) is correct and unchanged from the original job. Recorded because
+      # the asymmetry is easy to "fix" by copy-pasting `ts`'s checkout without noticing why it differs.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/cache@v4
+        id: node-modules-cache
+        with:
+          path: node_modules
+          key: node-modules-${{ hashFiles('package-lock.json') }}
+      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts
+      - run: npm run build
+      # PR_BODY AS AN ENV VAR, NEVER AS A SHELL ARGUMENT -- a PR body is adversarial input (anyone can open
+      # a PR), and GitHub Actions' own `env:` mapping keeps it one opaque string here rather than
+      # re-parsing it as shell. `acceptance-commands.mjs` reads it from `process.env.PR_BODY`, never argv.
+      # NO GH_TOKEN AND NO OTHER SECRET IS PASSED TO THIS STEP -- ruled explicitly (#382-adjacent, restated
+      # 2026-09-08 on worker-capture's refusal): an author-written command in a PR body runs read-only and
+      # tracker-less, always. That constraint moves with the job, not just with the file.
+      - name: Run the PR's own stated Acceptance command(s)
+        env:
+          PR_BODY: ${{ inputs.pr-body }}
+        run: node scripts/acceptance-commands.mjs
