@@ -56,7 +56,6 @@
     "nvda"
   ],
   "scripts": {
-    "prepack": "tsc --build",
-    "prepare": "tsc --build"
+    "prepack": "tsc --build"
   }
 }

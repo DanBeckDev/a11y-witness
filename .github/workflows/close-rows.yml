@@ -26,6 +26,21 @@ name: close-rows
 on:
   pull_request:
     types: [closed]
+  # #394: `close-rows.yml` fires for SOME merges and not others, and the mechanism swallowing it is
+  # unknown -- measured 2026-09-07, two PRs met every condition this workflow needs and no run of it
+  # exists for either. Before this, the only way to find that out was waiting for another merge to
+  # coincide with the conditions. `workflow_dispatch` converts "did it fire" from something observed by
+  # luck into something that can be ASKED, against one named PR, on demand:
+  #
+  #   gh workflow run close-rows.yml -f pr=<n>
+  #
+  # `scripts/close-rows-for-merged-pr.mjs` already takes the PR number positionally -- this is a trigger
+  # and an input, not new logic.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to close the rows for (must already be merged into main)"
+        required: true
 
 # `issues: write` to close them; `pull-requests: read` to resolve the references. Nothing else -- this
 # workflow never writes code and must never be able to.
@@ -36,7 +51,11 @@ permissions:
 
 jobs:
   close:
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    # `workflow_dispatch` has no `pull_request` payload to gate on -- its own `pr` input is the ask, and
+    # `close-rows-for-merged-pr.mjs` itself now refuses an unmerged PR or a non-`main` base (#394), so a
+    # manual run cannot bypass either guarantee the `pull_request` path's own `if:` used to be the only
+    # place enforcing.
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,4 +63,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node scripts/close-rows-for-merged-pr.mjs "${{ github.event.pull_request.number }}"
+        run: node scripts/close-rows-for-merged-pr.mjs "${{ github.event.inputs.pr || github.event.pull_request.number }}"
