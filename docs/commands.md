@@ -26,6 +26,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/control-plane-hygiene.mjs` — print every control-plane hygiene number fresh, measured by command, never typed once
 - `node scripts/coverage-failure-classifier.mjs` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
 - `node scripts/generate-commands-doc.mjs` — regenerate docs/commands.md from every script's own `// command:` header
+- `node scripts/generate-consumer-gate.mjs` — regenerate .github/workflows/consumer-gate.yml from README.md's own documented workflow
 - `node scripts/history-purge-rehearsal.mjs` — rehearse deleting non-standard refs and rewriting git history ahead of the org transfer
 - `node scripts/history-secret-scan.mjs` — scan every blob reachable from every ref for internal addresses and secret-shaped strings
 - `node scripts/install-git-hooks.mjs` — point git at this repo's tracked hooks; run automatically by npm install via prepare

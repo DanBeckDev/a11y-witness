@@ -471,14 +471,20 @@ runs:
     # Last, and `always()`, so the report still lands when the check is failing -- which is exactly when
     # someone wants to read it. `--edit-last --create-if-none` updates the previous comment instead of
     # adding one per push; the marker in the body makes it identifiable.
+    #
+    # #493: THE FAILURE MESSAGE IS NOW A FUNCTION OF WHETHER A REPORT ACTUALLY EXISTS, checked by
+    # `post-comment.ts` before it ever calls `gh` -- because this step runs on `always()`, including the run
+    # where the Report step died before writing $RUNNER_TEMP/a11ign-summary.md at all (the V1 rehearsal's
+    # own shape, all three of its runs). See that file's own header for why the two messages must not
+    # collapse into one.
     - name: Comment on the pull request
       if: ${{ always() && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request' }}
       shell: bash
+      working-directory: ${{ github.action_path }}
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        gh pr comment "${{ github.event.pull_request.number }}" \
-          --body-file "$RUNNER_TEMP/a11ign-summary.md" \
-          --edit-last --create-if-none \
-          --repo "${{ github.repository }}" \
-          || echo "::warning::Could not post the PR comment. The job summary still has the report."
+        npx tsx packages/cli/src/action/post-comment.ts \
+          --summary="$RUNNER_TEMP/a11ign-summary.md" \
+          --pr="${{ github.event.pull_request.number }}" \
+          --repo="${{ github.repository }}"
