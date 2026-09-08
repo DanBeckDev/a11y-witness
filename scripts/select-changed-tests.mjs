@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
-// command: pick only the test files that import a changed source file, narrower than package scoping
+// command: pick only the test files that reference a changed file, narrower than package scoping
 // A1B: THE PR `ts` JOB AND `trunk-guard` RAN THE SAME SUITE, TWICE, ON EVERY MERGE.
 //
 // Chairman, verbatim: "the trunk guard is running all of the unit tests. this takes just as long as the
@@ -10,19 +10,41 @@
 // PACKAGES) was not narrowing much: a change to a package many others depend on already selects nearly
 // every test in the repo at package granularity, even when only one FILE in it actually matters.
 //
-// THIS FILE NARROWS ONE STEP FURTHER, TO FILES: which TEST FILES actually import -- directly, or through
-// any number of other files -- a changed SOURCE file. `ci-changed.mjs`'s package-level `testPackages` is
-// still the SEARCH SCOPE and the SAFETY NET (unchanged): this only refines what runs WITHIN it, and any
-// change outside `packages/*/src/` (a root config, a `scripts/*.mjs` file, anything `ci-changed.mjs`
-// already treats as touching every package) is left to that existing, coarser rule rather than narrowed
-// here -- the reason is in `broadReasons` below.
+// THIS FILE NARROWS ONE STEP FURTHER, TO FILES: which TEST FILES actually reference -- directly, or
+// through any number of other files -- a changed file. `ci-changed.mjs`'s package-level `testPackages` is
+// still the SEARCH SCOPE and the SAFETY NET (unchanged): this only refines what runs WITHIN it.
+//
+// A1C: PACKAGE SOURCE WAS NEVER THE ONLY THING A TEST CAN DEPEND ON. A1b covered `packages/*/src/` by
+// IMPORT and left everything else to a single `BROAD` fallback -- correct, but wide enough that the
+// chairman opened a git-hook PR (#479, `scripts/git-hooks/pre-push`) expecting the narrow path and saw
+// the full suite, because every conflict-fix row in flight that night was exactly this shape. Two more
+// reference kinds are covered now, so `BROAD` narrows to what genuinely has no better answer:
+//
+//   `scripts/*.mjs`            BY IMPORT -- the SAME reverse index as packages/*/src/, since
+//                              `sourceClosure`'s relative-import walk was never package-restricted; a
+//                              test reaching `scripts/foo.mjs` via `../../../../scripts/foo.mjs` was
+//                              already IN the index, just never looked up for a script's own changes.
+//   hooks, workflow files      BY PATH STRING -- `scripts/git-hooks/pre-push` has no extension a module
+//   (other than ci.yml)        resolver would ever touch, and `.github/workflows/*.yml` is never
+//                              `import`ed, so no walk can reach them. `pathStringReferences` searches
+//                              comment-stripped test source for the changed file's path inside a real
+//                              quoted literal -- never a bare substring match against the WHOLE file,
+//                              which would also fire on a doc comment merely discussing the path (this
+//                              repo's own `` `scripts/foo.mjs` `` markdown convention). A test that
+//                              DISCUSSES a file is not a test that exercises it.
+//
+// `BROAD` now applies to exactly two things: `.github/workflows/ci.yml` itself (a job definition can
+// affect anything the job runs) and `ci-changed.mjs`'s own `ROOT_TS_FILES` (a root config or lockfile
+// change that touches how everything builds). Reused from there rather than a second hand-typed list --
+// this file's own most-repeated lesson, one row up.
 //
 // THE ZERO-TESTS FALLBACK IS THE LOAD-BEARING HALF, not the narrowing. "Run only what changed" is the
 // easy half; "notice when that set is empty and say so" is what stops this shipping as a job that passes
 // having run nothing -- CLAUDE.md's own most-recorded defect, and this is the job that gates every PR. A
-// changed SOURCE file no test's import closure reaches falls back to its OWN PACKAGE's full suite, per
-// package, so an uncovered file in one package costs that package's full run rather than silently
-// selecting nothing.
+// changed `packages/*/src/` file no test's import closure reaches falls back to ITS OWN PACKAGE's full
+// suite; a changed `scripts/*.mjs` or hook/workflow file with no reference anywhere falls back to EVERY
+// implicated package's full suite (there is no "its own package" for a file outside `packages/`) --
+// either way, named, never silent.
 //
 // THE WALK MUST BE TRANSITIVE OR THE ROW IS WORSE THAN USELESS. A source file with no test of its own,
 // imported by a test three hops away, must still select that test -- `sourceClosure` below walks the
@@ -31,9 +53,10 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { stripComments } from "@a11ign/evidence/source-text";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
-import { knownPackages, readWorkspaceDependencyGraph, classify } from "./ci-changed.mjs";
+import { knownPackages, readWorkspaceDependencyGraph, classify, ROOT_TS_FILES } from "./ci-changed.mjs";
 
 /**
  * `import ... from "<spec>"` specifiers, in source order -- identical regex to
@@ -190,39 +213,69 @@ export function discoverTestFiles(repoRoot, pkgDirs) {
     });
 }
 
+// #A1c: `.github/workflows/ci.yml` itself -- a job definition can affect anything the job runs, so
+// narrowing it would mean reasoning about what the CHANGE to the job does, not what it touches.
+const BROAD_ALWAYS = new Set([".github/workflows/ci.yml"]);
+
 /**
- * A changed file that lives OUTSIDE `packages/*\/src/` -- a root config, a `scripts/*.mjs` file, a
- * package's own `package.json`. `ci-changed.mjs`'s existing, coarser rule already treats these as
- * touching every implicated package (see its own `rootTsChanged`/`rootScriptsChanged`), and this file
- * deliberately does NOT re-narrow that: a config file is not imported by any test, so a fine-grained walk
- * would read it as "reaches zero tests" and this file's own fallback would have to guess which package(s)
- * it means -- the coarser rule already has the right, safe answer, so this file steps aside for it.
+ * A changed file with genuinely NO better answer than `ci-changed.mjs`'s existing, coarser
+ * "touching every implicated package" rule: `.github/workflows/ci.yml` itself, or one of `ROOT_TS_FILES`
+ * (a root config or lockfile change that touches how everything builds). Reused, not re-typed -- see this
+ * file's own header for why a second hand-written list is the mistake to avoid here specifically.
+ *
+ * Everything else outside `packages/*\/src/` (a `scripts/*.mjs` file, a hook, a non-`ci.yml` workflow) is
+ * NOT broad any more -- `selectTests` below covers it by reference instead.
  * @param {string[]} changedFiles
  * @returns {string[]} the files responsible, for the caller to report
  */
 export function broadReasons(changedFiles) {
-  return changedFiles.filter((f) => !/^packages\/[^/]+\/src\/.*$/.test(f));
+  return changedFiles.filter((f) => BROAD_ALWAYS.has(f) || ROOT_TS_FILES.has(f));
 }
 
 /**
- * THE SELECTION -- pure, given the diff and a pre-built reverse index (constructed once, real disk reads
- * bounded to the touched packages' own test files, never the whole repo).
- *
- * @param {string[]} changedFiles repo-relative
- * @param {(testFile: string) => Set<string>} closureOf test file (repo-relative) -> its own transitive
- *   closure (absolute paths) -- injected so the caller builds it once per test file rather than this
- *   function re-walking the same test file once per changed source line
- * @param {string[]} testFiles every candidate test file (repo-relative), the population `closureOf` may
- *   report against
- * @param {string} repoRoot
- * @returns {{ selectedTests: string[], fallbackPackages: string[], uncoveredFiles: string[] }}
+ * Every quoted string literal's CONTENT in `source` -- single-, double- or backtick-delimited. Coarse
+ * rather than a real tokenizer (an escaped quote inside one literal is not unescaped), which is fine for
+ * this file's one question: does SOME literal mention this path, never what the literal's exact runtime
+ * value would be.
+ * @param {string} source
+ * @returns {string[]}
  */
-export function selectTests(changedFiles, closureOf, testFiles, repoRoot) {
-  const selected = new Set();
-  const fallbackPackages = new Set();
-  const uncoveredFiles = [];
+function quotedLiterals(source) {
+  return [...source.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g)]
+    .map((m) => m[1] ?? m[2] ?? m[3]);
+}
 
-  // Build the reverse index ONCE: source file (repo-relative) -> every test file that reaches it.
+/**
+ * Which of `testFiles` reference `changedFile` BY PATH STRING -- for a hook or workflow file no `import`
+ * can ever name. COMMENTS ARE STRIPPED FIRST (`@a11ign/evidence/source-text`'s `stripComments`, the same
+ * tool A2's `command-line-census.mjs` already uses), so a doc comment that MENTIONS a path in prose --
+ * this repo's own `` `scripts/foo.mjs` `` markdown convention, never a real JS string literal -- cannot
+ * be mistaken for a test that actually exercises it. A test that DISCUSSES a file is not a test that
+ * reads or runs it, and collapsing the two is exactly the heading-collision shape #446 is open about.
+ * @param {string} changedFile repo-relative
+ * @param {string[]} testFiles repo-relative
+ * @param {string} repoRoot
+ * @returns {string[]}
+ */
+export function pathStringReferences(changedFile, testFiles, repoRoot) {
+  const found = [];
+  for (const testFile of testFiles) {
+    const source = stripComments(readFileSync(join(repoRoot, testFile), "utf8"));
+    if (quotedLiterals(source).some((lit) => lit.includes(changedFile))) found.push(testFile);
+  }
+  return found;
+}
+
+/**
+ * The reverse index ONCE: source file (repo-relative) -> every test file that reaches it. Never
+ * restricted to `packages/*\/src/` -- a test reaching `scripts/foo.mjs` via a relative import was already
+ * in here; #A1c is the first place anything LOOKS it up for a script's own changes.
+ * @param {string[]} testFiles
+ * @param {(testFile: string) => Set<string>} closureOf
+ * @param {string} repoRoot
+ * @returns {Map<string, Set<string>>}
+ */
+function buildReverseIndex(testFiles, closureOf, repoRoot) {
   /** @type {Map<string, Set<string>>} */
   const reverse = new Map();
   for (const testFile of testFiles) {
@@ -232,18 +285,81 @@ export function selectTests(changedFiles, closureOf, testFiles, repoRoot) {
       /** @type {Set<string>} */ (reverse.get(rel)).add(testFile);
     }
   }
+  return reverse;
+}
 
+/**
+ * One changed file's verdict: which tests select it (possibly the file itself, if it IS a test), or an
+ * empty selection naming which package(s) the caller must fall back to instead. Never both empty and
+ * silent -- see `selectTests`'s own header for why that is the rule this whole row exists to keep.
+ *
+ * @param {string} file repo-relative
+ * @param {{ reverse: Map<string, Set<string>>, testFiles: string[], testPackages: string[],
+ *   referencesPath: (file: string, testFiles: string[]) => string[] }} ctx
+ * @returns {{ selectedBy: string[], fallbackPackages: string[] }}
+ */
+function classifyOneFile(file, ctx) {
+  if (/^packages\/([^/]+)\/src\/.*\.test\.ts$/.test(file)) return { selectedBy: [file], fallbackPackages: [] };
+
+  const pkgMatch = /^packages\/([^/]+)\/src\/.*$/.exec(file);
+  if (pkgMatch) {
+    const reachedBy = [...(ctx.reverse.get(file) ?? [])];
+    return reachedBy.length > 0
+      ? { selectedBy: reachedBy, fallbackPackages: [] }
+      : { selectedBy: [], fallbackPackages: [pkgMatch[1]] };
+  }
+
+  // #A1c: `scripts/*.mjs` -- BY IMPORT, the SAME reverse index every `packages/*\/src/` lookup uses.
+  if (/^scripts\/.*\.mjs$/.test(file)) {
+    const reachedBy = [...(ctx.reverse.get(file) ?? [])];
+    return reachedBy.length > 0
+      ? { selectedBy: reachedBy, fallbackPackages: [] }
+      // No "own package" for a file outside packages/ -- every implicated package is the honest fallback.
+      : { selectedBy: [], fallbackPackages: ctx.testPackages };
+  }
+
+  // #A1c: anything else non-package, non-broad (a hook, a non-ci.yml workflow) -- BY PATH STRING.
+  const referencedBy = ctx.referencesPath(file, ctx.testFiles);
+  return referencedBy.length > 0
+    ? { selectedBy: referencedBy, fallbackPackages: [] }
+    : { selectedBy: [], fallbackPackages: ctx.testPackages };
+}
+
+/**
+ * THE SELECTION -- pure, given the diff and a pre-built reverse index (constructed once, real disk reads
+ * bounded to the touched packages' own test files, never the whole repo).
+ *
+ * THE ZERO-TESTS FALLBACK IS THE LOAD-BEARING HALF, not the narrowing (see this file's own top-of-file
+ * header). Every branch in `classifyOneFile` returns SOME fallback package the instant it finds no
+ * selecting test, and this function's own job is to never lose that signal on the way to the output.
+ *
+ * @param {string[]} changedFiles repo-relative
+ * @param {{ closureOf: (testFile: string) => Set<string>, testFiles: string[], repoRoot: string,
+ *   testPackages?: string[], referencesPath?: (file: string, testFiles: string[]) => string[] }} options
+ *   `closureOf` -- injected so the caller builds it once per test file rather than this function
+ *   re-walking the same test file once per changed source line. `testFiles` -- every candidate test file
+ *   (repo-relative), the population `closureOf` and `referencesPath` may report against. `testPackages`
+ *   -- every implicated package (from `ci-changed.mjs`'s `classify`), the fallback target for a
+ *   `scripts/*.mjs` or hook/workflow file with no reference anywhere; defaults to `[]` so an existing
+ *   caller testing only `packages/*\/src/` files is unaffected. `referencesPath` -- injected the same way
+ *   `closureOf` is, so a unit test never touches disk unless it deliberately wants to; defaults to the
+ *   real `pathStringReferences`.
+ * @returns {{ selectedTests: string[], fallbackPackages: string[], uncoveredFiles: string[] }}
+ */
+export function selectTests(changedFiles, options) {
+  const { closureOf, testFiles, repoRoot, testPackages = [],
+    referencesPath = (file, candidates) => pathStringReferences(file, candidates, repoRoot) } = options;
+  const reverse = buildReverseIndex(testFiles, closureOf, repoRoot);
+
+  const selected = new Set();
+  const fallbackPackages = new Set();
+  /** @type {string[]} */
+  const uncoveredFiles = [];
   for (const file of changedFiles) {
-    const testMatch = /^packages\/([^/]+)\/src\/.*\.test\.ts$/.exec(file);
-    if (testMatch) { selected.add(file); continue; }
-    const pkgMatch = /^packages\/([^/]+)\/src\/.*$/.exec(file);
-    if (!pkgMatch) continue; // handled by broadReasons()'s caller instead
-    const reachedBy = reverse.get(file);
-    if (reachedBy && reachedBy.size > 0) {
-      for (const t of reachedBy) selected.add(t);
-    } else {
-      // ZERO TESTS REACH THIS SOURCE FILE -- the load-bearing fallback, never silence.
-      fallbackPackages.add(pkgMatch[1]);
+    const verdict = classifyOneFile(file, { reverse, testFiles, testPackages, referencesPath });
+    for (const t of verdict.selectedBy) selected.add(t);
+    if (verdict.selectedBy.length === 0) {
+      for (const pkg of verdict.fallbackPackages) fallbackPackages.add(pkg);
       uncoveredFiles.push(file);
     }
   }
@@ -263,7 +379,9 @@ function writeOutputs(result) {
     `broad=${result.broad.length > 0}`,
   ];
   console.log(`select-changed-tests: ${result.broad.length > 0
-    ? `BROAD -- ${result.broad.length} file(s) outside packages/*/src/ (${result.broad.slice(0, 5).join(", ")}` + `${result.broad.length > 5 ? ", ..." : ""}), falling back to ci-changed.mjs's existing package-level scope`
+    ? `BROAD -- ${result.broad.length} file(s) outside the by-reference search (ci.yml itself or a root `
+      + `config): (${result.broad.slice(0, 5).join(", ")}${result.broad.length > 5 ? ", ..." : ""}), `
+      + "falling back to ci-changed.mjs's existing package-level scope"
     : `${result.selectedTests.length} test file(s) selected precisely` + (result.fallbackPackages.length > 0
       ? `, plus the full suite of ${result.fallbackPackages.length} package(s) with an uncovered change `
         + `(${result.uncoveredFiles.join(", ")})`
@@ -302,7 +420,7 @@ async function main() {
   const testFiles = discoverTestFiles(repoRoot, testPackages);
   const closureOf = (/** @type {string} */ testFile) =>
     sourceClosure(join(repoRoot, testFile), repoRoot, packages);
-  const result = selectTests(files, closureOf, testFiles, repoRoot);
+  const result = selectTests(files, { closureOf, testFiles, repoRoot, testPackages });
   writeOutputs({ ...result, broad: [] });
 }
 
