@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: say whether the first-publish npm token is still present after it should have been revoked
 // IS THE FIRST-PUBLISH NPM TOKEN STILL THERE AFTER IT SHOULD BE GONE? — #73, built alongside #72.
 //
 //   npm run npm-token:check            say whether NPM_TOKEN is gone, present, or unaskable

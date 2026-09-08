@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: list every git stash entry with the branch it was made on, since git alone will not say
 /**
  * WHOSE STASH IS THAT? — every entry with the branch it was made on (#290).
  *

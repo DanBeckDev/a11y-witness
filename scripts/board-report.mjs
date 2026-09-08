@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: generate the daily board report from GitHub and git, never from what an agent said
 // The daily board report, GENERATED FROM GITHUB AND GIT — never from what an agent said.
 //
 // The rule this file exists to enforce, and the reason it is a script rather than a habit: a report

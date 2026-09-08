@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: check at 21:00 whether tomorrow's hand-written board summary has been written yet
 // THE 21:00 CHECK: is tomorrow's executive summary written?
 //
 // The 08:00 job refuses an edition with no hand-written summary for that day, which is correct and was

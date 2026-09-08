@@ -1,4 +1,5 @@
 // @ts-check
+// command: refuse a candidate whose scorer head set shrank without declaring what it retired
 /**
  * A candidate whose head set SHRINKS must name what it retired, or be refused.
  *
