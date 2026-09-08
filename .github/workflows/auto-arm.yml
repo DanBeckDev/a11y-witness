@@ -22,12 +22,25 @@ name: auto-arm
 # arming here is safe BY CONSTRUCTION for the one thing CI can answer: GitHub cannot complete a merge this
 # workflow arms without `gate` -- and therefore `mergeSafety` -- reporting green for the real, current head.
 #
-# ## Why `opened` and `ready_for_review`, not `synchronize`
+# ## `opened` and `ready_for_review` ARE NOT ENOUGH -- `synchronize` closes a real gap, #415
 #
 # Arming is idempotent and only needs to happen once per PR; GitHub keeps auto-merge enabled across every
-# later push on its own. Re-arming on every `synchronize` would be a redundant API call on every commit for
-# no behavioural difference, and this workflow's own job only asks "is this PR eligible to be armed at
-# all" (open, against `main`, not a draft) -- a question that does not change between commits.
+# later push on its own, so re-arming on every `synchronize` is a redundant API call on most commits, with
+# no behavioural difference for a PR that was already armed. THAT case is not why `synchronize` is here.
+#
+# **A PR opened WHILE IT CONFLICTS gets neither `opened` nor `ready_for_review`** -- GitHub does not
+# dispatch `pull_request` workflows for a PR whose merge commit it cannot compute, so both of this
+# workflow's original triggers are spent before the author can even fix the conflict. Resolving it is a
+# push -- a `synchronize` -- which this trigger list did not listen for, so `arm` never saw the one event
+# left. Measured on #402: opened while `mergeable: CONFLICTING`, zero `ci` runs and zero `auto-arm` runs at
+# `opened`, and none at the `synchronize` that fixed the conflict either, because nothing was listening.
+# `#403`, opened ten seconds later and not conflicting, got both events normally -- same author, same
+# minute, the only variable was whether GitHub could compute a merge ref at `opened`.
+#
+# `sweep` (below) still finds such a PR EVENTUALLY -- it runs on every event this workflow takes -- but
+# only on the NEXT unrelated PR event anywhere in the repo, which in a quiet period is unbounded. #402 sat
+# unarmed from 00:22 until swept by hand. `synchronize` bounds this to the fix itself: the moment the
+# conflict is resolved, `arm` sees it directly instead of waiting on someone else's PR.
 #
 # ## AND THAT IS WHY A SWEEP IS NEEDED, NOT A THIRD TRIGGER -- #344, measured 2026-09-07
 #
@@ -73,9 +86,43 @@ name: auto-arm
 # could be expected to know exists. Adding `reopened` removes the exception rather than documenting it,
 # which is this repo's own preference: a rule that asks a human to remember something is a rule that
 # gets broken.
+#
+# ## `A11IGN_BOT_TOKEN`, WITH A FALLBACK -- #416, measured 2026-09-08
+#
+# GitHub does not trigger workflows from events created with `GITHUB_TOKEN`. A merge completed by
+# `github-actions[bot]` -- every merge THIS workflow arms and GitHub later completes -- fires neither
+# `pull_request: closed` nor a `push`, so `trunk-guard`, `close-rows` and every push watchdog go silent
+# for exactly the merges the pipeline performs (37 data points, no exceptions: 18 of 18 PAT merges ran
+# `close-rows`, 19 of 19 bot merges never did; 5 of 5 sampled bot-merge SHAs never ran `trunk-guard` at
+# all). Arming with a real, fine-grained PAT instead means the completed merge is attributed to that
+# identity, its push fires every trigger that currently goes silent, and `Closes #N` closes natively.
+#
+# CREATING THE TOKEN IS NOT PART OF THIS ROW -- `ceo` asks the chairman for it; nobody here creates, reads
+# or pastes it. This is the workflow's half: read the secret when present, and FALL BACK to `GITHUB_TOKEN`
+# with a printed warning when it is not, so the pipeline keeps arming before the token exists rather than
+# stopping -- #382's own lesson: a job that cannot do its intended work must say which path it took, not
+# go silent. The SAME four-line shell snippet appears in both `arm` and `sweep` below, deliberately: the
+# decision is one `[ -n "$A11IGN_BOT_TOKEN" ]` test, trivial enough that a composite action to share it
+# would be more surface than the thing it shares -- unlike the real logic elsewhere in this pipeline
+# (`closurePlan`, `stalledVerdict`) that this repo is right to insist on a single copy of.
+#
+# NOT `issues: write` for this -- #333 already measured that granting it changed nothing, because the
+# native `Closes #N` closure is performed by GitHub AS THE MERGING IDENTITY and needs no extra grant on
+# the workflow's own token. The permission stays here (below) for #298's existing bot-merge case, which
+# this token change does not remove until every merge in this repo's history is one.
+#
+# THE SECRET IS NEVER ECHOED, NEVER AN ARGUMENT, NEVER LOGGED -- it goes through an `env:` mapping into
+# `GH_TOKEN` exactly the way `PR_BODY` is handled in `ci.yml`'s `acceptance` job, and for the same reason:
+# `gh`'s own CLI reads `GH_TOKEN` from the environment, so the value never appears on a command line a
+# log could capture.
+#
+# EXPIRY IS A SCHEDULED OUTAGE. A 90-day PAT stops working on a known date, and the failure mode is this
+# same fallback -- a silent reversion to today's defect, not a loud one. Record the expiry wherever this
+# repository already tracks dated obligations once the token exists; this workflow cannot see its own
+# secret's expiry date to warn about it in advance.
 on:
   pull_request:
-    types: [opened, ready_for_review, reopened]
+    types: [opened, ready_for_review, reopened, synchronize]
   workflow_dispatch:
 
 permissions:
@@ -107,8 +154,16 @@ jobs:
     steps:
       - name: Enable auto-merge (merge commit) -- GitHub still withholds the merge until `gate` is green
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh pr merge --auto --merge "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}"
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+          FALLBACK_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "$A11IGN_BOT_TOKEN" ]; then
+            export GH_TOKEN="$A11IGN_BOT_TOKEN"
+          else
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk-guard, close-rows, the push watchdogs) -- see #416."
+            export GH_TOKEN="$FALLBACK_TOKEN"
+          fi
+          gh pr merge --auto --merge "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}"
 
   sweep:
     # ARM EVERY PR THE `arm` JOB ABOVE CANNOT SEE -- the ones already open, #344.
@@ -128,6 +183,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Arm every open, non-draft, unheld, tested PR against main that nothing has armed
         env:
-          GH_TOKEN: ${{ github.token }}
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+          FALLBACK_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node scripts/auto-arm-sweep.mjs
+        run: |
+          if [ -n "$A11IGN_BOT_TOKEN" ]; then
+            export GH_TOKEN="$A11IGN_BOT_TOKEN"
+          else
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk-guard, close-rows, the push watchdogs) -- see #416."
+            export GH_TOKEN="$FALLBACK_TOKEN"
+          fi
+          node scripts/auto-arm-sweep.mjs

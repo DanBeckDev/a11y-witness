@@ -42,6 +42,7 @@ import { realpathSync } from "node:fs";
 // rather than naming it), and there it dies on startup with ERR_MODULE_NOT_FOUND.
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
+import { fetchBoardItems, PROJECT_NUMBER } from "./board-snapshot.mjs";
 
 export const READY_LABEL = "ready";
 
@@ -201,6 +202,19 @@ export function closedDebris(issues) {
   return found;
 }
 
+/**
+ * Pure: which OPEN issues carrying `ready` have NO item on the Project board at all? Neither a label check
+ * (the label is correct) nor a Status check (there is no item to read a Status from) can see this on its
+ * own -- it is visible only as a comparison between the two populations. Measured 2026-09-08: four such
+ * rows existed while the Ready lane read empty and idled a worker.
+ * @param {LabelledIssue[]} openIssues
+ * @param {Set<number>} boardNumbers issue numbers that have an item on the Project
+ * @returns {LabelledIssue[]}
+ */
+export function readyRowsAbsentFromBoard(openIssues, boardNumbers) {
+  return openIssues.filter((i) => i.labels.includes(READY_LABEL) && !boardNumbers.has(i.number));
+}
+
 /** Report the OPEN-row mutex check exactly as before #378 -- unchanged population, unchanged wording. */
 function reportMutexViolations() {
   const issues = fetchOpenIssues();
@@ -241,9 +255,33 @@ function reportClosedDebris() {
   return debris.length;
 }
 
+/**
+ * Report the `ready`-labelled-but-off-the-board population #399 exists for -- a THIRD population,
+ * separate from both label checks above, since neither a label comparison nor a Status comparison alone
+ * can see a row with no Project item at all.
+ */
+function reportAbsentFromBoard() {
+  const issues = fetchOpenIssues();
+  const items = fetchBoardItems();
+  const boardNumbers = new Set(
+    /** @type {number[]} */ (items.map((i) => i.number).filter((n) => n !== null)),
+  );
+  const missing = readyRowsAbsentFromBoard(issues, boardNumbers);
+  if (missing.length === 0) {
+    process.stdout.write(`OK  every open \`ready\` issue has an item on Project ${PROJECT_NUMBER}\n`);
+    return 0;
+  }
+  for (const { number, title } of missing) {
+    process.stdout.write(`ABSENT  #${number} "${title}" -- carries \`ready\` and is not on the board at all\n`);
+  }
+  process.stderr.write(`\n${missing.length} \`ready\` row(s) have no Project item -- the Ready lane cannot `
+    + `show these even though they are pickable.\n`);
+  return missing.length;
+}
+
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "ready-label-audit" });
-  let mutexCount, debrisCount;
+  let mutexCount, debrisCount, absentCount;
   try {
     mutexCount = reportMutexViolations();
   } catch (error) {
@@ -259,7 +297,15 @@ function main() {
     process.exitCode = 2;
     return;
   }
-  if (mutexCount > 0 || debrisCount > 0) process.exitCode = 1;
+  process.stdout.write("\n");
+  try {
+    absentCount = reportAbsentFromBoard();
+  } catch (error) {
+    process.stderr.write(`COULD NOT AUDIT board membership: ${/** @type {Error} */ (error).message}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  if (mutexCount > 0 || debrisCount > 0 || absentCount > 0) process.exitCode = 1;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
