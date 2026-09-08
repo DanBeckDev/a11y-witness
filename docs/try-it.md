@@ -42,6 +42,7 @@ jobs:
   a11ign:
     runs-on: windows-2022        # NVDA is Windows-only; the action fails fast anywhere else
     steps:
+      - uses: actions/checkout@v4
       - uses: DanBeckDev/a11y-witness@main
         with:
           url: https://your-site.example/the-page
