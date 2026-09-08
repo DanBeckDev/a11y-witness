@@ -323,7 +323,7 @@ function reportReachability(issueNumber) {
  *
  * @param {number} issueNumber
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun }} [deps]
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} [deps]
  * @returns {{ claimed: true } | { claimed: false, reason: string }}
  */
 export function dispatchRow(issueNumber, mySession, deps = {}) {
@@ -338,7 +338,7 @@ export function dispatchRow(issueNumber, mySession, deps = {}) {
  *
  * @param {number} issueNumber
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun }} [deps]
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} [deps]
  * @returns {{ claimed: true } | { claimed: false, reason: string }}
  */
 export function claimRow(issueNumber, mySession, deps = {}) {
