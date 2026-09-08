@@ -43,4 +43,5 @@ export const COMMANDS = {
   "auto-arm-sweep": { argv: ["node", "scripts/auto-arm-sweep.mjs"] },
   "close-rows-for-merged-pr": { argv: ["node", "scripts/close-rows-for-merged-pr.mjs"] },
   "reconstitution-drill": { argv: ["node", "scripts/reconstitution-drill.mjs"] },
+  "select-changed-tests": { argv: ["node", "scripts/select-changed-tests.mjs"] },
 };
