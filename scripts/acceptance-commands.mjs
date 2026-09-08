@@ -216,6 +216,15 @@ function joinContinuations(lines, startIndex, firstLine) {
  * which errors loudly rather than doing something silent -- but the failure was baffling to an author who
  * never wrote a command at all, on the exact PR-body shape GitHub's own convention encourages.
  *
+ * #419 FOLLOW-UP: A BLANK LINE AFTER THE HEADER IS NOT THE TERMINATOR -- ONLY A BLANK LINE AFTER A COMMAND
+ * IS. Markdown convention puts a blank line after every heading (every other `## ` section in this repo's
+ * own PR template has one), so `## Acceptance` -- the very form #419 just made acceptable -- combined with
+ * that convention landed straight back on MISSING: the block "ended" at the blank line before a single
+ * command was ever read. `Acceptance:` followed by a blank line has the identical shape. So a blank line
+ * is skipped while NO command has been found yet, and still ends the block the moment one has -- which
+ * keeps `Acceptance:` + blank + `Mutation:` reading as MISSING (correct: the block never gains a command)
+ * while letting `## Acceptance` + blank + a real command through.
+ *
  * @param {string[]} lines
  * @param {number} headerIndex
  * @returns {string[]}
@@ -245,7 +254,10 @@ function commandLinesAfter(lines, headerIndex) {
       }
       continue;
     }
-    if (trimmed === "") break;
+    if (trimmed === "") {
+      if (commands.length === 0) continue; // leading blank, before any command -- not the terminator
+      break;
+    }
     if (/^#{1,6}\s/.test(trimmed)) break;
     if (/^(?:\*\*|__)?Mutation:(?:\*\*|__)?/i.test(trimmed)) break;
     const { command, consumed } = joinContinuations(lines, i, trimmed);
