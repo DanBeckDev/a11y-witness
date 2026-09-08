@@ -1,0 +1,10 @@
+{
+  "claim": "The corpus survives losing its machine.",
+  "evidence": "Several thousand screen-reader recordings, which cannot be re-recorded once a browser updates, existed in exactly one place. A copy now sits off that machine, and it was checked by downloading it back and counting what was inside rather than by trusting that the upload succeeded. 7,694 files, 108.1 MB of evidence in an 8.5 MB archive, zero empty files. Each step of the chain distrusts the one before it: the machine holding the corpus verifies its own archive against what is on its disk, the transfer is counted on arrival, and the upload is verified by retrieval. (`corpus:snapshot` -> `lab:fetch -e artifact=corpus-archive` -> `corpus:release`, orchestrator, 2026-09-06; release tag corpus-2026-09-06_19-31-35; tracked as issue #43.)",
+  "issue": 43,
+  "reportedBy": "orchestrator",
+  "at": "2026-09-06T20:45:00Z",
+  "boardClaim": "The recordings this product rests on now exist in more than one place.",
+  "affirmed": "Re-verified 2026-09-07 21:2xZ by orchestrator, who ran the backup, by downloading the asset back and counting inside it: `corpus:release --verify=corpus-2026-09-06_19-31-35` reports 7,694 JSON files, exit 0, from an 8,960,587-byte asset in `a11ign/corpus-backups`. The claim is that the corpus survives losing its machine, and it still does. It is NOT a claim that the copy is current: the corpus on the lab now holds 7,941 capture files, so the backup is 247 captures behind and a new snapshot is due after the next corpus run.",
+  "order": 20
+}
