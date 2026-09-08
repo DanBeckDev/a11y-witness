@@ -1,3 +1,4 @@
+// command: mark or query whether this checkout is the fleet-driving primary, which the hooks read
 // MARK THIS CHECKOUT AS THE FLEET-DRIVING ONE — the opt-in the hooks read.
 //
 //   node scripts/mark-primary-checkout.mjs           # is it marked?

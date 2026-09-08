@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 // MUTATION CHECKING, AS A COMMAND RATHER THAN A SEQUENCE PEOPLE TYPE.
 //
 // This repository relies on mutation checking more than on any other technique: almost every guard here
