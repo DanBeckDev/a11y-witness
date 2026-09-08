@@ -5,7 +5,7 @@
 # `npm publish` across six interdependent packages at the moment they are least able to check the result.
 # npm versions cannot be unpublished after 72 hours, only deprecated, so a wrong first release is permanent.
 #
-# SIX INDEPENDENT THINGS must all be true before a single byte is published. They are independent on
+# SEVEN INDEPENDENT THINGS must all be true before a single byte is published. They are independent on
 # purpose: any one of them alone would be a single point of failure, and this repo's own rule is that a
 # verification must not share a failure mode with the action it guards.
 #
@@ -21,19 +21,26 @@
 #   6. `capture-regression` must SUCCEED, run HERE, against the same sha. It drives real NVDA over the
 #      bundled tutorial pages, so a change to the capture path is proven against the exact commit about to
 #      publish rather than trusted from whenever it last happened to run.
+#   7. `consumer-gate` must SUCCEED, run HERE. #494: `action-smoke` runs `uses: ./` with full repository
+#      knowledge — it needs no `actions/checkout` and never reads the public documents, so it could not
+#      have caught (and did not catch) three publish-blockers the V1 rehearsal (#324) found on a real
+#      windows-2022 runner: no checkout in any public doc, the Action's own build dying on Windows, and a
+#      failure message lying about where the report was. `consumer-gate.yml` is generated from README.md's
+#      own Quickstart fence, not hand-retyped, and its workspace starts empty — the ONE check here that
+#      exercises the path a first reader actually takes, rather than the path this repo's own CI takes.
 #
-#   Both 5 and 6 used to run on every push touching their own paths, on `main`, with this workflow merely
+#   5, 6 and 7 used to run on every push touching their own paths, on `main`, with this workflow merely
 #   QUERYING whether that separately-triggered run had passed — reasonable while `main` itself was gated
 #   by nothing else, wrong now that `ci.yml` gates every merge on the PR (chairman's direction,
 #   2026-09-06): a check that only ever ran on a push nobody blocks on is not a release guard, it is a
-#   a habit. Both workflows left `main`/PR entirely and now declare `workflow_call`, so this file runs them
-#   as JOBS against the sha actually being released, and `release`'s own `needs:` on both makes "job did
-#   not succeed" the same failure as any other step here — no query, no race between "never ran" and
-#   "running right now", the exact ambiguity the old query step had to fail closed on three ways.
+#   a habit. All three workflows left `main`/PR entirely and now declare `workflow_call`, so this file runs
+#   them as JOBS against the sha actually being released, and `release`'s own `needs:` on all three makes
+#   "job did not succeed" the same failure as any other step here — no query, no race between "never ran"
+#   and "running right now", the exact ambiguity the old query step had to fail closed on three ways.
 #
-# Removing any of the six is a deliberate act. Do not remove them in the same change that first uses this.
+# Removing any of the seven is a deliberate act. Do not remove them in the same change that first uses this.
 #
-# `dist-tag` (issue #326) IS NOT A SEVENTH GUARD -- it is a CHANNEL, orthogonal to all six. All of them
+# `dist-tag` (issue #326) IS NOT AN EIGHTH GUARD -- it is a CHANNEL, orthogonal to all seven. All of them
 # still gate the run identically whether `dist-tag` is empty (publishes "latest", today's only behaviour)
 # or set (publishes under a named tag instead). It exists so the real path -- dry-run false, confirm typed,
 # access public, both smoke jobs green -- can be rehearsed against `next` without a first user's plain
@@ -55,12 +62,12 @@ on:
         description: >-
           npm dist-tag for a real publish, e.g. "next" -- lets the real path be exercised without
           claiming "latest", which is what a first user installs. Empty publishes to "latest" as before;
-          this changes WHICH TAG gets the version, none of the six guards above.
+          this changes WHICH TAG gets the version, none of the seven guards above.
         type: string
         default: ''
 
 jobs:
-  # GUARDS 5 AND 6, RUN AS JOBS AGAINST THE EXACT SHA THIS WORKFLOW WAS DISPATCHED AT -- see the file
+  # GUARDS 5, 6 AND 7, RUN AS JOBS AGAINST THE EXACT SHA THIS WORKFLOW WAS DISPATCHED AT -- see the file
   # header. `uses:` a local workflow path calls it as a reusable workflow (`workflow_call`); no `with:`
   # needed, since neither takes an input. GitHub runs a called workflow at THIS workflow's own ref by
   # default, which is exactly the property the old query step existed to approximate by asking whether a
@@ -71,8 +78,18 @@ jobs:
   capture-regression:
     uses: ./.github/workflows/capture-regression.yml
 
+  # #494. `consumer-gate.yml`'s own `uses: DanBeckDev/a11y-witness@<sha>` step is pinned to a LITERAL sha
+  # baked in at generation time (see scripts/generate-consumer-gate.mjs's own header for why `${{ }}` does
+  # not work in a `uses:` field) -- so unlike action-smoke/capture-regression, this job does NOT
+  # automatically track "the exact sha this workflow was dispatched at" by virtue of being a local
+  # `workflow_call`. The "consumer-gate.yml is current" step in the `release` job below asserts the
+  # checked-in file's pin is not stale before publishing proceeds; regenerate (`node
+  # scripts/generate-consumer-gate.mjs`) and commit as the last step before releasing if it has drifted.
+  consumer-gate:
+    uses: ./.github/workflows/consumer-gate.yml
+
   release:
-    needs: [action-smoke, capture-regression]
+    needs: [action-smoke, capture-regression, consumer-gate]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -127,6 +144,15 @@ jobs:
       - name: The release gate — the part a runner can prove
         run: npm run release:gate:ci
 
+      # #494: `consumer-gate.yml`'s pin is a LITERAL sha, baked in at generation time -- unlike
+      # action-smoke/capture-regression it does not automatically track this workflow's own dispatched
+      # sha. A stale pin would mean guard 7 above just proved the DOCUMENTED WORKFLOW works against some
+      # earlier commit, not this one -- silently reintroducing the "checked something, not this" gap the
+      # whole release-gate chain exists to close. `--check` is the same drift assertion
+      # commands-documented.test.ts already established for docs/commands.md (A6b, #478).
+      - name: consumer-gate.yml is current -- pinned to this exact release sha, not a stale one
+        run: node scripts/generate-consumer-gate.mjs --check
+
       - name: Name what this runner did NOT check
         run: |
           echo "::warning::release:gate:ci ran 4 of release:gate's 12 stages. The other 8 need the Python"
@@ -158,7 +184,7 @@ jobs:
       - name: Pack every package, which is what a consumer receives
         run: npm run gate:isolation
 
-      - name: Refuse to publish unless all six guards agree
+      - name: Refuse to publish unless all seven guards agree
         if: inputs.dry-run == false
         run: |
           if [ "${{ inputs.confirm }}" != "publish-for-real" ]; then
