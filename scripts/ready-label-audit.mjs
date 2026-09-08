@@ -240,13 +240,20 @@ export function readyRowsAbsentFromBoard(openIssues, boardNumbers) {
 }
 
 /**
- * @typedef {{ number: number, state: string }} ClosingPrRef
+ * @typedef {{ number: number, state: string, mergedAt: string | null }} ClosingPrRef
  */
 
 /**
- * Pure: which OPEN `ready` issues does a MERGED PR already claim to close? #443 -- #438 was merged as #440
- * at 02:31Z, never auto-closed (bot-attributed merges do not close a referenced issue -- see
- * `close-rows-for-merged-pr.mjs`'s own header), and sat `ready` until a worker claimed it and had to
+ * @typedef {{ number: number, title: string, state: "ALREADY-MERGED", closedBy: number, mergedAt: string }
+ *   | { number: number, title: string, state: "REOPENED-AFTER-MERGE", closedBy: number, mergedAt: string,
+ *       reopenedAt: string }} AlreadyMergedRow
+ */
+
+/**
+ * Pure: which OPEN `ready`/`in-progress` issues does a MERGED PR already claim to close, and -- #550 --
+ * was the row put back DELIBERATELY after that merge, rather than simply forgotten? #443 -- #438 was
+ * merged as #440 at 02:31Z, never auto-closed (bot-attributed merges do not close a referenced issue --
+ * see `close-rows-for-merged-pr.mjs`'s own header), and sat `ready` until a worker claimed it and had to
  * revert. Every existing check misses this: the collision check asks "does anyone else hold this row",
  * the mutex check asks "is `ready` beside a not-pickable LABEL", `readyRowsAbsentFromBoard` asks "is it on
  * the board" -- none of them ask "did the work already ship".
@@ -257,16 +264,41 @@ export function readyRowsAbsentFromBoard(openIssues, boardNumbers) {
  * MERGED, not merely present: an OPEN PR that declares `Closes #N` is exactly the state a worker taking
  * this row would want to know about, not a reason to hide the row.
  *
- * @param {LabelledIssue[]} readyIssues open issues already filtered to `ready`
+ * #550: #492 was closed by #529 (18:37:31Z), reopened (18:51:57Z), closed again by #545 (19:00:41Z), and
+ * reopened again (19:06:33Z) -- every clause of the old ALREADY-MERGED sentence was true and the
+ * conclusion was not, because a row REOPENED after the merge that referenced it is a refuted fix, not a
+ * forgotten one. So this compares the LATEST reopen against the MOST RECENT QUALIFYING MERGE, never the
+ * first of either found: a row can cycle through this more than once (as #492 did, TWICE), and only the
+ * latest events on each side are the ones actually in a race. Comparing against the first reopen or the
+ * first merge is right by luck whenever there is only one of each, and wrong the moment there are two.
+ *
+ * @param {LabelledIssue[]} readyIssues open issues already filtered to a live-state label
  * @param {Map<number, ClosingPrRef[]>} closingRefsByIssue issue number -> the PRs that would close it
- * @returns {{ number: number, title: string, closedBy: number }[]}
+ * @param {Map<number, string | null>} [latestReopenByIssue] issue number -> its LATEST `reopened` event's
+ *   timestamp, from the issue's own timeline (never from a label -- a label records what somebody SET,
+ *   the timeline records WHEN the row actually came back, and this whole distinction is about ordering
+ *   in time). Absent or null means the issue has never been reopened.
+ * @returns {AlreadyMergedRow[]}
  */
-export function readyRowsAlreadyMerged(readyIssues, closingRefsByIssue) {
+export function readyRowsAlreadyMerged(readyIssues, closingRefsByIssue, latestReopenByIssue = new Map()) {
+  /** @type {AlreadyMergedRow[]} */
   const flagged = [];
   for (const issue of readyIssues) {
     const refs = closingRefsByIssue.get(issue.number) ?? [];
-    const merged = refs.find((ref) => ref.state === "MERGED");
-    if (merged) flagged.push({ number: issue.number, title: issue.title, closedBy: merged.number });
+    const merged = refs.filter((ref) => ref.state === "MERGED" && ref.mergedAt);
+    if (merged.length === 0) continue;
+    const mostRecentMerge = merged.reduce(
+      (a, b) => (/** @type {string} */ (a.mergedAt) > /** @type {string} */ (b.mergedAt) ? a : b),
+    );
+    const mergedAt = /** @type {string} */ (mostRecentMerge.mergedAt);
+    const reopenedAt = latestReopenByIssue.get(issue.number);
+    if (reopenedAt && reopenedAt > mergedAt) {
+      flagged.push({ number: issue.number, title: issue.title, state: "REOPENED-AFTER-MERGE",
+        closedBy: mostRecentMerge.number, mergedAt, reopenedAt });
+    } else {
+      flagged.push({ number: issue.number, title: issue.title, state: "ALREADY-MERGED",
+        closedBy: mostRecentMerge.number, mergedAt });
+    }
   }
   return flagged;
 }
@@ -345,7 +377,7 @@ export function fetchClosingPrRefs(issueNumbers, { run = defaultRun } = {}) {
   if (issueNumbers.length === 0) return map;
   const [owner, name] = REPO.split("/");
   const fields = issueNumbers.map((n, i) => `i${i}: issue(number: ${n}) { number `
-    + `closedByPullRequestsReferences(first: 20) { nodes { number state } } }`).join(" ");
+    + `closedByPullRequestsReferences(first: 20) { nodes { number state mergedAt } } }`).join(" ");
   const query = `{ repository(owner: "${owner}", name: "${name}") { ${fields} } }`;
   /** @type {string} */
   let raw;
@@ -372,6 +404,86 @@ export function fetchClosingPrRefs(issueNumbers, { run = defaultRun } = {}) {
 }
 
 /**
+ * One GraphQL round trip for every issue's LATEST `reopened` timeline event -- #550. A separate call from
+ * `fetchClosingPrRefs` rather than one field folded into it: the two are independent facts (closing PR
+ * state, and the issue's own reopen history) and combining them into one richer return shape would have
+ * meant restructuring that function's existing `Map<number, ClosingPrRef[]>` contract for every caller
+ * and test, for a Ready lane small enough (single digits to low tens) that a second round trip costs
+ * nothing worth avoiding that for.
+ *
+ * `last: 1` on the server side, not `.pop()` on the client -- GitHub returns timeline items OLDEST
+ * first, so the LAST item in an unbounded page is the most recent one, and asking the server for exactly
+ * that one item is both the correct answer and the cheaper query.
+ *
+ * THROWS on any failure or unrecognised shape, same discipline as `fetchClosingPrRefs`: a silently empty
+ * map would read as "never reopened" for every issue, which turns every ALREADY-MERGED row into a
+ * guaranteed false conclusion rather than an honest refusal.
+ *
+ * @param {number[]} issueNumbers
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {Map<number, string | null>} issue number -> its latest reopen's ISO timestamp, or null if
+ *   the issue has never been reopened
+ */
+export function fetchLatestReopenedAt(issueNumbers, { run = defaultRun } = {}) {
+  /** @type {Map<number, string | null>} */
+  const map = new Map();
+  if (issueNumbers.length === 0) return map;
+  const [owner, name] = REPO.split("/");
+  const fields = issueNumbers.map((n, i) => `i${i}: issue(number: ${n}) { number `
+    + `timelineItems(itemTypes: [REOPENED_EVENT], last: 1) { nodes { ... on ReopenedEvent { createdAt } } } }`)
+    .join(" ");
+  const query = `{ repository(owner: "${owner}", name: "${name}") { ${fields} } }`;
+  /** @type {string} */
+  let raw;
+  try {
+    raw = run("gh", ["api", "graphql", "-f", `query=${query}`]);
+  } catch (cause) {
+    throw new Error(`ready-label-audit: could not resolve reopen history -- refusing to guess. `
+      + `${/** @type {Error} */ (cause).message}`, { cause });
+  }
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`ready-label-audit: gh's reopen-history response was not JSON -- refusing to guess. `
+      + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
+  }
+  const repo = /** @type {any} */ (parsed)?.data?.repository;
+  if (!repo || typeof repo !== "object") {
+    throw new Error(`ready-label-audit: gh's reopen-history response had no repository -- refusing to `
+      + `guess. Got: ${JSON.stringify(parsed).slice(0, 300)}`);
+  }
+  return latestReopenedAtFromRepoNode(repo, issueNumbers);
+}
+
+/**
+ * Reads each aliased `i<N>: issue(...)` node's reopen timeline back out, keyed by the real issue number
+ * rather than by alias -- split out of `fetchLatestReopenedAt` purely to keep that function's complexity
+ * under gate, per this repo's Stepdown Rule and the identical split `closingPrRefsFromRepoNode` already
+ * makes for `fetchClosingPrRefs`; it is the same one concept written out.
+ *
+ * @param {Record<string, any>} repo
+ * @param {number[]} issueNumbers
+ * @returns {Map<number, string | null>}
+ */
+function latestReopenedAtFromRepoNode(repo, issueNumbers) {
+  /** @type {Map<number, string | null>} */
+  const map = new Map();
+  for (let i = 0; i < issueNumbers.length; i++) {
+    const node = repo[`i${i}`];
+    if (!node || typeof node.number !== "number") {
+      throw new Error(`ready-label-audit: issue #${issueNumbers[i]} is missing from the reopen-history `
+        + `response -- refusing to guess. Got: ${JSON.stringify(node ?? null).slice(0, 300)}`);
+    }
+    const nodes = node.timelineItems?.nodes;
+    const latest = Array.isArray(nodes) && nodes.length > 0 ? nodes[nodes.length - 1]?.createdAt ?? null : null;
+    map.set(node.number, latest);
+  }
+  return map;
+}
+
+/**
  * Reads each aliased `i<N>: issue(...)` node back out of the GraphQL response, keyed by the real issue
  * number rather than by alias -- split out of `fetchClosingPrRefs` purely to keep that function's
  * complexity under gate, per this repo's Stepdown Rule; it is the same one concept written out.
@@ -393,7 +505,7 @@ function closingPrRefsFromRepoNode(repo, issueNumbers) {
     }
     const nodes = node.closedByPullRequestsReferences?.nodes;
     const refs = Array.isArray(nodes)
-      ? nodes.map((/** @type {any} */ r) => ({ number: r.number, state: r.state }))
+      ? nodes.map((/** @type {any} */ r) => ({ number: r.number, state: r.state, mergedAt: r.mergedAt ?? null }))
       : [];
     map.set(node.number, refs);
   }
@@ -608,20 +720,34 @@ function reportAlreadyMerged() {
   // closed by a merged PR that declared `Closes #N`. The check was right and its population was half the
   // question, which is the shape this file exists to catch, turned on the file itself.
   const liveRows = issues.filter((i) => livesStateLabels(i.labels));
-  const refsByIssue = fetchClosingPrRefs(liveRows.map((i) => i.number));
-  const flagged = readyRowsAlreadyMerged(liveRows, refsByIssue);
+  const numbers = liveRows.map((i) => i.number);
+  const refsByIssue = fetchClosingPrRefs(numbers);
+  const reopenByIssue = fetchLatestReopenedAt(numbers);
+  const flagged = readyRowsAlreadyMerged(liveRows, refsByIssue, reopenByIssue);
+  const alreadyMerged = flagged.filter((row) => row.state === "ALREADY-MERGED");
+  const reopenedAfterMerge = flagged.filter((row) => row.state === "REOPENED-AFTER-MERGE");
   if (flagged.length === 0) {
     process.stdout.write(`OK  no \`ready\` or \`in-progress\` issue is already closed by a merged PR\n`);
     return 0;
   }
-  for (const { number, title, closedBy } of flagged) {
-    process.stdout.write(`ALREADY-MERGED  #${number} "${title}" -- PR #${closedBy} merged and declares `
-      + `\`Closes #${number}\`, but the row is still open and claims a live state\n`);
+  for (const row of alreadyMerged) {
+    process.stdout.write(`ALREADY-MERGED  #${row.number} "${row.title}" -- PR #${row.closedBy} merged and `
+      + `declares \`Closes #${row.number}\`, but the row is still open and claims a live state\n`);
   }
-  process.stderr.write(`\n${flagged.length} open row(s) already shipped on main via a merged PR -- `
-    + `picking one would mean discovering the fix already exists, and a claimed one is a session `
-    + `credited with work that is done.\n`);
-  return flagged.length;
+  // #550: NOT counted toward the returned finding count -- this is not debris to close, it is a fix
+  // someone deliberately put back after the merge that referenced it. "Nothing goes quiet" means it is
+  // still printed on every run; it is just never the sentence that says a session should act on it.
+  for (const row of reopenedAfterMerge) {
+    process.stdout.write(`REOPENED-AFTER-MERGE  #${row.number} "${row.title}" -- PR #${row.closedBy} `
+      + `merged ${row.mergedAt} and declared \`Closes #${row.number}\`, but the row was reopened `
+      + `${row.reopenedAt}, AFTER that merge -- a refuted fix, not debris\n`);
+  }
+  if (alreadyMerged.length > 0) {
+    process.stderr.write(`\n${alreadyMerged.length} open row(s) already shipped on main via a merged PR -- `
+      + `picking one would mean discovering the fix already exists, and a claimed one is a session `
+      + `credited with work that is done.\n`);
+  }
+  return alreadyMerged.length;
 }
 
 /**
