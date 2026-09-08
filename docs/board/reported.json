@@ -60,6 +60,14 @@
       "issue": 356,
       "reportedBy": "dispatcher",
       "at": "2026-09-07T22:55:00Z"
+    },
+    {
+      "claim": "Three pre-registered real pages measured end to end on the fleet: 4 m 38 s, 4 m 50 s, 7 m 54 s, none reaching the 520 s hard timeout. Page shape barely moves it, so ~4.5 min is a floor.",
+      "boardClaim": "We can say what the tool costs an outside reader: four to eight minutes for a real page, most of it a floor page size does not move.",
+      "evidence": "The time a first reader waits was written down as \"a few minutes\" and had never been measured on the machines that will serve them. Three deliberately dissimilar pages were chosen in advance and recorded end to end: an image-heavy marketing page, a single-page application, and the heaviest page structure available. They took 4 m 38 s, 4 m 50 s and 7 m 54 s; none ran out of time. **Two of the three are twelve seconds apart**, so about four and a half minutes is a floor for any real page rather than a property of heavy ones \u2014 which means choosing a simpler page does not make it faster. **One of the three returned only a warning that a cookie banner had blocked the screen reader, and that is not the same as a clean page**: the tool refused to describe the banner as the page, correctly, after spending 4 m 50 s to say so. One run each; no variance measured. (`npm run witness` on three pages pre-registered in #337, measured for #311 by `orchestrator` on the fleet from `inventory.yml`, 2026-09-07/08; wording of the finding theirs.)",
+      "issue": 311,
+      "reportedBy": "orchestrator",
+      "at": "2026-09-08T00:05:00Z"
     }
   ],
   "capacity": {
