@@ -155,3 +155,58 @@ which is the only mechanism here that cannot be narrowed by a forgotten root.
 - **No claim that the unread rows are fine.** Forty-seven of the fifty-two have not been read against
   their prose. That is a stated gap, not a silent one — which is the distinction the whole document is
   about.
+
+## Moved from CLAUDE.md (#458)
+
+## A flag nobody reads, and an extra var nobody reads
+
+Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth recognising by shape:
+**an argument the receiving thing does not know is DISCARDED, so the default runs and reports success.**
+
+- **Ansible silently drops an unused extra var.** `-e out=varied` on a job that never reads `out` looked
+  like it worked. 36 jobs had 6 hand-written `when: job == '<name>'` asserts, so a new job's parameter
+  needed somebody to remember one. Each job now DECLARES `params: {only: required}` beside its command,
+  and `lab-job.test.ts` DERIVES the same answer from that job's raw argv and refuses any disagreement —
+  `{{ only }}` is required, `{{ out | default('candidate') }}` is optional, and `model is defined` is the
+  other spelling of optional. `-e describe=1` prints what a job takes.
+- **Every `.mjs` CLI here ignored an unrecognised flag**, because they all parse argv by looking for what
+  they know — so a mistyped one ran the default and reported success. `refuseUnknownFlags`
+  (`cli-flags.mjs`) refuses it, names the near miss, and prints what the command does take.
+  **Every argv-reading module in the tree is guarded or exempted with a stated reason, and
+  `cli-flags.test.ts` is the only place that says how many.** It DISCOVERS them by walking the tree and
+  fails on any it cannot classify. This paragraph used to carry the count, and the count moved six times
+  in one night (75, 76, 77, 79, 82, 85), each value correct for the minutes between two merges; a number
+  the tree computes does not live in prose. The one exemption, `scripts/check-schema-migration.mjs`, is
+  copied into a throwaway directory by its own gate test and so cannot resolve a workspace import; its
+  single flag fails closed, and the test names it with that reason.
+  > **The flag lists are READ out of each file, never derived, and every batch proved why.**
+  > `stability-gate` builds flags from a variable and `repeat-capture` reads seven through an `arg(name)`
+  > helper, so a regex reports ZERO for both. `fleet-playbook`, `capture-fixtures` and
+  > `audit-size-sensitivity` mention flags they pass ONWARD to git or to Python. `compare-layers` takes
+  > its input positionally. `compare-workers` accepts `--runs=` as a deliberate alias of `--rounds=`.
+  > A derived guard would have refused correct usage in every one of those cases.
+
+Three things that cost real time inside those two fixes:
+
+- **`lab_jobs[job].argv` cannot be inspected, because reading it RENDERS it.** A job whose command says
+  `{{ only }}` dies with *"'only' is undefined"* while being asked WHETHER it needs `only` — the question
+  destroys its own subject. A `lookup()` result is never re-templated, so a playbook CAN re-read itself,
+  and `lab-status`/`lab-log`/`lab-stop` do exactly that to check a job name against the catalogue.
+- **But do not build an analyser out of Jinja, which is what the first version of this did.** It
+  re-read the playbook and `regex_findall`-ed the parameters out of each argv at runtime. The SRE
+  Workbook (ch14-15) names the shape: a YAML+Jinja config that accrues *"ad hoc language features"*
+  becomes *"an esoteric and complex programming language ... difficult for both humans and tools to
+  maintain and analyze"*, and its remedy is to **separate config from data and put the cleverness in
+  TOOLING**. The `\b`-is-a-backspace bug below is what that costs. The interface is now DATA an operator
+  can read, and the derivation is a test in a language with a real regex engine that can be
+  mutation-checked.
+- **`\b` inside a JINJA string literal is a BACKSPACE**, since Jinja parses escapes with Python's rules.
+  Written that way first, both checks passed vacuously *and* refused `-e only=` on the one job requiring
+  it. Found by mutation, never by reading — a guard must be shown to fail before it is trusted.
+- **Static derivation of a CLI's flags CANNOT be trusted here, and that is why the list is pinned rather
+  than derived.** `stability-gate` builds flags from a variable and `repeat-capture` reads seven of them
+  through an `arg(name)` helper, so a regex reports ZERO flags for both — a test that would have passed
+  having examined nothing. Naming `--worker` literally in `repeat-capture` immediately made a pre-existing
+  discovery test fire: it had been reading `--worker` and never validating it.
+
+

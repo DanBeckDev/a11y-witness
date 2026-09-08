@@ -212,11 +212,51 @@ export function testFileArgumentsResolve(command) {
 const SECTION_FIELD_NAMES = ["Acceptance", "Refutation", "Mutation"];
 
 /**
+ * #506: A MARKDOWN HEADING'S TRAILING TEXT IS A TITLE, NOT A COMMAND -- unless a colon follows the field
+ * name, which is the one shape the inline-command form actually means (`Acceptance: <command>`, the shape
+ * #353's own acceptance test uses). The single pattern this used to be could not tell the two apart: `##
+ * Acceptance:?` and `(.*)` shared one capture group, so `## Acceptance -- old read vs new` and `##
+ * Acceptance: npm test` produced the identical shape, and `extractSection` ran the FIRST as a command.
+ * Caught live on PR #500: `## Acceptance — old read vs new, on the live queue` sent `— old read vs new, on
+ * the live queue` to bash. Before #446 this would have been silently EXECUTED (a real word like `test` at
+ * the front exits 0 on any non-empty string, a green acceptance that ran nothing -- #446's own defect,
+ * arriving through the heading instead of a body line); after #446 it is a loud but wrongly-attributed
+ * refusal, naming the missing executable rather than the heading that produced it.
+ *
+ * Two separate patterns, because a heading and the bold/plain form disagree about what "no colon" means:
+ * a bare `## Acceptance` heading with no colon at all is the ESTABLISHED (#419) "commands come from the
+ * lines below" shape, so a heading with prose after it and no colon must read the identical way, never as
+ * a command. The bold/plain form has no such ambiguity -- `Acceptance:` always requires the colon to match
+ * at all, so anything it captures was always meant as inline.
  * @param {string} fieldName
- * @returns {RegExp}
+ * @returns {{ heading: RegExp, plain: RegExp }}
  */
-function sectionHeaderPattern(fieldName) {
-  return new RegExp(`^\\s*(?:#{1,6}\\s+${fieldName}:?|(?:\\*\\*|__)?${fieldName}:(?:\\*\\*|__)?)\\s*(.*)$`);
+function sectionHeaderPatterns(fieldName) {
+  return {
+    heading: new RegExp(`^\\s*#{1,6}\\s+${fieldName}(:)?\\s*(.*)$`),
+    plain: new RegExp(`^\\s*(?:\\*\\*|__)?${fieldName}:(?:\\*\\*|__)?\\s*(.*)$`),
+  };
+}
+
+/**
+ * Whether `line` is this field's header, and -- the fact `sectionHeaderPatterns` alone cannot answer --
+ * whether its trailing text is a command at all. `inline: null` means "matched, but nothing here is a
+ * command" (a title-only heading); `inline: ""` and a non-empty string are both real captures, exactly as
+ * the bare-header and inline-command shapes already behaved.
+ * @param {string} fieldName
+ * @param {string} line
+ * @returns {{ matched: false } | { matched: true, inline: string | null }}
+ */
+function matchSectionHeader(fieldName, line) {
+  const { heading, plain } = sectionHeaderPatterns(fieldName);
+  const headingMatch = heading.exec(line);
+  if (headingMatch) {
+    const hasColon = headingMatch[1] === ":";
+    return { matched: true, inline: hasColon ? headingMatch[2].trim() : null };
+  }
+  const plainMatch = plain.exec(line);
+  if (plainMatch) return { matched: true, inline: plainMatch[1].trim() };
+  return { matched: false };
 }
 
 /**
@@ -245,12 +285,13 @@ function sectionHeaderPattern(fieldName) {
 function extractSection(fieldName, body) {
   const text = body ?? "";
   const lines = text.split(/\r\n|\r|\n/);
-  const headerPattern = sectionHeaderPattern(fieldName);
-  const headerIndex = lines.findIndex((line) => headerPattern.test(line));
+  const headerIndex = lines.findIndex((line) => matchSectionHeader(fieldName, line).matched);
   if (headerIndex === -1) return { kind: "missing" };
 
-  const headerMatch = headerPattern.exec(lines[headerIndex]);
-  const inline = (headerMatch?.[1] ?? "").trim();
+  const headerMatch = matchSectionHeader(fieldName, lines[headerIndex]);
+  // `inline === null` is a title-only heading (#506) -- there is nothing here to run, and it must fall
+  // through to `commandLinesAfter` exactly like a bare `## Acceptance` with nothing on its own line.
+  const inline = (headerMatch.matched ? headerMatch.inline : null) ?? "";
 
   const noneMatch = /^none\b\s*[-—]?\s*(.*)$/i.exec(inline);
   if (noneMatch) {
