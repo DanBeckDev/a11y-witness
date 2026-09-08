@@ -34,7 +34,7 @@ import { AddressInfo } from "node:net";
 import { stripComments } from "@a11ign/evidence/source-text";
 
 import {
-  applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, describeWorkerError,
+  applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, describeWorkerError, warnUnverified,
   type CaptureResponse, type CaptureRequest,
 } from "./cli.js";
 
@@ -262,4 +262,32 @@ test("describeWorkerError: a hard-timeout fault reports how far the capture got 
 test("describeWorkerError: a fault with no reachedPhase omits the progress line rather than inventing one", () => {
   const message = describeWorkerError(500, { error: "the browser could not reach the page", fault: "page-unreachable" });
   assert.doesNotMatch(message, /Got as far as/, "no reachedPhase was reported, so none must be claimed");
+});
+
+/** `warnUnverified` writes straight to `process.stderr`, so capturing its output means stubbing the write
+ *  method for the duration of one call and restoring it immediately after -- never left stubbed across
+ *  tests, or a later test's own diagnostics would silently vanish too. */
+function capturedStderr(run: () => void): string {
+  const original = process.stderr.write.bind(process.stderr);
+  let out = "";
+  process.stderr.write = ((chunk: string) => { out += chunk; return true; }) as typeof process.stderr.write;
+  try {
+    run();
+  } finally {
+    process.stderr.write = original;
+  }
+  return out;
+}
+
+test("warnUnverified: a 'contained' doubt gets the full WHAT/TRY/WHERE treatment -- issue #398", () => {
+  const out = capturedStderr(() => warnUnverified("contained", "Order details"));
+  assert.match(out, /reached almost none of this page/i, "the doubt itself must still be named");
+  assert.match(out, /Try:/, "#398: a bare doubt with no remediation sends the reader nowhere");
+  assert.match(out, /docs\/try-it\.md/i, "the same consent-banner guidance a first reader is already sent");
+});
+
+test("warnUnverified: a 'wrong-content' doubt names the title it expected", () => {
+  const out = capturedStderr(() => warnUnverified("wrong-content", "Order details"));
+  assert.match(out, /Order details/, "the expected title must still be printed");
+  assert.match(out, /Try:/, "this doubt also gets actionable remediation, not a bare sentence");
 });

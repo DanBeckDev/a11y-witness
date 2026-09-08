@@ -151,8 +151,9 @@ demonstrated on somebody else's pair rather than asserted on our own.
 
 **The accessible version is clean on both layers.** That control matters more than the findings: the same
 rules that fire five times on `before` fire zero times on `after`, which has 8 headings and descriptive
-link text. Across the 1,061 conformant pages of the corpus the new 2.4.4 rule fires **0** times, and 38
-times on their inaccessible twins.
+link text.
+
+Measured in `907ed704` (the commit that added this rule — not a recurring board-gate metric, so cited rather than re-run): the new 2.4.4 rule fires **0** times on the 1,061 conformant pages of the corpus, and 38 times on their inaccessible twins.
 
 One more thing this pair exposed, recorded because it changes what can be claimed: **the trained scorer
 contributed nothing here.** It scored every criterion below 0.002 on the inaccessible page — 2.4.4 at
