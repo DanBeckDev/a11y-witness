@@ -215,6 +215,112 @@ export function readyRowsAbsentFromBoard(openIssues, boardNumbers) {
   return openIssues.filter((i) => i.labels.includes(READY_LABEL) && !boardNumbers.has(i.number));
 }
 
+/**
+ * @typedef {{ number: number, state: string }} ClosingPrRef
+ */
+
+/**
+ * Pure: which OPEN `ready` issues does a MERGED PR already claim to close? #443 -- #438 was merged as #440
+ * at 02:31Z, never auto-closed (bot-attributed merges do not close a referenced issue -- see
+ * `close-rows-for-merged-pr.mjs`'s own header), and sat `ready` until a worker claimed it and had to
+ * revert. Every existing check misses this: the collision check asks "does anyone else hold this row",
+ * the mutex check asks "is `ready` beside a not-pickable LABEL", `readyRowsAbsentFromBoard` asks "is it on
+ * the board" -- none of them ask "did the work already ship".
+ *
+ * DELIBERATELY KEYED ON A CLOSING REFERENCE, never a bare mention -- `closingIssuesReferences` (fed here
+ * per issue as `closingRefsByIssue`) is GitHub's OWN resolution of a `Closes #N`-shaped keyword in a PR
+ * body, so a PR that only MENTIONS this issue in prose never appears in the map at all. And deliberately
+ * MERGED, not merely present: an OPEN PR that declares `Closes #N` is exactly the state a worker taking
+ * this row would want to know about, not a reason to hide the row.
+ *
+ * @param {LabelledIssue[]} readyIssues open issues already filtered to `ready`
+ * @param {Map<number, ClosingPrRef[]>} closingRefsByIssue issue number -> the PRs that would close it
+ * @returns {{ number: number, title: string, closedBy: number }[]}
+ */
+export function readyRowsAlreadyMerged(readyIssues, closingRefsByIssue) {
+  const flagged = [];
+  for (const issue of readyIssues) {
+    const refs = closingRefsByIssue.get(issue.number) ?? [];
+    const merged = refs.find((ref) => ref.state === "MERGED");
+    if (merged) flagged.push({ number: issue.number, title: issue.title, closedBy: merged.number });
+  }
+  return flagged;
+}
+
+/**
+ * One GraphQL round trip for every `ready` issue's closing PR references, via aliased sub-queries rather
+ * than one call per issue -- the Ready lane is small (single digits to low tens), but N separate `gh api`
+ * invocations is still N processes for one answer. Empty input makes no call at all, since an empty alias
+ * list is not valid GraphQL and "nothing to ask" needs no round trip to answer.
+ *
+ * THROWS on any failure or unrecognised shape, same discipline as every other fetcher in this file: a
+ * silently empty map would read as "no row is already merged", the opposite of an honest "could not ask".
+ *
+ * @param {number[]} issueNumbers
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {Map<number, ClosingPrRef[]>}
+ */
+export function fetchClosingPrRefs(issueNumbers, { run = defaultRun } = {}) {
+  /** @type {Map<number, ClosingPrRef[]>} */
+  const map = new Map();
+  if (issueNumbers.length === 0) return map;
+  const [owner, name] = REPO.split("/");
+  const fields = issueNumbers.map((n, i) => `i${i}: issue(number: ${n}) { number `
+    + `closedByPullRequestsReferences(first: 20) { nodes { number state } } }`).join(" ");
+  const query = `{ repository(owner: "${owner}", name: "${name}") { ${fields} } }`;
+  /** @type {string} */
+  let raw;
+  try {
+    raw = run("gh", ["api", "graphql", "-f", `query=${query}`]);
+  } catch (cause) {
+    throw new Error(`ready-label-audit: could not resolve closing PR references -- refusing to guess. `
+      + `${/** @type {Error} */ (cause).message}`, { cause });
+  }
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`ready-label-audit: gh's closing-references response was not JSON -- refusing to `
+      + `guess. First 200 chars: ${raw.slice(0, 200)}`, { cause });
+  }
+  const repo = /** @type {any} */ (parsed)?.data?.repository;
+  if (!repo || typeof repo !== "object") {
+    throw new Error(`ready-label-audit: gh's closing-references response had no repository -- refusing `
+      + `to guess. Got: ${JSON.stringify(parsed).slice(0, 300)}`);
+  }
+  return closingPrRefsFromRepoNode(repo, issueNumbers);
+}
+
+/**
+ * Reads each aliased `i<N>: issue(...)` node back out of the GraphQL response, keyed by the real issue
+ * number rather than by alias -- split out of `fetchClosingPrRefs` purely to keep that function's
+ * complexity under gate, per this repo's Stepdown Rule; it is the same one concept written out.
+ *
+ * @param {Record<string, any>} repo
+ * @param {number[]} issueNumbers
+ * @returns {Map<number, ClosingPrRef[]>}
+ */
+function closingPrRefsFromRepoNode(repo, issueNumbers) {
+  /** @type {Map<number, ClosingPrRef[]>} */
+  const map = new Map();
+  for (let i = 0; i < issueNumbers.length; i++) {
+    const node = repo[`i${i}`];
+    if (!node || typeof node.number !== "number") {
+      // `JSON.stringify(undefined)` returns `undefined`, not a string -- a missing alias (the exact case
+      // this branch exists for) would throw INSIDE the error message rather than reporting one.
+      throw new Error(`ready-label-audit: issue #${issueNumbers[i]} is missing from the closing-references `
+        + `response -- refusing to guess. Got: ${JSON.stringify(node ?? null).slice(0, 300)}`);
+    }
+    const nodes = node.closedByPullRequestsReferences?.nodes;
+    const refs = Array.isArray(nodes)
+      ? nodes.map((/** @type {any} */ r) => ({ number: r.number, state: r.state }))
+      : [];
+    map.set(node.number, refs);
+  }
+  return map;
+}
+
 /** Report the OPEN-row mutex check exactly as before #378 -- unchanged population, unchanged wording. */
 function reportMutexViolations() {
   const issues = fetchOpenIssues();
@@ -279,9 +385,32 @@ function reportAbsentFromBoard() {
   return missing.length;
 }
 
+/**
+ * Report the `ready`-but-already-merged population #443 exists for -- a FOURTH population: the row
+ * survives every earlier check (nobody holds it, no mutex label, it is on the board) and is still the
+ * wrong thing to pick, because a merged PR already declares `Closes #N` on it.
+ */
+function reportAlreadyMerged() {
+  const issues = fetchOpenIssues();
+  const readyIssues = issues.filter((i) => i.labels.includes(READY_LABEL));
+  const refsByIssue = fetchClosingPrRefs(readyIssues.map((i) => i.number));
+  const flagged = readyRowsAlreadyMerged(readyIssues, refsByIssue);
+  if (flagged.length === 0) {
+    process.stdout.write(`OK  no \`ready\` issue is already closed by a merged PR\n`);
+    return 0;
+  }
+  for (const { number, title, closedBy } of flagged) {
+    process.stdout.write(`ALREADY-MERGED  #${number} "${title}" -- PR #${closedBy} merged and declares `
+      + `\`Closes #${number}\`, but the row is still \`ready\`\n`);
+  }
+  process.stderr.write(`\n${flagged.length} \`ready\` row(s) already shipped on main via a merged PR -- `
+    + `picking one would mean discovering the fix already exists.\n`);
+  return flagged.length;
+}
+
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "ready-label-audit" });
-  let mutexCount, debrisCount, absentCount;
+  let mutexCount, debrisCount, absentCount, alreadyMergedCount;
   try {
     mutexCount = reportMutexViolations();
   } catch (error) {
@@ -305,7 +434,15 @@ function main() {
     process.exitCode = 2;
     return;
   }
-  if (mutexCount > 0 || debrisCount > 0 || absentCount > 0) process.exitCode = 1;
+  process.stdout.write("\n");
+  try {
+    alreadyMergedCount = reportAlreadyMerged();
+  } catch (error) {
+    process.stderr.write(`COULD NOT AUDIT closing PR references: ${/** @type {Error} */ (error).message}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  if (mutexCount > 0 || debrisCount > 0 || absentCount > 0 || alreadyMergedCount > 0) process.exitCode = 1;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {

@@ -81,6 +81,13 @@ const GUARDED: Record<string, string> = {
     + "than `arm the standing queue`, and a discarded one would have it sweep the whole queue while the "
     + "caller believed they had narrowed it. Its import is RELATIVE rather than the package specifier, "
     + "because its workflow job has only actions/checkout -- no npm ci, no build, no dist (#330/#331).",
+  "scripts/queue-stalled.mjs":
+    "takes NO flags -- it REPORTS which armed, green open PRs cannot ever merge as-is against `main` "
+    + "(#361), and never acts (no rebase, no branch update, no close). A discarded argument means the "
+    + "caller wanted something narrower than `examine the standing queue`, and running it anyway silently "
+    + "reports on a different population than the one asked about. Its import is RELATIVE rather than the "
+    + "package specifier, for the same reason as auto-arm-sweep.mjs: it rides the same pull_request "
+    + "trigger, whose job has only actions/checkout -- no npm ci, no build, no dist (#330/#331).",
   "scripts/merge-guard.mjs":
     "it decides whether a PR has actually been TESTED, so a discarded argument would answer about a "
     + "different PR than the one asked about -- and its whole reason for existing is that a confident "
@@ -94,6 +101,11 @@ const GUARDED: Record<string, string> = {
     + "-- the identical hazard `merge-guard.mjs` is guarded against, one door over. It takes "
     + "--push-sha=/--before-sha=/--run-url= and no positional argument (unlike merge-guard.mjs's PR "
     + "number), because a push event carries no PR to number.",
+  "scripts/trunk-revert-guard.mjs":
+    "decides whether a merge onto main silently deleted work already there, so a discarded --merge would "
+    + "check the wrong commit while reading as a clean pass -- the identical hazard trunk-revert.mjs is "
+    + "guarded against, and this one runs BEFORE the revert decision even exists: a false PASS here is "
+    + "how the #411 incident happened in the first place. Takes only --merge=<sha>, no positional.",
   "scripts/row-claim.mjs":
     "THE COMMAND THE PULL LOOP RESTS ON. Measured 2026-09-07, before the guard: `check 161 --jsonn` "
     + "printed the ordinary claim line and exited 0, and so did `--format=json` -- both read as a "
@@ -109,6 +121,17 @@ const GUARDED: Record<string, string> = {
     + "not a wrong answer you can read and dismiss, it is a write. Its import is RELATIVE rather than the "
     + "package specifier, because its workflow job has only actions/checkout -- no npm ci, no build, no "
     + "dist (#330/#331).",
+  "scripts/close-rows-sweep.mjs":
+    "it CLOSES ISSUES, the identical reason close-rows-for-merged-pr.mjs is guarded -- takes an OPTIONAL "
+    + "--window (minutes), refuseUnknownFlags([\"--window\"]). A mistyped flag silently running the "
+    + "default window is comparatively low-risk here since the window is generous by design (#394), but "
+    + "the discovery test does not carve out exceptions for low-risk writes. Its import is RELATIVE, "
+    + "same reason as its sibling: the job it runs in has only actions/checkout.",
+  "scripts/trunk-sweep.mjs":
+    "it TRIGGERS a real workflow run (`gh workflow run trunk-guard.yml`) when main's tip has zero check "
+    + "runs -- takes NO flags, so refuseUnknownFlags([]) with an EMPTY list, the same case as auto-arm-"
+    + "sweep.mjs. A discarded argument means the caller wanted something narrower than `check and trigger "
+    + "the standing gate`, and running it anyway silently acts on a different question than the one asked.",
   "scripts/close-merged-rows.mjs":
     "it CLOSES issues. Takes a positional commit range; the `--json`/`--jq` in the file are passed "
     + "onward to `gh` and are not this command's own",

@@ -26,8 +26,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { AddressInfo } from "node:net";
@@ -35,6 +36,7 @@ import { stripComments } from "@a11ign/evidence/source-text";
 
 import {
   applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, describeWorkerError, warnUnverified,
+  witnessArtifactRoot, witnessArtifactSlug, writeWitnessArtifact, reportWitnessArtifact,
   type CaptureResponse, type CaptureRequest,
 } from "./cli.js";
 
@@ -290,4 +292,107 @@ test("warnUnverified: a 'wrong-content' doubt names the title it expected", () =
   const out = capturedStderr(() => warnUnverified("wrong-content", "Order details"));
   assert.match(out, /Order details/, "the expected title must still be printed");
   assert.match(out, /Try:/, "this doubt also gets actionable remediation, not a bare sentence");
+});
+
+// --- #431: witness runs keep an artefact by default -- unit-testable against an INJECTED capture, no
+// worker needed. `writeWitnessArtifact`/`witnessArtifactRoot` are exempted alongside `dataset-paths.mjs`'s
+// own EXEMPT entry for this file, for the identical #199 boundary reason. ---
+
+/** Points `witnessArtifactRoot()` at an isolated temp dir for the duration of `run`, restoring after. */
+function withIsolatedRunsRoot<T>(run: (root: string) => T): T {
+  const dir = mkdtempSync(resolve(tmpdir(), "a11ign-witness-artifact-"));
+  const before = process.env.RUNS_ROOT;
+  process.env.RUNS_ROOT = dir;
+  try {
+    return run(dir);
+  } finally {
+    if (before === undefined) delete process.env.RUNS_ROOT; else process.env.RUNS_ROOT = before;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function minimalCapture(url: string): CaptureResponse {
+  return { url, screenReader: "NVDA", transcript: ["heading, level 1, Test"] };
+}
+
+test("witnessArtifactSlug: a plain URL becomes host-dashes-dot-com, matching #431's own acceptance example", () => {
+  assert.equal(witnessArtifactSlug("https://example.com"), "example-com");
+});
+
+test("witnessArtifactSlug: path and query are stripped -- only the host distinguishes a filename", () => {
+  assert.equal(witnessArtifactSlug("https://example.com/checkout?step=2"), "example-com");
+});
+
+test("witnessArtifactSlug: a URL whose host reduces to nothing falls back to 'page' rather than producing "
+  + "an empty filename", () => {
+  assert.equal(witnessArtifactSlug(""), "page");
+  assert.equal(witnessArtifactSlug("https://"), "page");
+});
+
+test("witnessArtifactRoot: RUNS_ROOT (an absolute override) wins over process.cwd(), and 'witness' is "
+  + "always the subdirectory", () => {
+  withIsolatedRunsRoot((dir) => {
+    assert.equal(witnessArtifactRoot(), resolve(dir, "witness"));
+  });
+});
+
+test("writeWitnessArtifact writes a file `capture:explain` can open, and returns its real path", () => {
+  withIsolatedRunsRoot(() => {
+    const cap = minimalCapture("https://example.com");
+    const path = writeWitnessArtifact(cap, "Read and understand this page");
+    assert.ok(existsSync(path), "the returned path must actually exist -- a printed path that is not "
+      + "written is worse than no path");
+    const written = JSON.parse(readFileSync(path, "utf8")) as
+      { task?: string; capturedAt?: string; capture?: CaptureResponse };
+    // `captureOf` in explain-capture.mjs reads `.capture` when present, so this shape is exactly what
+    // the product-path reader already knows how to unwrap.
+    assert.equal(written.capture?.url, cap.url);
+    assert.deepEqual(written.capture?.transcript, cap.transcript);
+    assert.equal(written.task, "Read and understand this page");
+    assert.equal(typeof written.capturedAt, "string");
+  });
+});
+
+test("writeWitnessArtifact: two captures of two different URLs in the same run get two different files, "
+  + "never a silent overwrite", () => {
+  withIsolatedRunsRoot(() => {
+    const a = writeWitnessArtifact(minimalCapture("https://example.com"), "task");
+    const b = writeWitnessArtifact(minimalCapture("https://example.org"), "task");
+    assert.notEqual(a, b);
+    assert.ok(existsSync(a) && existsSync(b));
+  });
+});
+
+/** `reportWitnessArtifact` writes straight to stdout via `console.log`; capture it the same way
+ *  `capturedStderr` above captures `warnUnverified`'s stream, so a later test's own output is never lost. */
+function capturedStdout(run: () => void): string {
+  const original = console.log;
+  let out = "";
+  console.log = ((chunk: string) => { out += `${chunk}\n`; }) as typeof console.log;
+  try {
+    run();
+  } finally {
+    console.log = original;
+  }
+  return out;
+}
+
+test("reportWitnessArtifact: a written path is announced as 'capture written to <relative path>'", () => {
+  withIsolatedRunsRoot((dir) => {
+    const path = resolve(dir, "witness", "2026-01-01T00-00-00-000Z-example-com.json");
+    const out = capturedStdout(() => reportWitnessArtifact(path));
+    assert.match(out, /^capture written to /);
+    assert.doesNotMatch(out, new RegExp(process.cwd()), "the path must be relative to where the reader is "
+      + "standing, not an absolute machine path nobody else can use");
+  });
+});
+
+test("reportWitnessArtifact: --no-keep says so explicitly rather than staying silent about the skip", () => {
+  const out = capturedStdout(() => reportWitnessArtifact(null));
+  assert.match(out, /capture not written \(--no-keep\)/);
+});
+
+test("--no-keep parses to keep:false; the default is true", () => {
+  assert.equal(parseArgs(["https://example.com"]).keep, true);
+  assert.equal(parseArgs(["https://example.com", "--no-keep"]).keep, false);
 });
