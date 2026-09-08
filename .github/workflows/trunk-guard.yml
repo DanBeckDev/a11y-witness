@@ -34,27 +34,22 @@ on:
     branches: [main]
 
 jobs:
-  # #394: A BACKSTOP FOR close-rows.yml, WHICH FIRES FOR SOME MERGES AND NOT OTHERS FOR AN UNEXPLAINED
-  # REASON. `ceo`'s ruling: do not chase the cause, remove the single point of failure -- this rides the
-  # SAME push-to-main event as `trunkGate` below (a push happens on every merge, which is what triggers
-  # this workflow at all) and asks the identical `closurePlan` decision `close-rows.yml` already drives,
-  # over every PR merged into `main` in the last `close-rows-sweep.mjs`'s window. INDEPENDENT of
-  # `trunkGate`'s result, deliberately -- row-closing has nothing to do with whether `main`'s new tip is
-  # green, and gating it on that would strand every merged PR's row behind an unrelated test failure. See
-  # `scripts/close-rows-sweep.mjs`'s own header for the window sizing and the idempotency argument.
-  closeRowsSweep:
-    runs-on: ubuntu-latest
-    permissions:
-      issues: write
-      pull-requests: read
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - name: Close any row a merged PR declared that the immediate trigger missed
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node scripts/close-rows-sweep.mjs
+  # #394 UPDATE, 2026-09-08: A `closeRowsSweep` JOB USED TO STAND HERE, RIDING THIS WORKFLOW'S OWN
+  # `push: branches: [main]` TRIGGER. IT WAS DEAD ON ARRIVAL AND HAS BEEN REMOVED.
+  #
+  # Measured: GitHub does not trigger workflows from events created with `GITHUB_TOKEN` -- a merge
+  # completed by `github-actions[bot]` (every merge `auto-arm.yml` completes) produces a `pull_request:
+  # closed` event AND a push to `main` that start NOTHING. 19 of 19 bot-merged PRs never ran `close-
+  # rows.yml`; 5 of 5 sampled bot-merge SHAs never ran `trunk-guard.yml` at all -- not "ran and passed",
+  # never ran. So a job riding THIS workflow's push trigger, built specifically to backstop bot merges,
+  # could never fire for the one case it existed to catch: a guard that structurally cannot run for its
+  # own target is worse than no guard, because it reads as coverage that was never real.
+  #
+  # `close-rows.yml`'s own `workflow_dispatch` (added in the same PR as the now-removed sweep) stays --
+  # it is how the workflow can be exercised deliberately regardless of which identity merged. The
+  # backstop this row needed is #417 (an interim scheduled sweep, gated on `main`'s tip carrying zero
+  # check runs) and #416 (the permanent fix: arm with a real PAT so bot merges stop being invisible to
+  # every `pull_request`/`push` trigger in this repository, not just this one).
 
   # THE ONLY QUESTION THIS JOB ANSWERS: is `main`'s new tip actually green. `decideRevert` below is what
   # decides whether that failure is this push's own, or something else -- this job just reports the fact.
