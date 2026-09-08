@@ -22,12 +22,25 @@ name: auto-arm
 # arming here is safe BY CONSTRUCTION for the one thing CI can answer: GitHub cannot complete a merge this
 # workflow arms without `gate` -- and therefore `mergeSafety` -- reporting green for the real, current head.
 #
-# ## Why `opened` and `ready_for_review`, not `synchronize`
+# ## `opened` and `ready_for_review` ARE NOT ENOUGH -- `synchronize` closes a real gap, #415
 #
 # Arming is idempotent and only needs to happen once per PR; GitHub keeps auto-merge enabled across every
-# later push on its own. Re-arming on every `synchronize` would be a redundant API call on every commit for
-# no behavioural difference, and this workflow's own job only asks "is this PR eligible to be armed at
-# all" (open, against `main`, not a draft) -- a question that does not change between commits.
+# later push on its own, so re-arming on every `synchronize` is a redundant API call on most commits, with
+# no behavioural difference for a PR that was already armed. THAT case is not why `synchronize` is here.
+#
+# **A PR opened WHILE IT CONFLICTS gets neither `opened` nor `ready_for_review`** -- GitHub does not
+# dispatch `pull_request` workflows for a PR whose merge commit it cannot compute, so both of this
+# workflow's original triggers are spent before the author can even fix the conflict. Resolving it is a
+# push -- a `synchronize` -- which this trigger list did not listen for, so `arm` never saw the one event
+# left. Measured on #402: opened while `mergeable: CONFLICTING`, zero `ci` runs and zero `auto-arm` runs at
+# `opened`, and none at the `synchronize` that fixed the conflict either, because nothing was listening.
+# `#403`, opened ten seconds later and not conflicting, got both events normally -- same author, same
+# minute, the only variable was whether GitHub could compute a merge ref at `opened`.
+#
+# `sweep` (below) still finds such a PR EVENTUALLY -- it runs on every event this workflow takes -- but
+# only on the NEXT unrelated PR event anywhere in the repo, which in a quiet period is unbounded. #402 sat
+# unarmed from 00:22 until swept by hand. `synchronize` bounds this to the fix itself: the moment the
+# conflict is resolved, `arm` sees it directly instead of waiting on someone else's PR.
 #
 # ## AND THAT IS WHY A SWEEP IS NEEDED, NOT A THIRD TRIGGER -- #344, measured 2026-09-07
 #
@@ -96,7 +109,7 @@ name: auto-arm
 # secret's expiry date to warn about it in advance.
 on:
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, ready_for_review, synchronize]
   workflow_dispatch:
 
 permissions:
