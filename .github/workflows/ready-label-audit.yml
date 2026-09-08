@@ -22,12 +22,21 @@ name: ready-label-audit
 #                      when a dead claim or a debris row stops being one, so it is not merely the inverse
 #   closed             the moment a row can start carrying debris
 #   reopened           a row can come back wearing labels its closure left on it
-#   pull_request closed  how a row becomes debris without anyone touching the row
-#   push to main       how work SHIPS without closing its row -- the shape #443 was filed for
+#   pull_request closed  a merge -- how a row becomes debris, and how work SHIPS without closing its row
+#                        (the shape #443 was filed for), without anyone touching the row
 #
-# Neither `unlabeled` nor `reopened` catches a fault the other four miss. They stop the audit answering
+# Neither `unlabeled` nor `reopened` catches a fault the other three miss. They stop the audit answering
 # with a state that has already moved, which is the whole value of it: the count has to be current when
 # somebody READS it. The cost is a run.
+#
+# NO `push: branches: [main]`, AND NOT BECAUSE IT WOULD NOT WORK. `push-trigger-allowlist.test.ts` holds
+# the chairman's rule that only a watchdog, a trunk gate or a trunk-followup may trigger on a push to
+# main, and this audit is none of the three -- it watches no schedule, builds nothing, and touches no
+# other PR. `close-rows.yml` asked the identical question and answered it in its own header: the
+# `pull_request` closed event carries exactly what is needed, scoped to one PR, so no allowlist entry is
+# required. Every merge here arrives as a merged PR, and a merged PR is a closed one. Adding a fourth
+# allowlist category to get a trigger already covered by another event would be arguing past a guard
+# rather than with it.
 #
 # THE CRON STAYS, and it is not redundant: it is the only thing that fires when nothing happens at all,
 # which is exactly the state where a stale claim sits unnoticed.
@@ -36,14 +45,12 @@ on:
     types: [labeled, unlabeled, closed, reopened]
   pull_request:
     types: [closed]
-  push:
-    branches: [main]
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
 
 concurrency:
-  # Several label changes and merges land in a minute on a busy day, and six triggers make that likelier.
+  # Several label changes and merges land in a minute on a busy day, and five triggers make that likelier.
   # One verdict at a time; the newest is the true one. This audit reads live state and accumulates
   # nothing, so a cancelled run loses nothing a later one will not recompute -- same choice and same
   # reason as board-liveness.yml.
@@ -71,7 +78,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
-      # WHICH EVENT WOKE THIS RUN (#536). With six triggers, "the audit is quiet because nothing changed"
+      # WHICH EVENT WOKE THIS RUN (#536). With five triggers, "the audit is quiet because nothing changed"
       # and "the audit is quiet because nothing fired" are different states and must never read the same.
       # A run that cannot say why it started cannot be told apart from one that should not have.
       - name: Say what woke this run
