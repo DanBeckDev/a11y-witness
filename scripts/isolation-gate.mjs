@@ -1,4 +1,5 @@
 // @ts-check
+// command: prove a published package installs and works standalone, by actually installing and running it
 // Can a consumer install this package and use it? Answered by doing it.
 //
 //   node scripts/isolation-gate.mjs packages/evidence [more...]
