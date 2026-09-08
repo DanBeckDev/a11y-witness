@@ -1,4 +1,5 @@
 // @ts-check
+// command: refuse a release while a declared schema migration is still open
 /**
  * A declared schema migration may exist on a branch. It may never be released.
  *

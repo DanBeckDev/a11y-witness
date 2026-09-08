@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// command: run a PR's own stated Acceptance/Refutation command(s) and report RAN/REFUSED/MISSING
 // NOTHING HAS EVER RUN A ROW'S ACCEPTANCE COMMAND -- pipeline unit 2, #353. Every PR body in this repo
 // carries an `Acceptance:` line and its own PR argues its case; the only thing that has ever executed it
 // is the author, reporting the result in prose. `capture-check` was mandatory after any `capture-core.mjs`

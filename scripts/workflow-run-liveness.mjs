@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// command: watchdog: did CI actually run before this commit reached main, checked automatically
 // DID CI ACTUALLY RUN BEFORE THIS COMMIT REACHED MAIN? -- #118, generalising `merge-guard.mjs`'s
 // per-PR, on-demand check into an AUTOMATIC watchdog for every commit that lands.
 //
