@@ -11,7 +11,7 @@
   // remedy applied at one call site when the behaviour reaches several. Measured 2026-08-25 on a fresh
   // worker, where `npm install` had never run before:
   //
-  //   npm error path C:\Users\witness\a11ign\packages\scorer
+  //   npm error path C:\Users\witness\a11y-witness\packages\scorer
   //   npm error command tsc --build
   //   src/evidence-units.ts(37,10): error TS2305: Module '"@a11ign/evidence"' has no exported
   //   member 'annotateCapture'.
