@@ -367,6 +367,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/merge-guard.mjs --ci-gate ${{ github.event.pull_request.number }}
+      # #549: WHAT THE BODY DECLARES MUST MATCH WHAT GITHUB WILL ACTUALLY CLOSE. `Closes: none` in the
+      # body and a real closure of two issues both merged the same day -- neither the acceptance job (no
+      # GH_TOKEN, by design) nor anything else compared the two. This is a NEW step, not folded into
+      # `merge-guard.mjs --ci-gate`'s own `mergeSafetyVerdict` above: that function is deliberately scoped
+      # to head-vs-tip ONLY, because its sibling rules (ancestry, closing-claim) were measured refusing the
+      # NORMAL case when asked unconditionally in CI -- see its own header. This check has the opposite
+      # property (silent on every well-formed PR), so it does not share that hazard and does not belong
+      # inside that narrowly-scoped composition.
+      - name: The declared Closes matches what GitHub will actually close (#549)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/closes-mismatch-check.mjs ${{ github.event.pull_request.number }}
 
   # #353 (pipeline unit 2): NOTHING HAS EVER RUN A ROW'S ACCEPTANCE COMMAND. Every PR body carries an
   # `Acceptance:` line and argues its own case; the only thing that has ever executed it is the author,
