@@ -170,10 +170,11 @@ jobs:
   a11y:
     runs-on: windows-2022          # NVDA needs Windows; GitHub hosts these
     steps:
+      - uses: actions/checkout@v4
       - uses: DanBeckDev/a11y-witness@main
         with:
-          url: https://example.com/checkout
-          task: Complete the checkout
+          url: https://example.com/contact
+          task: Send an enquiry
 ```
 
 That is the whole thing. **No API key and no account** — `judge-backend` defaults to `local`, this
