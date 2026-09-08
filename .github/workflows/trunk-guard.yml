@@ -94,14 +94,23 @@ jobs:
       ts-test-scope: unscoped
       run-python-tests: true
 
-  # RUNS WHEN EITHER `trunkGate` OR `trunkBuildTest` ACTUALLY FAILED -- never `always()`. A green trunk
-  # needs no decision at all, and `cancelled` (someone manually cancelled the run) is not the same fact as
-  # a real failure and must not be read as one. `trunkBuildTest` reads `skipped` (not `failure`) when
-  # `trunkGate` itself failed -- its own `needs:` default already stopped it from running -- so checking
-  # both results here does not double-count the revert-guard's own failure as if the suite had also failed.
+  # RUNS WHEN EITHER `trunkGate` OR `trunkBuildTest` ACTUALLY FAILED -- and `always() &&` IS REQUIRED, not
+  # decorative. This section used to say the opposite ("never `always()`"), and that claim was WRONG in a
+  # way that meant this job had never fired once: an `if:` with no status-check function carries an
+  # IMPLICIT `success()` (per GitHub's own expression documentation -- reasoned from the docs, not measured
+  # live), so the effective condition was `success() && needs.trunkGate.result == 'failure'`, and
+  # `success()` is false exactly when a needed job failed. Self-contradictory, and dispatcher measured it
+  # directly: 5 of the newest 40 trunk-guard runs had `trunkGate=failure`, and `decideRevert` read `skipped`
+  # in all five. `always()` LIFTS the implicit success -- it does not make the job unconditional, because
+  # the explicit `result == 'failure'` checks still do the discriminating. `cancelled` (someone manually
+  # cancelled the run) is still correctly excluded: `always()` does not turn a cancellation into a failure,
+  # it only stops a real failure from being silently treated as one. `trunkBuildTest` reads `skipped` (not
+  # `failure`) when `trunkGate` itself failed -- its own `needs:` default already stopped it from running --
+  # so checking both results here does not double-count the revert-guard's own failure as if the suite had
+  # also failed.
   decideRevert:
     needs: [trunkGate, trunkBuildTest]
-    if: needs.trunkGate.result == 'failure' || needs.trunkBuildTest.result == 'failure'
+    if: always() && (needs.trunkGate.result == 'failure' || needs.trunkBuildTest.result == 'failure')
     runs-on: ubuntu-latest
     permissions:
       contents: write
