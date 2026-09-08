@@ -155,184 +155,38 @@ jobs:
       - id: classify
         run: node scripts/ci-changed.mjs --event=${{ github.event_name }} --base=${{ steps.base.outputs.ref }}
 
+  # A1 (#452): CALLS `reusable-build-test.yml` rather than carrying its own steps -- see that file's own
+  # header for why (its `trunkGate` sibling in trunk-guard.yml used to duplicate most of this job's steps
+  # independently, and chairman's own comment here used to note the two ran "the SAME suite" -- now true
+  # by construction, not by two authors keeping two copies equal). The reusable file derives its own
+  # checkout depth from `run-ts-tests`/`ts-test-scope` below rather than taking it as an input -- see that
+  # file's own header for why a `fetch-depth` input here would be a misconfiguration this repo cannot
+  # afford (`select-changed-tests.mjs` needs full history to run `git diff <base>...HEAD`).
   ts:
     needs: changed
     if: needs.changed.outputs.ts == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      # `fetch-depth: 0` (full history) -- A1b's `select-changed-tests.mjs` runs `git diff <base>...HEAD`
-      # in this same job now, and a shallow clone fails that with "no commits in common", exactly the
-      # trap the `changed` job's own checkout comment already names for the identical command.
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      # CACHE node_modules ITSELF, KEYED ON THE LOCKFILE -- `setup-node`'s own `cache: npm` above caches
-      # the npm DOWNLOAD cache, not the installed tree, so `npm ci` still re-links everything on every run.
-      # On a cache hit this skips `npm ci` outright; on a miss it runs it once and the next PR touching an
-      # unchanged lockfile hits. Keyed on `package-lock.json`'s hash because that is the only thing that
-      # can make a previously-installed `node_modules` wrong.
-      - uses: actions/cache@v4
-        id: node-modules-cache
-        with:
-          path: node_modules
-          key: node-modules-${{ hashFiles('package-lock.json') }}
-      # --ignore-scripts: skip Playwright/Guidepup postinstall browser/AT setup, which lint, typecheck and
-      # the unit suite do not need (keeps this fast and Linux-safe) -- carried forward from `lint.yml`.
-      #
-      # #331: `--ignore-scripts` USED TO NOT SKIP A WORKSPACE PACKAGE'S OWN `prepare` SCRIPT -- measured,
-      # not assumed. npm 10.9.8 (bundled with the Node 22 this job pins) ran every workspace's `prepare`
-      # regardless of `--ignore-scripts`: `npm ci --ignore-scripts --loglevel=verbose` on a fresh clone
-      # logged `npm info run @a11ign/worker-fleet@0.1.0 prepare packages/worker-fleet tsc --build` and left
-      # a real, populated `dist/` behind. That is what masked #238: `build-packages.mjs` used to import
-      # `@a11ign/worker-fleet/cli-flags` (a `dist/` path) at its own top level (#164), and on a cache
-      # MISS this step's silent side-build made that import resolve by accident, so `gate` read green on a
-      # tree that could not build from a cache HIT (where this whole step, prepare included, was skipped).
-      # #330 fixed the real bug (a relative import that needs no pre-built `dist/` at all).
-      #
-      # #168: AND THAT SAME SILENT SIDE-BUILD WAS ALSO A RACE, FIXED AT ITS SOURCE RATHER THAN WORKED
-      # AROUND HERE. Five packages (`evidence`, `judge`, `cli`, `scorer`, `worker-fleet`) each carried
-      # BOTH `prepack: tsc --build` (fires on `npm pack`/`npm publish`; added in cf8578de so a tarball
-      # built from a fresh checkout ships real code rather than an empty `dist/`) AND an identical
-      # `prepare: tsc --build`, added at the same time out of extra caution. `prepare` is the one that
-      # ALSO fires on `npm ci`/`npm install` -- five independent, uncoordinated `tsc --build` invocations,
-      # one per workspace, is exactly the shape a race needs: `judge` imports from `evidence`, and nothing
-      # ordered "finish evidence's side-build before judge's own side-build reads its `dist/`". `judge`'s
-      # own incremental `.tsbuildinfo`, written against `evidence`'s dist mid-write, could then read as
-      # "up to date" once the DELIBERATE, correctly-ordered `npm run build` below ran moments later --
-      # which is why `tsc --build` never named a fault in `evidence` itself: there wasn't one, only a
-      # snapshot taken at the wrong moment.
-      #
-      # `prepare` ALREADY COVERS EVERYTHING `prepack` COVERS (npm's own documented lifecycle: `prepare`
-      # runs before packing too), so the pair was fully redundant, not two guards for two different
-      # risks. Removed `prepare`, kept `prepack` -- verified on Node 22.23.2/npm 10.9.8, the exact CI
-      # pin: `npm ci --ignore-scripts` now runs NO per-workspace script at all (`--loglevel=verbose` shows
-      # no `run prepare`/`run prepack` line, `packages/evidence/dist` does not exist afterward), while
-      # `npm pack --dry-run` inside `packages/evidence` still triggers `prepack` and ships a complete,
-      # real `dist/` in the tarball -- the original cf8578de guarantee, intact.
-      #
-      # THE DIAGNOSTIC STEP BELOW STAYS, deliberately, rather than being deleted alongside the cause: it
-      # cost nothing on a green run before this fix and costs nothing after it, and it is the thing that
-      # would tell a future reader plainly if a build-order race reappears through some other door.
-      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
-        run: npm ci --ignore-scripts
-      # Cross-package imports resolve to `dist` (every `exports` entry points there) -- CLAUDE.md's own
-      # rule: run the file runner on its own and it tests the LAST BUILD, which on a fresh checkout is no
-      # build at all.
-      - run: npm run build
-      # WHAT THE BUILD ACTUALLY PRODUCED, kept only when something after it fails -- #168.
-      #
-      # `ci/ts` fails intermittently with eleven type errors in a package the PR never touched, and every
-      # one is a consequence of the first: `File '.../packages/evidence/dist/wcag.d.ts' is not a module`
-      # means the emitted declaration had no top-level exports. The tell that it is not a real fault is
-      # that `tsc --build` reported no errors in `evidence` at all -- a genuine one there would have been
-      # named and would have stopped the build before `judge` compiled.
-      #
-      # Re-running the identical sha passes. So the TREE differs between the two runs and the LOGS CANNOT
-      # SAY HOW: they record the same commands and the same errors either way.
-      #
-      # Three causes remain open and they need opposite work -- a declaration that is ABSENT (nothing was
-      # emitted), EMPTY (a truncated write), or PRESENT-BUT-EXPORTLESS (a compile that produced no
-      # top-level exports). One `ls` and one `head` separate them, and only on the failing run.
-      #
-      # `if: failure()` so a green run pays nothing, and deliberately NO `continue-on-error` on the steps
-      # below: this is a diagnostic, not a remedy, and the job must still fail. Reproduction was attempted
-      # four times locally -- ci/ts's exact path and the parallel-`prepare` path, from a fresh clone with
-      # no `dist` and no `.tsbuildinfo` -- and did not reproduce on a 14-core machine, which is
-      # unremarkable for a race on a 2-core runner and is why the evidence must be caught where it happens.
-      - name: "#168: what the build produced, if anything below fails"
-        if: failure()
-        run: |
-          echo "--- packages/evidence/dist ---"
-          ls -la packages/evidence/dist/ || echo "(no dist directory at all)"
-          echo "--- wcag.d.ts, first 20 lines ---"
-          head -20 packages/evidence/dist/wcag.d.ts || echo "(no wcag.d.ts)"
-          echo "--- does tsc consider the graph up to date? ---"
-          npx tsc --build --dry $(node -e "const fs=require('fs');console.log(fs.readdirSync('packages').filter(d=>fs.existsSync('packages/'+d+'/tsconfig.json')).map(d=>'packages/'+d).join(' '))") || true
+    uses: ./.github/workflows/reusable-build-test.yml
+    with:
+      run-lint-typecheck: true
+      run-docs-coverage: true
+      run-ts-tests: true
+      ts-test-scope: scoped
+      base-ref: ${{ needs.changed.outputs.base }}
+      test-packages: ${{ needs.changed.outputs.testPackages }}
+      use-node-modules-cache: true
 
-      # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (issue #158) -- a fresh checkout has no
-      # copy on disk, and this job can reach `doc-references.test.ts` (packages/lab/src/packaging/**)
-      # both in the scoped run below and in the full-suite coverage run further down, either of which
-      # would otherwise report a real doc citation as broken.
-      - run: npm run docs:coverage
-      - run: npm run lint
-      - run: npm run typecheck
-      # A1B: WHICH TEST FILES DOES THIS DIFF ACTUALLY REACH? -- chairman, measured: this job and
-      # `trunk-guard` ran the SAME suite, on every merge, close enough in wall time (83-155s here,
-      # 144-155s there) that PACKAGE-level scoping (`testPackages` above) was not narrowing enough on its
-      # own. `select-changed-tests.mjs` narrows one step further, to FILES, by walking every candidate
-      # test's own transitive import closure -- see that file's own header for the mechanism and why the
-      # zero-tests fallback (a changed file no test reaches falls back to ITS OWN PACKAGE's full suite) is
-      # the load-bearing half. `testPackages` stays the SEARCH SCOPE and the safety net for anything
-      # outside `packages/*/src/` (a root config, `scripts/*.mjs`) -- this only refines what runs within
-      # it, never widens what `ci-changed.mjs` already decided must run.
-      - id: select
-        run: node scripts/select-changed-tests.mjs --base=${{ needs.changed.outputs.base }} --repo="$PWD"
-      - name: Unit tests of the changed test files (transitively), with a per-package fallback for anything uncovered
-        # `testPackages`, NOT `packages`, feeds the BROAD path above -- see `ci-changed.mjs`'s own header.
-        # A change under `packages/evidence` must still test `packages/judge` (depends on it) and
-        # everything downstream of judge, not just evidence's own tests; the broad path preserves that
-        # exactly, unchanged, for anything `select-changed-tests.mjs` steps aside for.
-        #
-        # GH_TOKEN: `packages/lab/src/packaging/*` (board-style.test.ts, row-claim.test.ts's live
-        # fetchLabels) shells out to real `gh` calls against this repo's own Issues -- read-only, and
-        # `github.token` already has that scope for the repo the workflow runs in.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ "${{ steps.select.outputs.broad }}" = "true" ]; then
-            globs=()
-            for pkg in ${{ needs.changed.outputs.testPackages }}; do
-              globs+=("packages/$pkg/src/**/*.test.ts")
-            done
-            if [ "${#globs[@]}" -eq 0 ]; then
-              echo "ts=true but no package was implicated -- ci-changed.mjs's own rule is that this should"
-              echo "never happen (a root config or scripts/*.mjs change adds every package); failing loudly"
-              echo "rather than silently running nothing."
-              exit 1
-            fi
-            npx tsx --test "${globs[@]}"
-          else
-            files=(${{ steps.select.outputs.testFiles }})
-            if [ "${#files[@]}" -eq 0 ]; then
-              echo "ts=true but select-changed-tests.mjs selected nothing and named no fallback -- its own"
-              echo "rule is that this should never happen; failing loudly rather than silently running"
-              echo "nothing, this job's whole reason for existing."
-              exit 1
-            fi
-            npx tsx --test "${files[@]}"
-          fi
-
+  # A1 (#452): CALLS `reusable-build-test.yml` for the one thing this job ever needed from it -- a real
+  # `dist/`, since `@a11ign/worker-fleet/cli-flags` resolves through `package.json`'s `exports` map and a
+  # handful of Python tests (`test_grants_map_is_current.py`, `test_unclosable_map_is_current.py`) shell
+  # out to a `node` script that imports it. No lint, no typecheck, no TS tests, no docs:coverage, no
+  # dedicated node_modules cache -- this job never ran any of those, and the reusable file's defaults are
+  # deliberately "off" for exactly this reason: opting IN to extra work, never opting OUT of it.
   python:
     needs: changed
     if: needs.changed.outputs.python == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # NODE TOO, deliberately, though this is "the Python job". A handful of Python tests shell out to a
-      # `node` script (`test_grants_map_is_current.py`, `test_unclosable_map_is_current.py`) to read a JS
-      # declaration the Python-side audit must agree with -- `lint.yml` ran this correctly by accident,
-      # because it was ONE job with both `setup-node`+`npm ci` and `setup-python` in sequence. Splitting
-      # them cleanly (this row's whole point) first shipped WITHOUT this step and broke both files on the
-      # very first real PR run: `node_modules` did not exist, so the subprocess failed before pytest could
-      # even report why. Found by watching this PR's own first CI run, not by inspection.
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
-      # `@a11ign/worker-fleet/cli-flags` resolves through its package.json `exports` to
-      # `dist/cli-flags.mjs` -- `npm ci` alone is not enough, the same stale-dist trap CLAUDE.md already
-      # names for cross-package imports in the TS suite, here reached from a Python subprocess instead.
-      - run: npm run build
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12", cache: pip }
-      # `requirements-ci.txt`, not `requirements.txt` -- the lab's full environment is torch + transformers
-      # + onnxruntime + huggingface-hub, and the test suite does not need most of it. See that file's own
-      # header for the measurement. Two tests DO need torch/onnxruntime and are marked
-      # `pytest.importorskip` for exactly that reason -- they run on the lab, not here.
-      - run: pip install -r requirements-ci.txt
-      # Same two flags as the root `test:python` script, deliberately: `spec_from_file_location` honours
-      # `__pycache__`, and a stale compile has decided a mutation check wrongly in this repo before.
-      - run: PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider packages/*/tests -q
+    uses: ./.github/workflows/reusable-build-test.yml
+    with:
+      run-python-tests: true
 
   ansible:
     needs: changed
@@ -412,28 +266,12 @@ jobs:
   # than the grep looked. Caught by actually RUNNING the job's real command with no build present, not by
   # reading the imports -- this repo's own rule, applied to itself. Still far cheaper than the `docs` job:
   # six files instead of the whole packaging directory, no coverage, no rules-check.
+  # A1 (#452): CALLS `reusable-board.yml` -- see that file for the steps and why NO TYPECHECK, NO GH_TOKEN
+  # by hand any more (it carries its own, correct one).
   board:
     needs: changed
     if: needs.changed.outputs.board == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
-      - run: npm run build
-      # GH_TOKEN: `board-*.test.ts` reach real `gh` calls TRANSITIVELY -- `board-style.test.ts` imports
-      # `scripts/board-data.mjs`, whose `collect()` shells out to `gh issue list`. The `ts` job has carried
-      # this env, with a comment naming board-style.test.ts as the reason, since before these tests were
-      # split into their own job -- and the env did not travel with them. Read-only; `github.token` already
-      # has that scope for the repo the workflow runs in.
-      #
-      # `gh-token-jobs.test.ts` pins the CLASS: it walks each job's test glob and every LOCAL import
-      # beneath it, and requires GH_TOKEN on any job that can reach a `gh` spawn. A test grepping the test
-      # FILES alone would have found nothing here -- neither board test names `gh` at all.
-      - env:
-          GH_TOKEN: ${{ github.token }}
-        run: npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
+    uses: ./.github/workflows/reusable-board.yml
 
   # THE RULES FITNESS GATE, ITS OWN JOB -- chairman's direction, 2026-09-06. Used to run inside `ts`
   # unconditionally on every package change; now gated on `rulesFitness`, true only when
@@ -547,47 +385,14 @@ jobs:
   #
   # UNSCOPED AND UNCONDITIONAL, like `mergeSafety` -- every PR needs its acceptance verified regardless of
   # which files changed, and a missing `Acceptance:` line must fail even a docs-only PR.
+  # A1 (#452): CALLS `reusable-acceptance.yml` -- see that file for the full reasoning, restated there
+  # because after this split it is the ONLY place a reader would think to look for this job's blast
+  # radius (no GH_TOKEN, contents:read only, pull_request never pull_request_target).
   acceptance:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - uses: actions/cache@v4
-        id: node-modules-cache
-        with:
-          path: node_modules
-          key: node-modules-${{ hashFiles('package-lock.json') }}
-      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
-        run: npm ci --ignore-scripts
-      - run: npm run build
-      # #497: DEEPEN THE CHECKOUT ONLY WHEN THE PR BODY ASKS FOR IT, via the SAME function
-      # `acceptance-commands.mjs` uses to decide what to refuse -- `hasFullHistoryDeclaration`, imported
-      # from the already-built module rather than re-typing the `History: full` regex a second time in
-      # shell. Placed AFTER checkout+build, deliberately: it needs `npm ci`/`npm run build` to have already
-      # produced a working tree, and it must run BEFORE the final step so a test declaring `requires:
-      # history` sees real history rather than this job's default depth-1 clone (#510).
-      - name: Deepen the checkout if the PR asks for full history (#497)
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          if node -e "
-            import('./scripts/acceptance-commands.mjs').then((m) => {
-              process.exit(m.hasFullHistoryDeclaration(process.env.PR_BODY) ? 0 : 1);
-            });
-          "; then
-            git fetch --unshallow origin main
-          fi
-      # PR_BODY AS AN ENV VAR, NEVER AS A SHELL ARGUMENT -- a PR body is adversarial input (anyone can open
-      # a PR), and GitHub Actions' own `env:` mapping keeps it one opaque string here rather than
-      # re-parsing it as shell. `acceptance-commands.mjs` reads it from `process.env.PR_BODY`, never argv.
-      - name: Run the PR's own stated Acceptance command(s)
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: node scripts/acceptance-commands.mjs
+    uses: ./.github/workflows/reusable-acceptance.yml
+    with:
+      pr-body: ${{ github.event.pull_request.body }}
 
   # THE ONE CONTEXT BRANCH PROTECTION REQUIRES. `if: always()` so this still runs when an upstream job
   # fails or is cancelled -- without it, a failing `ts` would skip `gate` too (the default `if` on a job
