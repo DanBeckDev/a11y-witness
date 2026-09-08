@@ -1,4 +1,5 @@
 // @ts-check
+// command: remove fully-merged, clean linked worktrees, and name every other one as dirty
 // WORKTREE LIFECYCLE, AS A COMMAND -- not a discipline somebody has to remember.
 //
 // The rule ("prune after every merge") existed as prose from 2026-09-06, `dispatcher` pruned 28 stale
