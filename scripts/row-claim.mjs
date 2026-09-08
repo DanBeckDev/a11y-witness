@@ -177,17 +177,30 @@ export function decideClaim(labelsBefore, mySession) {
  * mutation silently dropped all 112 items' Status values, and only a snapshot taken minutes earlier for
  * an unrelated reason made recovery possible. No board write ships without one.
  *
- * NEVER THROWS, on purpose. A row genuinely not on the Project is a real, common state -- four existed
- * the night this was written -- and `gh project item-edit` refuses with a real error for it; reading that
- * as "the claim failed" would make the LABEL write itself (the actual record) unsafe to run at all. Any
- * failure here is reported via `log` and returned, never thrown, matching `reportReachability`'s own rule
- * a few functions up: "I could not tell you whether it is claimed" and "I could not move the view" are
- * different failures, and conflating them is the mistake this file already avoids once elsewhere.
+ * NEVER THROWS, on purpose -- but the two ways it can fail to move Status are NOT the same failure, per
+ * `ceo`'s 2026-09-08 ruling on this issue: "'could not ask' and 'asked and wrote' must not look the same,
+ * and a half-applied claim is worse than none."
+ *
+ * A row genuinely not on the Project is a real, common state -- four existed the night this was written --
+ * and `gh project item-edit` refuses it with a STABLE, recognisable message ("is not an item in project
+ * N"); this is the one case this issue's own acceptance text names outright ("a claim on a row that is not
+ * on the Project at all must not fail"), so it is reported as `notOnBoard: true` and never treated as a
+ * defect for a caller to surface as a failure.
+ *
+ * ANY OTHER failure -- auth, network, a field-name typo, a real API error -- is the half-applied case ceo's
+ * ruling is about: the label (the record) was written and the view write genuinely did not reach the
+ * board. That is reported as `notOnBoard: false`, and callers (`writeRowLabels`/`declineRow` below) surface
+ * it distinctly rather than folding it into an ordinary success.
+ *
+ * Reading that a mutation failed is not the same failure as being unable to tell whether it failed at all
+ * -- matching `reportReachability`'s own rule a few functions up -- so this still never THROWS; it reports
+ * via the return value and `log`, and it is `writeRowLabels`/`declineRow`'s job to decide what that means
+ * for their own exit code.
  *
  * @param {number} issueNumber
  * @param {string} statusName exactly one of the Project's real Status option names ("Ready", "In progress", …)
  * @param {{ run?: typeof defaultRun, log?: (line: string) => void, snapshot?: typeof withBoardSnapshot }} [deps]
- * @returns {{ moved: true } | { moved: false, reason: string }}
+ * @returns {{ moved: true } | { moved: false, reason: string, notOnBoard: boolean }}
  */
 export function moveProjectStatus(issueNumber, statusName,
   { run = defaultRun, log = (line) => process.stderr.write(`${line}\n`), snapshot = withBoardSnapshot } = {}) {
@@ -197,10 +210,13 @@ export function moveProjectStatus(issueNumber, statusName,
       "--url", url, "--field", "Status", "--value", statusName]), { run, log });
     return { moved: true };
   } catch (error) {
-    const reason = `could not move #${issueNumber}'s Status to "${statusName}" -- `
-      + `${/** @type {Error} */ (error).message}`;
+    const message = /** @type {Error} */ (error).message;
+    // `gh`'s own wording, observed live against issue #393 (closed, never added to the Project): stable
+    // enough to match on because it names the mechanism ("is not an item in project N"), not a paraphrase.
+    const notOnBoard = /is not an item in project/.test(message);
+    const reason = `could not move #${issueNumber}'s Status to "${statusName}" -- ${message}`;
     log(`row-claim: ${reason}`);
-    return { moved: false, reason };
+    return { moved: false, reason, notOnBoard };
   }
 }
 
@@ -240,7 +256,7 @@ export function moveProjectStatus(issueNumber, statusName,
  * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
  *   dispatch, `[STARTED_LABEL]` for a claim/start
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} deps
- * @returns {{ claimed: true } | { claimed: false, reason: string }}
+ * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 function writeRowLabels(issueNumber, mySession, extraLabels, { run = defaultRun, moveStatus = moveProjectStatus } = {}) {
   const before = fetchLabels(issueNumber, { run });
@@ -268,9 +284,12 @@ function writeRowLabels(issueNumber, mySession, extraLabels, { run = defaultRun,
   // by a later sweep is wrong between sweeps, and "between sweeps" is where a worker reads it -- measured
   // live, a row read `unlabeled ready / labeled in-progress` for the three minutes between a real claim and
   // the next audit pass. `moveStatus` never throws (see its own comment); a claim this session actually
-  // holds must complete regardless of whether the Project view could be updated to match.
-  moveStatus(issueNumber, "In progress", { run });
-  return { claimed: true };
+  // holds must complete regardless of whether the Project view could be updated to match -- but a genuine,
+  // unexpected Status-write failure (as opposed to the row simply not being on the board) is a HALF-APPLIED
+  // claim, per ceo's ruling, and must be visible to the caller rather than folded into a plain success.
+  const statusResult = moveStatus(issueNumber, "In progress", { run });
+  if (statusResult.moved) return { claimed: true, statusMoved: true };
+  return { claimed: true, statusMoved: false, notOnBoard: statusResult.notOnBoard, statusReason: statusResult.reason };
 }
 
 /**
@@ -324,7 +343,7 @@ function reportReachability(issueNumber) {
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} [deps]
- * @returns {{ claimed: true } | { claimed: false, reason: string }}
+ * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 export function dispatchRow(issueNumber, mySession, deps = {}) {
   return writeRowLabels(issueNumber, mySession, [], deps);
@@ -339,7 +358,7 @@ export function dispatchRow(issueNumber, mySession, deps = {}) {
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} [deps]
- * @returns {{ claimed: true } | { claimed: false, reason: string }}
+ * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 export function claimRow(issueNumber, mySession, deps = {}) {
   return writeRowLabels(issueNumber, mySession, [STARTED_LABEL], deps);
@@ -359,7 +378,7 @@ export function claimRow(issueNumber, mySession, deps = {}) {
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} [deps]
- * @returns {{ declined: true } | { declined: false, reason: string }}
+ * @returns {{ declined: true, statusMoved: true } | { declined: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { declined: false, reason: string }}
  */
 export function declineRow(issueNumber, mySession, { run = defaultRun, moveStatus = moveProjectStatus } = {}) {
   const before = fetchLabels(issueNumber, { run });
@@ -381,9 +400,11 @@ export function declineRow(issueNumber, mySession, { run = defaultRun, moveStatu
   // #400: THE MATCHING MOVE ON RELEASE. "Genuinely unclaimed" and "Ready" are the same state in this
   // tracker's own model (`ready-label-audit.mjs`'s definition: a row cannot be both "unclaimed, pickable"
   // and "claimed"), so a decline moves the view back the same way a claim moved it forward. Never throws;
-  // see `moveProjectStatus`'s own comment for why.
-  moveStatus(issueNumber, "Ready", { run });
-  return { declined: true };
+  // see `moveProjectStatus`'s own comment for why an unexpected failure here is surfaced distinctly rather
+  // than folded into a plain `declined: true`.
+  const statusResult = moveStatus(issueNumber, "Ready", { run });
+  if (statusResult.moved) return { declined: true, statusMoved: true };
+  return { declined: true, statusMoved: false, notOnBoard: statusResult.notOnBoard, statusReason: statusResult.reason };
 }
 
 /** @returns {string} the check/conflict log's path -- shared across every worktree, per `gitCommonDir`. */
@@ -528,9 +549,23 @@ function runDispatchOrClaim(mode, issueNumber, rest) {
     if (result.claimed) {
       const label = mode === "dispatch" ? "DISPATCHED" : "STARTED";
       const startedSuffix = mode === "claim" ? ` / ${STARTED_LABEL}` : "";
-      process.stdout.write(`${label} -- #${issueNumber} is now ${CLAIM_LABEL} / session:${mySession}`
-        + `${startedSuffix}\n`);
-      process.exitCode = 0;
+      const claimLine = `${label} -- #${issueNumber} is now ${CLAIM_LABEL} / session:${mySession}${startedSuffix}`;
+      if (result.statusMoved) {
+        process.stdout.write(`${claimLine}\n`);
+        process.exitCode = 0;
+      } else if (result.notOnBoard) {
+        // #400's own acceptance case: a row with no Project item at all is a known, permitted gap, not a
+        // failure -- the claim (the record) stands and this exits clean.
+        process.stdout.write(`${claimLine} (not on the Project board -- Status view not applicable)\n`);
+        process.exitCode = 0;
+      } else {
+        // ceo's ruling: a half-applied claim -- the label (the record) is written, but the board Status
+        // write genuinely failed -- must never look like the plain success above. Exit code 3, distinct
+        // from 0 (clean), 1 (not claimed) and 2 (could not determine at all).
+        process.stdout.write(`${claimLine}, BUT the Project Status could not be moved to match: `
+          + `${result.statusReason}\n`);
+        process.exitCode = 3;
+      }
     } else {
       process.stdout.write(`NOT CLAIMED: ${result.reason}\n`);
       process.exitCode = 1;
@@ -556,8 +591,18 @@ function runDecline(issueNumber, rest) {
   try {
     const result = declineRow(issueNumber, mySession);
     if (result.declined) {
-      process.stdout.write(`DECLINED -- #${issueNumber} is unclaimed again\n`);
-      process.exitCode = 0;
+      if (result.statusMoved) {
+        process.stdout.write(`DECLINED -- #${issueNumber} is unclaimed again\n`);
+        process.exitCode = 0;
+      } else if (result.notOnBoard) {
+        process.stdout.write(`DECLINED -- #${issueNumber} is unclaimed again (not on the Project board -- `
+          + `Status view not applicable)\n`);
+        process.exitCode = 0;
+      } else {
+        process.stdout.write(`DECLINED -- #${issueNumber} is unclaimed again, BUT the Project Status could `
+          + `not be moved to match: ${result.statusReason}\n`);
+        process.exitCode = 3;
+      }
     } else {
       process.stdout.write(`NOT DECLINED: ${result.reason}\n`);
       process.exitCode = 1;
