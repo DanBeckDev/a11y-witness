@@ -369,6 +369,15 @@ const SECTION_FIELD_NAMES = ["Acceptance", "Refutation", "Mutation"];
  * lines below" shape, so a heading with prose after it and no colon must read the identical way, never as
  * a command. The bold/plain form has no such ambiguity -- `Acceptance:` always requires the colon to match
  * at all, so anything it captures was always meant as inline.
+ *
+ * THE LINE-START ANCHOR (`^\s*`) IS DELIBERATE, AND #522 IS THE PROOF -- both directions at once. #506
+ * (above) is a heading whose trailing text was wrongly taken as a command; the mirror fault is prose
+ * ABOUT the field being wrongly taken as its header. #522's own PR body says "an Acceptance/Refutation
+ * command's file actually declares..." mid-sentence, and this parser correctly reads that as prose, not a
+ * header -- which is also why that same PR shipped with no real `Acceptance:` section at all (a body full
+ * of correctly-ignored mentions is indistinguishable, to an author skimming it, from one that declares a
+ * real command). Widening the match to be more forgiving of one direction reliably breaks the other; both
+ * behaviours are currently correct and in tension, which is why the anchor stays exactly this strict.
  * @param {string} fieldName
  * @returns {{ heading: RegExp, plain: RegExp }}
  */
