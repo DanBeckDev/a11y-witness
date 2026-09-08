@@ -350,23 +350,38 @@ else
   # file. THE DIRECT BINARY, NOT `npx changeset` -- measured here 3.8s against 7.8s for the identical
   # command through `npx`'s resolution; `node_modules/.bin/changeset` is guaranteed present by the
   # toolchain guard above, which already refuses the whole hook before this point if it is not.
-  if [ -n "$changed" ] && [ "$(node scripts/changeset-precise.mjs origin/main)" = "true" ]; then
-    if ./node_modules/.bin/changeset status --since=origin/main >/tmp/a11y-changeset.$$ 2>&1; then
-      echo "  ok      changeset"
+  if [ -n "$changed" ]; then
+    # #288: `$(cmd)` DISCARDS `cmd`'s OWN EXIT STATUS -- the `if` only ever tested the STRING it printed.
+    # Measured live: an unresolvable base ref throws inside `changeset-precise.mjs`'s own `execFileSync`,
+    # uncaught, so the process exits non-zero having printed NOTHING -- and `[ "" = "true" ]` is false,
+    # so the hook took the ELSE branch and printed a POSITIVE CLAIM ("no file this push touches is one npm
+    # actually ships") from a check that had examined nothing at all. Captured into a variable first, so
+    # `$?` immediately after is `changeset-precise.mjs`'s REAL exit status, never the `[ ]` comparison's.
+    changeset_precise_out="$(node scripts/changeset-precise.mjs origin/main 2>/tmp/a11y-changeset-precise-err.$$)"
+    changeset_precise_status=$?
+    if [ "$changeset_precise_status" -ne 0 ]; then
+      echo "  COULD NOT RUN  changeset — changeset-precise.mjs could not answer whether this push touches a published package; nothing was examined"
+      tail -5 /tmp/a11y-changeset-precise-err.$$ | sed 's/^/            /'
+      skipped+=("changeset (could not run)")
+    elif [ "$changeset_precise_out" = "true" ]; then
+      if ./node_modules/.bin/changeset status --since=origin/main >/tmp/a11y-changeset.$$ 2>&1; then
+        echo "  ok      changeset"
+      else
+        echo "  FAILED  changeset"
+        tail -20 /tmp/a11y-changeset.$$ | sed 's/^/            /'
+        echo "            This push changes a file npm actually ships for a published package, with no changeset."
+        echo "            Run 'npm run changeset', pick the package(s) and bump level, and write one sentence a"
+        echo "            CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT"
+        echo "            follow from the size of the diff, and for the scorer any retrain is a MAJOR."
+        echo "            If this genuinely cannot affect a consumer: 'npx changeset add --empty' records that"
+        echo "            decision explicitly rather than leaving it to be inferred from silence."
+        failed+=("changeset")
+      fi
+      rm -f /tmp/a11y-changeset.$$
     else
-      echo "  FAILED  changeset"
-      tail -20 /tmp/a11y-changeset.$$ | sed 's/^/            /'
-      echo "            This push changes a file npm actually ships for a published package, with no changeset."
-      echo "            Run 'npm run changeset', pick the package(s) and bump level, and write one sentence a"
-      echo "            CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT"
-      echo "            follow from the size of the diff, and for the scorer any retrain is a MAJOR."
-      echo "            If this genuinely cannot affect a consumer: 'npx changeset add --empty' records that"
-      echo "            decision explicitly rather than leaving it to be inferred from silence."
-      failed+=("changeset")
+      skipped+=("changeset (no file this push touches is one npm actually ships for a published package)")
     fi
-    rm -f /tmp/a11y-changeset.$$
-  else
-    skipped+=("changeset (no file this push touches is one npm actually ships for a published package)")
+    rm -f /tmp/a11y-changeset-precise-err.$$
   fi
 fi
 
