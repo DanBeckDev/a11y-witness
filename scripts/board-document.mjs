@@ -18,6 +18,8 @@ import { writeFileSync, mkdirSync, mkdtempSync, readFileSync, existsSync, realpa
   from "node:fs";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
+// #589: the stated-writing-time parser, so the RENDER checks freshness where "now" means something.
+import { statedWritingTime } from "./board-summary-check.mjs";
 import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
@@ -50,6 +52,9 @@ function criteriaCounts(root = ROOT) {
 }
 
 const SUMMARY_WORDS = 120;
+// #589: the backstop window. The 07:25 write plus the 08:00 render is what delivers the board's
+// thirty minutes; this catches a stale paragraph reaching them, so it is deliberately wider.
+const SUMMARY_FRESH_MINUTES = 60;
 // TWO PAGES OF BODY, and the number is MEASURED rather than chosen.
 //
 // Edition 2 ran to 1,864 words across four pages of body and the chairman called it too long for a daily.
@@ -779,6 +784,45 @@ const PAGE_CSS = `
  * forbids, so there is no fallback to generate one -- the only way to publish is for a person to have
  * written it. Returns the summary, or exits.
  */
+
+/**
+ * THE STATED WRITING TIME MUST BE TRUE AT THE MOMENT OF THE RENDER, and this is the only place that can
+ * say so -- #589.
+ *
+ * It lived in `board-style.test.ts` until 2026-09-09, where it compared the summary's stated time against
+ * the clock at TEST time. A unit suite runs on every pull request at every hour, so from 60 minutes after
+ * the summary was written the whole queue failed on a document that was correct: measured this morning,
+ * every open PR red at 09:05 London against a summary written at 08:05 and never touched by any of them.
+ * The assertion was right and the place was wrong. Here, "now" IS the render, which is the only moment
+ * the freshness of a board paragraph means anything.
+ *
+ * The board asked for thirty minutes -- "it should be as fresh as possible as a lot happens over night".
+ * The SCHEDULE delivers that (the summary is written at 07:25 and the edition renders at 08:00); this is
+ * the backstop that catches a stale one reaching the board, so it is the wider sixty.
+ *
+ * @param {boolean} publishing @param {{text: string} | null | undefined} summary @param {string} today
+ */
+export function requireSummaryIsFresh(publishing, summary, today) {
+  if (!publishing || !summary) return;
+  const londonNow = new Intl.DateTimeFormat("en-GB",
+    { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+  const stated = statedWritingTime(summary.text, londonNow);
+  if (!stated) {
+    console.error(`REFUSING to render: the summary for ${today} does not say when it was written.\n`
+      + 'Open it with "Written at HH:MM on D Month" -- a document the board reads at 08:00 must say how '
+      + "old its one hand-written paragraph is, and a stated time nothing checks is decoration.");
+    process.exit(5);
+  }
+  if (stated.driftMinutes > SUMMARY_FRESH_MINUTES) {
+    console.error(`REFUSING to render: the summary for ${today} says it was written at ${stated.stated} `
+      + `and London now reads ${londonNow} -- ${stated.driftMinutes} minutes later, past the `
+      + `${SUMMARY_FRESH_MINUTES}-minute window.\n`
+      + "Rewrite it from the state at this moment. Do NOT adjust the time it claims: the claim is the "
+      + "thing being checked, and editing it to pass is how a freshness rule becomes a formality.");
+    process.exit(5);
+  }
+}
+
 /** @param {boolean} publishing */
 function requireSummary(publishing) {
   const today = new Date().toISOString().slice(0, 10);
@@ -797,6 +841,7 @@ function requireSummary(publishing) {
       + `${SUMMARY_WORDS}-word cap. Cut it; that cap is what makes it a summary.`);
     process.exit(5);
   }
+  requireSummaryIsFresh(publishing, summary, today);
   return summary;
 }
 
