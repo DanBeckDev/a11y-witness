@@ -295,6 +295,84 @@ test("a capture with NO media field makes no 1.4.2 claim at all", () => {
 });
 
 /**
+ * 1.3.5 Identify Input Purpose — #869 (issue #79; PR #89 closed unmerged and never wrote this rule).
+ *
+ * Written against `RuleInput.formInputs` as #869 re-declared it (no worker-side census populates this on
+ * any real capture yet — issue #170), so every test here is a HAND-BUILT fixture, the same shape 1.4.2's
+ * own tests use for `media`. This is the "the wiring is already proven" test dispatcher asked for: the day
+ * #170 lands, only the capture is open, not whether the rule fires on real data shaped like this.
+ */
+test("#869: a form field whose autocomplete value is not a real Autofill token is reported", () => {
+  const findings = ruleFindings({
+    transcript: [],
+    formInputs: [{ tag: "input", type: "text", autocomplete: "fname" }],
+  } as never);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].wcag, /^1\.3\.5/);
+  assert.match(findings[0].evidence, /<input type="text" autocomplete="fname">/);
+  assert.equal(findings[0].mapping, "secondary",
+    "F107 also asks whether the purpose is communicated some other way, which this census cannot see");
+});
+
+test("#869: a valid Autofill token, including composite forms, is silent", () => {
+  const findings = ruleFindings({
+    transcript: [],
+    formInputs: [
+      { tag: "input", type: "text", autocomplete: "given-name" },
+      { tag: "input", type: "email", autocomplete: "email" },
+      { tag: "input", type: "tel", autocomplete: "shipping home tel" }, // shipping + contact prefixes
+      { tag: "input", type: "text", autocomplete: "given-name webauthn" }, // the webauthn suffix
+    ],
+  } as never);
+  assert.equal(findings.filter((f) => f.wcag.startsWith("1.3.5")).length, 0);
+});
+
+test("#869: empty, `on` and `off` are not this rule's claim", () => {
+  // Neither says anything about the field's PURPOSE (or explicitly opts out) -- asserting from either
+  // would accuse a page for using the attribute correctly.
+  const findings = ruleFindings({
+    transcript: [],
+    formInputs: [
+      { tag: "input", type: "text", autocomplete: "" },
+      { tag: "input", type: "text", autocomplete: "on" },
+      { tag: "input", type: "text", autocomplete: "off" },
+    ],
+  } as never);
+  assert.equal(findings.filter((f) => f.wcag.startsWith("1.3.5")).length, 0);
+});
+
+test("#869: a field with NO autocomplete attribute at all is not this rule's claim", () => {
+  // Deciding whether it OUGHT to have one needs a word-sense judgement over the field's label -- see the
+  // rule's own comment. `autocomplete: null` is what a real DOM query returns for an absent attribute.
+  const findings = ruleFindings({
+    transcript: [],
+    formInputs: [{ tag: "input", type: "text", autocomplete: null }],
+  } as never);
+  assert.equal(findings.filter((f) => f.wcag.startsWith("1.3.5")).length, 0);
+});
+
+test("#869: a capture with NO formInputs field makes no 1.3.5 claim at all", () => {
+  // No worker census populates this on any capture that exists today (issue #170) -- absence means NOT
+  // CHECKED, matching `media`'s own established pattern, never a silent pass.
+  const findings = ruleFindings({ transcript: ["heading, level 1, News"] } as never);
+  assert.equal(findings.filter((f) => f.wcag.startsWith("1.3.5")).length, 0);
+  const probed = ruleFindings({ transcript: [], formInputs: [] } as never);
+  assert.equal(probed.filter((f) => f.wcag.startsWith("1.3.5")).length, 0,
+    "an empty probe result is also not a finding — it is a page with no form inputs");
+});
+
+test("#869 MUTATION TARGET: two invalid tokens on the same page are both reported", () => {
+  const findings = ruleFindings({
+    transcript: [],
+    formInputs: [
+      { tag: "input", type: "text", autocomplete: "fname" },
+      { tag: "input", type: "text", autocomplete: "lname" },
+    ],
+  } as never).filter((f) => f.wcag.startsWith("1.3.5"));
+  assert.equal(findings.length, 2, "two genuinely distinct invalid fields must both be reported");
+});
+
+/**
  * 2.1.2 No Keyboard Trap — a non-interference criterion, and the only failure here that is TOTAL: a
  * keyboard user who cannot leave a control cannot use the rest of the page at all.
  *
