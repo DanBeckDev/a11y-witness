@@ -131,8 +131,36 @@ skipped=()
 # A stale LOCAL `origin/main` (this hook does not fetch) makes the ancestry check pass on a branch that
 # is genuinely behind -- the guard reassuring you for the reason it exists. Fetch before trusting a green
 # result here, the same caveat every other `origin/main`-relative check in this hook already carries.
+#
 # BEGIN #348 STALE-BASE CHECK -- extraction markers for pre-push-stale-base.test.ts; keep both if edited.
-if git rev-parse --verify -q origin/main >/dev/null; then
+#
+# #583: A DELETION HAS NO BASE TO BE STALE AGAINST. `git push origin --delete <branch>` sends this hook
+# no commits at all -- there is nothing being pushed for "does HEAD contain origin/main's tip" to be a
+# question ABOUT. The refusal, and its own advice ("merge origin/main in before pushing"), name an action
+# that does not exist for a deletion. git's own pre-push protocol (githooks(5)) reports exactly this on
+# STDIN, one line per ref update, as `<local ref> SP <local sha1> SP <remote ref> SP <remote sha1>` -- a
+# deleted ref's LOCAL sha1 is the all-zeros object name. Read here, once, rather than inferred from HEAD,
+# which names the CURRENT checkout's branch and has nothing to do with which ref is actually being
+# pushed. A push mixing a deletion with a real update still has a real update line present, so this only
+# ever skips when EVERY line read is a deletion -- and an empty read (no lines at all) must NOT count as
+# "all deletions", since that is indistinguishable from a caller that supplied no stdin and existed before
+# this check did; both keep this check fully active.
+push_ref_lines=0
+push_deletion_lines=0
+while IFS=' ' read -r push_local_ref push_local_sha push_remote_ref push_remote_sha; do
+  push_ref_lines=$((push_ref_lines + 1))
+  if [ "$push_local_sha" = "0000000000000000000000000000000000000000" ]; then
+    push_deletion_lines=$((push_deletion_lines + 1))
+  fi
+done
+push_is_all_deletions=0
+if [ "$push_ref_lines" -gt 0 ] && [ "$push_ref_lines" -eq "$push_deletion_lines" ]; then
+  push_is_all_deletions=1
+fi
+
+if [ "$push_is_all_deletions" = "1" ]; then
+  skipped+=("stale-base-check (this push only deletes remote ref(s), which have no base to be stale against)")
+elif git rev-parse --verify -q origin/main >/dev/null; then
   if ! git merge-base --is-ancestor origin/main HEAD; then
     if [ -n "${A11Y_STALE_BASE_REASON:-}" ]; then
       echo "pre-push: HEAD does not contain origin/main's tip, overridden: $A11Y_STALE_BASE_REASON" >&2
