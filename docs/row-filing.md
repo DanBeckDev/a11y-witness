@@ -60,6 +60,27 @@ audit can tell them apart, so a blank leaves the row in the missing-section coun
 oversight. #149 (a parent that deletes nothing), #72 (a change only an npm org owner can make) and #668
 (a count each session accounts for) are the worked examples.
 
+**A PROBE IS A READ. A WRITE IS NEVER A PROBE.** To find out whether the API will accept a write, ask with
+`gh api -i` on a **read** and look at `X-Ratelimit-Remaining` — the headers are on every real call, not
+only on mutating ones. `gh api rate_limit` is not an instrument here: measured 2026-09-09 in the same
+second, it reported `core 5000/5000` while a real call's headers reported **2,216 already used**, and a
+secondary limit does not appear in it at all. Sending a `POST` to find out whether `POST` works created
+row #798, titled `probe`, in the live tracker — the same defect as the fixture rule above, committed by
+the person who had closed #762 for it two hours earlier.
+
+**AND `git show <ref>:<path>` IS THE READ. `git checkout <ref> -- <path>` IS A WRITE TO THE INDEX.** It
+copies the ref's whole tree into the working tree and stages it, so running it to *look at* a file on
+`main` staged fifteen files across a `pm/` branch — including `.github/workflows/trunk-guard.yml`, which
+that branch may not touch, and other sessions' in-flight work. Nothing was committed; a later
+`git checkout` to another branch aborted, which is the only reason it was noticed. CLAUDE.md already
+carries `git checkout --` as the command that destroyed release-eligible weights; **this is the same
+command reached for as a read.**
+
+**And tracker mutations go out at no more than ten a minute per session, with a pause between batches**;
+a batch over twenty is announced in the hourly line before it runs. Twenty-six board additions in four
+minutes bought a secondary rate limit that refused every session's writes for the next fifteen — cheap per
+item, costed to whoever needed the resource next.
+
 **And an invented section is worse than an absent one.** A plausible-looking Acceptance gets built
 against; a blank one is visible. Where the sections are written by somebody other than the filer — the
 backfill marked each *"sections written by the PM from the filing, filer to confirm"* — the mark is an
