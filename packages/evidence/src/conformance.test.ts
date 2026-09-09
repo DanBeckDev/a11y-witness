@@ -675,3 +675,35 @@ test("KNOWN: the element counts already include non-element numeric fields", () 
       "link"],
     "`candidates` is a fact about the READ and it is in here; narrowing this is a separate change");
 });
+
+/**
+ * A FOCUS WALK THAT READ NOTHING IS NOT A PAGE WITH NO TAB STOPS — #863.
+ *
+ * `stops: 0` leaves `truncated` false, so a zero-stop walk pushed no outcome at all and 2.1.2/2.4.3 read
+ * a clean channel from a probe that never read one. Measured on five IKEA captures reporting `stops: 0`
+ * beside the same capture's `focusConfinement` mark saying `controlsOnPage: 265`.
+ */
+test("a silent focus walk is reported as an outcome, so 2.1.2 cannot claim an unearned pass", () => {
+  const silent = sweepOutcomes([
+    { event: "focusOrder", stops: 0, cycled: false, stalled: false, truncated: false, stop: "silent" },
+  ]);
+  assert.deepEqual(silent, [{ type: "focusOrder", stop: "silent" }]);
+
+  // A walk that COMPLETED its ring says nothing here, exactly as before: it is not truncated and not
+  // silent, and inventing an outcome for it would make every conformant page a cantTell.
+  assert.deepEqual(sweepOutcomes([
+    { event: "focusOrder", stops: 14, cycled: true, stalled: false, truncated: false, stop: "cycled" },
+  ]), []);
+
+  // AND THE OLD RECORDS. A capture taken before #863 has no `stop`, so its zero-stop walk keeps the
+  // answer it has always had. Inventing truncation in old evidence is the wrong direction to be wrong in
+  // — `examinationState` states the same rule for an absent sweep stop.
+  assert.deepEqual(sweepOutcomes([
+    { event: "focusOrder", stops: 0, cycled: false, stalled: false, truncated: false },
+  ]), [], "a pre-#863 capture cannot say which ending it had, and must not be told");
+
+  // `truncated` still wins where it applies, unchanged.
+  assert.deepEqual(sweepOutcomes([
+    { event: "focusOrder", stops: 90, cycled: false, stalled: false, truncated: true, stop: "cap" },
+  ]), [{ type: "focusOrder", stop: "cap" }]);
+});
