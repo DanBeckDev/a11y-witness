@@ -261,6 +261,26 @@ Two companions, ruled the same morning:
 - **A ruling that changes an assignment reaches the builder in the same minute as the row**, and the
   row cites that it was sent. A record is not a delivery.
 
+## TWO RULES FROM 2026-09-09: THE FOLD TEST, AND THE RUNWAY WINDOW
+
+**The fold test, for every sweep row.** Ask of each instance: *can this be fixed on its own, with its own
+acceptance?* If yes, it is its own row and the sweep cites it; the sweep is for what is left after every
+findable instance has been taken out of it. Folding a fixable defect into a sweep is how the defect waits
+for the sweep (#655, with #658 as the live case). A sweep's population is sized against the tree before
+the row is written, its count is ASSERTED by the row's acceptance and never merely printed, and "empty by
+construction" is the phrase that decides whether a green test proved anything (#633).
+
+**The runway window, the dispatcher's only power over other sessions' PRs.** Under strict protection a
+PR must be green and current at one instant; the train's carry pushes, which restarts CI (~5 minutes);
+merges land every ~4 minutes; so the act that makes a PR mergeable invalidates its green, and a PR can
+stay green-and-behind indefinitely (#627: five green heads, never merged). When a PR has gone
+green-then-behind three times, the dispatcher may hold every other armed PR for one cycle (label plus
+disarm, read back from the API), let the starved one land, and release each hold with its reason
+printed. Conditions: declared in the table with which PRs were held and why; never for the dispatcher's
+own PRs without saying so in the same message; never pre-emptively, because a remedy used before its
+condition is met is how a remedy stops being believed. The merge queue at the org transfer (#156) must
+test the queued group once and merge without re-carrying each PR, or this loop survives under a new name.
+
 ## The contingency drill
 
 **The acceptance test for this whole page, and it is a command, not a judgement:** a fresh clone in a
