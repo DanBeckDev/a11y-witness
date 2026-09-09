@@ -253,7 +253,11 @@ Two companions, ruled the same morning:
 - **A ruling that changes an open PR's required shape takes `pr:hold` in the same act**, by the ruler,
   with the refusal naming the ruling rather than the state, and a release that prints its reason. The
   queue reads a green PR and never a row's comments, so a ruling recorded on the row alone merges the
-  overruled shape (#625, 2026-09-09).
+  overruled shape (#625, 2026-09-09). **And a hold means "cannot merge", not "cannot be armed"**: it
+  disarms auto-merge as well as labelling (a PR armed before the ruling merges regardless of any label),
+  the per-PR `arm` job reads it so the next push cannot re-arm it, and every write is read back from
+  the API, because a hold that labelled and failed to disarm looks held and is the most dangerous state.
+  Found by demonstrating the refusal rather than citing it (#645).
 - **A ruling that changes an assignment reaches the builder in the same minute as the row**, and the
   row cites that it was sent. A record is not a delivery.
 
