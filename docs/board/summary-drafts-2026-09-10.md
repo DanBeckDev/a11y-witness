@@ -6,8 +6,15 @@ gathered the day before so that the writing at 07:25 is *cutting to 120 words*, 
 happened* — which is the half that cannot be done at 07:25 with a clear head.
 
 Written 2026-09-09 by `product-manager` on `ceo`'s 12:30Z instruction, and revised the same day to
-`ceo`'s rulings on order and content. Ignored by the board pipeline: `board-data.mjs` reads `reported/`
-for `.json`.
+`ceo`'s rulings on order and content.
+
+**It sits beside `reported/` rather than inside it, and that is a correction.** The instruction said to
+draft it into `docs/board/reported/`, and `board-data.mjs` does read that directory for `.json` only — so
+a `.md` there looked invisible. It is not: `board-style.test.ts` asserts that **every subdirectory of
+`reported/` is named in `REPORTED_KINDS`**, because that directory holds records the report READS, and a
+directory nothing reads is a record nobody will notice has stopped being read. The guard was right and the
+reasoning that put the file there was wrong. A flat file here introduces no directory for any enumeration
+to adopt.
 
 ---
 
@@ -109,49 +116,41 @@ summary has room:
 
 ---
 
-## 3. The fleet line — `ceo`'s FINAL WORDING, 2026-09-09
+## 3. The fleet line — SETTLED, TEN OF TEN
 
-**Two forms. Which one you write depends on a single check at 06:30, and the check is named below.**
+**Write this, and check it once before you do:**
 
-### Default — write this unless the check below says otherwise
+> Ten boxes serving (`fleet:status` 2026-09-09T13:21:19Z, run by `orchestrator`, fleet consistent); the
+> tenth rejoined on 9 September after two days recorded as unreachable, which was a path to it and not
+> the box.
 
-> Nine boxes serving (`fleet:status` 2026-09-09T13:10:25Z, run by `orchestrator`, fleet consistent). The
-> tenth answered `/health` and SSH at 13:14Z on the fleet's provision revision and is rejoining today; the
-> tree will say ten only after a `fleet:status` shows ten ready and consistent.
+`ceo`'s second form, with the time filled in from the run that settled it: `npm run fleet:status` at
+**2026-09-09T13:21:19Z** — `10/10 serving /health`, `fleet CONSISTENT`, all ten `ready` on the same
+provision revision, `worker:code` 10/10 matching. `fleet:*` is inside this session's resource ban, so the
+figure is `orchestrator`'s and is attributed to them. **Re-ask at 07:25 for a fresh run; if it does not
+come, say the time this one was taken rather than implying it is current.**
 
-### If the tenth has rejoined before the draft converts at 06:30
-
-> Ten boxes serving (`fleet:status` `<time>`, `orchestrator`, consistent); the tenth rejoined on
-> 9 September after two days recorded as unreachable, which was a path to it and not the box.
-
-### The check, and the rules that survive either way
-
-**Ask `orchestrator` whether step 3 of their sequence shows ten ready and consistent.** If it does, write
-the second form with the time that run printed. If it does not — or if they have not answered — write the
-first. Do not infer it from this file.
-
-- **The sentence names the run time and who ran it, always.** `fleet:*` is inside this session's resource
-  ban, so every figure here is `orchestrator`'s and is attributed to them.
-- **It never mentions a visit.** The console-visit request was withdrawn with the chairman at 13:15Z on
-  9 September.
-- **"The tree will say ten only after a `fleet:status` shows ten"** is the standing rule, not a hedge:
-  the tree earns the number from the instrument, never the other way round.
-
-### Why the clause changed, kept here because the next person will meet this shape
+### NEVER PRINT THE CONSOLE VISIT, IN ANY FORM
 
 The earlier ruling was to say the tenth was *withdrawn pending the chairman's console visit, in the
-inventory's words*. The inventory's words were **false**: they say the box *"answers neither `/health`,
-nor SSH, nor ICMP"*, and at 13:10–13:12Z it answered two of the three, on `provisionRevision`
-`ba7f4174f90053f8` — identical to the live fleet — behind nothing but a Windows notification holding the
-foreground. **Two days recorded as unreachable, and it was a path to the box rather than the box.**
+inventory's words*. **The inventory's words were false** — they say it *"answers neither `/health`, nor
+SSH, nor ICMP"*, and it answered two of the three. `ceo` withdrew the request to the chairman at 13:15Z,
+and the box rejoined at 13:21Z **without any visit**.
 
-**A board sentence saying a machine needs a physical visit, when that machine answers HTTP and SSH, is
-something a chairman acts on.** It was caught only because the ruling also required the capacity figure to
-come fresh from a run *today*, which sent the request to `orchestrator`, who had just probed it. The date
-in the earlier ruling was wrong too — the tree says 2026-09-07, and the box's 4.6-day uptime rules out a
-restart on either day.
+**A board summary sending the chairman to a data centre for a machine that answers HTTP and SSH is the
+specific harm here.** It was caught only because the same ruling required the capacity figure to come
+fresh from a run *today*, which sent the request to the one session that had just probed the box.
 
-Tracked as **#743** (`fleet-gated`, `orchestrator`), whose tree fix is the last step of their sequence.
+### If the board asks what actually happened
+
+**It was a monitoring gap, not an outage, and that is the honest version.** The box had **4.6 days of
+uptime** on 7 September — it never went down. It was serving `/health` throughout, held out of `ready`
+only by a Windows notification holding the foreground. Two days were recorded as unreachable because the
+path to it was, not because it was. **Do not describe this as a recovery.**
+
+The 6th-versus-7th date question is moot for the summary: it only mattered while there was a withdrawal to
+describe. The tree fix rides `orchestrator`'s **#750**, not this document. **#743** carries the stale
+inventory sentence.
 
 ## 4. The process line — ONE SENTENCE, IN THE BODY, NOT IN THE THREE
 
