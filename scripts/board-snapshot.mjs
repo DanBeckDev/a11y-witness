@@ -239,14 +239,29 @@ export function fetchReadyIssueNumbers({ run = defaultRun, limit = 500 } = {}) {
  * population -- every open `ready` issue, read by a query that is not nested -- is the only thing that
  * can catch it: pure, so it is driven with real shapes rather than asserted against this file's text.
  *
+ * `excludeIssueNumber`, ADDED AFTER A LIVE SELF-TRIP (#891, filed live 2026-09-09, ceo's diagnosis):
+ * this floor exists to catch a `ready` row that has silently LOST its Status somewhere -- neglect. It is
+ * not that when the row's own filer passed a real `gh issue create -l ready` flag straight through
+ * (row-file's own `--ready` sentinel is a SEPARATE, later convention -- see row-file.mjs's own #844/#883
+ * comments -- and nothing stops a caller using gh's real flag instead), the issue already carried `ready`
+ * by the time `gh project item-add` ran, so THIS call's own pre-write snapshot caught the very row it was
+ * about to fix and refused, always, on itself -- the #872/#867 self-trip shape recurring through a second
+ * door "label lands last" never closed, because it only ever controlled row-file's OWN label-add call.
+ * The row currently having its Status set by the call this floor is protecting is not evidence of
+ * neglect; it is the reason the call exists. Every OTHER ready row missing its Status is unaffected --
+ * this excludes at most the one issue number the caller names, never a class.
+ *
  * @param {BoardItem[]} items
  * @param {number[]} readyIssueNumbers
+ * @param {number | null} [excludeIssueNumber] a row's own Status-setting call must not be refused by the
+ *   very absence of Status it is about to fix -- `null` (the default) excludes nothing, for every other
+ *   caller (a plain snapshot, an audit) that must still see every row honestly
  * @returns {number[]} the ready issue numbers with no Status in `items` (including one missing entirely)
  */
-export function readyRowsMissingStatus(items, readyIssueNumbers) {
+export function readyRowsMissingStatus(items, readyIssueNumbers, excludeIssueNumber = null) {
   const statusByNumber = new Map(
     items.filter((i) => i.number !== null).map((i) => [i.number, i.status]));
-  return readyIssueNumbers.filter((n) => statusByNumber.get(n) == null);
+  return readyIssueNumbers.filter((n) => n !== excludeIssueNumber && statusByNumber.get(n) == null);
 }
 
 /**
@@ -262,10 +277,15 @@ export function readyRowsMissingStatus(items, readyIssueNumbers) {
  * every caller of this function -- `writeBoardSnapshot`, and `ready-label-audit.mjs`'s own
  * board-membership check, which reads through this exact query -- inherits it for free.
  *
- * @param {{ run?: typeof defaultRun, fetchReady?: typeof fetchReadyIssueNumbers }} [deps]
+ * `excludeIssueNumber` -- see `readyRowsMissingStatus`'s own header (#891) -- passed through unchanged so
+ * a caller boarding ONE specific issue can exempt only that issue from the floor while it is mid-fix.
+ *
+ * @param {{ run?: typeof defaultRun, fetchReady?: typeof fetchReadyIssueNumbers,
+ *   excludeIssueNumber?: number | null }} [deps]
  * @returns {BoardItem[]}
  */
-export function fetchBoardItems({ run = defaultRun, fetchReady = fetchReadyIssueNumbers } = {}) {
+export function fetchBoardItems({ run = defaultRun, fetchReady = fetchReadyIssueNumbers,
+  excludeIssueNumber = null } = {}) {
   /** @type {BoardItem[]} */
   const items = [];
   /** @type {string | null} */
@@ -292,7 +312,7 @@ export function fetchBoardItems({ run = defaultRun, fetchReady = fetchReadyIssue
     cursor = page.endCursor;
   }
   const readyNumbers = fetchReady({ run });
-  const missing = readyRowsMissingStatus(items, readyNumbers);
+  const missing = readyRowsMissingStatus(items, readyNumbers, excludeIssueNumber);
   if (missing.length > 0) {
     throw new Error(`board-snapshot: ${missing.length} open ${READY_LABEL} row(s) came back with no `
       + `Status -- refusing to report this snapshot as complete. This is the snapshot reading short, `
@@ -321,7 +341,7 @@ export function snapshotStamp(date) {
  *
  * @param {{ run?: typeof defaultRun, fetchReady?: typeof fetchReadyIssueNumbers,
  *   writeFile?: (path: string, data: string) => void,
- *   mkdir?: (path: string) => void, now?: () => Date }} [deps]
+ *   mkdir?: (path: string) => void, now?: () => Date, excludeIssueNumber?: number | null }} [deps]
  * @returns {string} the path written
  */
 export function writeBoardSnapshot({
@@ -330,8 +350,9 @@ export function writeBoardSnapshot({
   writeFile = (path, data) => writeFileSync(path, data, "utf8"),
   mkdir = (path) => mkdirSync(path, { recursive: true }),
   now = () => new Date(),
+  excludeIssueNumber = null,
 } = {}) {
-  const items = fetchBoardItems({ run, fetchReady });
+  const items = fetchBoardItems({ run, fetchReady, excludeIssueNumber });
   const takenAt = now();
   const path = `${SNAPSHOT_DIR}/${snapshotStamp(takenAt)}.json`;
   const snapshot = {
@@ -356,10 +377,15 @@ export function writeBoardSnapshot({
  * never called.
  *
  * @template T
+ * `excludeIssueNumber` passes straight through to `writeBoardSnapshot` (see `readyRowsMissingStatus`'s
+ * own header, #891) -- deliberately NOT destructured out alongside `log` above: this function has no
+ * opinion on it, it is `moveProjectStatus`'s to set when `mutate` is specifically fixing that one issue's
+ * own Status.
+ *
  * @param {() => T} mutate the actual board-mutating call
  * @param {{ run?: typeof defaultRun, fetchReady?: typeof fetchReadyIssueNumbers,
- *   writeFile?: (path: string, data: string) => void,
- *   mkdir?: (path: string) => void, now?: () => Date, log?: (line: string) => void }} [deps]
+ *   writeFile?: (path: string, data: string) => void, mkdir?: (path: string) => void, now?: () => Date,
+ *   log?: (line: string) => void, excludeIssueNumber?: number | null }} [deps]
  * @returns {T}
  */
 export function withBoardSnapshot(mutate, deps = {}) {
