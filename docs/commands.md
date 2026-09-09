@@ -46,6 +46,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/parent-recheck-summary.mjs` — read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
 - `node scripts/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node scripts/pr-hold.mjs` — take or release a hold on a pull request, the record merge-guard reads before treating it as free
+- `node scripts/pr-open.mjs` — check a PR body's Acceptance/Closes with the tree's own parser before gh pr create/edit sends it
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
 - `node scripts/prune-worktrees.mjs` — remove fully-merged, clean linked worktrees, and name every other one as dirty
 - `node scripts/queue-stalled.mjs` — name the armed, green PRs that can never merge because they are behind and conflicting
