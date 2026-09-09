@@ -492,20 +492,48 @@ ts / run          pending  run 34329060025     <- gate has not run yet on this o
 Reading `gate: fail` there would have said the fix had failed. Reading the RUN said it was still going,
 and it passed.
 
-**Fifth site of this shape, and the first that is a reading tool rather than a decision.**
+**AND THE RUN-LEVEL READ HAS ITS OWN FAILURE MODE, so neither source is safe alone.** Measured on the
+same PR, thirty seconds before it merged, by a different session's waiter:
+
+```
+ci settled NOT-GREEN:
+  run 34329060025 success
+  run 34328823204 failure        <- both at the SAME head sha
+```
+
+A body edit re-triggers CI **without moving the commit**, so a superseded FAILED run sits beside the live
+successful one at one sha. A predicate of "drop cancelled, then require every remaining run at this sha to
+have succeeded" counts a corpse as a verdict. Dropping `cancelled` is not enough — a re-run at an
+unchanged head leaves a failed older run too.
+
+So the two sources fail in opposite directions and at different moments:
+
+| source | its failure |
+|---|---|
+| `gh pr checks` / the rollup | shows a superseded check-run for a name the CURRENT run has not reached yet — reads as `fail` when the honest answer is `pending` |
+| every-run-at-this-sha | counts a superseded failed run as a live verdict — reads as `fail` when the honest answer is `pass` |
+
+**The predicate that survives both: newest check-run PER NAME, and a name with no run on the current run
+is PENDING, never failed.** That is what `queue-table.mjs` does and it is why the table said `pass` on
+that PR while two hand-rolled waiters said otherwise, in opposite directions, within the same minute.
+
+**Fifth and sixth sites of this shape, and the first two that are reading tools rather than decisions.**
 `update-branch-sweep.mjs` (twice — #498/#500, then #517 for the in-flight case), `trunk-revert.mjs`
 (#582) and `queue-table.mjs` all take the newest per name now. `gh pr checks` cannot be fixed, so the
 rule is about consumption:
 
-- For a **verdict** — did this land, may it merge, is it safe to act — read `gh run view <id>`, scoped
-  to the run for the head you mean.
+- For a **verdict** — did this land, may it merge, is it safe to act — resolve the newest check-run per
+  NAME, and read a name with no run on the current run as PENDING. `gh run view <id>` scoped to one run
+  id is safe; "every run at this sha" is not.
 - The rollup is safe only where something takes the **newest per name**, comparing `completedAt` as a
   string (ISO-8601 sorts lexically) and treating the zero date `0001-01-01T00:00:00Z` as no answer.
 - `conclusion` on an unfinished run is `""`, not null, so `|| null` and never `??`.
 
-It caught the author of the previous four fixes the same morning, through a monitor keyed on
-`gh pr checks`'s buckets rather than on a run. Knowing the rule is not the same as holding it at every
-door.
+It caught two sessions in the same minute, in opposite directions, on the one PR the whole repository was
+waiting for — one of them the author of the previous four fixes, through a monitor keyed on `gh pr
+checks`'s buckets. And the other had **noticed the gap earlier that morning and chosen not to close it**,
+which is the more useful half: a known defect left open cost a wrong verdict on the PR that mattered
+most. Knowing the rule is not the same as holding it at every door.
 
 ## A fix and its correction travel together, or the window between them is live
 
