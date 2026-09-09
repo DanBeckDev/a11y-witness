@@ -1047,11 +1047,6 @@ export const CHECKS = [
 ];
 
 /**
- * Runs one check. A check that THREW could not ask its question, which is a different answer from
- * "asked and found nothing" -- so it is recorded as a refusal and never counted as a clean zero.
- * @param {string} what @param {() => number} check @param {string[]} refused
- */
-/**
  * #546: GitHub returns the IDENTICAL "could not resolve" wording for "this ProjectV2 does not exist" and
  * "this token has no permission to see it" -- Project 2 demonstrably exists (the same query succeeds
  * from a token that carries the scope), so a `runCheck` failure naming `ProjectV2` is, today, always the
@@ -1063,11 +1058,28 @@ export const CHECKS = [
  * future failure mode ever reuses this exact wording for something ELSE, it will be misclassified as
  * this gap too -- an accepted cost, since the alternative (treating every board failure as equally
  * unexplained) is the state ceo's ruling exists to end.
+ *
+ * CASE-INSENSITIVE, AND THAT IS THE FIX -- #849 merged matching only `ProjectV2` (GraphQL's own TYPE
+ * name) and missed the live failure the very next audit run hit: `FORBIDDEN (user.projectV2): Resource
+ * not accessible by personal access token`, GitHub's FIELD PATH, lowercase `p`. Both spellings are real
+ * -- measured live, `gh` returns the type name for a `Could not resolve to a ProjectV2` failure and the
+ * field path for a `FORBIDDEN` one -- and #849's own test proved the predicate true on a message it
+ * typed by hand rather than one GitHub actually sent, which is exactly how a case mismatch survives
+ * review. NOT WIDENED FURTHER, e.g. to `FORBIDDEN` alone or paired with "personal access token": either
+ * would also match a genuinely different permission failure this token could hit, and a predicate that
+ * matches too much turns a real, unexplained refusal into a silent skip -- the failure in the other
+ * direction, and the one this row must not trade for.
+ *
+ * A PREDICATE OVER A MESSAGE IS VERIFIED AGAINST A CAPTURED REAL MESSAGE, NEVER A WRITTEN ONE -- ceo's
+ * own rule, stated here because this file is where the next version of this predicate will be edited.
+ * `ready-label-audit.test.ts` fixtures the exact text from run 34386872582 (2026-09-09T18:05:19Z), not a
+ * paraphrase, and asserts `runCheck`'s OUTCOME against it (`NOT RUN`, never `refused`), not merely that
+ * this function returns `true`.
  * @param {string} message
  * @returns {boolean}
  */
 export function isProjectsCredentialGap(message) {
-  return message.includes("ProjectV2");
+  return /projectv2/i.test(message);
 }
 
 /**
