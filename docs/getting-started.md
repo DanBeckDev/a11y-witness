@@ -31,8 +31,8 @@ So: set up the control plane, get a worker, run it.
 ## 1. Install the control plane
 
 ```bash
-git clone https://github.com/a11ign/a11ign.git
-cd a11ign
+git clone https://github.com/DanBeckDev/a11y-witness.git
+cd a11y-witness
 npm install
 ```
 
@@ -121,7 +121,7 @@ On that machine, in an **elevated** PowerShell:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-irm https://raw.githubusercontent.com/a11ign/a11ign/main/packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1 | iex
+irm https://raw.githubusercontent.com/DanBeckDev/a11y-witness/main/packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1 | iex
 ```
 
 It installs Node, Git and NVDA, configures the interactive session, and starts the worker
