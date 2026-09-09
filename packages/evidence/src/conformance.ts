@@ -424,6 +424,14 @@ function coverageSentence(input: ConformanceScopeInput): string {
  * @param diagnostics a capture's diagnostic marks
  * @returns true when the census carries `distinct`
  */
+export function censusCountsDistinctNames(diagnostics: readonly unknown[]): boolean {
+  const mark = (diagnostics ?? []).find(
+    (d): d is Record<string, unknown> =>
+      typeof d === "object" && d !== null && (d as { event?: unknown }).event === "structureCensus");
+  const distinct = (mark as { distinct?: unknown } | undefined)?.distinct;
+  return typeof distinct === "object" && distinct !== null;
+}
+
 /**
  * The census's RAW element counts — every numeric key on the mark, with NO `distinct` laid over them.
  *
@@ -445,14 +453,6 @@ export function censusElementCounts(diagnostics: readonly unknown[]): Record<str
     if (key !== "event" && key !== "atMs" && typeof value === "number") counts[key] = value;
   }
   return Object.keys(counts).length > 0 ? counts : null;
-}
-
-export function censusCountsDistinctNames(diagnostics: readonly unknown[]): boolean {
-  const mark = (diagnostics ?? []).find(
-    (d): d is Record<string, unknown> =>
-      typeof d === "object" && d !== null && (d as { event?: unknown }).event === "structureCensus");
-  const distinct = (mark as { distinct?: unknown } | undefined)?.distinct;
-  return typeof distinct === "object" && distinct !== null;
 }
 
 /**
