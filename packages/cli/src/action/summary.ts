@@ -197,14 +197,40 @@ export interface SummaryOptions {
    * do read the task, and pass their own wording.
    */
   taskQuestion?: string;
+  /**
+   * `taskVerdictLabel().isTaskClaim` (`@a11ign/judge`), passed in for the identical reason `taskQuestion`
+   * is: this renderer is pure. `report.ts`'s own `verdictHeadline` already makes this split -- a bare
+   * "Yes"/"No" only when `taskCompletable` really answers a question about the task (the LLM backends).
+   * For the shipped `local` scorer it is `!findings.some(f => f.severity === "blocker")`, so a report of
+   * six SERIOUS findings answered "**No blocking findings** Yes" until this flag existed: true, and
+   * indistinguishable from a clean page to anyone who did not read past the first line. Defaults to
+   * `false`, the honest default for the backend that ships.
+   */
+  isTaskClaim?: boolean;
 }
 
 const DEFAULT_LIMIT = 20;
-/** See SummaryOptions.taskQuestion: true for the shipped local scorer, which never sees the task. */
-const DEFAULT_TASK_QUESTION = "No blocking findings:";
+/** See SummaryOptions.taskQuestion: true for the shipped local scorer, which never sees the task. No
+ *  trailing colon -- `blockerCountLine` adds its own, matching `taskVerdictLabel().question`'s own text
+ *  (`@a11ign/judge`) exactly, so this default is not a second, independently-punctuated copy of it. */
+const DEFAULT_TASK_QUESTION = "No blocking findings";
+
+/**
+ * The line `taskQuestion` renders as, when `taskCompletable` is not really an answer to a question --
+ * the SAME split `report.ts`'s `verdictHeadline` makes, so the two consumers cannot answer the same
+ * verdict two different ways. A count, never a bare yes/no: a number cannot contradict a list of the
+ * same things the way "No" can when the list right below it is all findings.
+ */
+function blockerCountLine(label: string, findings: readonly RunFinding[]): string {
+  const blockers = findings.filter((f) => f.severity === "blocker").length;
+  const rest = findings.length - blockers;
+  const others = rest ? `; ${rest} finding(s) below that severity` : "";
+  return `**${label}:** ${blockers === 0 ? "none" : blockers}${others}`;
+}
 
 export function renderSummary(result: RunResult, options: SummaryOptions = {}): string {
   const taskQuestion = options.taskQuestion ?? DEFAULT_TASK_QUESTION;
+  const isTaskClaim = options.isTaskClaim ?? false;
   const limit = options.limit ?? DEFAULT_LIMIT;
   const { verdict } = result;
   const lines: string[] = [];
@@ -244,10 +270,13 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     `**Task:** ${result.task}`,
     `**Screen reader:** ${result.screenReader}${result.transcript ? ` · ${result.transcript.length} announcements` : ""}`,
     "",
-    // See SummaryOptions.taskQuestion. This is posted on a PULL REQUEST in bold, and with the shipped
-    // local scorer it asked "could a screen-reader user complete the task?" and answered from a signal
-    // that never saw the task.
-    `**${taskQuestion}** ${verdict.taskCompletable ? "Yes" : "**No**"}`,
+    // See SummaryOptions.taskQuestion/isTaskClaim. This is posted on a PULL REQUEST in bold, and with
+    // the shipped local scorer it used to ask "could a screen-reader user complete the task?" (or claim
+    // "No blocking findings") and answer from a signal that never saw the task -- a report of six SERIOUS
+    // findings once read "**No blocking findings** Yes" above the very table listing them.
+    isTaskClaim
+      ? `**${taskQuestion}** ${verdict.taskCompletable ? "Yes" : "**No**"}`
+      : blockerCountLine(taskQuestion, verdict.findings),
     "",
     verdict.summary,
     "",

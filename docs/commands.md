@@ -46,6 +46,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/parent-recheck-summary.mjs` — read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
 - `node scripts/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node scripts/pr-hold.mjs` — take or release a hold on a pull request, the record merge-guard reads before treating it as free
+- `node scripts/pr-open.mjs` — check a PR body's Acceptance/Closes with the tree's own parser before gh pr create/edit sends it
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
 - `node scripts/prune-worktrees.mjs` — remove fully-merged, clean linked worktrees, and name every other one as dirty
 - `node scripts/queue-stalled.mjs` — name the armed, green PRs that can never merge because they are behind and conflicting
@@ -61,6 +62,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
 - `node scripts/stash-whose.mjs` — list every git stash entry with the branch it was made on, since git alone will not say
 - `node scripts/stranded-branches.mjs` — find pushed branches with no open PR, which are otherwise invisible to CI and review
+- `node scripts/tracker-comment.mjs` — read and edit a tracker comment safely -- the one place, so no edit is improvised again
 - `node scripts/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
 - `node scripts/trunk-revert-guard.mjs` — compare main's before/after state on a merge and refuse one that silently deletes prior work
 - `node scripts/trunk-revert.mjs` — revert a push to main that fails its own gate, unattended, since nothing else runs after it lands
