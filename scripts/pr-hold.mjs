@@ -242,6 +242,30 @@ function rearmAfterRelease(number) {
 }
 
 /**
+ * DID THE HOLD LABEL ACTUALLY LAND? `null` when it did, an operator-facing message when it did not.
+ *
+ * READ BACK, because taking a hold is two or more writes and either can half-succeed. `gh pr edit`
+ * exiting 0 says the request was accepted, not that the PR now says what you think -- the same reason
+ * `/health.code` is checked over HTTP rather than through the channel that performed the deploy.
+ *
+ * Extracted from `takeHold` when the re-arm marker gained the same read-back and pushed that function
+ * over its complexity budget: two writes verified the same way is one step written twice, and the
+ * extraction is what makes them look alike rather than a coincidence.
+ *
+ * @param {number} number @param {string} session
+ * @returns {string | null}
+ */
+function holdLanded(number, session) {
+  const after = prLabels(number);
+  const nowHeld = after === null ? null : holdersOf(after).map((l) => l.slice(HOLD_PREFIX.length));
+  if (nowHeld !== null && nowHeld.length === 1 && nowHeld[0] === session) return null;
+  return `#${number}: THE WRITE DID NOT LAND AS INTENDED. Expected exactly `
+    + `${HOLD_PREFIX}${session}; the PR now reads `
+    + `${nowHeld === null ? "unreadable" : nowHeld.join(", ") || "no holder"}.\n`
+    + "  Fix it by hand with `gh pr edit --add-label/--remove-label` before anyone acts on this PR.\n";
+}
+
+/**
  * Take the hold, displacing anyone else who has it — and then PROVE the PR says so.
  *
  * DISPLACE FIRST, THEN TAKE, so a half-failed write leaves the PR UNHELD rather than doubly held. Unheld
@@ -257,16 +281,9 @@ function takeHold(number, session, holders, steal) {
   if (!decision.act) return decision.code;
   for (const displaced of decision.displaces) writeLabel(number, displaced, "remove");
   writeLabel(number, session, "add");
-  // READ IT BACK, because this is two or more writes and either can half-succeed. `gh pr edit` exiting 0
-  // says the request was accepted, not that the PR now says what you think -- the same reason
-  // `/health.code` is checked over HTTP rather than through the channel that performed the deploy.
-  const after = prLabels(number);
-  const nowHeld = after === null ? null : holdersOf(after).map((l) => l.slice(HOLD_PREFIX.length));
-  if (nowHeld === null || nowHeld.length !== 1 || nowHeld[0] !== session) {
-    process.stderr.write(`#${number}: THE WRITE DID NOT LAND AS INTENDED. Expected exactly `
-      + `${HOLD_PREFIX}${session}; the PR now reads `
-      + `${nowHeld === null ? "unreadable" : nowHeld.join(", ") || "no holder"}.\n`
-      + "  Fix it by hand with `gh pr edit --add-label/--remove-label` before anyone acts on this PR.\n");
+  const landed = holdLanded(number, session);
+  if (landed !== null) {
+    process.stderr.write(landed);
     return EXIT.CANNOT_ASK;
   }
   // READ BEFORE DISARMING, because after the disarm the two states the release has to tell apart are the
@@ -274,7 +291,24 @@ function takeHold(number, session, holders, steal) {
   // for a different reason: it decides nothing about whether to disarm, only what to put back.
   const wasArmed = readAutoMerge(number)?.autoMergeRequest != null;
   const disarm = disarmAutoMerge(number);
-  if (wasArmed && disarm.disarmed) writeRawLabel(number, REARM_LABEL, "add");
+  // THE MARKER IS READ BACK, because it is the only thing that survives to tell the release what to do
+  // -- and on 2026-09-09 it did not land at all. `gh pr edit --add-label` REFUSES a label that does not
+  // exist in the repository ("'rearm-on-release' not found"), and #822 shipped the label's name without
+  // creating it. `writeRawLabel` throws on that, and this line's result was never inspected, so the hold
+  // succeeded, the PR was disarmed, and the release then reported "it carried no `rearm-on-release`, so
+  // it was already unarmed when the hold was taken" -- a true sentence about a label that was never
+  // written, and a PR left unarmed with nothing saying why.
+  //
+  // That is the same shape as the hold label's own read-back three lines above, which #822 added
+  // deliberately and then did not apply to the second write in the same function. A fix at one of two
+  // call sites, in the change that was about reading writes back.
+  if (wasArmed && disarm.disarmed && !markForRearm(number)) {
+    process.stderr.write(`#${number}: HELD AND DISARMED, but could not mark it \`${REARM_LABEL}\`.\n`
+      + "  `npm run pr:release` will therefore leave this PR UNARMED, and nothing on the PR will say so.\n"
+      + `  Add the label by hand (\`gh pr edit ${number} --add-label ${REARM_LABEL}\`, creating it first `
+      + "if it does not exist), or re-arm by hand after releasing.\n");
+    return EXIT.CANNOT_ASK;
+  }
   if (!disarm.disarmed) {
     process.stderr.write(`#${number}: ${disarm.reason}\n`);
     return EXIT.CANNOT_ASK;
@@ -284,6 +318,31 @@ function takeHold(number, session, holders, steal) {
     + `${wasArmed ? `, and it WAS armed — labelled \`${REARM_LABEL}\` so the release puts it back`
       : ", and it was not armed, so a release will leave it that way"}.\n`);
   return EXIT.DONE;
+}
+
+/**
+ * MARK THIS PR FOR RE-ARMING, AND PROVE THE MARK LANDED.
+ *
+ * `gh pr edit --add-label` exits non-zero for a label the repository does not have, so the write can fail
+ * for a reason that has nothing to do with this PR -- and the label is the ONLY thing that carries the
+ * decision from the hold to the release, which may be another session hours later. An unverified marker
+ * is a re-arm that silently will not happen.
+ *
+ * Reads the labels back rather than trusting the edit's exit code, for the reason this file already
+ * states about the hold label: `gh pr edit` exiting 0 says the request was accepted, not that the PR now
+ * says what you think.
+ *
+ * @param {number} number
+ * @returns {boolean} whether the PR now carries the marker
+ */
+function markForRearm(number) {
+  try {
+    writeRawLabel(number, REARM_LABEL, "add");
+  } catch {
+    return false; // the read below decides; a throw here is not the verdict either
+  }
+  const after = prLabels(number);
+  return after !== null && after.includes(REARM_LABEL);
 }
 
 /**
