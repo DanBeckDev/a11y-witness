@@ -85,6 +85,19 @@ import { CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
 // name -- hence import-then-export as two separate statements rather than one re-export line.
 export { CLAIM_LABEL, STARTED_LABEL };
 export const BLOCKED_LABEL = "blocked";
+
+/**
+ * #771: the `Filed-by: <session>` line `row-file.mjs` writes, or `null` when absent -- a LITERAL line
+ * match only. Older prose ("Filed by `orchestrator`", no hyphen, no colon-value structure) is NEVER
+ * inferred as this: #737 and #758 both carry that sentence and both must read `unrecorded`, the same rule
+ * #603's owned-path sign-off already applies to "I checked" standing in for a stated fact.
+ * @param {string} body
+ * @returns {string | null}
+ */
+export function filedByLine(body) {
+  const match = /^Filed-by:\s*(.+)$/m.exec(body);
+  return match ? match[1].trim() : null;
+}
 // #656: THE CLAIM RECORDS THE BRANCH. `session:*` names WHO holds a row; nothing named WHAT git object
 // that session was actually working on, so the dispatcher's own attempt to carry #614 -- "the row moves
 // to whoever is free" -- discovered only by running `git worktree add` that the branch was checked out
@@ -888,10 +901,15 @@ function usage() {
  * @param {number} issueNumber
  * @param {string} title
  * @param {{ claimed: boolean, started: boolean, sessions: string[], branch: string | null, worktree: string | null }} status
+ * @param {string | null} body the row's raw body, for #771's `Filed-by:` line -- `null` on a failed
+ *   lookup, printed distinctly from a genuinely absent line (CANNOT_ASK is not "unrecorded")
  */
-function renderStatus(issueNumber, title, status) {
+function renderStatus(issueNumber, title, status, body) {
+  // #771: printed for BOTH branches below -- who filed a row is a fact about the row, independent of
+  // whether it is currently claimed.
+  const filedBy = body === null ? "(could not read body)" : filedByLine(body) ?? "unrecorded";
   if (!status.claimed) {
-    process.stdout.write(`UNCLAIMED -- #${issueNumber} "${title}"\n`);
+    process.stdout.write(`UNCLAIMED -- #${issueNumber} "${title}" -- Filed-by: ${filedBy}\n`);
     process.exitCode = 0;
     const reachability = reportReachability(issueNumber);
     recordCheckSafely({ issueNumber, claimed: false, started: false, sessions: [], reachability });
@@ -906,7 +924,8 @@ function renderStatus(issueNumber, title, status) {
   // #665: THE RECORDED WORKTREE, for the identical reason -- and so a session reading a stale-looking
   // claim can see, from the board alone, whether a local directory is what is actually holding it open.
   const worktreeSuffix = status.worktree ? `, worktree ${status.worktree}` : "";
-  process.stdout.write(`${state} by ${by}${branchSuffix}${worktreeSuffix} -- #${issueNumber} "${title}"\n`);
+  process.stdout.write(`${state} by ${by}${branchSuffix}${worktreeSuffix} -- #${issueNumber} "${title}" `
+    + `-- Filed-by: ${filedBy}\n`);
   process.exitCode = 1;
   recordCheckSafely({ issueNumber, claimed: true, started: status.started, sessions: status.sessions,
     reachability: null });
@@ -916,7 +935,10 @@ function renderStatus(issueNumber, title, status) {
 function runStatus(issueNumber) {
   try {
     const { labels, title } = fetchLabels(issueNumber);
-    renderStatus(issueNumber, title, claimStatus(labels));
+    // #771: same injected-`run` shape `writeRowLabels` already uses for the identical lookup.
+    const ghRunForBody = (/** @type {string[]} */ args) => defaultRun("gh", args);
+    const body = lookupIssueBody(issueNumber, { run: ghRunForBody });
+    renderStatus(issueNumber, title, claimStatus(labels), body);
   } catch (error) {
     process.stderr.write(`COULD NOT DETERMINE: ${/** @type {Error} */ (error).message}\n`);
     process.exitCode = 2;
