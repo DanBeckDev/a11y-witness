@@ -1,5 +1,10 @@
 # A local NVDA worker on your own machine
 
+> **#636: the scripts below now REFUSE to run.** `worker-ctl.sh`, `fetch-windows-iso.sh`,
+> `build-vm.sh`, `clone-worker.sh` and `create-utm-vm.sh` each exit 1 and print the deprecation
+> notice below unless `A11Y_LOCAL_VM=1` is set in the environment. A warning printed and then
+> continued past is a warning nobody reads — see the incident this replaces, right below.
+>
 > **If you have, or are setting up, more than one worker, prefer a declared fleet
 > (`inventory.yml`, see [`control-plane-proxmox.md`](./control-plane-proxmox.md)) over adding
 > more local VMs.** This project's own capture now runs on bare-metal boxes for exactly that
@@ -11,10 +16,10 @@
 >
 > **Nothing below is wrong, and nothing here is being deleted.** If you are a single contributor
 > with a Mac and no other hardware — the case this document was written for — this remains the
-> right and only path, and the measurements below (native ARM64, the AppleScript `create`
-> workaround, the memory/scaling figures) are the record of why it works the way it does. Read
-> them as documentation of a supported route, not as the recommended one for anyone who has, or
-> could have, more than one machine.
+> right and only path: set `A11Y_LOCAL_VM=1` and the measurements below (native ARM64, the
+> AppleScript `create` workaround, the memory/scaling figures) are the record of why it works the
+> way it does. Read them as documentation of a supported route, not as the recommended one for
+> anyone who has, or could have, more than one machine.
 
 Capture needs a real Windows desktop, so the worker has always lived on a separate
 box. That is a bad debugging loop: a broken capture means a round trip to a machine
@@ -46,6 +51,7 @@ amount of container plumbing gets around it.
 ## Path A — scripted, no GUI clicking
 
 ```bash
+export A11Y_LOCAL_VM=1   # #636: the scripts below refuse without this -- see the notice at the top
 ./packages/worker-fleet/src/local-worker/fetch-windows-iso.sh              # official Win11 ARM64 ISO (~10 GB dl)
 ./packages/worker-fleet/src/local-worker/build-vm.sh <the-iso>             # builds support.iso (unattend + drivers)
 ./packages/worker-fleet/src/local-worker/create-utm-vm.sh <the-iso>        # creates + starts the VM in UTM
@@ -351,9 +357,10 @@ it does everything from Node through to a verified worker.
 ## Running it day to day — `worker-ctl.sh`
 
 A Windows guest is never really idle, so leaving it running costs you. `worker-ctl.sh`
-wraps the lifecycle:
+wraps the lifecycle. It refuses without `A11Y_LOCAL_VM=1` (#636) — export it once per shell:
 
 ```bash
+export A11Y_LOCAL_VM=1
 npm run worker:ctl -- up        # start or resume, then wait for /health
 npm run worker:ctl -- pool      # every a11y-worker* VM, as JSON
 npm run worker:ctl -- pool-up   # start them all
