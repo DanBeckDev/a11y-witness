@@ -133,6 +133,38 @@ from a message.
   **REFUSED** and says what is missing, rather than printing the total with a footnote. A footnote is
   something a reader skips; a refusal is not, and unlike a convention it cannot be satisfied by remembering.
 
+## A RECORD IS PUBLISHED, so it names hosts and paths rather than quoting them
+
+Everything under `docs/board/reported/` is an input to a **generated document that goes to the board**, and
+the repository is public. So a record names a machine by its **inventory name** and a location by its
+**declared fact name**; it never carries a raw address, a guest path, or a checkout path. Raw strings, when
+somebody genuinely needs them to act, belong in an issue comment.
+
+**Measured 2026-09-09 on #564.** A fleet record written to evidence a real incident carried
+a worker's raw LAN address, `C:\Users\witness` three times, and `/root/a11y-witness` — the fleet's own addressing,
+on its way into a public repository and a board document. Four guards caught it before it merged:
+
+- *no tracked source file carries a real internal LAN address* (#83's own acceptance pattern)
+- *the guest roots' contents are named from a MEASUREMENT, and every site agrees with it*
+- *every site naming an SSH key names the fleet key or a DECLARED other one*
+- *every site that ENTERS a directory either interpolates the source of truth or is classified*
+
+**None of those guards was written for board records**, which is the point: the record slipped into a
+population already fenced for a different reason, and only the fence stopped it. Nothing at the moment of
+writing a record says any of this — an author evidencing a fleet outage has no reason to know the rules
+exist. That gap is the same shape as a required declaration nothing prompts for (#601).
+
+**`a11y-worker-N answered win_ping` carries the whole evidentiary weight of the same sentence with a raw
+address in it, and publishes nothing.** If a figure genuinely needs the address to mean anything, that is worth
+knowing on its own, and is an argument for the raw record living somewhere untracked with the document
+quoting a summary of it.
+
+
+> **This paragraph tripped its own guard on the first attempt.** It quoted the offending strings as
+> examples, and `no tracked source file carries a real internal LAN address` failed with
+> *"found 2 unexempted leak(s)"*. Writing the rule is not exempt from the rule, and the fastest way to
+> find that out is the habit the rule is about: run the suite against your own artefact before pushing.
+
 ## By hand
 
 ```bash
