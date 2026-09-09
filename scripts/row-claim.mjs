@@ -76,9 +76,14 @@ import { resolveBlockedByOverride, blockedByExceptionNote } from "./row-claim/bl
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
 import { templateFieldsReason, lookupIssueBody } from "./row-claim/template-fields-rule.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
 
-export const CLAIM_LABEL = "in-progress";
-export const STARTED_LABEL = "started";
+// #804: CLAIM_LABEL/STARTED_LABEL are IMPORTED (above) from the leaf claim-labels.mjs and re-exported
+// here, not declared in this file -- see claim-labels.mjs's own header for why. Every existing
+// `import { CLAIM_LABEL } from "./row-claim.mjs"` call site is unchanged. A bare `export {...} from`
+// would forward the binding WITHOUT creating a local one, and this file's own code below needs the local
+// name -- hence import-then-export as two separate statements rather than one re-export line.
+export { CLAIM_LABEL, STARTED_LABEL };
 export const BLOCKED_LABEL = "blocked";
 // #656: THE CLAIM RECORDS THE BRANCH. `session:*` names WHO holds a row; nothing named WHAT git object
 // that session was actually working on, so the dispatcher's own attempt to carry #614 -- "the row moves
