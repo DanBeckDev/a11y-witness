@@ -377,3 +377,75 @@ Four things, and each one has been wrong here:
 
 And give the loop a second exit: the PR may be **merged** out from under it, which is a terminal
 state the run list will never report.
+
+## An Acceptance block is EXECUTED, so it holds commands and nothing else
+
+The `acceptance` job runs every line of a PR body's Acceptance section as a command
+(`scripts/acceptance-commands.mjs`). That is the whole point of #353 — nothing had ever run a row's
+acceptance, and every one was an author's prose report of a result nobody re-derived. It also means the
+section is an argv list wearing prose's clothes, and two shapes that read perfectly well to a person are
+executed as nonsense.
+
+Both of these cost a red run on #581 on 2026-09-09, and both look like a failing test rather than a
+malformed body:
+
+```
+actionlint .github/workflows/ready-label-audit.yml          clean
+  -> ACCEPTANCE: "actionlint ... clean" is not a command (no executable "actionlint")
+
+npx tsx --test .../ready-label-audit-triggers.test.ts       8/8 (was 7, one inverted, one added)
+  -> ACCEPTANCE: RAN ... -> fail (matched no file: .../ready-label-audit-triggers.test.ts, 8/8, (was, 7,, ...)
+```
+
+The first is a command the runner does not have — `actionlint` is not installed on the runner, so a line
+naming it can only ever be reported as a missing executable. The second is worse, because it *ran*: the
+trailing result was swallowed into the argv, the glob then matched no file, and a test suite that passes
+locally reported a failure whose message is about file matching.
+
+So:
+
+- **Commands only, one per line.** Put the result — `8/8`, `43/43`, `clean` — in prose OUTSIDE the block.
+- **Only commands the runner can execute.** Anything needing a tool CI does not install (`actionlint`), a
+  worker, the corpus, or the Python venv goes in prose with a sentence saying who runs it and where. A
+  `runs/`-reading gate is already forbidden from an acceptance block by CLAUDE.md's own ruling for the
+  same reason one layer along.
+- **The three outcomes must stay three.** `MISSING`, `REFUSED` and a `RAN -> fail` are different states;
+  a body with no Acceptance section at all reports `ACCEPTANCE: MISSING` and exits 1, which reads like a
+  failing check and is really an unwritten one.
+
+The general form is this repository's oldest shape: a field that is DATA to one reader and an
+INSTRUCTION to another. It is the same defect as text that reads as documentation and parses as a closer
+(#549), and as a scanner matching prose about the scanner — eight instances of that on 2026-09-08 alone.
+Ask what will EXECUTE what you are writing, not only what will read it.
+
+## A lane is who may CHANGE a path
+
+`scripts/workflow-lane-check.mjs`, a step in `mergeSafety`, refuses a PR that changes a lane-owned path
+from a branch outside that lane. Today there is one lane: `.github/workflows/` belongs to `dispatcher`.
+
+The reason is measured. On 2026-09-08 a `pull_request: [closed]` trigger was added to
+`ready-label-audit.yml` from outside the pipeline's lane. The change was reasoned and the reasoning was
+sound; the consequence was that the audit's verdict attached to every merged PR's head commit as a check
+named `audit`, and it failed on a board call whose PAT cannot read Projects v2. Seven merged PRs carried
+a red mark for ninety minutes, and the chairman found it before the org did.
+
+**Nobody was careless. The cost of that change is visible from the merge queue and from nowhere else.**
+A boundary that can only be seen from one seat is not enforced by asking people to remember it.
+
+**A lane is not a wall.** Crossings are assigned deliberately — the very change above was `ceo`'s own
+assignment, to a session that asked first — so the check accepts an exception and RECORDS it:
+
+```
+Lane-exception: the pipeline -- assigned by ceo -- <why, in the assigner's words>
+```
+
+All three parts are required, and the line is echoed into the run log rather than merely accepted. A
+line naming the lane with no reason is refused: this repository has already measured what an agreement
+existing only as a sentence is worth (#197 — three double-dispatches, each caught by a worker's caution
+and never by the tool).
+
+The lane list is `docs/lane-ownership.json`, which `ceo` owns. Data, so a lane moves without touching the
+mechanism, and so the mechanism cannot quietly decide who owns what — the same split as
+`docs/owned-path-facts.json`, which answers the DIFFERENT question of what a change to a path must
+declare. A path can be lane-owned and fact-free, or fact-heavy and open to everyone; folding the two
+together would make one owner's edit silently move the other's rule.
