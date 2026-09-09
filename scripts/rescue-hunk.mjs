@@ -12,9 +12,12 @@
 // Measured on the real pair (#698, rescuing `audit-rule-coverage.ts` from `lead/inventory-bootstrap`):
 //
 //     main    * ... `<the lab's address>:5050` serves OUR pages over http, so
-//     branch  * ... `192.168.1.79:5050` serves OUR pages over http, so
+//     branch  * ... `192.0.2.79:5050` serves OUR pages over http, so
 //
 // The wholesale take UN-REDACTS the lab's address, restoring a literal main had deliberately replaced.
+// (The address shown is 192.0.2.x -- TEST-NET-1, RFC 5737 -- because `tracked-source-leak-guard`
+// refused the real one HERE, in the header of the tool written to stop exactly this. Quoting the
+// subject verbatim felt like accuracy and was the leak; the guard was right and I was not.)
 // It is a comment: no build breaks, no test fails, no guard fires, and `--shortstat` reads
 // `12 insertions(+), 2 deletions(-)` either way.
 //
