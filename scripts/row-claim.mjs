@@ -59,7 +59,7 @@
 // failures, and conflating them would make a full disk read as an unreadable board.
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { realpathSync, readFileSync } from "node:fs";
+import { existsSync, realpathSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 // RELATIVE, NOT the `@a11ign/worker-fleet/cli-flags` package specifier: that export map
 // points at `dist/`, so it needs both `node_modules` AND a completed build. This file is reachable
@@ -73,6 +73,7 @@ import { withBoardSnapshot, PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapsh
 import { runnerReason } from "./row-claim/runner-rule.mjs";
 import { ownPrHealthReason, lookupOwnPrHealth } from "./row-claim/own-pr-health-rule.mjs";
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
+import { sandboxGitEnv } from "./git-env.mjs";
 
 export const CLAIM_LABEL = "in-progress";
 export const STARTED_LABEL = "started";
@@ -84,13 +85,27 @@ export const BLOCKED_LABEL = "blocked";
 // claim is now the one place that fact is recorded, so an escalating session can tell a PORTABLE row
 // (branch not held anywhere) from a HELD one before it ever offers to take it.
 export const BRANCH_LABEL_PREFIX = "branch:";
+// #665: THE CLAIM RECORDS THE WORKTREE TOO. Measured 2026-09-09T10:03Z: 115 worktrees on the host with
+// ~57 MB free -- each row taken opens one and nothing closes it when the row is done, because "prune
+// after every merge" is a habit, and this repository's own rule is that anything a human has to
+// remember is something that does not happen. Recording the path at claim time is what lets RELEASING
+// the claim -- the moment the releasing session, and only it, is known to be done with that directory --
+// remove it automatically rather than trusting the next sweep to notice.
+export const WORKTREE_LABEL_PREFIX = "worktree:";
 
 /**
  * @typedef {{ number: number, title: string, labels: string[] }} IssueClaim
  */
 
-/** @type {(cmd: string, args: string[]) => string} */
-const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8" });
+/**
+ * #709: `git worktree remove` (below) DESTROYS A DIRECTORY, and an unscrubbed spawn inherits any
+ * `GIT_DIR`/`GIT_WORK_TREE` a caller's environment carries -- the exact shape that once redirected a
+ * spawned git call onto the wrong repository. `sandboxGitEnv()` scrubs every `GIT_*` var; applying it to
+ * every spawn here, `gh` included, costs nothing (`gh` reads none of them) and needs no second helper for
+ * the one call that actually matters.
+ * @type {(cmd: string, args: string[]) => string}
+ */
+const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", env: sandboxGitEnv() });
 
 /**
  * Reads an issue's CURRENT labels from the real board. Injectable `run`, the same seam
@@ -156,16 +171,22 @@ export function fetchLabels(issueNumber, { run = defaultRun } = {}) {
  * would mean two claims wrote branches without one being declined first, which `writeRowLabels`'s own
  * race handling already prevents from standing.
  *
+ * `worktree` (#665) is the identical shape one field over -- the row's recorded `worktree:<path>` label,
+ * or `null`. Recorded alongside `branch` so `declineRow` knows what directory to remove when the claim
+ * is released, without guessing a path from a naming convention nobody enforces.
+ *
  * @param {string[]} labels
- * @returns {{ claimed: boolean, started: boolean, sessions: string[], branch: string | null }}
+ * @returns {{ claimed: boolean, started: boolean, sessions: string[], branch: string | null, worktree: string | null }}
  */
 export function claimStatus(labels) {
   const branchLabel = labels.find((l) => l.startsWith(BRANCH_LABEL_PREFIX));
+  const worktreeLabel = labels.find((l) => l.startsWith(WORKTREE_LABEL_PREFIX));
   return {
     claimed: labels.includes(CLAIM_LABEL),
     started: labels.includes(STARTED_LABEL),
     sessions: labels.filter((l) => l.startsWith("session:")).map((l) => l.slice("session:".length)),
     branch: branchLabel ? branchLabel.slice(BRANCH_LABEL_PREFIX.length) : null,
+    worktree: worktreeLabel ? worktreeLabel.slice(WORKTREE_LABEL_PREFIX.length) : null,
   };
 }
 
@@ -335,13 +356,13 @@ export function sessionEligibilityReason(issueNumber, mySession,
  * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
  *   dispatch, `[STARTED_LABEL]` for a claim/start
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
- *           requiredContexts?: () => (string[] | null),
+ *           worktree?: string, requiredContexts?: () => (string[] | null),
  *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
  *             completedAt: string | null}[] | null) }} deps
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 function writeRowLabels(issueNumber, mySession, extraLabels,
-  { run = defaultRun, moveStatus = moveProjectStatus, branch, requiredContexts, checkRuns } = {}) {
+  { run = defaultRun, moveStatus = moveProjectStatus, branch, worktree, requiredContexts, checkRuns } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
@@ -363,13 +384,16 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   // `undefined` so it composes into `labelsToAdd`/the back-off removal list below exactly like
   // `extraLabels` does, with no special-casing at either site.
   const branchLabel = branch ? [`${BRANCH_LABEL_PREFIX}${branch}`] : [];
+  // #665: THE WORKTREE LABEL, identical shape one field over -- optional for the same reason `branch` is
+  // (a dispatch has no worktree yet, a non-code row never gets one).
+  const worktreeLabel = worktree ? [`${WORKTREE_LABEL_PREFIX}${worktree}`] : [];
   // #449: RECORD, IN THE SAME EDIT, THAT THIS ROW WAS `ready` BEFORE THE CLAIM -- `declineRow`'s only way
   // to know whether releasing this row should restore `ready`, since removing it below is the one place
   // that fact is ever seen. A resumed claim (dispatched -> started, `ready` already gone) computes false
   // here and adds nothing, harmlessly -- the marker this row's own earlier dispatch already wrote stays
   // exactly where it is.
   const wasReady = before.labels.includes(READY_LABEL);
-  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels, ...branchLabel,
+  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels, ...branchLabel, ...worktreeLabel,
     ...(wasReady ? [WAS_READY_LABEL] : [])];
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
     ...labelsToAdd.flatMap((l) => ["--add-label", l]),
@@ -380,11 +404,11 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   const otherSessions = afterStatus.sessions.filter((s) => s !== mySession);
   if (otherSessions.length > 0) {
     // LOST THE RACE, DETECTED AFTER THE FACT: back off rather than leave a contested claim standing.
-    // Removing only OUR OWN session label (and any of our extras, including the branch label we just
-    // added), never `in-progress` (which the other session's claim needs) and never the other session's
-    // label (not ours to touch).
+    // Removing only OUR OWN session label (and any of our extras, including the branch/worktree labels
+    // we just added), never `in-progress` (which the other session's claim needs) and never the other
+    // session's label (not ours to touch).
     run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
-      ...[sessionLabel, ...extraLabels, ...branchLabel].flatMap((l) => ["--remove-label", l])]);
+      ...[sessionLabel, ...extraLabels, ...branchLabel, ...worktreeLabel].flatMap((l) => ["--remove-label", l])]);
     return { claimed: false, reason: `lost a race to ${otherSessions.join(", ")} -- backed off` };
   }
   // #400: THE LABEL IS THE RECORD; THIS MOVES THE VIEW TO MATCH IT, IN THE SAME ACT. A view corrected only
@@ -465,20 +489,102 @@ export function dispatchRow(issueNumber, mySession, deps = {}) {
  * already marked for it goes from dispatched to started, re-adding the same `in-progress`/`session:*`
  * labels harmlessly and adding `started`.
  *
- * `branch` (#656) is OPTIONAL, deliberately -- not every claimed row changes code (a doc row, a filing
- * task) and the branch may not exist at the moment `started` is written even for one that does. Passed
- * once here, at the point a worker actually knows its own worktree's branch name.
+ * `branch` (#656) and `worktree` (#665) are OPTIONAL, deliberately -- not every claimed row changes code
+ * (a doc row, a filing task) and neither may exist at the moment `started` is written even for one that
+ * does. Passed once here, at the point a worker actually knows its own worktree's path and branch name.
  *
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
- *           requiredContexts?: () => (string[] | null),
+ *           worktree?: string, requiredContexts?: () => (string[] | null),
  *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
  *             completedAt: string | null}[] | null) }} [deps]
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 export function claimRow(issueNumber, mySession, deps = {}) {
   return writeRowLabels(issueNumber, mySession, [STARTED_LABEL], deps);
+}
+
+/**
+ * #665: Is `worktreePath` clean (no uncommitted changes)? `{ clean: false }` names every dirty path --
+ * the issue's own stated acceptance: "A dirty worktree is refused by name, listing the files." A path
+ * that no longer exists (already removed by hand, or never created) reads as CLEAN: nothing there can be
+ * lost, and refusing to release a claim over a directory that is already gone would be the housekeeping
+ * failure this row exists to fix, one layer over.
+ * @param {string} worktreePath
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {{ clean: true } | { clean: false, files: string[] }}
+ */
+export function worktreeStatus(worktreePath, { run = defaultRun } = {}) {
+  if (!existsSync(worktreePath)) return { clean: true };
+  const out = run("git", ["-C", worktreePath, "status", "--porcelain"]);
+  const files = out.split("\n").filter(Boolean);
+  return files.length === 0 ? { clean: true } : { clean: false, files };
+}
+
+/**
+ * #665: Removes `worktreePath` via `git worktree remove` -- REFUSING on a dirty tree, by name, never
+ * `--force`. A dirty worktree is exactly the state this function exists to protect; forcing past it would
+ * be the destructive shortcut CLAUDE.md already warns against for `git checkout --` one door over. A path
+ * that no longer exists is treated as already-removed success, not a failure to report.
+ * @param {string} worktreePath
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {{ removed: true } | { removed: false, reason: string, files?: string[] }}
+ */
+export function removeClaimedWorktree(worktreePath, { run = defaultRun } = {}) {
+  if (!existsSync(worktreePath)) return { removed: true };
+  const status = worktreeStatus(worktreePath, { run });
+  if (!status.clean) {
+    return { removed: false,
+      reason: `${worktreePath} has uncommitted change(s) -- refusing to remove it: ${status.files.join(", ")}`,
+      files: status.files };
+  }
+  try {
+    run("git", ["worktree", "remove", worktreePath]);
+    return { removed: true };
+  } catch (error) {
+    return { removed: false,
+      reason: `git worktree remove failed -- ${/** @type {Error} */ (error).message}` };
+  }
+}
+
+/**
+ * Pure: every label a decline removes -- pulled out of `declineRow` to keep that function's own
+ * complexity below the lint gate, and because "what comes off a decline" is a fact worth naming on its
+ * own. #656/#665: the branch and worktree labels come off too -- a released row is no longer this
+ * session's, and a stale `branch:*`/`worktree:*` naming an object nobody here is working any more is
+ * worse than none: it would tell a future escalation "held" for a row that is actually free.
+ * @param {{ branch: string | null, worktree: string | null }} status
+ * @param {string} mySession
+ * @param {boolean} wasReady
+ * @returns {string[]}
+ */
+function declineRemoveLabels(status, mySession, wasReady) {
+  return [CLAIM_LABEL, `session:${mySession}`, STARTED_LABEL,
+    ...(status.branch ? [`${BRANCH_LABEL_PREFIX}${status.branch}`] : []),
+    ...(status.worktree ? [`${WORKTREE_LABEL_PREFIX}${status.worktree}`] : []),
+    ...(wasReady ? [WAS_READY_LABEL] : [])];
+}
+
+/**
+ * Pure: may `mySession` decline this row at all, given its labels? Pulled out of `declineRow` to keep
+ * that function's own complexity below the lint gate -- the three ownership checks it always ran, now
+ * named as the single question they jointly answer.
+ * @param {{ claimed: boolean, sessions: string[] }} status
+ * @param {string} mySession
+ * @returns {string | null} a refusal reason, or `null` to proceed
+ */
+function declineOwnershipReason(status, mySession) {
+  if (!status.claimed) return "row is not claimed -- nothing to decline";
+  if (status.sessions.length > 1) {
+    return `row carries multiple session labels (${status.sessions.join(", ")}) -- an unresolved race, `
+      + "not a single decline; resolve it by hand";
+  }
+  if (!status.sessions.includes(mySession)) {
+    const by = status.sessions.length > 0 ? status.sessions.join(", ") : "someone (no session label recorded yet)";
+    return `row is held by ${by}, not ${mySession} -- refusing to release a claim that is not this session's`;
+  }
+  return null;
 }
 
 /**
@@ -505,46 +611,32 @@ export function claimRow(issueNumber, mySession, deps = {}) {
  * row up next. Either way the marker is removed in the same edit: its job -- carrying the fact from claim
  * to decline -- is done the moment this function reads it.
  *
-/**
- * Pure: every label a decline removes -- pulled out of `declineRow` to keep that function's own
- * complexity below the lint gate, and because "what comes off a decline" is a fact worth naming on its
- * own. #656: the branch label comes off too -- a released row is no longer this session's, and a stale
- * `branch:*` naming a branch nobody here is working any more is worse than none: it would tell a future
- * escalation "held" for a row that is actually free.
- * @param {{ branch: string | null }} status
- * @param {string} mySession
- * @param {boolean} wasReady
- * @returns {string[]}
- */
-function declineRemoveLabels(status, mySession, wasReady) {
-  return [CLAIM_LABEL, `session:${mySession}`, STARTED_LABEL,
-    ...(status.branch ? [`${BRANCH_LABEL_PREFIX}${status.branch}`] : []),
-    ...(wasReady ? [WAS_READY_LABEL] : [])];
-}
-
-/**
+ * #665: REMOVES THE RECORDED WORKTREE FIRST, before touching any label. A dirty worktree refuses the
+ * WHOLE decline, not merely the removal -- otherwise the claim record disappears while the directory (and
+ * whatever uncommitted work sits in it) silently survives, untracked by anything that could tell a future
+ * session it still needs attention. Safe specifically because DECLINING is releasing YOUR OWN claim: the
+ * releasing session is, by construction, the one that owns the worktree being removed.
+ *
  * @param {number} issueNumber
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, blockedReason?: string }} [deps]
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, blockedReason?: string,
+ *           removeWorktree?: typeof removeClaimedWorktree }} [deps]
  * @returns {{ declined: true, restoredReady: boolean, blocked: boolean, statusMoved: true }
  *   | { declined: true, restoredReady: true, blocked: false, statusMoved: false, notOnBoard: boolean, statusReason: string }
  *   | { declined: false, reason: string }}
  */
 export function declineRow(issueNumber, mySession,
-  { run = defaultRun, moveStatus = moveProjectStatus, blockedReason } = {}) {
+  { run = defaultRun, moveStatus = moveProjectStatus, blockedReason, removeWorktree = removeClaimedWorktree } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const status = claimStatus(before.labels);
-  if (!status.claimed) {
-    return { declined: false, reason: "row is not claimed -- nothing to decline" };
-  }
-  if (status.sessions.length > 1) {
-    return { declined: false, reason: `row carries multiple session labels (${status.sessions.join(", ")})`
-      + " -- an unresolved race, not a single decline; resolve it by hand" };
-  }
-  if (!status.sessions.includes(mySession)) {
-    const by = status.sessions.length > 0 ? status.sessions.join(", ") : "someone (no session label recorded yet)";
-    return { declined: false, reason: `row is held by ${by}, not ${mySession} -- refusing to release a claim `
-      + "that is not this session's" };
+  const ownershipReason = declineOwnershipReason(status, mySession);
+  if (ownershipReason) return { declined: false, reason: ownershipReason };
+  // #665: THE WORKTREE COMES OFF FIRST, before any label is touched -- a dirty one refuses the WHOLE
+  // decline (see this function's own header for why), so the claim record stays intact until an operator
+  // has dealt with the uncommitted work by hand.
+  if (status.worktree) {
+    const removal = removeWorktree(status.worktree, { run });
+    if (!removal.removed) return { declined: false, reason: removal.reason };
   }
 
   const wasReady = before.labels.includes(WAS_READY_LABEL);
@@ -655,9 +747,11 @@ function usage() {
     + "  node scripts/row-claim.mjs --row=<issue-number>                       (status: three states)\n"
     + "  node scripts/row-claim.mjs check <issue-number>                       (alias of --row=)\n"
     + "  node scripts/row-claim.mjs dispatch <issue-number> --session=<name>   (mark taken at dispatch)\n"
-    + "  node scripts/row-claim.mjs claim <issue-number> --session=<name> [--branch=<name>]  (mark started; "
-    + "#656: records the branch the claim records, so a future escalation can tell portable from held)\n"
-    + "  node scripts/row-claim.mjs decline <issue-number> --session=<name>    (give it back)\n"
+    + "  node scripts/row-claim.mjs claim <issue-number> --session=<name> [--branch=<name>] "
+    + "[--worktree=<path>]  (mark started; #656/#665: records the branch and worktree, so a future "
+    + "escalation can tell portable from held, and decline can remove the worktree safely)\n"
+    + "  node scripts/row-claim.mjs decline <issue-number> --session=<name>    (give it back; #665: also "
+    + "removes the recorded worktree, refusing by name if it is dirty)\n"
     + "  node scripts/row-claim.mjs conflict <issue-number> --found=<text>     (#226: reality differed)\n";
 }
 
@@ -676,7 +770,7 @@ function usage() {
  *
  * @param {number} issueNumber
  * @param {string} title
- * @param {{ claimed: boolean, started: boolean, sessions: string[], branch: string | null }} status
+ * @param {{ claimed: boolean, started: boolean, sessions: string[], branch: string | null, worktree: string | null }} status
  */
 function renderStatus(issueNumber, title, status) {
   if (!status.claimed) {
@@ -692,7 +786,10 @@ function renderStatus(issueNumber, title, status) {
   // branch recorded, or none checked out here) from a held one BEFORE it ever tries `git worktree add`
   // on the branch name -- exactly the check the dispatcher's own #614 attempt had no way to make first.
   const branchSuffix = status.branch ? `, branch ${status.branch}` : "";
-  process.stdout.write(`${state} by ${by}${branchSuffix} -- #${issueNumber} "${title}"\n`);
+  // #665: THE RECORDED WORKTREE, for the identical reason -- and so a session reading a stale-looking
+  // claim can see, from the board alone, whether a local directory is what is actually holding it open.
+  const worktreeSuffix = status.worktree ? `, worktree ${status.worktree}` : "";
+  process.stdout.write(`${state} by ${by}${branchSuffix}${worktreeSuffix} -- #${issueNumber} "${title}"\n`);
   process.exitCode = 1;
   recordCheckSafely({ issueNumber, claimed: true, started: status.started, sessions: status.sessions,
     reachability: null });
@@ -710,6 +807,25 @@ function runStatus(issueNumber) {
 }
 
 /**
+ * Pure: the one-line summary of a successful dispatch/claim -- pulled out of `runDispatchOrClaim` to keep
+ * that function's own complexity below the lint gate. `record` bundles `branch`/`worktree` rather than
+ * two more positional parameters, per this repo's own "no boolean-flag-shaped argument lists" convention.
+ * @param {"dispatch" | "claim"} mode
+ * @param {number} issueNumber
+ * @param {string} mySession
+ * @param {{ branch?: string, worktree?: string }} record
+ * @returns {string}
+ */
+function claimLineFor(mode, issueNumber, mySession, { branch, worktree }) {
+  const label = mode === "dispatch" ? "DISPATCHED" : "STARTED";
+  const startedSuffix = mode === "claim" ? ` / ${STARTED_LABEL}` : "";
+  const branchSuffix = mode === "claim" && branch ? ` / ${BRANCH_LABEL_PREFIX}${branch}` : "";
+  const worktreeSuffix = mode === "claim" && worktree ? ` / ${WORKTREE_LABEL_PREFIX}${worktree}` : "";
+  return `${label} -- #${issueNumber} is now ${CLAIM_LABEL} / session:${mySession}`
+    + `${startedSuffix}${branchSuffix}${worktreeSuffix}`;
+}
+
+/**
  * @param {"dispatch" | "claim"} mode
  * @param {number} issueNumber
  * @param {string[]} rest
@@ -722,21 +838,19 @@ function runDispatchOrClaim(mode, issueNumber, rest) {
     process.exitCode = 2;
     return;
   }
-  // #656: `--branch=` ONLY MEANS ANYTHING FOR `claim` -- a dispatch precedes any branch existing, so
-  // `dispatchRow` never reads it (it does not accept a `branch` dep at all); silently ignoring it on
-  // `dispatch` rather than refusing it here matches `wasReady`'s own "unused declaration is a warning,
-  // never a hard error" tolerance elsewhere in this file, not a new inconsistency.
+  // #656/#665: `--branch=`/`--worktree=` ONLY MEAN ANYTHING FOR `claim` -- a dispatch precedes either
+  // existing, so `dispatchRow` never reads them (it does not accept those deps at all); silently ignoring
+  // them on `dispatch` rather than refusing here matches `wasReady`'s own "unused declaration is a
+  // warning, never a hard error" tolerance elsewhere in this file, not a new inconsistency.
   const branchFlag = rest.find((a) => a.startsWith("--branch="));
   const branch = branchFlag?.slice("--branch=".length);
+  const worktreeFlag = rest.find((a) => a.startsWith("--worktree="));
+  const worktree = worktreeFlag?.slice("--worktree=".length);
   try {
     const result = mode === "dispatch" ? dispatchRow(issueNumber, mySession)
-      : claimRow(issueNumber, mySession, { branch });
+      : claimRow(issueNumber, mySession, { branch, worktree });
     if (result.claimed) {
-      const label = mode === "dispatch" ? "DISPATCHED" : "STARTED";
-      const startedSuffix = mode === "claim" ? ` / ${STARTED_LABEL}` : "";
-      const branchSuffix = mode === "claim" && branch ? ` / ${BRANCH_LABEL_PREFIX}${branch}` : "";
-      const claimLine = `${label} -- #${issueNumber} is now ${CLAIM_LABEL} / session:${mySession}`
-        + `${startedSuffix}${branchSuffix}`;
+      const claimLine = claimLineFor(mode, issueNumber, mySession, { branch, worktree });
       if (result.statusMoved) {
         process.stdout.write(`${claimLine}\n`);
         process.exitCode = 0;
@@ -856,7 +970,7 @@ async function main() {
   // the bare status-read shape below, and a guard listing only `--session` would refuse the command's
   // own documented invocation. A flag guard that has not been merged forward is a guard that breaks the
   // thing it protects.
-  refuseUnknownFlags(["--session", "--row=", "--found=", "--blocked=", "--branch="],
+  refuseUnknownFlags(["--session", "--row=", "--found=", "--blocked=", "--branch=", "--worktree="],
     { entry: import.meta.url, command: "node scripts/row-claim.mjs" });
   const argv = process.argv.slice(2);
   const rowFlag = argv.find((a) => a.startsWith("--row="));
