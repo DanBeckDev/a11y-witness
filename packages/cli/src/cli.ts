@@ -46,6 +46,7 @@ import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics
   from "@a11ign/evidence/conformance";
 import { assessedCriteria } from "@a11ign/judge/coverage";
 import { earlReport } from "@a11ign/evidence/earl";
+import { documentIdentity } from "@a11ign/evidence/document-identity";
 import { criterionOutcomes, type CriterionOutcome } from "@a11ign/judge/outcomes";
 import { realpathSync, mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -773,6 +774,9 @@ export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): 
     browser: version("browser", "browserVersion"),
     ruleLayerRan: axe !== null,
     census: census ?? null,
+    // WHICH DOCUMENT THIS REPORT IS ABOUT (#687). Read from the same diagnostics, for the same reason the
+    // census is: the served URL and the title are already on the record and nothing consumed them.
+    documentIdentity: documentIdentity(cap as unknown as Record<string, unknown>),
     // Singular keys to match the census vocabulary; the structure fields are plural.
     swept: {
       heading: structure.headings?.length ?? 0,

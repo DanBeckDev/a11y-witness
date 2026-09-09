@@ -9,6 +9,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { documentIdentity } from "./document-identity.js";
 
 import {
   conformanceScope,
@@ -335,4 +336,27 @@ test("THE REPORT SAYS SO: a type whose sweep never ran renders as NOT EXAMINED, 
   assert.match(sentence, /TRUNCATED/);
   assert.doesNotMatch(sentence, /link 0\/340/);
   assert.match(sentence, /heading 80\/80/, "a type that DID run still reports its reach normally");
+});
+
+/**
+ * #687 — Requirement 2 has always said "one viewport, one state, one document" without saying WHICH.
+ */
+test("Full pages names the document the report describes, and omits the sentence when nobody read one", () => {
+  const base = { assessedCriteria: ["1.1.1"], screenReader: "NVDA 2024.4", ruleLayerRan: false };
+  const identified = conformanceScope({
+    ...base,
+    documentIdentity: documentIdentity({ diagnostics: [
+      { event: "structureCensus", targetUrl: "https://calendly.com/scheduling", targetMatch: "fallback" },
+      { event: "domCensus", tabbable: 98, heading: 28 },
+      { event: "titleSource", title: "Automated scheduling software", source: "document" },
+    ] }),
+  }).find((r) => r.number === 2)!;
+  assert.match(identified.limitation, /served https:\/\/calendly\.com\/scheduling/);
+  assert.match(identified.limitation, /tabbable=98/);
+
+  // ABSENT MEANS ABSENT. A report that named "the page you asked for" from a reading nobody took would be
+  // the claim this whole row exists to stop something making.
+  const anonymous = conformanceScope(base).find((r) => r.number === 2)!;
+  assert.doesNotMatch(anonymous.limitation, /Document /);
+  assert.doesNotMatch(anonymous.limitation, /NOT RECORDED/);
 });
