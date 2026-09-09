@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
-// command: check at 21:00 whether tomorrow's hand-written board summary has been written yet
-// THE 21:00 CHECK: is tomorrow's executive summary written?
+// command: check on the morning of an edition whether that day's hand-written board summary exists
+// THE MORNING CHECK: is TODAY's executive summary written, 45 and 15 minutes before the edition?
 //
 // The 08:00 job refuses an edition with no hand-written summary for that day, which is correct and was
 // approved -- a summary a machine wrote is the thing the board explicitly forbade. But a refusal at 08:00
@@ -21,7 +21,16 @@
 // and the refreshed real-page gate output -- and each was found by a person typing `git show
 // origin/main:...` by hand. None was found by a tool.
 //
-//   npm run board:summary-check            say whether tomorrow's summary exists
+//   npm run board:summary-check            say whether TODAY's summary exists
+//
+// IT USED TO ASK ABOUT TOMORROW, AND THAT WAS RIGHT WHEN IT RAN AT 21:00. The board moved it on
+// 2026-09-08 (`2a1bdd92`), in its own words: "it should be 30 mins before as it should be as fresh
+// as possible as a lot happens over night." A summary written the evening before is a forecast
+// about a night that has not happened -- measured on 8 September, the queue went from twelve open
+// pull requests to zero between the summary being written and the edition rendering, and the
+// forecast's own hedge was an instruction addressed to a person who would not be there at 03:00.
+// So the evening run is RETIRED ON PURPOSE, not lost: do not restore it without taking that back
+// to the board. `board-summary-check-schedule.test.ts` pins the morning hours for this reason.
 //   npm run board:summary-check -- --post  and comment on the report issue if it does not
 import { existsSync, readFileSync, readdirSync} from "node:fs";
 import { realpathSync } from "node:fs";
@@ -249,7 +258,7 @@ export function summaryVerdict({ day, present, localText, remote }) {
   // WRITTEN, AND NOT WHERE THE EDITION LOOKS. Its own refusal, because the remedy differs: the summary
   // exists and somebody has to PUSH it, which is not the same job as writing one.
   //
-  // NO `--post` BRANCH FOR THIS STATE, deliberately, and it is not an omission. The 21:00 workflow checks
+  // NO `--post` BRANCH FOR THIS STATE, deliberately, and it is not an omission. The scheduled workflow checks
   // out `main` on a runner, so there the working tree IS origin/main and this state cannot arise --
   // handling it there would be code that can never run. It is a LOCAL finding for the person who wrote
   // the summary, which is exactly who needs it.
@@ -268,7 +277,7 @@ export function summaryVerdict({ day, present, localText, remote }) {
 /**
  * WHICH ENTRIES DIFFER, never a bare "the file differs".
  *
- * *"reported.json has changed"* sends a reader to diff it themselves at 21:00; *"gates[npm run
+ * *"reported.json has changed"* sends a reader to diff it themselves; *"gates[npm run
  * rules:real-pages] differs"* tells them whether it matters in one line. This repo's own rule -- a count
  * is where an investigation stops -- applied to a comparison.
  *
