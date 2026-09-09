@@ -204,13 +204,20 @@ export function trunkState() {
  * `auto_merge` and `updated_at` come back on the REST list; check conclusions come from `check-runs`,
  * which is core and kept working throughout.
  *
- * NOT YET PROVEN AGAINST AN ARMED PR. When this was written every open PR read `auto_merge: null`, which
- * was CORRECT -- all of them opened after 14:41Z with a failing `arm` job, so none was armed. Consistent
- * with the known state is not the same as proven, and the difference matters here because a false
- * "UNARMED" is wrong in the reassuring direction: it reads as work still to do rather than as a table
- * that has stopped seeing. Confirmed against a genuinely armed PR at the first re-arm after the pool
- * reset; if that ever regresses, `armed` silently becomes always-false and no test on a fixture can see
- * it, because the fixtures supply the field.
+ * PROVEN AGAINST AN ARMED PR, 2026-09-09 15:06Z. When this was written every open PR read
+ * `auto_merge: null`, which was CORRECT -- all of them opened after 14:41Z with a failing `arm` job, so
+ * none was armed. Consistent with the known state is not the same as proven, and the difference matters
+ * here because a false "UNARMED" is wrong in the reassuring direction: it reads as work still to do
+ * rather than as a table that has stopped seeing. So it was left stated as unproven until it could be
+ * read non-null.
+ *
+ * It now is, and against a SECOND API rather than a re-read of the same one: REST `auto_merge` and
+ * GraphQL `autoMergeRequest` agree on #805 (armed/MERGE), #799 (armed/MERGE) and #742 (null/null, a
+ * draft nothing armed). The negative case is the half that matters -- two APIs agreeing on a positive
+ * would not distinguish a field that is always truthy.
+ *
+ * If this regresses, `armed` silently becomes always-false and NO TEST ON A FIXTURE CAN SEE IT, because
+ * the fixtures supply the field. The check is a live one or it is nothing.
  */
 export function openPRs() {
   const prs = ask(() => JSON.parse(gh(["api", `repos/${REPO}/pulls?state=open&per_page=100`])));
