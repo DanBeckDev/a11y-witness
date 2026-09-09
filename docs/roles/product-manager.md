@@ -260,7 +260,7 @@ words would have found it, because the defect was that a number had been typed r
 
 **The honest answer was that it does not — three things it stood for do.** The total cap is withdrawn.
 
-**1. Work-in-progress limits, where they bite.** Ready holds **at least three PRODUCT rows** and at most six unclaimed. **A worker holds at most one claimed row beyond the one in flight** — two claimed, total. No cap on the open total.
+**1. Work-in-progress limits, where they bite.** Ready holds **at least three PRODUCT rows** and at most six unclaimed. ~~**A worker holds at most one claimed row beyond the one in flight** — two claimed, total.~~ **RETIRED 2026-09-09 by `ceo`, replaced by liveness:** a claim is live while its branch has a push or its row has a comment from the claimant in the last four hours; a claim that has neither is dead, and the tracker-auditor releases it. No cap on claimed rows and no cap on the open total. A count of claims measured reservations, and a reservation costs nothing to hold and nothing to break — the incident below shows six held while Ready was empty. Four hours of silence on a claimed row is the stalled state `README.md` calls worse than unclaimed, whatever label it carries, and it is a measurement rather than a label: nobody can meet it by relabelling.
 
 > **Both numbers were amended on 2026-09-07, by the same incident.** `worker-judge` held SIX claimed rows while Ready was EMPTY and `worker-contracts` sat idle: rows parked against one worker while another had nothing to pick up. The old rule said "at most one row in progress per worker", which reads as a limit and is not one — a row claimed and not started is not in progress, so six of them broke nothing as written.
 >
