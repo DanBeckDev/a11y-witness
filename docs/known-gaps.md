@@ -34,6 +34,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§44](#44-the-title-three-criteria-compare-is-the-last-thing-nvda-said-which-on-a-live-region-page-is-not-the-title) THE "TITLE" THREE CRITERIA COMPARE IS THE LAST THING NVDA SAID, WHICH ON a LIVE-REGION PAGE IS NOT THE TITLE
 - [§45](#45-focusevents-is-not-deterministic-and-nothing-compared-it-until-the-day-before-this-was-found) focusEvents IS NOT DETERMINISTIC, and nothing compared it until the day before this was found
 - [§46](#46-a-document-identity-drops-the-query-string-so-a-site-whose-documents-differ-only-by-query-reads-as-one-document) A DOCUMENT IDENTITY DROPS THE QUERY STRING, so a site whose documents differ only by query reads as ONE document
+- [§47](#47-the-walk-alone-is-177-seconds-on-a-926-trip-page-so-no-probe-budget-can-rescue-it-and-the-report-has-to-say-what-it-did-not-walk) THE WALK ALONE IS 177 SECONDS ON A 926-TRIP PAGE, so no probe budget can rescue it and the report has to say what it did not walk
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -2989,3 +2990,13 @@ listing. If such a pair ever needs to be told apart, the remedy is a *second*, n
 query's parameter NAMES, still never their values, since a nonce is a value and `?dsh=` is a name), added
 beside `servedPath` rather than replacing it. Nobody has yet produced a case that needs it, which is why
 it is a recorded gap and not a feature.
+
+## 47. THE WALK ALONE IS 177 SECONDS ON A 926-TRIP PAGE, so no probe budget can rescue it and the report has to say what it did not walk
+
+**Measured 2026-09-09 by `orchestrator` on `a11y-worker-3`, `runs/witness/2026-09-09T14-31-43-041Z-www-ikea-com.json`**, on the fleet at `691969f6a8f1dd11` with #769's activation budget deployed.
+
+`www.ikea.com/de/de/` served **265 form controls**. The `formField` sweep walked them in **926 round trips** and cost **299.3 s**, of which the activation — capped by the new budget at 64 of 265 controls, `exhausted: true` — spent **121.8 s**. **The remaining ~177 s is the walk itself**: 926 trips at the **163 ms/trip** constant `worker-capture` measured across six pages and five sweep types, whose spread on every sweep with no `onItem` is 1.1–1.2. The budget did what it was built to do — `formField` stopped on `exhausted` rather than `deadline` for the first time, and `graphic` ran and found 47 where it had found 0 — and then `link`, `list`, `frame` and `postSubmit` hit `deadline` anyway, because the walk had already spent the budget's share of a 453-second capture.
+
+**So the gap is not tuning.** No share of the remaining deadline given to the per-field probe can recover five sweeps when the walk under one sweep is 177 s at a rate that does not vary by page. On a page of this size **the capture cannot examine everything within its deadline**, and the honest response is the one #686 shipped: the report says **NOT EXAMINED** for what it did not walk, distinct from `found: 0`. That distinction now has a measured cost behind it rather than an argument — *"this page is too large for one capture's budget"* is a statement about arithmetic, not about a threshold somebody chose.
+
+**What this does NOT establish**, and the row that asks it is #800: whether IKEA genuinely serves 265 form controls or the sweep is walking more than is there. At 926/265 the sweep is doing **3.5 trips per control**, which is what every sweep type runs at — so it leans toward the page being real and the deadline being too small for it. That is a lean from **one capture of a page that moved 40% in shape on the same afternoon** (#688), and #737 inflates exactly the census denominator anyone would check it against, so the two questions have to be told apart before either is acted on.
