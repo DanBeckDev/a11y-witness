@@ -77,6 +77,13 @@ import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row
 export const CLAIM_LABEL = "in-progress";
 export const STARTED_LABEL = "started";
 export const BLOCKED_LABEL = "blocked";
+// #656: THE CLAIM RECORDS THE BRANCH. `session:*` names WHO holds a row; nothing named WHAT git object
+// that session was actually working on, so the dispatcher's own attempt to carry #614 -- "the row moves
+// to whoever is free" -- discovered only by running `git worktree add` that the branch was checked out
+// on this same machine, in the owner's own worktree, with no way to have known that beforehand. A row's
+// claim is now the one place that fact is recorded, so an escalating session can tell a PORTABLE row
+// (branch not held anywhere) from a HELD one before it ever offers to take it.
+export const BRANCH_LABEL_PREFIX = "branch:";
 
 /**
  * @typedef {{ number: number, title: string, labels: string[] }} IssueClaim
@@ -143,14 +150,22 @@ export function fetchLabels(issueNumber, { run = defaultRun } = {}) {
  * can be `claimed` with `started: false` -- that is the dispatched-not-started state this function exists
  * to make visible, not an inconsistency to normalise away.
  *
+ * `branch` (#656) is the row's recorded `branch:<name>` label, or `null` when none is set -- a row can
+ * be legitimately claimed with no branch yet (dispatched but not started, or a non-code row entirely), so
+ * absence here is a real state, not a parse failure. Only the FIRST such label is read; more than one
+ * would mean two claims wrote branches without one being declined first, which `writeRowLabels`'s own
+ * race handling already prevents from standing.
+ *
  * @param {string[]} labels
- * @returns {{ claimed: boolean, started: boolean, sessions: string[] }}
+ * @returns {{ claimed: boolean, started: boolean, sessions: string[], branch: string | null }}
  */
 export function claimStatus(labels) {
+  const branchLabel = labels.find((l) => l.startsWith(BRANCH_LABEL_PREFIX));
   return {
     claimed: labels.includes(CLAIM_LABEL),
     started: labels.includes(STARTED_LABEL),
     sessions: labels.filter((l) => l.startsWith("session:")).map((l) => l.slice("session:".length)),
+    branch: branchLabel ? branchLabel.slice(BRANCH_LABEL_PREFIX.length) : null,
   };
 }
 
@@ -319,14 +334,14 @@ export function sessionEligibilityReason(issueNumber, mySession,
  * @param {string} mySession
  * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
  *   dispatch, `[STARTED_LABEL]` for a claim/start
- * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus,
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
  *           requiredContexts?: () => (string[] | null),
  *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
  *             completedAt: string | null}[] | null) }} deps
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 function writeRowLabels(issueNumber, mySession, extraLabels,
-  { run = defaultRun, moveStatus = moveProjectStatus, requiredContexts, checkRuns } = {}) {
+  { run = defaultRun, moveStatus = moveProjectStatus, branch, requiredContexts, checkRuns } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
@@ -343,13 +358,19 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   }
 
   const sessionLabel = `session:${mySession}`;
+  // #656: THE BRANCH LABEL, when this claim names one -- optional, since not every row is code-changing
+  // and a dispatch (no branch created yet) legitimately omits it. `branchLabel` is `[]` rather than
+  // `undefined` so it composes into `labelsToAdd`/the back-off removal list below exactly like
+  // `extraLabels` does, with no special-casing at either site.
+  const branchLabel = branch ? [`${BRANCH_LABEL_PREFIX}${branch}`] : [];
   // #449: RECORD, IN THE SAME EDIT, THAT THIS ROW WAS `ready` BEFORE THE CLAIM -- `declineRow`'s only way
   // to know whether releasing this row should restore `ready`, since removing it below is the one place
   // that fact is ever seen. A resumed claim (dispatched -> started, `ready` already gone) computes false
   // here and adds nothing, harmlessly -- the marker this row's own earlier dispatch already wrote stays
   // exactly where it is.
   const wasReady = before.labels.includes(READY_LABEL);
-  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels, ...(wasReady ? [WAS_READY_LABEL] : [])];
+  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels, ...branchLabel,
+    ...(wasReady ? [WAS_READY_LABEL] : [])];
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
     ...labelsToAdd.flatMap((l) => ["--add-label", l]),
     "--remove-label", READY_LABEL]);
@@ -359,10 +380,11 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   const otherSessions = afterStatus.sessions.filter((s) => s !== mySession);
   if (otherSessions.length > 0) {
     // LOST THE RACE, DETECTED AFTER THE FACT: back off rather than leave a contested claim standing.
-    // Removing only OUR OWN session label (and any of our extras), never `in-progress` (which the other
-    // session's claim needs) and never the other session's label (not ours to touch).
+    // Removing only OUR OWN session label (and any of our extras, including the branch label we just
+    // added), never `in-progress` (which the other session's claim needs) and never the other session's
+    // label (not ours to touch).
     run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
-      ...[sessionLabel, ...extraLabels].flatMap((l) => ["--remove-label", l])]);
+      ...[sessionLabel, ...extraLabels, ...branchLabel].flatMap((l) => ["--remove-label", l])]);
     return { claimed: false, reason: `lost a race to ${otherSessions.join(", ")} -- backed off` };
   }
   // #400: THE LABEL IS THE RECORD; THIS MOVES THE VIEW TO MATCH IT, IN THE SAME ACT. A view corrected only
@@ -443,9 +465,13 @@ export function dispatchRow(issueNumber, mySession, deps = {}) {
  * already marked for it goes from dispatched to started, re-adding the same `in-progress`/`session:*`
  * labels harmlessly and adding `started`.
  *
+ * `branch` (#656) is OPTIONAL, deliberately -- not every claimed row changes code (a doc row, a filing
+ * task) and the branch may not exist at the moment `started` is written even for one that does. Passed
+ * once here, at the point a worker actually knows its own worktree's branch name.
+ *
  * @param {number} issueNumber
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus,
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
  *           requiredContexts?: () => (string[] | null),
  *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
  *             completedAt: string | null}[] | null) }} [deps]
@@ -479,6 +505,24 @@ export function claimRow(issueNumber, mySession, deps = {}) {
  * row up next. Either way the marker is removed in the same edit: its job -- carrying the fact from claim
  * to decline -- is done the moment this function reads it.
  *
+/**
+ * Pure: every label a decline removes -- pulled out of `declineRow` to keep that function's own
+ * complexity below the lint gate, and because "what comes off a decline" is a fact worth naming on its
+ * own. #656: the branch label comes off too -- a released row is no longer this session's, and a stale
+ * `branch:*` naming a branch nobody here is working any more is worse than none: it would tell a future
+ * escalation "held" for a row that is actually free.
+ * @param {{ branch: string | null }} status
+ * @param {string} mySession
+ * @param {boolean} wasReady
+ * @returns {string[]}
+ */
+function declineRemoveLabels(status, mySession, wasReady) {
+  return [CLAIM_LABEL, `session:${mySession}`, STARTED_LABEL,
+    ...(status.branch ? [`${BRANCH_LABEL_PREFIX}${status.branch}`] : []),
+    ...(wasReady ? [WAS_READY_LABEL] : [])];
+}
+
+/**
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, blockedReason?: string }} [deps]
@@ -505,7 +549,7 @@ export function declineRow(issueNumber, mySession,
 
   const wasReady = before.labels.includes(WAS_READY_LABEL);
   const restoreReady = wasReady && !blockedReason;
-  const removeLabels = [CLAIM_LABEL, `session:${mySession}`, STARTED_LABEL, ...(wasReady ? [WAS_READY_LABEL] : [])];
+  const removeLabels = declineRemoveLabels(status, mySession, wasReady);
   const addLabels = blockedReason ? [BLOCKED_LABEL] : restoreReady ? [READY_LABEL] : [];
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
     ...removeLabels.flatMap((l) => ["--remove-label", l]),
@@ -611,7 +655,8 @@ function usage() {
     + "  node scripts/row-claim.mjs --row=<issue-number>                       (status: three states)\n"
     + "  node scripts/row-claim.mjs check <issue-number>                       (alias of --row=)\n"
     + "  node scripts/row-claim.mjs dispatch <issue-number> --session=<name>   (mark taken at dispatch)\n"
-    + "  node scripts/row-claim.mjs claim <issue-number> --session=<name>      (mark started)\n"
+    + "  node scripts/row-claim.mjs claim <issue-number> --session=<name> [--branch=<name>]  (mark started; "
+    + "#656: records the branch the claim records, so a future escalation can tell portable from held)\n"
     + "  node scripts/row-claim.mjs decline <issue-number> --session=<name>    (give it back)\n"
     + "  node scripts/row-claim.mjs conflict <issue-number> --found=<text>     (#226: reality differed)\n";
 }
@@ -631,7 +676,7 @@ function usage() {
  *
  * @param {number} issueNumber
  * @param {string} title
- * @param {{ claimed: boolean, started: boolean, sessions: string[] }} status
+ * @param {{ claimed: boolean, started: boolean, sessions: string[], branch: string | null }} status
  */
 function renderStatus(issueNumber, title, status) {
   if (!status.claimed) {
@@ -643,7 +688,11 @@ function renderStatus(issueNumber, title, status) {
   }
   const by = status.sessions.length > 0 ? status.sessions.join(", ") : "someone (no session label yet)";
   const state = status.started ? "STARTED" : "DISPATCHED (not started)";
-  process.stdout.write(`${state} by ${by} -- #${issueNumber} "${title}"\n`);
+  // #656: THE RECORDED BRANCH, so a session weighing whether to escalate can tell a portable claim (no
+  // branch recorded, or none checked out here) from a held one BEFORE it ever tries `git worktree add`
+  // on the branch name -- exactly the check the dispatcher's own #614 attempt had no way to make first.
+  const branchSuffix = status.branch ? `, branch ${status.branch}` : "";
+  process.stdout.write(`${state} by ${by}${branchSuffix} -- #${issueNumber} "${title}"\n`);
   process.exitCode = 1;
   recordCheckSafely({ issueNumber, claimed: true, started: status.started, sessions: status.sessions,
     reachability: null });
@@ -673,12 +722,21 @@ function runDispatchOrClaim(mode, issueNumber, rest) {
     process.exitCode = 2;
     return;
   }
+  // #656: `--branch=` ONLY MEANS ANYTHING FOR `claim` -- a dispatch precedes any branch existing, so
+  // `dispatchRow` never reads it (it does not accept a `branch` dep at all); silently ignoring it on
+  // `dispatch` rather than refusing it here matches `wasReady`'s own "unused declaration is a warning,
+  // never a hard error" tolerance elsewhere in this file, not a new inconsistency.
+  const branchFlag = rest.find((a) => a.startsWith("--branch="));
+  const branch = branchFlag?.slice("--branch=".length);
   try {
-    const result = mode === "dispatch" ? dispatchRow(issueNumber, mySession) : claimRow(issueNumber, mySession);
+    const result = mode === "dispatch" ? dispatchRow(issueNumber, mySession)
+      : claimRow(issueNumber, mySession, { branch });
     if (result.claimed) {
       const label = mode === "dispatch" ? "DISPATCHED" : "STARTED";
       const startedSuffix = mode === "claim" ? ` / ${STARTED_LABEL}` : "";
-      const claimLine = `${label} -- #${issueNumber} is now ${CLAIM_LABEL} / session:${mySession}${startedSuffix}`;
+      const branchSuffix = mode === "claim" && branch ? ` / ${BRANCH_LABEL_PREFIX}${branch}` : "";
+      const claimLine = `${label} -- #${issueNumber} is now ${CLAIM_LABEL} / session:${mySession}`
+        + `${startedSuffix}${branchSuffix}`;
       if (result.statusMoved) {
         process.stdout.write(`${claimLine}\n`);
         process.exitCode = 0;
@@ -798,7 +856,7 @@ async function main() {
   // the bare status-read shape below, and a guard listing only `--session` would refuse the command's
   // own documented invocation. A flag guard that has not been merged forward is a guard that breaks the
   // thing it protects.
-  refuseUnknownFlags(["--session", "--row=", "--found=", "--blocked="],
+  refuseUnknownFlags(["--session", "--row=", "--found=", "--blocked=", "--branch="],
     { entry: import.meta.url, command: "node scripts/row-claim.mjs" });
   const argv = process.argv.slice(2);
   const rowFlag = argv.find((a) => a.startsWith("--row="));
