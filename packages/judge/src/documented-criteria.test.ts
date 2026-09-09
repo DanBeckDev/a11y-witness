@@ -18,7 +18,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { RULE_CRITERIA, assessedCriteria } from "./coverage.js";
+import { RULE_CRITERIA, assessedCriteria, realPageAssessableCriteria, realPageUnfireableCriteria }
+  from "./coverage.js";
+
+const SPELLED = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
+  "nineteen"];
 
 /**
  * A repo file with whitespace collapsed.
@@ -80,15 +85,45 @@ test("the docs do not claim a rented model is the engine", () => {
 test("the totals quoted to strangers match what the judge can return", () => {
   // "Fourteen in total can produce a finding" — rules plus the scorer-only heads.
   const total = assessedCriteria().length;
-  const spelled = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
-    "nineteen"][total];
+  const spelled = SPELLED[total];
   for (const file of ["RELEASE.md", "action.yml"]) {
     const text = repoFile(file).toLowerCase();
     assert.ok(text.includes(`${spelled} criteria can produce a finding`)
       || text.includes(`${spelled} in total can produce a finding`),
       `${file} does not state the total as "${spelled}" — the judge can return ${total}`);
   }
+});
+
+test("action.yml's real-page claim is derived from CRITERION_COVERAGE, not hand-counted", () => {
+  // #171: "the rules can emit it" (RULE_CRITERIA) and "it can produce a finding on a page you do not own"
+  // are different claims, and action.yml stated the second as a hand-subtraction from the first, naming
+  // only SOME of the criteria `criterion-coverage.ts` itself declares
+  // `realPageEvidence: { available: false }` for. Pinned here so the two can never drift again: this reads
+  // the same field `audit-rule-coverage.ts` already reads for its own (fleet-dependent) purpose, but this
+  // test needs no fleet and no corpus — it is pure TS and docs, checked against `action.yml`'s prose.
+  const assessable = realPageAssessableCriteria();
+  const unfireable = realPageUnfireableCriteria();
+  const text = repoFile("action.yml");
+
+  const stillAt = text.indexOf("REAL page is still");
+  assert.ok(stillAt > 0, 'action.yml no longer contains "REAL page is still" — the claim moved or was reworded');
+  const NUMBER_WORD_WINDOW = 60; // enough room for "REAL page is still <spelled-out number>:" and no more
+  const stillMatch = /REAL page is still (\w+):/.exec(text.slice(stillAt, stillAt + NUMBER_WORD_WINDOW));
+  assert.ok(stillMatch, 'could not parse the number word after "REAL page is still"');
+  assert.equal(stillMatch![1].toLowerCase(), SPELLED[assessable.length],
+    `action.yml claims "${stillMatch![1]}" criteria always run on a real page, but CRITERION_COVERAGE `
+      + `says ${assessable.length} (${assessable.join(", ")})`);
+
+  const exceptAt = text.indexOf("except", stillAt);
+  assert.ok(exceptAt > stillAt, 'action.yml no longer names an "except" clause after the real-page claim');
+  // ". " (period-then-space), not a bare ".", because a WCAG number is itself full of periods ("1.4.2")
+  // and a bare "." bound truncates the span before the exception list even begins.
+  const exceptEnd = text.indexOf(". ", exceptAt);
+  assert.ok(exceptEnd > exceptAt, "the except clause never ends in a sentence boundary this test can bound on");
+  const claimedExceptions = criteriaIn(text.slice(exceptAt, exceptEnd));
+  assert.deepEqual(claimedExceptions, unfireable,
+    `action.yml's exception list is ${claimedExceptions.join(", ")}, but CRITERION_COVERAGE declares `
+      + `realPageEvidence unavailable for ${unfireable.join(", ")}`);
 });
 
 test("the README's quickstart workflow is one a stranger can actually paste", () => {
