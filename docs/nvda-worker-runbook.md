@@ -726,12 +726,28 @@ the result here I would defend hardest. The three routes analysed above are opti
 real page there is nothing there to win. Keep them for the corpus; do not quote them as "the biggest
 remaining cost" without naming which population.
 
-**`sweep` is the largest phase on every page and the only one that scales with the page** — and 78.5%
-of IKEA's run on its own, which is the whole explanation for why that page is 471 s while the other
-two are within 1.5% of each other. **This does not say the sweeps are wasteful**: `collectByType` walks
-the page by quick-navigation and that is how this tool sees structure at all. #397 asked what the time
-is made of, not what to cut; whether the cost is reducible is a separate and bigger question, and one
-run per page is not enough to open it on.
+**`sweep` is the largest phase on every page** — 81.8 s, 95.1 s and 358.7 s summed from the marks, and
+78.5% of IKEA's run on its own. **This does not say the sweeps are wasteful**: `collectByType` walks the
+page by quick-navigation and that is how this tool sees structure at all.
+
+> **THIS PARAGRAPH SAID "AND THE ONLY ONE THAT SCALES WITH THE PAGE" UNTIL 2026-09-09, AND THAT CAUSE WAS
+> WRONG.** The share is right; the mechanism behind it is not the walk. Replaying the same three captures
+> per sweep (#659 step 1) puts **every sweep type on every page at 108–210 ms per round trip — except
+> `formField`**, which is 385 ms/trip on hubspot's 4 fields, 1,233 on calendly's 18 and 1,478 on IKEA's
+> 100. `sweepEveryStructuralType` passes `onItem: onFormField` for that one sweep and nothing else, and
+> `onFormField` ACTIVATES each control, presses Escape and waits for speech to settle. So what scales is
+> `probeForms` operating every field the sweep finds, not the cost of walking a bigger DOM.
+>
+> **And `trips` does not count that work**, so "ms per trip" for `formField` is a ratio whose denominator
+> excludes most of its own numerator. Reading `worker:compare`'s rule — *ms up with trips flat means each
+> trip is slower* — against these three would have given the wrong answer with real numbers: hubspot and
+> IKEA are 422 and 434 trips against 81.8 s and 358.7 s.
+>
+> **IKEA did not walk more; it ran out of budget.** Its `formField` sweep spent 322.3 s and stopped on
+> `deadline`, and `graphic`, `link`, `list`, `frame` and `postSubmit` then reported `found: 0` with the
+> same stop — they never ran. `structureCrossCheck` on that capture reads `link: sweepEntries 0,
+> oracleDistinctNames 340` and `graphic: 0 vs 165`. **That 471-second page examined two structural types
+> out of eight**, and the only thing that said so was a cross-check nothing reads by default.
 
 **`focusOrder` is not ~8 s here either** — 72.5 s, 16.3 s, and outside ikea's top six. Wrong in both
 directions against the corpus figure, and by an order of magnitude on hubspot.
