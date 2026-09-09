@@ -150,6 +150,17 @@ Two mechanisms from that date, built before anything else in the queue:
 
 A second incident of the same shape moves the role to another session.
 
+**A fourth count, of a different shape, recorded 2026-09-09.** The pre-push hook's header records two
+figures, BEFORE 3m27.85s and AFTER 13.94s; this role read the BEFORE half as the current cost and
+skipped the hook with `A11Y_SKIP_VERIFY=1` nine times in one morning, on a check that costs ten
+seconds. Three `tsc` failures reached CI the same morning, one of them from a push whose typecheck was
+the thing skipped. The shape is not the lane unread; it is a guard bypassed on a number that was never
+measured, and then bypassed again eight times without measuring. Two consequences, both built: a bare
+`A11Y_SKIP_VERIFY=1` refuses and names the three checks it would skip, and the only bypass is
+`A11Y_SKIP_VERIFY_REASON="<why>"`, printed (#706); and the hook prints its own measured cost in its
+header on every run, so the figure a reader sees is the one from the run they are looking at. A
+bypass with a reason that would not survive being read in the log is a fifth count.
+
 ## What this role must NEVER do
 
 The standing resource ban, verbatim, and it applies to this role exactly as to a worker:
