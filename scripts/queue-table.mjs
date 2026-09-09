@@ -302,9 +302,65 @@ export function renderMergedChecks(merged, required) {
   return { lines, incomplete: unreadable.length > 0 || timesMissing || required === null };
 }
 
+/**
+ * THE HOST ITSELF, because on 2026-09-09 it was the bottleneck and nothing said so.
+ *
+ * At 08:57Z this machine had **56 MB free** and 164 worktrees, with 58 concurrent git processes across
+ * seven sessions. Four PRs read as "not carried by their owners" for twenty minutes; every one of those
+ * carries is a `git merge` plus a pre-push gate running lint and typecheck, and on that host they were
+ * minutes each or were killed outright. `tracker-auditor` had two sweeps killed by the system. The table
+ * named four idle owners and the truth was one starved machine -- **attributing a machine fault to
+ * people, which is the worst thing a status table can do.**
+ *
+ * READ AS A DELTA AND WITH ITS DISTORTION NAMED. CLAUDE.md's own record: `vm_stat` is distorted by
+ * exactly the condition it must detect, because macOS counts compressed and inactive pages as available
+ * -- it advertised 13.7 GB free while two guests were starving. So this prints free AND compressed AND
+ * inactive rather than one number, and says the free figure understates what is reclaimable while the
+ * compressor figure is what says whether the host is actually in trouble.
+ *
+ * @returns {{freeMb: number, compressedMb: number, inactiveMb: number, worktrees: number} | null}
+ */
+export function hostState() {
+  const stat = ask(() => execFileSync("vm_stat", [], { encoding: "utf8" }));
+  const trees = ask(() => execFileSync("git", ["worktree", "list"],
+    { encoding: "utf8", env: sandboxGitEnv() }).trim().split("\n").length);
+  if (stat === null) return null;
+  const pageSize = Number((/page size of (\d+)/.exec(stat) ?? [])[1] ?? 16384);
+  const pages = (/** @type {string} */ label) => {
+    const m = new RegExp(`${label}:\\s+(\\d+)`).exec(stat);
+    return m ? (Number(m[1]) * pageSize) / 1048576 : 0;
+  };
+  return {
+    freeMb: Math.round(pages("Pages free")),
+    compressedMb: Math.round(pages("Pages occupied by compressor")),
+    inactiveMb: Math.round(pages("Pages inactive")),
+    worktrees: trees ?? 0,
+  };
+}
+
+/** How little free memory means a carry or a suite will be minutes rather than seconds, or be killed. */
+export const HOST_FREE_MB_FLOOR = 500;
+
+/** @param {ReturnType<typeof hostState>} host @returns {{lines: string[], incomplete: boolean}} */
+export function renderHost(host) {
+  if (!host) return { lines: ["   ? could not read the host's memory"], incomplete: true };
+  const lines = [`   free ${host.freeMb} MB   compressed ${host.compressedMb} MB   `
+    + `inactive ${host.inactiveMb} MB   worktrees ${host.worktrees}`];
+  if (host.freeMb < HOST_FREE_MB_FLOOR) {
+    lines.push(`   ^ UNDER ${HOST_FREE_MB_FLOOR} MB FREE. A carry is a merge plus a pre-push gate running`,
+      "     lint and typecheck; at this level those are minutes each or are killed. A PR that is not",
+      "     carried right now is a starved machine, NOT an idle owner -- do not name people for it.",
+      "     Remove every worktree whose PR has merged; that is the cheapest relief and it is nobody's",
+      "     job in particular, which is why it does not happen.");
+  }
+  // The free figure UNDERSTATES what is reclaimable and the compressor figure is the one that says
+  // whether the host is in trouble -- so both print, always, and neither is offered alone.
+  return { lines, incomplete: false };
+}
+
 /** @param {{trunk: any, prs: any[] | null, merged: any[] | null, now: Date, fetched?: boolean,
- *   required?: string[] | null}} data */
-export function render({ trunk, prs, merged, now, fetched = true, required = null }) {
+ *   required?: string[] | null, host?: ReturnType<typeof hostState> | null}} data */
+export function render({ trunk, prs, merged, now, fetched = true, required = null, host = null }) {
   const sections = [
     { heading: "1. TRUNK", body: renderTrunk(trunk) },
     { heading: "2. OPEN PRs  (behind is COUNTED, never read off mergeStateStatus)", body: renderOpenPRs(prs) },
@@ -319,6 +375,10 @@ export function render({ trunk, prs, merged, now, fetched = true, required = nul
         "   (the view the chairman reads. A check red here blocks nothing and is therefore the red people",
         "    stop reading -- which is exactly how one sat on seven merged PRs for ninety minutes.)"].join("\n"),
       body: renderMergedChecks(merged, required),
+    },
+    {
+      heading: "5. THIS HOST  (it was the bottleneck on 2026-09-09 and nothing said so)",
+      body: renderHost(host),
     },
   ];
   // EVERY SECTION IS PRINTED, including the empty ones. A section that vanishes when it has nothing to
@@ -360,7 +420,8 @@ export function collect(now = new Date()) {
       : null;
     return prRow(pr, behind, now);
   });
-  return { trunk, prs, merged: recentlyMerged(), now, fetched, required: requiredContexts() };
+  return { trunk, prs, merged: recentlyMerged(), now, fetched, required: requiredContexts(),
+    host: hostState() };
 }
 
 function main() {
