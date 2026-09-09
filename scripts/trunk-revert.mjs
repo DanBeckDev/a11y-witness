@@ -40,7 +40,7 @@
 // same pipeline that gates every other PR gates this one too.
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
@@ -48,30 +48,102 @@ import { gh, lookup, lookupCheckRuns } from "./merge-guard.mjs";
 
 export const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2 };
 
-/** The job name in `trunk-guard.yml` -- read back as a check-run context, named once so it cannot drift. */
-export const GATE_JOB_NAME = "trunkGate";
+/**
+ * WHICH JOBS' FAILURE MEANS "MAIN IS RED" -- DERIVED FROM `trunk-guard.yml`'s OWN `if:`, NEVER LISTED.
+ *
+ * #582: this was `GATE_JOB_NAME = "trunkGate"`, one hand-written name, while A1 had already widened
+ * `decideRevert`'s trigger to `needs.trunkGate.result == 'failure' || needs.trunkBuildTest.result ==
+ * 'failure'`. The trigger asked about two jobs and the "was the commit before green" lookup asked about
+ * one -- so an INHERITED `trunkBuildTest` failure read as this push's own. Measured 2026-09-08 on
+ * `f4c8ff9c`, whose parent `1684c17d` carried `trunkGate: success` alongside `trunkBuildTest / run:
+ * failure`: the verdict printed "the commit before it was green" and reached READY on a merge that had
+ * broken nothing. Nothing was reverted only because the repository forbids Actions from opening PRs
+ * (#575) -- a credential gap protecting the pipeline by accident.
+ *
+ * So the answer is COMPUTED from the condition rather than remembered next to it, because remembering is
+ * exactly what failed: a third job added to that `if:` would otherwise reintroduce the identical gap in
+ * silence. Same remedy as `busy-worker-guard.test.ts`, which DISCOVERS every playbook rather than naming
+ * them -- a test naming files by hand could never see the one nobody thought of.
+ *
+ * @param {string} workflowText the raw text of `.github/workflows/trunk-guard.yml`
+ * @returns {string[]} every job named in `decideRevert`'s `if:` as a `needs.<job>.result` reference
+ */
+export function revertTriggerJobs(workflowText) {
+  const job = workflowText.split(/^ {2}decideRevert:$/m)[1];
+  if (job === undefined) return [];
+  const condition = /^\s{4}if:\s*(.+)$/m.exec(job.split(/^ {2}\S/m)[0] ?? "");
+  if (!condition) return [];
+  return [...new Set([...condition[1].matchAll(/needs\.([A-Za-z0-9_-]+)\.result/g)].map((m) => m[1]))];
+}
+
+/**
+ * The newest completed check-run for `job` on this commit, or `null`.
+ *
+ * TWO TRAPS, both measured, and each one alone makes this read the wrong answer.
+ *
+ * A REUSABLE-WORKFLOW JOB IS NOT NAMED AFTER ITSELF. `trunkBuildTest` calls `reusable-build-test.yml`,
+ * whose own job is `run`, so GitHub publishes the check-run as `trunkBuildTest / run`. An exact-name
+ * match finds nothing for it and returns `null` -- which this file correctly reads as CANNOT_ASK, so the
+ * bug would present as a refusal rather than a wrong revert, and would be blamed on the API.
+ *
+ * AND `find` RETURNS THE OLDEST. GitHub's check-runs list UNIONS superseded runs, so a re-run leaves the
+ * original in place and the first match is the stale one. This is #498 exactly, fixed in
+ * `update-branch-sweep.mjs` twice (#500, then #517 for the running case) -- the same defect at a second
+ * call site, which is this repository's most expensive recurring shape. `completedAt` is compared as a
+ * string because ISO-8601 sorts lexically, and a run still in flight reports the ZERO DATE
+ * `0001-01-01T00:00:00Z` rather than null, so it sorts below every real one, which is where it belongs.
+ *
+ * @param {{name: string, status: string, conclusion: string | null, completedAt: string | null}[]} runs
+ * @param {string} job
+ */
+export function newestRunFor(runs, job) {
+  const matching = runs.filter((r) => r.name === job || r.name.startsWith(`${job} / `));
+  if (matching.length === 0) return null;
+  return matching.reduce((best, run) => ((run.completedAt ?? "") >= (best.completedAt ?? "") ? run : best));
+}
 
 /**
  * THE VERDICT, PURE -- so both refusal shapes and the ready shape can be driven without a network.
  *
- * @param {{ beforeGateConclusion: string | null, currentMainSha: string | null, pushSha: string }} facts
- *   `beforeGateConclusion`: the commit immediately before this push's OWN `trunkGate` conclusion, or
- *   `null` if no record exists (never re-derived by re-running the suite against it). `currentMainSha`:
+ * @param {{ beforeConclusions: Record<string, string | null> | null, currentMainSha: string | null,
+ *   pushSha: string }} facts
+ *   `beforeConclusions`: for the commit immediately before this push, EVERY trigger job's own conclusion
+ *   -- read from ITS check-runs, never re-derived by re-running the suite against it. `null` for the whole
+ *   map when the lookup failed; `null` for one job when no completed record exists for it. `currentMainSha`:
  *   `main`'s real tip right now, or `null` on a failed lookup.
  * @returns {{code: number, reason: string}}
  */
-export function revertVerdict({ beforeGateConclusion, currentMainSha, pushSha }) {
-  if (beforeGateConclusion === null) {
-    return { code: EXIT.CANNOT_ASK, reason: "could not read whether the commit BEFORE this push had its own "
-      + "trunk-guard gate conclude `success` -- either the lookup failed, or (for the very first push this "
-      + "workflow has ever seen) no record exists yet. CANNOT SAY whether this failure is this push's own "
-      + "or inherited, and that is INCONCLUSIVE, never treated as either answer." };
+export function revertVerdict({ beforeConclusions, currentMainSha, pushSha }) {
+  if (beforeConclusions === null) {
+    return { code: EXIT.CANNOT_ASK, reason: "could not read the commit BEFORE this push's own trunk-guard "
+      + "conclusions -- either the lookup failed, or (for the very first push this workflow has ever seen) "
+      + "no record exists yet. CANNOT SAY whether this failure is this push's own or inherited, and that is "
+      + "INCONCLUSIVE, never treated as either answer." };
   }
-  if (beforeGateConclusion !== "success") {
-    return { code: EXIT.REFUSED, reason: `the commit before this push was ALREADY RED (its own trunk-guard `
-      + `run concluded \`${beforeGateConclusion}\`, not \`success\`). This push's failure is INHERITED, not `
-      + "its own -- reverting it would remove innocent work and leave the real breakage in place, and the "
-      + "NEXT push would read red for the identical reason." };
+  // ANTI-VACUITY, AND IT IS LOAD-BEARING RATHER THAN DEFENSIVE. Every check below is "no job is red", and
+  // an EMPTY map satisfies that vacuously -- so a renamed job, a re-indented `if:` or any change that made
+  // `revertTriggerJobs` return nothing would turn this function into an unconditional READY. That is the
+  // failure mode of a derived list, and it is worse than the hand-written list it replaces, so the
+  // derivation must be able to come back empty and be REFUSED for it rather than believed.
+  const jobs = Object.keys(beforeConclusions);
+  if (jobs.length === 0) {
+    return { code: EXIT.CANNOT_ASK, reason: "no trigger jobs were derived from `trunk-guard.yml` -- the "
+      + "condition this decision depends on could not be read, so there is nothing to have been green. A "
+      + "derived list that comes back empty is a broken derivation, never a satisfied one." };
+  }
+  const unknown = jobs.filter((job) => beforeConclusions[job] === null);
+  if (unknown.length > 0) {
+    return { code: EXIT.CANNOT_ASK, reason: `could not read whether \`${unknown.join("`, `")}\` concluded on `
+      + "the commit before this push -- no completed check-run for it. A job still in flight and a job that "
+      + "never ran are both INCONCLUSIVE here: \"not yet known to be green\" is not \"green\"." };
+  }
+  const red = jobs.filter((job) => beforeConclusions[job] !== "success");
+  if (red.length > 0) {
+    return { code: EXIT.REFUSED, reason: `the commit before this push was ALREADY RED (`
+      + `${red.map((job) => `its \`${job}\` concluded \`${beforeConclusions[job]}\``).join(", ")}, not `
+      + "`success`). This push's failure is INHERITED, not its own -- reverting it would remove innocent "
+      + "work and leave the real breakage in place, and the NEXT push would read red for the identical "
+      + "reason." };
   }
   if (currentMainSha === null) {
     return { code: EXIT.CANNOT_ASK, reason: "could not read main's current tip." };
@@ -82,22 +154,39 @@ export function revertVerdict({ beforeGateConclusion, currentMainSha, pushSha })
       + "have landed to address it (a follow-up fix, or another push entirely); refusing rather than "
       + "reverting a commit that is no longer the tip, which could revert a fix instead of the fault." };
   }
-  return { code: EXIT.READY, reason: "this push's own gate failed, the commit before it was green, and "
-    + "nothing has landed on main since -- safe to revert." };
+  return { code: EXIT.READY, reason: `this push's own gate failed, the commit before it was green on every `
+    + `trigger job (\`${jobs.join("`, `")}\`), and nothing has landed on main since -- safe to revert.` };
 }
 
 /**
- * The immediately-preceding commit's OWN `trunkGate` conclusion -- read from ITS check-run, never
- * re-derived by re-running the suite. `null` when the lookup fails OR no such run exists (the first-push
- * case); those two causes are indistinguishable from here and both correctly read as CANNOT_ASK.
+ * The immediately-preceding commit's OWN conclusion for EVERY trigger job -- read from ITS check-runs,
+ * never re-derived by re-running the suite. `null` for the whole map when the lookup fails; `null` for one
+ * job when no completed run exists for it (the first-push case, or a run still in flight). Those causes
+ * are indistinguishable from here and all correctly read as CANNOT_ASK.
  * @param {string} sha
- * @returns {string | null}
+ * @param {string[]} jobs
+ * @returns {Record<string, string | null> | null}
  */
-export function lookupPreviousGateConclusion(sha) {
+export function lookupPreviousConclusions(sha, jobs) {
   const runs = lookupCheckRuns(sha);
   if (runs === null) return null;
-  const run = runs.find((r) => r.name === GATE_JOB_NAME);
-  return run && run.status === "completed" ? run.conclusion : null;
+  return Object.fromEntries(jobs.map((job) => [job, conclusionOf(newestRunFor(runs, job))]));
+}
+
+/**
+ * One check-run's conclusion, or `null` for "not known to have concluded".
+ *
+ * `|| null`, NEVER `??`. A check-run that has not finished reports `conclusion: ""` rather than null
+ * (#517 measured this on the real API), and `??` does not fall through an empty string -- it would hand
+ * `""` back as though it were an answer, and `"" !== "success"` then reads as a RED commit rather than an
+ * unknown one. Those need OPPOSITE verdicts here: REFUSED versus CANNOT_ASK. Extracted rather than inlined
+ * so the distinction can be driven directly, because it is one operator wide and invisible in a diff.
+ *
+ * @param {{status: string, conclusion: string | null} | null} run
+ * @returns {string | null}
+ */
+export function conclusionOf(run) {
+  return run && run.status === "completed" ? (run.conclusion || null) : null;
 }
 
 /** @returns {string | null} */
@@ -235,8 +324,12 @@ function main() {
     process.exit(EXIT.CANNOT_ASK);
   }
 
+  // The trigger jobs are read from the workflow FILE, in the checkout this job already has. Reading them
+  // from the API would ask GitHub which jobs exist rather than which ones this decision is conditioned on,
+  // and those are different questions -- `decideRevert` itself is a job on the same run.
+  const workflow = readFileSync(new URL("../.github/workflows/trunk-guard.yml", import.meta.url), "utf8");
   const verdict = revertVerdict({
-    beforeGateConclusion: lookupPreviousGateConclusion(beforeSha),
+    beforeConclusions: lookupPreviousConclusions(beforeSha, revertTriggerJobs(workflow)),
     currentMainSha: lookupCurrentMainSha(),
     pushSha,
   });
