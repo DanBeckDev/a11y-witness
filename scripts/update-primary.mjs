@@ -16,6 +16,7 @@ import { sandboxGitEnv } from "./git-env.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
+import { npmCliInvocation } from "./npm-cli-executable.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
@@ -74,7 +75,10 @@ export function updatePrimary(root = REPO, run = (args) =>
  * @param {string} root
  */
 function build(root) {
-  execFileSync("npm", ["run", "build"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+  // `npmCliInvocation`, never a bare `npm` -- #? : a bare npm/npx spawn is unsafe on Windows and this
+  // repository's own guard refuses one anywhere in the tree. Same call shape as every other site.
+  const npm = npmCliInvocation("npm", ["run", "build"]);
+  execFileSync(npm.command, npm.args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
