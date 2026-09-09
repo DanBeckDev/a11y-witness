@@ -234,8 +234,8 @@ export function renderMergedChecks(merged) {
   return { lines, incomplete: unreadable.length > 0 };
 }
 
-/** @param {{trunk: any, prs: any[] | null, merged: any[] | null, now: Date}} data */
-export function render({ trunk, prs, merged, now }) {
+/** @param {{trunk: any, prs: any[] | null, merged: any[] | null, now: Date, fetched?: boolean}} data */
+export function render({ trunk, prs, merged, now, fetched = true }) {
   const sections = [
     { heading: "1. TRUNK", body: renderTrunk(trunk) },
     { heading: "2. OPEN PRs  (behind is COUNTED, never read off mergeStateStatus)", body: renderOpenPRs(prs) },
@@ -254,12 +254,33 @@ export function render({ trunk, prs, merged, now }) {
   // EVERY SECTION IS PRINTED, including the empty ones. A section that vanishes when it has nothing to
   // say is indistinguishable from one that was dropped, and this table exists because a missing thing was
   // invisible.
-  const text = [`QUEUE TABLE  ${now.toISOString()}`, "",
+  const header = [`QUEUE TABLE  ${now.toISOString()}`];
+  if (!fetched) header.push("   ! git fetch FAILED -- every 'behind' below is unknown, not zero");
+  const text = [...header, "",
     ...sections.flatMap((s) => [s.heading, ...s.body.lines, ""])].join("\n").trimEnd();
-  return { text, code: sections.some((s) => s.body.incomplete) ? EXIT.INCOMPLETE : EXIT.EXAMINED };
+  const incomplete = !fetched || sections.some((s) => s.body.incomplete);
+  return { text, code: incomplete ? EXIT.INCOMPLETE : EXIT.EXAMINED };
+}
+
+/**
+ * FETCH FIRST, or every count is `?`. Found by running it: the checkout this command happens to be in has
+ * no objects for a sha pushed one minute ago, so `git rev-list --count <head>..<base>` exits 128 with
+ * `Invalid revision range` and every row reports unknown. The API knows what the shas ARE; only the local
+ * repository can say how far apart they are, and it can only do that for objects it holds.
+ *
+ * It is the local repository as a source bounded to a window nobody chose -- the same shape as reading a
+ * journal with no bound, or a check-run rollup that unions superseded runs. Ask the source, and first
+ * make sure it has been told.
+ *
+ * @param {(args: string[]) => {status: number, stdout: string}} runGit
+ * @returns {boolean} whether the fetch succeeded; a failed fetch is reported, never silently tolerated
+ */
+export function fetchRefs(runGit) {
+  return runGit(["fetch", "--quiet", "origin", "+refs/heads/*:refs/remotes/origin/*"]).status === 0;
 }
 
 export function collect(now = new Date()) {
+  const fetched = fetchRefs(git);
   const trunk = trunkState();
   const raw = openPRs();
   const base = trunk?.sha ?? "origin/main";
@@ -269,7 +290,7 @@ export function collect(now = new Date()) {
       : null;
     return prRow(pr, behind, now);
   });
-  return { trunk, prs, merged: recentlyMerged(), now };
+  return { trunk, prs, merged: recentlyMerged(), now, fetched };
 }
 
 function main() {
