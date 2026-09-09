@@ -17,14 +17,32 @@ const ratiosFor = (type: string) => fixture.captures
   .map((c) => sweepAgainstCensus(c.capture as never).find((r) => r.type === type)?.ratio ?? null);
 
 /**
- * THE ANSWER, AND IT IS THE ROW'S THIRD OPTION. Five captures of one URL, one day, every one
- * `targetMatch: matched` with no navigation — and the comparison changes SIGN.
+ * THE ANSWER, AND IT IS THE ROW'S SECOND BRANCH — but only once truncated sweeps are excluded.
+ *
+ * The first version of this test asserted `[0.45, 0.45, 2.27, 2.17, 2.12]` and called the type
+ * `unstable`, reading the inversion as proof that the two numbers count different populations. **Three of
+ * those five ratios came from sweeps that never finished**: the morning pair stopped `deadline/deadline`
+ * and the 14:07 one stopped `cap/cap` at `MAX_SWEEP_STEPS`. A cut-off sweep reports a LOWER BOUND, and
+ * dividing it by a real census produces a number that reads as coverage.
+ *
+ * Excluding them, every sweep that actually ended says the same thing.
  */
-test("formField: the ratio inverts across captures of the same page, so neither branch is supported", () => {
+test("formField: every COMPLETE sweep found more than the census counts", () => {
   const ratios = ratiosFor("formField");
-  assert.deepEqual(ratios.map((r) => r && +r.toFixed(2)), [0.45, 0.45, 2.27, 2.17, 2.12]);
-  assert.equal(populationVerdict(ratios), "unstable",
-    "a denominator whose comparison changes sign is not measuring the numerator's population");
+  assert.deepEqual(ratios.map((r) => r === null ? null : +r.toFixed(2)), [null, null, null, 2.17, 2.12]);
+  assert.equal(populationVerdict(ratios), "sweep-exceeds",
+    "the sweep walks more than the census counts — #800's second branch");
+});
+
+test("the ratios excluded were sweeps that never ENDED, not sweeps that found little", () => {
+  const perCapture = fixture.captures.map((c) =>
+    sweepAgainstCensus(c.capture as never).find((r) => r.type === "formField")!);
+  assert.deepEqual(perCapture.map((r) => r.completeness),
+    ["truncated", "truncated", "truncated", "complete", "complete"]);
+  // The morning pair really did find 100-101 against a census of 224 — a true number about a sweep that
+  // ran out of time, and 0.45 read as "the sweep reaches under half of what is there".
+  assert.equal(perCapture[0].found, 101);
+  assert.equal(perCapture[0].ratio, null);
 });
 
 /**
@@ -42,16 +60,21 @@ test("the basis is stated as RAW, never left for the reader to assume", () => {
   assert.equal(row.basis, "raw");
   assert.equal(row.present, 125, "the AX formControl count, not the distinct-name count");
   assert.equal(row.found, 265);
+  assert.equal(row.completeness, "complete");
 });
 
-test("a sweep that never ran has no ratio, and is not a sweep that found almost nothing", () => {
-  // The same defect `sweep-costs.mjs` found in its own first output, in a different divisor: a starved
-  // sweep reports `found: 0`, which over a real census is 0.00 and reads as catastrophic coverage. On
-  // these captures `link` reads 0.00, 0.00, 0.13, 0.12, 0.00 and three of those five are deadline stops.
-  const link = sweepAgainstCensus(fixture.captures[0].capture as never).find((r) => r.type === "link")!;
-  assert.equal(link.neverRan, true);
-  assert.equal(link.ratio, null, "0.00 would be a real number about a sweep that never looked");
-  assert.deepEqual(ratiosFor("link").filter((r) => r !== null).length, 2, "only the two that ran");
+test("link has NO usable observation: three never ran and two were cut off", () => {
+  // This is what the three-state check bought. `link` reads `0.00 0.00 0.13 0.12 0.00` raw; excluding the
+  // sweeps that never started leaves 0.13 and 0.12, which look like a coverage finding — "the sweep
+  // reaches an eighth of this page's links". Both are `deadline` stops that walked 78 and 74 trips before
+  // the clock. **A lower bound is not a reach**, and reporting one as the other would have put a coverage
+  // claim about IKEA into a row on the strength of two truncations.
+  const perCapture = fixture.captures.map((c) =>
+    sweepAgainstCensus(c.capture as never).find((r) => r.type === "link")!);
+  assert.deepEqual(perCapture.map((r) => r.completeness),
+    ["never-ran", "never-ran", "truncated", "truncated", "never-ran"]);
+  assert.deepEqual(perCapture.map((r) => r.ratio), [null, null, null, null, null]);
+  assert.equal(populationVerdict(ratiosFor("link")), "cannot say");
 });
 
 test("a type with no census entry gets no invented denominator", () => {

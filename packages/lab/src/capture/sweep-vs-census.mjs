@@ -39,7 +39,7 @@
  * not a comparison between two populations that happen to have similar names.
  */
 import { censusElementCounts } from "@a11ign/evidence/conformance";
-import { sweepNeverRan } from "./sweep-costs.mjs";
+import { sweepCompleteness } from "./sweep-costs.mjs";
 
 /** Which census key each swept type is comparable against. Named once; `null` means no ground truth. */
 export const CENSUS_KEY_FOR_SWEEP = Object.freeze({
@@ -59,7 +59,7 @@ export const CENSUS_KEY_FOR_SWEEP = Object.freeze({
  *
  * @param {{ diagnostics?: unknown[] }} capture
  * @returns {{ type: string, found: number, present: number | null, basis: "raw" | "none",
- *             neverRan: boolean, ratio: number | null }[]}
+ *             completeness: "complete" | "truncated" | "never-ran", ratio: number | null }[]}
  */
 export function sweepAgainstCensus(capture) {
   const diagnostics = Array.isArray(capture?.diagnostics) ? capture.diagnostics : [];
@@ -76,13 +76,16 @@ export function sweepAgainstCensus(capture) {
       // divided by a real census gives 0.00 -- read as "the sweep found almost none of what is there"
       // when the truth is that it never looked. `link` on the IKEA captures reads 0.00, 0.00, 0.13, 0.12,
       // 0.00 and three of those five are deadline stops. Shared predicate, not a second spelling.
-      const neverRan = sweepNeverRan(mark);
+      // COMPLETE, TRUNCATED OR NEVER-RAN — three states, because only a sweep that ENDED gives a ratio.
+      // A sweep cut off by the deadline reports a lower bound, and dividing it by a real census produces
+      // a number that reads as coverage. Both usable `link` observations on IKEA are deadline stops.
+      const completeness = sweepCompleteness(mark);
       return {
-        type: mark.type, found, present, neverRan,
+        type: mark.type, found, present, completeness,
         basis: /** @type {"raw" | "none"} */ (present === null ? "none" : "raw"),
         // `null` when there is no denominator, NEVER 0 and never Infinity: a ratio against nothing is not
         // a small ratio, and rendering one would put a number where a question mark belongs.
-        ratio: present && !neverRan ? found / present : null,
+        ratio: present && completeness === "complete" ? found / present : null,
       };
     });
 }
