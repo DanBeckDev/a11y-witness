@@ -194,7 +194,7 @@ names a newer commit here.
 
 ## Known limitations, stated plainly
 
-- **On a real page, eleven criteria are actually assessed — seven of them partially.** Nineteen in total can
+- **On a real page, eleven criteria are actually assessed — seven of them partially.** Twenty in total can
   produce a finding, but four (2.4.6, 3.3.1, 3.3.2, 4.1.3) come only from the trained scorer, which abstains
   on pages unlike its training data — which today is still many real pages. A fifth, 3.3.3, is decided by a
   rule and still cannot fire on a page you do not own: it reads the form probe, which is deliberately off
@@ -203,17 +203,20 @@ names a newer commit here.
   been turned on for real-page captures, not a consent boundary. A seventh, 1.4.2, is also rule-decided and
   its probe DOES run on every real-page capture — it has simply never once found what it looks for: 89
   captures carry 8 media elements between them and none autoplay, so the rule is exercised and correctly
-  silent rather than blocked — see `criterion-coverage.ts` for all three. The ones that always work are the
-  deterministic rules:
+  silent rather than blocked. An eighth, 1.3.5, is rule-decided since 2026-09-09 and cannot fire on a real
+  page yet for a third reason: no worker-side census populates its evidence on any capture at all, so the
+  rule is exercised only against a hand-built fixture — see `criterion-coverage.ts` for all four. The ones
+  that always work are the deterministic rules:
   - **In full: 1.1.1, 1.3.1, 2.1.2, 2.4.4.**
   - **Only with an opt-in probe: 3.2.1, 3.2.2, 3.3.3** — a page that renames itself when a control is
     focused or typed into, and an announced validation error that names the problem and not the remedy.
     All three are rule-decided and exact, and all three read probes that press, type or submit — off for
     pages you do not own, so on somebody else's site they cannot fire in either direction.
-  - **Rule-decided but never yet demonstrated on a real page: 1.4.2, 1.4.13** — two different reasons, and
-    neither is a consent boundary. 1.4.2's probe runs and has simply never observed autoplaying media on a
-    real capture; 1.4.13's probe has simply not been turned on for real-page captures yet, which is an open
-    gap rather than a measured absence.
+  - **Rule-decided but never yet demonstrated on a real page: 1.3.5, 1.4.2, 1.4.13** — three different
+    reasons, and none is a consent boundary. 1.3.5 has no worker-side census populating its evidence on any
+    capture yet; 1.4.2's probe runs and has simply never observed autoplaying media on a real capture;
+    1.4.13's probe has simply not been turned on for real-page captures yet, which is an open gap rather
+    than a measured absence.
   - **Partially: 2.1.1, 2.4.1, 2.4.2, 2.4.3, 2.4.7, 3.3.2, 4.1.2** — each covers one failure mode of several, and
     `criterion-coverage.ts` records which mode and why the others are out. Three of them (2.4.1, 2.4.2,
     2.4.3, added 2026-08-22) are failures a static analyser structurally cannot reach: a skip link that is
