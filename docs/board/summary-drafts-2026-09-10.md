@@ -306,6 +306,36 @@ faults in what a stranger sees — including one where the tool reported less th
   yesterday and the difference is theirs to see. Capture throughput stayed at one deliberately: its own
   definition excludes correctness of what a capture records, and every candidate was correctness.
 
+### A closed row is not always a settled one — #800 is a CORRECTED close, and the distinction is the board's
+
+**Two rows closed today on reasons that turned out to be wrong, and both were caught by the session that
+built them rather than by any check.** A board query shows each as a clean close. **They are not, and the
+difference is exactly what a reader skimming a board flattens.**
+
+**#800, in `worker-capture`'s own words, which the summary should use rather than paraphrase:**
+
+> **#800 asked whether IKEA serves 265 form controls or the sweep walks more than is there, and the answer
+> is that no capture on disk can decide it: #699 merged at 12:40:39Z into the middle of the five-capture
+> dataset, moving the census read from after the probes to before them, so two captures measured the
+> denominator after the sweeps had walked the page and three measured it before — the five were never one
+> population.**
+
+And what it cost, which is the half that makes it a lesson rather than an anecdote: **the field that would
+have dated the instrument, `structureCensus.atMs`, is stamped when the mark is pushed rather than when the
+census is read, so it put the census last on all 25 captures in the checkout and made the wrong answer
+look confirmed.**
+
+**The conclusion never moved — no verdict, either way. Only the reason did, twice.** That is why it is a
+corrected close rather than a retraction, and the summary should say *corrected*, not *closed*.
+
+**#79 is the harder version of the same shape and it is not corrected, it is wrong.** The row reads
+`COMPLETED`; the pull request that closed it, #89, **never merged**; and the rule it claims to have added
+is nowhere on `main`. Two open rows were resting on it before anyone checked. **A row can read COMPLETED
+for two days with nothing behind it**, and the check that would notice is filed rather than built (#870).
+
+**What the board should take from this is one sentence, not three:** the tracker's closed rows are
+evidence of work stopping, not of work landing, and the two are being told apart by hand until #870 lands.
+
 ### What this section must NOT become
 
 **A list of incidents.** Two red windows on a day with 437 merges is a number the board can hold; a
