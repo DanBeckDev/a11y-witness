@@ -37,6 +37,7 @@ import { stripComments } from "@a11ign/evidence/source-text";
 import {
   applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, describeWorkerError, warnUnverified,
   witnessArtifactRoot, witnessArtifactSlug, writeWitnessArtifact, reportWitnessArtifact,
+  earlyContainmentWatcher,
   type CaptureResponse, type CaptureRequest,
 } from "./cli.js";
 
@@ -207,6 +208,47 @@ test("a capture that finished is RECOVERED, not reported as never examined", asy
   } finally { await w.close(); }
 });
 
+test("#426: a real, slow capture prints the early notice AND still completes normally -- never a rejection", async () => {
+  const written: string[] = [];
+  const realWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string) => { written.push(String(chunk)); return true; }) as never;
+  const recorded = new Map<string, { state: "running" } | { state: "done"; status: number; body: unknown }>();
+  const w = await loopbackWorker((url, res, raw) => {
+    if (url === "/capture") {
+      const id = (JSON.parse(raw) as { captureId?: string }).captureId as string;
+      recorded.set(id, { state: "running" });
+      // Held "running" past ONE progress poll (POLL_MS=2000ms), long enough for the watcher to see the
+      // contained marks at least once before the capture finishes -- a genuinely slow, contained page.
+      setTimeout(() => recorded.set(id,
+        { state: "done", status: 200, body: { transcript: ["heading, level 2, consent"] } }), 2400);
+      res.writeHead(202);
+      return res.end(JSON.stringify({ captureId: id, state: "running" }));
+    }
+    if (url === "/progress") {
+      res.writeHead(200);
+      return res.end(JSON.stringify({ busy: true, capturing: "https://example.com/", phases: [
+        { event: "structural", atMs: 1200, headings: 1 },
+        { event: "structureCensus", atMs: 1400, heading: 463 },
+      ] }));
+    }
+    const id = url.split("/").pop() ?? "";
+    const entry = recorded.get(id);
+    if (!entry) { res.writeHead(404); return res.end(JSON.stringify({ error: "no such capture" })); }
+    if (entry.state === "running") { res.writeHead(202); return res.end(JSON.stringify({ state: "running" })); }
+    res.writeHead(entry.status);
+    res.end(JSON.stringify(entry.body));
+  });
+  try {
+    const result = await captureViaWorker("https://example.com/", { ...CAPTURE_REQUEST, worker: w.url });
+    // NEVER A REJECTION: the capture completes and returns its result exactly as if nothing had been
+    // noticed -- the whole point of #426's second condition ("the warning must never become a rejection").
+    assert.deepEqual((result as unknown as { transcript: string[] }).transcript, ["heading, level 2, consent"]);
+    const notices = written.filter((line) => line.includes("NOTICE"));
+    assert.equal(notices.length, 1, "exactly one notice, from a real poll cycle, not zero and not several");
+    assert.match(notices[0], /1\.2s/);
+  } finally { process.stderr.write = realWrite; await w.close(); }
+});
+
 test("captureViaWorker sends a captureId, without which nothing above it can recover anything", async () => {
   let sentId: unknown;
   const w = await loopbackWorker((url, res, raw) => {
@@ -223,6 +265,47 @@ test("captureViaWorker sends a captureId, without which nothing above it can rec
     assert.equal(typeof sentId, "string", "no captureId reached the worker -- recovery has nothing to ask about");
     assert.ok((sentId as string).length > 0);
   } finally { await w.close(); }
+});
+
+/**
+ * #426: the CLI's own `onProgress` for the "contained" doubt, read directly rather than by driving the
+ * real 2s poll loop through a loopback worker -- `capture-client.test.ts` already covers that plumbing,
+ * and what this unit owns is fewer marks in, one stderr write out.
+ */
+test("earlyContainmentWatcher prints the notice EXACTLY ONCE across repeated polls carrying the same marks", () => {
+  const watcher = earlyContainmentWatcher();
+  const written: string[] = [];
+  const realWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string) => { written.push(String(chunk)); return true; }) as never;
+  try {
+    const containedProgress = { phases: [
+      { event: "structural", atMs: 6000, headings: 1 },
+      { event: "structureCensus", atMs: 6300, heading: 463 },
+    ] };
+    watcher(containedProgress);
+    watcher(containedProgress); // a second poll before the capture finishes -- e.g. a slow, contained page
+    watcher(containedProgress);
+    assert.equal(written.length, 1, "the same fact must not repeat once per poll for five minutes");
+    assert.match(written[0], /NOTICE/);
+    assert.match(written[0], /6\.0s/);
+  } finally { process.stderr.write = realWrite; }
+});
+
+test("earlyContainmentWatcher stays silent while undecided, and on a healthy capture", () => {
+  const watcher = earlyContainmentWatcher();
+  const written: string[] = [];
+  const realWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string) => { written.push(String(chunk)); return true; }) as never;
+  try {
+    watcher({ phases: [] }); // nothing recorded yet
+    watcher({ phases: [{ event: "structural", atMs: 1000, headings: 1 }] }); // still only one mark
+    watcher({ busy: true, capturing: null }); // the idle shape -- no `phases` at all
+    watcher({ phases: [
+      { event: "structural", atMs: 9000, headings: 37 },
+      { event: "structureCensus", atMs: 9200, heading: 38 },
+    ] }); // decided, and healthy
+    assert.equal(written.length, 0, "no doubt was ever decided-and-contained; nothing should print");
+  } finally { process.stderr.write = realWrite; }
 });
 
 // `errorReason` -- a stranger's "no worker answered" message must never print a bare "()".
