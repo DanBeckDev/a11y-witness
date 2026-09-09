@@ -12,6 +12,7 @@
  * which is the one that silently poisons results.
  */
 import type { CaptureStructure } from "./index.js";
+import { servedPathOf } from "./document-identity.js";
 import { parseAnnouncement, isLandmarkRole } from "./announcement.js";
 
 /** Whatever a capture backend returned; only the announcement fields matter here. */
@@ -439,6 +440,59 @@ export function probeStates(capture: CapturedAnnouncements): ProbeStates | null 
   }
   if (Object.keys(states).length === 0) return null;
   return { states, ...compareStates(states) };
+}
+
+/**
+ * WHERE DID THE DOCUMENT CHANGE UNDER THE CAPTURE? — #758.
+ *
+ * `documentIdentity` (#687) gives a capture ONE identity and `domCensus.targetMatch` (#699) says whether
+ * the census described the requested page. **Neither says which part of the run walked which document.**
+ *
+ * **IDENTITY, NOT SHAPE — and the first version of this got that wrong.** It compared `FINGERPRINT_KEYS`
+ * counts between fingerprints and reported a change in both calendly arms, which is true and useless: a
+ * page that lazy-loads content changes its counts without changing document. The same distinction #687
+ * had to draw one level up, arriving here in a divisor of a different kind. What identifies a document is
+ * the URL it was served from, and `pageState` has carried `targetUrl` all along:
+ *
+ *     probeForms ON    sweep: calendly.com/   ->  focus: accounts.google.com/v3/signin/identifier
+ *     probeForms OFF   sweep: calendly.com/   ->  focus: calendly.com/scheduling
+ *
+ * **Both arms navigated.** The ON arm reached a sign-in wall and the OFF arm another calendly page — so
+ * "the OFF arm held still" is false, and only the per-sweep `found` counts (link 82 against a census of
+ * 76, versus link 5) say the ON arm's sweeps were the ones walking the other document.
+ *
+ * **THE GRANULARITY IS WHATEVER THE MARKS ALLOW, AND IT IS REPORTED.** With per-probe fingerprints this
+ * can only say the document changed between two probes — a window containing eight sweeps. With per-sweep
+ * fingerprints (`beforeProbe: "sweep:link"`) it names the sweep. Reporting the first as though it were the
+ * second is invented precision, which is why `from`/`to` are the mark labels rather than a guess at a
+ * moment.
+ *
+ * @returns each boundary the served document changed across, in order; `[]` when it held still, and
+ *   `null` when fewer than two fingerprints carry a served URL — nobody asked, which is not "nothing
+ *   moved".
+ */
+export function documentChangedDuring(capture: CapturedAnnouncements):
+  { from: string; to: string; was: string; became: string }[] | null {
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  const seen: { at: string; path: string }[] = [];
+  for (const mark of marks) {
+    if (typeof mark !== "object" || mark === null) continue;
+    const record = mark as Record<string, unknown>;
+    // A FAILED FINGERPRINT IS NOT A READING, the same skip `probeStates` makes: `markPageState` marks even
+    // when the count failed, precisely so "not counted" stays distinguishable from "none".
+    if (record.event !== "pageState" || record.error) continue;
+    const at = typeof record.beforeProbe === "string" ? record.beforeProbe : null;
+    const path = servedPathOf(record.targetUrl);
+    if (at && path !== null) seen.push({ at, path });
+  }
+  if (seen.length < 2) return null;
+  const crossings: { from: string; to: string; was: string; became: string }[] = [];
+  for (let i = 1; i < seen.length; i += 1) {
+    if (seen[i - 1].path !== seen[i].path) {
+      crossings.push({ from: seen[i - 1].at, to: seen[i].at, was: seen[i - 1].path, became: seen[i].path });
+    }
+  }
+  return crossings;
 }
 
 /** @returns `sameState`/`changed`, or NEITHER when there is not enough to compare — see `sameState`. */
