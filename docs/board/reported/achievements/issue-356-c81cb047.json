@@ -5,5 +5,6 @@
   "issue": 356,
   "reportedBy": "dispatcher",
   "at": "2026-09-07T22:55:00Z",
-  "order": 30
+  "order": 30,
+  "affirmed": "Re-verified 2026-09-09 at 07:16Z by dispatcher, on main at 7400a850, by running the derivation and then breaking it. `npx tsx --test packages/lab/src/packaging/ci-changed.test.ts` reports 44/44; `gate`'s two lists are still equal and still read out of the workflow rather than written twice -- `needs:` and the result-checking loop both carry the same eleven jobs (changed, ts, python, ansible, docs, board, changeset, rulesFitness, mergeSafety, acceptance, ownedPaths). Then the part that makes it a claim rather than a reading: `npm run mutate` adding a twelfth job to `needs:` and not to the loop -- the exact fault -- reports THE GUARD BITES. The claim stands as written. Two things it still does NOT say: nothing faulty has ever merged (a larger question nobody has asked), and nothing about jobs outside `gate` -- `audit` is not in that context, which is precisely how a red check sat on seven merged PRs for ninety minutes on 8 September without blocking anything."
 }
