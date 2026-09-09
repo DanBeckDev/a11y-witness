@@ -941,6 +941,23 @@ const BASELINE_QUIET_BUDGET_MS = 20_000;
  * @param {Omit<SweepContext, "out" | "seenKeys">} ctx
  */
 async function collectByType(commands, ctx) {
+  // WHICH DOCUMENT IS THIS SWEEP ABOUT TO WALK? — #758.
+  //
+  // Two fingerprints per capture (one before each probe) bracket EIGHT sweeps, so a capture that
+  // navigates mid-run can be seen to have moved and not to have moved anywhere in particular. Measured on
+  // calendly: `pageState(sweep)` said `calendly.com/` and `pageState(focus)` said
+  // `accounts.google.com/v3/signin/identifier`, with six sweeps in between and nothing saying which of
+  // them walked which page.
+  //
+  // HERE, not at the call sites, and that is the whole reason it is one line: `sweepEveryStructuralType`,
+  // `sweepExtraTypes` and `rescanFormFieldsAfterSubmit` all reach the page through this function, so one
+  // mark covers eight sweeps and there is no second place to forget. A remedy applied at one call site
+  // when the behaviour reaches several is this repository's most expensive recurring shape.
+  //
+  // `sweep:<label>` rather than a new mark type: `probeStates` already groups `pageState` by
+  // `beforeProbe` and compares them with `FINGERPRINT_KEYS`, so this answers per sweep with no new
+  // comparator and no second spelling of the key list.
+  await markPageState(`sweep:${ctx.label}`, ctx.diag);
   /** @type {string[]} */
   const out = [];
   /** @type {Set<string>} */
@@ -1031,10 +1048,16 @@ const BROWSE_MODE_REMEDIES = [
  * @param {Diag} diag
  */
 async function markPageState(beforeProbe, diag) {
+  const startedAt = Date.now();
   const dom = await domCensus().catch(() => null);
   // Marked even when NULL. "The page was not counted" and "the page has none of these" must never be the
   // same silence — the rule that cost this project a whole corpus.
-  diag.mark("pageState", { beforeProbe, ...(dom ?? { error: "not counted" }) });
+  //
+  // `tookMs` because #758 adds one of these per SWEEP, and this fingerprint's own header claims it is
+  // cheap. A claim in a comment cannot be checked; a number on the mark can, from the next capture,
+  // without a benchmark. `sweep` is already the largest phase of a real page (#397) and a fingerprint
+  // that made it larger would be the next thing worth a row.
+  diag.mark("pageState", { beforeProbe, tookMs: Date.now() - startedAt, ...(dom ?? { error: "not counted" }) });
 }
 
 /**
@@ -2016,16 +2039,33 @@ async function operateControl(phrase, ctx) {
 // exposes afterwards, so a control that never updates its state is caught (4.1.2
 // Name, Role, Value).
 //
-// We RE-READ the control rather than listening for a spontaneous announcement,
+// We ASK NVDA FOR A STATE rather than listening for a spontaneous announcement,
 // because the spontaneous route cannot separate a conformant disclosure from a
 // broken one. Measured on NVDA 2026.1.1: activating either fixture announces only a
 // document re-announce (~625ms) — "expanded" is never spoken, and neither
 // `lastSpokenPhrase` nor the `spokenPhraseLog` delta contains it. Judging on that
 // meant a broken disclosure could look identical to a working one.
 //
-// Re-reading asks the accessibility tree instead: has the control's state actually
-// changed? That is precisely what 4.1.2 requires, and it is deterministic. The
-// spontaneous announcement is still recorded in the sweep log as evidence.
+// Asking is deterministic where the spontaneous route is not. The spontaneous
+// announcement is still recorded in the sweep log as evidence.
+//
+// **WHAT `after` ACTUALLY IS, corrected 2026-09-09 (#812): the FOCUSED control after
+// activation, not the control that was activated.** This comment described the opposite
+// for as long as it existed, promising something the code has never done: it calls
+// `reportCurrentFocus` and always has. The two coincide only when activation leaves
+// focus where it was -- true on 2,000+ corpus captures, and false on the V1 rehearsal's
+// nav menu, which moved focus into what it revealed:
+//
+//     control  "..., list, with 6 items, Platform, button, collapsed"
+//     after    "Outline, menu button, focused, collapsed, sub Menu"
+//
+// Both say `collapsed`, and the judge asserted 4.1.2 across two different controls. The
+// literal `focused` token in that string is `reportCurrentFocus`'s own output -- the
+// capture was saying which question it answered, and nothing read it.
+//
+// `afterSource` now says it in a field rather than in a comment nobody parses. Making
+// `after` a true re-read of the activated element needs a CDP read of that element and
+// is an evidence change: a separate row, and a recapture.
 /** @param {string} phrase @param {Record<string, any>} ctx */
 async function probeDisclosure(phrase, { interaction }) {
   try {
@@ -2040,7 +2080,9 @@ async function probeDisclosure(phrase, { interaction }) {
     interaction.sweepLog.push(
       `disclosure ${JSON.stringify(phrase.slice(0, 40))} announced=${JSON.stringify(announced)} state=${JSON.stringify(after)}`
     );
-    interaction.stateChanges.push({ control: phrase, after });
+    // `afterSource` is ADDITIVE and older captures simply lack it -- which the judge reads as "unknown
+    // provenance", the same conservative branch as a focus read, rather than as a re-read it can trust.
+    interaction.stateChanges.push({ control: phrase, after, afterSource: "focus" });
   } catch (e) {
     // **A failed measurement is not silence, and must never be recorded as one.**
     //
@@ -2055,7 +2097,7 @@ async function probeDisclosure(phrase, { interaction }) {
     // "we did not measure" from "there was nothing to hear" -- and `check-signals` sees a probe that
     // errored rather than a page that was silent.
     interaction.sweepLog.push(`disclosure ERROR ${errMsg(e)}`);
-    interaction.stateChanges.push({ control: phrase, after: null, error: errMsg(e) });
+    interaction.stateChanges.push({ control: phrase, after: null, afterSource: "focus", error: errMsg(e) });
   }
 }
 
