@@ -385,7 +385,7 @@ export function oracleCounts(capture: CapturedAnnouncements): OracleCounts {
 }
 
 /** The structural counts a page-state fingerprint compares. Named once; the order is the report order. */
-const FINGERPRINT_KEYS = ["tabbable", "formField", "link", "landmark", "heading", "graphic"] as const;
+export const FINGERPRINT_KEYS = ["tabbable", "formField", "link", "landmark", "heading", "graphic"] as const;
 
 export interface ProbeStates {
   /** The fingerprint taken immediately BEFORE each probe, keyed by that probe's name. */
