@@ -59,12 +59,17 @@ export const WAS_READY_LABEL = "was-ready";
 /**
  * Every label that already means "not actually pickable", independent of `ready`.
  *
- * `in-progress` belongs here for the reason `row-claim.mjs:161-170` names: `dispatchRow`/`claimRow` only
- * ever ADD labels, so a row still carrying `ready` at the moment it was dispatched comes out the other
- * side as `ready` + `in-progress` + `session:*` -- claimed and started, while still advertising itself as
- * pickable. #246: three real rows sat in exactly that state and this list could not see any of them,
- * because the string `in-progress` was never in it -- a correct predicate fed a list that cannot express
- * the fault, the `fleet-consistency`/`browserVersion` shape (CLAUDE.md).
+ * `in-progress` USED TO belong here (#246), and #673 split it out into its own check
+ * (`handClaims`/`reportHandClaims`, below). `row-claim.mjs`'s `writeRowLabels` removes `READY_LABEL` in
+ * the SAME `gh issue edit` call that adds `in-progress`/`session:*` -- always, atomically -- so a row
+ * genuinely claimed through `row-claim.mjs` can never be observed carrying both. `ready` + `in-progress`
+ * together is therefore not a generic contradiction the way `ready` + `blocked` is: it is PROOF the claim
+ * was made through some other route (`gh issue edit --add-label` by hand, or a direct assignment), never
+ * through the mechanism itself. Measured 2026-09-09: #634, #635 and #633 all sat in exactly this state,
+ * claimed by hand within hours of being filed, and stayed advertised as pickable until an audit run by
+ * hand caught them. Reporting that as "remove one or the other" -- this list's generic remedy -- names
+ * the symptom; naming it as a hand claim names the cause AND the remedy in the same sentence (#655's
+ * rule), so it gets a dedicated check instead of a place in this generic list.
  *
  * `runner:*` DELIBERATELY DOES NOT JOIN THIS LIST (#444). A row reserved for a specific session
  * (`ready` + `runner:worker-audit`) is still genuinely pickable -- BY ITS RUNNER -- so it is not a
@@ -75,7 +80,7 @@ export const WAS_READY_LABEL = "was-ready";
  * the row is closed.
  */
 export const MUTEX_LABELS =
-  ["fleet-gated", "disputed", "decision", "awaiting-merge", "blocked", "review-only", "in-progress"];
+  ["fleet-gated", "disputed", "decision", "awaiting-merge", "blocked", "review-only"];
 
 /**
  * @typedef {{ number: number, title: string, labels: string[] }} LabelledIssue
@@ -188,6 +193,26 @@ export function mutexViolations(issues) {
     if (conflicting.length > 0) violations.push({ number, title, conflicting });
   }
   return violations;
+}
+
+/**
+ * #673: Pure -- which open issues carry BOTH `ready` and `in-progress`? `row-claim.mjs`'s
+ * `writeRowLabels` removes `READY_LABEL` in the same edit that adds `in-progress`/`session:*`, always --
+ * so this co-occurrence can only arise from a claim made outside `row-claim.mjs` (a hand-applied label, a
+ * direct assignment). A row claimed through the real mechanism never reaches this filter, which is the
+ * mutation the issue itself names: claim one through `row-claim` and confirm this stays silent.
+ *
+ * @param {LabelledIssue[]} issues
+ * @returns {Array<{ number: number, title: string, sessions: string[] }>}
+ */
+export function handClaims(issues) {
+  const claims = [];
+  for (const { number, title, labels } of issues) {
+    if (!labels.includes(READY_LABEL) || !labels.includes("in-progress")) continue;
+    const sessions = labels.filter((l) => l.startsWith("session:"));
+    claims.push({ number, title, sessions });
+  }
+  return claims;
 }
 
 /**
@@ -530,6 +555,31 @@ function reportMutexViolations() {
 }
 
 /**
+ * #673: Report rows claimed by hand -- `ready` + `in-progress` together, which `row-claim.mjs`'s own
+ * atomic label-write can never produce. Named separately from `reportMutexViolations` because the two
+ * need different remedies: a hand claim's fix is to route the claim through `row-claim.mjs`, never to
+ * remove one of the two labels as `mutexViolations`' generic wording would suggest.
+ */
+function reportHandClaims() {
+  const issues = fetchOpenIssues();
+  const claims = handClaims(issues);
+  if (claims.length === 0) {
+    process.stdout.write(`OK  ${issues.length} open issue(s) checked, none carry ready + in-progress `
+      + `together -- row-claim's own mechanism can never produce that state\n`);
+    return 0;
+  }
+  for (const { number, title, sessions } of claims) {
+    const who = sessions.length > 0 ? sessions.join(", ") : "an unknown session";
+    process.stdout.write(`HAND CLAIM  #${number} "${title}" -- claimed by ${who} without row-claim.mjs, `
+      + `which never leaves \`ready\` in place\n`);
+  }
+  process.stderr.write(`\n${claims.length} row(s) were claimed by hand rather than through row-claim.mjs. `
+    + `Route the claim through it instead: \`node scripts/row-claim.mjs decline <n> `
+    + `--session=<whoever holds it>\`, then claim or dispatch it properly.\n`);
+  return claims.length;
+}
+
+/**
  * #449: A ROW THAT SHOULD BE `ready` AND IS NOT -- the population no existing check here can see, since
  * `mutexViolations` only ever compares labels the row DOES carry against each other, and an absent label
  * has nothing to conflict with. `WAS_READY_LABEL` is the marker that makes this population expressible:
@@ -761,6 +811,7 @@ function reportAlreadyMerged() {
 /** @type {[string, () => number][]} */
 export const CHECKS = [
   ["open issues", reportMutexViolations],
+  ["hand claims", reportHandClaims],
   ["declined rows", reportStrandedByIncompleteDecline],
   ["closed issues", reportClosedDebris],
   ["board membership", reportAbsentFromBoard],
