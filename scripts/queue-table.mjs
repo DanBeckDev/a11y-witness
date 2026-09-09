@@ -16,6 +16,16 @@
  *
  * ## SECTION 4 IS FIRST FOR A REASON
  *
+ * AND THIS SECTION WAS ONCE BLIND TO ITS OWN SUBJECT, which is its second instance and belongs in the
+ * header rather than only in a row. It answered "did each PR's CI pass before merge" for a day, under a
+ * heading that asked "what is red on main" -- and it was built after the chairman's seven-red-PRs
+ * complaint to see exactly that. Its rollup hung off `headRefOid`, the branch tip BEFORE the merge, so
+ * every post-merge workflow, every scheduled run pinned to a sha and every non-code event was
+ * structurally unreachable. On 2026-09-09 it printed NONE for three consecutive tables while
+ * `ready-label-audit` had been red since 12:11Z; changing the population to main's first-parent chain
+ * and rerunning on the same tree gave `audit` red on 7 of 10 -- the same number and check name as the
+ * incident quoted below. **The next reader of this section needs to know its population was once wrong.**
+ *
  * "Non-success checks on the last ten merged PR heads, by check name" is the view the chairman actually
  * looks at, and nothing in this org was looking at it. It is printed last, because a reader scans down --
  * but it is the section this file was written for, and a change that drops it has removed the point.
