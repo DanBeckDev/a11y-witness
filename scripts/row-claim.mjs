@@ -73,6 +73,7 @@ import { withBoardSnapshot, PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapsh
 import { runnerReason } from "./row-claim/runner-rule.mjs";
 import { ownPrHealthReason, lookupOwnPrHealth } from "./row-claim/own-pr-health-rule.mjs";
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
+import { sandboxGitEnv } from "./git-env.mjs";
 
 export const CLAIM_LABEL = "in-progress";
 export const STARTED_LABEL = "started";
@@ -96,8 +97,15 @@ export const WORKTREE_LABEL_PREFIX = "worktree:";
  * @typedef {{ number: number, title: string, labels: string[] }} IssueClaim
  */
 
-/** @type {(cmd: string, args: string[]) => string} */
-const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8" });
+/**
+ * #709: `git worktree remove` (below) DESTROYS A DIRECTORY, and an unscrubbed spawn inherits any
+ * `GIT_DIR`/`GIT_WORK_TREE` a caller's environment carries -- the exact shape that once redirected a
+ * spawned git call onto the wrong repository. `sandboxGitEnv()` scrubs every `GIT_*` var; applying it to
+ * every spawn here, `gh` included, costs nothing (`gh` reads none of them) and needs no second helper for
+ * the one call that actually matters.
+ * @type {(cmd: string, args: string[]) => string}
+ */
+const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", env: sandboxGitEnv() });
 
 /**
  * Reads an issue's CURRENT labels from the real board. Injectable `run`, the same seam
