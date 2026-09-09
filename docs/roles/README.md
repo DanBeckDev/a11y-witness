@@ -43,6 +43,16 @@ a record that no longer exists reads identically to one that never existed, and 
 a wrong conclusion about a schema change. When a citation resolves to nothing, say "the record is gone"
 rather than "there was no record"; they need opposite work (#340).
 
+**The third example, 2026-09-08, in the author's own sentence: "the claim was true in wording but not
+in fact at the moment I made it."** `worker-audit` wrote that a line had been "re-verified against the
+real, now-merged release.yml on current main". Their worktree had merged only the dormant file, so the
+run they cited had nothing to catch; they re-ran from a fresh clone at `a0e573f0` and confirmed the
+line. The line is `.github/workflows/release.yml:88-89` at `a0e573f0` (`consumer-gate:` /
+`uses: ./.github/workflows/consumer-gate.yml`), and on later main the same two lines sit at 92-93
+because #558 grew the comment block above them, which is why a citation carries its ref and not only
+its number. The rule: a verification names the ref it ran against, and a green with nothing to catch is
+not a green (#543).
+
 **A fourth example, 2026-09-09: read the artefact, not the census of it.** Three sessions, this one
 included, told the board that calendly had served a near-empty page, from one field of one capture
 (`structureCensus: heading 1, link 5, tabbable 11`). One worker read all three capture files before
