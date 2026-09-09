@@ -54,7 +54,9 @@ jobs:
 **`task` is load-bearing.** It is what a user is trying to *do*, in plain words, and it changes what gets
 captured: a button whose announced name shares a meaningful word with the task gets activated, and
 whatever the screen reader says next is recorded. The word match is the safety guard — *"show only bags"*
-activates a **Bags** button and never a **Delete account** one.
+activates a **Bags** button and never a **Delete account** one. That is all it does on this shipped
+default — see [the README's "Using it"](../README.md#using-it) for why a well-chosen task does not also
+sharpen the verdict.
 
 **Don't have a page picked yet?** Point it at `https://www.w3.org/WAI` — the W3C's own accessibility
 site — for a first look before choosing anything of your own. We have already run it there
