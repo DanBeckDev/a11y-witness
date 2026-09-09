@@ -5,6 +5,7 @@
 Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-documented.test.ts` against every script's own header; do not hand-edit.
 
 - `node scripts/acceptance-commands.mjs` — run a PR's own stated Acceptance/Refutation command(s) and report RAN/REFUSED/MISSING
+- `node scripts/arm-pr.mjs` — arm-pr -- enable auto-merge on ONE pull request, unless it is held
 - `node scripts/assert-glob-not-empty.mjs` — refuse a test glob that resolves to zero files instead of passing silently
 - `node scripts/auto-arm-sweep.mjs` — arm auto-merge on open PRs that predate auto-arm.yml and were never armed
 - `node scripts/board-document.mjs` — render the board's PDF from the same data the daily GitHub report reads
