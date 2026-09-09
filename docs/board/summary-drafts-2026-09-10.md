@@ -161,6 +161,61 @@ as one sentence about the check that caught it.
 
 ---
 
+## 4a. The afternoon, which happened after this file was first drafted
+
+Added on `ceo`'s instruction, from the artefacts. **Every time below is a run, a comment or a merge —
+none is from a session clock.** This session's own `date -u` read 15:10Z and then 14:27Z within the same
+hour, so it is not a source.
+
+### Main went red twice, and recovered both times without a person waiting on it
+
+From `trunk-guard`'s own run list on `main`:
+
+| | last green | first red | last red | first green after |
+|---|---|---|---|---|
+| first | `857f5485` 12:42:57Z | `7ad67c2c` 12:45:24Z | `2904b680` 13:11:57Z | `5e7c1184` 13:17:54Z |
+| second | `deb3103f` 13:48:51Z | `5e97a3ef` 13:49:49Z | `9f77d953` 13:58:43Z | `25b7b0fd` 14:03:29Z |
+
+**Derived spans: about 32 minutes and about 14 minutes**, measured green-to-green.
+
+> **THE FIGURES IN `ceo`'S INSTRUCTION WERE 34 AND 19 MINUTES, AND I HAVE NOT ADOPTED EITHER SET
+> SILENTLY.** The difference is a boundary choice, not a disagreement about facts: green-to-green is not
+> the same as red-until-the-revert-merged, and both are defensible. **Ask `ceo` which boundary the board
+> should be told, and say which one the number is.** A duration with no stated boundary is the same defect
+> as a count with no stated window, which the board has already been taught to look for.
+
+### The automatic repair declined both, and the reason is one defect
+
+The auto-revert **built the right answer twice and declined to act twice.** Its parent re-check asks
+whether the commit before the suspect push was healthy — and it asks that question of a worktree pinned
+at that commit, which **shares its refs with the checkout that created it**. So `origin/main` inside the
+pinned worktree is not the old `origin/main`; it is whatever `origin/main` is right now (#775, from
+#744's PR #774 with a three-commit reproduction). The check therefore reported the parent as failing on a
+tree the push never touched, and the revert was declined as unattributable.
+
+**Both were reverted by hand, with the attribution measured rather than assumed**, and the second one's
+cause is now understood: #777 re-lands it.
+
+**For the board this is one sentence, not three:** *our automatic repair for a broken main built the right
+fix twice today and would not apply it, because the check that decides whether the fault is ours was
+reading the current state of the code rather than the state it meant to ask about. It was done by hand
+both times, and the defect is identified.* **Do not offer a date for the fix** — it is another session's
+row and this document does not promise other people's work.
+
+### Everything else
+
+- **The fleet is at ten of ten** — the settled figure in section 3, `fleet:status` 13:21:19Z.
+- **Merges since midnight: 437**, `git log origin/main --since=2026-09-09T00:00:00Z --merges`. **Re-measure
+  at 07:25 and state the window in the same breath as the number** — a peer's 17 and this script's 42
+  were both right on edition 1, over different windows.
+
+### What this section must NOT become
+
+**A list of incidents.** Two red windows on a day with 437 merges is a number the board can hold; a
+narrative of each is the engineering edition's job, not this one. If the summary is tight, **the whole of
+4a is one sentence: main was briefly red twice and green by mid-afternoon, and the automatic repair for it
+has a known defect being fixed.** The corrections in section 1 outrank it.
+
 ## 5. Are we on the date?
 
 The date held at **20 September** through 9 September. **Re-read at 07:25 from the milestone**, not from
@@ -181,7 +236,7 @@ without acknowledging it has been asked before is how a decision request stops b
 
 | | 9 Sep | re-measure with |
 |---|---|---|
-| merges since midnight | 357 | `git log origin/main --since=<today>T00:00:00Z --merges --oneline \| wc -l` |
+| merges since midnight | 437 at 14:2xZ | `git log origin/main --since=<today>T00:00:00Z --merges --oneline \| wc -l` |
 | open pull requests | 6 | `gh pr list --state open --json number --jq 'length'` |
 | pickable rows | 22 | `gh issue list --state open --label ready --json number --jq 'length'` |
 
