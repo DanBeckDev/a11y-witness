@@ -18,6 +18,7 @@
     "branches:stranded": "node scripts/stranded-branches.mjs",
     "queue:table": "node scripts/queue-table.mjs",
     "board:document": "node scripts/board-document.mjs",
+    "tracker:comment": "node scripts/tracker-comment.mjs",
     "board:record": "node scripts/board-record.mjs",
     "board:report": "node scripts/board-report.mjs",
     "jobs:check": "node scripts/check-scheduled-jobs.mjs",
@@ -151,7 +152,9 @@
     "corpus:release": "node packages/lab/scripts/corpus-release.mjs",
     "stash:whose": "node scripts/stash-whose.mjs",
     "pr:hold": "node scripts/pr-hold.mjs",
-    "pr:release": "node scripts/pr-hold.mjs --release"
+    "pr:release": "node scripts/pr-hold.mjs --release",
+    "pr:open": "node scripts/pr-open.mjs create",
+    "pr:edit": "node scripts/pr-open.mjs edit"
   },
   "dependencies": {
     "@a11ign/evidence": "0.1.0",
