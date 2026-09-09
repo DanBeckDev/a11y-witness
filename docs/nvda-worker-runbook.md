@@ -734,9 +734,19 @@ page by quick-navigation and that is how this tool sees structure at all.
 > WRONG.** The share is right; the mechanism behind it is not the walk. Replaying the same three captures
 > per sweep (#659 step 1) puts **every sweep type on every page at 108–210 ms per round trip — except
 > `formField`**, which is 385 ms/trip on hubspot's 4 fields, 1,233 on calendly's 18 and 1,478 on IKEA's
-> 100. `sweepEveryStructuralType` passes `onItem: onFormField` for that one sweep and nothing else, and
-> `onFormField` ACTIVATES each control, presses Escape and waits for speech to settle. So what scales is
-> `probeForms` operating every field the sweep finds, not the cost of walking a bigger DOM.
+> 100. **What makes that one sweep expensive is NOT KNOWN**, and the first answer written here was wrong:
+> it said `probeForms` activating every field, on the strength of `sweepEveryStructuralType` passing
+> `onItem: onFormField` for that sweep alone and `operateControl` being gated on the flag. **Tested the
+> same day, two arms on one worker: `--probe-forms` ON gives 1,283 ms/trip and OFF gives 1,279.** Four
+> milliseconds, with `formChanges` going 6 to 0, so the flag did what it says and the cost did not move.
+> The obvious second candidate is weakened too — `probeKindFor` returns `disclosure` BEFORE the
+> `probeForms` gate, so collapsed controls are probed either way, but IKEA has **zero** "collapsed"
+> phrases across its 100 fields and the highest per-trip cost of all.
+>
+> So the measurement stands and the mechanism is open. hubspot's 385 ms/trip is the one low reading and
+> its four phrases are plain buttons that earn no probe at all, which is a lead rather than a finding.
+> Answering it needs a per-item timing mark `collectByType` does not carry — a capture-path change, not
+> another run.
 >
 > **And `trips` does not count that work**, so "ms per trip" for `formField` is a ratio whose denominator
 > excludes most of its own numerator. Reading `worker:compare`'s rule — *ms up with trips flat means each
@@ -751,6 +761,14 @@ page by quick-navigation and that is how this tool sees structure at all.
 
 **`focusOrder` is not ~8 s here either** — 72.5 s, 16.3 s, and outside ikea's top six. Wrong in both
 directions against the corpus figure, and by an order of magnitude on hubspot.
+
+> **AND CALENDLY SERVED TWO DIFFERENT PAGES, so its column above is a near-empty render.**
+> `structureCensus` — the browser's own count, not the sweep's — reads `link=5 graphic=1 heading=1
+> tabbable=11` on the 08:12 capture and on a 10:42 re-run, and `link=64 graphic=28 heading=15
+> tabbable=98` on a 10:50 re-run eight minutes later. A page with eleven tabbable elements and one
+> heading is a wall or a stub, not calendly. Nothing in the capture options can cause that; it is what
+> the site served. Treat every calendly figure in this section, in #397 and in #311 as describing
+> whichever of the two it got, and prefer hubspot and IKEA, which both reproduced exactly.
 
 n=1 per page, one fleet, one day; every split except `windowsActivate` and the `sweep` share is a
 single observation. The captures are on disk and re-readable — the first time this question could be
