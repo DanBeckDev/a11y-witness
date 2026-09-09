@@ -95,7 +95,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { leakRefusalReason } from "../packages/lab/src/packaging/leak-patterns.mjs";
-import { missingTemplateFields } from "./row-claim/template-fields-rule.mjs";
+import { missingTemplateFields, wholeSuiteAcceptanceReason } from "./row-claim/template-fields-rule.mjs";
 import { moveProjectStatus, filedByLine, fetchLabels as fetchIssueLabels, ensureLabelsExist } from "./row-claim.mjs";
 import { PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { REPO } from "./repo-identity.mjs";
@@ -178,11 +178,17 @@ export function fileRefusalReason(body) {
   const leak = leakRefusalReason(body);
   if (leak) return `row-file: ${leak}`;
   const missing = missingTemplateFields(body);
-  if (missing.length === 0) return null;
-  return `row-file: REFUSING to file -- missing ${missing.join(", ")}. The issue template requires all `
-    + "three (Region, Acceptance, Open-check) but the web form that enforces that does not apply to "
-    + "`gh issue create`. Add the missing section(s) as a `## <Field>` heading with real content under "
-    + "it, then file again -- whoever claims this row later has less context than you have right now.";
+  if (missing.length > 0) {
+    return `row-file: REFUSING to file -- missing ${missing.join(", ")}. The issue template requires all `
+      + "three (Region, Acceptance, Open-check) but the web form that enforces that does not apply to "
+      + "`gh issue create`. Add the missing section(s) as a `## <Field>` heading with real content under "
+      + "it, then file again -- whoever claims this row later has less context than you have right now.";
+  }
+  // PRESENCE FIRST, THEN CONTENT. A row with no Acceptance section is refused above for that reason; a
+  // row whose Acceptance names the whole suite has the section and cannot be run from it, and the two
+  // refusals must not be collapsed -- the fix for each is different, which is the same argument
+  // `missingTemplateFields` makes for naming each missing field rather than counting them.
+  return wholeSuiteAcceptanceReason(body, "row-file");
 }
 
 /**
