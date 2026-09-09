@@ -26,7 +26,7 @@ import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "@a11ign/judge/layers";
 import { reportLines, type Report } from "./report.js";
-import { formatFaultMessage, formatDoubtMessage } from "./fault-remediation.js";
+import { formatFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice } from "./fault-remediation.js";
 import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ign/worker-fleet";
 import { CAPTURE_CLIENT_TIMEOUT_MS, requestJson } from "@a11ign/worker-fleet/worker-http";
 import { captureTolerantly } from "@a11ign/worker-fleet/capture-client";
@@ -38,7 +38,8 @@ import { annotateCapture } from "@a11ign/evidence";
 import type { CaptureStructure, CaptureInteraction, CaptureRequest as WireCaptureRequest,
   CaptureFormState } from "@a11ign/evidence";
 import type { RuleLayerCoverage } from "@a11ign/judge/outcomes";
-import { captureDoubt, captureMentionsTitle, oracleCounts, type CaptureDoubt } from "@a11ign/evidence/verify";
+import { captureDoubt, captureMentionsTitle, oracleCounts, earlyContainmentVerdict, type CaptureDoubt }
+  from "@a11ign/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11ign/scorer";
 import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics,
   censusCountsDistinctNames, type ConformanceRequirement }
@@ -995,6 +996,36 @@ export function describeWorkerError(status: number, body: unknown): string {
 }
 
 /**
+ * A fresh `onProgress` callback per capture, so the notice fires at most ONCE — #426's second half. The
+ * plumbing already existed and was unused for this caller (`captureTolerantly` has always accepted
+ * `onProgress` and polled `/progress` while a capture is in flight; this was the one caller that never
+ * passed one). `/progress`'s `phases` array carries the SAME two marks a finished capture's `captureDoubt`
+ * reads, so `earlyContainmentVerdict` applies the identical threshold early rather than a different,
+ * unvalidated one — see that function's own comment in `@a11ign/evidence/verify`.
+ *
+ * NEVER a rejection: this only ever prints to stderr. `onProgress`'s return value is unused by
+ * `capture-client.mjs`, so there is no path from here back into whether the capture continues — the rule
+ * this project has paid for once already ("a check must never reject evidence whose absence is the
+ * finding"), applied to a warning instead of a gate.
+ *
+ * A closure rather than a module-level flag: two concurrent captures (this CLI's own `Promise.all` in
+ * `captureAndScan` runs the capture beside axe, and a caller could invoke `captureViaWorker` more than
+ * once) must not share one "already notified" bit.
+ */
+export function earlyContainmentWatcher(): (progress: object) => void {
+  let notified = false;
+  return (progress: object) => {
+    if (notified) return;
+    const phases = (progress as { phases?: unknown }).phases;
+    if (!Array.isArray(phases)) return;
+    const verdict = earlyContainmentVerdict(phases);
+    if (!verdict.decided || !verdict.contained) return;
+    notified = true;
+    process.stderr.write(`${formatEarlyContainmentNotice(verdict.observedAtMs)}\n`);
+  };
+}
+
+/**
  * THROUGH `captureTolerantly` NOW, not a bare `requestJson` POST — architecture-audit.md §5, item 6.
  *
  * This was the one caller of ten that sent no `captureId`, so the async-dispatch, poll and lost-response
@@ -1018,6 +1049,7 @@ export async function captureViaWorker(
         // absent key is the same "no configured form" it has always understood. Additive, like `fault`.
         ...(formState ? { formState } : {}) },
       timeoutMs: CAPTURE_CLIENT_TIMEOUT_MS,
+      onProgress: earlyContainmentWatcher(),
     });
   } catch (error) {
     // A transport failure is not an accessibility finding, and it must not read like one.
