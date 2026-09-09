@@ -160,6 +160,11 @@ knowing on its own, and is an argument for the raw record living somewhere untra
 quoting a summary of it.
 
 
+**And put the correction in the field that is READ.** A record's fields are not interchangeable: `evidence`
+renders into the appendix, so that is where a reader meets it; `affirmed` is consulted only to decide whether
+the record has gone stale. A refinement written into `affirmed` is one nobody reads, and a record can be
+entirely correct and still say nothing to the board because the sentence went in the wrong field.
+
 > **This paragraph tripped its own guard on the first attempt.** It quoted the offending strings as
 > examples, and `no tracked source file carries a real internal LAN address` failed with
 > *"found 2 unexempted leak(s)"*. Writing the rule is not exempt from the rule, and the fastest way to
