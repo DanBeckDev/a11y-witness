@@ -735,3 +735,60 @@ import("./scripts/owned-path-signoff.mjs").then(({ signoffVerdict, loadFacts }) 
 
 A refusal names exactly which fact your own wording does not state, or which two lines disagree about the
 same one — cheaper to fix before pushing than to re-derive from a CI log after the fact.
+
+## The absence of a measurement is not the measurement zero — and it always coalesces to the comfortable answer
+
+**Five instances on 2026-09-09, in five unrelated files, none of which announced itself.**
+
+| where | the absent case | what it folded into | why nobody noticed |
+|---|---|---|---|
+| `prune-worktrees.mjs` | merge status could not be DETERMINED | "not merged" | `rev-list --count 2>/dev/null` reads an errored empty result as a real nonzero count |
+| `row-claim.mjs` | `CANNOT_ASK` — a failed lookup | `READY` | a null branch tip compares unequal to main's, which is what "behind" looks like |
+| `merge-queue.mjs` | a name with no run on the rollup | not blocking | `.find()` returns the OLDEST superseded run, so a green PR read as failing and a failing one as green |
+| the #659 publish blocker | a sweep that was NOT EXAMINED | `found: 0` | five of eight sweeps reported zero against an oracle of 340 links, and zero is a number |
+| `queue-table.mjs` §5 | a load that could not be READ | a quiet host | `sysctl` is in `/usr/sbin`, not on a minimal PATH; `(load ?? 0) > 12` is `false` |
+
+**In every one of the five, the coalesced value is the reassuring one.** That is not coincidence and it is the whole reason the class is expensive: a metric that fails into "everything is fine" is worse than no metric, because it is believed, and it is believed most exactly when the thing it measures has gone wrong. The `queue:table` instance is the sharpest — its own section heading reads *"it was the bottleneck on 2026-09-09 and nothing said so"*, and it printed no warning on a host at load 15.08 against a ceiling of 12.
+
+**`??` and `||` are where this lives.** Both were written to supply a default, and a default is a claim about a value you do not have. That is fine for a display string and wrong for anything a threshold reads:
+
+```js
+const contended = (host.load ?? 0) > LOAD_CEILING;   // an unreadable load says "not contended"
+const contended = host.load !== null && host.load > LOAD_CEILING;  // and says so about what it read
+```
+
+**The remedy is not "handle null" — it is to return the unknowns beside the verdict.** A boolean destroys the distinction between *asked and answered no* and *never asked*, so the caller cannot restore it however carefully it is written:
+
+```js
+export function hostContention(host) {
+  const unknown = [];
+  if (host.load === null) unknown.push("load");
+  if (host.gitProcesses === null) unknown.push("git process count");
+  const contended = (host.load !== null && host.load > LOAD_CEILING) || ...;
+  return { contended, unknown };   // still never claims contention it did not measure
+}
+```
+
+Better still, **remove the failure rather than handling it**: `os.loadavg()` is the same kernel number from Node's own call, with no subprocess and therefore no PATH to be wrong about. A failure mode that cannot occur needs no null case.
+
+**`NaN` is the same bug arriving through a parse.** `Number("")` and `Number(undefined)` are both `NaN`, and `NaN > 12` is `false` — so a value that parsed wrongly reads as below every ceiling. Guard `Number.isNaN` wherever you guard null.
+
+**And a count that exits 1 for two different reasons cannot be coalesced at all.** `pgrep -x git` exits 1 when nothing matches *and* when it cannot run; `?? 0` folds "I could not ask" into "there are none", and none is the good news. Ask separately whether the tool is askable, or keep the null.
+
+## A check that observes something ADJACENT to the property is the failure review cannot catch
+
+**Three instances in one session, all found by mutation, none by reading the check** — because reading a check means reading its intent, and the intent is always correct.
+
+| the check asked | the property actually is | the gap |
+|---|---|---|
+| #622 | does this **path** match | does this **record** carry the field | a path rule exempts every field that path will ever have |
+| #645 | is the wiring **present** | does the wiring **fire** | a record is not a delivery |
+| #634 | does the **file** mention a window-naming predicate | does this **line** narrow the window | an `import` statement satisfies the file-level question for free |
+
+The `worktrees:prune` STANDING bucket is the fourth (#671): it exempts on **prefix** when the thing that makes a worktree safe to remove is its **state**, so a `pm/` tree finished a week ago is protected and an `agent/` tree finished a minute ago is not — and neither answer is about whether removing it is safe.
+
+**Every one of these passes review.** A reviewer reads "every site that enters a directory is classified", agrees that is the right rule, and does not re-derive whether the predicate expresses it. Mutation does: break the property and see whether the guard bites. **If it does not bite, the guard was watching its neighbour.**
+
+**A discovery sweep has the same failure in a worse form.** #634's own discovery regex carried a lookbehind meant to exclude a `--json` field list and excluded the *readers* instead — it found 3 of 4 real call sites, and 3-of-4 and 4-of-4 produce identical output. **A sweep whose predicate silently shrinks reports cleanly about a population it never examined.** The floor caught it, and a floor works because it asserts about the SEARCH rather than about the result. Give every sweep one.
+
+**And do not add a guard where naming a boundary is the honest answer.** #634 deliberately left `mergeStateStatus` unguarded: its occurrences are dominated by a recorded API fixture and by display code reporting the field as itself, and a rule demanding a narrowing predicate for `status: pr.mergeStateStatus` in a table would refuse the one use that is correct. `queue-table.mjs` carries the discipline in prose where it bites — *"behind is COUNTED, never read off `mergeStateStatus`"* — and that is the better instrument. **A guard that fires on the honest use teaches people to route around it.**
