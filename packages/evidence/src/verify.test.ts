@@ -218,26 +218,63 @@ test("a capture held inside a consent modal is REJECTED, though every other gate
 });
 
 // --- The same "contained" verdict, read EARLY off in-flight `/progress` marks -- #426 ---
+//
+// FIRST SHIPPED reading `structureCensus`, and #426's own fleet measurement refuted that build before it
+// merged: across nine real captures, `structureCensus`'s timestamp equalled the capture's TOTAL DURATION
+// in all nine -- it is the last mark of a capture, never an early one. `pageState` (`beforeProbe: "sweep"`,
+// a raw DOM census via `domCensus()`) answers the same question 80-90 seconds sooner on real pages, and
+// the fixtures below are the exact three verified captures that proved it, not invented numbers.
 
-/** The two marks `/progress`'s `phases` carries once the structural sweep and the census have both run --
- * `sweepEveryStructuralType`'s `structural` mark and `navigateByStructureThenAudit`'s `structureCensus`
- * mark, in the order a real capture actually produces them. */
-const inFlightMarks = (reachedHeadings: number, exposedHeadings: number, structuralAtMs = 8000) => [
-  { event: "structural", atMs: structuralAtMs, headings: reachedHeadings, landmarks: 0, formFields: 0, roundTrips: 4 },
-  { event: "structureCensus", atMs: structuralAtMs + 400, heading: exposedHeadings, names: [] },
+/** `runs/witness/2026-09-09T11-28-26-617Z-www-theregister-com.json`, `pageState`(sweep) and `structural`
+ * marks, verbatim (`runs/` is gitignored and unavailable in CI, the same reason #685's fixture above is
+ * pinned rather than read from disk). `--probe-forms` was off for all three captures in this section,
+ * deliberately -- #685 measured that flag causing its OWN navigation, and this fix is not about that one. */
+const THEREGISTER_MARKS = [
+  { event: "pageState", beforeProbe: "sweep", atMs: 19857, heading: 725, targetMatch: "matched" },
+  { event: "structural", atMs: 23575, headings: 1, landmarks: 0, formFields: 3, roundTrips: 4 },
 ];
 
-test("the register's consent wall reads 'contained' EARLY, off the same two marks the finished verdict uses", () => {
-  // Numerically the walled fixture above, but read mid-capture: only the two marks that decide it, not the
-  // whole finished capture. `captureReachedThePage(walled)` and this must agree -- same threshold, same
-  // numbers, read at two different times.
-  const verdict = earlyContainmentVerdict(inFlightMarks(1, 463));
-  assert.deepEqual(verdict, { decided: true, contained: true, observedAtMs: 8000 });
+/** `runs/witness/2026-09-09T11-32-02-886Z-www-hubspot-com.json`, verbatim. A positive from a DIFFERENT
+ * mechanism than theregister's consent wall (#398: "reached almost none of this page") -- proves the
+ * notice discriminates containment generally, not one specific cause. */
+const HUBSPOT_MARKS = [
+  { event: "pageState", beforeProbe: "sweep", atMs: 35875, heading: 99, targetMatch: "matched" },
+  { event: "structural", atMs: 45257, headings: 1, landmarks: 1, formFields: 0, roundTrips: 6 },
+];
+
+/** `runs/witness/2026-09-09T11-39-12-947Z-en-wikipedia-org.json`, verbatim -- the CONTROL. It is the
+ * SLOWEST of the three real captures (`structural` does not land until 117s) and must NOT read as
+ * contained: without this fixture, "fires on theregister" could not be told from "fires on anything
+ * slow", which is exactly the confound a duration-based check would have. */
+const WIKIPEDIA_CONTROL_MARKS = [
+  { event: "pageState", beforeProbe: "sweep", atMs: 64973, heading: 30, targetMatch: "matched" },
+  { event: "structural", atMs: 116984, headings: 29, landmarks: 8, formFields: 2, roundTrips: 40 },
+];
+
+test("theregister.com's real consent wall reads 'contained', off pageState+structural alone (1 of 725)", () => {
+  assert.deepEqual(earlyContainmentVerdict(THEREGISTER_MARKS),
+    { decided: true, contained: true, observedAtMs: 23575 });
 });
 
-test("a healthy in-flight capture reads 'not contained', not merely 'undecided'", () => {
-  const verdict = earlyContainmentVerdict(inFlightMarks(37, 38));
-  assert.deepEqual(verdict, { decided: true, contained: false });
+test("hubspot.com's real capture ALSO reads 'contained' (1 of 99) -- a different mechanism, same verdict", () => {
+  assert.deepEqual(earlyContainmentVerdict(HUBSPOT_MARKS),
+    { decided: true, contained: true, observedAtMs: 45257 });
+});
+
+test("the CONTROL -- wikipedia, slowest of the three -- reads 'not contained' (29 of 30)", () => {
+  // If this fired, the notice would be discriminating duration, not containment, and the two positives
+  // above would prove nothing.
+  assert.deepEqual(earlyContainmentVerdict(WIKIPEDIA_CONTROL_MARKS), { decided: true, contained: false });
+});
+
+test("observedAtMs is the LATER of the two marks -- 'the moment both inputs exist', #426's revised acceptance", () => {
+  // theregister's own marks arrive pageState-then-structural (19857, then 23575); a capture where the
+  // sweep somehow finished first must still report the later of the two honestly.
+  const reordered = [
+    { event: "structural", atMs: 5000, headings: 1 },
+    { event: "pageState", beforeProbe: "sweep", atMs: 30000, heading: 500, targetMatch: "matched" },
+  ];
+  assert.deepEqual(earlyContainmentVerdict(reordered), { decided: true, contained: true, observedAtMs: 30000 });
 });
 
 test("before EITHER mark has arrived, the verdict is UNDECIDED -- never read as cleared", () => {
@@ -245,35 +282,48 @@ test("before EITHER mark has arrived, the verdict is UNDECIDED -- never read as 
   // one state, or a caller watching for the FIRST decided verdict would print "not contained" the instant
   // polling starts, before the sweep has told it anything.
   assert.deepEqual(earlyContainmentVerdict([]), { decided: false });
-  // Only the sweep's own mark has arrived -- the census (the oracle) has not, so there is nothing yet to
-  // compare the reached count against.
   assert.deepEqual(
     earlyContainmentVerdict([{ event: "structural", atMs: 4000, headings: 1 }]),
     { decided: false },
-  );
-  // Only the census has arrived -- the sweep has not yet reported what it reached.
+    "only the sweep's own mark has arrived -- no denominator yet to compare it against");
   assert.deepEqual(
-    earlyContainmentVerdict([{ event: "structureCensus", atMs: 4000, heading: 463 }]),
+    earlyContainmentVerdict([{ event: "pageState", beforeProbe: "sweep", atMs: 4000, heading: 500 }]),
     { decided: false },
-  );
+    "only the denominator has arrived -- the sweep has not yet reported what it reached");
 });
 
-test("a small page cannot be judged early either, for the identical reason it cannot be judged at the end", () => {
-  // Reuses `reachedEnoughHeadings`'s own floor (CENSUS_HEADINGS_TO_JUDGE) rather than a second one -- a
-  // page with 3 headings reached 0 tells this heuristic nothing, exactly as it tells the finished-capture
-  // gate nothing.
-  assert.deepEqual(earlyContainmentVerdict(inFlightMarks(0, 3)), { decided: true, contained: false });
-});
-
-test("a suspect census (unconfirmed CDP target) reads as decided-and-clear early too, not as undecided", () => {
-  // `pageCensus` already treats a suspect census as "cannot judge" (-> `reachedEnoughHeadings` returns
-  // true), and that must reach this reader unchanged -- the census MARK has arrived, so this is a decided
-  // verdict, not a pending one.
-  const marks = [
+test("MUTATION TARGET: a pageState mark for the FOCUS probe is not mistaken for the sweep's own", () => {
+  // The calendly incident's own shape (#685): a LATER pageState mark can carry a corrupted, post-
+  // navigation count. Filtering on beforeProbe === 'sweep' specifically is what keeps this reader immune
+  // to that -- a mark for a different probe must never satisfy it.
+  const focusOnly = [
     { event: "structural", atMs: 5000, headings: 1 },
-    { event: "structureCensus", atMs: 5300, heading: 463, targetMatch: "fallback", candidates: 2 },
+    { event: "pageState", beforeProbe: "focus", atMs: 6000, heading: 500, targetMatch: "matched" },
   ];
-  assert.deepEqual(earlyContainmentVerdict(marks), { decided: true, contained: false });
+  assert.deepEqual(earlyContainmentVerdict(focusOnly), { decided: false });
+});
+
+test("a small page cannot be judged early, for the identical reason a small page cannot be judged at the end", () => {
+  // Reuses the SAME floor value `reachedEnoughHeadings` uses for the AX-tree population (re-derived, not
+  // imported -- see domReachedEnoughHeadings's own header) -- a page with 3 headings reached 0 tells this
+  // heuristic nothing.
+  const small = [
+    { event: "pageState", beforeProbe: "sweep", atMs: 4000, heading: 3, targetMatch: "matched" },
+    { event: "structural", atMs: 4500, headings: 0 },
+  ];
+  assert.deepEqual(earlyContainmentVerdict(small), { decided: true, contained: false });
+});
+
+test("MUTATION TARGET: an unconfirmed pageState target reads as UNDECIDED, never as a false verdict either way", () => {
+  // #685's own lesson, applied defensively: a fallback CDP target must never be trusted as a real
+  // denominator. Unlike `structureCensus` (where a fallback still gets a verdict via `censusTargetIsSuspect`'s
+  // more permissive rule), pageState's fallback here means "cannot judge" -- there is no later poll that
+  // could improve this single mark, so refusing is the only honest answer.
+  const suspectPageState = [
+    { event: "pageState", beforeProbe: "sweep", atMs: 4000, heading: 500, targetMatch: "fallback", candidates: 2 },
+    { event: "structural", atMs: 4500, headings: 1 },
+  ];
+  assert.deepEqual(earlyContainmentVerdict(suspectPageState), { decided: false });
 });
 
 test("a healthy capture of a big page is accepted", () => {

@@ -43,6 +43,16 @@ a record that no longer exists reads identically to one that never existed, and 
 a wrong conclusion about a schema change. When a citation resolves to nothing, say "the record is gone"
 rather than "there was no record"; they need opposite work (#340).
 
+**A fourth example, 2026-09-09: read the artefact, not the census of it.** Three sessions, this one
+included, told the board that calendly had served a near-empty page, from one field of one capture
+(`structureCensus: heading 1, link 5, tabbable 11`). One worker read all three capture files before
+writing a sentence: the structural sweep had read the full page identically every time (44 headings),
+and the census had been taken after the tool's own form probe navigated to Google's sign-in page,
+which `routeChange` recorded. The correction posted to the board at 11:00Z was itself corrected at
+11:05Z. A claim about a page cites the capture file and the field, and a claim that withdraws a
+published figure gets at least the scrutiny a claim that confirms one gets, because withdrawing is
+the direction where being wrong costs more.
+
 ## The roster
 
 | role | agent name | file | reports to |

@@ -178,6 +178,13 @@ export function formatDoubtMessage(doubt: string, detail: string): string {
  * and gone for others on a real page, so a notice that does not say WHEN it looked inherits that
  * ambiguity instead of resolving it.
  *
+ * **Deliberately NOT consent-specific, corrected before this shipped rather than after.** The first draft
+ * named a consent overlay outright; #426's own fleet validation fired the identical notice on hubspot.com,
+ * a positive from a different mechanism entirely (#398's own "reached almost none of this page"). A
+ * consent-specific sentence would have been wrong on that page while being right on theregister.com's real
+ * consent wall — so the wording states only what both mechanisms share and nothing this early reader
+ * cannot actually tell apart.
+ *
  * Never a rejection, and cannot become one from here — `capture-client.mjs`'s `onProgress` return value
  * is unused, so nothing this prints can touch whether the capture continues. It fires once per capture
  * (`cli.ts`'s `captureViaWorker` tracks that) precisely so five minutes of silence does not read as five
@@ -185,8 +192,7 @@ export function formatDoubtMessage(doubt: string, detail: string): string {
  */
 export function formatEarlyContainmentNotice(observedAtMs: number): string {
   const seconds = (observedAtMs / 1000).toFixed(1);
-  return `NOTICE (as of ${seconds}s into this capture — not the final result): the screen reader had `
-    + `reached almost none of this page's headings at that point, the shape a consent overlay Escape `
-    + `could not dismiss leaves. The capture is still running; this may still clear.`
+  return `NOTICE (as of ${seconds}s into this capture — not the final result): the screen reader has `
+    + `reached almost none of this page. The capture is still running; this may still clear.`
     + `${remediationTail("contained")}`;
 }

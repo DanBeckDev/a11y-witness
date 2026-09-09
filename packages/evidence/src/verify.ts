@@ -1287,13 +1287,28 @@ export function captureDoubt(capture: CapturedAnnouncements, title: string | und
 
 /**
  * `captureDoubt`'s "contained" half, read off an IN-FLIGHT capture's marks instead of a finished one —
- * #426's second half. `/progress`'s `phases` array (`server.mjs`'s `respondWithProgress`, #627) already
- * carries both numbers this needs — `structureCensus`'s exposed heading count and `structural`'s reached
- * count — and both are marked well before a capture's later probes (route-change, forms) run, because
- * `sweepEveryStructuralType` marks `structural` mid-sweep and `navigateByStructure` takes its one census
- * reading right after. Nothing new is recorded to answer this: it is `reachedEnoughHeadings` applied to
- * the SAME two numbers `captureReachedThePage` would read from the finished result, so a future change to
- * the threshold has exactly one place to happen, never two that could drift apart.
+ * #426's second half.
+ *
+ * **First shipped reading `structureCensus`, and #426's own measurement refuted that build before it was
+ * ever merged.** `structureCensus` is `censusBeforeNavigating`'s own mark, and across nine real captures
+ * its timestamp equalled the capture's TOTAL DURATION in all nine — it is the last thing a capture does,
+ * not an early one, so a verdict waiting on it is correct and never early. Three further real captures
+ * (`theregister.com`, `hubspot.com`, `en.wikipedia.org` as a control that must NOT fire) confirmed a
+ * different mark answers the same question far sooner: `markPageState`'s `pageState` mark, recorded with
+ * `beforeProbe: "sweep"` immediately before the structural sweep runs (`capture-probes.mjs`), carries a
+ * raw DOM element count via `domCensus()` — a real denominator, available at 19.9 s / 35.9 s / 65.0 s
+ * against `structureCensus`'s 115 s / 208 s / 424 s on the same three captures. Both readings correctly
+ * discriminated theregister (1 of 725) and hubspot (1 of 99) from wikipedia's control (29 of 30) — the
+ * SAME separation, read 80–90 seconds sooner. Captures on disk:
+ * `runs/witness/2026-09-09T11-28-26-617Z-www-theregister-com.json`,
+ * `runs/witness/2026-09-09T11-32-02-886Z-www-hubspot-com.json`,
+ * `runs/witness/2026-09-09T11-39-12-947Z-en-wikipedia-org.json`.
+ *
+ * **The DOM count and the AX-tree count are different populations, not a substitution** — theregister
+ * reads 725 (DOM) against 471 (AX tree), hubspot 99 against 28 — so this does NOT reuse
+ * `reachedEnoughHeadings`; see `domReachedEnoughHeadings` for its own, separately-justified threshold.
+ * `structural`'s reached count is unchanged: the sweep's own count is the same population regardless of
+ * which denominator judges it.
  *
  * `wrong-content` has no early equivalent here on purpose — it needs a title comparison across retries
  * this file's own retry loop (`recaptureUntilItReadsThePage`, `cli.ts`) only completes once the capture is
@@ -1302,7 +1317,10 @@ export function captureDoubt(capture: CapturedAnnouncements, title: string | und
  * `decided: false` until BOTH marks have arrived, and that must stay distinct from "decided, not
  * contained" — the same rule `census.heading === 0` needed against "the probe has not run yet"
  * (CLAUDE.md's own record of that incident). A caller must never read "no doubt yet" as "cleared": the
- * verdict can still flip to `contained` once the marks do arrive.
+ * verdict can still flip to `contained` once the marks do arrive. `observedAtMs` is the LATER of the two
+ * marks' timestamps — "the moment both inputs exist" (#426's own revised acceptance; "within ~60s" was
+ * withdrawn because wikipedia's own control needed 117s on a page that is fine), not the earlier one,
+ * since the verdict genuinely could not have been reached before that.
  */
 export type EarlyContainmentVerdict =
   | { decided: false }
@@ -1318,27 +1336,61 @@ function structuralMark(phases: readonly unknown[]): { headings?: unknown; atMs?
 }
 
 /**
- * Has a `structureCensus` mark arrived at all — regardless of whether it turns out usable. `pageCensus`
- * collapses "not yet arrived" and "arrived but suspect" into the same `null`, which is right for a
- * FINISHED capture (both mean "cannot judge", so `reachedEnoughHeadings` treats them alike) but wrong
- * here, where the two need different verdicts: "not yet" must stay `decided: false` rather than reading
- * as an early "not contained".
+ * `markPageState`'s mark for the FIRST position-dependent probe — "sweep" under the default `probeOrder`
+ * — the DOM census taken immediately before it, before anything has had a chance to activate or navigate.
+ * Filtered on `beforeProbe === "sweep"` specifically rather than "the first `pageState` mark", because a
+ * non-default `probeOrder` (focus-first) would otherwise pair the sweep's reach against a census taken
+ * before a DIFFERENT probe — a mismatch of exactly the kind #685 found between `structural` and a census
+ * taken after something else had run.
  */
-function censusMarkArrived(phases: readonly unknown[]): boolean {
-  return phases.some(
-    (m) => typeof m === "object" && m !== null && (m as { event?: unknown }).event === "structureCensus",
+function pageStateBeforeSweep(phases: readonly unknown[]): Record<string, unknown> | undefined {
+  return phases.find(
+    (m): m is Record<string, unknown> =>
+      typeof m === "object" && m !== null && (m as { event?: unknown; beforeProbe?: unknown }).event === "pageState"
+      && (m as { beforeProbe?: unknown }).beforeProbe === "sweep",
   );
+}
+
+/**
+ * The floor and ratio below are the SAME numbers `reachedEnoughHeadings` uses for the AX-tree population
+ * (`CENSUS_HEADINGS_TO_JUDGE = 20`, `MIN_HEADINGS_REACHED = 0.1`) — re-derived rather than imported, per
+ * #426's own finding that the DOM count and the AX-tree count are different populations (theregister.com's
+ * DOM census reads 725 headings against the AX tree's 471; hubspot's reads 99 against 28), so a future
+ * change to one threshold must not silently move the other. Kept at the same numbers because they express
+ * a judgment — "a page is substantial enough to judge, and reaching under a tenth of it is a real
+ * shortfall" — that does not depend on which vocabulary counts the headings, not because three real pages
+ * were fitted to them: theregister (1/725 ≈ 0.1%), hubspot (1/99 ≈ 1%) and wikipedia's control (29/30 ≈
+ * 97%) are three points, not a calibration, and the separation between them is wide enough that this
+ * threshold — or a substantially different one — would have read all three the same way. Revisit with
+ * more real captures before trusting this as validated rather than plausible.
+ */
+const DOM_HEADINGS_TO_JUDGE = 20;
+const MIN_DOM_HEADINGS_REACHED = 0.1;
+
+function domReachedEnoughHeadings(exposed: number | undefined, reached: number): boolean {
+  if (typeof exposed !== "number" || exposed < DOM_HEADINGS_TO_JUDGE) return true;
+  return reached >= exposed * MIN_DOM_HEADINGS_REACHED;
 }
 
 export function earlyContainmentVerdict(phases: readonly unknown[]): EarlyContainmentVerdict {
   const structural = structuralMark(phases);
-  if (!structural || !censusMarkArrived(phases)) return { decided: false };
+  const pageState = pageStateBeforeSweep(phases);
+  if (!structural || !pageState) return { decided: false };
+  // #685's own lesson, applied here defensively rather than because it has been observed on this mark:
+  // an unconfirmed CDP target must never be trusted as a real denominator, whichever census carries it.
+  // `pageState` is taken before any probe can navigate, but a page can present this ambiguity on its own
+  // (calendly's own real captures did, with no navigation involved) — so a fallback target here means
+  // "cannot judge yet", never a false "not contained" or a false "contained".
+  if (pageState.targetMatch === "fallback") return { decided: false };
   const reached = typeof structural.headings === "number" ? structural.headings : 0;
-  const census = pageCensus({ diagnostics: phases as unknown[] } as CapturedAnnouncements);
-  if (reachedEnoughHeadings(census?.heading, reached)) return { decided: true, contained: false };
+  const exposed = typeof pageState.heading === "number" ? pageState.heading : undefined;
+  if (domReachedEnoughHeadings(exposed, reached)) return { decided: true, contained: false };
   return {
     decided: true, contained: true,
-    observedAtMs: typeof structural.atMs === "number" ? structural.atMs : 0,
+    observedAtMs: Math.max(
+      typeof structural.atMs === "number" ? structural.atMs : 0,
+      typeof pageState.atMs === "number" ? pageState.atMs : 0,
+    ),
   };
 }
 
