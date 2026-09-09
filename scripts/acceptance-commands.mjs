@@ -726,11 +726,52 @@ export function extractRefutationSection(body) {
  * verbatim to bash -- the backticks stayed attached, so the file check saw `` `npx `` as a token and
  * reported it missing for a command that runs perfectly. Stripped only when they wrap the WHOLE command
  * (start and end), never partial backticks inside one, which are the author's own quoting to preserve.
+ *
+ * #658: A CLOSING BACKTICK IS ALSO AN UNAMBIGUOUS END-OF-COMMAND MARKER ON ITS OWN, even when it is not
+ * the LAST character of the line -- "`npx tsx --test x.test.ts` — 12/12 passing, was 7" used to fail the
+ * whole-line-wrap test above (the backtick was no longer at the end), so the leading backtick stayed
+ * attached and became part of the executable name: `is not a command (no executable "`npx")`, a message
+ * that sends a reader to check whether npx is installed, never to suspect a stray backtick. A line that
+ * OPENS with a backtick and has a later closing one is still exactly the #419 shape; everything after the
+ * close is discarded the same way `extractSection`'s own inline-command form already discards everything
+ * before a header's colon -- a boundary the author drew, not text this parser gets to keep by default.
  * @param {string} command
  * @returns {string}
  */
 function unwrapBackticks(command) {
-  return /^`[^`]+`$/.test(command) ? command.slice(1, -1) : command;
+  if (/^`[^`]+`$/.test(command)) return command.slice(1, -1);
+  const trailingProseAfterClose = /^`([^`]+)`/.exec(command.trim());
+  return trailingProseAfterClose ? trailingProseAfterClose[1] : command;
+}
+
+// #658: TRAILING PROSE AFTER AN EM-DASH (U+2014 "—", never the ASCII "--") IS COMMENTARY, NEVER PART OF
+// THE COMMAND -- for a BARE line with no backticks at all, which has no delimiter as unambiguous as a
+// closing backtick. Real Acceptance lines write their own result this way --
+// "npx tsx --test x.test.ts — 12/12 passing" -- and a BARE command in this shape used to classify
+// `runnable` with the prose going straight into argv: the command RAN, for real, with
+// "— 12/12 passing" as extra arguments, and failed on a file that does not exist -- a genuine command
+// failure that blames the test rather than the body that produced it, which is the more expensive half of
+// #658 and the one that was not noticed first.
+//
+// Deliberately NOT done inside `unwrapBackticks`/`extractSection` -- `heading-title-not-command.test.ts`
+// pins that a bare line's raw text (including one that happens to contain an em-dash, like a literal
+// command named "none — nothing to run") survives EXTRACTION unchanged, and that only `classifyCommand`
+// decides whether it is runnable. So this strips at the point a command is actually turned into argv and
+// run, in `runOneCommand` below, never at extraction -- the reported line still shows the ORIGINAL text
+// so an author can see exactly what was written, while only the truncated form is classified and executed.
+//
+// The em-dash is the safe, unambiguous marker for THIS purpose: a real shell command practically never
+// contains that exact Unicode character, unlike the ASCII `--`, which is common, real flag syntax
+// (`npm run build -- --production`) and must NEVER be treated as a delimiter here -- truncating there
+// would silently drop a command's own arguments.
+const TRAILING_COMMENTARY = /\s+—.*$/;
+
+/**
+ * @param {string} command
+ * @returns {string}
+ */
+function stripTrailingCommentary(command) {
+  return command.replace(TRAILING_COMMENTARY, "").trimEnd();
 }
 
 /**
@@ -838,7 +879,12 @@ function commandLinesAfter(lines, headerIndex) {
  * @returns {{ line: string, ok: boolean }}
  */
 function runOneCommand(command, run, { prefix, isPass, commandExists: exists, capabilities }) {
-  const classification = classifyCommand(command, { commandExists: exists, capabilities, section: prefix });
+  // #658: truncate for CLASSIFICATION AND EXECUTION only. `command` itself is never reassigned, so every
+  // reported line below still shows the ORIGINAL text an author wrote, even on the RAN branch (where
+  // "executable" and "command" can now legitimately differ) -- seeing exactly what was written next to
+  // what actually ran is what makes this line something a reader can act on, per #655's own rule.
+  const executable = stripTrailingCommentary(command);
+  const classification = classifyCommand(executable, { commandExists: exists, capabilities, section: prefix });
   if (classification.verdict === "refused") {
     return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
   }
@@ -854,11 +900,11 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists, ca
   // CHECKED BEFORE RUNNING, never inferred from the exit code -- an unresolved test file/glob is
   // exactly the shape whose exit code cannot be trusted (#353's fifth hazard). Failing this here means
   // the real command never runs at all: there is nothing honest it could report.
-  const fileCheck = testFileArgumentsResolve(command);
+  const fileCheck = testFileArgumentsResolve(executable);
   if (!fileCheck.ok) {
     return { line: `${prefix}: RAN ${command} -> fail (matched no file: ${fileCheck.missing.join(", ")})`, ok: false };
   }
-  const code = run(command);
+  const code = run(executable);
   const passed = isPass(code);
   const verb = prefix === "ACCEPTANCE"
     ? (passed ? "pass" : "fail")
