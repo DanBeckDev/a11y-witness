@@ -52,6 +52,9 @@ const GIT_ERROR_STATUS = 128;
 /** Enough to recognise a redaction or a rename; the full list is the diff. */
 const GAINED_SHOWN = 12;
 
+/** Long enough to recognise a redaction or an import; the full line is in the file. */
+const GAINED_LINE_WIDTH = 110;
+
 /**
  * The conflicted regions of a `--diff3` merge, as text, so a refusal can SHOW what it refused rather than
  * counting it. "3 conflicts" sends the reader to open the file; the region tells them whether main's line
@@ -169,7 +172,7 @@ function main() {
   const gained = linesGained(texts.base, texts.main);
   process.stdout.write(`  main has gained ${gained.length} line(s) in this file since the base`
     + `${gained.length ? ":" : "."}\n`);
-  for (const line of gained.slice(0, GAINED_SHOWN)) process.stdout.write(`    + ${line.slice(0, 110)}\n`);
+  for (const line of gained.slice(0, GAINED_SHOWN)) process.stdout.write(`    + ${line.slice(0, GAINED_LINE_WIDTH)}\n`);
   if (gained.length > GAINED_SHOWN) process.stdout.write(`    ... and ${gained.length - GAINED_SHOWN} more\n`);
   process.stdout.write("\n");
 
