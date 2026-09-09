@@ -17,6 +17,10 @@
       "types": "./dist/wcag.d.ts",
       "default": "./dist/wcag.js"
     },
+    "./document-identity": {
+      "types": "./dist/document-identity.d.ts",
+      "default": "./dist/document-identity.js"
+    },
     "./conformance": {
       "types": "./dist/conformance.d.ts",
       "default": "./dist/conformance.js"
