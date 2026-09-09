@@ -46,7 +46,7 @@ import { newestPerName } from "./newest-check-run.mjs";
 
 export const EXIT = { EXAMINED: 0, INCOMPLETE: 2 };
 
-/** How many merged PRs' heads section 4 examines. Ten is what the chairman's own list shows. */
+/** How many commits on main section 4 examines. Ten is what the chairman's own list shows. */
 export const MERGED_HEADS_EXAMINED = 10;
 
 /** A PR whose head has not moved in this long, while it is behind, is stalled rather than waiting. */
@@ -110,8 +110,11 @@ export function prRow(pr, behind, now) {
  * Counted BY NAME rather than by PR, because the question is "which check is red on the list" -- one
  * check red on ten PRs and ten checks red on one PR are different faults and must not print the same.
  *
- * @param {{number: number, checks: {name: string, conclusion: string}[] | null}[]} merged
- * @returns {{byName: Map<string, number[]>, unreadable: number[]}}
+ * A commit's `number` is NULL when nothing merged it -- a direct push to main is a real thing and its red
+ * check is exactly the kind this section exists to surface, so it is carried rather than dropped.
+ *
+ * @param {{number: number | null, sha?: string, checks: {name: string, conclusion: string}[] | null}[]} merged
+ * @returns {{byName: Map<string, (number | null)[]>, unreadable: (number | null)[]}}
  */
 export function nonSuccessByName(merged) {
   const byName = new Map();
@@ -170,15 +173,66 @@ export function openPRs() {
  * difference between "a check has been red all morning" and "a check was red once, months ago".
  */
 export function recentlyMerged(limit = MERGED_HEADS_EXAMINED) {
-  const prs = ask(() => JSON.parse(gh(["pr", "list", "--state", "merged", "--limit", String(limit),
-    "--json", "number,statusCheckRollup,mergedAt"])));
-  if (!Array.isArray(prs)) return null;
-  return prs.map((/** @type {any} */ pr) => ({
-    number: pr.number,
-    mergedAt: pr.mergedAt ?? null,
-    checks: newestPerName(pr.statusCheckRollup ?? [])
-      .map((c) => ({ name: c.name, conclusion: c.conclusion ?? "" })),
+  const commits = mergeCommitsOnMain(limit);
+  if (commits === null) return null;
+  return commits.map((commit) => ({
+    number: commit.pr,
+    sha: commit.sha,
+    mergedAt: commit.date,
+    checks: checksOnSha(commit.sha),
   }));
+}
+
+/**
+ * The last N commits on `main`'s FIRST-PARENT chain, with the PR each merge names.
+ *
+ * THIS USED TO READ `gh pr list --state merged --json statusCheckRollup`, WHICH IS A DIFFERENT
+ * POPULATION AND ANSWERS A DIFFERENT QUESTION. A merged PR's `headRefOid` is the BRANCH TIP BEFORE THE
+ * MERGE; the merge commit is a different sha. So the section reported "did this PR's own CI pass before
+ * it merged" while its heading -- and the chairman reading it -- asked "what is red on main".
+ *
+ * Measured 2026-09-09: `ready-label-audit` failed on five merged heads from 12:11Z and section 4 printed
+ * NONE for three consecutive tables. It runs on the `issues` event against main's tip, so its check-runs
+ * attach to MERGE COMMITS (861ffbb7, bdf9c0ba) -- and `gh pr list --json headRefOid` matches neither.
+ * **It was not missed; it was structurally unreachable.** Every post-merge workflow, every scheduled run
+ * pinned to a sha, and every non-code event was equally invisible, which is the entire class of check
+ * that CAN be red on main without blocking anything -- the class this section exists to surface.
+ *
+ * @param {number} limit
+ * @returns {{sha: string, pr: number | null, date: string | null}[] | null}
+ */
+export function mergeCommitsOnMain(limit, { run = defaultGitLog } = {}) {
+  const log = ask(() => run(limit));
+  if (log === null) return null;
+  return log.trim().split("\n").filter(Boolean).map((line) => {
+    const [sha, date, subject] = line.split("\t");
+    const named = /Merge pull request #(\d+)/.exec(subject ?? "");
+    return { sha, date: date ?? null, pr: named ? Number(named[1]) : null };
+  });
+}
+
+/** @param {number} limit */
+function defaultGitLog(limit) {
+  return execFileSync("git",
+    ["log", "--first-parent", "-n", String(limit), "--format=%H%x09%cI%x09%s", "origin/main"],
+    { encoding: "utf8", env: sandboxGitEnv() });
+}
+
+/**
+ * Every check-run on one sha, newest per name. `null` when the lookup fails, never an empty list -- an
+ * unreadable sha and a sha with no checks are different facts and the caller reports them differently.
+ *
+ * @param {string} sha
+ * @returns {{name: string, conclusion: string}[] | null}
+ */
+export function checksOnSha(sha) {
+  const raw = ask(() => gh(["api", `repos/${REPO}/commits/${sha}/check-runs`, "--paginate",
+    "--jq", ".check_runs[] | {name, conclusion, completedAt: .completed_at}"]));
+  if (raw === null) return null;
+  const runs = raw.trim().split("\n").filter(Boolean).flatMap((line) => {
+    try { return [JSON.parse(line)]; } catch { return []; }
+  });
+  return newestPerName(runs).map((c) => ({ name: c.name, conclusion: c.conclusion ?? "" }));
 }
 
 /**
@@ -529,7 +583,7 @@ export function render({ trunk, prs, merged, now, fetched = true, required = nul
       body: { lines: renderStalled(prs ?? []), incomplete: false },
     },
     {
-      heading: [`4. NON-SUCCESS CHECKS ON THE LAST ${MERGED_HEADS_EXAMINED} MERGED PR HEADS, BY NAME`,
+      heading: [`4. NON-SUCCESS CHECKS ON THE LAST ${MERGED_HEADS_EXAMINED} COMMITS ON MAIN, BY NAME`,
         "   (the view the chairman reads. A check red here blocks nothing and is therefore the red people",
         "    stop reading -- which is exactly how one sat on seven merged PRs for ninety minutes.)"].join("\n"),
       body: renderMergedChecks(merged, required),
