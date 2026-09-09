@@ -6,9 +6,18 @@
     {
       "lane": "the pipeline",
       "owner": "dispatcher",
-      "branchPrefixes": ["dispatcher/", "revert/"],
-      "paths": [".github/workflows/"],
-      "why": "trunk health and the merge queue. A workflow edited by a session that is not watching the queue is a red check nobody owns -- measured 2026-09-08, when a pull_request trigger attached a failing audit to seven merged PRs and sat red for ninety minutes before anyone in the org read the view the chairman reads. revert/ is here because trunk-guard's own decideRevert opens those branches and they carry whatever the reverted commit touched."
+      "branchPrefixes": [
+        "dispatcher/",
+        "revert/"
+      ],
+      "paths": [
+        ".github/workflows/"
+      ],
+      "why": "trunk health and the merge queue. A workflow edited by a session that is not watching the queue is a red check nobody owns -- measured 2026-09-08, when a pull_request trigger attached a failing audit to seven merged PRs and sat red for ninety minutes before anyone in the org read the view the chairman reads. revert/ is here because trunk-guard's own decideRevert opens those branches and they carry whatever the reverted commit touched.",
+      "except": [
+        ".github/workflows/consumer-gate.yml"
+      ],
+      "exceptWhy": "A GENERATED file whose SOURCE lives outside the lane is not the lane's to own. consumer-gate.yml is regenerated from README.md by scripts/generate-consumer-gate.mjs, so its content is contract work that happens to land in this directory -- the pipeline does not decide what it says, and the cost of changing it is visible from the generator's seat rather than from the merge queue, which is the whole test for whether a path belongs to a lane. Added 2026-09-09 after the flat prefix would have refused #558 and forced its author to write a Lane-exception for a rule that was mis-stated: making somebody paper over a wrong rule with a body line is the guard-people-route-around failure the exception was designed to prevent, arriving one door along."
     }
   ]
 }
