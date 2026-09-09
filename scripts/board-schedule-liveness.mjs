@@ -201,6 +201,84 @@ const STALE_AFTER_DAYS = 3;
 const DAY_MS = 86_400_000;
 
 /** Exit codes, and the third is the one that matters. */
+/**
+ * HOW LONG SINCE THIS WATCHDOG ITSELF LAST RAN, in hours -- `null` when the answer could not be had.
+ *
+ * #272. THIS CHECK RUNS ON `push` AND ONLY ON `push`, deliberately: a watchdog moved onto a cron is
+ * disabled by the same repository inactivity it watches for, so `push` is the one trigger that cannot be
+ * silenced by the condition it exists to detect. `board-liveness.test.ts` pins the absence of a
+ * `schedule:` key for that reason.
+ *
+ * The cost of that choice is the gap this function closes: on a day nobody pushes to main, this check
+ * does not run, and a missing edition goes unreported until the next push. Not noticed and nothing wrong
+ * look identical from the outside -- which is the exact failure this whole file exists to end, turned on
+ * the file itself.
+ *
+ * SO THE WATCHDOG REPORTS ITS OWN SILENCE rather than being given a second trigger. Two alternatives were
+ * refused and the reasons are worth keeping: a `schedule:` contradicts the header and the pinned test,
+ * and a second event trigger (`issues`, say) buys a workflow firing on every label change -- measured on
+ * `ready-label-audit` the same day at 200 runs, 175 cancelled, 0 succeeded -- to cover a gap that has not
+ * occurred once: `git log origin/main` shows a push on every one of the last 15 days.
+ *
+ * A number in the report costs one call and turns an unobservable absence into a printed line.
+ *
+ * @param {(args: string[]) => string} run
+ * @param {Date} now
+ * @returns {number | null}
+ */
+export function hoursSincePreviousRun(run, now) {
+  /** @type {{ createdAt?: string }[]} */
+  let runs;
+  try {
+    runs = JSON.parse(run(["run", "list", "--repo", REPO, "--workflow", "board-liveness.yml",
+      "--json", "createdAt", "--limit", "2"]));
+  } catch {
+    return null;
+  }
+  // INDEX 1, NOT 0. The newest run is THIS one -- the check is reporting on itself while it runs -- so
+  // index 0 would always answer "zero hours since the last run", a number that is true, useless, and
+  // indistinguishable from a healthy answer. The one before it is the question.
+  const previous = Array.isArray(runs) ? runs[1]?.createdAt : null;
+  if (!previous) return null;
+  const hours = (now.getTime() - new Date(previous).getTime()) / 3_600_000;
+  return Number.isFinite(hours) ? hours : null;
+}
+
+/**
+ * The line the report carries about the WATCHDOG rather than about the board -- `null` when there is
+ * nothing worth saying.
+ *
+ * Past the threshold it reads as a warning about this check, because a reader who sees "editions are
+ * arriving" has no way to know the sentence is a day old. Under it, the gap is stated plainly and without
+ * alarm: a number a reader can weigh beats a reassurance they cannot.
+ *
+ * UNREADABLE SAYS SO. A failed lookup is not "it ran recently" -- the same rule this file applies to
+ * every other absence.
+ *
+ * @param {number | null} hours @param {number} [thresholdHours]
+ * @returns {string | null}
+ */
+export function watchdogSilenceLine(hours, thresholdHours = WATCHDOG_QUIET_HOURS) {
+  if (hours === null) {
+    return "This check could not read its own run history, so how long it has been silent is UNKNOWN. "
+      + "Unknown is not recent.";
+  }
+  const rounded = Math.round(hours);
+  if (hours >= thresholdHours) {
+    return `WARNING ABOUT THIS CHECK, NOT ABOUT THE BOARD: it last ran ${rounded}h ago. It runs on push `
+      + "to main and nothing else, so a quiet spell here means nobody pushed -- and a missing edition in "
+      + "that window would have gone unreported until now.";
+  }
+  return `This check last ran ${rounded}h ago.`;
+}
+
+/**
+ * How long this check may be silent before its own quiet is worth a warning. 26 hours rather than 24:
+ * the board publishes daily, so a full day plus a margin is the first gap that cannot be explained by
+ * ordinary timing drift between one push and the next.
+ */
+const WATCHDOG_QUIET_HOURS = 26;
+
 export const EXIT = { ALIVE: 0, STOPPED: 1, CANNOT_TELL: 2 };
 
 /** The first line every published edition carries: `# Board report — 2026-09-06`. */
@@ -383,6 +461,10 @@ function main() {
     { lastDay: newestEditionDay(bodies), now: new Date(), hasSummary: summaryExists });
   const say = verdict.code === EXIT.ALIVE ? console.log : console.error;
   say(`${verdict.headline}${verdict.detail ? `\n  ${verdict.detail}` : ""}`);
+  // PRINTED IN EVERY STATE, including ALIVE. A reader who sees "editions are arriving" has no way to
+  // know the sentence is a day old, and that is exactly the reader this line is for.
+  const silence = watchdogSilenceLine(hoursSincePreviousRun(gh, new Date()));
+  if (silence) say(`  ${silence}`);
   if (verdict.code === EXIT.STOPPED && argv.includes("--post")) postOnce(issue, verdict);
   process.exit(verdict.code);
 }
