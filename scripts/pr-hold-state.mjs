@@ -97,6 +97,21 @@ export function armabilityOf({ labels, holdReason = null }) {
 export const REARM_LABEL = "rearm-on-release";
 
 /**
+ * HAS THIS PR ALREADY MERGED? Both verdicts need it, and neither could see it before 2026-09-09.
+ *
+ * `state` comes back `MERGED` from `gh pr view --json state` and `closed` from REST's `pulls/N`, which is
+ * why both spellings are checked and why REST's `merged` boolean is preferred when present: `closed`
+ * alone does not distinguish a merged PR from one somebody shut.
+ *
+ * @param {{ state?: unknown, merged?: unknown } | null | undefined} pr
+ * @returns {boolean}
+ */
+function isMerged(pr) {
+  if (pr?.merged === true) return true;
+  return String(pr?.state ?? "").toUpperCase() === "MERGED";
+}
+
+/**
  * ARM IS VERIFIED FROM THE STATE, NEVER THE EXIT CODE -- the mirror of `disarmVerdict` below, and it
  * exists because arming has the SAME asymmetry pointed the other way.
  *
@@ -105,10 +120,18 @@ export const REARM_LABEL = "rearm-on-release";
  * UNARMED with nothing in the log, and an unarmed PR is indistinguishable from an armed one until the
  * queue fails to take it. Reading `autoMergeRequest` back is what caught it.
  *
- * @param {{ autoMergeRequest?: unknown } | null} prAfterArm
+ * @param {{ autoMergeRequest?: unknown, state?: unknown, merged?: unknown } | null} prAfterArm
  * @returns {{ armed: boolean, reason: string }}
  */
 export function armVerdict(prAfterArm) {
+  // MERGED IS NOT UNARMED, the mirror of the rule in `disarmVerdict` below. A PR that merged between the
+  // arm and the read-back has a null `autoMergeRequest`, and reporting that as "still unarmed" sends the
+  // operator to re-arm something that has already landed. Wrong in the alarming direction rather than the
+  // dangerous one, but wrong, and the fix is the same field.
+  if (isMerged(prAfterArm)) {
+    return { armed: true, reason: "it MERGED -- auto-merge did its job between the arm and this read, "
+      + "which is why `autoMergeRequest` reads null" };
+  }
   if (prAfterArm?.autoMergeRequest != null) {
     return { armed: true, reason: "auto-merge is back on: `autoMergeRequest` reads non-null" };
   }
@@ -132,10 +155,24 @@ export function armVerdict(prAfterArm) {
  * A hold that labelled and failed to disarm is the most dangerous of the three states, because it LOOKS
  * held.
  *
- * @param {{ autoMergeRequest: unknown }} prAfterDisarm as read back from the API
+ * @param {{ autoMergeRequest?: unknown, state?: unknown, merged?: unknown } | null} prAfterDisarm
+ *   as read back from the API
  * @returns {{ disarmed: boolean, reason: string }}
  */
 export function disarmVerdict(prAfterDisarm) {
+  // MERGED IS NOT DISARMED, AND THIS IS THE ONE THAT WOULD HAVE HURT. `autoMergeRequest` reads null on a
+  // MERGED PR as surely as on a disarmed one -- measured on #845 at 17:25:53Z, where `arm-pr` said
+  // "armed", the PR merged four seconds later, and three separate reads then reported NOT-ARMED. Both
+  // fields are null and neither says why.
+  //
+  // Read as "disarmed", that makes `takeHold` print `#N is now held by X` about a PR that has already
+  // merged: a hold reported as successful over something nobody can hold any more. Wrong in the
+  // reassuring direction, which is the only direction that matters in a state somebody acts on.
+  if (isMerged(prAfterDisarm)) {
+    return { disarmed: false, reason: "THIS PR HAS ALREADY MERGED, so there is nothing to hold. "
+      + "`autoMergeRequest` reads null on a merged PR exactly as it does on a disarmed one, and treating "
+      + "that as a successful disarm would report a hold over something that no longer exists." };
+  }
   if (prAfterDisarm?.autoMergeRequest == null) {
     return { disarmed: true, reason: "auto-merge is off: `autoMergeRequest` is null" };
   }
