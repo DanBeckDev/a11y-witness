@@ -577,6 +577,20 @@ The citation is the half that makes the first checkable rather than remembered. 
 the queue **cannot read at all**: `auto-arm` arms a non-draft, green, unheld PR and `update-branch`
 carries it, and neither looks at the row the PR declares.
 
+**The queue has two members, and both write.** `auto-arm` merges and `update-branch` pushes to a PR's own
+branch, so "the queue reads a green PR and not a row's comments" is true of the arming and of the
+carrying. That second half has its own benign collision: a hand-carry and the sweep can act on one branch
+at once, with no shared view of who is mid-flight. Measured 2026-09-09, the push was refused —
+
+```
+cannot lock ref ... is at c9d164ba but expected d73d0baf
+```
+
+— and it resolved correctly **only because the ref-lock refused and the refusal was read rather than
+retried**. `--force-with-lease` there would have discarded the sweep's carry and landed a branch behind
+main while looking current: the same two-actors-one-object shape as the ruling above, with git's own lock
+standing in for the hold.
+
 ### What each of these is deliberately NOT
 
 - **Not a gate on the row's text.** Deciding whether a comment is a ruling is a judgement, and a tool that
