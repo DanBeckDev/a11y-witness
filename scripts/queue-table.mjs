@@ -42,6 +42,7 @@ import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-
 import { behindByCount } from "./queue-stalled.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { newestPerName } from "./newest-check-run.mjs";
 
 export const EXIT = { EXAMINED: 0, INCOMPLETE: 2 };
 
@@ -159,31 +160,6 @@ export function openPRs() {
   }));
 }
 
-/**
- * NEWEST PER NAME, never `find`. GitHub's rollup UNIONS superseded check-runs, so the first match is the
- * OLDEST -- #498, fixed twice in `update-branch-sweep.mjs` (#500, #517) and once more in
- * `trunk-revert.mjs` (#582). A table built on `find` reports a check red that has since gone green.
- *
- * `completedAt` is compared as a string because ISO-8601 sorts lexically, and a run still in flight
- * reports the ZERO DATE rather than null, so it sorts below every real completion.
- *
- * @param {{name: string, conclusion?: string, completedAt?: string, startedAt?: string}[]} rollup
- */
-export function newestPerName(rollup) {
-  const best = new Map();
-  for (const check of rollup) {
-    if (!check?.name) continue;
-    const stamp = stampOf(check);
-    const seen = best.get(check.name);
-    if (!seen || stamp >= stampOf(seen)) best.set(check.name, check);
-  }
-  return [...best.values()];
-}
-
-const ZERO_DATE = "0001-01-01T00:00:00Z";
-const real = (/** @type {string | undefined} */ v) => (v && v !== ZERO_DATE ? v : "");
-const stampOf = (/** @type {{completedAt?: string, startedAt?: string}} */ c) =>
-  real(c.completedAt) || real(c.startedAt) || "";
 
 /**
  * The last N merged PRs, each head's checks, and WHEN THE OLDEST OF THEM MERGED.
@@ -623,3 +599,6 @@ function main() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
+
+/** Re-exported so `queue-table.test.ts` keeps its import; the definition lives in one place (#634). */
+export { newestPerName };
