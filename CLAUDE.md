@@ -54,9 +54,9 @@ We follow the applicable subset of *Clean Code* (Martin). It has two halves, enf
 
 ## Working on a Mac (the usual case)
 
-> **THE LOCAL UTM WORKER VMs ARE DEPRECATED. Capture on the bare-metal fleet.** NINE boxes
+> **THE LOCAL UTM WORKER VMs ARE DEPRECATED. Capture on the bare-metal fleet.** TEN boxes
 > (`a11y-worker-2` … `-11`, in `inventory.yml`; `-1` is retired and its number is never reused.
-> [`-10` status →](docs/operational-lessons.md#a11y-worker-10-withdrawn-2026-09-07)) serve
+> [`-10` rejoined 2026-09-09 →](docs/operational-lessons.md#a11y-worker-10-withdrawn-2026-09-07-rejoined-2026-09-09)) serve
 > `/health` without a laptop in the path, and `npm run fleet:status` is the one command that says
 > so. Deploy with **`npm run fleet:deploy`**, never `worker:deploy` — that one is `utmctl file push` to a
 > VM UUID and cannot reach a physical box.

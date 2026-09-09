@@ -10,6 +10,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/auto-arm-sweep.mjs` — arm auto-merge on open PRs that predate auto-arm.yml and were never armed
 - `node scripts/board-document.mjs` — render the board's PDF from the same data the daily GitHub report reads
 - `node scripts/board-only-check.mjs` — print true/false: is this branch's diff against origin/main board-only
+- `node scripts/board-record.mjs` — write an achievement record, refusing when it would displace one — #577
 - `node scripts/board-report.mjs` — generate the daily board report from GitHub and git, never from what an agent said
 - `node scripts/board-schedule-liveness.mjs` — say whether the board report's cron is still arriving, and comment once if not
 - `node scripts/board-snapshot.mjs` — snapshot every Project item before any board-mutating call, so a bad mutation is recoverable
@@ -42,6 +43,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node scripts/owned-path-signoff.mjs` — check a PR touching a corpus-invalidating path named the facts its own body must state
+- `node scripts/parent-recheck-summary.mjs` — read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
 - `node scripts/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node scripts/pr-hold.mjs` — take or release a hold on a pull request, the record merge-guard reads before treating it as free
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
