@@ -132,6 +132,11 @@ from a message.
 - A **fleet-hours** entry must name the `run` it was computed from. Without one the report prints
   **REFUSED** and says what is missing, rather than printing the total with a footnote. A footnote is
   something a reader skips; a refusal is not, and unlike a convention it cannot be satisfied by remembering.
+- An **achievement** stays in the body for at most **three editions** and is then marked `inBody: false`,
+  so **section 3 lists the achievements of the last three editions and the appendix lists all of them** —
+  the two-page cap is met by a rule rather than by a hand decision each time the body fills. Absent means
+  in the body, so forgetting the rule can never empty section 3; only an explicit `inBody: false` retires
+  one, and retiring is not withdrawing — the claim and its evidence stay in the record and the appendix.
 
 ## A RECORD IS PUBLISHED, so it names hosts and paths rather than quoting them
 
