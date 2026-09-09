@@ -59,6 +59,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
 - `node scripts/stash-whose.mjs` — list every git stash entry with the branch it was made on, since git alone will not say
 - `node scripts/stranded-branches.mjs` — find pushed branches with no open PR, which are otherwise invisible to CI and review
+- `node scripts/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
 - `node scripts/trunk-revert-guard.mjs` — compare main's before/after state on a merge and refuse one that silently deletes prior work
 - `node scripts/trunk-revert.mjs` — revert a push to main that fails its own gate, unattended, since nothing else runs after it lands
 - `node scripts/trunk-sweep.mjs` — sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
