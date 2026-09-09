@@ -235,6 +235,28 @@ it tell you what it is bounded to — `--branch`, not a grep over the last twent
 **Nothing `lead/*` or `agent/*` merges without a run against current `main`.** That is the rule the facts
 above exist to make enforceable, and the words "against current `main`" are the load-bearing half.
 
+## A ROW'S OWNER IS WHOEVER CAN REACH ITS ACCEPTANCE — ruled 2026-09-09
+
+Not whoever noticed the gap, and not whoever filed the row. `worker-capture` filed #630, a row whose whole
+content is a fleet measurement the resource ban forbids them to take, and declined it in one sentence:
+*authorship is not a reason to hold a row you cannot finish.* A row parked with someone who cannot finish
+it reads as in-progress while being stalled, which is worse than unclaimed, because unclaimed is visible
+to whoever could pick it up.
+
+So: a row whose acceptance needs the fleet or the lab is labelled `fleet-gated` and left unassigned for
+whoever is nearest the fleet; a row whose acceptance needs a workflow change is the dispatcher's; a row
+whose acceptance is a board record is the product manager's; and the filer's name stays on the row as
+the person who noticed, which is a different credit from the person who finishes.
+
+Two companions, ruled the same morning:
+
+- **A ruling that changes an open PR's required shape takes `pr:hold` in the same act**, by the ruler,
+  with the refusal naming the ruling rather than the state, and a release that prints its reason. The
+  queue reads a green PR and never a row's comments, so a ruling recorded on the row alone merges the
+  overruled shape (#625, 2026-09-09).
+- **A ruling that changes an assignment reaches the builder in the same minute as the row**, and the
+  row cites that it was sent. A record is not a delivery.
+
 ## The contingency drill
 
 **The acceptance test for this whole page, and it is a command, not a judgement:** a fresh clone in a
