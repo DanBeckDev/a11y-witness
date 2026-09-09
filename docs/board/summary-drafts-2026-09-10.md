@@ -423,10 +423,11 @@ board nothing except that the question needs the authoritative corpus.** `orches
 instrument for it — a lab job that keeps *"lost the claim"*, *"no usable census"* and *"predates the mark"*
 apart, with a vacuity floor — and the lab runs it after round 3.
 
-**The concrete case is not a rate and does survive**, because it is a fact about four named files rather
-than a proportion over a population: **four captures of `theregister.com` report `link` found 0 in 6 trips
-against a census of 788** — zero links, on a page with 788 of them — **and each currently renders the
-full-page completeness sentence.**
+**And the page names go with the number, for the same reason.** `ceo`'s second ruling, and it is the
+stronger one: two local checkouts lose the claim on **different pages** — one holds captures the other does
+not — so naming any site from either would tell the board which copy the writer happened to have. **The
+edition names no page.** The figure by page comes from the lab run after round 3, or waits for the next
+edition.
 
 **The mechanism, in one sentence, and it is the reason nothing looked broken:** a landmark sweep walked
 into a chat widget and left the cursor inside its open dialog, so every later sweep truthfully exhausted
@@ -437,7 +438,8 @@ survived being looked at.
 
 **The fix needs no deploy and no recapture. The marks were always there and nothing read them.** The check
 is arithmetic — a sweep cannot have visited more elements than it made trips — so it names its own
-numbers rather than a threshold somebody picked: *"link (1 found in 8 trips, census 79)."*
+numbers rather than a threshold somebody picked: *"link (N found in M trips, census C)"* — the sentence
+carries its own arithmetic, so a reader can check it rather than trust it.
 
 **And the direction matters more than any count, which is the part a board should be given:** this
 **withholds a claim; it does not assert that anything was missed.** A census counts elements a
