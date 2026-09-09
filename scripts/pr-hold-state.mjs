@@ -63,6 +63,44 @@ export function armabilityOf({ labels, holdReason = null }) {
 }
 
 /**
+ * THE LABEL THAT SAYS THE HOLD IS WHAT DISARMED THIS PR.
+ *
+ * `takeHold` disarms unconditionally, so on release the two states it must tell apart -- "this PR was
+ * armed and I turned it off" and "this PR was never armed" -- have the same end state and are gone by
+ * the time anyone releases. The take records which one it found, because the release cannot recover it,
+ * and re-arming a PR nobody armed would be arming in the dangerous direction.
+ *
+ * A LABEL rather than anything in this process, because the take and the release are different
+ * processes, often different sessions, often hours apart. The PR is the only thing both can read.
+ */
+export const REARM_LABEL = "rearm-on-release";
+
+/**
+ * ARM IS VERIFIED FROM THE STATE, NEVER THE EXIT CODE -- the mirror of `disarmVerdict` below, and it
+ * exists because arming has the SAME asymmetry pointed the other way.
+ *
+ * `gh pr merge --auto --squash` returned `Merge method squash merging is not allowed on this repository`
+ * on 2026-09-09 and the caller saw only a non-zero exit, because stderr was redirected; the PR sat
+ * UNARMED with nothing in the log, and an unarmed PR is indistinguishable from an armed one until the
+ * queue fails to take it. Reading `autoMergeRequest` back is what caught it.
+ *
+ * @param {{ autoMergeRequest?: unknown } | null} prAfterArm
+ * @returns {{ armed: boolean, reason: string }}
+ */
+export function armVerdict(prAfterArm) {
+  if (prAfterArm?.autoMergeRequest != null) {
+    return { armed: true, reason: "auto-merge is back on: `autoMergeRequest` reads non-null" };
+  }
+  return {
+    armed: false,
+    reason: "THE HOLD IS OFF AND THE PR IS STILL UNARMED. The hold disarmed it and the release did not "
+      + "put it back, so it will sit green and unmerged with nothing marking it as waiting -- a hold "
+      + "that outlived its reason, and invisible, which is the pair this file exists to prevent. Re-arm "
+      + "by hand with `gh pr merge --auto --merge <n>` and read `autoMergeRequest` back.",
+  };
+}
+
+/**
  * Did the disarm actually take? **READ THE STATE, NEVER THE EXIT CODE.**
  *
  * `gh pr merge --disable-auto` returns success on a PR that is already merging, having changed nothing —
