@@ -920,6 +920,21 @@ function branchAges(numbers, run) {
   return ages;
 }
 
+/**
+ * #755: the line names the criterion it applied (#723), the same way the clean-path `OK` line already
+ * did -- so a reader who sees DEAD-CLAIM and later sees the row alive can tell "the rule changed" from
+ * "the row changed" without going to read `claimsNobodyIsWorking` itself. Pulled out to a pure formatter
+ * so the string is unit-testable without spawning `gh` the way `reportDeadClaims` itself would require.
+ *
+ * @param {{ number: number, title: string, sessions: string[], minutes: number | null }} claim
+ */
+export function formatDeadClaimLine({ number, title, sessions, minutes }) {
+  const held = sessions.length > 0 ? sessions.join(", ") : "nobody (no session label)";
+  const age = minutes === null ? "no branch at all" : `last push ${minutes} min ago`;
+  return `DEAD-CLAIM  #${number} "${title}" -- held by ${held}, no open PR, ${age}, `
+    + "no comment in the window -- none of `ceo`'s three legs (#723)\n";
+}
+
 /** Reports the claims nobody is working. Returns the count, so the caller decides severity. */
 function reportDeadClaims() {
   const { issues, reportedCount } = fetchOpenIssuesChecked();
@@ -931,11 +946,8 @@ function reportDeadClaims() {
       + "three legs as `ceo`'s release rule (#723)\n");
     return 0;
   }
-  for (const { number, title, sessions, minutes } of stale) {
-    const held = sessions.length > 0 ? sessions.join(", ") : "nobody (no session label)";
-    const age = minutes === null ? "no branch at all" : `last push ${minutes} min ago`;
-    process.stdout.write(`DEAD-CLAIM  #${number} "${title}" -- held by ${held}, no open PR, ${age}, `
-      + "no comment in the window\n");
+  for (const claim of stale) {
+    process.stdout.write(formatDeadClaimLine(claim));
   }
   process.stderr.write(`\n${stale.length} \`in-progress\` row(s) nobody is working. A claim with no `
     + "holder is invisible to everyone reading the board.\n");
