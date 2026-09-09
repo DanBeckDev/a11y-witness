@@ -453,6 +453,79 @@ export function unmetRequirements(requirements, capabilities) {
 }
 
 /**
+ * A COMMAND THAT RUNS THE WHOLE SUITE, which the capability gate could not see until 2026-09-09.
+ *
+ * `unmetCommandRequirements` and `unmetCommandClosureRequirements` both opened with
+ * `if (!/tsx --test/.test(command)) return []`, so they asked whether the command NAMED a file needing a
+ * capability. `npm test` names none and runs them all.
+ *
+ * THAT IS THE ADJACENT-PROPERTY SHAPE AGAIN, and it cost the whole afternoon's PR checks. #513 split
+ * `row-claim-live.test.ts` out precisely so a `tsx --test` command naming it could be refused, and that
+ * half worked. The half nobody had is the command everybody actually types: on 2026-09-09 four PRs at
+ * once were red on `acceptance / run`, every one of them for `gh: To use GitHub CLI in a GitHub Actions
+ * workflow, set the GH_TOKEN environment variable`, in a job that passes no token BY DESIGN because it
+ * runs commands taken from a stranger's PR body. None of the four had touched the code that failed.
+ *
+ * The failure mode is the bad one: not a refusal naming the capability, but a red check naming the
+ * PR's author for a line they never wrote. Refused, it is green with a printed reason.
+ *
+ * `npm test` is `pretest` (build) then `test:ts` then `test:python`; `test:ts` runs
+ * the recursive `.test.ts` glob under every package's `src`. So the suite's population is that glob,
+ * and a whole-suite command
+ * requires the UNION of what every file in it requires.
+ *
+ * @param {string} command
+ * @returns {boolean}
+ */
+export function runsTheWholeSuite(command) {
+  // `(?![:\w-])` AND NOT `\b`: `\b` after `test` matches `npm run test:python`, whose population is the
+  // pytest tree rather than the `.test.ts` glob this function's callers walk. Refusing that command for a
+  // requirement declared by a TypeScript file would be a refusal about a population it never runs.
+  return /(?:^|&&|\|\||;)\s*npm\s+(?:run\s+)?(?:test:ts|test)(?![:\w-])/.test(command.trim());
+}
+
+/**
+ * Every test file `npm test` runs, FROM `test:ts`'s OWN GLOB rather than a second copy of it.
+ *
+ * The glob is read out of `package.json`'s `test:ts` script, because a hand-written copy here would be
+ * the same fact in two places -- and the copy that drifts is the one that decides whether a PR's check
+ * goes red. If the script cannot be read or carries no glob this THROWS rather than returning `[]`: an
+ * empty population would make every whole-suite command pass the capability gate, which is exactly the
+ * hole this function was added to close.
+ *
+ * @returns {string[]}
+ */
+/** @type {string[] | null} */
+let suiteFilesCache = null;
+export function suiteTestFiles() {
+  if (suiteFilesCache) return suiteFilesCache;
+  let script;
+  try {
+    script = JSON.parse(readFileSync("package.json", "utf8")).scripts?.["test:ts"];
+  } catch (cause) {
+    throw new Error("acceptance-commands: could not read package.json to find what `npm test` runs -- "
+      + "refusing to report a whole-suite command as needing nothing.", { cause });
+  }
+  const glob = typeof script === "string" ? /"([^"]*\*[^"]*\.test\.ts)"/.exec(script)?.[1] : null;
+  if (!glob) {
+    throw new Error("acceptance-commands: `test:ts` names no `*.test.ts` glob, so the suite's population "
+      + "is unknown. Refusing to treat that as an empty population -- every `npm test` acceptance would "
+      + "then pass the capability gate having examined nothing.");
+  }
+  suiteFilesCache = globSync(glob);
+  return suiteFilesCache;
+}
+
+/**
+ * The files a command runs: the ones it NAMES, or -- for a whole-suite command -- all of them.
+ * @param {string} command
+ * @returns {string[]}
+ */
+function testFilesRunBy(command) {
+  return runsTheWholeSuite(command) ? suiteTestFiles() : tsxTestFileArgs(command);
+}
+
+/**
  * The literal file/glob arguments of a `tsx --test <...>` command, in order -- split out of
  * `testFileArgumentsResolve` so the #510 requirements check below reads the SAME tokenisation rather than
  * risking a second, independently-written answer to "what files does this command name" (this file's own
@@ -479,10 +552,10 @@ function tsxTestFileArgs(command) {
  * @returns {{ requirement: string, files: string[] }[]}
  */
 export function unmetCommandRequirements(command, capabilities) {
-  if (!/\btsx\s+--test\b/.test(command)) return [];
+  if (!/\btsx\s+--test\b/.test(command) && !runsTheWholeSuite(command)) return [];
   /** @type {Map<string, string[]>} */
   const byRequirement = new Map();
-  for (const fileArg of tsxTestFileArgs(command)) {
+  for (const fileArg of testFilesRunBy(command)) {
     if (/[*?[{]/.test(fileArg) || !existsSync(fileArg)) continue;
     const text = readFileSync(fileArg, "utf8");
     for (const req of unmetRequirements(testFileRequirements(text), capabilities)) {
@@ -503,12 +576,16 @@ export function unmetCommandRequirements(command, capabilities) {
  * @returns {{ requirement: string, message: string }[]}
  */
 export function unmetCommandClosureRequirements(command, capabilities) {
-  if (!/\btsx\s+--test\b/.test(command)) return [];
+  if (!/\btsx\s+--test\b/.test(command) && !runsTheWholeSuite(command)) return [];
   /** @type {{ requirement: string, message: string }[]} */
   const out = [];
-  for (const fileArg of tsxTestFileArgs(command)) {
+  for (const fileArg of testFilesRunBy(command)) {
     if (/[*?[{]/.test(fileArg) || !existsSync(fileArg)) continue;
     out.push(...unmetClosureRequirements(fileArg, capabilities));
+    // SHORT-CIRCUIT ON THE FIRST, and only for the whole-suite case: `classifyCommand` prints one
+    // refusal, and walking ~700 files' import closures to collect the other 699 is time spent producing
+    // a message nobody reads. A named command still reports every one of the few files it names.
+    if (out.length > 0 && runsTheWholeSuite(command)) break;
   }
   return out;
 }
