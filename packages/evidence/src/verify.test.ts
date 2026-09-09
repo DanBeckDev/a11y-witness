@@ -251,6 +251,62 @@ const WIKIPEDIA_CONTROL_MARKS = [
   { event: "structural", atMs: 116984, headings: 29, landmarks: 8, formFields: 2, roundTrips: 40 },
 ];
 
+/** `runs/witness/2026-09-09T13-41-41-784Z-www-theregister-com.json`, verbatim -- the SAME page as
+ * `THEREGISTER_MARKS` on a later capture, kept separately because this one carries the per-sweep marks and
+ * the older fixture does not. `structural` lands at 23085; the heading sweep's own mark says the same
+ * thing (`found: 1`) at 20276. */
+const THEREGISTER_WITH_SWEEP_MARKS = [
+  { event: "pageState", beforeProbe: "sweep", atMs: 19402, heading: 725, targetMatch: "matched" },
+  { event: "sweep", type: "heading", atMs: 20276, found: 1 },
+  { event: "sweep", type: "landmark", atMs: 20824, found: 0 },
+  { event: "structural", atMs: 23085, headings: 1 },
+];
+
+/** `runs/witness/2026-09-09T14-31-43-041Z-www-ikea-com.json`, verbatim -- a NOT-contained capture whose
+ * `structural` mark is the latest measured anywhere (402462, on a 453-second capture). It is the reason
+ * this change exists and it must keep reading the same verdict. */
+const IKEA_MARKS = [
+  { event: "pageState", beforeProbe: "sweep", atMs: 67153, heading: 71, targetMatch: "matched" },
+  { event: "sweep", type: "heading", atMs: 99036, found: 80 },
+  { event: "structural", atMs: 402462, headings: 80 },
+];
+
+test("#426: the verdict decides off the HEADING SWEEP's mark, 2.8s earlier on theregister", () => {
+  // Same page, same verdict, same numerator -- only the moment moves. `structural` would give 23085.
+  assert.deepEqual(earlyContainmentVerdict(THEREGISTER_WITH_SWEEP_MARKS),
+    { decided: true, contained: true, observedAtMs: 20276 });
+});
+
+test("#426: ikea, the worst measured case -- same verdict, 303s earlier", () => {
+  // Not contained (80 reached against 71 exposed), which is the point: the earlier mark must not change
+  // WHAT is decided. `structural` does not land until 402462 on this capture.
+  assert.deepEqual(earlyContainmentVerdict(IKEA_MARKS), { decided: true, contained: false });
+});
+
+test("#426 FALLBACK: a capture with no heading-sweep mark still decides off `structural`", () => {
+  // Additive, never a replacement: every capture taken before the sweep marks carried `found` -- and any
+  // `probeOrder` with no heading sweep -- must read exactly as it did. The three fixtures above this line
+  // are real captures of that shape, and they are the proof; this states the rule the reader needs.
+  assert.deepEqual(earlyContainmentVerdict(HUBSPOT_MARKS),
+    { decided: true, contained: true, observedAtMs: 45257 },
+    "no `sweep` mark present -- `structural` is still the numerator, at its own later time");
+});
+
+test("MUTATION TARGET: a sweep mark of a DIFFERENT type is not mistaken for the heading sweep", () => {
+  // Landmark FIRST, deliberately: `phases.find` returns the earliest match, so a reader that filtered on
+  // `event === "sweep"` without checking `type` would pass on the real captures (heading is swept first)
+  // and take a landmark count here. That would compare landmarks reached against headings exposed --
+  // #685's shape exactly, two populations one comparison.
+  const landmarkFirst = [
+    { event: "pageState", beforeProbe: "sweep", atMs: 19402, heading: 725, targetMatch: "matched" },
+    { event: "sweep", type: "landmark", atMs: 20000, found: 900 },
+    { event: "sweep", type: "heading", atMs: 20276, found: 1 },
+  ];
+  assert.deepEqual(earlyContainmentVerdict(landmarkFirst),
+    { decided: true, contained: true, observedAtMs: 20276 },
+    "the landmark sweep's 900 must not be read as headings reached, which would clear the doubt");
+});
+
 test("theregister.com's real consent wall reads 'contained', off pageState+structural alone (1 of 725)", () => {
   assert.deepEqual(earlyContainmentVerdict(THEREGISTER_MARKS),
     { decided: true, contained: true, observedAtMs: 23575 });
