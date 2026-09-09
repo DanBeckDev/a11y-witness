@@ -82,23 +82,38 @@ test("truncation is STATED, never silent", () => {
   assert.match(out, /and 20 more, omitted/, "a truncated report that looks complete is how a finding gets missed");
 });
 
-test("a task the user cannot complete is stated plainly", () => {
+test("the default (isTaskClaim false) renders a COUNT, never a bare yes/no -- #796's own defect", () => {
+  // report.ts's own incident, reproduced here: "**No blocking findings** Yes" printed directly above six
+  // SERIOUS findings, because taskCompletable really means "no BLOCKER-severity finding" for the shipped
+  // local scorer, and a bare "Yes" reads as "nothing is wrong" to anyone who does not read the table below
+  // it. verdictHeadline() in report.ts already made this split; this pins summary.ts to the same one.
   const out = renderSummary(result({
-    verdict: { taskCompletable: false, summary: "s", findings: [], confidence: 0.9 },
+    verdict: {
+      taskCompletable: true, summary: "s", confidence: 0.9,
+      findings: [finding("serious", "a"), finding("serious", "b")],
+    },
   }));
-  // Two things, because this line is posted on a pull request in bold. The DEFAULT wording must be
-  // the honest one for the shipped local scorer, which never sees the task — and asserting the task
-  // question here is what pinned the overclaim in place, so it is now refused outright.
-  assert.match(out, /No blocking findings:\*\*\s+\*\*No\*\*/);
+  assert.match(out, /No blocking findings:\*\*\s+none;\s+2 finding\(s\) below that severity/);
+  assert.doesNotMatch(out, /\*\*Yes\*\*|\*\*No\*\*|\*\*\s+Yes\b/,
+    "a bare yes/no must never appear for a backend whose taskCompletable is not really an answer to a "
+    + "question about the task");
   assert.doesNotMatch(out, /complete the task/,
     "the default renderer must not ask a task question the local scorer cannot answer");
 });
 
-test("an LLM backend CAN state the task verdict, so the option is not decorative", () => {
-  // The anthropic/openai judges do read the task and answer it, so the wording is theirs to pass.
+test("the default (isTaskClaim false) with zero findings at all still reads as a count, not a claim", () => {
   const out = renderSummary(result({
     verdict: { taskCompletable: false, summary: "s", findings: [], confidence: 0.9 },
-  }), { taskQuestion: "Could a screen-reader user complete the task?" });
+  }));
+  assert.match(out, /No blocking findings:\*\*\s+none$/m);
+});
+
+test("an LLM backend CAN state the task verdict, so the option is not decorative", () => {
+  // The anthropic/openai judges do read the task and answer it, so the wording is theirs to pass --
+  // isTaskClaim: true is what tells this renderer taskCompletable really answers that question.
+  const out = renderSummary(result({
+    verdict: { taskCompletable: false, summary: "s", findings: [], confidence: 0.9 },
+  }), { taskQuestion: "Could a screen-reader user complete the task?", isTaskClaim: true });
   assert.match(out, /complete the task\?\*\*\s+\*\*No\*\*/);
 });
 

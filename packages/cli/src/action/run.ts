@@ -60,7 +60,8 @@ function main(): void {
     process.exit(2);
   }
 
-  const markdown = renderSummary(result, { marker, taskQuestion: taskVerdictLabel().question });
+  const label = taskVerdictLabel();
+  const markdown = renderSummary(result, { marker, taskQuestion: label.question, isTaskClaim: label.isTaskClaim });
 
   // An unverified capture is an infrastructure failure, not a verdict about the page — so it exits 2, the
   // same code used for "could not read the result". Green would say "we checked and it is fine"; red (1)
