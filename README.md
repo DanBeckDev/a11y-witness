@@ -5,8 +5,8 @@
 *(formerly a11y-witness — renamed 2026-09-07, before the transfer to the `a11ign` organisation; see #66.
 Nothing had been published under the old name, so this is a rename, not a migration.)*
 
-[![lint](https://github.com/a11ign/a11ign/actions/workflows/lint.yml/badge.svg)](https://github.com/a11ign/a11ign/actions/workflows/lint.yml)
-[![capture-regression](https://github.com/a11ign/a11ign/actions/workflows/capture-regression.yml/badge.svg)](https://github.com/a11ign/a11ign/actions/workflows/capture-regression.yml)
+[![lint](https://github.com/DanBeckDev/a11y-witness/actions/workflows/lint.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/lint.yml)
+[![capture-regression](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml)
 [![licence: AGPL-3.0-or-later](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](./LICENSE)
 
 **a11ign drives a real screen reader (NVDA) through a web page and reports the barriers a screen-reader user would hit.** Every finding cites a WCAG criterion and quotes the announcement it rests on, so you can check it yourself.
