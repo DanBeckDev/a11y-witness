@@ -121,14 +121,17 @@ export function prCreateArgs({ title, body, branch }) {
  * THE VERDICT, PURE -- so both refusal shapes and the ready shape can be driven without a network.
  *
  * @param {{ beforeConclusions: Record<string, string | null> | null, currentMainSha: string | null,
- *   pushSha: string }} facts
+ *   pushSha: string, parentRecheck?: "pass" | "fail" | null }} facts
+ *   `parentRecheck`: `"pass"` or `"fail"` from re-running the failing check AT THE PARENT, NOW -- or
+ *   `null` if it was not run. This is the only input that is not a recorded historical value, and #616 is
+ *   the row for why it has to exist.
  *   `beforeConclusions`: for the commit immediately before this push, EVERY trigger job's own conclusion
  *   -- read from ITS check-runs, never re-derived by re-running the suite against it. `null` for the whole
  *   map when the lookup failed; `null` for one job when no completed record exists for it. `currentMainSha`:
  *   `main`'s real tip right now, or `null` on a failed lookup.
  * @returns {{code: number, reason: string}}
  */
-export function revertVerdict({ beforeConclusions, currentMainSha, pushSha }) {
+export function revertVerdict({ beforeConclusions, currentMainSha, pushSha, parentRecheck = null }) {
   if (beforeConclusions === null) {
     return { code: EXIT.CANNOT_ASK, reason: "could not read the commit BEFORE this push's own trunk-guard "
       + "conclusions -- either the lookup failed, or (for the very first push this workflow has ever seen) "
@@ -160,6 +163,42 @@ export function revertVerdict({ beforeConclusions, currentMainSha, pushSha }) {
       + "work and leave the real breakage in place, and the NEXT push would read red for the identical "
       + "reason." };
   }
+  // #616: WAS THE PARENT GREEN BECAUSE IT WAS CORRECT, OR BECAUSE IT WAS MEASURED EARLIER?
+  //
+  // Every check above reads a RECORDED conclusion, and a recorded conclusion is true as of the moment it
+  // was taken. On 2026-09-09 `main` went red on a wall-clock assertion -- "the summary states WHEN it was
+  // written, and that time is within 60 minutes of the render". The parent was green, verifiably, in its
+  // own run sixty-one minutes earlier. So every check above passed, this function reached READY, and a
+  // revert PR was opened against a merge that had broken nothing.
+  //
+  // #582 taught this decision to see a failure that ALREADY EXISTED and was being attributed to the wrong
+  // commit. It could not see a failure that DID NOT EXIST when the parent was measured. Both produce "the
+  // commit before was green" and only one of them means it -- product-manager's statement of it is the
+  // sharpest: THE INPUT SILENTLY ENCODED THE TIME IT WAS READ, so the revert's own freshness check
+  // inherited the staleness it was measuring.
+  //
+  // NO THRESHOLD CAN FIX THIS, and that is why the remedy is a re-run rather than an age limit. "Only
+  // trust a parent measured in the last N minutes" needs N to exceed the slowest honest gap between two
+  // trunk runs, and the case that matters fits inside it -- the same shape as #590, where a staleness
+  // threshold could not see a nineteen-hour silence because the workflow's own worst legitimate gap is
+  // twenty-two hours. A check calibrated to a cadence cannot see a gap shorter than that cadence's worst
+  // case. The only way to turn a stale boolean into a current one is to ask again, now.
+  //
+  // `null` is CANNOT_ASK and never READY: a re-run that could not happen leaves the question open, and
+  // this is the one function where an open question must not resolve toward acting.
+  if (parentRecheck === null) {
+    return { code: EXIT.CANNOT_ASK, reason: "the parent's failing check was not re-run, so it is unknown "
+      + "whether its recorded green is still the answer. A recorded conclusion is true as of the moment it "
+      + "was taken; this decision needs it to be true NOW. Not re-running is INCONCLUSIVE, never a green." };
+  }
+  if (parentRecheck === "fail") {
+    return { code: EXIT.REFUSED, reason: "COULD NOT ATTRIBUTE: the parent was recorded green and FAILS THE "
+      + "SAME CHECK NOW, on a tree this push did not touch. So the failure is the world's rather than this "
+      + "push's -- a wall-clock assertion, an outage, a dependency that moved, an expired credential. "
+      + "Reverting would remove innocent work and leave the real cause in place, and the next push would "
+      + "read red for the identical reason. This is NOT the inherited-failure refusal above: there the "
+      + "parent was already red when measured; here it was green when measured and is red now." };
+  }
   if (currentMainSha === null) {
     return { code: EXIT.CANNOT_ASK, reason: "could not read main's current tip." };
   }
@@ -170,7 +209,8 @@ export function revertVerdict({ beforeConclusions, currentMainSha, pushSha }) {
       + "reverting a commit that is no longer the tip, which could revert a fix instead of the fault." };
   }
   return { code: EXIT.READY, reason: `this push's own gate failed, the commit before it was green on every `
-    + `trigger job (\`${jobs.join("`, `")}\`), and nothing has landed on main since -- safe to revert.` };
+    + `trigger job (\`${jobs.join("`, `")}\`) AND still passes that check when re-run now, and nothing has `
+    + "landed on main since -- safe to revert." };
 }
 
 /**
@@ -342,7 +382,7 @@ function performRevert({ pushSha, runUrl }) {
 }
 
 function main() {
-  refuseUnknownFlags(["--push-sha", "--before-sha", "--run-url"],
+  refuseUnknownFlags(["--push-sha", "--before-sha", "--run-url", "--parent-recheck"],
     { entry: import.meta.url, command: "node scripts/trunk-revert.mjs" });
   const flag = (/** @type {string} */ name) => {
     const arg = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -361,10 +401,21 @@ function main() {
   // from the API would ask GitHub which jobs exist rather than which ones this decision is conditioned on,
   // and those are different questions -- `decideRevert` itself is a job on the same run.
   const workflow = readFileSync(new URL("../.github/workflows/trunk-guard.yml", import.meta.url), "utf8");
+  // #616: `pass` / `fail` from the workflow having re-run the failing check at the PARENT, now. Anything
+  // else -- absent, empty, a value nobody recognises -- is `null` and therefore CANNOT_ASK. A flag this
+  // decision depends on must never be interpreted generously: a typo that read as "pass" would restore
+  // exactly the behaviour this row exists to remove.
+  const recheck = flag("parent-recheck");
+  const parentRecheck = recheck === "pass" || recheck === "fail" ? recheck : null;
+  if (recheck && parentRecheck === null) {
+    console.error(`--parent-recheck=${recheck} is not \`pass\` or \`fail\`; treating it as UNKNOWN.`);
+  }
+
   const verdict = revertVerdict({
     beforeConclusions: lookupPreviousConclusions(beforeSha, revertTriggerJobs(workflow)),
     currentMainSha: lookupCurrentMainSha(),
     pushSha,
+    parentRecheck,
   });
   if (verdict.code !== EXIT.READY) {
     console.error(`NOT REVERTING ${pushSha.slice(0, 10)}: ${verdict.reason}`);
