@@ -166,7 +166,6 @@ The `openai` backend makes a self-hosted, zero-cost judge realistic. Measured ag
 OS-bound desktop application, so something has to run Windows — but it does not have to be yours.
 
 ```yaml
-on: pull_request
 jobs:
   a11y:
     runs-on: windows-2022          # NVDA needs Windows; GitHub hosts these
