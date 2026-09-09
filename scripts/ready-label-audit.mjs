@@ -1051,11 +1051,49 @@ export const CHECKS = [
  * "asked and found nothing" -- so it is recorded as a refusal and never counted as a clean zero.
  * @param {string} what @param {() => number} check @param {string[]} refused
  */
-export function runCheck(what, check, refused) {
+/**
+ * #546: GitHub returns the IDENTICAL "could not resolve" wording for "this ProjectV2 does not exist" and
+ * "this token has no permission to see it" -- Project 2 demonstrably exists (the same query succeeds
+ * from a token that carries the scope), so a `runCheck` failure naming `ProjectV2` is, today, always the
+ * one credential gap #546 records: `A11IGN_BOT_TOKEN` exists but was not granted `Projects: Read-only`.
+ * Widening that scope is an account-owner action in GitHub's own UI -- no agent holds it and none can
+ * take it, which is #546's own stated reason this sits with the chairman.
+ *
+ * A substring match, not a structured error code, because that is genuinely all GitHub gives back; if a
+ * future failure mode ever reuses this exact wording for something ELSE, it will be misclassified as
+ * this gap too -- an accepted cost, since the alternative (treating every board failure as equally
+ * unexplained) is the state ceo's ruling exists to end.
+ * @param {string} message
+ * @returns {boolean}
+ */
+export function isProjectsCredentialGap(message) {
+  return message.includes("ProjectV2");
+}
+
+/**
+ * Runs one check. A check that THREW could not ask its question, which is a different answer from
+ * "asked and found nothing" -- so it is recorded as a refusal and never counted as a clean zero.
+ *
+ * ceo's ruling, 2026-09-09: a throw that is #546's one NAMED, ungrantable-by-any-agent credential gap is
+ * recorded in `notRun`, never `refused` -- a job red on every commit for a capability the org cannot
+ * grant trains everyone to ignore the job (#706's own lesson). Every OTHER throw is still a `refused`
+ * refusal, unchanged: an unnamed, unexplained failure stays exactly as alarming as it always was. The
+ * moment the credential exists, this same code path throws nothing and the check's real findings fail
+ * the job again, unchanged.
+ * @param {string} what @param {() => number} check @param {string[]} refused @param {string[]} [notRun]
+ */
+export function runCheck(what, check, refused, notRun = []) {
   try {
     return check();
   } catch (error) {
-    process.stderr.write(`COULD NOT AUDIT ${what}: ${/** @type {Error} */ (error).message}\n`);
+    const message = /** @type {Error} */ (error).message;
+    if (isProjectsCredentialGap(message)) {
+      process.stderr.write(`NOT RUN ${what}: ${message} -- a named credential is absent (#546); only a `
+        + "human can widen it, so this is counted apart from a genuine refusal.\n");
+      notRun.push(what);
+      return 0;
+    }
+    process.stderr.write(`COULD NOT AUDIT ${what}: ${message}\n`);
     refused.push(what);
     return 0;
   }
@@ -1065,15 +1103,32 @@ function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "ready-label-audit" });
   /** @type {string[]} */
   const refused = [];
+  /** @type {string[]} */
+  const notRun = [];
   let findings = 0;
   for (const [index, [what, check]] of CHECKS.entries()) {
     if (index > 0) process.stdout.write("\n");
-    findings += runCheck(what, check, refused);
+    findings += runCheck(what, check, refused, notRun);
   }
+  const partial = refused.length + notRun.length;
+  if (partial > 0) {
+    /** @type {string[]} */
+    const clauses = [];
+    if (notRun.length > 0) {
+      clauses.push(`${notRun.length} could not run for #546's one named, ungrantable credential gap: `
+        + `${notRun.join(", ")}`);
+    }
+    if (refused.length > 0) {
+      clauses.push(`${refused.length} refused for an unexplained reason: ${refused.join(", ")}`);
+    }
+    process.stderr.write(`\n${partial} of ${CHECKS.length} check(s) did not answer -- ${clauses.join("; ")}. `
+      + `The count above is a PARTIAL audit and must not be read as a clean one -- an unasked question `
+      + "and a question answered `none` are different states.\n");
+  }
+  // ONLY an unexplained refusal fails the job (unchanged from before this ruling). #546's named gap is
+  // still stated as partial above, but the other checks' own findings are what decide exit 0 vs 1 --
+  // never a capability nobody here can grant.
   if (refused.length > 0) {
-    process.stderr.write(`\n${refused.length} of ${CHECKS.length} check(s) could not run: `
-      + `${refused.join(", ")}. The count above is a PARTIAL audit and must not be read as a clean `
-      + "one -- an unasked question and a question answered `none` are different states.\n");
     process.exitCode = 2;
     return;
   }
