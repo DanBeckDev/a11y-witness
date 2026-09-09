@@ -41,7 +41,7 @@ import type { RuleLayerCoverage } from "@a11ign/judge/outcomes";
 import { captureDoubt, captureMentionsTitle, oracleCounts, earlyContainmentVerdict, type CaptureDoubt }
   from "@a11ign/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11ign/scorer";
-import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics,
+import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics, censusElementCounts, activationBudgetFromDiagnostics,
   censusCountsDistinctNames, censusTargetMismatchReason, type ConformanceRequirement }
   from "@a11ign/evidence/conformance";
 import { assessedCriteria } from "@a11ign/judge/coverage";
@@ -781,6 +781,12 @@ export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): 
     browser: version("browser", "browserVersion"),
     ruleLayerRan: axe !== null,
     census: census ?? null,
+    // THE RAW COUNTS TOO (#677). `censusFromDiagnostics` overlays `distinct`, which is right for reach and
+    // wrong for "how much went unlooked-at"; both readers now exist and both are supplied.
+    censusElements: censusElementCounts(diagnostics),
+    // WHICH FORM CONTROLS THE ACTIVATION NEVER REACHED (#677 part 2). Read from the mark for the same
+    // reason the census is: the worker records the counts and this layer decides what they mean.
+    activationBudget: activationBudgetFromDiagnostics(diagnostics),
     // WHICH DOCUMENT THIS REPORT IS ABOUT (#687). Read from the same diagnostics, for the same reason the
     // census is: the served URL and the title are already on the record and nothing consumed them.
     documentIdentity: documentIdentity(cap as unknown as Record<string, unknown>),

@@ -62,8 +62,21 @@ import { pathToFileURL } from "node:url";
 // not exist there. #330 and #331 are what that circular bootstrap costs. `cli-flags.mjs` imports only
 // `node:path`, `node:fs` and `node:url`.
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+// SAFE for the identical no-`npm ci` reason: `ready-label-audit.mjs`'s own import graph
+// (`board-snapshot.mjs`, `claim-provenance.mjs`, `git-env.mjs`, `repo-identity.mjs`) is relative-only,
+// same as `cli-flags.mjs` above -- verified before adding this, not assumed.
+import { READY_LABEL } from "./ready-label-audit.mjs";
 
 export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2 };
+
+// #754: DUPLICATED FROM `row-claim.mjs`'s OWN CONSTANTS, deliberately, rather than imported. That file's
+// import graph pulls in `merge-guard.mjs`, `board-snapshot.mjs`'s write path and the whole `row-claim/`
+// rule set -- real risk in a script that runs with no `npm ci` and no build, the exact `ERR_MODULE_NOT_FOUND`
+// bootstrap trap #330/#331 already cost this file once. Two literal strings, pinned equal to
+// `row-claim.mjs`'s by `close-rows-on-merge.test.ts`, is the documented-duplicate exception CLAUDE.md
+// names for `git-safe-env.mjs` under an identical constraint, applied here.
+const CLAIM_LABEL = "in-progress";
+const STARTED_LABEL = "started";
 
 /**
  * WHAT TO DO WITH EACH ROW THE MERGED PR DECLARED -- the whole decision, as one pure function.
@@ -71,17 +84,87 @@ export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2 };
  * Separated from the API calls so the four outcomes can be driven directly. A job whose reporting is
  * only exercised through a live merge is one whose reporting is never exercised.
  *
- * @param {{ number: number, state: string }[]} issues  as GitHub resolved them
- * @returns {{ close: number[], already: number[], none: boolean }}
+ * @param {{ number: number, state: string, labels?: string[] }[]} issues  as GitHub resolved them
+ * @returns {{ close: { number: number, labels: string[] }[], already: number[], none: boolean }}
  */
 export function closurePlan(issues) {
-  const close = issues.filter((i) => i.state === "OPEN").map((i) => i.number);
+  const close = issues.filter((i) => i.state === "OPEN")
+    .map((i) => ({ number: i.number, labels: i.labels ?? [] }));
   const already = issues.filter((i) => i.state !== "OPEN").map((i) => i.number);
   return { close, already, none: issues.length === 0 };
 }
 
+/**
+ * #754: which of a row's CURRENT labels a merge-driven close must strip, IN THE SAME ACT as the close --
+ * `ready` (it is no longer pickable), `in-progress`/`started` and any `session:*` (the claim is over), so
+ * `audit`'s recurring DEBRIS finding -- *"a closed row still carries a pickable/claimed label"* -- stops
+ * being PRODUCED by this path rather than being cleared by hand each hour.
+ *
+ * `was-ready` is DELIBERATELY NEVER in this list. It is a record of what the row WAS, not a claim on it
+ * (#703 still carries it correctly, and this must not change that) -- the same distinction
+ * `declineRemoveLabels` in `row-claim.mjs` draws for the identical label on a different path.
+ *
+ * Safe on a row missing any of these: the caller strips only what `currentLabels` actually contains, and
+ * `gh issue edit --remove-label` is itself a harmless no-op on a label a row does not carry.
+ *
+ * @param {string[]} currentLabels
+ * @returns {string[]}
+ */
+export function labelsToStrip(currentLabels) {
+  return currentLabels.filter((label) => label === READY_LABEL || label === CLAIM_LABEL
+    || label === STARTED_LABEL || label.startsWith("session:"));
+}
+
 /** @param {string[]} args */
 const gh = (args) => execFileSync("gh", args, { encoding: "utf8" }).trim();
+
+/**
+ * Closes one row with the standard sentence. Returns whether it succeeded -- never throws, so the caller
+ * can decide what to do next (and, for #754, whether the label strip below should even be attempted).
+ * @param {number} n @param {{ prNumber: string, sha: string, repo: string }} ctx
+ * @returns {boolean}
+ */
+function closeOneRow(n, { prNumber, sha, repo }) {
+  const sentence = `Closed by the pipeline: PR #${prNumber} merged as \`${sha}\` and declared `
+    + `\`Closes #${n}\`.\n\nGitHub does not apply a closing reference when the merge is performed by `
+    + `\`github-actions[bot]\` -- measured on #310, #321 and #344 (see #298), where three of three bot `
+    + `merges left their rows open while two of two human merges closed theirs. This comment and this `
+    + `closure are that step, performed explicitly.\n\nIf the work did not land, reopen and say so on `
+    + `the row: \`git show ${sha}\` is what actually merged.`;
+  try {
+    gh(["issue", "close", String(n), "--repo", repo, "--comment", sentence, "--reason", "completed"]);
+    console.log(`CLOSE-ROWS: #${n} CLOSED (PR #${prNumber}, merge ${sha}).`);
+    return true;
+  } catch (cause) {
+    console.log(`CLOSE-ROWS: #${n} COULD NOT CLOSE -- ${cause instanceof Error ? cause.message : cause}`);
+    return false;
+  }
+}
+
+/**
+ * #754: strips the row's claim labels IN THE SAME ACT as the close, right after it succeeds -- not a
+ * second pass, which is a second thing to remember and the whole reason `audit`'s DEBRIS finding kept
+ * coming back. A label-removal failure must NEVER prevent or roll back the close (the close is the point;
+ * a row that closed with a stale label is strictly better than one left open because a label edit failed),
+ * so this never throws -- it only reports. EXPORTED so `close-rows-sweep.mjs`'s backstop path can call
+ * the identical decision rather than re-deriving it -- that file's own header names the rule this follows:
+ * "a second copy of that decision is the exact 'fact stated twice' shape this repo keeps paying for."
+ * @param {number} n @param {string[]} labels @param {string} repo
+ * @param {string} [logPrefix] the immediate path logs `CLOSE-ROWS:`, the sweep logs `SWEEP:` -- callers
+ *   must stay distinguishable in the log, the same reason close-rows-sweep.mjs's own header gives for
+ *   never reusing `CLOSE-ROWS:` itself: which path did the work is a fact about the pipeline's health.
+ */
+export function stripClaimLabels(n, labels, repo, logPrefix = "CLOSE-ROWS") {
+  const toStrip = labelsToStrip(labels);
+  if (toStrip.length === 0) return;
+  try {
+    gh(["issue", "edit", String(n), "--repo", repo, ...toStrip.flatMap((l) => ["--remove-label", l])]);
+    console.log(`${logPrefix}: #${n} stripped ${toStrip.join(", ")}.`);
+  } catch (cause) {
+    console.log(`${logPrefix}: #${n} closed but COULD NOT STRIP ${toStrip.join(", ")} -- `
+      + `${cause instanceof Error ? cause.message : cause}`);
+  }
+}
 
 function main() {
   refuseUnknownFlags([], {
@@ -100,8 +183,12 @@ function main() {
   const [owner, name] = repo.split("/");
   let issues, sha;
   try {
+    // `labels(first:20){nodes{name}}` added for #754 -- the same lookup that already resolves WHICH rows
+    // to close also carries WHAT each one is still labelled, so stripping the claim needs no second
+    // round trip and reads the row's state at the same instant the close decision was made.
     const query = `{repository(owner:"${owner}",name:"${name}"){pullRequest(number:${number}){`
-      + `merged baseRefName mergeCommit{oid} closingIssuesReferences(first:20){nodes{number state}}}}}`;
+      + `merged baseRefName mergeCommit{oid} closingIssuesReferences(first:20){nodes{number state `
+      + `labels(first:20){nodes{name}}}}}}}`;
     const pr = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`,
       "--jq", ".data.repository.pullRequest"]));
     // Enforced HERE, not only in the workflow's `if:` -- `workflow_dispatch` (#394) takes an arbitrary
@@ -118,7 +205,11 @@ function main() {
       console.error(`CANNOT ASK: #${number} merged into \`${pr.baseRefName}\`, not \`main\` -- refusing.`);
       process.exit(EXIT.CANNOT_ASK);
     }
-    issues = pr.closingIssuesReferences.nodes;
+    /** @type {{ number: number, state: string, labels: { nodes: { name: string }[] } }[]} */
+    const nodes = pr.closingIssuesReferences.nodes;
+    issues = nodes.map((i) => ({
+      number: i.number, state: i.state, labels: (i.labels?.nodes ?? []).map((l) => l.name),
+    }));
     sha = pr.mergeCommit?.oid ?? "unknown";
   } catch (cause) {
     console.error(`CANNOT ASK: resolving #${number}'s closing references failed -- `
@@ -136,21 +227,10 @@ function main() {
   for (const n of already) console.log(`CLOSE-ROWS: #${n} ALREADY CLOSED -- left alone.`);
 
   const failed = [];
-  for (const n of close) {
-    const sentence = `Closed by the pipeline: PR #${number} merged as \`${sha}\` and declared `
-      + `\`Closes #${n}\`.\n\nGitHub does not apply a closing reference when the merge is performed by `
-      + `\`github-actions[bot]\` -- measured on #310, #321 and #344 (see #298), where three of three bot `
-      + `merges left their rows open while two of two human merges closed theirs. This comment and this `
-      + `closure are that step, performed explicitly.\n\nIf the work did not land, reopen and say so on `
-      + `the row: \`git show ${sha}\` is what actually merged.`;
-    try {
-      gh(["issue", "close", String(n), "--repo", repo, "--comment", sentence, "--reason", "completed"]);
-      console.log(`CLOSE-ROWS: #${n} CLOSED (PR #${number}, merge ${sha}).`);
-    } catch (cause) {
-      console.log(`CLOSE-ROWS: #${n} COULD NOT CLOSE -- `
-        + `${cause instanceof Error ? cause.message : cause}`);
-      failed.push(n);
-    }
+  for (const { number: n, labels } of close) {
+    const closed = closeOneRow(n, { prNumber: number, sha, repo });
+    if (!closed) { failed.push(n); continue; }
+    stripClaimLabels(n, labels, repo);
   }
 
   if (failed.length > 0) {

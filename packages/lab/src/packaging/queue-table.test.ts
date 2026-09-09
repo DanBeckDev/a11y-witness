@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadavg } from "node:os";
 import { prRow, nonSuccessByName, newestPerName, render, fetchRefs, renderStalled, windowOf,
-  renderMergedChecks, STALL_MINUTES, EXIT, hostState, hostContention, reliefFor, topConsumers }
+  renderMergedChecks, STALL_MINUTES, EXIT, hostState, hostContention, reliefFor, topConsumers, isRed }
   from "../../../../scripts/queue-table.mjs";
 
 const NOW = new Date("2026-09-09T08:00:00Z");
@@ -527,4 +527,93 @@ test("#737 a direct commit to main with a red check still counts, with no PR num
   assert.deepEqual(byName.get("audit"), [null],
     "red on main is red on main; a check that arrived without a PR is exactly the kind this section "
     + "exists to surface, and dropping it would rebuild the blind spot one level down");
+});
+
+
+/**
+ * ONE FACT, FOUR COPIES, AND #734 CORRECTED TWO OF THEM.
+ *
+ * `.metadata_never_index` was measured on 2026-09-09 and does not work per-directory: placed on all 68
+ * worktrees at 12:47Z and verified present, `mds_stores` read 54.8% at 12:45Z and 80% at 12:52Z. #734
+ * corrected the claim in `.gitignore` and `scripts/spotlight-exclude.mjs` — and missed `queue-table.mjs`'s
+ * relief line and `docs/pipeline.md`'s remedy table, **which are the two a reader actually reaches**.
+ *
+ * The fix was found by grepping for the SENTENCE rather than revisiting the file that was edited. That is
+ * this repository's most-repeated defect stated exactly: a fact in more than one place, with nothing
+ * comparing them, and a correction that reached the copies its author was looking at.
+ */
+test("#761 section 5 never recommends the marker, which was measured not to work", () => {
+  const consumers = [{ command: "mds_stores", cpu: 80 }, { command: "WindowServer", cpu: 30 }];
+  const relief = reliefFor(consumers).join("\n");
+  assert.match(relief, /Spotlight is indexing the worktrees/, "the cause is still named");
+  assert.match(relief, /does NOT help/, "and the marker is named as not helping");
+  assert.ok(!/stops it being indexed at all/.test(relief),
+    "the withdrawn claim must not survive anywhere a reader reaches");
+});
+
+test("#761 a user application makes the state say THROTTLED, not merely describe it", () => {
+  const relief = reliefFor([{ command: "zoom.us", cpu: 49 }, { command: "mds_stores", cpu: 61 }]).join("\n");
+  assert.match(relief, /THROTTLED/,
+    "a reader must be able to SEE the state rather than infer it from a paragraph");
+  assert.match(relief, /zoom\.us/, "and which application, so they can tell when it is gone");
+  assert.match(relief, /carries serialise/);
+});
+
+test("#761 no user application means no THROTTLED line -- the word must stay meaningful", () => {
+  const relief = reliefFor([{ command: "node", cpu: 120 }, { command: "tsc", cpu: 40 }]).join("\n");
+  assert.ok(!/THROTTLED/.test(relief),
+    "printing it on every contended host is how a state word stops being read");
+});
+
+/**
+ * CANCELLED IS NOT RED, AND THIS COUNTED IT FOR AN HOUR — reported to the chairman three times.
+ *
+ * `ci.yml` sets `concurrency: cancel-in-progress: true`, so every new run cancels the previous one on the
+ * same ref. Measured on ten main commits at 14:2xZ:
+ *
+ *     audit   6 of 10   ->  SIX cancelled, TWO real failures
+ *     check   3 of 10   ->  ALL THREE cancelled
+ *
+ * **The change that made section 4 see everything is the change that made it over-count.** A PR head
+ * stops moving and rarely carries a cancellation; a merge commit on a fast-moving main carries them
+ * constantly — and #740 moved this section's population from PR heads to merge commits an hour earlier.
+ * Widening a population without re-reading what its members can say is the shape.
+ *
+ * And it inflates in the ALARMING direction, which is the direction that gets acted on: "audit red on 8
+ * of 10" was quoted into three tables and a dispatch before anybody read a conclusion.
+ */
+test("#784 CANCELLED is not red -- a superseded run is not a verdict about the commit", () => {
+  const { byName } = nonSuccessByName([
+    { number: 1, sha: "a", checks: [{ name: "audit", conclusion: "CANCELLED" }] },
+    { number: 2, sha: "b", checks: [{ name: "audit", conclusion: "FAILURE" }] },
+    { number: 3, sha: "c", checks: [{ name: "check", conclusion: "cancelled" }] },
+  ]);
+  assert.deepEqual(byName.get("audit"), [2], "only the real failure counts");
+  assert.equal(byName.get("check"), undefined, "a name that was only ever cancelled is not reported red");
+});
+
+test("#784 an EMPTY conclusion is in flight, not red -- and that was already true, now deliberately", () => {
+  const { byName } = nonSuccessByName([
+    { number: 1, sha: "a", checks: [{ name: "gate", conclusion: "" }] },
+  ]);
+  assert.equal(byName.size, 0);
+});
+
+test("#784 the SAME list serves section 2 and section 4 -- it existed twice and was about to drift", () => {
+  // Section 4's tally and section 2's per-PR red list each carried their own copy. This fix changed one
+  // and would have left the other reporting cancelled runs as red on open PRs -- a remedy applied at one
+  // call site when the behaviour reaches several, in the commit fixing exactly that class.
+  for (const conclusion of ["SUCCESS", "SKIPPED", "NEUTRAL", "CANCELLED", ""]) {
+    assert.equal(isRed({ conclusion }), false, `${conclusion || "(empty)"} must not read as red anywhere`);
+  }
+  assert.equal(isRed({ conclusion: "FAILURE" }), true);
+  assert.equal(isRed({ conclusion: "TIMED_OUT" }), true, "a timeout IS a verdict about the commit");
+});
+
+test("#784 MUTATION TARGET: restoring the list without CANCELLED reproduces the over-count exactly", () => {
+  const pre = ["SUCCESS", "SKIPPED", "NEUTRAL", ""];
+  const wouldCount = ["CANCELLED", "cancelled"]
+    .filter((c) => !pre.includes(c.toUpperCase()));
+  assert.deepEqual(wouldCount, ["CANCELLED", "cancelled"],
+    "the pre-fix list reports a superseded run as red, which is the six-of-ten that was quoted");
 });
