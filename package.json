@@ -18,6 +18,7 @@
     "branches:stranded": "node scripts/stranded-branches.mjs",
     "queue:table": "node scripts/queue-table.mjs",
     "board:document": "node scripts/board-document.mjs",
+    "tracker:comment": "node scripts/tracker-comment.mjs",
     "board:record": "node scripts/board-record.mjs",
     "board:report": "node scripts/board-report.mjs",
     "jobs:check": "node scripts/check-scheduled-jobs.mjs",
@@ -113,8 +114,8 @@
     "changeset": "changeset",
     "changeset:status": "changeset status --since=origin/main",
     "release:version": "changeset version && npm install --package-lock-only",
-    "release:gate:ci": "npm run scorer:verify && npm run release:provenance && npm run scorer:migration && npm run gate:isolation",
-    "release:gate": "npm run scorer:verify && npm run release:provenance && npm run scorer:migration && npm run scorer:shortcuts && npm run gate:isolation && npm run corpus:distribution && npm run training:check-signals:complete && npm run rules:gate && npm run rules:coverage && npm run rules:real-pages && npm run training:evaluate-acceptance:shipped && npm run eval:gate",
+    "release:gate:ci": "npm run scorer:verify && npm run release:provenance && npm run release:rehearsal-check && npm run scorer:migration && npm run gate:isolation",
+    "release:gate": "npm run scorer:verify && npm run release:provenance && npm run release:rehearsal-check && npm run scorer:migration && npm run scorer:shortcuts && npm run gate:isolation && npm run corpus:distribution && npm run training:check-signals:complete && npm run rules:gate && npm run rules:coverage && npm run rules:real-pages && npm run training:evaluate-acceptance:shipped && npm run eval:gate",
     "capture:check": "tsx packages/lab/src/harnesses/capture-check.mjs",
     "capture:explain": "node packages/lab/scripts/explain-capture.mjs",
     "layers:compare": "A11Y_PYTHON=.venv/bin/python node packages/lab/scripts/compare-layers.mjs",
@@ -138,6 +139,7 @@
     "corpus:urls": "node packages/lab/scripts/audit-corpus-urls.mjs",
     "scorer:verify": "node packages/lab/scripts/verify-safetensors.mjs packages/scorer/models/screenreader-scorer",
     "release:provenance": "node packages/lab/scripts/check-shipped-provenance.mjs",
+    "release:rehearsal-check": "node packages/lab/scripts/check-rehearsal-currency.mjs",
     "corpus:distribution": "node packages/lab/scripts/check-dataset-distribution.mjs",
     "scorer:explain-feature": ".venv/bin/python packages/scorer/python/explain_feature.py",
     "corpus:observation-ambiguity": "node packages/lab/scripts/audit-observation-ambiguity.mjs",
@@ -151,7 +153,9 @@
     "corpus:release": "node packages/lab/scripts/corpus-release.mjs",
     "stash:whose": "node scripts/stash-whose.mjs",
     "pr:hold": "node scripts/pr-hold.mjs",
-    "pr:release": "node scripts/pr-hold.mjs --release"
+    "pr:release": "node scripts/pr-hold.mjs --release",
+    "pr:open": "node scripts/pr-open.mjs create",
+    "pr:edit": "node scripts/pr-open.mjs edit"
   },
   "dependencies": {
     "@a11ign/evidence": "0.1.0",

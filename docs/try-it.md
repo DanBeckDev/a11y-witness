@@ -41,6 +41,8 @@ If your app is on GitHub, this needs one workflow file and no machine of your ow
 jobs:
   a11ign:
     runs-on: windows-2022        # NVDA is Windows-only; the action fails fast anywhere else
+    permissions:
+      pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v4
       - uses: DanBeckDev/a11y-witness@main

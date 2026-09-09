@@ -48,6 +48,25 @@
 // would report success having done nothing, which is this repository's most-recorded defect. An issue
 // somebody already closed by hand is reported as `ALREADY CLOSED` rather than silently skipped.
 //
+// ## #776/#791: "ALREADY CLOSED" IS NOT ONLY "SOMEBODY CLOSED IT BY HAND, UNRELATED TO THIS PR"
+//
+// GitHub applies a PR body's `Closes #N` NATIVELY -- at merge, before any workflow even starts -- whenever
+// the merging actor is a HUMAN. This file's own opening measurement (#298) is precisely the mirror case:
+// three of three BOT merges left their rows open, which is why this script exists at all. It never
+// followed that the opposite is also true -- a human merge closes the row before this script's own
+// `gh issue close` call ever runs, so by the time `closingIssuesReferences` is read, the row already
+// reads `state: CLOSED` and lands in `already`, not `close`.
+//
+// Measured 2026-09-09: #677, #577 and #752, closed one second after their PRs (#769/#766/#783, all merged
+// by a human account) merged -- ALL after #776 (this file's own #754 fix) was already on `main`. Each
+// row's `closed` timeline event carried `commit_id: null` and the human merger as `actor` -- GitHub's own
+// signature for a closing-KEYWORD resolution, distinct from this script's `gh issue close` (which shows
+// `github-actions[bot]` and a comment). None of the three had its claim labels stripped, because
+// `stripClaimLabels` was called only inside the `close` loop.
+//
+// So `already`'s rows are stripped too now, exactly like `close`'s -- a row's claim is exactly as stale
+// whether GitHub closed it natively one second before this script asked, or this script closed it itself.
+//
 // Exit codes are the contract:
 //   0  every declared row is closed -- by this run or already
 //   1  one or more could not be closed. NAMED, never counted.
@@ -62,21 +81,16 @@ import { pathToFileURL } from "node:url";
 // not exist there. #330 and #331 are what that circular bootstrap costs. `cli-flags.mjs` imports only
 // `node:path`, `node:fs` and `node:url`.
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
-// SAFE for the identical no-`npm ci` reason: `ready-label-audit.mjs`'s own import graph
-// (`board-snapshot.mjs`, `claim-provenance.mjs`, `git-env.mjs`, `repo-identity.mjs`) is relative-only,
-// same as `cli-flags.mjs` above -- verified before adding this, not assumed.
-import { READY_LABEL } from "./ready-label-audit.mjs";
+// #804: A LEAF IMPORT, safe under the identical no-`npm ci`/no-build constraint the rest of this header
+// names -- `claim-labels.mjs` imports nothing at all, so it cannot be part of a cycle. This replaced two
+// rounds of "duplicate the constant locally instead" (#754 for CLAIM_LABEL/STARTED_LABEL, #782 for
+// READY_LABEL): each was individually defensible against the immediate risk (row-claim.mjs's heavy import
+// graph; a cycle back through ready-label-audit.mjs) but the accumulation was itself the fact-stated-twice
+// shape this repo names as its own most expensive recurring defect -- three copies of four literals is
+// worse than the cycle either duplicate was solving. See claim-labels.mjs's own header for the full story.
+import { READY_LABEL, CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
 
 export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2 };
-
-// #754: DUPLICATED FROM `row-claim.mjs`'s OWN CONSTANTS, deliberately, rather than imported. That file's
-// import graph pulls in `merge-guard.mjs`, `board-snapshot.mjs`'s write path and the whole `row-claim/`
-// rule set -- real risk in a script that runs with no `npm ci` and no build, the exact `ERR_MODULE_NOT_FOUND`
-// bootstrap trap #330/#331 already cost this file once. Two literal strings, pinned equal to
-// `row-claim.mjs`'s by `close-rows-on-merge.test.ts`, is the documented-duplicate exception CLAUDE.md
-// names for `git-safe-env.mjs` under an identical constraint, applied here.
-const CLAIM_LABEL = "in-progress";
-const STARTED_LABEL = "started";
 
 /**
  * WHAT TO DO WITH EACH ROW THE MERGED PR DECLARED -- the whole decision, as one pure function.
@@ -84,13 +98,18 @@ const STARTED_LABEL = "started";
  * Separated from the API calls so the four outcomes can be driven directly. A job whose reporting is
  * only exercised through a live merge is one whose reporting is never exercised.
  *
+ * #776/#791: `already`'s labels travel too, for the identical reason `close`'s do -- see this file's own
+ * header ("GitHub can close a row NATIVELY, before this script ever runs") for why a row here still needs
+ * its claim stripped.
+ *
  * @param {{ number: number, state: string, labels?: string[] }[]} issues  as GitHub resolved them
- * @returns {{ close: { number: number, labels: string[] }[], already: number[], none: boolean }}
+ * @returns {{ close: { number: number, labels: string[] }[], already: { number: number, labels: string[] }[], none: boolean }}
  */
 export function closurePlan(issues) {
   const close = issues.filter((i) => i.state === "OPEN")
     .map((i) => ({ number: i.number, labels: i.labels ?? [] }));
-  const already = issues.filter((i) => i.state !== "OPEN").map((i) => i.number);
+  const already = issues.filter((i) => i.state !== "OPEN")
+    .map((i) => ({ number: i.number, labels: i.labels ?? [] }));
   return { close, already, none: issues.length === 0 };
 }
 
@@ -166,6 +185,38 @@ export function stripClaimLabels(n, labels, repo, logPrefix = "CLOSE-ROWS") {
   }
 }
 
+/**
+ * Applies a resolved `closurePlan`: strips every already-closed row's claim labels (#776/#791 -- GitHub
+ * can close a row NATIVELY, before this script ever runs, so `already` needs the identical strip `close`
+ * gets), then closes each still-open row and strips its labels too. Split out of `main` so the WIRING --
+ * which rows get closed, which get stripped, and that `already` is never silently skipped -- is
+ * unit-testable without a live `gh` call, the same reason `close-rows-sweep.mjs`'s own `closeOnePr` is
+ * split out of ITS `main`. Injectable `closeOne`/`strip` so a test can prove call order and arguments.
+ *
+ * @param {{ close: {number:number, labels:string[]}[], already: {number:number, labels:string[]}[] }} plan
+ * @param {{ prNumber: string, sha: string, repo: string }} ctx
+ * @param {{ closeOne?: typeof closeOneRow, strip?: typeof stripClaimLabels }} [deps]
+ * @returns {number[]} row numbers that could not be closed (empty on success)
+ */
+export function applyClosurePlan({ close, already }, ctx, { closeOne = closeOneRow, strip = stripClaimLabels } = {}) {
+  // #776/#791: THE CLOSE is left alone -- re-closing an already-closed row is not this loop's job, and
+  // never was. The CLAIM is not: a row that reaches this script already CLOSED is not necessarily one
+  // somebody closed by hand days ago -- it may be THIS exact merge, one second earlier (GitHub's own
+  // native closing-keyword resolution), and its claim is exactly as stale as a freshly-closed row's.
+  for (const { number: n, labels } of already) {
+    console.log(`CLOSE-ROWS: #${n} ALREADY CLOSED -- left alone.`);
+    strip(n, labels, ctx.repo);
+  }
+
+  const failed = [];
+  for (const { number: n, labels } of close) {
+    const closed = closeOne(n, ctx);
+    if (!closed) { failed.push(n); continue; }
+    strip(n, labels, ctx.repo);
+  }
+  return failed;
+}
+
 function main() {
   refuseUnknownFlags([], {
     entry: import.meta.url,
@@ -217,21 +268,15 @@ function main() {
     process.exit(EXIT.CANNOT_ASK);
   }
 
-  const { close, already, none } = closurePlan(issues);
+  const plan = closurePlan(issues);
 
-  if (none) {
+  if (plan.none) {
     // NOT a failure, and not silence either. Most PRs declare nothing.
     console.log(`CLOSE-ROWS: #${number} declared NO closing references. Nothing to close.`);
     process.exit(EXIT.DONE);
   }
-  for (const n of already) console.log(`CLOSE-ROWS: #${n} ALREADY CLOSED -- left alone.`);
 
-  const failed = [];
-  for (const { number: n, labels } of close) {
-    const closed = closeOneRow(n, { prNumber: number, sha, repo });
-    if (!closed) { failed.push(n); continue; }
-    stripClaimLabels(n, labels, repo);
-  }
+  const failed = applyClosurePlan(plan, { prNumber: number, sha, repo });
 
   if (failed.length > 0) {
     console.error(`CLOSE-ROWS: could not close ${failed.length}: ${failed.join(" ")}`);
