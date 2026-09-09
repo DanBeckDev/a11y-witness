@@ -46,7 +46,11 @@ import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { gh, lookup, lookupCheckRuns } from "./merge-guard.mjs";
 
-export const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2 };
+// #578: `PUSHED_NO_PR` is its own code, never folded into a generic non-zero exit. "Could not revert"
+// (REFUSED/CANNOT_ASK, nothing touched) and "reverted but could not tell anyone" (the branch is on the
+// remote, no PR exists) are different findings and need opposite responses -- the first needs nothing
+// from a human, the second needs someone to open the PR by hand or clean up the branch.
+export const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2, PUSHED_NO_PR: 3 };
 
 /**
  * WHICH JOBS' FAILURE MEANS "MAIN IS RED" -- DERIVED FROM `trunk-guard.yml`'s OWN `if:`, NEVER LISTED.
@@ -115,6 +119,31 @@ export function newestRunFor(runs, job) {
 export function prCreateArgs({ title, body, branch }) {
   return ["pr", "create", "--repo", REPO, "--title", title, "--body", body,
     "--base", "main", "--head", branch, "--draft"];
+}
+
+/**
+ * #578: THE DISTINCT "REVERTED BUT COULD NOT TELL ANYONE" MESSAGE, pulled out so its wording can be
+ * asserted without a network -- `performRevert` spawns git and `gh`, so it has no unit test itself,
+ * exactly `prCreateArgs`'s own reason for being a separate function.
+ *
+ * Names the branch and the exact command to open it by hand OR delete it, per the issue's own
+ * acceptance ("either the failure names it, or the job cleans it up") -- naming it is the choice made
+ * here: deleting automatically on a `gh pr create` failure risks discarding a real revert over a
+ * transient API error, and this mechanism's whole design (the draft-PR hold, #616) already prefers
+ * leaving a decision for a human over guessing on their behalf.
+ *
+ * @param {{ branch: string, pushSha: string, cause: unknown }} args
+ * @returns {string}
+ */
+export function pushedNoPrMessage({ branch, pushSha, cause }) {
+  const causeText = cause instanceof Error ? cause.message : String(cause);
+  return `PUSHED, PR NOT OPENED: the revert of ${pushSha.slice(0, 10)} is built and on the remote as `
+    + `\`${branch}\`, but \`gh pr create\` failed -- ${causeText}\n`
+    + `main is still broken. To finish this by hand:\n`
+    + `  gh pr create --repo ${REPO} --title 'revert: ${pushSha.slice(0, 10)} broke main' --base main `
+    + `--head ${branch} --draft --body 'Opened by hand after the automated PR-create call failed.'\n`
+    + `Or, if the revert itself is wrong, remove the branch rather than leave it stranded:\n`
+    + `  git push origin --delete ${branch}`;
 }
 
 /**
@@ -362,7 +391,20 @@ function performRevert({ pushSha, runUrl }) {
   // all produced and readable; what is withheld is only the merge. `auto-arm.yml` refuses a draft
   // outright, so nothing arms it by another route -- which is exactly why the draft is the hold rather
   // than an unarmed PR: unarmed is a state anything can change, draft is a state something must.
-  const created = gh(prCreateArgs({ title, body, branch })).trim();
+  //
+  // #578: WRAPPED, because this call has failed before -- run 34275102543 built and pushed
+  // `revert/4e87c87565-316`, then died here on `GraphQL: GitHub Actions is not permitted to create or
+  // approve pull requests`, with nothing after it ever running. That is the worst outcome this mechanism
+  // can produce: it LOOKS like it worked (the branch is there, the run is red) while main stays broken
+  // and nobody is told. A raw uncaught throw here is indistinguishable from "could not revert at all" --
+  // this makes "reverted but could not tell anyone" its own, distinctly reported outcome instead.
+  let created;
+  try {
+    created = gh(prCreateArgs({ title, body, branch })).trim();
+  } catch (cause) {
+    console.error(pushedNoPrMessage({ branch, pushSha, cause }));
+    process.exit(EXIT.PUSHED_NO_PR);
+  }
   console.log(`Opened ${created} AS A DRAFT -- a human reads the attribution before this can merge (#616).`);
 
   // NOT ARMED, and the comment that used to explain the arming is kept below because its FACT is still
@@ -370,13 +412,22 @@ function performRevert({ pushSha, runUrl }) {
   // `auto-arm.yml` will never see this PR at all. That means un-drafting alone does not arm it either --
   // whoever confirms the attribution must arm it by hand, which is the right amount of friction for an
   // action that deletes somebody's merged work.
+  //
+  // #578: this comment is WORTH LESS than the PR that already exists -- a failure here must never read as
+  // "the revert did not happen" when it did. Reported, never thrown: the PR is real and open regardless.
   if (originPr) {
-    gh(["pr", "comment", String(originPr.number), "--repo", REPO, "--body",
-      `This merge's own trunk-guard run failed on \`main\`'s tip and the commit before it was green, so `
-      + `a revert is PROPOSED in ${created} -- opened as a DRAFT and NOT armed. Nothing is reverted yet. `
-      + `If this failure is the world's rather than this merge's (a wall-clock assertion, an outage, a `
-      + `dependency moving underneath), close that draft and say why; #616 is the row for teaching the `
-      + `decision to tell those apart by itself.`]);
+    try {
+      gh(["pr", "comment", String(originPr.number), "--repo", REPO, "--body",
+        `This merge's own trunk-guard run failed on \`main\`'s tip and the commit before it was green, so `
+        + `a revert is PROPOSED in ${created} -- opened as a DRAFT and NOT armed. Nothing is reverted yet. `
+        + `If this failure is the world's rather than this merge's (a wall-clock assertion, an outage, a `
+        + `dependency moving underneath), close that draft and say why; #616 is the row for teaching the `
+        + `decision to tell those apart by itself.`]);
+    } catch (cause) {
+      console.error(`Opened ${created}, but could not comment on the origin PR #${originPr.number} -- `
+        + `${cause instanceof Error ? cause.message : cause}. The revert PR itself is real; only this `
+        + "notification failed.");
+    }
   }
   process.exit(EXIT.READY);
 }
