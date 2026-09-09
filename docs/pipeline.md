@@ -792,3 +792,47 @@ The `worktrees:prune` STANDING bucket is the fourth (#671): it exempts on **pref
 **A discovery sweep has the same failure in a worse form.** #634's own discovery regex carried a lookbehind meant to exclude a `--json` field list and excluded the *readers* instead — it found 3 of 4 real call sites, and 3-of-4 and 4-of-4 produce identical output. **A sweep whose predicate silently shrinks reports cleanly about a population it never examined.** The floor caught it, and a floor works because it asserts about the SEARCH rather than about the result. Give every sweep one.
 
 **And do not add a guard where naming a boundary is the honest answer.** #634 deliberately left `mergeStateStatus` unguarded: its occurrences are dominated by a recorded API fixture and by display code reporting the field as itself, and a rule demanding a narrowing predicate for `status: pr.mergeStateStatus` in a table would refuse the one use that is correct. `queue-table.mjs` carries the discipline in prose where it bites — *"behind is COUNTED, never read off `mergeStateStatus`"* — and that is the better instrument. **A guard that fires on the honest use teaches people to route around it.**
+
+## "The fix has merged" and "the fix is in the checkout I am about to run" are different claims
+
+**2026-09-09, one minute after #669 merged.** #669 makes `worktrees:prune` report by default and mutate only on `--apply` — written that morning because another session ran the bare command to *read* the breakdown and it removed three other sessions' worktrees. The moment it landed, the dispatcher ran `npm run worktrees:prune` from the primary to read the list. It printed:
+
+```
+removed 0 worktree(s):
+```
+
+**`removed`, not `WOULD REMOVE`.** The primary checkout was at `a8fb7cc4`; #669 was on `origin/main` at `a3ce44d0`. **A merged fix does not reach a checkout until that checkout moves** — and the primary is read-only except fast-forward, so it had not. The old mutating default ran, in exactly the manner the incident describes, driven by the session that had just written the fix for it.
+
+Nothing was removed, and **not because anything prevented it**: every candidate happened to be refused as dirty, standing, cherry-picked or active at that second. One merged, clean worktree in that list and it would have been gone.
+
+**The check is one line, before running any tool whose fix has just landed:**
+
+```bash
+git merge-base --is-ancestor origin/main HEAD || echo "this checkout does not have it yet"
+```
+
+And `npm run primary:update` is the only sanctioned way to move the primary. After it, the same command printed `WOULD REMOVE 2`.
+
+**Three things this shows that watching the PR merge cannot:**
+
+- **Watching a merge is evidence about the remote.** The thing you are about to execute is a file on a disk, and the two are related by an operation nobody performed. This is `a-source-bounded-to-a-window-you-did-not-choose` with the window being a working tree rather than a query.
+- **The two versions differ by one word of output.** `removed 0` and `WOULD REMOVE 0` both scan as "nothing happened". The wording split is what made the diagnosis possible *afterwards*, and it does nothing at all for the reader who is not looking for it.
+- **Anything scheduled must fast-forward its own checkout first.** An hourly prune wired to a stale tree does this on a timer, and a timer never notices.
+
+## A remedy named without its cause is worse than none
+
+**Section 5 said "stop running `npm test` locally" while the top five processes by CPU were Docker's VM at 134%, Spotlight at 61%, WindowServer at 51% and Zoom at 39% — not one of them ours.** Every session could have stopped everything and the load would not have moved.
+
+**"Contended" without the consumer is a verdict without a cause**, and the remedies are disjoint:
+
+| what is using the CPU | what actually helps | what does nothing |
+|---|---|---|
+| nine sessions running suites | serialise pushes, run scoped test files | pruning worktrees |
+| `mds_stores` indexing 106 worktrees | prune; `.metadata_never_index` in each root | serialising pushes |
+| a VM or a video call somebody else started | wait, and stop throttling ourselves harder | anything we do |
+
+So the table names the top five each cycle and **derives the advice from them**. When a user application (Zoom, a browser playing video, a screen share) is among them, somebody is *using* this machine rather than sharing it, and the org throttles to one push at a time until the next table shows it gone. When none of the five is ours, the table says so explicitly — because the honest instruction is to wait, and a session told to throttle harder will comply and see nothing improve.
+
+**Read the CPU with `ps -r`, never `top -l 1`.** A single `top` sample has no interval to measure a percentage against and reports `0.0` for every process — measured on a host at load 35, five processes all reading 0.0 while `ps` put `mds_stores` at 52%. That is the same class as the rest of this section arriving through a sampling window instead of a missing PATH: **an unmeasurable value printed as a small number reads as good news.**
+
+**And a control that shares the failure mode of the thing it controls for is not a control.** `pgrep` exits 1 for "nothing matched" and 2+ for "I could not look", so the first attempt at telling those apart asked `pgrep -x <a name nothing has>` — which returns the *identical* exit status as the real query. Read the status itself instead. This is #645's shape (a verification sharing a failure mode with its action) in a two-line helper.
