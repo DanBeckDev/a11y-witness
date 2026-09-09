@@ -163,7 +163,12 @@ jobs:
     if: github.event.pull_request.draft == false && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     steps:
-      - name: Enable auto-merge (merge commit) -- GitHub still withholds the merge until `gate` is green
+      # #645: this step ran `gh pr merge --auto` UNCONDITIONALLY, so a PR held by a ruling was re-armed by
+      # its own next event -- `auto-arm-sweep.mjs` refused a held PR and this path did not. Both now read
+      # one predicate (`pr-hold-state.mjs`); a second correct copy would have been the same shape with a
+      # longer fuse. It needs a checkout, which this job did not previously have.
+      - uses: actions/checkout@v4
+      - name: Enable auto-merge (merge commit) -- unless held. GitHub still withholds until `gate` is green
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
           FALLBACK_TOKEN: ${{ github.token }}
@@ -174,7 +179,7 @@ jobs:
             echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk-guard, close-rows, the push watchdogs) -- see #416."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
-          gh pr merge --auto --merge "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}"
+          node scripts/arm-pr.mjs --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
 
   sweep:
     # ARM EVERY PR THE `arm` JOB ABOVE CANNOT SEE -- the ones already open, #344.
