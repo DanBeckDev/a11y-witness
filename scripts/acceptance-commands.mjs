@@ -64,13 +64,19 @@
 import { execSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { basename, delimiter, join } from "node:path";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { localImports, importedNamesFor, stripComments } from "./local-import-closure.mjs";
 
 /** @typedef {{ verdict: "runnable" } | { verdict: "refused", reason: string } | { verdict: "prose", reason: string }} Classification */
 /** @typedef {{ kind: "missing" } | { kind: "none", reason: string } | { kind: "commands", commands: string[] } | { kind: "duplicate", occurrences: { line: number, text: string }[] }} Section */
 /** @typedef {{ kind: "missing" } | { kind: "malformed", detail: string } | { kind: "none", reason: string } | { kind: "closes", numbers: number[] }} ClosesDeclaration */
-/** @typedef {{ history: boolean, token: boolean, fleet: boolean }} JobCapabilities */
+// #621: `corpus` is OPTIONAL, deliberately -- every existing capabilities literal in this file's own test
+// suite (`NO_HISTORY`, `WITH_HISTORY`) predates it and names only three keys. `unmetRequirements`'s own
+// rule already reads an absent key as unmet, never as satisfied by default, so making the field optional
+// costs nothing: an object that never mentions `corpus` still answers "unmet" exactly as if it had named
+// `corpus: false`.
+/** @typedef {{ history: boolean, token: boolean, fleet: boolean, corpus?: boolean }} JobCapabilities */
 
 // `npm run fleet:*` and its siblings -- the resource ban every worker/agent role file below `ceo` and
 // `orchestrator` carries, verbatim, elsewhere in this repo. A GitHub-hosted runner is not one of the
@@ -168,7 +174,8 @@ function commandExists(token) {
 // the one job that consults it," never as "false on any GitHub runner" -- a future caller of this same
 // mechanism from `ts`/`trunkGate` would need its own, differently-true `token` value, not this one.
 // `history` is the one axis a PR itself controls, via `History: full` in the body (#497).
-const FULL_CAPABILITIES = /** @type {JobCapabilities} */ ({ history: true, token: true, fleet: true });
+const FULL_CAPABILITIES =
+  /** @type {JobCapabilities} */ ({ history: true, token: true, fleet: true, corpus: true });
 
 // A bare line, deliberately -- `History: full` names nothing else the way `Acceptance:`/`Closes:` name a
 // command or an issue, so this needs no section parser, just a marker this PR's checkout should deepen
@@ -194,7 +201,10 @@ export function hasFullHistoryDeclaration(body) {
  * @returns {JobCapabilities}
  */
 export function jobCapabilities(body) {
-  return { history: hasFullHistoryDeclaration(body), token: false, fleet: false };
+  // `corpus: false` unconditionally -- `runs/` is gitignored, so a GitHub-hosted runner never has one
+  // (CLAUDE.md: "A GATE THAT READS runs/ IS NOT YOURS TO REPORT"), the identical structural fact `token`
+  // and `fleet` already state for this job.
+  return { history: hasFullHistoryDeclaration(body), token: false, fleet: false, corpus: false };
 }
 
 // The header convention `generate-commands-doc.mjs`'s `commandHeader` already uses for `// command:`,
@@ -217,6 +227,126 @@ export function testFileRequirements(text) {
   const match = REQUIRES_HEADER.exec(text);
   if (!match) return [];
   return match[1].split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+// #621: DERIVED, NOT DECLARED. `board-style.test.ts` reaches `gh` with no `// requires:` header at all --
+// the fourth instance in two days of the identical shape #382 already named: "an opt-in declaration
+// cannot catch the file whose author did not know there was something to declare, which is the whole
+// population that matters." So this job's capability check no longer trusts the header alone; it walks
+// the SAME local-import closure `gh-token-jobs.test.ts` already walks (`scripts/local-import-closure.mjs`,
+// shared rather than reimplemented -- see that module's header) and asks each file in it a factual
+// question about what it DOES, never about what it merely mentions.
+//
+// KEYED ON THE OPERATION, NOT THE WORD -- AND THIS FILE IS ITS OWN COUNTEREXAMPLE. Every pattern below
+// requires a real call/identifier shape, never a bare substring a comment could contain just as easily as
+// a spawn -- and it was STILL wrong on its first run: this file's own comments, describing the patterns in
+// prose, contain the literal identifiers `GH_TOKEN`, `RUNS_ROOT`/`A11Y_RUNS_ROOT` and
+// `--is-shallow-repository`, so `acceptance-commands.test.ts` (which imports this file) derived `token`
+// from ITS OWN closure walking back into the module that defines the check. `stripCommentsForMatching`
+// below is the fix: patterns run against comment-stripped text, so describing an operation in prose can
+// never again be mistaken for performing it. Caught by #419 form 4's own pre-existing test -- a file
+// naming ITSELF as an Acceptance command must still run, and it stopped running the moment this landed.
+// #621, SECOND-ORDER SELF-REFERENCE: `stripComments` alone is not enough for a pattern whose OWN REGEX
+// LITERAL spells the exact identifier it searches for -- that text is real CODE, not a comment, so it
+// survives stripping and matches itself every time this file is walked as part of its own test's closure.
+// Measured live: `\bRUNS_ROOT|A11Y_RUNS_ROOT\b` and `--is-shallow-repository` both self-matched on THIS
+// FILE after comment-stripping alone fixed the `GH_TOKEN`/`import { collect }` instances. `fingerprint`
+// below builds each pattern from CONCATENATED fragments, so the searched-for substring never appears
+// contiguously in this file's own source -- the file that defines "what counts as a real read" cannot
+// itself read as one.
+/** @param {string} a @param {string} b @returns {string} */
+const fingerprint = (a, b) => a + b;
+
+const CLOSURE_REQUIREMENT_PATTERNS =
+  /** @type {[RegExp, "token" | "corpus" | "history"][]} */ ([
+    // A `gh` invocation (the same fingerprint gh-token-jobs.test.ts's own SPAWNS_GH uses) or a direct read
+    // of the token itself -- either means the file's operation needs a real GH_TOKEN to behave honestly.
+    [/(?:execFileSync|execSync|spawnSync|spawn|run)\s*\(\s*(['"`])gh\1/, "token"],
+    [new RegExp(`\\b${fingerprint("GH_TO", "KEN")}\\b`), "token"],
+    // `runsRoot()` (packages/lab/src/dataset-paths.mjs) is the ONE function this repo reads `runs/`
+    // through; its two documented override env vars are the ONE other door. Reading `runs/` any other way
+    // would be a second, undocumented door CLAUDE.md's own corpus rule does not know about.
+    [/\brunsRoot\s*\(/, "corpus"],
+    [new RegExp(`\\b(?:${fingerprint("RUNS_R", "OOT")}|${fingerprint("A11Y_RUNS_R", "OOT")})\\b`), "corpus"],
+    // The shallow-checkout question this repo's own idiom asks (pre-push-resolve-toward-main.test.ts,
+    // pre-push-stale-base.test.ts) -- a file asking it needs a real answer, which only a full-history
+    // checkout can honestly give it.
+    [new RegExp(fingerprint("--is-shallow-repo", "sitory") + "\\b"), "history"],
+  ]);
+
+/**
+ * Where in `text` a 1-indexed line number sits for a given match index.
+ * @param {string} text
+ * @param {number} index
+ * @returns {number}
+ */
+function lineNumberOf(text, index) {
+  return text.slice(0, index).split("\n").length;
+}
+
+/** @typedef {{ requirement: "token" | "corpus" | "history", file: string, line: number, chain: string[] }} ClosureHit */
+
+/**
+ * Every requirement reachable from `entry`'s local-import closure, each named by the FIRST file (in walk
+ * order) that proves it, the line it was found on, and the full chain of files from `entry` down to it --
+ * #621's own stated acceptance is naming the HOP, not just the capability: "this test needs a token" sends
+ * a reader to the test; naming the module that spawns `gh` sends them to the cause.
+ * @param {string} entry absolute path to the entry file
+ * @returns {ClosureHit[]}
+ */
+export function deriveClosureRequirements(entry) {
+  /** @type {Map<string, ClosureHit>} */
+  const found = new Map();
+  /** @param {string} file @param {string[]} chain @param {Set<string>} seen */
+  const walk = (file, chain, seen) => {
+    if (seen.has(file) || !existsSync(file)) return;
+    seen.add(file);
+    const text = readFileSync(file, "utf8");
+    const codeOnly = stripComments(text);
+    const hereChain = [...chain, file];
+    for (const [pattern, requirement] of CLOSURE_REQUIREMENT_PATTERNS) {
+      if (found.has(requirement)) continue;
+      const match = pattern.exec(codeOnly);
+      if (match) found.set(requirement, { requirement, file, line: lineNumberOf(text, match.index), chain: hereChain });
+    }
+    for (const next of localImports(file)) walk(next, hereChain, seen);
+  };
+  walk(entry, [], new Set());
+  return [...found.values()];
+}
+
+/**
+ * The human-facing form of a `ClosureHit` -- `"board-style.test.ts requires token via collect →
+ * board-data.mjs:72"` for a one-hop chain, matching #621's own worked example verbatim. A direct hit (the
+ * entry file itself matches, zero hops) reads as `"<entry> requires <req>, at <entry>:<line>"`.
+ * @param {ClosureHit} hit
+ * @returns {string}
+ */
+export function closureRequirementMessage(hit) {
+  const { requirement, file, line, chain } = hit;
+  const entryLabel = basename(chain[0]);
+  const fileLabel = basename(file);
+  if (chain.length <= 1) return `${entryLabel} requires ${requirement}, at ${fileLabel}:${line}`;
+  const hops = [];
+  for (let i = 0; i < chain.length - 1; i++) {
+    const names = importedNamesFor(chain[i], chain[i + 1]);
+    hops.push(names[0] ?? basename(chain[i + 1]));
+  }
+  return `${entryLabel} requires ${requirement} via ${hops.join(" → ")} → ${fileLabel}:${line}`;
+}
+
+/**
+ * Which of `entry`'s closure-derived requirements this job's `capabilities` do NOT satisfy, each with the
+ * human-facing chain message -- the derived counterpart to `unmetRequirements`, which only ever sees what
+ * a header DECLARED.
+ * @param {string} entry
+ * @param {JobCapabilities} capabilities
+ * @returns {{ requirement: string, message: string }[]}
+ */
+export function unmetClosureRequirements(entry, capabilities) {
+  return deriveClosureRequirements(entry)
+    .filter((hit) => /** @type {Record<string, boolean>} */ (capabilities)[hit.requirement] !== true)
+    .map((hit) => ({ requirement: hit.requirement, message: closureRequirementMessage(hit) }));
 }
 
 /**
@@ -273,12 +403,37 @@ export function unmetCommandRequirements(command, capabilities) {
 }
 
 /**
+ * The #621 counterpart to `unmetCommandRequirements` above -- CLOSURE-DERIVED rather than header-declared,
+ * so it catches `board-style.test.ts` (no `// requires:` header at all) the same way it catches a file
+ * that declared one honestly. Checked FIRST in `classifyCommand`, because a header that under-declares is
+ * itself a refusal (#621's own framing): whatever the header says, the closure is what actually runs.
+ * @param {string} command
+ * @param {JobCapabilities} capabilities
+ * @returns {{ requirement: string, message: string }[]}
+ */
+export function unmetCommandClosureRequirements(command, capabilities) {
+  if (!/\btsx\s+--test\b/.test(command)) return [];
+  /** @type {{ requirement: string, message: string }[]} */
+  const out = [];
+  for (const fileArg of tsxTestFileArgs(command)) {
+    if (/[*?[{]/.test(fileArg) || !existsSync(fileArg)) continue;
+    out.push(...unmetClosureRequirements(fileArg, capabilities));
+  }
+  return out;
+}
+
+/**
  * Does ANY real `tsx --test` file named across `commands` actually declare `// requires: history`? #497's
  * own stated boundary: "a PR carrying `History: full` and no historical fixture is asking for something it
  * does not use -- worth a warning, not a refusal, since the cost is only time." So this is checked
  * independent of `unmetCommandRequirements` (which asks whether a declared requirement is SATISFIED, not
  * whether the declaration exists at all) -- a file naming `requires: history` always counts as "used" here,
  * whether or not `capabilities.history` happens to be true.
+ *
+ * #621: ALSO true when the CLOSURE reaches `history` with no header at all -- a file whose `// requires:`
+ * header omits `history` but whose real dependency needs it is exactly the shape this whole row exists
+ * to stop reading as "unused." Checked via `deriveClosureRequirements` directly, not `capabilities`: this
+ * question is "does the command use it," never "does the job have it."
  * @param {string[]} commands
  * @returns {boolean}
  */
@@ -287,7 +442,8 @@ function anyCommandUsesHistory(commands) {
     if (!/\btsx\s+--test\b/.test(command)) return false;
     return tsxTestFileArgs(command).some((fileArg) => {
       if (/[*?[{]/.test(fileArg) || !existsSync(fileArg)) return false;
-      return testFileRequirements(readFileSync(fileArg, "utf8")).includes("history");
+      if (testFileRequirements(readFileSync(fileArg, "utf8")).includes("history")) return true;
+      return deriveClosureRequirements(fileArg).some((hit) => hit.requirement === "history");
     });
   });
 }
@@ -335,6 +491,16 @@ export function classifyCommand(command,
   }
   for (const [pattern, reason] of [...FLEET_LAB_PATTERNS, ...CORPUS_PATTERNS]) {
     if (pattern.test(command)) return { verdict: "refused", reason };
+  }
+  // #621: CLOSURE-DERIVED, CHECKED FIRST -- whatever the header says. `board-style.test.ts` has no
+  // `// requires:` header at all and is refused here regardless; a file that DOES declare one correctly
+  // is refused here too, on the identical evidence, so declaring honestly never changes which branch a
+  // command takes -- only whether the message happens to also match a hand-written comma list.
+  const [firstUnmetClosure] = unmetCommandClosureRequirements(command, capabilities);
+  if (firstUnmetClosure) {
+    return { verdict: "refused",
+      reason: `needs \`${firstUnmetClosure.requirement}\`, which this job does not have -- `
+        + firstUnmetClosure.message };
   }
   const [firstUnmet] = unmetCommandRequirements(command, capabilities);
   if (firstUnmet) {
