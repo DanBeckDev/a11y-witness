@@ -29,3 +29,63 @@ export const PATH_IN_PROSE = /(?:^|[\s`"'(])((?:packages|scripts|docs|\.github)\
 export function regionPathsFromBody(body) {
   return [...new Set([...body.matchAll(PATH_IN_PROSE)].map((m) => m[1]))];
 }
+
+// #710: `## Region` (any heading level, optional trailing colon and inline text) or a bare `Region:` /
+// `**Region:**` line -- both seen in real issue bodies (compare #621's `## Region` heading against this
+// row's own trailing `Region: ...` line). A markdown heading line, matched separately, is what bounds a
+// heading-form Region section: the text runs until the next one or the end of the body.
+const REGION_HEADING = /^\s*#{1,6}\s*Region\s*:?\s*(.*)$/i;
+const REGION_INLINE = /^\s*(?:\*\*|__)?Region:(?:\*\*|__)?\s*(.*)$/i;
+const MARKDOWN_HEADING = /^\s*#{1,6}\s+\S/;
+
+/**
+ * Every line after `startIndex`, up to (not including) the next markdown heading or the end.
+ * @param {string[]} lines
+ * @param {number} startIndex
+ * @returns {string[]}
+ */
+function linesUntilNextHeading(lines, startIndex) {
+  const rest = [];
+  for (const later of lines.slice(startIndex)) {
+    if (MARKDOWN_HEADING.test(later)) break;
+    rest.push(later);
+  }
+  return rest;
+}
+
+/**
+ * #710: the raw text of a row's OWN declared `## Region` (or inline `Region:`) section, or `null` when
+ * the body has no Region section at all. Deliberately returns text, not paths -- `declaredRegionFiles`
+ * (below) runs `regionPathsFromBody` over exactly this substring, so a Region section and a whole body
+ * are read by the identical path grammar and can never disagree about what counts as a path.
+ * @param {string} body
+ * @returns {string | null}
+ */
+export function extractRegionSection(body) {
+  const lines = body.split(/\r\n|\r|\n/);
+  for (const [index, line] of lines.entries()) {
+    const heading = REGION_HEADING.exec(line);
+    if (heading) {
+      const inline = heading[1].trim();
+      return inline.length > 0 ? inline : linesUntilNextHeading(lines, index + 1).join("\n");
+    }
+    const plain = REGION_INLINE.exec(line);
+    if (plain) return plain[1].trim();
+  }
+  return null;
+}
+
+/**
+ * #710: the paths a row's OWN `## Region` section declares it will touch -- NOT every path its prose
+ * mentions anywhere (that question is `regionPathsFromBody`'s, unchanged, and still what
+ * `row-reachability.mjs`'s STARTABLE check wants). A row citing a file as a worked example, a fixture, or
+ * something someone else's PR already touches is not declaring intent to change it, and
+ * `fileOverlapReason` needs exactly that narrower question. `null` when the body has no Region section at
+ * all -- CANNOT_ASK, distinct from `[]` (a Region section that names no source path).
+ * @param {string} body
+ * @returns {string[] | null}
+ */
+export function declaredRegionFiles(body) {
+  const section = extractRegionSection(body);
+  return section === null ? null : regionPathsFromBody(section);
+}
