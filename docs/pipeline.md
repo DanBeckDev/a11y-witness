@@ -136,6 +136,54 @@ is one reporting success having drained nothing:
   STRANDED, not slow, and it reads as CLEAN to anything asking `mergeStateStatus`, which is why
   `merge-guard.mjs` asks the check runs instead.
 
+## A three-dot diff says the file is still added. Only a hash says it is the same file.
+
+**There are two questions and the whole difficulty is knowing that.** *Is this path still present after the
+merge?* and *is this the same content I wrote?* A diffstat and a three-dot diff answer the first. Nothing
+in the ordinary carry answers the second.
+
+```bash
+git hash-object docs/board/reported/gates/<record>.json    # before the merge
+git hash-object docs/board/reported/gates/<record>.json    # after
+```
+
+Measured 2026-09-09 on a PR carried from **163 commits behind**, across 46 files, 2,723 insertions and 191
+deletions:
+
+```
+before  e1af2c015c2e2093f93b5e8321d8e3fb5d327bb0
+after   e1af2c015c2e2093f93b5e8321d8e3fb5d327bb0
+```
+
+Byte-identical, so another session's words survived the merge untouched. The three-dot diff returned
+exactly one line — `A docs/.../<record>.json` — which confirms the file is **added** and says nothing at
+all about whether it still contains what its author wrote.
+
+**Why the hash and not a diff.** It is content-addressed, so it is indifferent to rename, mode and
+history — and it **fails safe**: any difference whatever changes it, including a whitespace fix somebody
+thought was harmless.
+
+**Why it matters at depth.** #232 is this repository's record of a resolution that removed four merged
+units, source and tests together, **with every check green**. The deeper the carry, the more a resolution
+can drop without anything red appearing — and the usual instruments are all shape-of-the-tree instruments.
+
+### It is the one check that survives a source moving under you
+
+This belongs with the class in #634 rather than beside it. Three cases in one morning, at three layers,
+all of them *a source that moved between the reading and the use of it*:
+
+| | |
+|---|---|
+| a waiter counted a **superseded run at one sha** as a live verdict | `pull_request: edited` re-runs CI without moving the commit — **the sha is not a run identifier** |
+| a monitor read a **stale `gate`** off a rollup that unions superseded runs | reported a green PR as failing |
+| an experiment's **control was merged out from under it** — the fix landed 21 s after the push and 9 s before the job ran | the before/after pair was designed and then could not exist |
+
+Each is a check answering about a **neighbouring** fact, with the neighbour holding while the fact moves.
+A hash is the instrument that survives it, because it pins **content** rather than **state** — the same
+distinction as verifying a deploy through `/health.code` over HTTP rather than reading a hash back through
+the `exec` channel that was broken, where a broken channel returns *empty* and empty reads as flaky rather
+than as failed.
+
 ## `update-branch` moves your branch under you — a non-fast-forward is the train, not a violation
 
 The `update-branch` job in `.github/workflows/auto-arm.yml` runs `scripts/update-branch-sweep.mjs` on
