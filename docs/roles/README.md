@@ -270,6 +270,16 @@ Two companions, ruled the same morning:
   Found by demonstrating the refusal rather than citing it (#645).
 - **A ruling that changes an assignment reaches the builder in the same minute as the row**, and the
   row cites that it was sent. A record is not a delivery.
+- **The claim label decides the builder, and it is read before anyone is named.** `ceo` named
+  `worker-judge` for #705 while the orchestrator had already started it (2026-09-09), and two sessions
+  built for ten minutes. Before assigning, read the row's `session:*` label from the API; if it carries
+  one, that session builds, and reassigning means releasing the claim on the row first, in the same act
+  as the new name. A row being built under `ready`, or under another session's label, is a labelling
+  fault to fix that minute, because every other reader of the tracker will make the same wrong
+  assignment.
+- **A claim is live for four hours from its last push or comment, and a dead claim is released by the
+  tracker-auditor**, not by a count of how many rows a session holds. The two-claimed-rows cap is
+  retired (2026-09-09); see `product-manager.md` and `tracker-auditor.md` for the measurement.
 
 ## TWO RULES FROM 2026-09-09: THE FOLD TEST, AND THE RUNWAY WINDOW
 
