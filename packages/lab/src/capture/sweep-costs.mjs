@@ -41,6 +41,57 @@ export function captureIn(record) {
   return Array.isArray(record?.capture?.diagnostics) ? record.capture : null;
 }
 
+/**
+ * DID THIS SWEEP NEVER RUN? — the one place that decides it, for every reader.
+ *
+ * A starved sweep records `found: 0`, `ms: 0` and TWO round trips: the baseline speech-log read it makes
+ * before checking the deadline. Every consumer that divides by it gets a number that looks like the
+ * cheapest or the emptiest in the set — `0 ms/trip` here, `ratio 0.00` in `sweep-vs-census.mjs` — and a
+ * second spelling of this predicate is how those two would drift apart.
+ *
+ * READ FROM THE STOP REASON, never inferred from `ms === 0` or `found === 0`: a sweep can legitimately be
+ * quick, and a page can legitimately have none of a type. Only the sweep's own account of why it stopped
+ * can say it never got to look.
+ *
+ * @param {any} mark a `sweep` diagnostic
+ */
+export function sweepNeverRan(mark) {
+  const ms = (mark?.prevMs ?? 0) + (mark?.nextMs ?? 0);
+  return [mark?.prevStop, mark?.nextStop].includes("deadline") && ms === 0;
+}
+
+/**
+ * Stop reasons that mean the sweep ENDED, as opposed to being stopped.
+ *
+ * `exhausted` is the page running out of elements; `silent` is NVDA's own end-of-page answer after the
+ * late-speech retries. Everything else — `deadline`, `cap`, `error`, `focusModeStuck` — is the sweep being
+ * cut off with elements it never reached, and a count from one of those is a lower bound, not a total.
+ */
+const SWEEP_RAN_OUT = new Set(["exhausted", "silent"]);
+
+/**
+ * DID THIS SWEEP FINISH, GET CUT OFF, OR NEVER START? — three states, and the middle one is the one that
+ * gets lost.
+ *
+ * `sweepNeverRan` already separated "never started" from "ran". That is not enough for anything that
+ * DIVIDES by the result: a sweep cut off by the deadline having walked 78 trips reports `found: 38`
+ * against a census of 295, and `0.13` reads as "this sweep reaches an eighth of the links on this page"
+ * when what it says is "it got an eighth of the way through before the clock". Measured on IKEA, where
+ * BOTH usable `link` observations are `deadline` stops and both were being read as coverage.
+ *
+ * The same three states `examinationState` draws for the report (#677), one level down at the sweep.
+ *
+ * @param {any} mark a `sweep` diagnostic
+ * @returns {"complete" | "truncated" | "never-ran"}
+ */
+export function sweepCompleteness(mark) {
+  if (sweepNeverRan(mark)) return "never-ran";
+  const stops = [mark?.prevStop, mark?.nextStop].filter((s) => typeof s === "string");
+  // EVERY direction must have ended on its own. A sweep whose backward half exhausted and whose forward
+  // half hit the deadline reached everything behind the caret and an unknown fraction ahead of it.
+  return stops.length > 0 && stops.every((s) => SWEEP_RAN_OUT.has(s)) ? "complete" : "truncated";
+}
+
 /** A sweep mark that can be read: it names a type and did not fail. */
 const isReadableSweep = (/** @type {any} */ mark) =>
   mark && typeof mark === "object" && mark.event === "sweep"
@@ -73,7 +124,7 @@ export function sweepCostsOf(diagnostics) {
     // READ FROM THE STOP REASON, not inferred from `ms === 0`. A sweep can legitimately be fast; only its
     // own account of why it stopped can say it never got to look. Both directions, because either can be
     // the one that was starved.
-    const starved = [mark.prevStop, mark.nextStop].includes("deadline") && ms === 0;
+    const starved = sweepNeverRan(mark);
     return {
       type: mark.type,
       found: typeof mark.found === "number" ? mark.found : 0,

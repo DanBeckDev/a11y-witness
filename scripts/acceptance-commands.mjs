@@ -335,6 +335,47 @@ const CLOSURE_REQUIREMENT_PATTERNS =
     [new RegExp(fingerprint("--is-shallow-repo", "sitory") + "\\b"), "history"],
   ]);
 
+// #827: THE MIRROR OF `// writes:`, ON THE TEST FILE RATHER THAN THE FILE THAT CALLS THE RISKY FUNCTION --
+// `board-markdown.test.ts` and `board-achievement-retirement.test.ts` each import only `document` from
+// `board-document.mjs`, render it from a literal fixture object, and pass 5/5 and 7/7 with `gh` stubbed to
+// exit 4 on every call. Neither calls `todaysReleaseExists` (`board-document.mjs`'s own `gh release view`
+// spawn, line ~1190) -- but the walk scans the WHOLE FILE'S text for every requirement pattern, not the
+// one export a caller actually imports, so any test reaching `board-document.mjs` at all is charged for
+// EVERY spawn anywhere in it, including ones its own import never uses.
+//
+// `// writes:` sits where the RISKY CALL lives (git-fixture-cache.mjs calls `runsRoot()` itself, so its own
+// declaration is checked right there, mid-walk). `token`'s risky call lives in an IMPORTED file the test
+// does not control, so the declaration cannot live beside the call the same way -- it has to live on the
+// file that actually knows which of its own imports it exercises: the entry itself. So `// no-token: <fn>`
+// is checked ONCE, against `entry`'s own text, before the walk begins, rather than incrementally at each
+// file the way `// writes:` is -- the shape differs because WHERE the two declarations can honestly live
+// differs, not because the discipline does: declared, then verified, never substituted, exactly as #731's
+// own rule states it. A file naming a function it does not itself call is judged wrong the same way a file
+// naming a subdirectory it does not itself write to is -- a DIFFERENT, MORE SPECIFIC refusal than plain
+// `token`, never a silent pass and never a silent override.
+const NO_TOKEN_HEADER = /^\/\/\s*no-token:\s*(\S+)\s*$/m;
+
+/**
+ * @param {string} text
+ * @returns {string | null} the declared function name (e.g. `todaysReleaseExists`), or null if undeclared.
+ */
+function declaredNoTokenFn(text) {
+  const match = NO_TOKEN_HEADER.exec(text);
+  return match ? match[1] : null;
+}
+
+/**
+ * Does `entry`'s own code genuinely never call the function it claims not to need -- a real call SHAPE
+ * (`fnName(`), never a bare mention a comment or a string could contain just as easily. Shallow, exactly
+ * as `writeDeclarationHolds` is shallow: this proves the declaring file's OWN text does not call it, not
+ * that nothing it calls calls it in turn -- the same scope #731's own write-side check keeps.
+ * @param {string} entryCodeOnly
+ * @param {string} fnName
+ */
+function noTokenDeclarationHolds(entryCodeOnly, fnName) {
+  return !new RegExp(`\\b${fnName}\\s*\\(`).test(entryCodeOnly);
+}
+
 /**
  * Where in `text` a 1-indexed line number sits for a given match index.
  * @param {string} text
@@ -359,6 +400,9 @@ function lineNumberOf(text, index) {
  * corpus-dependent at all, and is skipped rather than recorded. A file that DECLARES `// writes:` but whose
  * own text does not bear it out is still recorded as `corpus`, flagged `wrongDeclaration: true` -- named as
  * a bad declaration, never silently trusted and never silently overridden.
+ *
+ * #827: `token`'s mirror, checked once against `entry` itself before the walk begins -- see `NO_TOKEN_HEADER`'s
+ * own header for why the declaration cannot live beside the risky call the way `// writes:` does.
  * @param {string} entry absolute path to the entry file
  * @returns {ClosureHit[]}
  */
@@ -374,6 +418,22 @@ export function deriveClosureRequirements(entry) {
   // exists to remove, one hop further down the same chain. `exemptCorpus` records that the closure has
   // already answered "corpus" honestly and nothing further in this walk may reopen it.
   let exemptCorpus = false;
+  // #827: the `token` counterpart, decided ONCE before the walk starts (see `NO_TOKEN_HEADER`'s header for
+  // why token's declaration is checked at the entry rather than incrementally like `// writes:` is).
+  let exemptToken = false;
+  if (existsSync(entry)) {
+    const entryText = readFileSync(entry, "utf8");
+    const entryCodeOnly = stripComments(entryText);
+    const noTokenFn = declaredNoTokenFn(entryText);
+    if (noTokenFn !== null) {
+      if (noTokenDeclarationHolds(entryCodeOnly, noTokenFn)) {
+        exemptToken = true;
+      } else {
+        const line = lineNumberOf(entryText, /** @type {RegExpExecArray} */ (NO_TOKEN_HEADER.exec(entryText)).index);
+        found.set("token", { requirement: "token", file: entry, line, chain: [entry], wrongDeclaration: true });
+      }
+    }
+  }
   /** @param {string} file @param {string[]} chain @param {Set<string>} seen */
   const walk = (file, chain, seen) => {
     if (seen.has(file) || !existsSync(file)) return;
@@ -382,7 +442,8 @@ export function deriveClosureRequirements(entry) {
     const codeOnly = stripComments(text);
     const hereChain = [...chain, file];
     for (const [pattern, requirement] of CLOSURE_REQUIREMENT_PATTERNS) {
-      if (found.has(requirement) || (requirement === "corpus" && exemptCorpus)) continue;
+      if (found.has(requirement) || (requirement === "corpus" && exemptCorpus)
+        || (requirement === "token" && exemptToken)) continue;
       const match = pattern.exec(codeOnly);
       if (!match) continue;
       const hit = { requirement, file, line: lineNumberOf(text, match.index), chain: hereChain };
@@ -404,8 +465,9 @@ export function deriveClosureRequirements(entry) {
  * entry file itself matches, zero hops) reads as `"<entry> requires <req>, at <entry>:<line>"`.
  *
  * #731: A `wrongDeclaration` HIT SAYS SO, naming the file's OWN claim as the thing that failed -- a reader
- * fixing a plain `corpus` refusal edits the test; a reader fixing a wrong `// writes:` edits the comment
- * that no longer describes what the file does, a different fix at a different spot.
+ * fixing a plain `corpus` refusal edits the test; a reader fixing a wrong `// writes:` (or, #827, `// no-
+ * token:`) edits the comment that no longer describes what the file does, a different fix at a different
+ * spot.
  * @param {ClosureHit} hit
  * @returns {string}
  */
@@ -413,10 +475,11 @@ export function closureRequirementMessage(hit) {
   const { requirement, file, line, chain, wrongDeclaration } = hit;
   const entryLabel = basename(chain[0]);
   const fileLabel = basename(file);
-  const suffix = wrongDeclaration
-    ? ` -- ${fileLabel} declares \`// writes:\` a path its own code does not bear out; refusing rather `
-      + "than trusting an unverified claim"
-    : "";
+  const suffix = !wrongDeclaration ? "" : requirement === "token"
+    ? ` -- ${fileLabel} declares \`// no-token:\` a function its own code DOES call; refusing rather than `
+      + "trusting an unverified claim"
+    : ` -- ${fileLabel} declares \`// writes:\` a path its own code does not bear out; refusing rather `
+      + "than trusting an unverified claim";
   if (chain.length <= 1) return `${entryLabel} requires ${requirement}, at ${fileLabel}:${line}${suffix}`;
   const hops = [];
   for (let i = 0; i < chain.length - 1; i++) {
@@ -1044,7 +1107,7 @@ function commandLinesAfter(lines, headerIndex) {
  * @param {(command: string) => number} run
  * @param {{ prefix: "ACCEPTANCE" | "REFUTATION", isPass: (code: number) => boolean,
  *           commandExists?: (token: string) => boolean, capabilities?: JobCapabilities }} options
- * @returns {{ line: string, ok: boolean }}
+ * @returns {{ line: string, ok: boolean, executed: boolean }}
  */
 function runOneCommand(command, run, { prefix, isPass, commandExists: exists, capabilities }) {
   // #658: truncate for CLASSIFICATION AND EXECUTION only. `command` itself is never reassigned, so every
@@ -1061,12 +1124,12 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists, ca
     // The message names the fix rather than the state, because a refusal a reader cannot follow is one
     // they route around.
     if (runsTheWholeSuite(executable)) {
-      return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}\n`
+      return { executed: false, line: `${prefix}: REFUSED ${command} -> ${classification.reason}\n`
         + "  Name the files this change is verified by. This job has no token and no corpus, and it runs "
         + "commands taken from a PR body, so it cannot run the whole suite -- a PR whose author cannot "
         + "name a file that verifies it has no acceptance.", ok: false };
     }
-    return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
+    return { executed: false, line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
   }
   // #446: A THIRD, DISTINCT LINE SHAPE -- neither RAN nor REFUSED, so it cannot be mistaken for either.
   // Unlike REFUSED (`ok: true`, a legitimate "not this job's to run"), this IS a failure: the line made a
@@ -1075,14 +1138,18 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists, ca
   // opposite fixes. Never run -- there is nothing honest a line that was never a command could report by
   // being executed anyway.
   if (classification.verdict === "prose") {
-    return { line: `${prefix}: "${command}" ${classification.reason}`, ok: false };
+    return { executed: false, line: `${prefix}: "${command}" ${classification.reason}`, ok: false };
   }
   // CHECKED BEFORE RUNNING, never inferred from the exit code -- an unresolved test file/glob is
   // exactly the shape whose exit code cannot be trusted (#353's fifth hazard). Failing this here means
   // the real command never runs at all: there is nothing honest it could report.
   const fileCheck = testFileArgumentsResolve(executable);
   if (!fileCheck.ok) {
-    return { line: `${prefix}: RAN ${command} -> fail (matched no file: ${fileCheck.missing.join(", ")})`, ok: false };
+    // `executed: true`: the command was ATTEMPTED and answered. A glob matching nothing is a real
+    // failure of this line, not a capability this job lacks -- the section examined something and found
+    // it wanting, which is the opposite of examining nothing.
+    return { executed: true,
+      line: `${prefix}: RAN ${command} -> fail (matched no file: ${fileCheck.missing.join(", ")})`, ok: false };
   }
   const code = run(executable);
   const passed = isPass(code);
@@ -1091,7 +1158,7 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists, ca
     // #438's own point: a Refutation: command that exits 0 is the FAILURE that matters -- the guard was
     // never shown to bite. "fail" here, not "pass", is what makes that absence loud instead of quiet.
     : (passed ? "refused" : "fail (did not refuse)");
-  return { line: `${prefix}: RAN ${command} -> ${verb} (exit ${code})`, ok: passed };
+  return { executed: true, line: `${prefix}: RAN ${command} -> ${verb} (exit ${code})`, ok: passed };
 }
 
 /**
@@ -1124,10 +1191,38 @@ function duplicateSectionLine(prefix, section) {
 function runSectionCommands(commands, run, options) {
   let ok = true;
   const lines = [];
+  let ran = 0;
   for (const command of commands) {
     const result = runOneCommand(command, run, options);
     lines.push(result.line);
+    if (result.executed) ran += 1;
     if (!result.ok) ok = false;
+  }
+  // A SECTION THAT EXECUTED NOTHING IS NOT A SECTION THAT PASSED. This is `evidence:check`'s
+  // examined-nothing shape (`2 compared: 2 same` on a 48-case sample) in the acceptance job: every
+  // command REFUSED, no command RAN, and the job concluding success.
+  //
+  // MEASURED, 2026-09-09: 55 of the 145 PRs merged that day had an acceptance job that executed no
+  // command, almost all of them `tsx --test packages/lab/src/packaging/<x>.test.ts` refused for `token`
+  // -- the tracker and pipeline tooling, which is exactly the code everything else now relies on. Three
+  // were found by the PM re-running the declared commands at the merge commit by hand; the shape is
+  // generic to the closure walk, not to those three.
+  //
+  // A REFUSED LINE PASSES ONLY BESIDE A RAN LINE. Refusing one named file while another actually runs is
+  // a legitimate partial answer; refusing every one of them is no answer at all.
+  // ACCEPTANCE ONLY, and the boundary is #516's rather than a convenience. `Refutation:` is optional and
+  // this repo's own rule tells authors to declare `npm run mutate` there, which the classifier refuses BY
+  // DESIGN -- mutate's exit 0 means the guard BITES and `Refutation:` reads success as non-zero, so
+  // running it would invert the verdict. Failing a section for executing nothing when the tree told the
+  // author to write exactly that would refuse the body its own rule asks for. An Acceptance section has
+  // no such case: every refusal there is a capability this job lacks.
+  if (options.prefix === "ACCEPTANCE" && commands.length > 0 && ran === 0) {
+    lines.push(`${options.prefix}: EXECUTED NOTHING -- every command above was refused, so this job `
+      + "verified nothing and must not report success. Declare at least one command this job can "
+      + "actually run: it has no token, no fleet and no corpus, and it runs commands taken from a PR "
+      + "body. A refusal beside a command that RAN is a partial answer; a refusal beside no command at "
+      + "all is the absence of one.");
+    ok = false;
   }
   return { lines, ok };
 }

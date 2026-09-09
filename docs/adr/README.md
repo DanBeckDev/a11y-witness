@@ -48,6 +48,7 @@ you which arguments have already been tried.
 | [0034](./0034-the-speech-channel-is-a-socket-forced-to-fail-loud.md) | The speech channel is a raw TLS socket, and recovery forces it to fail loud rather than restarting NVDA | accepted |
 | [0035](./0035-the-browser-preset-is-evidence-not-configuration.md) | The browser preset is evidence, not configuration — and never falls back | accepted |
 | [0036](./0036-the-layer-model.md) | The layer model — a source of evidence, and which packages may claim one, before the `a11ign` rename | accepted |
+| [0037](./0037-a-partial-examination-is-reported-with-its-bounds.md) | A partial examination is REPORTED with its bounds, not withheld and not rounded up | accepted |
 
 ## If you read only one
 

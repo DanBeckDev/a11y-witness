@@ -704,9 +704,14 @@ test("TRUE POSITIVE FIRST: an ORPHANED focusout -- no matching focusin ever reco
 });
 
 test("the SAME orphaned control across two laps of a ring still reports as ONE finding, not two", () => {
-  // The real 27-event log wraps the ring twice; both occurrences of id 1's orphaned focusout must collapse
-  // to the one finding `add()`'s own dedup already provides (`wcag|evidence` key), the same as any other
-  // rule reporting the same evidence twice.
+  // The real 27-event log wraps the ring twice. CORRECTED (#811): this test's own comment used to credit
+  // `add()`'s dedup for the count of 1, and that is not what happens -- checked directly, id 1's FIRST
+  // orphaned focusout sits at index 0 of this log, which `focusLossVerdict`'s own `i === 0` rule reads as
+  // `"unpairable"` (no prior event proves the listener was watching), not `"finding"`. It never reaches
+  // `add()` at all. The SECOND occurrence, at index 5, is the only real candidate here, so the count of 1
+  // reflects one real finding-candidate, not two candidates collapsed into one. #811's fix (below) folds
+  // `atMs` into the evidence precisely so that IF this log had produced two genuine candidates, both
+  // would have survived -- see "#811: two genuinely distinct focusout events on the same control...".
   const log = [
     { type: "focusout", id: 1, name: "Delivery instructions", atMs: 5098 },
     { type: "focusin", id: 2, name: "Daytime telephone", atMs: 5098 },
@@ -716,7 +721,64 @@ test("the SAME orphaned control across two laps of a ring still reports as ONE f
     { type: "focusout", id: 1, name: "Delivery instructions", atMs: 14582 },
     { type: "focusin", id: 2, name: "Daytime telephone", atMs: 14583 },
   ];
+  assert.deepEqual(focusLossVerdict(log, 0), { kind: "unpairable" },
+    "the first occurrence never becomes a finding -- it is not dedup silencing it");
   assert.equal(focusFindings(log).length, 1);
+});
+
+test("#811: two genuinely distinct focusout events on the same control, close together, both survive -- "
+  + "the V1 rehearsal's own shape (issue #811), verbatim from its stored log", () => {
+  // DanBeckDev/a11ign-v1-rehearsal, run 34364673899, `a11ign-result.json`, `interaction.focusEvents.log`
+  // indices 6-13. `BUTTON` (id 2) never receives a witnessed focusin anywhere in this window -- each of
+  // its three focusout events is independently unpairable-by-receipt, and NVDA's "Filter headings" (id 1)
+  // receives focus for 24-26ms between each one, well under FOCUS_SCRIPT_WINDOW_MS. Before #811's fix,
+  // all three produced the byte-identical evidence "BUTTON (id 2): focus was never fully received before
+  // it was removed" and `add()`'s `wcag|evidence` key collapsed them to one line; the artifact's own
+  // `verdict.findings` confirms it (6 findings total, one BUTTON line, not three).
+  const log = [
+    { type: "focusin", id: 1, name: "Filter headings", atMs: 77961 },
+    { type: "focusout", id: 1, name: "Filter headings", atMs: 82459 },
+    { type: "focusout", id: 2, name: "BUTTON", atMs: 82460 },
+    { type: "focusin", id: 1, name: "Filter headings", atMs: 82461 },
+    { type: "focusout", id: 1, name: "Filter headings", atMs: 82485 },
+    { type: "focusout", id: 2, name: "BUTTON", atMs: 82486 },
+    { type: "focusin", id: 1, name: "Filter headings", atMs: 82487 },
+    { type: "focusout", id: 1, name: "Filter headings", atMs: 82488 },
+    { type: "focusout", id: 2, name: "BUTTON", atMs: 82488 },
+  ];
+  const buttonFindings = focusFindings(log).filter((f) => f.evidence.startsWith("BUTTON"));
+  assert.equal(buttonFindings.length, 3,
+    "three distinct real focusout events on BUTTON (id 2) must produce three findings, not one collapsed "
+    + "by a dedup key blind to which occurrence produced the evidence");
+  assert.deepEqual(buttonFindings.map((f) => f.evidence), [
+    "BUTTON (id 2, at 82460ms): focus was never fully received before it was removed",
+    "BUTTON (id 2, at 82486ms): focus was never fully received before it was removed",
+    "BUTTON (id 2, at 82488ms): focus was never fully received before it was removed",
+  ]);
+});
+
+test("#811 MUTATION TARGET: two genuinely distinct occurrences of identical evidence text, at different "
+  + "atMs, must both survive `ruleFindings`' shared dedup -- reverting the evidence to drop `atMs` "
+  + "collapses this back to one and must fail", () => {
+  // Constructed directly rather than via a real log, to isolate the ONE property this test exists to pin:
+  // two `finding`-kind verdicts whose pre-#811 evidence text was byte-identical must still both reach
+  // `ruleFindings`'s output. Both are index !== 0 and orphaned (no preceding focusin for their own id), so
+  // both independently reach `focusLossVerdict`'s `"finding"` branch -- unlike the two-laps-of-a-ring test
+  // above, where only one candidate ever exists.
+  const log = [
+    { type: "focusin", id: 9, name: "Other", atMs: 1 },
+    { type: "focusout", id: 9, name: "Other", atMs: 2 },
+    { type: "focusout", id: 4, name: "Coupon", atMs: 100 },
+    { type: "focusin", id: 9, name: "Other", atMs: 101 },
+    { type: "focusout", id: 9, name: "Other", atMs: 102 },
+    { type: "focusout", id: 4, name: "Coupon", atMs: 200 },
+  ];
+  assert.equal(focusLossVerdict(log, 2).kind, "finding");
+  assert.equal(focusLossVerdict(log, 5).kind, "finding");
+  const couponFindings = focusFindings(log).filter((f) => f.evidence.startsWith("Coupon"));
+  assert.equal(couponFindings.length, 2,
+    "two genuinely distinct orphaned focusout events on the same control, id 4, must not collapse to one "
+    + "just because the pre-#811 evidence text ('focus was never fully received...') would have matched");
 });
 
 test("REDIRECTION IS NOT F55: a completed receipt that lands on a DIFFERENT real control is silent", () => {
@@ -891,7 +953,8 @@ test("focusLossVerdict: unpairable, clear and finding are three distinct values,
     { type: "focusin", id: 0, name: "Promo code", atMs: 851 },
     { type: "focusout", id: 0, name: "Promo code", atMs: 853 },
   ];
-  assert.deepEqual(focusLossVerdict(realStrip, 1), { kind: "finding", evidence: "Promo code (id 0): focus held 2ms" });
+  assert.deepEqual(focusLossVerdict(realStrip, 1),
+    { kind: "finding", evidence: "Promo code (id 0, at 853ms): focus held 2ms" });
 });
 
 test("CORPUS POSITIVE SHAPE: the same orphan one index later IS F55, so the fix cannot go deaf", () => {

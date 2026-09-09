@@ -9,6 +9,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { documentIdentity } from "./document-identity.js";
 
 import {
@@ -80,6 +82,57 @@ test("an untruncated run still admits iframes and post-interaction content", () 
   const [, fullPages] = conformanceScope(CLEAN);
   assert.match(fullPages.establishes, /examined in full/);
   assert.match(fullPages.limitation, /iframes/);
+});
+
+// #835: nothing pinned that Requirement 2's two branches must differ on `establishes` specifically --
+// the property ADR 0037 relies on is not "the two strings differ" (any accidental wording difference
+// would satisfy that), it is that ONLY the complete branch may claim completeness. So this names the
+// exact phrase (`/examined in full/`) and asserts its PRESENCE on one branch and its ABSENCE on the
+// other, compared directly rather than each checked alone.
+test("#835: the truncated branch's `establishes` must NOT claim what the complete branch claims", () => {
+  const complete = conformanceScope(CLEAN)[1];
+  // `deadline`, not `cap` -- #835's acceptance is explicit that ADR 0037 was written from a `deadline`
+  // stop (a time budget running out mid-sweep, the IKEA capture's own shape) and the existing fixture
+  // only ever used `cap` (a step-count budget). A stop reason no fixture has used is one this guard has
+  // never actually seen fail correctly.
+  const truncated = conformanceScope({
+    ...CLEAN,
+    sweeps: [{ type: "heading", stop: "exhausted" }, { type: "graphic", stop: "deadline" }],
+  })[1];
+  assert.match(complete.establishes, /examined in full/,
+    "the complete branch must still claim completeness -- otherwise this test could pass by both "
+    + "branches losing the claim, not by the truncated one correctly lacking it");
+  assert.doesNotMatch(truncated.establishes, /examined in full/,
+    "the truncated branch's `establishes` must not contain the completeness phrase -- this is the exact "
+    + "confusion ADR 0037 exists to prevent: a report claiming a full page while naming truncated sweeps "
+    + "underneath it");
+  assert.notEqual(complete.establishes, truncated.establishes,
+    "belt and suspenders: the two must not be textually identical either");
+});
+
+// #835 ACCEPTANCE 4: driven against the REAL IKEA capture named in the row, not only a synthetic fixture.
+// `runs/` is gitignored -- a CI runner's checkout never has this local capture, so this SKIPS HONESTLY
+// when it is absent, the same pattern `announcement.corpus.test.ts` (this same package) and
+// `verify.corpus.test.ts` already use. `sweepOutcomes` is the REAL exported reader, driven on the
+// capture's REAL diagnostics -- not a hand-built `sweeps` array standing in for what a real capture
+// would produce.
+const IKEA_CAPTURE = fileURLToPath(
+  new URL("../../../runs/witness/2026-09-09T14-31-43-041Z-www-ikea-com.json", import.meta.url));
+
+test("#835 ACCEPTANCE 4: the real IKEA capture (10 of 16 sweep outcomes truncated by `deadline`) still "
+  + "keeps the two branches apart", { skip: !existsSync(IKEA_CAPTURE) }, () => {
+  const record = JSON.parse(readFileSync(IKEA_CAPTURE, "utf8")) as { capture?: { diagnostics?: unknown[] } };
+  const diagnostics = record.capture?.diagnostics ?? [];
+  const sweeps = sweepOutcomes(diagnostics);
+  const truncated = truncatedSweeps(sweeps);
+  assert.equal(truncated.length, 10, "the row's own measurement -- re-read the fixture if this drifts");
+  assert.ok(truncated.every((s) => s.stop === "deadline"),
+    "every truncated outcome on this real capture stops on `deadline`, which is the stop reason ADR "
+    + "0037 was written from and the one the synthetic fixture above must also cover");
+  const [, fullPages] = conformanceScope({ ...CLEAN, sweeps });
+  assert.doesNotMatch(fullPages.establishes, /examined in full/,
+    "the real IKEA capture's truncated sweeps must not produce a full-page claim");
+  assert.match(fullPages.limitation, /INCOMPLETE/);
 });
 
 test("only `exhausted` and `repeat` count as the page ending first", () => {
@@ -563,4 +616,62 @@ test("activationBudgetFromDiagnostics reads the mark, and absence is null rather
   assert.deepEqual(read, { fields: 100, allowed: 60, skipped: 40, exhausted: true });
   assert.equal(activationBudgetFromDiagnostics([]), null,
     "a capture with no mark has no budget — not a budget of zero, which would claim it covered everything");
+});
+
+/**
+ * THE CENSUS ELEMENT COUNTS ARE READ OFF A DENYLIST, AND #854 ADDS A FIELD — so this pins the interaction
+ * rather than the intention. `censusElementCounts` and `censusFromDiagnostics` take every numeric field on
+ * the `structureCensus` mark except `event` and `atMs`; a flat `readAtMs: 3200` would have arrived here as
+ * an element type named `readAtMs` with 3,200 of them, and no test in either package would have noticed.
+ *
+ * The capture nests it under `readAt` for exactly this reason. This test is the other end of that
+ * agreement: flattening it there breaks here, which is where the damage would actually be done.
+ */
+test("the census read moment is not reported as an element count", () => {
+  const diagnostics = [{
+    event: "structureCensus", atMs: 452791,
+    heading: 69, formControl: 125, landmark: 12,
+    readAt: { startedAtMs: 5211, tookMs: 47 },
+  }];
+  const counts = censusElementCounts(diagnostics);
+  assert.deepEqual(counts, { heading: 69, formControl: 125, landmark: 12 });
+
+  // The mutation that would have shipped it: the same numbers, flat.
+  const flattened = [{
+    event: "structureCensus", atMs: 452791,
+    heading: 69, formControl: 125, landmark: 12,
+    readAtMs: 5211, readTookMs: 47,
+  }];
+  assert.deepEqual(Object.keys(censusElementCounts(flattened) ?? {}).sort(),
+    ["formControl", "heading", "landmark", "readAtMs", "readTookMs"],
+    "this is what a flat field does here — two invented element types, silently");
+});
+
+/**
+ * AND THE TRAP IS ALREADY SPRUNG — recorded here rather than fixed here, because fixing it is a
+ * different change with a different blast radius (its own row).
+ *
+ * The exclusion is `event` and `atMs`, so every OTHER numeric field on a real `structureCensus` mark is
+ * already reported as an element type. Read off the marks of 8 real captures, the census carries
+ * `candidates` (how many CDP page targets matched — a diagnostic about the READ, not the page) and the
+ * two graphic sub-counts. No consumer is harmed today because every one of them looks a key up by name —
+ * `sweepCoverage` iterates `CENSUS_KEY`, not the census — but the function's contract says "element
+ * counts" and three of the things it returns are not that.
+ *
+ * This test asserts the CURRENT behaviour, so the day someone narrows it the change is visible rather
+ * than silent, and so the next person adding a census field finds the trap named instead of stepping in
+ * it. It is not an endorsement.
+ */
+test("KNOWN: the element counts already include non-element numeric fields", () => {
+  const realShape = [{
+    event: "structureCensus", atMs: 452791,
+    heading: 69, landmark: 12, link: 340, graphic: 165, formControl: 125,
+    graphicUnnamed: 9, graphicExempted: 3,
+    // Not the page. How many CDP targets the census could have read, and which one it took.
+    candidates: 1, targetMatch: "matched", targetUrl: "https://www.ikea.com/de/de/",
+  }];
+  assert.deepEqual(Object.keys(censusElementCounts(realShape) ?? {}).sort(),
+    ["candidates", "formControl", "graphic", "graphicExempted", "graphicUnnamed", "heading", "landmark",
+      "link"],
+    "`candidates` is a fact about the READ and it is in here; narrowing this is a separate change");
 });
