@@ -86,3 +86,48 @@ against; a blank one is visible. Where the sections are written by somebody othe
 backfill marked each *"sections written by the PM from the filing, filer to confirm"* — the mark is an
 invitation to **replace**, never to append: a second `## Acceptance` beside the first is what #746
 measured going red as `DUPLICATE -- 2 sections found`.
+
+## The sections a machine reads: Region and Acceptance
+
+Two rulings from 2026-09-09, both earned the same evening, and both about the same thing: **a section
+that is parsed is not prose, whatever it reads like.** A person reads these correctly. The only reader
+that matters does not.
+
+**A REGION LISTS ONLY PATHS THE CHANGE TOUCHES. AN EXCLUSION IS PROSE UNDER ITS OWN HEADING, NEVER IN
+THE REGION — THERE IS NO NEGATION GRAMMAR.** `declaredRegionFiles` parses that section for paths and
+cannot see the word `not`, so this sentence, written inside #848's Region, **declared exactly what it
+denied**:
+
+> **`.github/workflows/ready-label-audit.yml` is NOT in this region**
+
+`fileOverlapReason` then refused another session's claim on #849 over a file #848 had no intention of
+touching: **the row's own disclaimer was the thing that blocked them.** Put the exclusion under
+`## Not in scope`, and say why it is not a preference — *"a `pm/` branch may not touch that
+directory"* — which is where a reader looks for it anyway. Measured across all 63 open rows carrying a
+Region: **one harmful instance and three latent**, each escaping only by accident of the grammar — a
+directory with no filename, a file that was in scope regardless. **The accident is not a defence; the
+grammar will change.** The check is one command, and it is the check to run before quoting any row's
+region:
+
+```bash
+node --input-type=module -e "import {declaredRegionFiles} from './scripts/region-paths.mjs';
+  import {readFileSync} from 'node:fs';
+  console.log(declaredRegionFiles(readFileSync(process.argv[1],'utf8')))" <a file holding the row body>
+```
+
+If a path you meant to exclude comes back in that list, the row is claiming it.
+
+**AND AN ACCEPTANCE NAMES FILES, NEVER `npm test`.** #854's acceptance said `npm test`, passed
+`row-file`, and was then refused by `pr:open`: *"needs `corpus`, which this job does not have —
+`abstention-regression.test.ts` requires corpus via `compareAtFloor`"*. The acceptance job has no token
+and no corpus and runs commands taken from a PR body, so *"the whole suite"* is not something it can run.
+`worker-capture`'s statement of why is the half that makes the rule follow from something rather than
+merely assert it: **a row's acceptance is written before anybody knows which job will run it**, which is
+exactly why it has to name the files the change is verified by rather than the command a developer would
+type. `pr:open`'s own refusal says it best, and a filer who follows it exactly will pass:
+
+> a PR whose author cannot name a file that verifies it has no acceptance
+
+**Neither rule is a request to teach the parser more grammar.** Teaching `declaredRegionFiles` to read
+negation would make it guess at intent, and the exclusion belongs under its own heading for the human
+reader anyway.
