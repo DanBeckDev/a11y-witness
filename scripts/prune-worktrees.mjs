@@ -354,10 +354,12 @@ const VERDICT_BUCKET = {
  * The whole flow: list, classify, remove the clean+merged, name the rest, never touch the primary.
  *
  * @param {string} repoRoot the repository whose `git worktree list` is authoritative
- * @param {{ run?: typeof defaultRun, remove?: (path: string, deps: { run: typeof defaultRun }) => void, now?: number }} [deps]
+ * @param {{ run?: typeof defaultRun, remove?: (path: string, deps: { run: typeof defaultRun }) => void,
+ *   now?: number, dryRun?: boolean }} [deps] `dryRun` skips the removal and nothing else -- same walk,
+ *   same predicate, same buckets, so the listing is the tool's own answer rather than a second one.
  * @returns {PruneReport}
  */
-export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.now() } = {}) {
+export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.now(), dryRun = false } = {}) {
   const porcelain = run("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot });
   const entries = parseWorktreeList(porcelain);
   /** @type {PruneReport} */
@@ -381,7 +383,19 @@ export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.
     const assessment = assessWorktree(repoRoot, entry, { run, now });
     const verdict = classify({ branch: entry.branch, ...assessment });
     if (verdict === "remove") {
-      doRemove(entry.path, { run });
+      // `dryRun` SKIPS THE REMOVAL AND NOTHING ELSE -- same walk, same predicate, same buckets. The
+      // listing has to come from the tool that owns the decision, because the alternative was measured:
+      // a hand-rolled re-implementation of this predicate reported 99 of 114 worktrees "unmerged" on a
+      // tree where a directly-tested branch was merged. A uniform answer across a varied set is a broken
+      // checker, and re-implementing a predicate beside the thing that owns it is this repository's
+      // fact-stated-twice shape, arriving through a listing.
+      //
+      // AND THE TOOL'S SAFETY AND THE HAZARD ARE ABOUT DIFFERENT THINGS. This guarantees the BRANCH is
+      // merged and the TREE is clean. The hazard is about the SESSION: whether anyone is standing in that
+      // directory. A merged, clean worktree can still be somebody's current working directory, and no
+      // branch-level check can see that -- their next `cd` fails and the command runs in the PRIMARY
+      // checkout instead, which is the fleet-driving tree `assertFleetRunsThisCheckout` hashes.
+      if (!dryRun) doRemove(entry.path, { run });
       report.removed.push(reported);
     } else {
       report[VERDICT_BUCKET[verdict]].push(reported);
@@ -399,8 +413,14 @@ function pushSection(lines, entries, header) {
 }
 
 /** @param {PruneReport} report */
-function formatReport(report) {
-  const lines = [`removed ${report.removed.length} worktree(s):`];
+function formatReport(report, dryRun = false) {
+  // WOULD REMOVE versus REMOVED, never the same word. A listing that says "removed" is indistinguishable
+  // from a run that removed, and the whole purpose of the dry run is that a session can read the list one
+  // cycle before its directory disappears.
+  const lines = [dryRun
+    ? `WOULD REMOVE ${report.removed.length} worktree(s) -- nothing has been removed; pass --apply to `
+      + "remove them, and announce the list one cycle first so no session loses its working directory:"
+    : `removed ${report.removed.length} worktree(s):`];
   for (const r of report.removed) lines.push(`  ${r.path}  (${r.branch ?? "detached"})`);
   pushSection(lines, report.dirty,
     `refused ${report.dirty.length} DIRTY worktree(s) -- uncommitted or unmerged work, named, nothing removed:`);
@@ -421,10 +441,21 @@ function formatReport(report) {
 
 async function main() {
   // Guarded per #164: positional repo root; git flags go onward.
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/prune-worktrees.mjs" });
-  const repoRoot = process.argv[2] ?? process.cwd();
-  const report = pruneWorktrees(statSync(repoRoot).isDirectory() ? repoRoot : process.cwd());
-  process.stdout.write(formatReport(report) + "\n");
+  refuseUnknownFlags(["--apply"],
+    { entry: import.meta.url, command: "node scripts/prune-worktrees.mjs" });
+  // THE DEFAULT IS THE LISTING, AND IT IS THE WRONG WAY ROUND UNTIL IT IS NOT. Measured 2026-09-09: a
+  // session ran `npm run worktrees:prune` to READ its breakdown before writing a row about worktree
+  // accounting, and it removed three worktrees belonging to three other sessions. No work was lost -- the
+  // tool refuses anything dirty or unmerged -- but a command whose name reads as a report, on a host with
+  // nine live sessions, is one somebody runs to look.
+  //
+  // `lab:reset` already has this shape (`-e apply=true`) and for the same reason: it exists because the
+  // manual alternative once destroyed release-eligible weights.
+  const dryRun = !process.argv.includes("--apply");
+  const positional = process.argv.slice(2).find((a) => !a.startsWith("--"));
+  const repoRoot = positional ?? process.cwd();
+  const report = pruneWorktrees(statSync(repoRoot).isDirectory() ? repoRoot : process.cwd(), { dryRun });
+  process.stdout.write(formatReport(report, dryRun) + "\n");
 }
 
 import { pathToFileURL } from "node:url";
