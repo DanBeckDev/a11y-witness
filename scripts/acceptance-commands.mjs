@@ -246,6 +246,19 @@ export function testFileRequirements(text) {
 // declaration is what decides -- and when a file claims a write path its own code does not actually use,
 // that mismatch is named as A WRONG DECLARATION, a DIFFERENT and MORE SPECIFIC refusal than plain `corpus`,
 // rather than the closure silently trusting or silently overriding it either way.
+//
+// #731, THE BUG FOUND WHILE FIXING THE BUG: a verified write-only hit that is merely SKIPPED (not
+// recorded) lets the walk carry on into that file's OWN imports -- and `runsRoot()` is not only CALLED by
+// a writer, it is also DEFINED, in `dataset-paths.mjs`, whose `export function runsRoot() {` line matches
+// the identical call-shaped pattern as any real call. The first version of this fix skipped
+// `git-fixture-cache.mjs`'s own verified hit and let the walk recurse into its imports as normal, which
+// reached `dataset-paths.mjs` next and matched ITS definition line as a fresh, unexempted `corpus` hit --
+// reproducing the exact refusal this row exists to end, one hop further down the identical chain. A regex
+// for a call shape matching the definition of the function it looks for fails in the direction that looks
+// like success: the exemption appears to work, and the walk quietly finds the same requirement one hop
+// later. THE PROPERTY IS ABOUT THE CHAIN, NOT ABOUT A LINE -- so `deriveClosureRequirements`'s own
+// `exemptCorpus` flag marks the WHOLE closure exempt once a verified write is found, rather than
+// suppressing one file's occurrence and leaving the requirement free to be rediscovered downstream.
 const WRITES_HEADER = /^\/\/\s*writes:\s*(\S+)\s*$/m;
 
 /**
