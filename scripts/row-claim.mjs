@@ -72,6 +72,7 @@ import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
 import { withBoardSnapshot, PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { runnerReason } from "./row-claim/runner-rule.mjs";
 import { ownPrHealthReason, lookupOwnPrHealth } from "./row-claim/own-pr-health-rule.mjs";
+import { resolveBlockedByOverride, blockedByExceptionNote } from "./row-claim/blocked-by-rule.mjs";
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
 import { templateFieldsReason, lookupIssueBody } from "./row-claim/template-fields-rule.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
@@ -352,18 +353,63 @@ export function sessionEligibilityReason(issueNumber, mySession,
 }
 
 /**
+ * #741: does `--blocked-by=#N` change an otherwise-refusing `ineligible` verdict into a proceed? Pulled
+ * out of `writeRowLabels` to keep that function's own complexity below the lint gate, matching this
+ * file's own established pattern (`declineOwnershipReason`, `declineRemoveLabels`) for exactly this
+ * reason.
+ *
+ * This re-runs `lookupOwnPrHealth`/`ownPrHealthReason` itself, rather than reading `sessionEligibilityReason`'s
+ * `ineligible` string apart -- that function returns one string for B2 and B4 alike, and the override must
+ * never apply to B4 (a file-overlap refusal has nothing to do with the claimant's own PR being unhealthy).
+ * A `blockedBy` value present while the refusal is NOT a B2 one, or absent entirely, is a plain pass-through
+ * of `ineligible`.
+ *
+ * @param {{ issueNumber: number, mySession: string, ineligible: string, blockedBy: string | undefined }} attempt
+ * @param {{ ghRun: (args: string[]) => string, requiredContexts?: () => (string[] | null),
+ *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
+ *             completedAt: string | null}[] | null) }} deps
+ * @returns {{ proceed: true, blockedByNote: string | null } | { proceed: false, reason: string }}
+ */
+function eligibilityWithBlockedBy({ issueNumber, mySession, ineligible, blockedBy }, deps) {
+  if (!blockedBy) return { proceed: false, reason: ineligible };
+  const ownPr = lookupOwnPrHealth(mySession, issueNumber,
+    { run: deps.ghRun, requiredContexts: deps.requiredContexts, checkRuns: deps.checkRuns });
+  const health = ownPrHealthReason(ownPr);
+  if (!health) return { proceed: false, reason: ineligible };
+  const override = resolveBlockedByOverride(ownPr, blockedBy, { run: deps.ghRun });
+  if (!override.ok) {
+    return { proceed: false,
+      reason: `${ineligible} (--blocked-by=${blockedBy} did not apply: ${override.reason})` };
+  }
+  return { proceed: true, blockedByNote: blockedByExceptionNote(override) };
+}
+
+/**
+ * #741: posts the exception comment IF an override actually fired -- pulled out purely so the `if` does
+ * not add to `writeRowLabels`'s own complexity count (a called function's branches are not the caller's).
+ * @param {number} issueNumber
+ * @param {string | null} blockedByNote
+ * @param {(cmd: string, args: string[]) => string} runFn
+ */
+function postBlockedByNoteIfAny(issueNumber, blockedByNote, runFn) {
+  if (blockedByNote) {
+    runFn("gh", ["issue", "comment", String(issueNumber), "--repo", REPO, "--body", blockedByNote]);
+  }
+}
+
+/**
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
  *   dispatch, `[STARTED_LABEL]` for a claim/start
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
- *           worktree?: string, requiredContexts?: () => (string[] | null),
+ *           worktree?: string, blockedBy?: string, requiredContexts?: () => (string[] | null),
  *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
  *             completedAt: string | null}[] | null) }} deps
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 function writeRowLabels(issueNumber, mySession, extraLabels,
-  { run = defaultRun, moveStatus = moveProjectStatus, branch, worktree, requiredContexts, checkRuns } = {}) {
+  { run = defaultRun, moveStatus = moveProjectStatus, branch, worktree, blockedBy, requiredContexts, checkRuns } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
@@ -386,9 +432,15 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   // transition is not a NEW front, and re-running these lookups on every resume would be pure cost for a
   // question already answered the first time this row was claimed).
   const alreadyMine = claimStatus(before.labels).sessions.includes(mySession);
+  let blockedByNote = null;
   if (!alreadyMine) {
     const ineligible = sessionEligibilityReason(issueNumber, mySession, { run, requiredContexts, checkRuns });
-    if (ineligible) return { claimed: false, reason: ineligible };
+    if (ineligible) {
+      const eligibility = eligibilityWithBlockedBy({ issueNumber, mySession, ineligible, blockedBy },
+        { ghRun: ghRunForBody, requiredContexts, checkRuns });
+      if (!eligibility.proceed) return { claimed: false, reason: eligibility.reason };
+      blockedByNote = eligibility.blockedByNote;
+    }
   }
 
   const sessionLabel = `session:${mySession}`;
@@ -424,6 +476,10 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
       ...[sessionLabel, ...extraLabels, ...branchLabel, ...worktreeLabel].flatMap((l) => ["--remove-label", l])]);
     return { claimed: false, reason: `lost a race to ${otherSessions.join(", ")} -- backed off` };
   }
+  // #741: THE EXCEPTION GOES ON THE RECORD, in the same act that wins the claim -- never on a race we
+  // then lost (the block above already returned), so a losing session's attempted override leaves no
+  // comment behind naming an exception it never actually exercised.
+  postBlockedByNoteIfAny(issueNumber, blockedByNote, run);
   // #400: THE LABEL IS THE RECORD; THIS MOVES THE VIEW TO MATCH IT, IN THE SAME ACT. A view corrected only
   // by a later sweep is wrong between sweeps, and "between sweeps" is where a worker reads it -- measured
   // live, a row read `unlabeled ready / labeled in-progress` for the three minutes between a real claim and
@@ -506,10 +562,14 @@ export function dispatchRow(issueNumber, mySession, deps = {}) {
  * (a doc row, a filing task) and neither may exist at the moment `started` is written even for one that
  * does. Passed once here, at the point a worker actually knows its own worktree's path and branch name.
  *
+ * `blockedBy` (#741) is the raw `--blocked-by=#N` flag value -- releases B2 ONLY, and only when the
+ * claimant's own open PR already carries a qualifying measurement comment and `#N` is confirmed open;
+ * see `blocked-by-rule.mjs`. Absent, B2 behaves exactly as it always has.
+ *
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
- *           worktree?: string, requiredContexts?: () => (string[] | null),
+ *           worktree?: string, blockedBy?: string, requiredContexts?: () => (string[] | null),
  *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
  *             completedAt: string | null}[] | null) }} [deps]
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
@@ -761,8 +821,10 @@ function usage() {
     + "  node scripts/row-claim.mjs check <issue-number>                       (alias of --row=)\n"
     + "  node scripts/row-claim.mjs dispatch <issue-number> --session=<name>   (mark taken at dispatch)\n"
     + "  node scripts/row-claim.mjs claim <issue-number> --session=<name> [--branch=<name>] "
-    + "[--worktree=<path>]  (mark started; #656/#665: records the branch and worktree, so a future "
-    + "escalation can tell portable from held, and decline can remove the worktree safely)\n"
+    + "[--worktree=<path>] [--blocked-by=#N]  (mark started; #656/#665: records the branch and worktree, "
+    + "so a future escalation can tell portable from held, and decline can remove the worktree safely; "
+    + "#741: --blocked-by releases B2 only with a measurement comment already on this session's own open "
+    + "PR, and only while #N is open)\n"
     + "  node scripts/row-claim.mjs decline <issue-number> --session=<name>    (give it back; #665: also "
     + "removes the recorded worktree, refusing by name if it is dirty)\n"
     + "  node scripts/row-claim.mjs conflict <issue-number> --found=<text>     (#226: reality differed)\n";
@@ -859,9 +921,13 @@ function runDispatchOrClaim(mode, issueNumber, rest) {
   const branch = branchFlag?.slice("--branch=".length);
   const worktreeFlag = rest.find((a) => a.startsWith("--worktree="));
   const worktree = worktreeFlag?.slice("--worktree=".length);
+  // #741: `--blocked-by=` ONLY MEANS ANYTHING FOR `claim`, for the identical reason `--branch=`/
+  // `--worktree=` do -- a dispatch precedes any of this session's own PR existing at all.
+  const blockedByFlag = rest.find((a) => a.startsWith("--blocked-by="));
+  const blockedBy = blockedByFlag?.slice("--blocked-by=".length);
   try {
     const result = mode === "dispatch" ? dispatchRow(issueNumber, mySession)
-      : claimRow(issueNumber, mySession, { branch, worktree });
+      : claimRow(issueNumber, mySession, { branch, worktree, blockedBy });
     if (result.claimed) {
       const claimLine = claimLineFor(mode, issueNumber, mySession, { branch, worktree });
       if (result.statusMoved) {
@@ -983,8 +1049,8 @@ async function main() {
   // the bare status-read shape below, and a guard listing only `--session` would refuse the command's
   // own documented invocation. A flag guard that has not been merged forward is a guard that breaks the
   // thing it protects.
-  refuseUnknownFlags(["--session", "--row=", "--found=", "--blocked=", "--branch=", "--worktree="],
-    { entry: import.meta.url, command: "node scripts/row-claim.mjs" });
+  refuseUnknownFlags(["--session", "--row=", "--found=", "--blocked=", "--branch=", "--worktree=",
+    "--blocked-by="], { entry: import.meta.url, command: "node scripts/row-claim.mjs" });
   const argv = process.argv.slice(2);
   const rowFlag = argv.find((a) => a.startsWith("--row="));
 

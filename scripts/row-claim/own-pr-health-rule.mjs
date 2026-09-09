@@ -34,15 +34,43 @@ import { checkReasons } from "../merge-guard/checks-rule.mjs";
 // this shape can hide in `scripts/merge-guard/lookups.mjs`; this file has no such call to have one in.
 
 /**
+ * #733: THE COLOUR, NAMED FROM THE REASONS THEMSELVES -- `checkReasons` (`checks-rule.mjs`) already
+ * separates "still running" from "failing" (and "never ran") in its own returned strings; this reads
+ * those categories back rather than re-deriving them, so a mutation to `checkReasons`'s own output shape
+ * is the only thing that can desynchronise this from what it actually found.
+ *
+ * `unfinished`-only is a DIFFERENT sentence from `failing`-only: a still-running required check is not a
+ * failure a claimant can go fix, it is a wait whose remedy is asking again -- reported to `checkReasons`'s
+ * own PROSE as "Not a refusal forever". Naming it "a required check is failing" sent a reader
+ * (`product-manager`, #733) looking for a failure that did not exist, on a PR that needed nothing but 80
+ * more seconds.
+ * @param {readonly string[]} reasons the exact array `checkReasons` returned for this PR's head
+ * @returns {string}
+ */
+function colourFor(reasons) {
+  const stillRunning = reasons.some((reason) => reason.startsWith("STILL RUNNING"));
+  const failing = reasons.some((reason) => reason.startsWith("FAILING")
+    || reason.startsWith("REQUIRED CONTEXT NEVER RAN"));
+  if (failing && stillRunning) {
+    return "RED (a required check is failing) AND STILL RUNNING (another has not finished -- not a "
+      + "refusal forever on that half, ask again)";
+  }
+  if (failing) return "RED (a required check is failing)";
+  if (stillRunning) return "STILL RUNNING (a required check has not finished yet -- not a failure; the "
+    + "wait is the remedy, ask again)";
+  return "not yet merged";
+}
+
+/**
  * THE VERDICT, PURE.
  *
- * @param {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", red: boolean } | null} ownPr
+ * @param {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", reasons: readonly string[] } | null} ownPr
  * @returns {string | null}
  */
 export function ownPrHealthReason(ownPr) {
   if (ownPr === null) return null;
   if (ownPr.state !== "OPEN") return null;
-  const colour = ownPr.red ? "RED (a required check is failing)" : "not yet merged";
+  const colour = colourFor(ownPr.reasons);
   return `#${ownPr.number} is still open and ${colour} -- a unit is finished when the PR reads MERGED, `
     + "not when a local run is green. Finish that one before starting another (this is B2: one PR in "
     + "flight per session).";
@@ -73,14 +101,16 @@ export function lookupOtherHeldIssues(mySession, excludeIssueNumber, { run = gh 
  *
  * `closedByPullRequestsReferences` is resolved server-side by GitHub, never a `Closes #N` regex over a
  * PR body -- the same discipline `merge-guard.mjs`'s `lookupClosingIssues` already applies in reverse.
- * `null` on a failed lookup; `{ number, state: "OPEN"/"MERGED"/"CLOSED", red }` when a closing PR exists;
- * an issue with NO closing PR at all (nobody has opened one yet) is reported as `undefined`, distinct
- * from a failed lookup -- "nothing to check" and "could not ask" are different states.
+ * `null` on a failed lookup; `{ number, state: "OPEN"/"MERGED"/"CLOSED", reasons }` when a closing PR
+ * exists (`reasons` is `checkReasons`'s own exact returned array, `[]` when nothing blocks or when the
+ * required-contexts/check-runs sub-lookup itself failed -- see #476's own "fail open" rule); an issue with
+ * NO closing PR at all (nobody has opened one yet) is reported as `undefined`, distinct from a failed
+ * lookup -- "nothing to check" and "could not ask" are different states.
  *
  * @param {number} issueNumber
  * @param {{ run?: (args: string[]) => string, requiredContexts?: typeof lookupRequiredContexts,
  *           checkRuns?: typeof lookupCheckRuns }} [deps]
- * @returns {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", red: boolean } | undefined | null}
+ * @returns {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", reasons: string[] } | undefined | null}
  */
 export function lookupClosingPrHealth(issueNumber,
   { run = gh, requiredContexts = lookupRequiredContexts, checkRuns = lookupCheckRuns } = {}) {
@@ -97,16 +127,16 @@ export function lookupClosingPrHealth(issueNumber,
     // MOST RECENT (last) reference wins -- an issue can accumulate more than one over its life (a
     // reverted fix reopened and closed by a second PR); the newest is the one that matters now.
     const pr = nodes[nodes.length - 1];
-    if (pr.state !== "OPEN") return { number: pr.number, state: pr.state, red: false };
+    if (pr.state !== "OPEN") return { number: pr.number, state: pr.state, reasons: [] };
     // INJECTABLE, NOT THE BARE IMPORTS -- `lookupRequiredContexts`/`lookupCheckRuns` spawn `gh` through
     // their OWN internal helper, not through this file's `run` parameter, so a test injecting `run` alone
     // would silently make a real network call the moment a fixture's PR reads OPEN. Defaulting the params
     // to the real functions keeps production behaviour identical; only a test needs to override them.
     const required = requiredContexts();
     const runs = checkRuns(pr.headRefOid);
-    const red = required !== null && runs !== null
-      && checkReasons({ headRefOid: pr.headRefOid }, required, runs).length > 0;
-    return { number: pr.number, state: "OPEN", red };
+    const reasons = required !== null && runs !== null
+      ? checkReasons({ headRefOid: pr.headRefOid }, required, runs) : [];
+    return { number: pr.number, state: "OPEN", reasons };
   });
 }
 
@@ -119,7 +149,7 @@ export function lookupClosingPrHealth(issueNumber,
  * @param {number} excludeIssueNumber the row being claimed right now -- never checked against itself
  * @param {{ run?: (args: string[]) => string, requiredContexts?: typeof lookupRequiredContexts,
  *           checkRuns?: typeof lookupCheckRuns }} [deps]
- * @returns {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", red: boolean } | null}
+ * @returns {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", reasons: string[] } | null}
  */
 export function lookupOwnPrHealth(mySession, excludeIssueNumber, deps = {}) {
   const otherHeld = lookupOtherHeldIssues(mySession, excludeIssueNumber, deps);
