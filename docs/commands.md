@@ -43,6 +43,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node scripts/owned-path-signoff.mjs` — check a PR touching a corpus-invalidating path named the facts its own body must state
+- `node scripts/parent-recheck-summary.mjs` — read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
 - `node scripts/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node scripts/pr-hold.mjs` — take or release a hold on a pull request, the record merge-guard reads before treating it as free
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
