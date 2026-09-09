@@ -287,6 +287,14 @@ export function decideClaim(labelsBefore, mySession) {
  * via the return value and `log`, and it is `writeRowLabels`/`declineRow`'s job to decide what that means
  * for their own exit code.
  *
+ * `issueNumber` ITSELF IS EXCLUDED FROM THE SNAPSHOT'S OWN #747 FLOOR (#891, live 2026-09-09): that floor
+ * refuses if any open `ready` row has no Status, and it does not know the difference between "a row
+ * silently lost its Status, neglected" and "this exact call is what is about to give it one" -- so a row
+ * that already carries `ready` by the time it reaches `gh project item-add` (any caller passing gh's own
+ * `-l ready`/`--label=ready` straight through does this; `row-file.mjs`'s `--ready` sentinel is a separate,
+ * later convention that does not stop it) trips the floor on ITSELF, refusing every time. See
+ * `readyRowsMissingStatus`'s own header for the full account.
+ *
  * @param {number} issueNumber
  * @param {string} statusName exactly one of the Project's real Status option names ("Ready", "In progress", …)
  * @param {{ run?: typeof defaultRun, log?: (line: string) => void, snapshot?: typeof withBoardSnapshot }} [deps]
@@ -297,7 +305,8 @@ export function moveProjectStatus(issueNumber, statusName,
   const url = `https://github.com/${REPO}/issues/${issueNumber}`;
   try {
     snapshot(() => run("gh", ["project", "item-edit", String(PROJECT_NUMBER), "--owner", PROJECT_OWNER,
-      "--url", url, "--field", "Status", "--value", statusName]), { run, log });
+      "--url", url, "--field", "Status", "--value", statusName]),
+      { run, log, excludeIssueNumber: issueNumber });
     return { moved: true };
   } catch (error) {
     const message = /** @type {Error} */ (error).message;
