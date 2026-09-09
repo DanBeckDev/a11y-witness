@@ -42,6 +42,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node scripts/owned-path-signoff.mjs` — check a PR touching a corpus-invalidating path named the facts its own body must state
+- `node scripts/parent-recheck-summary.mjs` — read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
 - `node scripts/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node scripts/pr-hold.mjs` — take or release a hold on a pull request, the record merge-guard reads before treating it as free
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
@@ -52,12 +53,14 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/reconstitution-drill.mjs` — run the contingency drill: clone, compose each agent's first message, from nothing but a checkout
 - `node scripts/rescue-hunk.mjs` — rescue one file's change off a stranded branch WITHOUT reverting what main gained since
 - `node scripts/row-claim.mjs` — check, claim, or decline a tracker row by reading its labels, the record, never git history
+- `node scripts/row-file.mjs` — refuse to file a backlog row via `gh issue create` when its body is missing a required section
 - `node scripts/row-reachability.mjs` — compute whether a row is actually startable from the tree, never from a label alone
 - `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
 - `node scripts/select-changed-tests.mjs` — pick only the test files that reference a changed file, narrower than package scoping
 - `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
 - `node scripts/stash-whose.mjs` — list every git stash entry with the branch it was made on, since git alone will not say
 - `node scripts/stranded-branches.mjs` — find pushed branches with no open PR, which are otherwise invisible to CI and review
+- `node scripts/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
 - `node scripts/trunk-revert-guard.mjs` — compare main's before/after state on a merge and refuse one that silently deletes prior work
 - `node scripts/trunk-revert.mjs` — revert a push to main that fails its own gate, unattended, since nothing else runs after it lands
 - `node scripts/trunk-sweep.mjs` — sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
