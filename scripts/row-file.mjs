@@ -1,7 +1,23 @@
 #!/usr/bin/env node
 // @ts-check
-// command: refuse to file a backlog row via `gh issue create` when its body is missing a required section
+// command: refuse to file a backlog row via `gh issue create` when its body is missing a required
+// section, or board/label it wrong -- see #844's own addition below for the second half
 // #735: THE SAME GATE #707 PUT ON THE CLAIM SIDE, CALLED FROM THE FILING SIDE INSTEAD.
+//
+// #844: THE TEMPLATE CHECK ALONE STILL LET A FILED ROW LAND OFF THE BOARD. Measured by `product-manager`:
+// five rows filed through this tool in one night were not on Project 2, and one carried no labels at all
+// -- `gh issue create` needs neither, and this file checked only the body. So filing now also boards the
+// new issue on Project 2 and moves its Status to match a label (`backlog` unless `--ready` is given, in
+// which case `ready` -- never both), and REFUSES to report success until a fresh read-back confirms the
+// label, the `Filed-by:` line and the Status all actually landed -- a row this cannot board is refused,
+// not reported filed halfway.
+//
+// THE LABEL LANDS LAST, NOT AT `gh issue create` TIME, AND THAT ORDER IS LOAD-BEARING. Found by
+// dogfooding this exact fix (#867, filed live with `--ready` while building it): a `ready` label present
+// before the item has a Status makes the row itself the exact shape #747's own board-safety floor exists
+// to catch (an OPEN `ready` issue with no Status), so `moveProjectStatus`'s own pre-write snapshot
+// refused every `--ready` filing on itself, always. See `boardAndVerify`'s own header for the full
+// account and why labelling last is safe.
 //
 // #771: NOTHING RECORDS WHO FILED A ROW, SO A BACKFILL LIST CANNOT BE ADDRESSED. GitHub's `author` is the
 // one fleet account for every row, and a `session:` label means CLAIMED, not filed (the 2026-09-09
@@ -63,6 +79,12 @@ import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { missingTemplateFields } from "./row-claim/template-fields-rule.mjs";
+import { moveProjectStatus, filedByLine, fetchLabels as fetchIssueLabels } from "./row-claim.mjs";
+import { PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
+import { REPO } from "./repo-identity.mjs";
+
+/** @type {(cmd: string, args: string[]) => string} */
+const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8" });
 
 /** `gh issue create --help`'s complete flag surface, long and short forms, plus its two inherited flags. */
 const KNOWN_GH_ISSUE_CREATE_FLAGS = [
@@ -163,8 +185,9 @@ export function appendFiledBy(body, session) {
 
 /**
  * `argv` with any `--body`/`--body-file` form removed and replaced by a single `--body <augmentedBody>`,
- * and `--session=` removed entirely -- `gh issue create` has no such flag and would refuse it as unknown.
- * Every other argument (title, labels, ...) passes through in its original position, unchanged.
+ * and `--session=`/`--ready` removed entirely -- `gh issue create` knows neither and would refuse them
+ * as unknown flags. Every other argument (title, labels, ...) passes through in its original position,
+ * unchanged.
  * @param {string[]} argv @param {string} session @param {string} body the body BEFORE augmentation
  * @returns {string[]}
  */
@@ -173,30 +196,135 @@ export function withFiledBy(argv, session, body) {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--body" || arg === "--body-file" || arg === "--session") { i += 1; continue; }
-    if (arg.startsWith("--body=") || arg.startsWith("--body-file=") || arg.startsWith("--session=")) continue;
+    if (arg.startsWith("--body=") || arg.startsWith("--body-file=") || arg.startsWith("--session=")
+      || arg === READY_FLAG) continue;
     kept.push(arg);
   }
   kept.push("--body", appendFiledBy(body, session));
   return kept;
 }
 
+// #844: THE ONE FLAG THIS FILE OWNS, NOT `gh`'s -- stripped by `withFiledBy` above the same way
+// `--session=` is, so `refuseUnknownFlags`'s own gh-facing list never needs to know it.
+const READY_FLAG = "--ready";
+
 /**
- * Every argument, unchanged, straight to the real `gh issue create`.
+ * #844: which label -- and which Project 2 Status option, by the SAME name -- this filing gets.
+ * `backlog` unless `--ready` is explicitly given: a row filed with everything a claimant needs (Region,
+ * Acceptance, Open-check already checked above) can go straight to the Ready lane; every other row
+ * starts in Backlog, matching this repo's own convention that `ready` is a judgement about pickability
+ * a filer states on purpose, never a default.
  * @param {string[]} argv
+ * @returns {{ label: "backlog" | "ready", status: "Backlog" | "Ready" }}
  */
-function spawnGhIssueCreate(argv) {
-  execFileSync("gh", ["issue", "create", ...argv], { stdio: "inherit" });
+export function boardingFor(argv) {
+  return argv.includes(READY_FLAG) ? { label: "ready", status: "Ready" } : { label: "backlog", status: "Backlog" };
 }
 
 /**
- * Checks, then (only if it passes) files, with `Filed-by:` appended into the body that actually reaches
- * `gh` -- injectable `spawnGh` so a test can prove the passthrough happens, and happens with the argv
- * this function actually builds, without spawning a real `gh` or reaching GitHub.
+ * The issue number from `gh issue create`'s own stdout -- a bare URL, nothing else, on success. `null`
+ * for anything that does not end in `/issues/<digits>`, so a caller can tell "filed, but I could not
+ * read back what number it got" from a genuine number, rather than guessing.
+ * @param {string} output
+ * @returns {number | null}
+ */
+export function issueNumberFromUrl(output) {
+  const match = /\/issues\/(\d+)\s*$/.exec(output.trim());
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * #844: does a FRESH read-back confirm all three records this filing wrote -- the label, the Filed-by
+ * line, and the Project Status? Named, not just a boolean: a reader fixing a half-boarded row needs to
+ * know WHICH of the three did not stick, not merely that something did not.
+ * @param {{ labels: string[], body: string | null, boardStatus: string | null }} after
+ * @param {{ session: string, label: string, status: string }} expected
+ * @returns {string[]} empty when everything is confirmed
+ */
+export function unverifiedFilingFields(after, expected) {
+  const missing = [];
+  if (!after.labels.includes(expected.label)) missing.push(`the \`${expected.label}\` label`);
+  if (after.body === null || filedByLine(after.body) !== expected.session) missing.push("the Filed-by line");
+  if (after.boardStatus !== expected.status) {
+    missing.push(after.boardStatus === null
+      ? `Project ${PROJECT_NUMBER} membership`
+      : `Project ${PROJECT_NUMBER} Status (reads "${after.boardStatus}", not "${expected.status}")`);
+  }
+  return missing;
+}
+
+/**
+ * #844: is issue `issueNumber` on Project `PROJECT_NUMBER`, and what Status does it carry? A single
+ * targeted GraphQL read of the one issue this filing just created -- never `board-snapshot.mjs`'s whole
+ * `fetchBoardItems()` walk, which answers a different, much larger question (every item on the board) at
+ * a cost this one-row check does not need to pay.
+ * @param {number} issueNumber
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {string | null} the Status option name, or `null` if the issue is not on this Project at all
+ */
+export function fetchIssueBoardStatus(issueNumber, { run = defaultRun } = {}) {
+  const [owner, name] = REPO.split("/");
+  const query = `query { repository(owner: "${owner}", name: "${name}") { issue(number: ${issueNumber}) `
+    + `{ projectItems(first: 10) { nodes { project { number } fieldValueByName(name: "Status") `
+    + `{ ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } }`;
+  /** @type {string} */
+  let raw;
+  try {
+    raw = run("gh", ["api", "graphql", "-f", `query=${query}`]);
+  } catch (cause) {
+    throw new Error(`row-file: could not read #${issueNumber}'s Project membership -- refusing to guess `
+      + `whether it boarded. ${/** @type {Error} */ (cause).message}`, { cause });
+  }
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`row-file: gh's Project-membership response for #${issueNumber} was not JSON -- `
+      + `refusing to guess. First 200 chars: ${raw.slice(0, 200)}`, { cause });
+  }
+  const nodes = /** @type {any} */ (parsed)?.data?.repository?.issue?.projectItems?.nodes;
+  if (!Array.isArray(nodes)) {
+    throw new Error(`row-file: gh's Project-membership response for #${issueNumber} did not have the `
+      + `expected shape -- refusing to guess. Got: ${JSON.stringify(parsed).slice(0, 300)}`);
+  }
+  const onThisProject = nodes.find((/** @type {any} */ n) => n?.project?.number === PROJECT_NUMBER);
+  return onThisProject?.fieldValueByName?.name ?? null;
+}
+
+/**
+ * Every argument, unchanged, straight to the real `gh issue create`. Captures stdout (the created issue's
+ * URL) instead of inheriting the terminal -- #844: this file now reports its OWN verdict after boarding
+ * and reading it back, not `gh`'s raw output, and needs the URL to do either.
  * @param {string[]} argv
- * @param {{ spawnGh?: (argv: string[]) => void }} [deps]
+ * @returns {string} gh's own stdout, trimmed
+ */
+function spawnGhIssueCreate(argv) {
+  return execFileSync("gh", ["issue", "create", ...argv], { encoding: "utf8" }).trim();
+}
+
+/**
+ * Checks, then (only if it passes) files, with `Filed-by:` and a board label appended into the body/argv
+ * that actually reach `gh`, adds the new issue to Project 2 with a matching Status, and REFUSES to
+ * report success until a fresh read-back confirms all three landed -- #844: `row-file` used to hand a
+ * created issue straight to `gh` with nothing else, so the filer had to remember the board and the
+ * labels by hand, and five rows filed one night landed off Project 2, one (#844's own measurement) with
+ * no labels at all. A row this cannot board is refused, not reported filed halfway: it prints exactly
+ * which of the three did not stick and a distinct exit code, never a plain success for a row nothing
+ * else can find.
+ *
+ * Injectable `spawnGh`/`run`/`fetchBoardStatus` so a test can prove every step -- the label composed
+ * into argv, the board-add call, the Status move, and the read-back -- without spawning a real `gh` or
+ * reaching GitHub.
+ * @param {string[]} argv
+ * @param {{ spawnGh?: (argv: string[]) => string, run?: typeof defaultRun,
+ *   fetchBoardStatus?: typeof fetchIssueBoardStatus, fetchLabels?: typeof fetchIssueLabels,
+ *   moveStatus?: typeof moveProjectStatus }} [deps]
  * @returns {number} the process exit code
  */
-export function createIssue(argv, { spawnGh = spawnGhIssueCreate } = {}) {
+export function createIssue(argv, { spawnGh = spawnGhIssueCreate, run = defaultRun,
+  fetchBoardStatus = fetchIssueBoardStatus, fetchLabels = fetchIssueLabels,
+  moveStatus = moveProjectStatus } = {}) {
   const session = sessionFromArgv(argv);
   if (!session) {
     process.stderr.write("row-file: --session=<name> is required -- Filed-by: is taken from the session "
@@ -209,16 +337,103 @@ export function createIssue(argv, { spawnGh = spawnGhIssueCreate } = {}) {
     process.stderr.write(`${reason}\n`);
     return 1;
   }
+  const boarding = boardingFor(argv);
+  // #844: THE BOARD LABEL IS NOT ADDED HERE -- see `boardAndVerify`'s own header for why it has to wait
+  // until AFTER the Project Status is set, not merely after the issue exists.
+  const filedArgv = withFiledBy(argv, session, /** @type {string} */ (body));
+
+  /** @type {string} */
+  let url;
   try {
-    spawnGh(withFiledBy(argv, session, /** @type {string} */ (body)));
-    return 0;
+    url = spawnGh(filedArgv);
   } catch (error) {
+    process.stderr.write(`row-file: gh issue create failed -- nothing was filed. `
+      + `${/** @type {Error} */ (error).message}\n`);
     return /** @type {{ status?: number }} */ (error).status ?? 1;
   }
+  const issueNumber = issueNumberFromUrl(url);
+  if (issueNumber === null) {
+    process.stderr.write(`row-file: FILED, but could not read an issue number back from gh's own output `
+      + `-- cannot board it or verify it. gh printed: ${url}\n`);
+    return 2;
+  }
+
+  const result = boardAndVerify({ issueNumber, url, boarding, session },
+    { run, fetchBoardStatus, fetchLabels, moveStatus });
+  if (!result.ok) {
+    process.stderr.write(`row-file: ${result.message}\n`);
+    return 2;
+  }
+  process.stdout.write(`https://github.com/${REPO}/issues/${issueNumber}\n`);
+  return 0;
+}
+
+/**
+ * #844: board the freshly-created issue, set its Status, ONLY THEN add the board label, and finally
+ * read all three records back -- pulled out of `createIssue` to keep that function's own complexity
+ * under this repo's gate; it is the same one concept (board it, then prove it) written out, rather than
+ * a genuinely separate responsibility.
+ *
+ * THE LABEL GOES ON LAST, AND THAT ORDER IS LOAD-BEARING, FOUND BY DOGFOODING THIS EXACT FIX (#867,
+ * filed live with `--ready` while building this row): `moveStatus` snapshots the WHOLE board first
+ * (#399's own rule), and #747's own floor inside that snapshot refuses if any OPEN `ready`-labelled
+ * issue has no Status. A `ready` label added at CREATION time -- before the item is even on the board,
+ * let alone has a Status -- makes the freshly-filed row itself the exact row that floor exists to catch,
+ * refusing every `--ready` filing, always, on its own snapshot. Labelling AFTER the Status is set means
+ * no reader (including this filing's own next step) ever sees `ready` without a Status: the row is
+ * either not yet labelled `ready` at all (invisible to that floor, same as an ordinary unlabelled issue)
+ * or fully consistent (labelled AND Statused) by the time anything could ask.
+ * @param {{ issueNumber: number, url: string, boarding: { label: string, status: string },
+ *   session: string }} filed
+ * @param {{ run: typeof defaultRun, fetchBoardStatus: typeof fetchIssueBoardStatus,
+ *   fetchLabels: typeof fetchIssueLabels, moveStatus: typeof moveProjectStatus }} deps
+ * @returns {{ ok: true } | { ok: false, message: string }}
+ */
+function boardAndVerify({ issueNumber, url, boarding, session }, { run, fetchBoardStatus, fetchLabels, moveStatus }) {
+  try {
+    run("gh", ["project", "item-add", String(PROJECT_NUMBER), "--owner", PROJECT_OWNER, "--url", url]);
+  } catch (error) {
+    return { ok: false, message: `FILED as #${issueNumber}, but could NOT add it to Project `
+      + `${PROJECT_NUMBER} -- refusing to report success for a row nothing else can find. `
+      + `${/** @type {Error} */ (error).message}\n  Add it by hand: gh project item-add ${PROJECT_NUMBER} `
+      + `--owner ${PROJECT_OWNER} --url ${url}` };
+  }
+  const statusResult = moveStatus(issueNumber, boarding.status, { run });
+  if (!statusResult.moved) {
+    return { ok: false, message: `FILED as #${issueNumber} and added to Project ${PROJECT_NUMBER}, but `
+      + `its Status could not be set to "${boarding.status}" -- ${statusResult.reason}` };
+  }
+  try {
+    run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO, "--add-label", boarding.label]);
+  } catch (error) {
+    return { ok: false, message: `FILED as #${issueNumber}, boarded with Status "${boarding.status}", `
+      + `but the \`${boarding.label}\` label could not be added -- `
+      + `${/** @type {Error} */ (error).message}` };
+  }
+
+  /** @type {string | null} */
+  let bodyAfter;
+  try {
+    bodyAfter = run("gh", ["issue", "view", String(issueNumber), "--repo", REPO, "--json", "body",
+      "--jq", ".body"]);
+  } catch {
+    bodyAfter = null; // read-back failure reads as "cannot confirm the Filed-by line", not a crash
+  }
+  const after = {
+    labels: fetchLabels(issueNumber, { run }).labels,
+    body: bodyAfter,
+    boardStatus: fetchBoardStatus(issueNumber, { run }),
+  };
+  const missing = unverifiedFilingFields(after, { session, label: boarding.label, status: boarding.status });
+  if (missing.length > 0) {
+    return { ok: false, message: `FILED as #${issueNumber}, but the read-back does not confirm it -- `
+      + `missing: ${missing.join(", ")}. Refusing to report success for a row it could not fully board.` };
+  }
+  return { ok: true };
 }
 
 function main() {
-  refuseUnknownFlags([...KNOWN_GH_ISSUE_CREATE_FLAGS, "--session="],
+  refuseUnknownFlags([...KNOWN_GH_ISSUE_CREATE_FLAGS, "--session=", READY_FLAG],
     { entry: import.meta.url, command: "npm run row-file --" });
   process.exitCode = createIssue(process.argv.slice(2));
 }

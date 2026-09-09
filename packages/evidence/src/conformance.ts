@@ -519,6 +519,7 @@ export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcom
   for (const mark of diagnostics) {
     const m = mark as {
       event?: string; type?: string; prevStop?: string; nextStop?: string; truncated?: boolean;
+      stop?: string;
     };
     // The focus probe is not a quick-nav sweep, but it truncates the same way — it stops after a fixed
     // number of Tab presses — and the consequence is identical: content past that point was never
@@ -526,6 +527,15 @@ export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcom
     // criterion whose evidence collection stopped early, instead of a `passed` it did not earn.
     if (m?.event === "focusOrder") {
       if (m.truncated === true) out.push({ type: "focusOrder", stop: "cap" });
+      // A WALK THAT READ NOTHING IS NOT A PAGE WITH NO TAB STOPS — #863. `stops: 0` leaves `truncated`
+      // false, so a zero-stop walk pushed no outcome at all and 2.1.2/2.4.3 got a clean channel from a
+      // probe that never read one. Measured on five IKEA captures: `stops: 0` beside the same capture's
+      // `focusConfinement` mark reporting `controlsOnPage: 265`.
+      //
+      // Gated on the PRESENCE of `stop`, which #863 adds: a capture taken before it has no way to say
+      // which ending it had, and inventing truncation in old evidence is the wrong direction to be wrong
+      // in — the same rule `examinationState` states for an absent stop reason.
+      else if (m.stop === "silent") out.push({ type: "focusOrder", stop: "silent" });
       continue;
     }
     if (m?.event !== "sweep") continue;
