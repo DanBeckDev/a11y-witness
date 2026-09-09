@@ -199,8 +199,18 @@ jobs:
             echo "result=pass" >> "$GITHUB_OUTPUT"
           else
             echo "the parent FAILS the suite now, on a tree this push did not touch."
-            tail -40 /tmp/parent-test.log || true
-            echo "result=fail" >> "$GITHUB_OUTPUT"
+            # #744: NEVER `tail -40` -- the last forty lines of a node:test run are the trailing PASSING
+            # subtests, not the failure. Measured live on #718: a genuine failure produced a step output of
+            # nothing but `ok 4180`/`ok 4181`/`ok 4182`, and `decideRevert` correctly declined to act on a
+            # verdict naming no cause -- so a real revert was refused and main stayed red for ninety
+            # minutes. `parent-recheck-summary.mjs` prints the actual `not ok` lines and the `# fail N`
+            # summary, wherever they sit in the log, and reports `unknown` rather than `fail` when it
+            # cannot name a real failing subtest -- `decideRevert` already treats `unknown` as CANNOT_ASK,
+            # never as grounds to refuse a genuine revert.
+            cd - >/dev/null
+            node scripts/parent-recheck-summary.mjs /tmp/parent-test.log | tee /tmp/parent-summary.log
+            RECHECK_RESULT="$(grep -oE 'RECHECK_RESULT=(fail|unknown)' /tmp/parent-summary.log | tail -1 | cut -d= -f2)"
+            echo "result=${RECHECK_RESULT:-unknown}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Revert this push, unless the failure is inherited or main has already moved on

@@ -16,7 +16,8 @@ import {
   notAConformanceClaim,
   NON_INTERFERENCE_CRITERIA,
   sweepOutcomes,
-  truncatedSweeps, sweepCoverage, censusCountsDistinctNames, censusFromDiagnostics,
+  truncatedSweeps, sweepCoverage, censusCountsDistinctNames, censusFromDiagnostics, censusElementCounts,
+  activationBudgetFromDiagnostics, type ConformanceScopeInput,
   censusTargetMismatchReason, examinationState } from "./conformance.js";
 
 const CLEAN = {
@@ -216,7 +217,9 @@ test("states reach per type against the browser's own count", () => {
   assert.deepEqual(coverage.find((c) => c.type === "link"),
     // `examined: "examined"` with NO sweep outcomes given, and that is the deliberate default (#677):
     // a capture predating the stop marks must not be relabelled as truncated on a field it never had.
-    { type: "link", reached: 46, present: 57, complete: false, examined: "examined" });
+    // `reachable === present` with no raw census supplied: both denominators fall back to the same
+    // number, which is exactly what a capture predating `censusElements` must keep doing.
+    { type: "link", reached: 46, present: 57, reachable: 57, complete: false, examined: "examined" });
   assert.equal(coverage.every((c) => c.type === "link" || c.complete), true);
 });
 
@@ -450,4 +453,114 @@ test("Full pages names the document the report describes, and omits the sentence
   const anonymous = conformanceScope(base).find((r) => r.number === 2)!;
   assert.doesNotMatch(anonymous.limitation, /Document /);
   assert.doesNotMatch(anonymous.limitation, /NOT RECORDED/);
+});
+
+/**
+ * #677 — TWO DENOMINATORS, BECAUSE "NOT EXAMINED (of N)" AND "reach R/N" ASK DIFFERENT QUESTIONS.
+ *
+ * `distinct` collapses by NAME and an element with no name counts as its own, so on a page with unnamed
+ * graphics it is nearly the element count. Measured 2026-09-09: calendly `graphic=63, graphicUnnamed=38,
+ * distinct.graphic=61` (two collapsed); ikea `graphic=205, graphicUnnamed=0, distinct.graphic=165`
+ * (forty collapsed, correctly).
+ */
+const calendlyGraphics = {
+  assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true,
+  census: { graphic: 61 },                                  // distinct-overlaid, as the reader produces it
+  censusElements: { graphic: 63, graphicUnnamed: 38 },       // raw, straight off the mark
+  swept: { graphic: 10 },
+};
+
+test("reach excludes what a sweep could never announce; NOT EXAMINED counts every element", () => {
+  const [graphic] = sweepCoverage(calendlyGraphics);
+  assert.equal(graphic.present, 63, "NOT EXAMINED asks how much of the page went unlooked-at");
+  assert.equal(graphic.reachable, 23, "61 distinct minus 38 unnamed — distinct names among NAMED elements");
+  assert.equal(graphic.reached, 10);
+  assert.equal(graphic.complete, false);
+});
+
+test("the sentence states both numbers, so neither denominator can be mistaken for the other", () => {
+  const sentence = conformanceScope({ ...calendlyGraphics, sweeps: [] })
+    .find((r) => r.number === 2)!.establishes;
+  assert.match(sentence, /graphic 10\/23 of 63 on the page/);
+});
+
+test("without the raw census, both denominators fall back and the report is unchanged", () => {
+  // A capture predating `censusElements` must read exactly as it always did. Reporting a NEW number on an
+  // OLD capture would be this project's own defect — a value invented from an absent measurement.
+  const [graphic] = sweepCoverage({ ...calendlyGraphics, censusElements: null });
+  assert.equal(graphic.present, 61);
+  assert.equal(graphic.reachable, 61);
+  const sentence = conformanceScope({ ...calendlyGraphics, censusElements: null, sweeps: [] })
+    .find((r) => r.number === 2)!.establishes;
+  assert.match(sentence, /graphic 10\/61/);
+  assert.doesNotMatch(sentence, /on the page/);
+});
+
+test("a type with every element named is untouched by the correction", () => {
+  // ikea's graphics: 205 raw, 0 unnamed, 165 distinct. The dedupe is real name-collapsing and must survive.
+  const [graphic] = sweepCoverage({
+    assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true,
+    census: { graphic: 165 }, censusElements: { graphic: 205, graphicUnnamed: 0 }, swept: { graphic: 165 },
+  });
+  assert.equal(graphic.reachable, 165, "nothing unnamed, so nothing to subtract");
+  assert.equal(graphic.present, 205);
+  assert.equal(graphic.complete, true, "reaching every NAMED graphic is complete reach");
+});
+
+test("a nonsense denominator is clamped rather than printed", () => {
+  // The two numbers come from one mark and cannot disagree today. A reach of "10/-3" would render rather
+  // than fail, and a nonsense number in a report is worse than a conservative one.
+  const [graphic] = sweepCoverage({
+    assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true,
+    census: { graphic: 5 }, censusElements: { graphic: 9, graphicUnnamed: 9 }, swept: { graphic: 1 },
+  });
+  assert.equal(graphic.reachable, 0);
+});
+
+test("censusElementCounts returns the RAW counts, with no distinct laid over them", () => {
+  const raw = censusElementCounts([
+    { event: "structureCensus", graphic: 63, graphicUnnamed: 38, link: 76, distinct: { graphic: 61 } }]);
+  assert.equal(raw?.graphic, 63, "the distinct overlay must not reach this reader");
+  assert.equal(raw?.graphicUnnamed, 38, "the unnamed count is what `reachable` subtracts");
+  assert.equal(censusElementCounts([{ event: "structureCensus", error: "CDP listed no page target" }]), null,
+    "a failed census is not a reading");
+  assert.equal(censusElementCounts([]), null);
+});
+
+/**
+ * #677 part 2 — A CONTROL THE BUDGET REFUSED AND A CONTROL THAT SAID NOTHING PRODUCE THE SAME EVIDENCE.
+ */
+const withBudget = (budget: ConformanceScopeInput["activationBudget"]) =>
+  conformanceScope({ assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true, sweeps: [],
+    activationBudget: budget }).find((r) => r.number === 2)!.limitation;
+
+test("an exhausted activation budget is reported as NOT ACTIVATED, with the count", () => {
+  const said = withBudget({ fields: 100, allowed: 60, skipped: 40, exhausted: true });
+  assert.match(said, /40 of 100 form control\(s\) were NOT ACTIVATED/);
+  assert.match(said, /statement about this capture and not about the page/);
+});
+
+test("a budget that covered every control says so, rather than saying nothing", () => {
+  // ALWAYS PRINTED, including the good case. A line that appears only when something went wrong cannot
+  // tell "nothing went wrong" from "nobody looked" — the distinction this whole row is about.
+  const said = withBudget({ fields: 12, allowed: 12, skipped: 0, exhausted: false });
+  assert.match(said, /Every one of the 12 form control\(s\) found was offered/);
+  assert.doesNotMatch(said, /NOT ACTIVATED/);
+});
+
+test("no budget, or no controls, states nothing at all", () => {
+  // A configured form activates exactly the control the author named and keeps no budget; a page with no
+  // form controls consulted none. Neither is a coverage claim, and inventing one would be the defect.
+  assert.doesNotMatch(withBudget(null), /activation probe|NOT ACTIVATED|form control/);
+  assert.doesNotMatch(withBudget({ fields: 0, allowed: 0, skipped: 0, exhausted: false }),
+    /activation probe|NOT ACTIVATED|form control/);
+});
+
+test("activationBudgetFromDiagnostics reads the mark, and absence is null rather than a zeroed budget", () => {
+  const read = activationBudgetFromDiagnostics([
+    { event: "activationBudget", budgetMs: 175000, spentMs: 175200, allowed: 60, skipped: 40,
+      exhausted: true, fields: 100 }]);
+  assert.deepEqual(read, { fields: 100, allowed: 60, skipped: 40, exhausted: true });
+  assert.equal(activationBudgetFromDiagnostics([]), null,
+    "a capture with no mark has no budget — not a budget of zero, which would claim it covered everything");
 });

@@ -52,7 +52,7 @@ import { pathToFileURL } from "node:url";
 // RELATIVE, never the package specifier -- this job runs with `actions/checkout` and nothing else, the
 // identical reason close-rows-for-merged-pr.mjs's own header gives (#330/#331).
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
-import { closurePlan } from "./close-rows-for-merged-pr.mjs";
+import { closurePlan, stripClaimLabels } from "./close-rows-for-merged-pr.mjs";
 
 export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2 };
 export const DEFAULT_WINDOW_MINUTES = 45;
@@ -86,11 +86,18 @@ function closeOnePr(number, repo) {
   const [owner, name] = repo.split("/");
   let issues, sha;
   try {
+    // `labels(first:20){nodes{name}}` added for #754, same reason as the immediate path's identical
+    // change in close-rows-for-merged-pr.mjs: one lookup carries both what to close and what to strip.
     const query = `{repository(owner:"${owner}",name:"${name}"){pullRequest(number:${number}){`
-      + `mergeCommit{oid} closingIssuesReferences(first:20){nodes{number state}}}}}`;
+      + `mergeCommit{oid} closingIssuesReferences(first:20){nodes{number state `
+      + `labels(first:20){nodes{name}}}}}}}`;
     const pr = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`,
       "--jq", ".data.repository.pullRequest"]));
-    issues = pr.closingIssuesReferences.nodes;
+    /** @type {{ number: number, state: string, labels: { nodes: { name: string }[] } }[]} */
+    const nodes = pr.closingIssuesReferences.nodes;
+    issues = nodes.map((i) => ({
+      number: i.number, state: i.state, labels: (i.labels?.nodes ?? []).map((l) => l.name),
+    }));
     sha = pr.mergeCommit?.oid ?? "unknown";
   } catch (cause) {
     console.log(`SWEEP: #${number} CANNOT ASK -- ${cause instanceof Error ? cause.message : cause}`);
@@ -105,7 +112,7 @@ function closeOnePr(number, repo) {
   for (const n of already) console.log(`SWEEP: #${n} ALREADY CLOSED -- left alone.`);
 
   const failed = [];
-  for (const n of close) {
+  for (const { number: n, labels } of close) {
     const sentence = `Closed by the pipeline's sweep: PR #${number} merged as \`${sha}\` and declared `
       + `\`Closes #${n}\`, but the immediate pull_request:closed trigger did not fire for it (#394).\n\n`
       + `If the work did not land, reopen and say so on the row: \`git show ${sha}\` is what actually `
@@ -116,7 +123,12 @@ function closeOnePr(number, repo) {
     } catch (cause) {
       console.log(`SWEEP: #${n} COULD NOT CLOSE -- ${cause instanceof Error ? cause.message : cause}`);
       failed.push(n);
+      continue;
     }
+    // #754: the identical decision the immediate path uses, imported rather than re-derived (see this
+    // file's own header). "SWEEP" as the log prefix, never "CLOSE-ROWS", for the same reason every other
+    // line here is distinguished -- which path did the work is a fact about the pipeline's health.
+    stripClaimLabels(n, labels, repo, "SWEEP");
   }
   return failed;
 }
