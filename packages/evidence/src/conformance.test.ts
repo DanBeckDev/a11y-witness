@@ -9,6 +9,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { documentIdentity } from "./document-identity.js";
 
 import {
@@ -80,6 +82,57 @@ test("an untruncated run still admits iframes and post-interaction content", () 
   const [, fullPages] = conformanceScope(CLEAN);
   assert.match(fullPages.establishes, /examined in full/);
   assert.match(fullPages.limitation, /iframes/);
+});
+
+// #835: nothing pinned that Requirement 2's two branches must differ on `establishes` specifically --
+// the property ADR 0037 relies on is not "the two strings differ" (any accidental wording difference
+// would satisfy that), it is that ONLY the complete branch may claim completeness. So this names the
+// exact phrase (`/examined in full/`) and asserts its PRESENCE on one branch and its ABSENCE on the
+// other, compared directly rather than each checked alone.
+test("#835: the truncated branch's `establishes` must NOT claim what the complete branch claims", () => {
+  const complete = conformanceScope(CLEAN)[1];
+  // `deadline`, not `cap` -- #835's acceptance is explicit that ADR 0037 was written from a `deadline`
+  // stop (a time budget running out mid-sweep, the IKEA capture's own shape) and the existing fixture
+  // only ever used `cap` (a step-count budget). A stop reason no fixture has used is one this guard has
+  // never actually seen fail correctly.
+  const truncated = conformanceScope({
+    ...CLEAN,
+    sweeps: [{ type: "heading", stop: "exhausted" }, { type: "graphic", stop: "deadline" }],
+  })[1];
+  assert.match(complete.establishes, /examined in full/,
+    "the complete branch must still claim completeness -- otherwise this test could pass by both "
+    + "branches losing the claim, not by the truncated one correctly lacking it");
+  assert.doesNotMatch(truncated.establishes, /examined in full/,
+    "the truncated branch's `establishes` must not contain the completeness phrase -- this is the exact "
+    + "confusion ADR 0037 exists to prevent: a report claiming a full page while naming truncated sweeps "
+    + "underneath it");
+  assert.notEqual(complete.establishes, truncated.establishes,
+    "belt and suspenders: the two must not be textually identical either");
+});
+
+// #835 ACCEPTANCE 4: driven against the REAL IKEA capture named in the row, not only a synthetic fixture.
+// `runs/` is gitignored -- a CI runner's checkout never has this local capture, so this SKIPS HONESTLY
+// when it is absent, the same pattern `announcement.corpus.test.ts` (this same package) and
+// `verify.corpus.test.ts` already use. `sweepOutcomes` is the REAL exported reader, driven on the
+// capture's REAL diagnostics -- not a hand-built `sweeps` array standing in for what a real capture
+// would produce.
+const IKEA_CAPTURE = fileURLToPath(
+  new URL("../../../runs/witness/2026-09-09T14-31-43-041Z-www-ikea-com.json", import.meta.url));
+
+test("#835 ACCEPTANCE 4: the real IKEA capture (10 of 16 sweep outcomes truncated by `deadline`) still "
+  + "keeps the two branches apart", { skip: !existsSync(IKEA_CAPTURE) }, () => {
+  const record = JSON.parse(readFileSync(IKEA_CAPTURE, "utf8")) as { capture?: { diagnostics?: unknown[] } };
+  const diagnostics = record.capture?.diagnostics ?? [];
+  const sweeps = sweepOutcomes(diagnostics);
+  const truncated = truncatedSweeps(sweeps);
+  assert.equal(truncated.length, 10, "the row's own measurement -- re-read the fixture if this drifts");
+  assert.ok(truncated.every((s) => s.stop === "deadline"),
+    "every truncated outcome on this real capture stops on `deadline`, which is the stop reason ADR "
+    + "0037 was written from and the one the synthetic fixture above must also cover");
+  const [, fullPages] = conformanceScope({ ...CLEAN, sweeps });
+  assert.doesNotMatch(fullPages.establishes, /examined in full/,
+    "the real IKEA capture's truncated sweeps must not produce a full-page claim");
+  assert.match(fullPages.limitation, /INCOMPLETE/);
 });
 
 test("only `exhausted` and `repeat` count as the page ending first", () => {
