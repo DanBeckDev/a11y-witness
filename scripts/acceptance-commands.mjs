@@ -1107,7 +1107,7 @@ function commandLinesAfter(lines, headerIndex) {
  * @param {(command: string) => number} run
  * @param {{ prefix: "ACCEPTANCE" | "REFUTATION", isPass: (code: number) => boolean,
  *           commandExists?: (token: string) => boolean, capabilities?: JobCapabilities }} options
- * @returns {{ line: string, ok: boolean }}
+ * @returns {{ line: string, ok: boolean, executed: boolean }}
  */
 function runOneCommand(command, run, { prefix, isPass, commandExists: exists, capabilities }) {
   // #658: truncate for CLASSIFICATION AND EXECUTION only. `command` itself is never reassigned, so every
@@ -1124,12 +1124,12 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists, ca
     // The message names the fix rather than the state, because a refusal a reader cannot follow is one
     // they route around.
     if (runsTheWholeSuite(executable)) {
-      return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}\n`
+      return { executed: false, line: `${prefix}: REFUSED ${command} -> ${classification.reason}\n`
         + "  Name the files this change is verified by. This job has no token and no corpus, and it runs "
         + "commands taken from a PR body, so it cannot run the whole suite -- a PR whose author cannot "
         + "name a file that verifies it has no acceptance.", ok: false };
     }
-    return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
+    return { executed: false, line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
   }
   // #446: A THIRD, DISTINCT LINE SHAPE -- neither RAN nor REFUSED, so it cannot be mistaken for either.
   // Unlike REFUSED (`ok: true`, a legitimate "not this job's to run"), this IS a failure: the line made a
@@ -1138,14 +1138,18 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists, ca
   // opposite fixes. Never run -- there is nothing honest a line that was never a command could report by
   // being executed anyway.
   if (classification.verdict === "prose") {
-    return { line: `${prefix}: "${command}" ${classification.reason}`, ok: false };
+    return { executed: false, line: `${prefix}: "${command}" ${classification.reason}`, ok: false };
   }
   // CHECKED BEFORE RUNNING, never inferred from the exit code -- an unresolved test file/glob is
   // exactly the shape whose exit code cannot be trusted (#353's fifth hazard). Failing this here means
   // the real command never runs at all: there is nothing honest it could report.
   const fileCheck = testFileArgumentsResolve(executable);
   if (!fileCheck.ok) {
-    return { line: `${prefix}: RAN ${command} -> fail (matched no file: ${fileCheck.missing.join(", ")})`, ok: false };
+    // `executed: true`: the command was ATTEMPTED and answered. A glob matching nothing is a real
+    // failure of this line, not a capability this job lacks -- the section examined something and found
+    // it wanting, which is the opposite of examining nothing.
+    return { executed: true,
+      line: `${prefix}: RAN ${command} -> fail (matched no file: ${fileCheck.missing.join(", ")})`, ok: false };
   }
   const code = run(executable);
   const passed = isPass(code);
@@ -1154,7 +1158,7 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists, ca
     // #438's own point: a Refutation: command that exits 0 is the FAILURE that matters -- the guard was
     // never shown to bite. "fail" here, not "pass", is what makes that absence loud instead of quiet.
     : (passed ? "refused" : "fail (did not refuse)");
-  return { line: `${prefix}: RAN ${command} -> ${verb} (exit ${code})`, ok: passed };
+  return { executed: true, line: `${prefix}: RAN ${command} -> ${verb} (exit ${code})`, ok: passed };
 }
 
 /**
@@ -1187,10 +1191,38 @@ function duplicateSectionLine(prefix, section) {
 function runSectionCommands(commands, run, options) {
   let ok = true;
   const lines = [];
+  let ran = 0;
   for (const command of commands) {
     const result = runOneCommand(command, run, options);
     lines.push(result.line);
+    if (result.executed) ran += 1;
     if (!result.ok) ok = false;
+  }
+  // A SECTION THAT EXECUTED NOTHING IS NOT A SECTION THAT PASSED. This is `evidence:check`'s
+  // examined-nothing shape (`2 compared: 2 same` on a 48-case sample) in the acceptance job: every
+  // command REFUSED, no command RAN, and the job concluding success.
+  //
+  // MEASURED, 2026-09-09: 55 of the 145 PRs merged that day had an acceptance job that executed no
+  // command, almost all of them `tsx --test packages/lab/src/packaging/<x>.test.ts` refused for `token`
+  // -- the tracker and pipeline tooling, which is exactly the code everything else now relies on. Three
+  // were found by the PM re-running the declared commands at the merge commit by hand; the shape is
+  // generic to the closure walk, not to those three.
+  //
+  // A REFUSED LINE PASSES ONLY BESIDE A RAN LINE. Refusing one named file while another actually runs is
+  // a legitimate partial answer; refusing every one of them is no answer at all.
+  // ACCEPTANCE ONLY, and the boundary is #516's rather than a convenience. `Refutation:` is optional and
+  // this repo's own rule tells authors to declare `npm run mutate` there, which the classifier refuses BY
+  // DESIGN -- mutate's exit 0 means the guard BITES and `Refutation:` reads success as non-zero, so
+  // running it would invert the verdict. Failing a section for executing nothing when the tree told the
+  // author to write exactly that would refuse the body its own rule asks for. An Acceptance section has
+  // no such case: every refusal there is a capability this job lacks.
+  if (options.prefix === "ACCEPTANCE" && commands.length > 0 && ran === 0) {
+    lines.push(`${options.prefix}: EXECUTED NOTHING -- every command above was refused, so this job `
+      + "verified nothing and must not report success. Declare at least one command this job can "
+      + "actually run: it has no token, no fleet and no corpus, and it runs commands taken from a PR "
+      + "body. A refusal beside a command that RAN is a partial answer; a refusal beside no command at "
+      + "all is the absence of one.");
+    ok = false;
   }
   return { lines, ok };
 }
