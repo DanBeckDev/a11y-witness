@@ -155,6 +155,132 @@ export function unattributableClosedRows(rows, { since } = {}) {
 }
 
 /**
+ * Pure: the rows an audit should REPORT, out of the ones it cannot attribute.
+ *
+ * `unattributableClosedRows` answers "which have no claim event". That is not the same question as "which
+ * need a person", and reporting the first as the second is what made ten rows read as one population on
+ * 2026-09-09. A row closed `NOT_PLANNED` was never worked, so **"who worked it" has no answer and its
+ * absence is not a defect** -- three of that evening's ten were such rows, and two of the three were junk
+ * rows filed by a `POST` used as a write probe. They would have sat in the count forever.
+ *
+ * ABSENT `stateReason` IS REPORTABLE, deliberately: see `parseClosedRows`.
+ *
+ * @param {ClosedRowEvents[]} rows @param {{ since?: string }} [opts]
+ * @returns {ClosedRowEvents[]}
+ */
+export function reportableUnattributable(rows, { since } = {}) {
+  return unattributableClosedRows(rows, { since })
+    .filter((r) => /** @type {any} */ (r).stateReason !== "NOT_PLANNED");
+}
+
+/**
+ * Pure: what a row with no claim event can honestly be said to be, given its closing pull request.
+ *
+ * THREE OUTCOMES, AND THE MIDDLE ONE IS THE POINT. Measured over the ten unattributable rows of
+ * 2026-09-09: five had been closed by a merged PR that declared them, and calling those `UNATTRIBUTABLE`
+ * put work that shipped correctly in the same bucket as a row whose history cannot be reconstructed at
+ * all.
+ *
+ * - **A PR armed after `ARM_LABELS_FROM` carries the row's `session:*` label**, so it names the WORKER.
+ * - **An earlier PR names the WORK and not the worker.** `agent/exhausted-over-a-gap-887` identifies a
+ *   row; it does not identify who ran it, and four of that evening's five used the generic `agent/`
+ *   prefix. Saying "attributed" of a branch name would collapse work and worker, which is this
+ *   repository's most-recorded defect.
+ * - **No closing PR at all** is the finding that needs a person: the work landed and nothing declared it.
+ *
+ * The boundary is compared against the PR's `createdAt` rather than the moment its label was applied,
+ * which UNDER-attributes a PR opened before #839 and armed after it. That direction is deliberate: a
+ * missed attribution is a row a person looks at, and a wrong one is a row nobody looks at again.
+ *
+ * @param {{ number: number, headRefName: string, merged: boolean, createdAt: string,
+ *   sessionLabels: string[] } | null} pr
+ * @returns {{ attributed: boolean, line: string }}
+ */
+export function attributionFor(pr) {
+  if (pr === null || !pr.merged) {
+    return { attributed: false, line: "no session ever claimed this row and no merged pull request "
+      + "declared it -- the work landed with nothing recording who did it" };
+  }
+  const armed = pr.createdAt >= ARM_LABELS_FROM && pr.sessionLabels.length > 0;
+  if (armed) {
+    return { attributed: true, line: `closed by merged PR #${pr.number} `
+      + `(${pr.headRefName}), armed with ${pr.sessionLabels.join(", ")}` };
+  }
+  return { attributed: false, line: `closed by merged PR #${pr.number} (${pr.headRefName}) -- that names `
+    + `the WORK, not the worker; PRs before ${ARM_LABELS_FROM} carry no session label (#839)` };
+}
+
+/** @typedef {{ number: number, headRefName: string, merged: boolean, createdAt: string,
+ *   sessionLabels: string[] }} ClosingPr */
+
+/**
+ * ONE row's closing pull request, read ONE ROW AT A TIME AND DELIBERATELY SO.
+ *
+ * The batched shape -- `timelineItems` nested inside an `issues(first: N)` connection -- is the one
+ * truncation this module exists because of: it narrows each row's history to a budget SHARED ACROSS THE
+ * REQUEST and reports `totalCount` within the narrowed window, so `nodes.length === totalCount` passes
+ * while eight rows read as having no history. Batching by alias does not escape it either. Asking per row
+ * is the only shape whose bound is knowable, and the caller pays for it only on rows it is already about
+ * to report -- ten, not the whole closed population.
+ *
+ * `null` when nothing closed it. A FAILED READ THROWS: returning `null` would report "no PR declared
+ * this" -- the most serious of the three verdicts -- on a network error.
+ *
+ * @param {number} number @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {ClosingPr | null}
+ */
+export function fetchClosingPullRequest(number, { run = defaultRun } = {}) {
+  // Split HERE rather than importing two more constants: `REPO` is the one fact, and a second spelling of
+  // the same owner/name pair is the "a fact stated twice" shape this repo names as its costliest.
+  const [owner, name] = REPO.split("/");
+  const query = `query{repository(owner:"${owner}",name:"${name}"){issue(number:${number}){`
+    + "timelineItems(last:30,itemTypes:[CLOSED_EVENT]){nodes{... on ClosedEvent{closer{"
+    + "... on PullRequest{number headRefName merged createdAt labels(first:50){nodes{name}}}}}}}}}}";
+  /** @type {string} */
+  let raw;
+  try {
+    raw = run("gh", ["api", "graphql", "-f", `query=${query}`]);
+  } catch (cause) {
+    throw new Error(`claim-provenance: could not read #${number}'s closing pull request -- refusing to `
+      + `report it as undeclared on a failed read. ${/** @type {Error} */ (cause).message}`, { cause });
+  }
+  return closingPrFromResponse(raw, number);
+}
+
+/**
+ * Pure: the closing PR out of `fetchClosingPullRequest`'s response, or `null` when the closer was not a
+ * pull request. A response this cannot parse THROWS rather than reading as "nothing closed it".
+ * @param {string} raw @param {number} number
+ * @returns {ClosingPr | null}
+ */
+export function closingPrFromResponse(raw, number) {
+  /** @type {any} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`claim-provenance: #${number}'s closing-PR response was not JSON -- refusing to `
+      + `guess. First 200 chars: ${raw.slice(0, 200)}`, { cause });
+  }
+  const nodes = parsed?.data?.repository?.issue?.timelineItems?.nodes;
+  if (!Array.isArray(nodes)) {
+    throw new Error(`claim-provenance: #${number}'s closing-PR response had no timeline -- refusing to `
+      + `guess. Got: ${JSON.stringify(parsed ?? null).slice(0, 200)}`);
+  }
+  const pr = nodes.map((/** @type {any} */ n) => n?.closer)
+    .filter((/** @type {any} */ c) => typeof c?.number === "number").pop();
+  if (!pr) return null;
+  return {
+    number: pr.number,
+    headRefName: typeof pr.headRefName === "string" ? pr.headRefName : "an unrecorded branch",
+    merged: pr.merged === true,
+    createdAt: typeof pr.createdAt === "string" ? pr.createdAt : "",
+    sessionLabels: (pr.labels?.nodes ?? []).map((/** @type {any} */ l) => l?.name)
+      .filter((/** @type {unknown} */ n) => typeof n === "string" && n.startsWith("session:")),
+  };
+}
+
+/**
  * Pure: one JSON object per line into a list. A line that does not parse THROWS -- skipping it would drop
  * a claim and report the row it belonged to as unattributable.
  * @param {string} raw
@@ -223,9 +349,26 @@ export function parseClosedRows(raw, limit) {
       throw new Error(`claim-provenance: a closed row is missing number/title/closedAt -- refusing to `
         + `guess. Got: ${JSON.stringify(entry).slice(0, 200)}`);
     }
-    return { number: o.number, title: o.title, closedAt: o.closedAt };
+    return {
+      number: o.number, title: o.title, closedAt: o.closedAt,
+      // OPTIONAL, and absent is not NOT_PLANNED. A caller that did not ask `gh` for `stateReason` gets
+      // `undefined` here and every row stays reportable -- reading a missing field as "not planned" would
+      // silently empty the finding, which is the cleanest possible output and the exact failure this
+      // module's own header warns about.
+      stateReason: typeof o.stateReason === "string" ? o.stateReason : undefined,
+    };
   });
 }
+
+/**
+ * THE DATE THE CLOSING PULL REQUEST BEGAN TO CARRY ITS WORKER, and it is a boundary rather than a
+ * constant somebody chose. #839 (#725) landed at this instant and made `arm-pr` copy the ROW's
+ * `session:*` label onto the pull request at arm time. Before it, a merged PR carried no labels at all --
+ * measured 2026-09-09 on the five closing PRs of that evening's unattributable rows: #894, #793, #765,
+ * #753 and #778 each returned an EMPTY label set. So a rule reading a PR's session label before this
+ * instant is a rule that never fires, and a check that cannot fire reports clean.
+ */
+export const ARM_LABELS_FROM = "2026-09-09T17:11:53Z";
 
 /**
  * THE FLOOR: a row carrying a `session:` label RIGHT NOW must have the event that applied it.
