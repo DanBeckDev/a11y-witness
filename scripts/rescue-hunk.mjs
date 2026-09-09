@@ -169,6 +169,13 @@ function main() {
   // WHAT MAIN GAINED, printed BEFORE the verdict and whether or not anything conflicts. A CLEAN merge
   // still means main moved, and the reader is about to commit a file they did not write all of. This is
   // the line the manual procedure got right by hand in #698 and that nobody would run twice.
+  //
+  // AND IT IS NOT REDUNDANT WITH THE CONFLICT MARKERS, which was the first thing asked about it. At a
+  // conflict site the `main` side of a `--diff3` block already IS "what only main has" there -- but THE
+  // REAL PAIR THIS TOOL EXISTS FOR HAS ZERO CONFLICTS. The branch's hunk and main's edits are in
+  // different parts of the file, so the merge is clean, no marker is printed, and main's gain still
+  // includes the un-redacted address. A report that fires only at conflict sites is silent on exactly the
+  // case that motivated the row. The markers explain a REFUSAL; this explains a PASS.
   const gained = linesGained(texts.base, texts.main);
   process.stdout.write(`  main has gained ${gained.length} line(s) in this file since the base`
     + `${gained.length ? ":" : "."}\n`);
