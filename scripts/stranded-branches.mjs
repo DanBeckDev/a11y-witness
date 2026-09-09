@@ -77,73 +77,134 @@ export function fetchPushedBranches({ run = defaultRun } = {}) {
 }
 
 /**
- * `gh pr list` returns NEWEST-first, so a truncating `--limit` drops the OLDEST PRs -- and stage 1 of
- * this file's own filter is "has this branch EVER had a PR". A dropped PR's head then reads as "no PR
- * ever pointed at this", which does not make the tool miss a stranded branch, it makes the tool
- * MANUFACTURE one, from exactly the oldest branches a stranded-work check most wants to be right about
- * (#321). 400 is ~3x headroom over the 127 PRs measured when this was filed -- raising the number moves
- * the cliff without removing it, so the real fix is detecting arrival AT it, below.
+ * The OPEN-PR listing's cap, and it is a REFUSAL BOUNDARY rather than a page size.
+ *
+ * `gh pr list` returns NEWEST-first, so a truncating `--limit` drops the OLDEST PRs. `gh` exits 0 whether
+ * that is genuinely every PR or the first `PR_LIST_LIMIT` of more, and nothing in the response tells the
+ * two apart -- so arriving AT it is the CANNOT-ASK state this file already has an exit code for, never a
+ * performance setting to be raised (#321).
+ *
+ * IT NO LONGER BOUNDS `fetchAllPRHeadRefs`. That listing crossed 400 on 2026-09-09 and refused, exactly
+ * as built; the fix is to PAGINATE TO THE END rather than to write a bigger number, because a bigger
+ * number moves the cliff without removing it. `fetchOpenPRs` keeps the cap: its population is the OPEN
+ * PRs (4 at the time of writing, against a limit of 400), so the cap there is not a paging bound anybody
+ * expects to reach, and reaching it would mean something has gone very wrong rather than that the repo
+ * grew.
+ *
+ * Contrast #286's `--limit 100` on a SCHEDULE workflow: there, 100 consecutive non-schedule runs *is
+ * itself the finding* the check exists to report, so hitting that bound is a correct answer, not a
+ * truncation -- the two look identical in the code and are opposite in meaning.
  */
 export const PR_LIST_LIMIT = 400;
 
+/** REST's maximum page size. Fewer, larger calls is the whole point of paginating over `gh pr list`. */
+export const PR_PAGE_SIZE = 100;
+
 /**
- * Every branch name that has EVER had a PR opened against it, in ANY state. THROWS on failure -- never an
- * empty Set standing in for "no PR anywhere", which would read every pushed branch as stranded. The same
- * vacuity guard as `fetchOpenIssues`/`fetchLabels` elsewhere in this repo, aimed at the opposite direction:
- * there the danger is under-reporting a claim, here it is OVER-reporting a stranded branch.
+ * A runaway bound on the page walk, NOT a population bound: 100 pages is 10,000 PRs. Reaching it THROWS
+ * for the same reason arriving at `PR_LIST_LIMIT` did -- a walk that stops at a limit cannot say whether
+ * it reached the end -- so #321's lesson survives the move rather than being deleted with the constant
+ * that carried it.
+ */
+export const MAX_PR_PAGES = 100;
+
+/**
+ * Every branch name that has EVER had a PR opened against it, in ANY state, PAGINATED TO THE END.
  *
- * ALSO THROWS when the response comes back at exactly `PR_LIST_LIMIT` (#321) -- not a bigger-number fix,
- * a DIFFERENT kind of check: `gh` exits 0 whether that is genuinely every PR or the first `PR_LIST_LIMIT`
- * of more, and nothing about the response tells the two apart. A truncated listing is exactly the
- * CANNOT-ASK state this file already has an exit code for ("a clean sweep over an unreadable board"),
- * not a performance setting to be raised and forgotten. Contrast #286's `--limit 100` on a SCHEDULE
- * workflow: there, 100 consecutive non-schedule runs *is itself the finding* the check exists to report,
- * so hitting that bound is a correct answer, not a truncation -- the two look identical in the code and
- * are opposite in meaning, which is why each has to be reasoned about on its own rather than copied.
+ * THROWS on failure -- never an empty Set standing in for "no PR anywhere", which would read every pushed
+ * branch as stranded. The same vacuity guard as `fetchOpenIssues`/`fetchLabels` elsewhere in this repo,
+ * aimed at the opposite direction: there the danger is under-reporting a claim, here it is OVER-reporting
+ * a stranded branch, and this file's stage-1 filter is "has this branch EVER had a PR" -- a PR dropped
+ * off the end does not make the tool MISS a stranded branch, it makes the tool MANUFACTURE one.
+ *
+ * REST (`gh api`, core) rather than `gh pr list` (GraphQL). MEASURED, 2026-09-09 16:3xZ, against the
+ * real repo: one `gh pr list --state all --limit 400 --json headRefName` cost **107 GraphQL points**.
+ * Attributed rather than inferred -- a trivial probe either side of it moved the counter by exactly 1,
+ * so the window was quiet and the 107 is this command's, not the account's. The same population over
+ * REST is 5 core calls.
+ *
+ * 107 IS NOT THE EXHAUSTION, AND SAYING SO WOULD BE THE COMFORTABLE ERROR. The GraphQL pool reached
+ * 5000/5000 account-wide at 14:41Z today, and 107 is 2% of it -- about 47 invocations. This was the
+ * heaviest SINGLE consumer in an audit pass that spent 816 calls against a 300 budget; what exhausted
+ * the pool across nine sessions is a separate question nobody has attributed.
+ *
+ * ASCENDING BY CREATION, which is not cosmetic. REST's default is newest-first, and a PR opened while the
+ * walk is in flight shifts every later page down by one, so an entry is silently seen twice or not at
+ * all. Ascending appends new PRs AFTER the position being read: the walk is stable, and the only thing it
+ * can miss is a PR created during the walk, whose branch is by construction not stranded.
+ *
+ * THE TERMINATION IS A SHORT PAGE, which is a positive statement about having reached the end, rather
+ * than a count compared against a limit, which is the thing that could not tell "all of them" from "the
+ * first N of more".
+ *
+ * `prs` COUNTS ROWS AND `refs` COLLAPSES THEM. A branch reused across two PRs is two rows and one ref
+ * -- measured live at 402 and 399 -- so reporting the Set's size as a PR count would be a real number
+ * about the quantity NEXT TO the one named, which is this repo's most-repeated reporting defect.
  *
  * @param {{ run?: typeof defaultRun }} [deps]
- * @returns {Set<string>}
+ * @returns {{ refs: Set<string>, calls: number, prs: number }}
  */
 export function fetchAllPRHeadRefs({ run = defaultRun } = {}) {
+  /** @type {Set<string>} */
+  const refs = new Set();
+  let calls = 0;
+  let prs = 0;
+  for (let page = 1; page <= MAX_PR_PAGES; page += 1) {
+    const rows = fetchPRHeadRefPage({ run, page });
+    calls += 1;
+    prs += rows.length;
+    for (const ref of rows) refs.add(ref);
+    // A SHORT PAGE IS THE END. A full one is not evidence of more, but asking again costs one call and
+    // answers definitely; guessing costs the whole audit.
+    if (rows.length < PR_PAGE_SIZE) return { refs, calls, prs };
+  }
+  throw new Error(`stranded-branches: still receiving full pages after ${MAX_PR_PAGES} of `
+    + `${PR_PAGE_SIZE} -- refusing to guess whether that is the end. Either this repo has more than `
+    + `${MAX_PR_PAGES * PR_PAGE_SIZE} PRs, in which case raise MAX_PR_PAGES deliberately, or the walk `
+    + "is not advancing.");
+}
+
+/**
+ * One page of PR head refs, PROJECTED IN THE REQUEST. `--jq` runs server-side of this process, so the
+ * only thing crossing into node is the one field the check reads -- and it stays JSON rather than
+ * newline-delimited text so that a MISSING ref arrives as `null` and can be refused. Projected to bare
+ * lines, a PR whose head ref could not be read would arrive as the four characters `null` and be
+ * indistinguishable from a branch actually named that.
+ *
+ * @param {{ run: typeof defaultRun, page: number }} deps
+ * @returns {string[]}
+ */
+function fetchPRHeadRefPage({ run, page }) {
+  const path = `repos/${REPO}/pulls?state=all&per_page=${PR_PAGE_SIZE}`
+    + `&sort=created&direction=asc&page=${page}`;
   /** @type {string} */
   let raw;
   try {
-    raw = run("gh", ["pr", "list", "--repo", REPO, "--state", "all", "--limit", String(PR_LIST_LIMIT),
-      "--json", "headRefName"]);
+    raw = run("gh", ["api", path, "--jq", "[.[] | {ref: .head.ref}]"]);
   } catch (cause) {
-    throw new Error(`stranded-branches: could not list PRs from ${REPO} -- refusing to guess. `
-      + `${/** @type {Error} */ (cause).message}`, { cause });
+    throw new Error(`stranded-branches: could not list PRs from ${REPO} (page ${page}) -- refusing to `
+      + `guess. ${/** @type {Error} */ (cause).message}`, { cause });
   }
   /** @type {unknown} */
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (cause) {
-    throw new Error(`stranded-branches: gh's PR list was not JSON -- refusing to guess. `
+    throw new Error(`stranded-branches: gh's PR list (page ${page}) was not JSON -- refusing to guess. `
       + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
   }
   if (!Array.isArray(parsed)) {
-    throw new Error(`stranded-branches: gh's PR list was not an array -- refusing to guess. `
-      + `Got: ${JSON.stringify(parsed).slice(0, 300)}`);
+    throw new Error(`stranded-branches: gh's PR list (page ${page}) was not an array -- refusing to `
+      + `guess. Got: ${JSON.stringify(parsed).slice(0, 300)}`);
   }
-  // AT THE CAP IS NOT "A LOT OF PRs", IT IS "CANNOT TELL" (#321). `gh` exits 0 and returns exactly
-  // `PR_LIST_LIMIT` rows whether that is every PR this repo has ever opened or the newest slice of many
-  // more -- and because the response is newest-first, anything past the cap is silently missing from the
-  // OLDEST end, which is precisely the population stage 1 of this file's filter depends on being complete.
-  if (parsed.length === PR_LIST_LIMIT) {
-    throw new Error(`stranded-branches: gh returned exactly ${PR_LIST_LIMIT} PRs, the configured `
-      + "--limit -- cannot tell whether that is every PR or a truncated, newest-first slice missing the "
-      + "oldest ones. Refusing to guess rather than silently manufacturing stranded-branch candidates "
-      + "from PRs that were dropped off the end.");
-  }
-  return new Set(parsed.map((/** @type {unknown} */ pr, /** @type {number} */ i) => {
-    const headRefName = /** @type {{ headRefName?: unknown }} */ (pr)?.headRefName;
-    if (typeof headRefName !== "string") {
-      throw new Error(`stranded-branches: PR entry ${i} has no headRefName -- refusing to guess. `
-        + `Got: ${JSON.stringify(pr).slice(0, 200)}`);
+  return parsed.map((/** @type {unknown} */ row, /** @type {number} */ i) => {
+    const ref = /** @type {{ ref?: unknown }} */ (row)?.ref;
+    if (typeof ref !== "string") {
+      throw new Error(`stranded-branches: PR entry ${i} on page ${page} has no head ref -- refusing to `
+        + `guess. Got: ${JSON.stringify(row).slice(0, 200)}`);
     }
-    return headRefName;
-  }));
+    return ref;
+  });
 }
 
 /**
@@ -277,6 +338,17 @@ export function fetchOpenPRs({ run = defaultRun } = {}) {
     "number,headRefName,createdAt,isDraft,labels,mergeStateStatus"]);
   const parsed = JSON.parse(raw);
   if (!Array.isArray(parsed)) throw new Error("gh pr list did not return an array");
+  // THE SAME AT-THE-CAP REFUSAL AS THE ALL-PRs LISTING HAD. It lived at one of the two call sites of the
+  // one constant, which is this repository's most expensive recurring shape; when the all-PRs listing
+  // moved to pagination the guard would have left with it, so it is stated here instead. Reaching 400
+  // OPEN PRs is not repo growth -- it is the sweep about to close PRs from a truncated, newest-first
+  // slice, with `--close` behind it.
+  if (parsed.length === PR_LIST_LIMIT) {
+    throw new Error(`stranded-branches: gh returned exactly ${PR_LIST_LIMIT} OPEN PRs, the configured `
+      + "--limit -- cannot tell whether that is every open PR or a truncated, newest-first slice. "
+      + "Refusing to sweep a population that may be missing its oldest members, which are exactly the "
+      + "ones a lifetime sweep acts on.");
+  }
   return parsed;
 }
 
@@ -349,18 +421,25 @@ function main() {
   }
   /** @type {string[]} */
   let pushed;
-  /** @type {Set<string>} */
-  let prHeadRefs;
+  /** @type {{ refs: Set<string>, calls: number, prs: number }} */
+  let prs;
   try {
     pushed = fetchPushedBranches();
-    prHeadRefs = fetchAllPRHeadRefs();
+    prs = fetchAllPRHeadRefs();
   } catch (error) {
     process.stderr.write(`COULD NOT AUDIT: ${/** @type {Error} */ (error).message}\n`);
     process.exitCode = EXIT.CANNOT_ASK;
     return;
   }
 
-  const noPR = branchesWithNoPR(pushed, prHeadRefs);
+  // WHAT THE FETCH SPENT, PRINTED WHETHER OR NOT ANYTHING IS FOUND. This listing was the heaviest
+  // consumer in an audit pass that spent 816 calls against a 300 budget, and a cost nobody can see is a
+  // cost nobody can attribute -- the pass was over budget for a week before the heaviest call was named.
+  process.stdout.write(`PR listing: ${prs.prs} PR(s), ${prs.refs.size} distinct head ref(s), `
+    + `over ${prs.calls} REST call(s) `
+    + `(core, ${PR_PAGE_SIZE}/page; \`gh pr list\` spent GraphQL and capped at ${PR_LIST_LIMIT})\n`);
+
+  const noPR = branchesWithNoPR(pushed, prs.refs);
   const aheadCounts = new Map();
   for (const branch of noPR) {
     try {
