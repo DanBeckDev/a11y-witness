@@ -189,7 +189,7 @@ page, not what the tool prefers. A workflow runs against your own app, where sub
 on a stranger's site is not a review. `chooseProbe` is exported and unit-tested for exactly that gate.
 
 Other probes beyond the default set are opt-in over the wire (`probeFocus`) so a capture
-never pays for evidence nobody asked for. `focusOrder` costs ~8 s on top of a ~15 s capture.
+never pays for evidence nobody asked for. `focusOrder` costs ~8 s on a ~15 s CORPUS capture; on real pages, 72.5 s and 16.3 s.
 
 ## Captures are cached — and the cache is keyed on more than the page
 
@@ -417,5 +417,5 @@ checks loudly for exactly this reason, and calls that honest rather than passing
 - Don't manually `taskkill nvda.exe` — let Guidepup own NVDA's lifecycle, or the speech-capture channel destabilises. Killing the worker with `Stop-Process` orphans its NVDA (still holding port 6837); the next cold start recovers, but expect to see it.
 - The worker keeps NVDA alive between captures (recycled every 25). `A11Y_REUSE_NVDA=0` reverts to a fresh NVDA per capture — the first thing to try if captures drift as a run progresses.
 - The guest is provisioned as an **appliance**: Windows Update may install but not reboot, and Edge's background mode, startup boost and auto-updater are off. It used to reboot itself mid-run and leak Edge processes.
-The largest single capture phase is `windowsActivate` (~10 s, ~37%) — Edge cold-starting every time. Keeping Edge alive between captures is the only real fix. [Route analysis →](docs/nvda-worker-runbook.md#capture-timing-and-the-windowsactivate-cost-analysis-from-environment-facts)
+Capture timing has TWO populations. On the ~12 s CORPUS capture the largest phase is `windowsActivate`, ~10 s / ~37%, and keeping Edge alive is the only real fix. On a REAL page it is ~0.3 s — one tenth of one percent — and `sweep` leads. [Both measurements →](docs/nvda-worker-runbook.md#capture-timing-and-the-windowsactivate-cost-analysis-from-environment-facts)
 
