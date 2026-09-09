@@ -800,7 +800,7 @@ const PAGE_CSS = `
  * The SCHEDULE delivers that (the summary is written at 07:25 and the edition renders at 08:00); this is
  * the backstop that catches a stale one reaching the board, so it is the wider sixty.
  *
- * @param {boolean} publishing @param {{text: string} | undefined} summary @param {string} today
+ * @param {boolean} publishing @param {{text: string} | null | undefined} summary @param {string} today
  */
 export function requireSummaryIsFresh(publishing, summary, today) {
   if (!publishing || !summary) return;
