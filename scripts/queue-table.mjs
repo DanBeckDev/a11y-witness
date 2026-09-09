@@ -46,6 +46,32 @@ import { newestPerName } from "./newest-check-run.mjs";
 
 export const EXIT = { EXAMINED: 0, INCOMPLETE: 2 };
 
+/**
+ * Conclusions that are NOT a red check, stated ONCE because this list existed twice and the copies were
+ * about to drift -- section 2's open-PR reds and section 4's tally each carried their own.
+ *
+ * SUCCESS/SKIPPED/NEUTRAL: `gate`'s own loop treats skipped as success and so must this, or every
+ * path-filtered job reads as a failure on every PR that did not touch its paths.
+ *
+ * CANCELLED: a run superseded by `ci.yml`'s `concurrency: cancel-in-progress: true`, which fires every
+ * time a new run starts on the same ref. It is not a verdict about the commit. This was counted as red
+ * for an hour and reported to the chairman: measured on ten main commits, `audit` read 6 of 10 of which
+ * SIX were cancelled and TWO were real, and `check` read 3 of 10, ALL cancelled. A PR HEAD stops moving
+ * and rarely carries one; a MERGE COMMIT on a fast main carries them constantly -- and section 4's
+ * population became merge commits an hour before this fix, so the change that made it see everything is
+ * the change that made it over-count.
+ *
+ * "": no conclusion yet -- in flight, and not a verdict either.
+ *
+ * The failure is in the ALARMING direction, which is the direction that gets acted on.
+ */
+export const NOT_RED = ["SUCCESS", "SKIPPED", "NEUTRAL", "CANCELLED", ""];
+
+/** @param {{conclusion?: string | null}} check */
+export function isRed(check) {
+  return !NOT_RED.includes((check.conclusion ?? "").toUpperCase());
+}
+
 /** How many commits on main section 4 examines. Ten is what the chairman's own list shows. */
 export const MERGED_HEADS_EXAMINED = 10;
 
@@ -122,9 +148,7 @@ export function nonSuccessByName(merged) {
   for (const pr of merged) {
     if (pr.checks === null) { unreadable.push(pr.number); continue; }
     for (const check of pr.checks) {
-      // SKIPPED and NEUTRAL are not red. `gate`'s own loop treats skipped as success and so must this,
-      // or every path-filtered job reads as a failure on every PR that did not touch its paths.
-      if (["SUCCESS", "SKIPPED", "NEUTRAL", ""].includes((check.conclusion ?? "").toUpperCase())) continue;
+      if (!isRed(check)) continue;  // NOT_RED above states why, once, for both readers.
       if (!byName.has(check.name)) byName.set(check.name, []);
       byName.get(check.name).push(pr.number);
     }
@@ -158,7 +182,7 @@ export function openPRs() {
     updatedAt: pr.updatedAt,
     armed: Boolean(pr.autoMergeRequest),
     redChecks: newestPerName(pr.statusCheckRollup ?? [])
-      .filter((c) => !["SUCCESS", "SKIPPED", "NEUTRAL", ""].includes((c.conclusion ?? "").toUpperCase()))
+      .filter(isRed)
       .map((c) => c.name),
   }));
 }
