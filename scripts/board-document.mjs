@@ -677,10 +677,15 @@ function appendix(d) {
 }
 
 /** @param {any} d @param {{text: string} | null} [summary] */
-export function document(d, summary) {
+/** @param {any} d @param {{text: string} | null} [summary] @param {{ lateAt?: string }} [opts] */
+export function document(d, summary, opts) {
   return [
     `# a11ign — board report, ${longDate(new Date().toISOString())}`,
     "",
+    // THE DOCUMENT SAYS OF ITSELF THAT IT IS LATE, in its own header rather than in a covering message.
+    // A board member reading the PDF a week later has only the document; a caveat delivered beside it is
+    // a caveat that does not travel with the thing it qualifies.
+    ...(opts?.lateAt ? [`**LATE EDITION, published ${opts.lateAt}.**`, ""] : []),
     "*a11ign drives a real screen reader through real navigation to assess the accessibility "
     + "failures that automated scanners structurally cannot reach. Nothing is published yet.*",
     "",
@@ -815,6 +820,84 @@ const PAGE_CSS = `
  * forbids, so there is no fallback to generate one -- the only way to publish is for a person to have
  * written it. Returns the summary, or exits.
  */
+
+// #607: A LATE MORNING PRODUCED NO DOCUMENT RATHER THAN A LATE ONE, and neither guard was wrong.
+//
+// The 9 September edition posted its comment at 07:11:53Z and refused the PDF: two capability claims were
+// past the freshness bar. Both authors re-affirmed inside the window -- 07:32:17Z and 07:34:13Z -- and the
+// merge carrying them did not land before the render window closed at 07:59:59Z. `republish` could not
+// rescue it either: by #507's own design it is permitted ONLY when today's release already exists, because
+// a republish must be able to replace a document the board HAS and must never create one they should not
+// have yet. No release existed, because RENDERING is the step that creates it.
+//
+// **Two guards, each correct alone, composing into a state with no exit.** A day three minutes late
+// produced nothing.
+//
+// THE FAILURE MODE OF A LATE PATH IS THAT IT BECOMES THE NORMAL ONE. A document that is always late and
+// always says so is worse than the refusal it replaces, because the header stops being read. So the four
+// conditions are not ceremony: the noon cut-off stops it being an evening document, and "no release yet"
+// keeps it disjoint from `republish` -- one creates, the other replaces, and neither can do the other's
+// job.
+export const LATE_EDITION_EARLIEST = 7 * 60 + 30;
+export const LATE_EDITION_CUTOFF = 12 * 60;
+
+/**
+ * Pure: `"08:05"` -> 485. `null` for anything that is not HH:MM.
+ * @param {string | undefined | null} hhmm @returns {number | null}
+ */
+export function minutesOfDay(hhmm) {
+  const m = typeof hhmm === "string" ? hhmm.match(/^(\d{2}):(\d{2})$/) : null;
+  if (!m) return null;
+  const [h, min] = [Number(m[1]), Number(m[2])];
+  return h < 24 && min < 60 ? h * 60 + min : null;
+}
+
+/**
+ * THE VERDICT, PURE: may a LATE edition render right now? `null` to proceed; a refusal STRING otherwise.
+ *
+ * THE ORDER OF THE CHECKS IS ASSERTED BY A TEST, because each refusal sends the reader somewhere
+ * different and the wrong one sends them to the wrong place. A missing summary reported as "too late"
+ * would have somebody widening a time window over a paragraph nobody wrote.
+ *
+ * @param {{ summary: { text: string } | null | undefined, stated: string | null,
+ *           releaseExists: boolean, londonNow: string }} state
+ * @returns {string | null}
+ */
+export function lateEditionRefusal({ summary, stated, releaseExists, londonNow }) {
+  if (!summary) {
+    return "REFUSING a late edition: there is no summary for today.\n"
+      + "A late edition is a late DOCUMENT, not a document without its one hand-written paragraph. "
+      + "Write the summary first; the missing summary is the missing edition.";
+  }
+  const statedMinutes = minutesOfDay(stated);
+  if (statedMinutes === null) {
+    return "REFUSING a late edition: the summary does not say when it was written.\n"
+      + 'Open it with "Written at HH:MM on D Month". A late edition claims in its own header that it is '
+      + "late, and that claim is only checkable against a time the summary states.";
+  }
+  if (statedMinutes < LATE_EDITION_EARLIEST) {
+    return `REFUSING a late edition: the summary says it was written at ${stated}, which is inside the `
+      + "normal window.\nThis path exists for a summary written AFTER 07:30 London. A document written on "
+      + "time does not need a header saying it is late -- run the ordinary render.";
+  }
+  if (releaseExists) {
+    return "REFUSING a late edition: today's release already exists.\n"
+      + "A late edition CREATES today's document; replacing one the board already has is `republish`'s "
+      + "job, and the two are deliberately disjoint. Use `republish`.";
+  }
+  const nowMinutes = minutesOfDay(londonNow);
+  if (nowMinutes === null) {
+    return `REFUSING a late edition: could not read the London time (${londonNow}).\n`
+      + "Refusing rather than guessing: the whole of this path is a claim about what time it is.";
+  }
+  if (nowMinutes >= LATE_EDITION_CUTOFF) {
+    return `REFUSING a late edition: London reads ${londonNow}, past the ${
+      String(Math.floor(LATE_EDITION_CUTOFF / 60)).padStart(2, "0")}:00 cut-off.\n`
+      + "A morning document must not arrive in the evening. What is late by hours is not a late edition, "
+      + "it is tomorrow's problem, and a header nobody believes is worse than an absent document.";
+  }
+  return null;
+}
 
 /**
  * THE STATED WRITING TIME MUST BE TRUE AT THE MOMENT OF THE RENDER, and this is the only place that can
@@ -968,20 +1051,22 @@ export function resolveChromeBinary(deps = {}) {
 }
 
 function main() {
-  refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release"],
-    { entry: import.meta.url, command: "npm run board:document" });
+  refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release",
+    "--late-edition"], { entry: import.meta.url, command: "npm run board:document" });
 
   const argv = process.argv.slice(2);
   /** @type {(n: string) => string | undefined} */
   const flagOf = (n) => argv.find((a) => a.startsWith(`${n}=`))?.split("=").slice(1).join("=");
 
-  const summary = requireSummary(argv.includes("--pdf") || argv.includes("--release"));
+  const late = argv.includes("--late-edition");
+  const summary = requireSummary(argv.includes("--pdf") || argv.includes("--release") || late);
+  const lateAt = late ? requireLateEditionPermitted(summary) : undefined;
   const d = collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString());
   // THE WORLD-MOVED CHECK RUNS FIRST, before the markdown is built: a stale claim should not be
   // rendered at all, and this is the cheaper of the two refusals. The body cap needs `md` and so must
   // follow it.
   refuseIfTheWorldMoved(d.achievements);
-  const md = document(d, summary);
+  const md = document(d, summary, { lateAt });
   // UNCONDITIONAL, unlike the summary check above: a body over the cap is wrong in the plain markdown
   // preview too, not only when publishing, and catching it earlier is the whole point of issue #88 (the
   // agent who hit this had already reached the render-a-PDF step before the cap said anything).
@@ -1068,6 +1153,53 @@ function renderPdfWithChrome(html, pdf) {
  * whose release workflow reads tags.
  * @param {string} pdf
  */
+/**
+ * THE LATE GATE RUNS BEFORE ANYTHING IS COLLECTED OR RENDERED (#607). Every one of its four conditions is
+ * knowable without the document, and a refusal that arrives after a render has spent a minute reading
+ * GitHub is a refusal somebody learns to pre-empt by not running it.
+ * @param {{ text: string } | null | undefined} summary
+ * @returns {string} London's `HH:MM` at this moment, for the header
+ */
+function requireLateEditionPermitted(summary) {
+  const lateAt = londonNowHHMM();
+  const refusal = lateEditionRefusal({ summary,
+    stated: summary ? (statedWritingTime(summary.text, lateAt)?.stated ?? null) : null,
+    releaseExists: todaysReleaseExists(), londonNow: lateAt });
+  if (refusal) {
+    console.error(`${refusal}\n\nNothing was written.`);
+    process.exit(5);
+  }
+  return lateAt;
+}
+
+/** London's wall clock as `HH:MM`, the one string every part of the late path agrees on. */
+export function londonNowHHMM() {
+  return new Intl.DateTimeFormat("en-GB",
+    { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+}
+
+/**
+ * Does today's board release already exist? A FAILED LOOKUP READS AS "YES", deliberately and against this
+ * file's other conventions: the condition guards against a late edition CREATING a document beside one the
+ * board already has, so the safe answer when `gh` cannot be asked is the one that refuses. Reading a
+ * failure as "no release" would let the one state this path must never reach through on an outage.
+ * @param {{ run?: (args: string[]) => string }} [deps]
+ */
+export function todaysReleaseExists({ run } = {}) {
+  const tag = `board/${new Date().toISOString().slice(0, 10)}`;
+  const exec = run ?? ((args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
+  try {
+    exec(["release", "view", tag, "--repo", REPO, "--json", "isDraft"]);
+    return true;
+  } catch (error) {
+    const message = String(/** @type {Error} */ (error)?.message ?? "");
+    // `gh` says "release not found" for a tag that does not exist; anything else is an outage or a
+    // permission problem, and those must not read as "no release".
+    return !/not found/i.test(message);
+  }
+}
+
+/** @param {string} pdf */
 function publishToDraftRelease(pdf) {
   const tag = `board/${new Date().toISOString().slice(0, 10)}`;
   const title = `Board report — ${new Date().toISOString().slice(0, 10)}`;
