@@ -141,6 +141,17 @@ jobs:
         run: npm run lint
       - if: inputs.run-lint-typecheck
         run: npm run typecheck
+      # #660: THE FIXTURE BUNDLE FOR `pre-push-resolve-toward-main.test.ts`'S bb7fa639/3d38dbf0 PAIR --
+      # keyed on the two shas THEMSELVES, not a lockfile or a tree hash. They never change (they name a
+      # real, closed incident), so the key is stable and a hit is a true hit rather than a rebuild wearing
+      # a cache's name. A runner that misses still builds the bundle itself on first use
+      # (`git-fixture-cache.mjs`'s own idempotent `ensureFixtureBundle`) -- this step is pure speedup, never
+      # a precondition the test would fail without.
+      - if: inputs.run-ts-tests
+        uses: actions/cache@v4
+        with:
+          path: runs/git-fixture-cache
+          key: git-fixture-cache-bb7fa639-3d38dbf0
       # A1B: WHICH TEST FILES DOES THIS DIFF ACTUALLY REACH -- unchanged from ci.yml's own `ts` job. Only
       # relevant when ts-test-scope is 'scoped'; the unscoped path below is trunk-guard's own long-standing
       # "test everything, on every merge" choice, which needs no diff at all.
