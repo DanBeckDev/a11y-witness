@@ -43,6 +43,7 @@ import { behindByCount } from "./queue-stalled.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { newestPerName } from "./newest-check-run.mjs";
+import { holdersOf } from "./pr-hold-state.mjs";
 
 export const EXIT = { EXAMINED: 0, INCOMPLETE: 2 };
 
@@ -125,6 +126,7 @@ export function prRow(pr, behind, now) {
     owner,
     behind,
     armed: pr.armed,
+    holders: pr.holders ?? [],
     idleMinutes,
     // A PR can be stalled by being behind and untouched, which is the state `update-branch` skips
     // because it only carries GREEN PRs -- so a red PR that nobody pushes is invisible to the train.
@@ -228,6 +230,22 @@ export function openPRs() {
     headRefOid: pr.head?.sha ?? "",
     updatedAt: pr.updated_at,
     armed: Boolean(pr.auto_merge),
+    // THE HOLD LABEL COMES BACK ON THE SAME PAYLOAD, so reading it costs nothing. It has to be read,
+    // because a held PR is DISARMED ON PURPOSE (`pr-hold.mjs` disarms as part of taking the hold) and
+    // "UNARMED" for a held PR is a true word for the wrong reason -- it reads as nobody has got to it
+    // yet, when somebody has decided it must not merge. #819 sat in section 2 as UNARMED at 15:37Z while
+    // ceo held it pending a gate stage. Wrong in the reassuring direction, which is the only direction
+    // that matters in a table people scan.
+    // `holdersOf`, THE PREDICATE THE ARM PATH ITSELF USES -- never this file's own copy of the prefix.
+    //
+    // This read is what found the collision it now has to survive. Written against `session:`, it printed
+    // #820 as HELD+ARMED; the answer was that `session:` meant OWNERSHIP -- twelve PRs carried it that
+    // day to say whose they were -- and holds moved to `hold:` within the hour. A table carrying its own
+    // literal would have gone on reporting every owned PR as held, which is a table lying about the exact
+    // thing it just found. Importing the predicate means this row follows the rename by construction
+    // rather than by somebody remembering, and it agrees with `arm-pr`/`auto-arm-sweep` at every instant
+    // including the one where main has the rename and this branch has not been carried yet.
+    holders: holdersOf((pr.labels ?? []).map((/** @type {any} */ l) => String(l?.name ?? ""))),
     redChecks: checksOnSha(pr.head?.sha ?? "")?.filter(isRed).map((c) => c.name) ?? null,
   }));
 }
@@ -347,8 +365,14 @@ export function renderOpenPRs(prs) {
   const lines = prs.map((row) => {
     const behind = row.behind === null ? "?" : String(row.behind);
     const red = row.red === null ? " red:?" : row.red.length ? ` red: ${row.red.join(" ")}` : "";
-    return `   #${row.number}  ${row.owner.padEnd(11)} behind=${behind.padEnd(3)} `
-      + `${row.armed ? "armed  " : "UNARMED"}${red}`;
+    // HELD OUTRANKS UNARMED, because a held PR is unarmed BY DECISION. Held-and-armed is printed as
+    // its own word rather than folded into either: it is `pr-hold`'s failure state (#645) -- the label
+    // says stop and auto-merge says go -- and a table that renders it as plain "HELD" hides exactly the
+    // pair the hold exists to prevent.
+    const arm = row.holders.length
+      ? (row.armed ? `HELD+ARMED(${row.holders.join(",")})` : `HELD(${row.holders.join(",")})`)
+      : (row.armed ? "armed  " : "UNARMED");
+    return `   #${row.number}  ${row.owner.padEnd(11)} behind=${behind.padEnd(3)} ${arm}${red}`;
   });
   return { lines, incomplete: prs.some((r) => r.behind === null || r.red === null) };
 }
