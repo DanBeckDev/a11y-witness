@@ -564,3 +564,32 @@ test("activationBudgetFromDiagnostics reads the mark, and absence is null rather
   assert.equal(activationBudgetFromDiagnostics([]), null,
     "a capture with no mark has no budget — not a budget of zero, which would claim it covered everything");
 });
+
+/**
+ * THE CENSUS ELEMENT COUNTS ARE READ OFF A DENYLIST, AND #854 ADDS A FIELD — so this pins the interaction
+ * rather than the intention. `censusElementCounts` and `censusFromDiagnostics` take every numeric field on
+ * the `structureCensus` mark except `event` and `atMs`; a flat `readAtMs: 3200` would have arrived here as
+ * an element type named `readAtMs` with 3,200 of them, and no test in either package would have noticed.
+ *
+ * The capture nests it under `readAt` for exactly this reason. This test is the other end of that
+ * agreement: flattening it there breaks here, which is where the damage would actually be done.
+ */
+test("the census read moment is not reported as an element count", () => {
+  const diagnostics = [{
+    event: "structureCensus", atMs: 452791,
+    heading: 69, formControl: 125, landmark: 12,
+    readAt: { startedAtMs: 5211, tookMs: 47 },
+  }];
+  const counts = censusElementCounts(diagnostics);
+  assert.deepEqual(counts, { heading: 69, formControl: 125, landmark: 12 });
+
+  // The mutation that would have shipped it: the same numbers, flat.
+  const flattened = [{
+    event: "structureCensus", atMs: 452791,
+    heading: 69, formControl: 125, landmark: 12,
+    readAtMs: 5211, readTookMs: 47,
+  }];
+  assert.deepEqual(Object.keys(censusElementCounts(flattened) ?? {}).sort(),
+    ["formControl", "heading", "landmark", "readAtMs", "readTookMs"],
+    "this is what a flat field does here — two invented element types, silently");
+});
