@@ -440,7 +440,10 @@ run() { # run <label> <command...>
 # SUBSHELL to satisfy the pipe/substitution, and a subshell's own `times` reports its OWN (near-zero)
 # children, not this shell's accumulated ones. Measured directly: piped, the delta read 0.000 across a
 # node loop that burned real CPU. Redirected to a FILE (`times > file`), no fork happens and the real
-# cumulative figure survives to be read back.
+# cumulative figure survives to be read back. THE SAME CLASS AS #712 -- a status/value read from the wrong
+# side of a pipe reports something real, just not the thing being asked about; that one was a piped exit
+# code, this is a piped builtin's own accounting, but the shape (a fork silently substitutes its own
+# state for the caller's) is identical.
 #
 # WALL CLOCK is still recorded, as a bound never the answer (ceo's own words) -- `date +%s.%N` is a GNU
 # extension absent from a bare BSD `date`, so `node -e "Date.now()"` is the portable millisecond clock:
@@ -497,25 +500,45 @@ run_gate_with_guards_budget() { # run_gate_with_guards_budget <branch-label>
   guards_wall="$(ms_delta_seconds "$guards_wall_start" "$guards_wall_end")"
   rm -f "$guards_cpu_start_file" "$guards_cpu_end_file"
 
-  echo "pre-push: gate ($branch_label) -- wall ${gate_wall}s, CPU ${gate_cpu}s | guards (#716, 21) -- wall ${guards_wall}s, CPU ${guards_cpu}s"
+  # THE RATIO, NOT JUST THE TWO NUMBERS -- printed every run, so a reader can watch it drift before it
+  # ever reaches a threshold. `ga+0==0` guards a division that should never happen (the gate always runs
+  # real lint/typecheck/mjs-check work) without crashing the hook on the day it somehow does.
+  local ratio
+  ratio="$(awk -v gu="$guards_cpu" -v ga="$gate_cpu" \
+    'BEGIN{ if (ga + 0 == 0) { print "0.00" } else { printf "%.2f", gu / ga } }')"
+  echo "pre-push: gate ($branch_label) -- wall ${gate_wall}s, CPU ${gate_cpu}s | guards (#716, 21) -- wall ${guards_wall}s, CPU ${guards_cpu}s | ratio ${ratio}x"
 
   # A MEASURED RANGE, NEVER A FIXED FIGURE -- CLAUDE.md's own rule about quoting a timing number applies to
-  # this hook's own header exactly as it applies to any other. The number above is THIS run's; it will
+  # this hook's own header exactly as it applies to any other. The numbers above are THIS run's; they will
   # differ on a busier or quieter host, and neither reading makes the other one wrong.
-  local budget_cpu
-  budget_cpu="$(awk -v g="$gate_cpu" 'BEGIN{printf "%.3f", g * 2}')"
-  if awk -v guards="$guards_cpu" -v budget="$budget_cpu" 'BEGIN{exit !(guards > budget)}'; then
+  #
+  # GRADUATED, NOT A BARE "REFUSE AT 2x" -- ceo's ruling 2026-09-09, revised the SAME day this hook's first
+  # version shipped, after its own real end-to-end run refused a push at 2.06x an hour after three quiet
+  # measurements averaged 1.77x, no code change between them. FOUR OBSERVED RATIOS on this host: ~1.72x,
+  # ~1.74x, ~1.84x, 2.06x -- the ratio of two independently noisy CPU measurements crosses a bare 2x line
+  # on HOST CONTENTION ALONE, and a hook that refuses pushes on noise is the #706 lesson (nine
+  # A11Y_SKIP_VERIFY=1 pushes in one evening, on a wrong belief about cost) arriving through the very guard
+  # built to stop exactly that pattern. So: under 2x is silent (the header line above already states the
+  # number); [2x, 3x) WARNS, naming the 2x design target, and does NOT fail the push; 3x or more REFUSES --
+  # a threshold none of the four observed ratios came near, and a real regression cannot miss (the
+  # unfixed #716 population, before its own fix, measured at roughly 10x the gate's cost).
+  if awk -v r="$ratio" 'BEGIN{exit !(r >= 3)}'; then
     if [ -n "${A11Y_GUARDS_BUDGET_REASON:-}" ]; then
-      echo "pre-push: guards CPU ${guards_cpu}s exceeds 2x the gate's own ${gate_cpu}s (budget ${budget_cpu}s), overridden: $A11Y_GUARDS_BUDGET_REASON" >&2
+      echo "pre-push: guards CPU ${guards_cpu}s is ${ratio}x the gate's own ${gate_cpu}s (refusing at 3x), overridden: $A11Y_GUARDS_BUDGET_REASON" >&2
     else
-      echo "pre-push: REFUSING -- the tree-wide guards cost ${guards_cpu}s CPU (user+sys) this run, more than" >&2
-      echo "double the gate's own ${gate_cpu}s (budget ${budget_cpu}s) -- ceo's ruling on #716/#704: adding the" >&2
-      echo "guards may at most double what a push already costs. A guard drifted slow; find which one with" >&2
-      echo "'npm run guards:sweep' and time each file individually, then fix it, or:" >&2
+      echo "pre-push: REFUSING -- the tree-wide guards cost ${guards_cpu}s CPU (user+sys) this run, ${ratio}x" >&2
+      echo "the gate's own ${gate_cpu}s -- at or past the 3x refusal line, which is past every ratio measured" >&2
+      echo "on this host so far (worst: 2.06x) and past what host-contention noise alone plausibly explains." >&2
+      echo "Find which guard drifted slow with 'npm run guards:sweep', time each file, and fix it, or:" >&2
       echo "A11Y_GUARDS_BUDGET_REASON=\"<why>\" git push ... -- the reason is printed, not just the override," >&2
       echo "so a deliberate exception is in the log rather than in somebody's memory." >&2
-      failed+=("tree-wide guards budget (${guards_cpu}s CPU > 2x ${gate_cpu}s)")
+      failed+=("tree-wide guards budget (${ratio}x the gate's own CPU, refusing at 3x)")
     fi
+  elif awk -v r="$ratio" 'BEGIN{exit !(r >= 2)}'; then
+    echo "pre-push: WARNING -- the tree-wide guards cost ${ratio}x the gate's own CPU this run (design" >&2
+    echo "target: 2x, refusal at 3x). Not refusing -- two independently noisy CPU measurements can cross" >&2
+    echo "the 2x design line on host contention alone (measured on this host: 1.72x-2.06x with no code" >&2
+    echo "change). Worth a look with 'npm run guards:sweep' if this keeps happening on a quiet host." >&2
   fi
 }
 # END #704 GUARDS-BUDGET TIMING
