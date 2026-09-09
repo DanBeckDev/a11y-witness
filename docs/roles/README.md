@@ -278,7 +278,8 @@ Two companions, ruled the same morning:
   fault to fix that minute, because every other reader of the tracker will make the same wrong
   assignment.
 - **A claim is live for four hours from its last push or comment, and a dead claim is released by the
-  tracker-auditor**, not by a count of how many rows a session holds. The two-claimed-rows cap is
+  tracker-auditor**, not by a count of how many rows a session holds, and never while an open PR touches the
+  row's Region. The two-claimed-rows cap is
   retired (2026-09-09); see `product-manager.md` and `tracker-auditor.md` for the measurement.
 
 ## TWO RULES FROM 2026-09-09: THE FOLD TEST, AND THE RUNWAY WINDOW
