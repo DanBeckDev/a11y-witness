@@ -1045,13 +1045,71 @@ The sentence naming how many rules-owned subtypes actually assert read "4 of the
 
 This file is for working ON the repo, and it is long because it is a record of what specific mistakes cost. No longer true after #458: the record moved to this file and its siblings, and CLAUDE.md itself is rules only.
 
-## a11y-worker-10, WITHDRAWN 2026-09-07
+## a11y-worker-10, WITHDRAWN 2026-09-07, REJOINED 2026-09-09
+
+**It never needed the console visit.** Measured 13:10-13:12Z on 2026-09-09, probing it directly because a
+commented-out host is invisible to `fleet:status` and nobody had re-checked it in two days:
+
+```
+GET /health          200   ok:true  ready:FALSE  busy:false
+SSH port 22          OPEN
+ICMP                 100% loss
+uptimeMinutes        6636  = 4.6 days -- it had NOT rebooted since ~2026-09-04
+provisionRevision    ba7f4174f90053f8   -- IDENTICAL to the live fleet
+readiness            every check passed EXCEPT noForegroundBlocker
+foregroundBlockedBy  { owner: "ShellExperienceHost", title: "New notification" }
+```
+
+The withdrawal note said *"It answers neither `/health`, nor SSH, nor ICMP."* **Two of those three were
+false.** A Windows toast was holding the foreground; the box was serving throughout.
+
+Rejoined the same afternoon -- uncomment, `fleet:deploy --limit`, `fleet:recover --limit` -- with
+`fleet:status` reading **10/10 ready, fleet CONSISTENT** at 13:21Z, every box on `691969f6a8f1dd11`.
+
+### Three things the next diagnosis should take from this
+
+**The box had 4.6 days of uptime ON THE 7th, so whatever failed then was A PATH TO IT, not the box.**
+`fleet:wake`'s magic packet went to a machine that was already awake, and its *"did NOT come back"* was
+true of the probe rather than of the hardware. A wake that fails against a running box is not evidence
+about the box at all.
+
+**ICMP loss on a Windows box is the FIREWALL'S DEFAULT and is never evidence of anything.** It is the
+cheapest of the three probes and the only one that stayed down. Weighting it is what made a live box read
+as absent. Do not put ping in a liveness verdict for a Windows guest.
+
+**`fleet:deploy`'s reboot is CONDITIONAL and cannot be relied on to clear a foreground blocker.** This was
+predicted as "a reboot clears it by construction" and it did not happen: the deploy reported
+`ok=14 changed=4` with `TASK [Reboot] skipping`, because the scheduled-task restart had already picked up
+the files -- and `uptimeMinutes` kept climbing through 6640, 6641, 6642. **The code updated and the
+blocker stayed.** `fleet:recover` reboots unconditionally and PROVES it (*"restarted -- uptime 0m"*),
+which is the check that caught the wrong prediction.
+
+### What CLAUDE.md said until 2026-09-09, kept verbatim
+
+Kept rather than deleted, because a figure with the reason it was wrong beside it is worth more than a
+figure quietly replaced — and `claude-md-content-preservation.test.ts` requires anything trimmed out of
+CLAUDE.md to survive somewhere under `docs/`:
 
 > **THE LOCAL UTM WORKER VMs ARE DEPRECATED. Capture on the bare-metal fleet.** NINE boxes
-> (`a11y-worker-2` … `-11`, in `inventory.yml`; `-1` is retired and its number is never reused, and
-> **`-10` is WITHDRAWN as of 2026-09-07 pending a console visit** — it answers neither `/health`, nor SSH,
-> nor ICMP, and `fleet:wake`'s magic packet did not bring it back, which `ansible/README.md` records as
-> the one thing nothing can automate) serve
-> `/health` without a laptop in the path, and
-> `npm run fleet:status` is the one command that says so. Deploy with **`npm run fleet:deploy`**, never
-> `worker:deploy` — that one is `utmctl file push` to a VM UUID and cannot reach a physical box.
+
+> [`-10` status →](docs/operational-lessons.md#a11y-worker-10-withdrawn-2026-09-07)) serve
+
+### The address is deliberately not in this file
+
+This section names the box by its **inventory name** and never by its address, and the quoted error above
+is redacted to `<a11y-worker-10>` for that reason. **The address lives in `/etc/a11ign/inventory.yml` and
+nowhere else** — the rule #83 set and that `docs/board/reported/` already follows: hosts by inventory
+name, paths by fact name.
+
+It is worth saying because the temptation here is FIDELITY rather than carelessness: the sentence is a
+quotation of a real refusal, and quoting it exactly is what a record is for. `tracked-source-leak-guard`
+refused this file for it, correctly, and the same instinct put the real address into `rescue-hunk`'s own
+test earlier the same day — in the tool written to stop un-redactions.
+
+### Why it was commented out rather than left to fail
+
+Kept, because the reasoning holds for the next genuinely dead box. `lab_fleet_workers` is every host in
+the group, unconditionally, with no health filter -- so a dead box there is dispatched work by every
+pooling job and takes the run down with it. Measured 2026-09-07: `capture-only` died on *"The worker at
+http://<a11y-worker-10>:8765 did not answer /health"* after the job had already started.
+
