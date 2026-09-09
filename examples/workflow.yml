@@ -35,14 +35,14 @@ jobs:
       - uses: DanBeckDev/a11y-witness@main
         id: witness
         with:
-          url: https://example.com/checkout
+          url: https://example.com/contact
           # Say what a USER is trying to do, not what you want tested.
           #
           # Know what it affects, though: with `probe-forms: true` — the default, and what is set below —
           # it decides WHICH buttons get activated (a button sharing a meaningful word with the task), so
           # it is LOAD-BEARING on this example as written. With an LLM backend it also drives the "could
           # someone finish this?" verdict; the default `local` scorer never sees it.
-          task: Complete the checkout with a saved card
+          task: Send an enquiry
 
           # No key, no account, nothing leaves the runner. This is the project's own trained scorer:
           # 27 KB of weights shipped in the action, over an encoder fetched at setup. It covers EIGHT
