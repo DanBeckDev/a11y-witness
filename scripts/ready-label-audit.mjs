@@ -47,16 +47,20 @@ import { fetchBoardItems, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { fetchClosedRowEvents, claimsFromEvents, describeClaims, unattributableClosedRows,
   PROVENANCE_REQUIRED_FROM } from "./claim-provenance.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { READY_LABEL, WAS_READY_LABEL } from "./claim-labels.mjs";
+// #782: THE PURE DECISION ONLY -- `labelsToStrip` classifies a label, it never calls `gh`. Importing it
+// does NOT give this file a mutation capability; the header above's ruling ("this audit REPORTS the
+// debris; it does not strip it... a bulk label mutation is product-manager's deliberate act") is
+// untouched. Safe from a cycle (#804): `close-rows-for-merged-pr.mjs` imports its own label constants
+// from the leaf `claim-labels.mjs`, never from this file, so this file importing FROM it forms no loop.
+import { labelsToStrip } from "./close-rows-for-merged-pr.mjs";
 
-export const READY_LABEL = "ready";
-
-// #449: THE RECORD THAT A ROW WAS `ready` IMMEDIATELY BEFORE A CLAIM REMOVED IT. `declineRow`
-// (row-claim.mjs) is the only writer of this label -- it always removes it in the same edit that
-// restores `ready`, mirroring `session:<name>`/`runner:<name>`'s own shape: a label recording a FACT
-// about the row's history, not a state a human sets by hand. See `strandedByIncompleteDecline` below for
-// the audit this enables: a row carrying it while neither `ready` nor claimed is the #171 shape --
-// a correct decline whose restore silently did not happen.
-export const WAS_READY_LABEL = "was-ready";
+// #804: READY_LABEL/WAS_READY_LABEL are IMPORTED (above) from the leaf claim-labels.mjs and re-exported
+// here, not declared in this file -- see claim-labels.mjs's own header for why. Every existing
+// `import { READY_LABEL } from "./ready-label-audit.mjs"` call site is unchanged. A bare `export {...}
+// from` would forward the binding WITHOUT creating a local one, and this file's own code below needs the
+// local name -- hence import-then-export as two separate statements rather than one re-export line.
+export { READY_LABEL, WAS_READY_LABEL };
 
 /**
  * Every label that already means "not actually pickable", independent of `ready`.
@@ -219,20 +223,27 @@ export function handClaims(issues) {
 
 /**
  * A label on a CLOSED row that means "pickable" or "claimed" -- not a contradiction to resolve, DEBRIS
- * nobody is going to act on. `ready`, `in-progress`, or any `session:*` label: a `session:` label on a
- * closed row is a claim with no holder, the exact state `decline` (#266/#268) exists for and which
- * nothing here prompts.
+ * nobody is going to act on.
  *
- * `runner:*` joins this list (#444): a reservation is the same family as `session:*` -- a claim on a row
- * with nobody left to honour it once the row is closed. A closed, runner-reserved row is not a
+ * #782: DELEGATES TO `labelsToStrip` for `ready`/`in-progress`/`started`/`session:*`, rather than a
+ * second, hand-rolled list -- found 2026-09-09 when a real sweep using `labelsToStrip` caught 52 closed
+ * rows carrying only a stale `started` label that this function's own list (missing `started` entirely)
+ * had never once flagged. That is the "a fact stated twice, and the copies drifted" shape: two
+ * independent answers to "what counts as a stale claim label on a closed row", with nothing comparing
+ * them. Delegating means there is exactly one list to drift FROM now.
+ *
+ * `runner:*` stays as this function's OWN addition, deliberately not folded into `labelsToStrip` (#444): a
+ * reservation is the same family as `session:*` -- a claim on a row with nobody left to honour it once the
+ * row is closed -- but `labelsToStrip` must never remove it (`row-claim.mjs`'s own comment: it survives a
+ * claim on purpose, recording WHO a row was reserved for). A closed, runner-reserved row is not a
  * contradiction (see `mutexViolations`'s own doc for why `runner:` must NOT join `MUTEX_LABELS` instead),
- * it is the identical stale-bookkeeping shape `session:*` debris already is.
+ * it is the identical stale-bookkeeping shape `session:*` debris already is -- reported here, never
+ * stripped by either function.
  * @param {string} label
  * @returns {boolean}
  */
 export function isClosedDebrisLabel(label) {
-  return label === READY_LABEL || label === "in-progress" || label.startsWith("session:")
-    || label.startsWith("runner:");
+  return labelsToStrip([label]).length > 0 || label.startsWith("runner:");
 }
 
 /**
