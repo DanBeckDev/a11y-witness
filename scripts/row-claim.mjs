@@ -127,6 +127,19 @@ export const WORKTREE_LABEL_PREFIX = "worktree:";
  */
 const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", env: sandboxGitEnv() });
 
+// #749: `gh issue edit --add-label <name>` REFUSES a label that does not exist -- and #677's own
+// reproduction (13:23:15Z) showed the failure is NOT atomic: the SAME command's `--remove-label ready`
+// still applied while every `--add-label` (including `branch:agent/activation-budget-677`) did not,
+// because `branch:<name>` and `worktree:<path>` are PER-ROW-UNIQUE labels this repo has never created in
+// advance -- `gh label list | grep '^branch:'` returned 0 the day this row was filed, and `worktree:`
+// (#665, the identical shape one field over) was found to be exactly as unwritten while fixing this.
+// `--force` makes creation idempotent (updates color/description rather than erroring) so this never
+// fails on a label a previous claim already made.
+/** @param {string[]} labels @param {{ run?: typeof defaultRun }} [deps] */
+function ensureLabelsExist(labels, { run = defaultRun } = {}) {
+  for (const label of labels) run("gh", ["label", "create", label, "--repo", REPO, "--force"]);
+}
+
 /**
  * Reads an issue's CURRENT labels from the real board. Injectable `run`, the same seam
  * `install-git-hooks.mjs` uses, so this is testable without a network call or a real repo.
@@ -484,9 +497,18 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   const wasReady = before.labels.includes(READY_LABEL);
   const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels, ...branchLabel, ...worktreeLabel,
     ...(wasReady ? [WAS_READY_LABEL] : [])];
+  // #749: the label must EXIST before `gh` can add it (see `ensureLabelsExist`'s own header), and the
+  // ADD and the REMOVE are now two SEPARATE calls, in that order, rather than one combined edit -- #677's
+  // own reproduction proved a combined call is not atomic (its `--remove-label ready` applied while every
+  // `--add-label` did not), so "leaves the row's labels exactly as it found them on ANY failure" can only
+  // be honoured by making the removal wait until the additions are KNOWN to have succeeded: `run` throws
+  // on a non-zero exit (`defaultRun`'s own `execFileSync`), so a failed ADD call never reaches the REMOVE
+  // below -- the row keeps `ready` (worse than a clean claim, but recoverable and visible) rather than
+  // losing it while gaining nothing.
+  ensureLabelsExist(labelsToAdd, { run });
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
-    ...labelsToAdd.flatMap((l) => ["--add-label", l]),
-    "--remove-label", READY_LABEL]);
+    ...labelsToAdd.flatMap((l) => ["--add-label", l])]);
+  run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO, "--remove-label", READY_LABEL]);
 
   const after = fetchLabels(issueNumber, { run });
   const afterStatus = claimStatus(after.labels);
