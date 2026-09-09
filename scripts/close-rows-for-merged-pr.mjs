@@ -81,21 +81,16 @@ import { pathToFileURL } from "node:url";
 // not exist there. #330 and #331 are what that circular bootstrap costs. `cli-flags.mjs` imports only
 // `node:path`, `node:fs` and `node:url`.
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
-// SAFE for the identical no-`npm ci` reason: `ready-label-audit.mjs`'s own import graph
-// (`board-snapshot.mjs`, `claim-provenance.mjs`, `git-env.mjs`, `repo-identity.mjs`) is relative-only,
-// same as `cli-flags.mjs` above -- verified before adding this, not assumed.
-import { READY_LABEL } from "./ready-label-audit.mjs";
+// #804: A LEAF IMPORT, safe under the identical no-`npm ci`/no-build constraint the rest of this header
+// names -- `claim-labels.mjs` imports nothing at all, so it cannot be part of a cycle. This replaced two
+// rounds of "duplicate the constant locally instead" (#754 for CLAIM_LABEL/STARTED_LABEL, #782 for
+// READY_LABEL): each was individually defensible against the immediate risk (row-claim.mjs's heavy import
+// graph; a cycle back through ready-label-audit.mjs) but the accumulation was itself the fact-stated-twice
+// shape this repo names as its own most expensive recurring defect -- three copies of four literals is
+// worse than the cycle either duplicate was solving. See claim-labels.mjs's own header for the full story.
+import { READY_LABEL, CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
 
 export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2 };
-
-// #754: DUPLICATED FROM `row-claim.mjs`'s OWN CONSTANTS, deliberately, rather than imported. That file's
-// import graph pulls in `merge-guard.mjs`, `board-snapshot.mjs`'s write path and the whole `row-claim/`
-// rule set -- real risk in a script that runs with no `npm ci` and no build, the exact `ERR_MODULE_NOT_FOUND`
-// bootstrap trap #330/#331 already cost this file once. Two literal strings, pinned equal to
-// `row-claim.mjs`'s by `close-rows-on-merge.test.ts`, is the documented-duplicate exception CLAUDE.md
-// names for `git-safe-env.mjs` under an identical constraint, applied here.
-const CLAIM_LABEL = "in-progress";
-const STARTED_LABEL = "started";
 
 /**
  * WHAT TO DO WITH EACH ROW THE MERGED PR DECLARED -- the whole decision, as one pure function.
