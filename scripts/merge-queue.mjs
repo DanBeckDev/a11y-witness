@@ -44,6 +44,7 @@ import { sandboxGitEnv } from "./git-env.mjs";
 import { gitCommonDir } from "./merge-guard.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
+import { newestPerName } from "./newest-check-run.mjs";
 
 /** @param {string[]} args */
 function gh(args) {
@@ -80,7 +81,11 @@ export function refusalFor(pr) {
   if (pr.isDraft) return "draft";
   if (pr.mergeable === "CONFLICTING") return "conflicts with main — its OWNER rebases it, not the dispatcher";
   if (pr.mergeable === "UNKNOWN") return "GitHub has not computed mergeability yet — ask again in a moment";
-  const checks = pr.statusCheckRollup ?? [];
+  // NEWEST PER NAME (#634). This filtered the RAW rollup, which UNIONS superseded check-runs -- so a
+  // cancelled or replaced FAILED run survived on the head and this reported `checks failing` for a PR
+  // whose current runs were all green. It is the FIFTH call site of a fix applied four times elsewhere
+  // (#500, #517, #582, and `queue-table.mjs`), and the one that decides whether a PR is mergeable.
+  const checks = newestPerName(pr.statusCheckRollup ?? []);
   // No checks at all is NOT green. Before branch protection exists, a PR with no run is indistinguishable
   // from one whose workflow never triggered, and that is the state that let a frozen branch through.
   if (checks.length === 0) return "no checks have run — a PR with no run is not a green PR";
