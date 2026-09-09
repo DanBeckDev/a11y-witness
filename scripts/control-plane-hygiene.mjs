@@ -143,6 +143,23 @@ export function distTrapReport(repoRoot) {
   return { checked: packages.length, importedByOthers: needed.size, exposed, protectedByRoot };
 }
 
+/**
+ * The refusal MESSAGE, as a pure function of the rendered rows -- or `null` when every row has a real
+ * decision. #655: the first draft counted the undecided rows without naming which ones, so a reader had
+ * to re-scan the whole table above to find the offender; this names them directly.
+ * @param {Array<[string, string, string]>} rows
+ * @returns {string | null}
+ */
+export function undecidedRefusal(rows) {
+  const undecided = rows.filter(([, , rule]) => /we should clean|TODO|tidy/i.test(rule));
+  if (undecided.length === 0) return null;
+  return `REFUSING: ${undecided.length} row(s) have no recorded rule or decision, only an `
+    + "intention -- that is a failed acceptance for this row by its own definition.\n"
+    + `  ${undecided.map(([label]) => label).join(", ")}\n`
+    + "Replace \"we should clean\"/\"TODO\"/\"tidy\" in the row(s) above with an actual rule: KEEP, DELETE, "
+    + "or an explicit threshold -- the table's own job is to make that decision legible, not to defer it.";
+}
+
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "npm run hygiene:report" });
 
@@ -156,6 +173,7 @@ function main() {
   const diskFreeKb = Number(diskFreeOut.trim().split(/\s+/)[3]);
   const trap = distTrapReport(REPO_ROOT);
 
+  /** @type {Array<[string, string, string]>} */
   const rows = [
     ["Worktrees registered", `${trees.length}`,
       "RULE: prune stale/fully-merged trees regularly; `git worktree remove` refuses a dirty tree by "
@@ -203,10 +221,9 @@ function main() {
     console.log(`  ${rule}\n`);
   }
 
-  const undecided = rows.filter(([, , rule]) => /we should clean|TODO|tidy/i.test(rule));
-  if (undecided.length) {
-    console.error(`REFUSING: ${undecided.length} row(s) have no recorded rule or decision, only an `
-      + "intention -- that is a failed acceptance for this row by its own definition.");
+  const refusal = undecidedRefusal(rows);
+  if (refusal) {
+    console.error(refusal);
     process.exit(1);
   }
   process.exit(0);

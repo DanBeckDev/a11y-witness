@@ -227,8 +227,8 @@ test("#426: a real, slow capture prints the early notice AND still completes nor
     if (url === "/progress") {
       res.writeHead(200);
       return res.end(JSON.stringify({ busy: true, capturing: "https://example.com/", phases: [
+        { event: "pageState", beforeProbe: "sweep", atMs: 1400, heading: 463, targetMatch: "matched" },
         { event: "structural", atMs: 1200, headings: 1 },
-        { event: "structureCensus", atMs: 1400, heading: 463 },
       ] }));
     }
     const id = url.split("/").pop() ?? "";
@@ -245,7 +245,8 @@ test("#426: a real, slow capture prints the early notice AND still completes nor
     assert.deepEqual((result as unknown as { transcript: string[] }).transcript, ["heading, level 2, consent"]);
     const notices = written.filter((line) => line.includes("NOTICE"));
     assert.equal(notices.length, 1, "exactly one notice, from a real poll cycle, not zero and not several");
-    assert.match(notices[0], /1\.2s/);
+    // observedAtMs is the LATER of the two marks (#426's revised acceptance) -- pageState here, at 1.4s.
+    assert.match(notices[0], /1\.4s/);
   } finally { process.stderr.write = realWrite; await w.close(); }
 });
 
@@ -279,15 +280,15 @@ test("earlyContainmentWatcher prints the notice EXACTLY ONCE across repeated pol
   process.stderr.write = ((chunk: string) => { written.push(String(chunk)); return true; }) as never;
   try {
     const containedProgress = { phases: [
+      { event: "pageState", beforeProbe: "sweep", atMs: 6300, heading: 463, targetMatch: "matched" },
       { event: "structural", atMs: 6000, headings: 1 },
-      { event: "structureCensus", atMs: 6300, heading: 463 },
     ] };
     watcher(containedProgress);
     watcher(containedProgress); // a second poll before the capture finishes -- e.g. a slow, contained page
     watcher(containedProgress);
     assert.equal(written.length, 1, "the same fact must not repeat once per poll for five minutes");
     assert.match(written[0], /NOTICE/);
-    assert.match(written[0], /6\.0s/);
+    assert.match(written[0], /6\.3s/);
   } finally { process.stderr.write = realWrite; }
 });
 
@@ -301,8 +302,8 @@ test("earlyContainmentWatcher stays silent while undecided, and on a healthy cap
     watcher({ phases: [{ event: "structural", atMs: 1000, headings: 1 }] }); // still only one mark
     watcher({ busy: true, capturing: null }); // the idle shape -- no `phases` at all
     watcher({ phases: [
+      { event: "pageState", beforeProbe: "sweep", atMs: 9200, heading: 38, targetMatch: "matched" },
       { event: "structural", atMs: 9000, headings: 37 },
-      { event: "structureCensus", atMs: 9200, heading: 38 },
     ] }); // decided, and healthy
     assert.equal(written.length, 0, "no doubt was ever decided-and-contained; nothing should print");
   } finally { process.stderr.write = realWrite; }
