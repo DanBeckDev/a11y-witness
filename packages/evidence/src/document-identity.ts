@@ -101,6 +101,17 @@ export interface DocumentIdentity {
    * `"fallback"`, and refusing to state an identity there would withhold exactly the finding.
    */
   targetMatch: string | null;
+  /**
+   * HOW MANY QUERY PARAMETERS THE SERVED PATH DROPPED — the caveat on this module's own reduction.
+   *
+   * `0` means the served URL carried no query, so nothing was set aside and a `SAME_DOCUMENT` verdict
+   * rests on the whole URL. Above zero, two captures agreeing on `servedPath` agreed on origin and path
+   * while differing, possibly, in a query this deliberately did not read. `null` when no served path was
+   * read at all — not `0`, which would claim a reduction that never happened.
+   *
+   * The COUNT only. See `servedFrom` for why the values are never recorded.
+   */
+  droppedQueryParams: number | null;
   /** Eight hex characters naming this render in a report. A label; never the comparison. */
   digest: string;
 }
@@ -124,6 +135,12 @@ export interface IdentityComparison {
    * facts and the second is the more serious one — see `DocumentIdentity.unstable`.
    */
   unstable: IdentityComponent[];
+  /**
+   * Did either side's served path drop a query string? A `SAME_DOCUMENT` verdict here rests on origin
+   * and path with a query set aside, so the agreement is narrower than it looks and the caller must be
+   * able to say so. `false` when neither URL carried a query, or when no path was compared.
+   */
+  queryDropped: boolean;
 }
 
 /** A capture record, walked by field. `any` for the same reason `evidence-diff.mjs` uses it. */
@@ -166,16 +183,36 @@ const markNamed = (diagnostics: readonly unknown[], event: string): Record<strin
  *   guess dressed as a reading.
  */
 export function servedPathOf(url: unknown): string | null {
+  return servedFrom(url)?.path ?? null;
+}
+
+/**
+ * The served path AND HOW MUCH WAS DROPPED TO GET IT — ceo's condition on this reduction, 2026-09-09.
+ *
+ * Dropping the query is what makes a nonce-bearing URL comparable at all, and it is also what makes a
+ * `SAME_DOCUMENT` verdict weaker on exactly the captures where a query was present: two URLs that agree
+ * on origin and path but differed in a query this deliberately did not read. So the COUNT of dropped
+ * parameters is recorded beside the path and carried into the verdict, and a report can say where the
+ * caveat applies rather than leaving the reader to discover the reduction.
+ *
+ * **The count, never the values.** The parameters are the nonces (`state`, `code_challenge`, `rart`),
+ * and recording them would put single-use handshake material into a tracked comparison record for no
+ * gain — the count is what says "a caveat applies here", which is the whole of what a reader needs.
+ */
+function servedFrom(url: unknown): { path: string, droppedParams: number } | null {
   if (typeof url !== "string" || url === "") return null;
   try {
     const parsed = new URL(url);
+    const droppedParams = [...parsed.searchParams.keys()].length;
     // AN OPAQUE ORIGIN IS THE STRING "null", and concatenating it produces a value that is not a URL and
     // is not distinguishable from another one: `about:blank#` came out as `"nullblank"` under the first
     // version of this line, and `about:blank` is a real value a capture carries when a navigation failed.
     // Two different failures reading equal is a silent SAME_DOCUMENT, which is the one answer this module
     // must never give by accident. Found by this function's own test, not by review.
-    if (parsed.origin === "null") return `${parsed.protocol}${parsed.pathname}`;
-    return `${parsed.origin}${parsed.pathname}`;
+    const path = parsed.origin === "null"
+      ? `${parsed.protocol}${parsed.pathname}`
+      : `${parsed.origin}${parsed.pathname}`;
+    return { path, droppedParams };
   } catch (cause) {
     // NOT swallowed and not thrown: a capture may legitimately record a target that is not a URL, and
     // that is "unreadable", which this function's contract already has a value for.
@@ -229,13 +266,13 @@ function shapeOf(diagnostics: readonly unknown[]):
  */
 export function documentIdentity(capture: CaptureRecord | null | undefined): DocumentIdentity {
   const diagnostics = Array.isArray(capture?.diagnostics) ? capture.diagnostics : [];
-  const { components, unstable } = componentsIn(diagnostics);
+  const { components, unstable, droppedQueryParams } = componentsIn(diagnostics);
   const read = IDENTITY_COMPONENTS.filter((name) => components[name] !== undefined);
   // THE COMPONENT NAMES ARE IN THE CANONICAL STRING, not only their values. An identity that read a
   // title and no path must never digest equal to one that read a path and no title.
   const canonical = read.map((name) => `${name}=${components[name]}`).join("\n");
   return {
-    components, read, unstable,
+    components, read, unstable, droppedQueryParams,
     titleSource: titleSourceIn(diagnostics),
     ...shapeOf(diagnostics),
     targetMatch: targetMatchIn(diagnostics),
@@ -254,13 +291,19 @@ const distinct = (values: readonly string[]): string[] => [...new Set(values)];
  * ask for a better capture, the second means the page moved under the capture you have.
  */
 function componentsIn(diagnostics: readonly unknown[]):
-  Pick<DocumentIdentity, "components" | "unstable"> {
+  Pick<DocumentIdentity, "components" | "unstable" | "droppedQueryParams"> {
   // EVERY census mark, both kinds. `structureCensus` and `domCensus` are separate reads of the CDP
   // target and can in principle name different documents; asserting they agree without looking is the
   // assumption this function exists to stop making.
-  const served = distinct([...marksNamed(diagnostics, "structureCensus"), ...marksNamed(diagnostics, "domCensus")]
-    .map((mark) => servedPathOf(mark.targetUrl))
-    .filter((path): path is string => path !== null));
+  const servedReads = [...marksNamed(diagnostics, "structureCensus"), ...marksNamed(diagnostics, "domCensus")]
+    .map((mark) => servedFrom(mark.targetUrl))
+    .filter((read): read is { path: string, droppedParams: number } => read !== null);
+  const served = distinct(servedReads.map((read) => read.path));
+  // THE MOST ANY READ DROPPED. Two marks can share a path and differ in their query — that is precisely
+  // the nonce case — so the caveat applies if it applied to any of them.
+  const droppedQueryParams = servedReads.length
+    ? Math.max(...servedReads.map((read) => read.droppedParams))
+    : null;
   const titles = distinct(marksNamed(diagnostics, "titleSource")
     .map((mark) => mark.title)
     .filter((value): value is string => typeof value === "string" && value !== ""));
@@ -271,7 +314,7 @@ function componentsIn(diagnostics: readonly unknown[]):
     if (values.length === 1) components[name] = values[0];
     else if (values.length > 1) unstable[name] = values;
   }
-  return { components, unstable };
+  return { components, unstable, droppedQueryParams };
 }
 
 /**
@@ -328,7 +371,9 @@ export function compareIdentity(before: DocumentIdentity, after: DocumentIdentit
     : differing.length ? "DIFFERENT_DOCUMENT" : "SAME_DOCUMENT";
   const unstable = IDENTITY_COMPONENTS.filter(
     (name) => before.unstable[name] !== undefined || after.unstable[name] !== undefined);
-  return { verdict, compared, differing, incomparable, unstable };
+  const queryDropped = compared.includes("servedPath")
+    && [before, after].some((side) => (side.droppedQueryParams ?? 0) > 0);
+  return { verdict, compared, differing, incomparable, unstable, queryDropped };
 }
 
 /** The counts, rendered in `FINGERPRINT_KEYS` order — the order is the report order. */
@@ -343,9 +388,12 @@ function shapeSentence(identity: DocumentIdentity): string {
 /**
  * WHICH RENDER DOES THIS REPORT DESCRIBE? — #687's third half.
  *
- * "assessed 19 of 55 criteria" deserves to say it was assessed against a page with eleven tabbable
- * elements, if it was. Says NOT RECORDED rather than nothing when the marks are absent, because a
- * report silently omitting the render reads as a report about the page the reader asked for.
+ * A report stating how many criteria it assessed deserves to say WHICH RENDER it assessed them against
+ * — a page with eleven tabbable elements is a different subject from the one with ninety-eight, and the
+ * criteria count says nothing about which it saw. (The count itself is `assessedCriteria().length`; it is
+ * not written here, because a number in a comment is a number that stops being true.) Says NOT RECORDED
+ * rather than nothing when the marks are absent, because a report silently omitting the render reads as
+ * a report about the page the reader asked for.
  */
 export function identitySentence(identity: DocumentIdentity): string {
   const served = identity.components.servedPath
@@ -359,7 +407,22 @@ export function identitySentence(identity: DocumentIdentity): string {
     : identity.targetMatch === null ? ""
       : ` The document this was read from was NOT CONFIRMED (targetMatch: ${identity.targetMatch}).`;
   return `Document ${identity.digest}: ${served}${title}.${shapeSentence(identity)}${unconfirmed}`
-    + unstableSentence(identity);
+    + droppedQuerySentence(identity) + unstableSentence(identity);
+}
+
+/**
+ * WHERE THE CAVEAT ON THIS MODULE'S REDUCTION APPLIES — ceo's condition, 2026-09-09.
+ *
+ * The served path is origin + path, so a query string is set aside to make a nonce-bearing URL
+ * comparable at all. On a capture whose URL carried one, "the same document" is a narrower claim than it
+ * reads: two such captures agreed on origin and path while a query went unexamined. Said here, on the
+ * captures where it applies, rather than left in a code comment for a reader to discover afterwards.
+ */
+function droppedQuerySentence(identity: DocumentIdentity): string {
+  const dropped = identity.droppedQueryParams;
+  if (dropped === null || dropped === 0) return "";
+  return ` Its served URL carried ${dropped} query parameter(s), which the served path DROPS`
+    + " (they carry per-request nonces), so an identity match here is a match on origin and path only.";
 }
 
 /**

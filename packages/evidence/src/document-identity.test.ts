@@ -211,3 +211,47 @@ test("the real capture records on disk say the same thing as the fixture", (t) =
   assert.equal(identities[0].digest, documentIdentity(first.capture).digest);
   assert.equal(identities[1].digest, documentIdentity(second.capture).digest);
 });
+
+/**
+ * CEO'S CONDITION ON THE QUERY-DROPPING REDUCTION, 2026-09-09: the capture records that a non-empty
+ * query was present and dropped — the COUNT, never the values, since they carry nonces — so a
+ * "same document" verdict carries its caveat where it applies.
+ */
+test("the dropped query is counted, never quoted, and null when no path was read", () => {
+  const withQuery = documentIdentity({ diagnostics: [{
+    event: "structureCensus",
+    targetUrl: "https://accounts.google.com/v3/signin/identifier?dsh=S194&state=f0b3&rart=ANgo",
+  }] });
+  assert.equal(withQuery.droppedQueryParams, 3);
+  assert.match(identitySentence(withQuery), /carried 3 query parameter\(s\)/);
+  // THE VALUES NEVER APPEAR. Recording them would put single-use handshake material into a comparison
+  // record for no gain: the count is the whole of what says "a caveat applies here".
+  assert.doesNotMatch(identitySentence(withQuery), /f0b3|ANgo|S194/);
+
+  const noQuery = documentIdentity({
+    diagnostics: [{ event: "structureCensus", targetUrl: "https://calendly.com/scheduling" }] });
+  assert.equal(noQuery.droppedQueryParams, 0);
+  assert.equal(droppedQueryMentioned(noQuery), false, "nothing was set aside, so there is no caveat");
+
+  // `null`, NOT 0: no path was read at all, and claiming a reduction that never happened is the same
+  // defect one level down as reading an absent measurement as zero.
+  assert.equal(documentIdentity({ diagnostics: [] }).droppedQueryParams, null);
+});
+
+const droppedQueryMentioned = (identity: ReturnType<typeof documentIdentity>) =>
+  /query parameter/.test(identitySentence(identity));
+
+test("a SAME_DOCUMENT verdict says when it rests on origin and path only", () => {
+  const nonce = (dsh: string) => documentIdentity({ diagnostics: [
+    { event: "structureCensus", targetUrl: `https://accounts.google.com/v3/signin/identifier?dsh=${dsh}` }] });
+  const sameWall = compareIdentity(nonce("S194"), nonce("S999"));
+  assert.equal(sameWall.verdict, "SAME_DOCUMENT");
+  assert.equal(sameWall.queryDropped, true,
+    "these two agreed on origin and path while their queries differed — the caller must be able to say so");
+
+  const clean = documentIdentity({
+    diagnostics: [{ event: "structureCensus", targetUrl: "https://calendly.com/scheduling" }] });
+  assert.equal(compareIdentity(clean, clean).queryDropped, false);
+  // NOT SET when no path was compared at all: a caveat about a comparison nobody made is noise.
+  assert.equal(compareIdentity(documentIdentity({ diagnostics: [] }), clean).queryDropped, false);
+});

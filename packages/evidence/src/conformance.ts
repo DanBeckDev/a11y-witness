@@ -88,8 +88,10 @@ export interface ConformanceScopeInput {
    * Requirement 2's limitation has always said "one viewport, one state, one document" without ever
    * saying WHICH document, and two captures of one URL can describe different ones: measured on
    * `https://calendly.com/`, one capture was served Google's sign-in wall and the other
-   * `calendly.com/scheduling`, both recorded under the requested URL. A reader given "assessed 19 of 55
-   * criteria" deserves to know it was assessed against a page with eleven tabbable elements, if it was.
+   * `calendly.com/scheduling`, both recorded under the requested URL. A reader told how many criteria
+   * this run assessed deserves to know WHICH RENDER it assessed them against — a page with eleven
+   * tabbable elements is a different subject from the one with ninety-eight, and the criteria count says
+   * nothing about which was seen.
    *
    * Omitted (or `null`) leaves the sentence out entirely rather than asserting an identity nobody read.
    */

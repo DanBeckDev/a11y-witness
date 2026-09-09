@@ -32,6 +32,12 @@ The counts are reported and deliberately not compared: a real page recaptured an
 links and is the same document, so deciding identity on counts would refuse most of the population this
 runs against.
 
+The served path is origin + path, because a sign-in URL carries per-request nonces and two captures of one
+wall would otherwise differ every time. Each capture records HOW MANY query parameters were dropped —
+the count, never the values — so a "same document" verdict says where it rests on origin and path alone.
+`docs/known-gaps.md` §46 records what that costs: a site whose documents differ only by query string reads
+as one document here.
+
 One finding fell out of measuring the records rather than reasoning about them: the 10:42 capture carries
 eleven `titleSource` marks, ten saying "Sign in - Google Accounts" and the last saying "Privacy Notice
 Calendly". A capture whose own marks name two documents has no single identity, and the report now says
