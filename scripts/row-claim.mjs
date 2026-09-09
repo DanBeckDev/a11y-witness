@@ -435,6 +435,31 @@ function postBlockedByNoteIfAny(issueNumber, blockedByNote, runFn) {
 }
 
 /**
+ * #749: writes the claim's labels, split from `writeRowLabels` for the same reason
+ * `postBlockedByNoteIfAny` above is (a called function's own lines are not the caller's).
+ *
+ * The label must EXIST before `gh` can add it (see `ensureLabelsExist`'s own header), and the ADD and the
+ * REMOVE are now two SEPARATE calls, in that order, rather than one combined edit -- #677's own
+ * reproduction proved a combined call is not atomic (its `--remove-label ready` applied while every
+ * `--add-label` did not), so "leaves the row's labels exactly as it found them on ANY failure" can only be
+ * honoured by making the removal wait until the additions are KNOWN to have succeeded: `run` throws on a
+ * non-zero exit (`defaultRun`'s own `execFileSync`), so a failed ADD call never reaches the REMOVE below --
+ * the row keeps `ready` (worse than a clean claim, but recoverable and visible) rather than losing it while
+ * gaining nothing.
+ * @param {number} issueNumber
+ * @param {{ run: typeof defaultRun, sessionLabel: string, extraLabels: string[], branchLabel: string[],
+ *           worktreeLabel: string[], wasReady: boolean }} args
+ */
+function applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, branchLabel, worktreeLabel, wasReady }) {
+  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels, ...branchLabel, ...worktreeLabel,
+    ...(wasReady ? [WAS_READY_LABEL] : [])];
+  ensureLabelsExist(labelsToAdd, { run });
+  run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
+    ...labelsToAdd.flatMap((l) => ["--add-label", l])]);
+  run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO, "--remove-label", READY_LABEL]);
+}
+
+/**
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
@@ -495,20 +520,8 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   // here and adds nothing, harmlessly -- the marker this row's own earlier dispatch already wrote stays
   // exactly where it is.
   const wasReady = before.labels.includes(READY_LABEL);
-  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels, ...branchLabel, ...worktreeLabel,
-    ...(wasReady ? [WAS_READY_LABEL] : [])];
-  // #749: the label must EXIST before `gh` can add it (see `ensureLabelsExist`'s own header), and the
-  // ADD and the REMOVE are now two SEPARATE calls, in that order, rather than one combined edit -- #677's
-  // own reproduction proved a combined call is not atomic (its `--remove-label ready` applied while every
-  // `--add-label` did not), so "leaves the row's labels exactly as it found them on ANY failure" can only
-  // be honoured by making the removal wait until the additions are KNOWN to have succeeded: `run` throws
-  // on a non-zero exit (`defaultRun`'s own `execFileSync`), so a failed ADD call never reaches the REMOVE
-  // below -- the row keeps `ready` (worse than a clean claim, but recoverable and visible) rather than
-  // losing it while gaining nothing.
-  ensureLabelsExist(labelsToAdd, { run });
-  run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
-    ...labelsToAdd.flatMap((l) => ["--add-label", l])]);
-  run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO, "--remove-label", READY_LABEL]);
+  applyClaimLabels(issueNumber,
+    { run, sessionLabel, extraLabels, branchLabel, worktreeLabel, wasReady });
 
   const after = fetchLabels(issueNumber, { run });
   const afterStatus = claimStatus(after.labels);
