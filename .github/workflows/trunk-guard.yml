@@ -122,10 +122,42 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
       - run: npm run build
+      # THE PAT, NOT `github.token`, AND FOR TWO INDEPENDENT REASONS -- either one alone is sufficient,
+      # which is why fixing only the more visible of them produces a WORSE failure than the one it fixes.
+      #
+      # 1. `GITHUB_TOKEN` CANNOT OPEN A PR HERE AT ALL. Measured on run 34275102543, the first run in which
+      #    this job ever reached its READY path: it decided correctly, cut `revert/4e87c87565-316`, pushed
+      #    it, and then died on `gh pr create` with `GraphQL: GitHub Actions is not permitted to create or
+      #    approve pull requests (createPullRequest)`. That is a REPOSITORY setting, confirmed from the API
+      #    rather than inferred -- `gh api repos/<owner>/<repo>/actions/permissions/workflow` answers
+      #    `{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}` -- and it
+      #    blocks `GITHUB_TOKEN` REGARDLESS of the `permissions:` block above, which already grants
+      #    `pull-requests: write` and already did on that run. So the obvious remedy (add the scope) adds a
+      #    scope that is present, fails identically, and reads as "the fix did not take".
+      # 2. A PR OPENED WITH `GITHUB_TOKEN` FIRES NO `pull_request` EVENT (#416, the same fact `auto-arm`
+      #    warns about below). `gate` would never run on the revert PR, `auto-arm` would never arm it, and
+      #    the revert would sit unmergeable with no checks -- which LOOKS like success from every angle
+      #    except the one that matters. So flipping the repository setting would not be sufficient either.
+      #
+      # The fallback is deliberate and mirrors `auto-arm.yml`'s three sites exactly: with no secret the job
+      # still runs the DECISION and still pushes the branch, and warns about what it cannot then do. A
+      # refusal here would throw away a correct verdict over a missing credential; a silent fallback would
+      # produce the unmergeable PR of (2) with nothing saying so.
+      #
+      # Note the `git push` is NOT affected by any of this: it goes through the checkout's persisted
+      # credentials under `contents: write`, which is why the push succeeded on the run above while the
+      # `gh` call did not. Two different credentials in one step, and only one of them moved.
       - name: Revert this push, unless the failure is inherited or main has already moved on
         env:
-          GH_TOKEN: ${{ github.token }}
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+          FALLBACK_TOKEN: ${{ github.token }}
         run: |
+          if [ -n "$A11IGN_BOT_TOKEN" ]; then
+            export GH_TOKEN="$A11IGN_BOT_TOKEN"
+          else
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- the revert decision and branch push still run, but this repository forbids GitHub Actions from creating pull requests, so the pr-create call will refuse; and a PR it did create would fire no workflow events, so the gate check would never run on it. See #575."
+            export GH_TOKEN="$FALLBACK_TOKEN"
+          fi
           # `github.event.before` only exists on a real `push` event. #417's sweep triggers this workflow
           # via `workflow_dispatch` (no such field), so fall back to the checked-out commit's own parent
           # -- `fetch-depth: 0` above already makes that a real, resolvable commit, and it is the same
