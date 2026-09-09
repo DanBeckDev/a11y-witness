@@ -152,12 +152,48 @@ The 6th-versus-7th date question is moot for the summary: it only mattered while
 describe. The tree fix rides `orchestrator`'s **#750**, not this document. **#743** carries the stale
 inventory sentence.
 
-## 4. The process line — ONE SENTENCE, IN THE BODY, NOT IN THE THREE
+## 4. The process section — THIS CORRECTION LEADS IT
 
-`ceo`'s ruling: a wrong number caught before publication is not a board correction. It belongs in the body
-as one sentence about the check that caught it.
+### The check that says a change was tested reported success on 55 of today's 145 merges without running anything
+
+**`ceo`'s ruling, 2026-09-09.** The number goes in **with its 38%**, because a smaller-sounding phrasing
+is the thing this correction is about.
+
+**What happened.** Every pull request declares the command that proves it. A check runs that command and
+reports. **On 55 of the 145 changes merged today — 38% — it reported success having executed no
+command**: the declared test needed a credential the check deliberately does not carry, the check said so,
+and **saying "I could not run this" was counted as a pass.**
+
+**Where it came from, and the honest bound on the number.** Found by `product-manager` against three of
+their own merges, by reading what the check actually printed rather than the tick beside it. Measured
+across the day by `dispatcher`, **by classifying each merge's declared command rather than opening every
+log: 55 classified, of which 5 were confirmed from the logs themselves.** So 55 is a classified count with
+five verified, not 55 read one by one — **and the board is told that rather than the round number alone.**
+
+### Whether that code was tested anyway — WRITE ONE OF THESE, NOT BOTH
+
+**`dispatcher` sends the trunk-guard reading before 21:04.** A separate check runs the whole suite after
+every merge; the question is whether it ran those tests, skipped them, or never reached them. **Fill in
+the sentence the reading supports and delete the other.** Do not hedge across both: a correction that
+declines to say which is true teaches the reader that we do not know, when by then we will.
+
+> **If the suite ran them:** the code was tested by the check that runs everything after a change lands —
+> what failed is the one that was supposed to say so *before*, and no untested change reached us.
+
+> **If it did not:** 55 changes merged today with nothing having run their own stated proof, and we are
+> establishing now which of them are covered by other means.
+
+### The rest of the process line
+
+`ceo`'s earlier ruling stands and follows this: a wrong number caught before publication is not a board
+correction, and belongs in the body as one sentence.
 
 > A fourth wrong figure was caught before it reached anyone, by the same habit of measuring a second way.
+
+**The fix**, if the board asks: the check stops treating *"could not run"* as *"passed"* — **#827 first**,
+then #826's successor. **The order matters and is worth one clause:** until a check that ran nothing stops
+reporting success, making it refuse fewer things only means fewer honest refusals behind the same green
+tick.
 
 ---
 
