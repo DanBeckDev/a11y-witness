@@ -92,7 +92,19 @@ on:
     # block below, which cancels the previous run on the same ref, and cheap in this repo because the
     # `changed` job gates every expensive job behind a real diff -- a body edit changes no files, so the
     # heavy jobs skip and what actually re-runs is `changed`, `acceptance`, `mergeSafety` and `gate`.
-    types: [opened, synchronize, reopened, edited]
+    # `labeled`/`unlabeled` ARE THE HALF THAT MAKES THE HOLD REAL. `gate` refuses a PR carrying a
+    # `hold:<session>` label (2026-09-09), and a hold is placed by adding a label -- which changes no file
+    # and moves no commit. Without these two types, a hold placed on a GREEN PR never re-runs the check
+    # that would refuse it, and GitHub's auto-merge takes it: the change would protect only PRs that
+    # happen to be pushed to afterwards, which is not the population a hold is for.
+    #
+    # This is `edited`'s own lesson, one field along. A job reading an input no trigger watches cannot be
+    # fixed by the person holding the input -- there, a PR body; here, a label.
+    #
+    # Cost is the same shape and the same bound: a label change moves no files, so `changed` gates every
+    # expensive job away and what re-runs is `changed`, `acceptance`, `mergeSafety` and `gate`. The
+    # `concurrency` block cancels the previous run on the same ref.
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
   # #156: a merge queue CANNOT be turned on without this. GitHub's own docs are explicit -- "You must use
   # the merge_group event to trigger your GitHub Actions workflow when a pull request is added to a merge
   # queue ... Otherwise, status checks will not be triggered" -- and an entry whose checks never report is
