@@ -50,6 +50,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/queue-table.mjs` — print the pipeline's four sections -- trunk, open PRs, stalled work, and red checks on merged PRs
 - `node scripts/ready-label-audit.mjs` — audit the tracker's ready label for contradictions, debris, and rows absent from the board
 - `node scripts/reconstitution-drill.mjs` — run the contingency drill: clone, compose each agent's first message, from nothing but a checkout
+- `node scripts/rescue-hunk.mjs` — rescue one file's change off a stranded branch WITHOUT reverting what main gained since
 - `node scripts/row-claim.mjs` — check, claim, or decline a tracker row by reading its labels, the record, never git history
 - `node scripts/row-reachability.mjs` — compute whether a row is actually startable from the tree, never from a label alone
 - `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
