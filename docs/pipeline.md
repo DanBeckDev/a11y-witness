@@ -418,6 +418,60 @@ INSTRUCTION to another. It is the same defect as text that reads as documentatio
 (#549), and as a scanner matching prose about the scanner — eight instances of that on 2026-09-08 alone.
 Ask what will EXECUTE what you are writing, not only what will read it.
 
+### The parser is the authority on the body, and it is one command
+
+Every one of those failures was found by CI and could have been found in ten seconds. A PR body is read
+by three separate parsers before anything else looks at it — the acceptance runner, the `Closes:`
+resolver, and `owned-path-signoff` — and each is importable and drivable against a file.
+
+Run them against your own body before pushing. Measured on 2026-09-09: three PRs failed
+`CLOSES: MISSING` in one morning, and one failed `ownedPaths` on a body that stated the fact perfectly
+well thirty lines below a sentence that merely mentioned it. All four were bodies, none were code, and
+each cost a full CI cycle to discover.
+
+```
+node -e "import('./scripts/acceptance-commands.mjs').then(...)"   # what the runner will execute
+node scripts/owned-path-signoff.mjs --diff=<file> --body=<file>   # exit 0, or what it wants stated
+```
+
+**A cheap pre-check is for deciding whether to bother running the real one, never for concluding the
+real one will pass** — CLAUDE.md's own rule. This is the inverse case and the rule still holds: here the
+cheap check IS the same code CI runs, so it is not a proxy at all.
+
+### Reading a dependency's source answers the question you asked, not the one next to it
+
+`worker-judge`, 2026-09-09, on their own fix and unprompted:
+
+> Reading a dependency's source correctly answers *"does this pattern get REJECTED"*. It does not
+> separately answer *"does this pattern MATCH ANYTHING"*.
+
+#568's first fix passed the rejection question and failed the matching one: `github.action_path` on
+`windows-2022` is a **backslash** path, and `@actions/glob`'s `Path` splits on the OS's own `path.sep`,
+so a concatenated `/package-lock.json` was swallowed into the final segment's literal filename and
+matched nothing on disk. The error read `Some specified paths were not resolved`, which sounds like a
+missing file rather than a malformed pattern.
+
+This is the same shape as three of the most expensive defects in this repository — `evidence:check`
+comparing objects through `String(entry)` so every entry was identical; `refreshBrowseBuffer` guarded on
+a flag nothing ever set; the signal-type scrape that matched nothing and asserted over an empty set.
+Every one was verified in the direction where it could not fail. **Ask which half of your question the
+check you just ran actually answered.**
+
+## A fix and its correction travel together, or the window between them is live
+
+Twice on 2026-09-09 a change reached `main` without the correction that makes it correct.
+
+- #575 gave `decideRevert` a working credential; #582 fixed it reading only `trunkGate` while its trigger
+  fires on `trunkBuildTest` too. In the wrong order, the credential arms a wrong verdict — the revert PR
+  opens against an innocent merge, auto-armed and gate-green, and it merges. Caught by ordering them.
+- #593 merged the lane check; the two commits adding its generated-file exception were pushed to the
+  branch *after* the merge was cut, so the guard went live **without** the exception and refused a PR it
+  was never meant to refuse. Caught by measuring it against that PR's real branch name and path.
+
+So: **when a fix has a correction, the correction merges first or in the same commit range, never
+after.** A derived artefact and its qualifier are false in the window between — this repository has paid
+for that four times in one release — and here the window had a live guard in it.
+
 ## A lane is who may CHANGE a path
 
 `scripts/workflow-lane-check.mjs`, a step in `mergeSafety`, refuses a PR that changes a lane-owned path
