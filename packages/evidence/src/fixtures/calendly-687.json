@@ -1,0 +1,287 @@
+{
+  "_provenance": "Generated from the two real capture records named in issue #687 acceptance clause 1. TWICE REDUCED, and neither reduction touches what documentIdentity reads: (1) only the three marks it reads are kept -- the bulk arrays (names, graphicUnnamedDetail, graphicExemptedDetail, unnamedGraphics, candidateUrls) are dropped; (2) every recorded URL keeps its origin, path and query parameter NAMES, and every query VALUE is emptied, because the values are per-request OAuth nonces and the names are what droppedQueryParams counts. document-identity.test.ts asserts this fixture and the real files on disk produce identical identities AND identical dropped-parameter counts, so neither reduction can drift unnoticed.",
+  "captures": [
+    {
+      "source": "runs/witness/2026-09-09T10-42-55-274Z-calendly-com.json",
+      "sourceSha256": "f0deb7f425e46974bd18bad46086effac345b50fe3ebb7111f51698a87a18473",
+      "capture": {
+        "url": "https://calendly.com/",
+        "capturedAt": "2026-09-09T10:42:53.570Z",
+        "diagnostics": [
+          {
+            "event": "titleSource",
+            "atMs": 180495,
+            "title": "Sign in - Google Accounts",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 1
+          },
+          {
+            "event": "titleSource",
+            "atMs": 182669,
+            "title": "Sign in - Google Accounts",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 1
+          },
+          {
+            "event": "titleSource",
+            "atMs": 186172,
+            "title": "Sign in - Google Accounts",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 1
+          },
+          {
+            "event": "titleSource",
+            "atMs": 188140,
+            "title": "Sign in - Google Accounts",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 1
+          },
+          {
+            "event": "titleSource",
+            "atMs": 189518,
+            "title": "Sign in - Google Accounts",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 1
+          },
+          {
+            "event": "titleSource",
+            "atMs": 191612,
+            "title": "Sign in - Google Accounts",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 1
+          },
+          {
+            "event": "titleSource",
+            "atMs": 194568,
+            "title": "Sign in - Google Accounts",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 1
+          },
+          {
+            "event": "titleSource",
+            "atMs": 196998,
+            "title": "Sign in - Google Accounts",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 1
+          },
+          {
+            "event": "titleSource",
+            "atMs": 200204,
+            "title": "Sign in - Google Accounts",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 1
+          },
+          {
+            "event": "titleSource",
+            "atMs": 252915,
+            "title": "Sign in - Google Accounts",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 1
+          },
+          {
+            "event": "titleSource",
+            "atMs": 260267,
+            "title": "Privacy Notice Calendly - Profile 1 - Microsoft​ Edge",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 2
+          },
+          {
+            "event": "structureCensus",
+            "atMs": 263409,
+            "landmark": 2,
+            "heading": 1,
+            "link": 5,
+            "graphic": 1,
+            "formControl": 6,
+            "graphicUnnamed": 0,
+            "graphicExempted": 0,
+            "distinct": {
+              "landmark": 2,
+              "heading": 1,
+              "link": 5,
+              "graphic": 1,
+              "formControl": 6
+            },
+            "targetMatch": "fallback",
+            "candidates": 1,
+            "targetUrl": "https://accounts.google.com/v3/signin/identifier?opparams=&dsh=&access_type=&client_id=&code_challenge=&code_challenge_method=&include_granted_scopes=&o2v=&prompt=&redirect_uri=&response_type=&scope=&service=&state=&flowName=&continue=&app_domain=&rart=",
+            "expectedUrl": "https://calendly.com/"
+          },
+          {
+            "event": "domCensus",
+            "atMs": 263409,
+            "heading": 1,
+            "link": 5,
+            "documentLang": "en-us",
+            "partLangs": [],
+            "partLangCount": 0,
+            "graphic": 2,
+            "unnamedGraphicCount": 0,
+            "landmark": 2,
+            "formField": 3,
+            "tabbable": 11,
+            "targetMatch": "fallback",
+            "candidates": 1,
+            "targetUrl": "https://accounts.google.com/v3/signin/identifier?opparams=&dsh=&access_type=&client_id=&code_challenge=&code_challenge_method=&include_granted_scopes=&o2v=&prompt=&redirect_uri=&response_type=&scope=&service=&state=&flowName=&continue=&app_domain=&rart=",
+            "expectedUrl": "https://calendly.com/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "runs/witness/2026-09-09T10-50-08-636Z-calendly-com.json",
+      "sourceSha256": "a24233b8edfc39651eb62bcf8e64297697b379261da7d0935ca21b8c6c7802ed",
+      "capture": {
+        "url": "https://calendly.com/",
+        "capturedAt": "2026-09-09T10:50:06.483Z",
+        "diagnostics": [
+          {
+            "event": "titleSource",
+            "atMs": 300774,
+            "title": "Automated scheduling software Calendly - Profile 1 - Microsoft​ Edge",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 2
+          },
+          {
+            "event": "titleSource",
+            "atMs": 302904,
+            "title": "Automated scheduling software Calendly - Profile 1 - Microsoft​ Edge",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 2
+          },
+          {
+            "event": "titleSource",
+            "atMs": 306427,
+            "title": "Automated scheduling software Calendly - Profile 1 - Microsoft​ Edge",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 2
+          },
+          {
+            "event": "titleSource",
+            "atMs": 308401,
+            "title": "Automated scheduling software Calendly - Profile 1 - Microsoft​ Edge",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 2
+          },
+          {
+            "event": "titleSource",
+            "atMs": 309693,
+            "title": "Automated scheduling software Calendly - Profile 1 - Microsoft​ Edge",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 2
+          },
+          {
+            "event": "titleSource",
+            "atMs": 311851,
+            "title": "Automated scheduling software Calendly - Profile 1 - Microsoft​ Edge",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 2
+          },
+          {
+            "event": "titleSource",
+            "atMs": 315146,
+            "title": "Automated scheduling software Calendly - Profile 1 - Microsoft​ Edge",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 2
+          },
+          {
+            "event": "titleSource",
+            "atMs": 317285,
+            "title": "Automated scheduling software Calendly - Profile 1 - Microsoft​ Edge",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 2
+          },
+          {
+            "event": "titleSource",
+            "atMs": 318605,
+            "title": "Automated scheduling software Calendly - Profile 1 - Microsoft​ Edge",
+            "source": "spoken",
+            "diverged": false,
+            "targetMatch": "fallback",
+            "candidates": 2
+          },
+          {
+            "event": "structureCensus",
+            "atMs": 424215,
+            "landmark": 5,
+            "heading": 15,
+            "link": 64,
+            "graphic": 28,
+            "formControl": 26,
+            "graphicUnnamed": 2,
+            "graphicExempted": 18,
+            "distinct": {
+              "landmark": 5,
+              "heading": 15,
+              "link": 64,
+              "graphic": 26,
+              "formControl": 26
+            },
+            "targetMatch": "fallback",
+            "candidates": 2,
+            "targetUrl": "https://calendly.com/scheduling",
+            "expectedUrl": "https://calendly.com/"
+          },
+          {
+            "event": "domCensus",
+            "atMs": 424215,
+            "heading": 28,
+            "link": 124,
+            "documentLang": "en",
+            "partLangs": [
+              "en"
+            ],
+            "partLangCount": 1,
+            "graphic": 23,
+            "unnamedGraphicCount": 5,
+            "landmark": 7,
+            "formField": 8,
+            "tabbable": 98,
+            "targetMatch": "fallback",
+            "candidates": 2,
+            "targetUrl": "https://calendly.com/scheduling",
+            "expectedUrl": "https://calendly.com/"
+          }
+        ]
+      }
+    }
+  ]
+}
