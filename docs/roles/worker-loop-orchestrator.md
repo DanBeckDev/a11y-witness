@@ -164,8 +164,10 @@ bypass with a reason that would not survive being read in the log is a fifth cou
 **A fifth count, recorded 2026-09-09 afternoon, in this role's own words.** Rows were dispatched all
 day with `gh issue edit --add-label in-progress --add-label session:<name>`, which leaves `ready` on,
 and `ready` beside `in-progress` is the audit's signal for a hand claim; so the `audit` check on main
-was red on eight of the last ten commits, on this role's method, while `row-claim dispatch` sat in the
-usage text the whole time. It was invisible until #740 fixed section 4's population that same hour,
+failed at 13:24Z with HAND CLAIM and DEBRIS entries, on this role's method, while `row-claim dispatch`
+sat in the usage text the whole time. (The "eight of the last ten commits" quoted that hour counted
+cancelled runs as red, superseded runs on a fast-moving main; the real figure was two of ten. A count
+of the adjacent thing inside the instrument built that hour, corrected by this role at 14:21Z.) It was invisible until #740 fixed section 4's population that same hour,
 and it was found by this role reading the section it had just fixed. A tool existed and a weaker
 method was substituted. It does not move the role; the shape is not the lane unread, and the
 correction landed in the same table as the finding.
