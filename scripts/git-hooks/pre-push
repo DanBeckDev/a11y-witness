@@ -426,6 +426,123 @@ run() { # run <label> <command...>
   rm -f /tmp/a11y-prepush.$$
 }
 
+# BEGIN #704 GUARDS-BUDGET TIMING -- extraction markers for guards-budget.test.ts; keep both if edited.
+#
+# WALL CLOCK ON THIS HOST MEASURES THE OTHER SESSIONS ON IT, NOT THIS HOOK'S WORK -- ceo's ruling,
+# 2026-09-09, after three runs of the identical 21-guard sweep on one machine read 28.0s, 45.1s and 44.2s
+# with no code change between them (#716). So the BUDGET this hook enforces is CPU (`user`+`sys`), never
+# wall: `times` reports the CUMULATIVE CPU this shell's finished children have consumed since the shell
+# started, so a snapshot before and after a phase, subtracted, is that phase's own CPU cost -- immune to
+# how many OTHER processes the host happened to be running at the moment, which is exactly what makes it
+# usable as a budget rather than a mood.
+#
+# `times`, NEVER PIPED OR COMMAND-SUBSTITUTED -- `times | sed ...` or `x=$(times)` both fork bash into a
+# SUBSHELL to satisfy the pipe/substitution, and a subshell's own `times` reports its OWN (near-zero)
+# children, not this shell's accumulated ones. Measured directly: piped, the delta read 0.000 across a
+# node loop that burned real CPU. Redirected to a FILE (`times > file`), no fork happens and the real
+# cumulative figure survives to be read back. THE SAME CLASS AS #712 -- a status/value read from the wrong
+# side of a pipe reports something real, just not the thing being asked about; that one was a piped exit
+# code, this is a piped builtin's own accounting, but the shape (a fork silently substitutes its own
+# state for the caller's) is identical.
+#
+# WALL CLOCK is still recorded, as a bound never the answer (ceo's own words) -- `date +%s.%N` is a GNU
+# extension absent from a bare BSD `date`, so `node -e "Date.now()"` is the portable millisecond clock:
+# node is already a hard dependency of every check this hook runs.
+snapshot_children_cpu() { times > "$1"; }
+children_cpu_seconds() {
+  # $1: a file `snapshot_children_cpu` wrote. Line 2 of `times`' output is this shell's children,
+  # cumulative since the shell started -- `0m12.340s 0m1.560s` (user, sys). `(tok+0)` in awk parses a
+  # string's own leading numeric prefix and stops at the first non-digit, so the trailing "s" is silently
+  # dropped rather than needing its own strip.
+  sed -n '2p' "$1" | awk '{
+    split($1, u, "m"); split($2, s, "m");
+    user = u[1] * 60 + (u[2] + 0);
+    sys  = s[1] * 60 + (s[2] + 0);
+    printf "%.3f", user + sys
+  }'
+}
+now_ms() { node -e "process.stdout.write(String(Date.now()))"; }
+cpu_delta() { awk -v a="$1" -v b="$2" 'BEGIN{printf "%.3f", b - a}'; }
+ms_delta_seconds() { awk -v a="$1" -v b="$2" 'BEGIN{printf "%.1f", (b - a) / 1000}'; }
+
+# `run "lint"`/`"typecheck"`/`"mjs parse check"` (the GATE) then `run "tree-wide guards"` (#716's 21,
+# `npm run guards:sweep`, no exclusion list -- #704's own stated point), timed on both sides. Shared by the
+# `main` and fast-gate branches below so the timing logic exists once. #704's ANCHOR: the guards may cost
+# at most DOUBLE the gate's own CPU, in this SAME run -- never a fixed figure, because the gate itself
+# costs something different on every host and every day.
+run_gate_with_guards_budget() { # run_gate_with_guards_budget <branch-label>
+  local branch_label="$1"
+  local gate_cpu_start_file gate_cpu_end_file
+  gate_cpu_start_file="/tmp/a11y-cpu-gate-start.$$"; gate_cpu_end_file="/tmp/a11y-cpu-gate-end.$$"
+  local gate_wall_start gate_wall_end
+  snapshot_children_cpu "$gate_cpu_start_file"; gate_wall_start="$(now_ms)"
+
+  run "lint"       npm run --silent lint
+  run "typecheck"  npm run --silent typecheck
+  run "mjs parse check"  npx tsx --test packages/worker-fleet/src/mjs-parses.test.ts
+
+  snapshot_children_cpu "$gate_cpu_end_file"; gate_wall_end="$(now_ms)"
+  local gate_cpu gate_wall
+  gate_cpu="$(cpu_delta "$(children_cpu_seconds "$gate_cpu_start_file")" "$(children_cpu_seconds "$gate_cpu_end_file")")"
+  gate_wall="$(ms_delta_seconds "$gate_wall_start" "$gate_wall_end")"
+  rm -f "$gate_cpu_start_file" "$gate_cpu_end_file"
+
+  local guards_cpu_start_file guards_cpu_end_file
+  guards_cpu_start_file="/tmp/a11y-cpu-guards-start.$$"; guards_cpu_end_file="/tmp/a11y-cpu-guards-end.$$"
+  local guards_wall_start guards_wall_end
+  snapshot_children_cpu "$guards_cpu_start_file"; guards_wall_start="$(now_ms)"
+
+  run "tree-wide guards (21, #716)" npm run --silent guards:sweep
+
+  snapshot_children_cpu "$guards_cpu_end_file"; guards_wall_end="$(now_ms)"
+  local guards_cpu guards_wall
+  guards_cpu="$(cpu_delta "$(children_cpu_seconds "$guards_cpu_start_file")" "$(children_cpu_seconds "$guards_cpu_end_file")")"
+  guards_wall="$(ms_delta_seconds "$guards_wall_start" "$guards_wall_end")"
+  rm -f "$guards_cpu_start_file" "$guards_cpu_end_file"
+
+  # THE RATIO, NOT JUST THE TWO NUMBERS -- printed every run, so a reader can watch it drift before it
+  # ever reaches a threshold. `ga+0==0` guards a division that should never happen (the gate always runs
+  # real lint/typecheck/mjs-check work) without crashing the hook on the day it somehow does.
+  local ratio
+  ratio="$(awk -v gu="$guards_cpu" -v ga="$gate_cpu" \
+    'BEGIN{ if (ga + 0 == 0) { print "0.00" } else { printf "%.2f", gu / ga } }')"
+  echo "pre-push: gate ($branch_label) -- wall ${gate_wall}s, CPU ${gate_cpu}s | guards (#716, 21) -- wall ${guards_wall}s, CPU ${guards_cpu}s | ratio ${ratio}x"
+
+  # A MEASURED RANGE, NEVER A FIXED FIGURE -- CLAUDE.md's own rule about quoting a timing number applies to
+  # this hook's own header exactly as it applies to any other. The numbers above are THIS run's; they will
+  # differ on a busier or quieter host, and neither reading makes the other one wrong.
+  #
+  # GRADUATED, NOT A BARE "REFUSE AT 2x" -- ceo's ruling 2026-09-09, revised the SAME day this hook's first
+  # version shipped, after its own real end-to-end run refused a push at 2.06x an hour after three quiet
+  # measurements averaged 1.77x, no code change between them. FOUR OBSERVED RATIOS on this host: ~1.72x,
+  # ~1.74x, ~1.84x, 2.06x -- the ratio of two independently noisy CPU measurements crosses a bare 2x line
+  # on HOST CONTENTION ALONE, and a hook that refuses pushes on noise is the #706 lesson (nine
+  # A11Y_SKIP_VERIFY=1 pushes in one evening, on a wrong belief about cost) arriving through the very guard
+  # built to stop exactly that pattern. So: under 2x is silent (the header line above already states the
+  # number); [2x, 3x) WARNS, naming the 2x design target, and does NOT fail the push; 3x or more REFUSES --
+  # a threshold none of the four observed ratios came near, and a real regression cannot miss (the
+  # unfixed #716 population, before its own fix, measured at roughly 10x the gate's cost).
+  if awk -v r="$ratio" 'BEGIN{exit !(r >= 3)}'; then
+    if [ -n "${A11Y_GUARDS_BUDGET_REASON:-}" ]; then
+      echo "pre-push: guards CPU ${guards_cpu}s is ${ratio}x the gate's own ${gate_cpu}s (refusing at 3x), overridden: $A11Y_GUARDS_BUDGET_REASON" >&2
+    else
+      echo "pre-push: REFUSING -- the tree-wide guards cost ${guards_cpu}s CPU (user+sys) this run, ${ratio}x" >&2
+      echo "the gate's own ${gate_cpu}s -- at or past the 3x refusal line, which is past every ratio measured" >&2
+      echo "on this host so far (worst: 2.06x) and past what host-contention noise alone plausibly explains." >&2
+      echo "Find which guard drifted slow with 'npm run guards:sweep', time each file, and fix it, or:" >&2
+      echo "A11Y_GUARDS_BUDGET_REASON=\"<why>\" git push ... -- the reason is printed, not just the override," >&2
+      echo "so a deliberate exception is in the log rather than in somebody's memory." >&2
+      failed+=("tree-wide guards budget (${ratio}x the gate's own CPU, refusing at 3x)")
+    fi
+  elif awk -v r="$ratio" 'BEGIN{exit !(r >= 2)}'; then
+    echo "pre-push: WARNING -- the tree-wide guards cost ${ratio}x the gate's own CPU this run (design" >&2
+    echo "target: 2x, refusal at 3x). Not refusing -- two independently noisy CPU measurements can cross" >&2
+    echo "the 2x design line on host contention alone (measured on this host: 1.72x-2.06x with no code" >&2
+    echo "change). Worth a look with 'npm run guards:sweep' if this keeps happening on a quiet host." >&2
+  fi
+}
+# END #704 GUARDS-BUDGET TIMING
+
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 # #386: PUSHING TO AN ARMED, GREEN PR RACES A MERGE THAT CAN COMPLETE UNDERNEATH IT. Measured three
@@ -472,9 +589,7 @@ fi
 # END #386 ARMED-PR PUSH GUARD
 
 if [ "$BRANCH" = "main" ]; then
-  run "lint"       npm run --silent lint
-  run "typecheck"  npm run --silent typecheck
-  run "mjs parse check"  npx tsx --test packages/worker-fleet/src/mjs-parses.test.ts
+  run_gate_with_guards_budget "main"
   echo "pre-push: gate (main). Package test suites run in CI's acceptance job now, not here -- see the"
   echo "2026-09-07 UPDATE above. Release gates are separate: npm run release:gate"
 elif [ "$(node scripts/board-only-check.mjs)" = "true" ]; then
@@ -497,11 +612,10 @@ elif [ "$(node scripts/board-only-check.mjs)" = "true" ]; then
   run "board guards" node scripts/assert-glob-not-empty.mjs \
     "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts" --run
 else
-  run "lint"       npm run --silent lint
-  run "typecheck"  npm run --silent typecheck
-  run "mjs parse check"  npx tsx --test packages/worker-fleet/src/mjs-parses.test.ts
-  echo "pre-push: gate ($BRANCH) -- lint, typecheck, and an .mjs parse check. Package test suites run in"
-  echo "CI's acceptance job on this branch's PR now, not here -- see the 2026-09-07 UPDATE above."
+  run_gate_with_guards_budget "$BRANCH"
+  echo "pre-push: gate ($BRANCH) -- lint, typecheck, an .mjs parse check, and the tree-wide guards (#716/"
+  echo "#704). Package test suites run in CI's acceptance job on this branch's PR now, not here -- see the"
+  echo "2026-09-07 UPDATE above."
   # Still needed for the changeset gate below, which is scoped to whether this push touches a published
   # package at all -- unrelated to which package's TESTS used to run here.
   changed="$(node scripts/changed-packages.mjs)"
