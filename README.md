@@ -235,6 +235,8 @@ Running it is one command; getting value out of it is a few habits.
 
 **Give it a real task.** `--task` is not a label — task-completability is judged separately from the criteria, so "Find the contact details" produces a usable answer and "test accessibility" does not. Use the words a user would.
 
+**On the shipped default (`judge-backend: local`), that separate judgement never happens.** The task still matters — it decides which control `probe-forms` activates, and therefore whether 3.3.1/4.1.3 evidence exists at all — but the local scorer has no head for task completion and never reads it, so a well-chosen task does not sharpen the *verdict*. Only a rented `anthropic`/`openai` backend reads the task and answers "could someone finish this?" See [`docs/github-action.md`'s "What `task` actually does"](./docs/github-action.md#what-task-actually-does) for the full breakdown.
+
 **Read a finding as a claim plus its evidence.**
 
 ```
