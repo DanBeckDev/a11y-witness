@@ -31,16 +31,42 @@
 // claim time, asked here one step earlier. A body that would pass this refuses nothing later, and a body
 // that would fail `row-claim claim` cannot be filed in the first place.
 //
-// DELIBERATELY NO `refuseUnknownFlags` HERE. Every other CLI in this tree owns its own small, fixed flag
-// surface and refuses anything else (#419's whole point). This one wraps an EXTERNAL tool with a large,
-// evolving flag surface (`gh issue create --help` lists title, body, label, assignee, milestone, project,
-// template, editor, web, ...) that this script has no business enumerating or falling behind on. Its job
-// is exactly one thing -- read the body this invocation would file and check it before `gh` ever runs --
-// and every other argument passes through unexamined and unchanged.
+// `cli-flags.test.ts`'s discovery guard requires EVERY argv-reading file here to call
+// `refuseUnknownFlags`, on a small, CLOSED, shrink-only exemption list this file does not qualify for --
+// so `KNOWN_GH_ISSUE_CREATE_FLAGS` below is `gh issue create --help`'s own flag surface (read 2026-09-09,
+// gh's current stable release), not a subset this wrapper invented. A flag it does not yet know is
+// refused with the near miss named, same as any other guarded CLI here -- the cost of a genuinely new
+// `gh` flag arriving is a refusal naming it, not a silent pass-through. Every argument that IS known still
+// passes through to `gh` unexamined -- this file checks nothing about VALUES, only that the flag NAME is
+// one `gh issue create` actually reads, which is `refuseUnknownFlags`'s whole job everywhere else in this
+// tree, applied to a wrapped external tool instead of to this file's own flags.
 import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { missingTemplateFields } from "./row-claim/template-fields-rule.mjs";
+
+/** `gh issue create --help`'s complete flag surface, long and short forms, plus its two inherited flags. */
+const KNOWN_GH_ISSUE_CREATE_FLAGS = [
+  "--assignee=", "-a",
+  "--attach=",
+  "--blocked-by=",
+  "--blocking=",
+  "--body=", "-b",
+  "--body-file=", "-F",
+  "--editor", "-e",
+  "--label=", "-l",
+  "--milestone=", "-m",
+  "--parent=",
+  "--project=", "-p",
+  "--recover=",
+  "--template=", "-T",
+  "--title=", "-t",
+  "--type=",
+  "--web", "-w",
+  "--help",
+  "--repo=", "-R",
+];
 
 /**
  * The body text THIS invocation would file, read from its own argv exactly the way `gh issue create`
@@ -126,6 +152,7 @@ export function createIssue(argv, { spawnGh = spawnGhIssueCreate } = {}) {
 }
 
 function main() {
+  refuseUnknownFlags(KNOWN_GH_ISSUE_CREATE_FLAGS, { entry: import.meta.url, command: "npm run row-file --" });
   process.exitCode = createIssue(process.argv.slice(2));
 }
 
