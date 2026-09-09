@@ -44,6 +44,8 @@ import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { fetchBoardItems, PROJECT_NUMBER } from "./board-snapshot.mjs";
+import { fetchClosedRowEvents, claimsFromEvents, describeClaims, unattributableClosedRows,
+  PROVENANCE_REQUIRED_FROM } from "./claim-provenance.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 
 export const READY_LABEL = "ready";
@@ -808,6 +810,51 @@ function reportAlreadyMerged() {
  * reported nothing at all about closing PR references or dead claims -- questions that need no board
  * and would have answered fine.
  */
+
+/**
+ * Report #683's population: a CLOSED row whose claimant cannot be recovered.
+ *
+ * The label is gone by design -- `closedDebris` above fires on every closed row that still carries one --
+ * but the EVENT that applied it is on the issue's own timeline forever, so a closed row still answers
+ * "who worked this" and over what window. Measured 2026-09-09: 185 of 291 closed rows, and 77 of the 83
+ * sitting behind a branch with no open PR.
+ *
+ * WHAT IS REPORTED IS THE GAP, NOT THE RECOVERY. Printing 185 provenance lines every run would bury the
+ * six that need something done; the count of what WAS recovered is stated so a reader can tell an empty
+ * finding list from an empty population, which is the same distinction `runCheck` draws one level up.
+ *
+ * A row here is UNATTRIBUTABLE, and that is a different sentence from "nobody claimed it" only because
+ * the timeline was actually asked. Every one of the six is a hand claim (#673's shape) -- a row taken
+ * with `gh issue edit` and no `session:` label, so there is no event to find and never was.
+ */
+function reportUnattributableClosedRows() {
+  // THE FLOOR TRAVELS WITH THE QUESTION: the open rows' live `session:` labels are a population this
+  // audit already reads, and every one of them must have the event that applied it. A short event log
+  // would otherwise make this check's cleanest possible output -- "nothing unattributable" -- the thing
+  // it prints when it read nothing at all.
+  const rows = fetchClosedRowEvents({ openIssues: fetchOpenIssues() });
+  const historical = unattributableClosedRows(rows);
+  const gated = unattributableClosedRows(rows, { since: PROVENANCE_REQUIRED_FROM });
+  const recovered = rows.length - historical.length;
+  process.stdout.write(`${rows.length} closed row(s) read; ${recovered} name their claimant and the `
+    + `window from the timeline, label or no label. ${historical.length} carry no claim event at all -- `
+    + `rows claimed by hand before #673 closed that route, where no record was ever written and none can `
+    + `be recovered.\n`);
+  if (gated.length === 0) {
+    process.stdout.write(`OK  every row closed since ${PROVENANCE_REQUIRED_FROM} names its claimant\n`);
+    return 0;
+  }
+  for (const { number, title, closedAt, events } of gated) {
+    process.stdout.write(`UNATTRIBUTABLE  #${number} "${title}" -- closed ${closedAt}, `
+      + `${describeClaims(claimsFromEvents(events))}\n`);
+  }
+  process.stderr.write(`\n${gated.length} row(s) closed since ${PROVENANCE_REQUIRED_FROM} carry no claim `
+    + `event, so nothing can say who worked them. A hand claim got past \`row-claim.mjs\` -- find who `
+    + `pushed the branch named on the row and have them re-run \`row-claim.mjs claim\` against it, so the `
+    + `next audit can read what this one could not.\n`);
+  return gated.length;
+}
+
 /** @type {[string, () => number][]} */
 export const CHECKS = [
   ["open issues", reportMutexViolations],
@@ -817,6 +864,7 @@ export const CHECKS = [
   ["board membership", reportAbsentFromBoard],
   ["closing PR references", reportAlreadyMerged],
   ["claim activity", reportDeadClaims],
+  ["closed-row provenance", reportUnattributableClosedRows],
 ];
 
 /**
