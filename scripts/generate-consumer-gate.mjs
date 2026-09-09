@@ -80,6 +80,30 @@ export const OUT = `${REPO}.github/workflows/consumer-gate.yml`;
  *  several code blocks in README.md, and the one whose ref gets pinned. */
 const ACTION_REF = "DanBeckDev/a11y-witness";
 
+/** Top-level keys `buildWorkflowHeader`/`buildConsumerGateWorkflow` wrap themselves -- a fence carrying
+ *  either of its own produces a DUPLICATE key once spliced in. */
+const WRAPPED_TOP_LEVEL_KEYS = ["on", "name"];
+
+/**
+ * #796: A DUPLICATE on:/name: DID NOT ERROR -- IT SILENTLY DROPPED A WHOLE JOB. Measured live: this
+ * repo's own README.md briefly carried a top-level `on: pull_request` above its `jobs:` line, and
+ * `buildConsumerGateWorkflow`'s `jobsYaml.replace(/^jobs:\n/, ...)` anchors to the STRING's own start
+ * (no `/m` flag) -- a fence that does not literally BEGIN "jobs:\n" makes that splice a silent no-op, so
+ * `check-pin` vanished from the generated file with no error at all. A guard that produces nothing where
+ * it should refuse is worse than no guard, so this is checked here, before any splicing, rather than
+ * left for a diff to eventually notice.
+ * @param {string} jobsYaml
+ */
+function refuseWrappedTopLevelKey(jobsYaml) {
+  const found = WRAPPED_TOP_LEVEL_KEYS.find((key) => new RegExp(`^${key}:`, "m").test(jobsYaml));
+  if (!found) return;
+  throw new Error(`${README_PATH}'s Quickstart fence carries its own top-level "${found}:" key -- this `
+    + `generator wraps ${WRAPPED_TOP_LEVEL_KEYS.map((k) => `"${k}:"`).join(" and ")} itself `
+    + "(buildWorkflowHeader), so a second one produces a duplicate YAML key and silently drops the "
+    + "check-pin job rather than failing loudly. The fence must be a bare `jobs:`-rooted fragment -- what "
+    + "a reader adds to a workflow they already have, never a standalone one.");
+}
+
 /**
  * Extracts the first fenced ```yaml block in `markdown` that contains a `uses: <ACTION_REF>` line --
  * the documented consumer workflow, not any other yaml example the document happens to carry.
@@ -90,7 +114,11 @@ const ACTION_REF = "DanBeckDev/a11y-witness";
 export function extractDocumentedJobsBlock(markdown) {
   const fences = markdown.matchAll(/```yaml\n([\s\S]*?)```/g);
   for (const m of fences) {
-    if (m[1].includes(`uses: ${ACTION_REF}`)) return m[1].trimEnd();
+    if (m[1].includes(`uses: ${ACTION_REF}`)) {
+      const jobsYaml = m[1].trimEnd();
+      refuseWrappedTopLevelKey(jobsYaml);
+      return jobsYaml;
+    }
   }
   throw new Error(`no \`\`\`yaml fence containing "uses: ${ACTION_REF}" found in ${README_PATH} -- `
     + "the Quickstart section may have moved or been reworded");
