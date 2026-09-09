@@ -73,6 +73,7 @@ import { withBoardSnapshot, PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapsh
 import { runnerReason } from "./row-claim/runner-rule.mjs";
 import { ownPrHealthReason, lookupOwnPrHealth } from "./row-claim/own-pr-health-rule.mjs";
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
+import { templateFieldsReason, lookupIssueBody } from "./row-claim/template-fields-rule.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 
 export const CLAIM_LABEL = "in-progress";
@@ -366,6 +367,18 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
+
+  // #707: THE TEMPLATE FIELDS, checked on EVERY claim attempt -- unlike the session-eligibility block
+  // below, this is a property of the ROW, not of who is claiming it or when they last touched it, so it
+  // is not skipped on a resumed (`alreadyMine`) claim: a row dispatched before this check shipped, or by
+  // a hand-claim (#673) that bypassed row-claim entirely, must still be caught the first time row-claim
+  // itself acts on it, which may well be a "resume".
+  const ghRunForBody = (/** @type {string[]} */ args) => run("gh", args);
+  const body = lookupIssueBody(issueNumber, { run: ghRunForBody });
+  if (body !== null) {
+    const templateReason = templateFieldsReason(body, issueNumber);
+    if (templateReason) return { claimed: false, reason: templateReason };
+  }
 
   // B2 (#476) + B4 (#462): SESSION ELIGIBILITY, not row ownership -- `decideClaim` above already answered
   // "is this row somebody else's"; these ask "should THIS session start ANY new row right now", which is
