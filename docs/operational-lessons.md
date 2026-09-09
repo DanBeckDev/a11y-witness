@@ -18,8 +18,9 @@ of them looked like an error, which is why each cost a run or more.
 | `capture-progress.json` said `running: false, 49 of 49` | the FINISHED run's file. A second run had started one minute earlier and not yet written its own — so I deployed into it and killed 12 captures. `lab:status` was printing `SubState=running` in the same output |
 | the PLAY RECAP above a deploy's refusal | the PREVIOUS deploy's, seven minutes old. `followUnit` ran `journalctl -u <unit>` with no bound, so a correct refusal (`failed=1`, `changed=0`) read as a successful deploy. **The fourth instance of the journal-window defect**, in the one place that had no window at all |
 | "which of my peers started that job?" | **me.** A backgrounded chain of mine was still running. I asked two other sessions before running `tail` on my own task output |
+| `Error: Command failed: gh pr create --title revert: "Board record ..." broke main --body Reverts the merge of #562 ...` | an **argv** call, correctly quoted. Node renders an `execFileSync` failure by JOINING argv with spaces, so a title holding `"` and a multi-line body print inline and unescaped — a well-formed argv call and a broken shell string are indistinguishable in that message. The real cause was three lines further down and had nothing to do with quoting: `GitHub Actions is not permitted to create or approve pull requests`, a repository setting that blocks `GITHUB_TOKEN` regardless of the workflow's `permissions:` block. **Read to the end of the error before diagnosing its first line** |
 
-**The rule that covers all nine: ask the authoritative source, and let it tell you what it is bounded to.**
+**The rule that covers every row above: ask the authoritative source, and let it tell you what it is bounded to.**
 The last three are the same rule pointed at three different sources, and the third is the sharpest — **your own backgrounded work is a source you have to ask too.** A chain you started an hour ago is
 indistinguishable, from inside, from somebody else's job.
 
