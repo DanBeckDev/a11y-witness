@@ -139,6 +139,20 @@ test("#426: the early notice says WHEN it looked and that this is not the final 
   assert.match(message, new RegExp(remediation.tryThis.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
+test("#426: the notice's OWN sentence is NOT consent-specific -- hubspot.com fired it from a different "
+  + "mechanism entirely", () => {
+  // The first draft named a consent overlay outright in this function's OWN authored sentence, and #426's
+  // own fleet validation refuted it: hubspot fired the identical notice with no consent wall involved.
+  // Scoped to the sentence THIS function writes, not the whole message -- `remediationTail("contained")`
+  // is #398's pre-existing WHAT/TRY/WHERE table entry, shared with the finished-capture doubt, and
+  // redesigning that table is a separate concern from this function's own wording.
+  const message = formatEarlyContainmentNotice(45257);
+  const ownSentence = message.split("\n")[0];
+  assert.doesNotMatch(ownSentence, /consent/i);
+  assert.doesNotMatch(ownSentence, /escape/i);
+  assert.match(ownSentence, /reached almost none of this page/i);
+});
+
 test("#336: the progress argument reports how far a PARTIAL capture got, when the worker said", () => {
   const withProgress = formatFaultMessage("hard-timeout", "capture exceeded the hard timeout",
     { reachedPhase: "readingForm", markCount: 7 });
