@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
-// command: print the pipeline's four sections -- trunk, open PRs, stalled work, and red checks on merged PRs
+// command: print the pipeline's sections -- trunk, open PRs, stalled work, red checks on merged PRs,
+// this host, and (#790) branch prefixes
 /**
  * THE HOURLY TABLE, AS A COMMAND RATHER THAN A HABIT -- ceo's ruling, 2026-09-08.
  *
@@ -103,6 +104,106 @@ const git = (/** @type {string[]} */ args) => {
 
 /** @template T @param {() => T} fn @returns {T | null} */
 const ask = (fn) => { try { return fn(); } catch { return null; } };
+
+/**
+ * #790: THROWS on failure, unlike the local `git` above -- that one folds a failed command into `status:
+ * 1` because a queue-table row degrading to `?` is this file's whole design, but a completeness statement
+ * that swallowed its own read would report "OK, 0 of 0 checked" having asked nothing. Same discipline as
+ * `ready-label-audit.mjs`'s `defaultRun`.
+ * @type {(args: string[]) => string}
+ */
+const defaultRunGit = (args) => execFileSync("git", args, { encoding: "utf8", env: sandboxGitEnv() });
+
+/**
+ * #790: every remote branch's SHORT name (no `origin/`), examined against an INDEPENDENT second read of
+ * the same remote -- `git ls-remote --heads` talks to the network, `for-each-ref` reads this checkout's
+ * own ref database, and a `fetch` that ran a while ago can leave the second stale without either command
+ * failing. Same shape as `ready-label-audit.mjs`'s `fetchOpenIssuesChecked` (#788): THROWS on a mismatch
+ * rather than reporting a population that may have moved between the two reads.
+ *
+ * The measured anomaly this exists for: a branch pushed to `origin` literally named `origin` -- one path
+ * segment, same as `main`, but not the trunk -- invisible to any check that only ever asks "what is this
+ * branch's prefix" and never "does it have one at all".
+ *
+ * @param {{ run?: typeof defaultRunGit }} [deps]
+ * @returns {{ branches: string[], remoteCount: number }}
+ */
+export function fetchRemoteBranchesChecked({ run = defaultRunGit } = {}) {
+  /** @type {string} */
+  let localRaw;
+  try {
+    // `%(symref)` is EMPTY for a real branch and non-empty for a symbolic ref -- `refs/remotes/origin/HEAD`
+    // is the one guaranteed member of this remote-tracking tree, and it is not a branch: it is a pointer
+    // to whichever branch the remote calls its default (`origin/main` here). Read by symref rather than
+    // by name, because `%(refname:short)` COLLAPSES `origin/HEAD` to the bare string `origin` -- one path
+    // segment, indistinguishable in NAME from the exact anomaly this census exists to catch (a real
+    // branch pushed with no owner prefix). tracker-auditor measured this against #878's own build:
+    // treating it as a branch would have made this census flag `origin` as a stray on every single run,
+    // a false finding baked into the tool by its own first version.
+    localRaw = run(["for-each-ref", "--format=%(refname:short)%09%(symref)", "refs/remotes/origin"]);
+  } catch (cause) {
+    throw new Error(`queue-table: could not list remote-tracking branches -- refusing to census. `
+      + `${/** @type {Error} */ (cause).message}`, { cause });
+  }
+  const branches = localRaw.split("\n").map((l) => l.trim()).filter(Boolean)
+    .map((l) => l.split("\t"))
+    .filter(([, symref]) => !symref)
+    .map(([name]) => name.replace(/^origin\//, ""));
+  /** @type {string} */
+  let remoteRaw;
+  try {
+    remoteRaw = run(["ls-remote", "--heads", "origin"]);
+  } catch (cause) {
+    throw new Error(`queue-table: could not ask the remote for its own branch count -- refusing to `
+      + `census a population it cannot vouch for. ${/** @type {Error} */ (cause).message}`, { cause });
+  }
+  const remoteCount = remoteRaw.split("\n").map((l) => l.trim()).filter(Boolean).length;
+  if (branches.length !== remoteCount) {
+    throw new Error(`queue-table: examined ${branches.length} branch(es) from the local mirror but the `
+      + `remote reports ${remoteCount} -- refusing to census a population that may have moved between `
+      + `the two reads. Run \`git fetch --prune origin\` and retry.`);
+  }
+  return { branches, remoteCount };
+}
+
+/**
+ * PURE. #790: which of these branch names carry NO owner prefix at all -- the presence/absence question,
+ * never which prefix is the "right" one (that is a judgement this row deliberately does not make; see its
+ * own "What this row is NOT"). `main` is the one name this project's own convention allows without one --
+ * it is the trunk, not an unattributed stray -- so it is the sole accepted exception rather than a second
+ * unnamed rule living beside the real one.
+ *
+ * @param {string[]} branchNames
+ * @returns {{ total: number, noPrefix: string[] }}
+ */
+export function branchPrefixCensus(branchNames) {
+  const noPrefix = branchNames.filter((name) => name !== "main" && !name.includes("/"));
+  return { total: branchNames.length, noPrefix };
+}
+
+/**
+ * @param {{ branches: string[], remoteCount: number } | null} census
+ * @returns {{ lines: string[], incomplete: boolean }}
+ */
+export function renderBranchPrefixes(census) {
+  // NOT `incomplete: true` -- unlike a section this table's own job is to examine every run (trunk, open
+  // PRs), a branch has no owner to page over a red result, so a read that failed once is worth a line,
+  // never worth failing the whole table's exit code over. `withBudget`'s own comment states the identical
+  // trade for section 5's API-cost footer.
+  if (!census) return { lines: ["   ? could not census remote branches"], incomplete: false };
+  const { total, noPrefix } = branchPrefixCensus(census.branches);
+  if (noPrefix.length === 0) {
+    return {
+      lines: [`   OK  ${total} of ${census.remoteCount} remote branch(es) checked (symbolic refs `
+        + "excluded), every one but `main` carries an owner prefix"],
+      incomplete: false,
+    };
+  }
+  return {
+    lines: noPrefix.map((name) => `   NO PREFIX  ${name} -- not attributable to any session by name`),
+    incomplete: false,
+  };
+}
 
 /**
  * PURE. One PR's row, from facts already gathered -- so every shape is exercisable without a network.
@@ -810,8 +911,10 @@ function withBudget(host) {
 }
 
 /** @param {{trunk: any, prs: any[] | null, merged: any[] | null, now: Date, fetched?: boolean,
- *   required?: string[] | null, host?: ReturnType<typeof hostState> | null}} data */
-export function render({ trunk, prs, merged, now, fetched = true, required = null, host = null }) {
+ *   required?: string[] | null, host?: ReturnType<typeof hostState> | null,
+ *   branchCensus?: { branches: string[], remoteCount: number } | null}} data */
+export function render({ trunk, prs, merged, now, fetched = true, required = null, host = null,
+  branchCensus = null }) {
   const sections = [
     { heading: "1. TRUNK", body: renderTrunk(trunk) },
     { heading: "2. OPEN PRs  (behind is COUNTED, never read off mergeStateStatus)", body: renderOpenPRs(prs) },
@@ -830,6 +933,14 @@ export function render({ trunk, prs, merged, now, fetched = true, required = nul
     {
       heading: "5. THIS HOST  (it was the bottleneck on 2026-09-09 and nothing said so)",
       body: withBudget(renderHost(host)),
+    },
+    {
+      heading: "6. BRANCH PREFIXES  (#790 -- a REAL branch can exist with no owner prefix at all, and only "
+        + "naming it, never assuming one, tells it apart from a normal role branch. `origin/HEAD`, a "
+        + "symbolic ref rather than a branch, is excluded by `%(symref)`, not by name -- its short form "
+        + "collapses to the bare string `origin`, which would otherwise read exactly like the anomaly "
+        + "this section exists to catch)",
+      body: renderBranchPrefixes(branchCensus),
     },
   ];
   // EVERY SECTION IS PRINTED, including the empty ones. A section that vanishes when it has nothing to
@@ -872,7 +983,7 @@ export function collect(now = new Date()) {
     return prRow(pr, behind, now);
   });
   return { trunk, prs, merged: recentlyMerged(), now, fetched, required: requiredContexts(),
-    host: hostState() };
+    host: hostState(), branchCensus: ask(() => fetchRemoteBranchesChecked()) };
 }
 
 function main() {
