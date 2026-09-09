@@ -407,6 +407,44 @@ could not.
 identical on all five runs**, along with thirteen other fields. A page changing under the probe would have
 moved those first. It did not — so the seven fields that vary are ours.
 
+### A completeness claim the report was making without support — a correction that GROWS
+
+**Written as a correction that grows, and the count in it is a PRE-CHECK, not a verdict. `orchestrator`'s
+authoritative figure replaces it when the rounds finish; if it has not landed by press time the sentence
+says "pre-check" in the edition, not in a footnote.**
+
+**The claim being withheld** is the report's own: *"every structural sweep ran until the page ran out of
+elements."* It is an affirmative statement that the tool reached the end of the page, and a reader is
+entitled to rely on it.
+
+**Over 32 captures with a readable census in one local checkout, 14 lose that claim.** The sharpest four
+are `theregister.com`: **`link` reports 0 found in 6 trips against a census of 788** — zero links, on a
+page with 788 of them — **and each of those captures currently renders the full-page completeness
+sentence.**
+
+**The mechanism, in one sentence, and it is the reason nothing looked broken:** a landmark sweep walked
+into a chat widget and left the cursor inside its open dialog, so every later sweep truthfully exhausted
+*the dialog* — **every component behaved correctly and the report was false.** The screen reader's
+`exhausted` is its own honest *"no next link"*, and it is true about wherever its cursor happens to be.
+The same capture's `heading` sweep found 28, exactly as the healthy ones did, which is why the anomaly
+survived being looked at.
+
+**The fix needs no deploy and no recapture. The marks were always there and nothing read them.** The check
+is arithmetic — a sweep cannot have visited more elements than it made trips — so it names its own
+numbers rather than a threshold somebody picked: *"link (1 found in 8 trips, census 79)."*
+
+**And the direction matters more than the count, which is the part a board should be given:** this
+**withholds a claim; it does not assert that anything was missed.** A census counts elements a
+quick-navigation key may legitimately never reach, so short trips are doubt, not proof. **Withholding needs
+doubt; asserting needs proof.** The rendered sentence says so itself — *"This does not establish that
+anything was missed. It establishes that the full-page claim is not supported."*
+
+**Why the count is a pre-check and not a number to print unqualified:** it was produced against a copy of
+`runs/` in one checkout, and a copy is only as fresh as its last sync. **This project's own rule is that a
+gate reading `runs/` gives a verdict only when the session driving the fleet and the lab runs it.** The
+14-of-32 is real, it is the right order of magnitude, and it is not the figure of record until
+`orchestrator` produces it.
+
 ### What this section must NOT become
 
 **A list of incidents.** Two red windows on a day with 437 merges is a number the board can hold; a
