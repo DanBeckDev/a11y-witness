@@ -94,6 +94,7 @@
     "rules:score": "tsx packages/lab/scripts/score-rules.ts",
     "rules:gate": "tsx packages/lab/scripts/score-rules.ts --gate",
     "rules:coverage": "tsx packages/lab/scripts/audit-rule-coverage.ts",
+    "rescue:hunk": "node scripts/rescue-hunk.mjs",
     "rules:real-pages": "tsx packages/lab/scripts/check-real-page-findings.ts",
     "scorer:migration": "node scripts/check-schema-migration.mjs",
     "scorer:retired-heads": "node scripts/check-retired-heads.mjs",
