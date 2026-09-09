@@ -335,6 +335,47 @@ const CLOSURE_REQUIREMENT_PATTERNS =
     [new RegExp(fingerprint("--is-shallow-repo", "sitory") + "\\b"), "history"],
   ]);
 
+// #827: THE MIRROR OF `// writes:`, ON THE TEST FILE RATHER THAN THE FILE THAT CALLS THE RISKY FUNCTION --
+// `board-markdown.test.ts` and `board-achievement-retirement.test.ts` each import only `document` from
+// `board-document.mjs`, render it from a literal fixture object, and pass 5/5 and 7/7 with `gh` stubbed to
+// exit 4 on every call. Neither calls `todaysReleaseExists` (`board-document.mjs`'s own `gh release view`
+// spawn, line ~1190) -- but the walk scans the WHOLE FILE'S text for every requirement pattern, not the
+// one export a caller actually imports, so any test reaching `board-document.mjs` at all is charged for
+// EVERY spawn anywhere in it, including ones its own import never uses.
+//
+// `// writes:` sits where the RISKY CALL lives (git-fixture-cache.mjs calls `runsRoot()` itself, so its own
+// declaration is checked right there, mid-walk). `token`'s risky call lives in an IMPORTED file the test
+// does not control, so the declaration cannot live beside the call the same way -- it has to live on the
+// file that actually knows which of its own imports it exercises: the entry itself. So `// no-token: <fn>`
+// is checked ONCE, against `entry`'s own text, before the walk begins, rather than incrementally at each
+// file the way `// writes:` is -- the shape differs because WHERE the two declarations can honestly live
+// differs, not because the discipline does: declared, then verified, never substituted, exactly as #731's
+// own rule states it. A file naming a function it does not itself call is judged wrong the same way a file
+// naming a subdirectory it does not itself write to is -- a DIFFERENT, MORE SPECIFIC refusal than plain
+// `token`, never a silent pass and never a silent override.
+const NO_TOKEN_HEADER = /^\/\/\s*no-token:\s*(\S+)\s*$/m;
+
+/**
+ * @param {string} text
+ * @returns {string | null} the declared function name (e.g. `todaysReleaseExists`), or null if undeclared.
+ */
+function declaredNoTokenFn(text) {
+  const match = NO_TOKEN_HEADER.exec(text);
+  return match ? match[1] : null;
+}
+
+/**
+ * Does `entry`'s own code genuinely never call the function it claims not to need -- a real call SHAPE
+ * (`fnName(`), never a bare mention a comment or a string could contain just as easily. Shallow, exactly
+ * as `writeDeclarationHolds` is shallow: this proves the declaring file's OWN text does not call it, not
+ * that nothing it calls calls it in turn -- the same scope #731's own write-side check keeps.
+ * @param {string} entryCodeOnly
+ * @param {string} fnName
+ */
+function noTokenDeclarationHolds(entryCodeOnly, fnName) {
+  return !new RegExp(`\\b${fnName}\\s*\\(`).test(entryCodeOnly);
+}
+
 /**
  * Where in `text` a 1-indexed line number sits for a given match index.
  * @param {string} text
@@ -359,6 +400,9 @@ function lineNumberOf(text, index) {
  * corpus-dependent at all, and is skipped rather than recorded. A file that DECLARES `// writes:` but whose
  * own text does not bear it out is still recorded as `corpus`, flagged `wrongDeclaration: true` -- named as
  * a bad declaration, never silently trusted and never silently overridden.
+ *
+ * #827: `token`'s mirror, checked once against `entry` itself before the walk begins -- see `NO_TOKEN_HEADER`'s
+ * own header for why the declaration cannot live beside the risky call the way `// writes:` does.
  * @param {string} entry absolute path to the entry file
  * @returns {ClosureHit[]}
  */
@@ -374,6 +418,22 @@ export function deriveClosureRequirements(entry) {
   // exists to remove, one hop further down the same chain. `exemptCorpus` records that the closure has
   // already answered "corpus" honestly and nothing further in this walk may reopen it.
   let exemptCorpus = false;
+  // #827: the `token` counterpart, decided ONCE before the walk starts (see `NO_TOKEN_HEADER`'s header for
+  // why token's declaration is checked at the entry rather than incrementally like `// writes:` is).
+  let exemptToken = false;
+  if (existsSync(entry)) {
+    const entryText = readFileSync(entry, "utf8");
+    const entryCodeOnly = stripComments(entryText);
+    const noTokenFn = declaredNoTokenFn(entryText);
+    if (noTokenFn !== null) {
+      if (noTokenDeclarationHolds(entryCodeOnly, noTokenFn)) {
+        exemptToken = true;
+      } else {
+        const line = lineNumberOf(entryText, /** @type {RegExpExecArray} */ (NO_TOKEN_HEADER.exec(entryText)).index);
+        found.set("token", { requirement: "token", file: entry, line, chain: [entry], wrongDeclaration: true });
+      }
+    }
+  }
   /** @param {string} file @param {string[]} chain @param {Set<string>} seen */
   const walk = (file, chain, seen) => {
     if (seen.has(file) || !existsSync(file)) return;
@@ -382,7 +442,8 @@ export function deriveClosureRequirements(entry) {
     const codeOnly = stripComments(text);
     const hereChain = [...chain, file];
     for (const [pattern, requirement] of CLOSURE_REQUIREMENT_PATTERNS) {
-      if (found.has(requirement) || (requirement === "corpus" && exemptCorpus)) continue;
+      if (found.has(requirement) || (requirement === "corpus" && exemptCorpus)
+        || (requirement === "token" && exemptToken)) continue;
       const match = pattern.exec(codeOnly);
       if (!match) continue;
       const hit = { requirement, file, line: lineNumberOf(text, match.index), chain: hereChain };
@@ -404,8 +465,9 @@ export function deriveClosureRequirements(entry) {
  * entry file itself matches, zero hops) reads as `"<entry> requires <req>, at <entry>:<line>"`.
  *
  * #731: A `wrongDeclaration` HIT SAYS SO, naming the file's OWN claim as the thing that failed -- a reader
- * fixing a plain `corpus` refusal edits the test; a reader fixing a wrong `// writes:` edits the comment
- * that no longer describes what the file does, a different fix at a different spot.
+ * fixing a plain `corpus` refusal edits the test; a reader fixing a wrong `// writes:` (or, #827, `// no-
+ * token:`) edits the comment that no longer describes what the file does, a different fix at a different
+ * spot.
  * @param {ClosureHit} hit
  * @returns {string}
  */
@@ -413,10 +475,11 @@ export function closureRequirementMessage(hit) {
   const { requirement, file, line, chain, wrongDeclaration } = hit;
   const entryLabel = basename(chain[0]);
   const fileLabel = basename(file);
-  const suffix = wrongDeclaration
-    ? ` -- ${fileLabel} declares \`// writes:\` a path its own code does not bear out; refusing rather `
-      + "than trusting an unverified claim"
-    : "";
+  const suffix = !wrongDeclaration ? "" : requirement === "token"
+    ? ` -- ${fileLabel} declares \`// no-token:\` a function its own code DOES call; refusing rather than `
+      + "trusting an unverified claim"
+    : ` -- ${fileLabel} declares \`// writes:\` a path its own code does not bear out; refusing rather `
+      + "than trusting an unverified claim";
   if (chain.length <= 1) return `${entryLabel} requires ${requirement}, at ${fileLabel}:${line}${suffix}`;
   const hops = [];
   for (let i = 0; i < chain.length - 1; i++) {
