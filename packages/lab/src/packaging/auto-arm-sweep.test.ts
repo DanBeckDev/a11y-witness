@@ -12,6 +12,11 @@
  * paid for `refreshBrowseBuffer` (a correct remedy whose trigger was never set, inert on every capture
  * ever taken) and for `scorer:verify` (a security check nothing invoked).
  */
+// no-token: gh
+//
+// #827. This file exercises `sweepDecision` (pure, fixtures in and a verdict out) and reads source text
+// with `readFileSync`. `auto-arm-sweep.mjs`'s `gh` helper is in the closure because it is in the module,
+// not because anything here calls it -- `main()` is never invoked.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -43,25 +48,40 @@ test("`blocked` is refused — a person's refusal is not something a green gate 
     + "strength of the PR being green.");
 });
 
-test("a `session:` label is a HOLD and is refused, naming the holder (#266)", () => {
-  const { arm, reason } = sweepDecision(pr({ labels: ["session:worker-capture"] }));
+test("a `hold:` label is a HOLD and is refused, naming the holder (#266)", () => {
+  const { arm, reason } = sweepDecision(pr({ labels: ["hold:worker-capture"] }));
   assert.equal(arm, false);
-  assert.match(reason, /session:worker-capture/,
+  assert.match(reason, /hold:worker-capture/,
     "naming the holder is the point: `held` sends you to the label list, `held by worker-capture` sends "
     + "you to a session.");
 });
 
-test("EVERY `session:` label is named, not just the first — two sessions is a collision worth seeing", () => {
-  const { reason } = sweepDecision(pr({ labels: ["session:worker-capture", "session:dispatcher"] }));
-  assert.match(reason, /session:worker-capture/);
-  assert.match(reason, /session:dispatcher/);
+/**
+ * THE PREFIX MOVED, 2026-09-09, AND THIS IS THE HALF THAT MATTERS. `session:<name>` meant BOTH "this PR
+ * is mine" and "this PR is held", and ceo's 12:2xZ ruling put an ownership label on every PR its author
+ * opened. orchestrator hand-labelled twelve of their own PRs that afternoon; every one was, to this
+ * predicate, HELD, and #725 was about to apply the label to every armed PR in the org.
+ *
+ * So an OWNERSHIP label must now arm. Flipping the test above to `hold:` alone would have left that
+ * untested -- the case the rename exists for is the one where the old label appears and nothing happens.
+ */
+test("a `session:` label is OWNERSHIP and still ARMS -- the collision the `hold:` namespace ended", () => {
+  assert.equal(sweepDecision(pr({ labels: ["session:orchestrator"] })).arm, true,
+    "twelve PRs carried exactly this on 2026-09-09 to mark whose they were; refusing to arm them is the "
+    + "defect, not the guard");
+});
+
+test("EVERY `hold:` label is named, not just the first — two sessions is a collision worth seeing", () => {
+  const { reason } = sweepDecision(pr({ labels: ["hold:worker-capture", "hold:dispatcher"] }));
+  assert.match(reason, /hold:worker-capture/);
+  assert.match(reason, /hold:dispatcher/);
 });
 
 test("a label merely CONTAINING the word is not a hold — `blocked-on-fleet` must not read as `blocked`", () => {
   // Substring matching is how a guard comes to refuse the case it was never written for. The `blocked`
   // check is an exact membership test and this pins it as one.
   assert.equal(sweepDecision(pr({ labels: ["blocked-on-fleet"] })).arm, true);
-  assert.equal(sweepDecision(pr({ labels: ["not-session:anything"] })).arm, true);
+  assert.equal(sweepDecision(pr({ labels: ["not-hold:anything"] })).arm, true);
 });
 
 test("ZERO check runs is refused, and the reason says STRANDED rather than anything resembling `wait`", () => {
@@ -190,4 +210,29 @@ test("MUTATION TARGET (#404/#415): removing `reopened` or `synchronize` from the
     "exactly four trigger types (opened, ready_for_review, reopened, synchronize) -- if this grows or "
     + "shrinks without the tests above changing, something was added or removed without being reasoned "
     + "about here");
+});
+
+/**
+ * MERGED MEANWHILE IS THE ORDINARY CASE ON A FAST MAIN, NOT A FAILURE.
+ *
+ * The candidate list is read at the top of a sweep run. On a main taking eight merges in half an hour, a
+ * PR can go green, arm itself and land between that read and the arm — `gh pr merge --auto` then exits
+ * non-zero, and reporting it as FAILED TO ARM puts `sweep` red on main's tip for a PR that did exactly
+ * what it was supposed to. Measured on #845 at 17:25:53Z.
+ *
+ * The predicate is asked of the API rather than matched on the failure's message, because `gh` exits 1
+ * for a merged PR, an unmergeable one and a network fault alike.
+ */
+test("the sweep's source asks the API whether the PR merged, rather than matching on the error text", () => {
+  const src = readFileSync(
+    fileURLToPath(new URL("../../../../scripts/auto-arm-sweep.mjs", import.meta.url)), "utf8");
+  assert.match(src, /function mergedMeanwhile/);
+  assert.match(src, /pulls\/\$\{number\}/,
+    "it must ASK -- a predicate reading `cause.message` cannot tell a merge from a network fault");
+  assert.doesNotMatch(src, /cause\.message.*already merged|already merged.*cause\.message/,
+    "no message-matching path may creep back in beside it");
+  const helper = src.slice(src.indexOf("function mergedMeanwhile"));
+  assert.match(helper.slice(0, helper.indexOf("\n}")), /catch \{\s*return false;/,
+    "UNREADABLE IS NOT MERGED: a failed lookup must report FAILED TO ARM, because not knowing why an "
+    + "arm failed is not the same as knowing it was harmless");
 });

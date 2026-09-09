@@ -80,6 +80,7 @@ import {
   closingClaimReasons, claimedCloseCoveredBy, applyAllowClaimedClose,
 } from "./merge-guard/claimed-row-rule.mjs";
 import { prHoldReasons } from "./merge-guard/pr-hold-rule.mjs";
+import { holdersOf, HOLD_PREFIX } from "./pr-hold-state.mjs";
 import { racesAnArmedMerge, lookupArmedPrStatus } from "./merge-guard/armed-race-rule.mjs";
 import {
   appendJsonl, gitCommonDir, verdictLogPath, agreementLogPath, recordVerdict, latestVerdictFor,
@@ -124,14 +125,55 @@ const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2 };
  * the response to an unmergeable-by-default queue is to bypass the gate, and this repository's record on
  * that is `A11Y_SKIP_VERIFY` used six times in one evening.
  *
- * @param {{pr: {headRefOid: string}, branchTip: string | null}} facts
+ * A HOLD IS NOW ENFORCED HERE, AND UNTIL 2026-09-09 IT WAS ENFORCED NOWHERE THAT COULD STOP A MERGE.
+ *
+ * `pr-hold` disarms auto-merge when it takes a hold, and `armabilityOf` stops anything re-arming — so the
+ * hold worked, at ARM time. A hold placed on a PR that was ALREADY ARMED stopped nothing: GitHub's
+ * auto-merge consults no label, and `gate` — the only required context — read head-vs-tip and nothing
+ * else. Measured: eleven of the twelve PRs one session labelled on 2026-09-09 merged, labelled, armed.
+ * #645 called that "a label that stops nothing"; it was the observed behaviour rather than a hypothesis.
+ *
+ * This is deliberately NOT the two rules below it. Ancestry and the claimed-row rule were both measured
+ * refusing the NORMAL case from CI. A hold cannot: the normal case is a PR with no `hold:` label, and the
+ * refusal is only ever the state somebody asked for by hand.
+ *
+ * @param {{pr: {headRefOid: string, number?: number, state?: string}, branchTip: string | null,
+ *   prLabels?: string[] | null}} facts
  * @returns {{code: number, reasons: string[]}}
  */
-export function mergeSafetyVerdict({ pr, branchTip }) {
+export function mergeSafetyVerdict({ pr, branchTip, prLabels = [] }) {
   if (branchTip === null) {
     return { code: EXIT.CANNOT_ASK, reasons: [
       `CANNOT SAY whether #${pr.headRefOid.slice(0, 10)} is safe to auto-arm: could not read the branch's `
       + "real tip (`git ls-remote`, #294).\n  This is INCONCLUSIVE, not clear.",
+    ] };
+  }
+  // UNREADABLE REFUSES, AND SAYS SO IN ITS OWN WORDS. "Could not read the labels" and "this PR is held"
+  // are different facts needing different actions -- one sends a reader to the API, the other to the
+  // holder -- and printing the same sentence for both is how a reader learns to ignore it.
+  if (prLabels === null) {
+    return { code: EXIT.CANNOT_ASK, reasons: [
+      `CANNOT SAY whether #${pr.number ?? "?"} is held: its labels could not be read.\n`
+      + "  This is INCONCLUSIVE, not unheld. Nobody looked, and a merge that happens when nothing looked "
+      + "is what this tool exists to prevent.",
+    ] };
+  }
+  // ONLY WHILE THE PR IS OPEN, and this is #690's rule reaching one field further. `labeled`/`unlabeled`
+  // fire on a CLOSED PR too -- anything that strips a label after a merge re-triggers this workflow --
+  // and `gate` is deliberately ungated (`if: always()`), so without this a merged PR that still carries
+  // its `hold:` label would go permanently red on its own head. That red blocks nothing, lands in the
+  // report of non-success checks on merged heads, and trains people to skip the section: exactly the
+  // failure #690 was written to stop, and exactly how one real red sat on seven merged PRs for ninety
+  // minutes. A closed PR cannot merge, so refusing it protects nothing.
+  const holders = pr.state === "closed"
+    ? []
+    : holdersOf(prLabels).map((label) => label.slice(HOLD_PREFIX.length));
+  if (holders.length > 0) {
+    return { code: EXIT.REFUSED, reasons: [
+      `#${pr.number ?? "?"} IS HELD by ${holders.join(", ")}, so it must not merge.\n`
+      + "  A hold is a decision somebody made by hand; releasing it is `npm run pr:release -- <n> "
+      + `--session=<name>\`, which puts auto-merge back.\n  The label is \`${HOLD_PREFIX}<session>\`; a `
+      + "`session:<name>` label is OWNERSHIP and is deliberately not read here.",
     ] };
   }
   const reasons = headTipMismatchReason(pr, branchTip);
@@ -202,11 +244,39 @@ export function mergeReadiness({ pr, required, runs, mainTipIso, behindBy, branc
  * `facts()` too: no required-contexts or check-runs lookup at all.
  * @param {number} number
  */
+/**
+ * REST, NOT `gh pr view`, AND THAT IS A PROPERTY OF THE REQUIRED GATE RATHER THAN A PREFERENCE.
+ *
+ * `gh pr view` spends GRAPHQL. On 2026-09-09 the shared GraphQL pool reached 5000 of 5000 at 14:41Z and
+ * every `gh pr list`/`view`/`checks` in every session failed for twenty-two minutes. `gate` is the ONLY
+ * required context on this repository, so a GraphQL outage would make the one check that must answer
+ * unable to answer -- and an unanswerable required check is a queue that stops. `gh api repos/.../pulls/N`
+ * is core, a separate pool, and returns the labels on the same payload, so the hold read below costs
+ * nothing extra.
+ *
+ * `prLabels` is `null` when the read failed, NEVER `[]`. The two need opposite responses: an empty list
+ * means nobody holds this PR and it may proceed; a failed lookup means nobody LOOKED, and this whole tool
+ * exists because a merge happened when nothing looked (#294's "Unreadable is not unheld").
+ *
+ * @param {number} number
+ */
 function ciGateFacts(number) {
-  const pr = JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
-    "--json", "number,state,baseRefName,headRefOid,headRefName"]));
+  const raw = JSON.parse(gh(["api", `repos/${REPO}/pulls/${number}`]));
+  const pr = {
+    number: raw.number,
+    state: raw.state,
+    baseRefName: raw.base?.ref,
+    headRefOid: raw.head?.sha,
+    headRefName: raw.head?.ref,
+  };
+  const names = Array.isArray(raw.labels)
+    ? raw.labels.map((/** @type {{name?: unknown}} */ l) => l?.name)
+    : null;
+  const prLabels = names && names.every((/** @type {unknown} */ n) => typeof n === "string")
+    ? /** @type {string[]} */ (names)
+    : null;
   const branchTip = lookupBranchTip(pr.headRefName);
-  return { pr, branchTip };
+  return { pr, branchTip, prLabels };
 }
 
 /**

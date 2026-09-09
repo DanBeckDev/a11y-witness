@@ -39,8 +39,7 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
-import { disarmVerdict } from "./pr-hold-state.mjs";
-import { claimStatus } from "./row-claim.mjs";
+import { disarmVerdict, armVerdict, REARM_LABEL, HOLD_PREFIX, holdersOf } from "./pr-hold-state.mjs";
 import { REPO } from "./repo-identity.mjs";
 
 const EXIT = { DONE: 0, REFUSED: 1, CANNOT_ASK: 2 };
@@ -106,7 +105,32 @@ export function holdDecision({ holders, session, steal }) {
 
 /** @param {number} number @param {string} session @param {"add"|"remove"} how */
 function writeLabel(number, session, how) {
-  gh(["pr", "edit", String(number), "--repo", REPO, `--${how}-label`, `session:${session}`]);
+  writeRawLabel(number, `${HOLD_PREFIX}${session}`, how);
+}
+
+/** @param {number} number @param {string} label @param {"add"|"remove"} how */
+function writeRawLabel(number, label, how) {
+  gh(["pr", "edit", String(number), "--repo", REPO, `--${how}-label`, label]);
+}
+
+/**
+ * This PR's `autoMergeRequest`, or `null` when the answer could not be had -- and the two are NOT the
+ * same thing, which is why the callers below check what they got rather than its truthiness.
+ *
+ * @param {number} number
+ * @returns {{ autoMergeRequest?: unknown } | null}
+ */
+function readAutoMerge(number) {
+  try {
+    // `state` ALONGSIDE `autoMergeRequest`, because a null `autoMergeRequest` means "disarmed" or
+    // "merged" and the field cannot tell you which. `disarmVerdict` and `armVerdict` both need the
+    // second one -- see their headings and #845, where three reads said NOT-ARMED about a PR that had
+    // merged four seconds earlier.
+    return JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
+      "--json", "autoMergeRequest,state"]));
+  } catch {
+    return null;
+  }
 }
 
 function usage() {
@@ -130,7 +154,10 @@ function main() {
       + "lookup.\n");
     process.exit(EXIT.CANNOT_ASK);
   }
-  const holders = claimStatus(labels).sessions;
+  // `holdersOf`, NEVER `claimStatus(...).sessions`. They read different prefixes since the 2026-09-09
+  // rename, and `claimStatus` is the ROW vocabulary -- reading it here would report every PR its author
+  // labelled as held, which is the collision this rename exists to end.
+  const holders = holdersOf(labels).map((l) => l.slice(HOLD_PREFIX.length));
   const session = flagValue(process.argv, "session");
   if (!session) {
     process.stdout.write(holders.length === 0
@@ -158,9 +185,84 @@ function releaseHold(number, session, holders) {
       + `${holders.length ? ` (it is held by ${holders.join(", ")})` : ""} — nothing released.\n`);
     return EXIT.DONE;
   }
+  // THE HOLD LABEL COMES OFF FIRST, and the order is the same reasoning `takeHold` uses for displacing
+  // before taking: on a half-failure, leave the state that is visible and recoverable. Released-but-
+  // unarmed is what this command did until today and is merely a PR waiting for somebody to arm it.
+  // Armed-but-still-labelled is the dangerous half -- `merge-guard` refuses it while auto-merge merges
+  // it, which is the pair #645 was filed about.
   writeLabel(number, session, "remove");
   process.stdout.write(`#${number}: ${session} released it.\n`);
+
+  const labels = prLabels(number);
+  if (labels === null) {
+    process.stderr.write(`#${number}: RELEASED, but its labels could not be read back, so whether the `
+      + `hold disarmed it is unknown. Check for \`${REARM_LABEL}\` and re-arm by hand if it is there.\n`);
+    return EXIT.CANNOT_ASK;
+  }
+  if (!labels.includes(REARM_LABEL)) {
+    process.stdout.write(`#${number}: not re-armed — it carried no \`${REARM_LABEL}\`, so it was `
+      + "already unarmed when the hold was taken and putting auto-merge on it now would arm something "
+      + "nobody armed.\n");
+    return EXIT.DONE;
+  }
+  return rearmAfterRelease(number);
+}
+
+/**
+ * PUT BACK WHAT THE HOLD TOOK AWAY, and prove it from the API.
+ *
+ * A release that leaves a PR unarmed is a hold that outlives its reason: the label is gone, so nothing
+ * marks the PR as waiting, and it sits green and unmerged with no record of why. Measured on #816 at
+ * 15:45Z 2026-09-09 -- `--release` removed the label and left `auto_merge` null, and it took a hand
+ * re-arm to notice.
+ *
+ * `--merge` IS NAMED AT THE CALL SITE, never inherited from whatever the repository's default is today:
+ * this repo allows merge commits only, `--squash` fails at the API, and a caller that redirects stderr
+ * sees only a non-zero exit.
+ *
+ * @param {number} number
+ * @returns {number} the exit code
+ */
+function rearmAfterRelease(number) {
+  try {
+    gh(["pr", "merge", "--auto", "--merge", String(number)]);
+  } catch {
+    // NOT the verdict, in either direction -- the state read below is. `gh pr merge` can fail having
+    // armed, and can succeed having done nothing, which is the asymmetry `disarmAutoMerge` records for
+    // the mirror case.
+  }
+  const verdict = armVerdict(readAutoMerge(number));
+  if (!verdict.armed) {
+    process.stderr.write(`#${number}: ${verdict.reason}\n`);
+    return EXIT.CANNOT_ASK;
+  }
+  writeRawLabel(number, REARM_LABEL, "remove");
+  process.stdout.write(`#${number}: re-armed with a merge commit — ${verdict.reason}.\n`);
   return EXIT.DONE;
+}
+
+/**
+ * DID THE HOLD LABEL ACTUALLY LAND? `null` when it did, an operator-facing message when it did not.
+ *
+ * READ BACK, because taking a hold is two or more writes and either can half-succeed. `gh pr edit`
+ * exiting 0 says the request was accepted, not that the PR now says what you think -- the same reason
+ * `/health.code` is checked over HTTP rather than through the channel that performed the deploy.
+ *
+ * Extracted from `takeHold` when the re-arm marker gained the same read-back and pushed that function
+ * over its complexity budget: two writes verified the same way is one step written twice, and the
+ * extraction is what makes them look alike rather than a coincidence.
+ *
+ * @param {number} number @param {string} session
+ * @returns {string | null}
+ */
+function holdLanded(number, session) {
+  const after = prLabels(number);
+  const nowHeld = after === null ? null : holdersOf(after).map((l) => l.slice(HOLD_PREFIX.length));
+  if (nowHeld !== null && nowHeld.length === 1 && nowHeld[0] === session) return null;
+  return `#${number}: THE WRITE DID NOT LAND AS INTENDED. Expected exactly `
+    + `${HOLD_PREFIX}${session}; the PR now reads `
+    + `${nowHeld === null ? "unreadable" : nowHeld.join(", ") || "no holder"}.\n`
+    + "  Fix it by hand with `gh pr edit --add-label/--remove-label` before anyone acts on this PR.\n";
 }
 
 /**
@@ -179,26 +281,68 @@ function takeHold(number, session, holders, steal) {
   if (!decision.act) return decision.code;
   for (const displaced of decision.displaces) writeLabel(number, displaced, "remove");
   writeLabel(number, session, "add");
-  // READ IT BACK, because this is two or more writes and either can half-succeed. `gh pr edit` exiting 0
-  // says the request was accepted, not that the PR now says what you think -- the same reason
-  // `/health.code` is checked over HTTP rather than through the channel that performed the deploy.
-  const after = prLabels(number);
-  const nowHeld = after === null ? null : claimStatus(after).sessions;
-  if (nowHeld === null || nowHeld.length !== 1 || nowHeld[0] !== session) {
-    process.stderr.write(`#${number}: THE WRITE DID NOT LAND AS INTENDED. Expected exactly `
-      + `session:${session}; the PR now reads `
-      + `${nowHeld === null ? "unreadable" : nowHeld.join(", ") || "no holder"}.\n`
-      + "  Fix it by hand with `gh pr edit --add-label/--remove-label` before anyone acts on this PR.\n");
+  const landed = holdLanded(number, session);
+  if (landed !== null) {
+    process.stderr.write(landed);
     return EXIT.CANNOT_ASK;
   }
+  // READ BEFORE DISARMING, because after the disarm the two states the release has to tell apart are the
+  // same. This is the one round trip the disarm's own heading argues against, and it is worth it here
+  // for a different reason: it decides nothing about whether to disarm, only what to put back.
+  const wasArmed = readAutoMerge(number)?.autoMergeRequest != null;
   const disarm = disarmAutoMerge(number);
+  // THE MARKER IS READ BACK, because it is the only thing that survives to tell the release what to do
+  // -- and on 2026-09-09 it did not land at all. `gh pr edit --add-label` REFUSES a label that does not
+  // exist in the repository ("'rearm-on-release' not found"), and #822 shipped the label's name without
+  // creating it. `writeRawLabel` throws on that, and this line's result was never inspected, so the hold
+  // succeeded, the PR was disarmed, and the release then reported "it carried no `rearm-on-release`, so
+  // it was already unarmed when the hold was taken" -- a true sentence about a label that was never
+  // written, and a PR left unarmed with nothing saying why.
+  //
+  // That is the same shape as the hold label's own read-back three lines above, which #822 added
+  // deliberately and then did not apply to the second write in the same function. A fix at one of two
+  // call sites, in the change that was about reading writes back.
+  if (wasArmed && disarm.disarmed && !markForRearm(number)) {
+    process.stderr.write(`#${number}: HELD AND DISARMED, but could not mark it \`${REARM_LABEL}\`.\n`
+      + "  `npm run pr:release` will therefore leave this PR UNARMED, and nothing on the PR will say so.\n"
+      + `  Add the label by hand (\`gh pr edit ${number} --add-label ${REARM_LABEL}\`, creating it first `
+      + "if it does not exist), or re-arm by hand after releasing.\n");
+    return EXIT.CANNOT_ASK;
+  }
   if (!disarm.disarmed) {
     process.stderr.write(`#${number}: ${disarm.reason}\n`);
     return EXIT.CANNOT_ASK;
   }
   process.stdout.write(`#${number} is now held by ${session}${decision.displaces.length
-    ? `, and ${decision.displaces.join(", ")} no longer holds it` : ""}. ${disarm.reason}.\n`);
+    ? `, and ${decision.displaces.join(", ")} no longer holds it` : ""}. ${disarm.reason}`
+    + `${wasArmed ? `, and it WAS armed — labelled \`${REARM_LABEL}\` so the release puts it back`
+      : ", and it was not armed, so a release will leave it that way"}.\n`);
   return EXIT.DONE;
+}
+
+/**
+ * MARK THIS PR FOR RE-ARMING, AND PROVE THE MARK LANDED.
+ *
+ * `gh pr edit --add-label` exits non-zero for a label the repository does not have, so the write can fail
+ * for a reason that has nothing to do with this PR -- and the label is the ONLY thing that carries the
+ * decision from the hold to the release, which may be another session hours later. An unverified marker
+ * is a re-arm that silently will not happen.
+ *
+ * Reads the labels back rather than trusting the edit's exit code, for the reason this file already
+ * states about the hold label: `gh pr edit` exiting 0 says the request was accepted, not that the PR now
+ * says what you think.
+ *
+ * @param {number} number
+ * @returns {boolean} whether the PR now carries the marker
+ */
+function markForRearm(number) {
+  try {
+    writeRawLabel(number, REARM_LABEL, "add");
+  } catch {
+    return false; // the read below decides; a throw here is not the verdict either
+  }
+  const after = prLabels(number);
+  return after !== null && after.includes(REARM_LABEL);
 }
 
 /**

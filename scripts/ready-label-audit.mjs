@@ -109,6 +109,66 @@ export function fetchOpenIssues({ run = defaultRun } = {}) {
 }
 
 /**
+ * #788: THE COUNT GITHUB ITSELF REPORTS OPEN, independent of `fetchIssues`'s own `gh issue list` call --
+ * GitHub's search index, asked the identical question a second way, so the two can be compared rather
+ * than one trusted alone. `type:issue`/`is:open` (via `is:issue is:open`) deliberately does NOT use the
+ * repository API's own `open_issues_count`: that field is the well-documented quirk of counting open
+ * issues AND open pull requests together, so it would never equal `fetchIssues`'s issues-only count even
+ * on a perfectly healthy tracker.
+ *
+ * THROWS on any failure or an unparseable count, same discipline as every other fetcher here: a silent 0
+ * would read as "no issues are open", the opposite of an honest "could not ask".
+ *
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {number}
+ */
+export function fetchReportedOpenIssueCount({ run = defaultRun } = {}) {
+  /** @type {string} */
+  let raw;
+  try {
+    raw = run("gh", ["api", `search/issues?q=${encodeURIComponent(`repo:${REPO} is:issue is:open`)}`,
+      "--jq", ".total_count"]);
+  } catch (cause) {
+    throw new Error(`ready-label-audit: could not read GitHub's reported open-issue count -- refusing to `
+      + `guess whether the examined population is complete. ${/** @type {Error} */ (cause).message}`,
+      { cause });
+  }
+  const count = Number(raw.trim());
+  if (!Number.isFinite(count)) {
+    throw new Error(`ready-label-audit: GitHub's reported open-issue count was not a number -- refusing `
+      + `to guess. Got: ${raw.slice(0, 200)}`);
+  }
+  return count;
+}
+
+/**
+ * #788: `fetchOpenIssues`, but STATES what it examined against what GitHub's own search index reports
+ * open, and REFUSES the whole read as partial when they differ -- rather than each of the mutex,
+ * hand-claim, stranded, board-membership, dead-claim, already-merged and #788's own labelless-row checks
+ * silently examining a population smaller (or larger) than the tracker actually holds and reporting a
+ * clean result regardless. #715's own rule, generalised: a guard whose population is a query must assert
+ * about the SEARCH, not only about its result -- an audit reporting "OK 74 open issues checked" has
+ * examined only the rows its query could see, and #623 was reachable by NO label query at all.
+ *
+ * A GENUINE MISMATCH IS NOT NECESSARILY A BUG -- an issue opened or closed between the two reads would
+ * produce one honestly. Refusing rather than guessing is still correct: this audit is a point-in-time
+ * report, and reporting a count it cannot vouch for is the exact failure #715 names, whatever the cause.
+ *
+ * @param {{ run?: typeof defaultRun, fetchReportedCount?: typeof fetchReportedOpenIssueCount }} [deps]
+ * @returns {{ issues: LabelledIssue[], reportedCount: number }}
+ */
+export function fetchOpenIssuesChecked({ run = defaultRun, fetchReportedCount = fetchReportedOpenIssueCount } = {}) {
+  const issues = fetchOpenIssues({ run });
+  const reportedCount = fetchReportedCount({ run });
+  if (issues.length !== reportedCount) {
+    throw new Error(`ready-label-audit: examined ${issues.length} open issue(s) but GitHub's search `
+      + `index reports ${reportedCount} open -- refusing to audit a population that may have shrunk (or `
+      + `grown) silently between the two reads.`);
+  }
+  return { issues, reportedCount };
+}
+
+/**
  * Reads issues from the real board, at the given `--state`. Shared by `fetchOpenIssues` (unchanged
  * behaviour: `--state open`, limit 200, still exactly what the mutex check reads) and `fetchAllIssues`
  * (`--state all`, the population #378 exists to make visible). `gh` failing, answering with a shape this
@@ -265,16 +325,37 @@ export function closedDebris(issues) {
 }
 
 /**
- * Pure: which OPEN issues carrying `ready` have NO item on the Project board at all? Neither a label check
- * (the label is correct) nor a Status check (there is no item to read a Status from) can see this on its
- * own -- it is visible only as a comparison between the two populations. Measured 2026-09-08: four such
- * rows existed while the Ready lane read empty and idled a worker.
+ * #788: Pure -- which open issues carry NO labels at all? Not `unclaimed`, not `not ready`, not
+ * `blocked` -- ABSENT. Every check in this file, the Ready lane, the backlog view, the WIP count, the
+ * dead-claim check, the hourly table and the section-backfill sweep are all keyed on labels, so a row
+ * carrying none is invisible to all of them at once, not merely to one. Measured 2026-09-09: three open
+ * rows (#623, #644, #600), fixed by hand -- #623 was the most irreversible row on the 15 September
+ * transfer milestone and reachable by no label query at all. Nothing stops a fourth: filing requires no
+ * label, and every check that would notice reads by label.
+ * @param {LabelledIssue[]} openIssues
+ * @returns {LabelledIssue[]}
+ */
+export function labellessRows(openIssues) {
+  return openIssues.filter((i) => i.labels.length === 0);
+}
+
+/**
+ * Pure: which OPEN issues have NO item on the Project board at all? Neither a label check (the label is
+ * correct) nor a Status check (there is no item to read a Status from) can see this on its own -- it is
+ * visible only as a comparison between the two populations. Measured 2026-09-08: four `ready` rows
+ * existed this way while the Ready lane read empty and idled a worker.
+ *
+ * #788: WIDENED FROM `ready` ROWS TO EVERY OPEN ROW -- ceo's ruling, 2026-09-09. The `ready`-only version
+ * reported nothing while 24 open rows of every OTHER kind had no Project item; it was right to, since it
+ * was only ever asked about the `ready` subset. Project 2 is the view the chairman reads, so a row off
+ * it is invisible there exactly as a labelless row was invisible to the label-keyed checks -- the same
+ * shape at a different layer, closed the same way: widen the population, not the label list.
  * @param {LabelledIssue[]} openIssues
  * @param {Set<number>} boardNumbers issue numbers that have an item on the Project
  * @returns {LabelledIssue[]}
  */
-export function readyRowsAbsentFromBoard(openIssues, boardNumbers) {
-  return openIssues.filter((i) => i.labels.includes(READY_LABEL) && !boardNumbers.has(i.number));
+export function openRowsAbsentFromBoard(openIssues, boardNumbers) {
+  return openIssues.filter((i) => !boardNumbers.has(i.number));
 }
 
 /**
@@ -293,7 +374,7 @@ export function readyRowsAbsentFromBoard(openIssues, boardNumbers) {
  * merged as #440 at 02:31Z, never auto-closed (bot-attributed merges do not close a referenced issue --
  * see `close-rows-for-merged-pr.mjs`'s own header), and sat `ready` until a worker claimed it and had to
  * revert. Every existing check misses this: the collision check asks "does anyone else hold this row",
- * the mutex check asks "is `ready` beside a not-pickable LABEL", `readyRowsAbsentFromBoard` asks "is it on
+ * the mutex check asks "is `ready` beside a not-pickable LABEL", `openRowsAbsentFromBoard` asks "is it on
  * the board" -- none of them ask "did the work already ship".
  *
  * DELIBERATELY KEYED ON A CLOSING REFERENCE, never a bare mention -- `closingIssuesReferences` (fed here
@@ -579,11 +660,11 @@ function closingPrRefsFromRepoNode(repo, issueNumbers) {
 
 /** Report the OPEN-row mutex check exactly as before #378 -- unchanged population, unchanged wording. */
 function reportMutexViolations() {
-  const issues = fetchOpenIssues();
+  const { issues, reportedCount } = fetchOpenIssuesChecked();
   const violations = mutexViolations(issues);
   if (violations.length === 0) {
-    process.stdout.write(`OK  ${issues.length} open issue(s) checked, none carry \`ready\` `
-      + `with a not-pickable label\n`);
+    process.stdout.write(`OK  ${issues.length} of ${reportedCount} open issue(s) checked, none carry `
+      + `\`ready\` with a not-pickable label\n`);
     return 0;
   }
   for (const { number, title, conflicting } of violations) {
@@ -601,11 +682,11 @@ function reportMutexViolations() {
  * remove one of the two labels as `mutexViolations`' generic wording would suggest.
  */
 function reportHandClaims() {
-  const issues = fetchOpenIssues();
+  const { issues, reportedCount } = fetchOpenIssuesChecked();
   const claims = handClaims(issues);
   if (claims.length === 0) {
-    process.stdout.write(`OK  ${issues.length} open issue(s) checked, none carry ready + in-progress `
-      + `together -- row-claim's own mechanism can never produce that state\n`);
+    process.stdout.write(`OK  ${issues.length} of ${reportedCount} open issue(s) checked, none carry `
+      + `ready + in-progress together -- row-claim's own mechanism can never produce that state\n`);
     return 0;
   }
   for (const { number, title, sessions } of claims) {
@@ -617,6 +698,34 @@ function reportHandClaims() {
     + `Route the claim through it instead: \`node scripts/row-claim.mjs decline <n> `
     + `--session=<whoever holds it>\`, then claim or dispatch it properly.\n`);
   return claims.length;
+}
+
+/**
+ * #788: Report open rows carrying NO labels at all -- distinct from every other check here, because
+ * those all enumerate BY label and a labelless row has nothing for any of them to key on. Named
+ * separately, with wording that says what absence MEANS: not merely unlabelled, but invisible to the
+ * Ready lane, the backlog view, the WIP count, the dead-claim check, the hourly table and the
+ * section-backfill sweep all at once -- a reader who saw only "unlabelled" could mistake it for
+ * cosmetic.
+ */
+function reportLabelless() {
+  const { issues, reportedCount } = fetchOpenIssuesChecked();
+  const rows = labellessRows(issues);
+  if (rows.length === 0) {
+    process.stdout.write(`OK  ${issues.length} of ${reportedCount} open issue(s) checked, none carry `
+      + `zero labels\n`);
+    return 0;
+  }
+  for (const { number, title } of rows) {
+    process.stdout.write(`NO LABELS  #${number} "${title}" -- carries no label at all, so it is absent `
+      + `from every other check in this audit, and from the Ready lane, the backlog view, the WIP count, `
+      + `the dead-claim check, the hourly table and the section-backfill sweep, all of which enumerate by `
+      + `label\n`);
+  }
+  process.stderr.write(`\n${rows.length} row(s) carry no label at all. Add at least one -- \`backlog\` is `
+    + `the safe default, and which is right is a human judgement -- so they become visible to every `
+    + `check that reads this tracker.\n`);
+  return rows.length;
 }
 
 /**
@@ -679,11 +788,11 @@ function reportClosedDebris() {
  * Report the #449 population: an open row a correct decline should have made `ready` again, and did not.
  */
 function reportStrandedByIncompleteDecline() {
-  const issues = fetchOpenIssues();
+  const { issues, reportedCount } = fetchOpenIssuesChecked();
   const stranded = strandedByIncompleteDecline(issues);
   if (stranded.length === 0) {
-    process.stdout.write(`OK  ${issues.length} open issue(s) checked, none are stranded by an incomplete `
-      + "decline\n");
+    process.stdout.write(`OK  ${issues.length} of ${reportedCount} open issue(s) checked, none are `
+      + "stranded by an incomplete decline\n");
     return 0;
   }
   for (const { number, title } of stranded) {
@@ -696,26 +805,30 @@ function reportStrandedByIncompleteDecline() {
 }
 
 /**
- * Report the `ready`-labelled-but-off-the-board population #399 exists for -- a THIRD population,
- * separate from both label checks above, since neither a label comparison nor a Status comparison alone
- * can see a row with no Project item at all.
+ * Report the off-the-board population #399 exists for -- a THIRD population, separate from both label
+ * checks above, since neither a label comparison nor a Status comparison alone can see a row with no
+ * Project item at all.
+ *
+ * #788: EVERY OPEN ROW, not just `ready` -- ceo's ruling, 2026-09-09. See `openRowsAbsentFromBoard`'s own
+ * doc for the 24 rows the `ready`-only version could not see.
  */
 function reportAbsentFromBoard() {
-  const issues = fetchOpenIssues();
+  const { issues, reportedCount } = fetchOpenIssuesChecked();
   const items = fetchBoardItems();
   const boardNumbers = new Set(
     /** @type {number[]} */ (items.map((i) => i.number).filter((n) => n !== null)),
   );
-  const missing = readyRowsAbsentFromBoard(issues, boardNumbers);
+  const missing = openRowsAbsentFromBoard(issues, boardNumbers);
   if (missing.length === 0) {
-    process.stdout.write(`OK  every open \`ready\` issue has an item on Project ${PROJECT_NUMBER}\n`);
+    process.stdout.write(`OK  ${issues.length} of ${reportedCount} open issue(s) checked, every one has `
+      + `an item on Project ${PROJECT_NUMBER}\n`);
     return 0;
   }
   for (const { number, title } of missing) {
-    process.stdout.write(`ABSENT  #${number} "${title}" -- carries \`ready\` and is not on the board at all\n`);
+    process.stdout.write(`ABSENT  #${number} "${title}" -- open, and not on the board at all\n`);
   }
-  process.stderr.write(`\n${missing.length} \`ready\` row(s) have no Project item -- the Ready lane cannot `
-    + `show these even though they are pickable.\n`);
+  process.stderr.write(`\n${missing.length} open row(s) have no Project item -- Project ${PROJECT_NUMBER} `
+    + `is the view the chairman reads, and a row off it is invisible there.\n`);
   return missing.length;
 }
 
@@ -809,12 +922,13 @@ function branchAges(numbers, run) {
 
 /** Reports the claims nobody is working. Returns the count, so the caller decides severity. */
 function reportDeadClaims() {
-  const issues = fetchOpenIssues();
+  const { issues, reportedCount } = fetchOpenIssuesChecked();
   const claimed = issues.filter((i) => i.labels.includes("in-progress"));
   const stale = claimsNobodyIsWorking(claimed, fetchClaimActivity(claimed.map((i) => i.number)));
   if (stale.length === 0) {
-    process.stdout.write("OK  every `in-progress` row has an open PR, a push, or a comment in the last "
-      + "four hours -- the same three legs as `ceo`'s release rule (#723)\n");
+    process.stdout.write(`OK  ${issues.length} of ${reportedCount} open issue(s) checked; every `
+      + "`in-progress` row has an open PR, a push, or a comment in the last four hours -- the same "
+      + "three legs as `ceo`'s release rule (#723)\n");
     return 0;
   }
   for (const { number, title, sessions, minutes } of stale) {
@@ -829,7 +943,7 @@ function reportDeadClaims() {
 }
 
 function reportAlreadyMerged() {
-  const issues = fetchOpenIssues();
+  const { issues, reportedCount } = fetchOpenIssuesChecked();
   // EVERY ROW ADVERTISING A LIVE STATE, not just `ready`. This filtered on `ready` alone, so on
   // 2026-09-08 it reported OK while FIFTEEN `in-progress` rows were finished or dead -- eleven of them
   // closed by a merged PR that declared `Closes #N`. The check was right and its population was half the
@@ -842,7 +956,8 @@ function reportAlreadyMerged() {
   const alreadyMerged = flagged.filter((row) => row.state === "ALREADY-MERGED");
   const reopenedAfterMerge = flagged.filter((row) => row.state === "REOPENED-AFTER-MERGE");
   if (flagged.length === 0) {
-    process.stdout.write(`OK  no \`ready\` or \`in-progress\` issue is already closed by a merged PR\n`);
+    process.stdout.write(`OK  ${issues.length} of ${reportedCount} open issue(s) checked, no \`ready\` `
+      + `or \`in-progress\` issue is already closed by a merged PR\n`);
     return 0;
   }
   for (const row of alreadyMerged) {
@@ -922,6 +1037,7 @@ function reportUnattributableClosedRows() {
 export const CHECKS = [
   ["open issues", reportMutexViolations],
   ["hand claims", reportHandClaims],
+  ["labelless rows", reportLabelless],
   ["declined rows", reportStrandedByIncompleteDecline],
   ["closed issues", reportClosedDebris],
   ["board membership", reportAbsentFromBoard],
@@ -935,11 +1051,49 @@ export const CHECKS = [
  * "asked and found nothing" -- so it is recorded as a refusal and never counted as a clean zero.
  * @param {string} what @param {() => number} check @param {string[]} refused
  */
-export function runCheck(what, check, refused) {
+/**
+ * #546: GitHub returns the IDENTICAL "could not resolve" wording for "this ProjectV2 does not exist" and
+ * "this token has no permission to see it" -- Project 2 demonstrably exists (the same query succeeds
+ * from a token that carries the scope), so a `runCheck` failure naming `ProjectV2` is, today, always the
+ * one credential gap #546 records: `A11IGN_BOT_TOKEN` exists but was not granted `Projects: Read-only`.
+ * Widening that scope is an account-owner action in GitHub's own UI -- no agent holds it and none can
+ * take it, which is #546's own stated reason this sits with the chairman.
+ *
+ * A substring match, not a structured error code, because that is genuinely all GitHub gives back; if a
+ * future failure mode ever reuses this exact wording for something ELSE, it will be misclassified as
+ * this gap too -- an accepted cost, since the alternative (treating every board failure as equally
+ * unexplained) is the state ceo's ruling exists to end.
+ * @param {string} message
+ * @returns {boolean}
+ */
+export function isProjectsCredentialGap(message) {
+  return message.includes("ProjectV2");
+}
+
+/**
+ * Runs one check. A check that THREW could not ask its question, which is a different answer from
+ * "asked and found nothing" -- so it is recorded as a refusal and never counted as a clean zero.
+ *
+ * ceo's ruling, 2026-09-09: a throw that is #546's one NAMED, ungrantable-by-any-agent credential gap is
+ * recorded in `notRun`, never `refused` -- a job red on every commit for a capability the org cannot
+ * grant trains everyone to ignore the job (#706's own lesson). Every OTHER throw is still a `refused`
+ * refusal, unchanged: an unnamed, unexplained failure stays exactly as alarming as it always was. The
+ * moment the credential exists, this same code path throws nothing and the check's real findings fail
+ * the job again, unchanged.
+ * @param {string} what @param {() => number} check @param {string[]} refused @param {string[]} [notRun]
+ */
+export function runCheck(what, check, refused, notRun = []) {
   try {
     return check();
   } catch (error) {
-    process.stderr.write(`COULD NOT AUDIT ${what}: ${/** @type {Error} */ (error).message}\n`);
+    const message = /** @type {Error} */ (error).message;
+    if (isProjectsCredentialGap(message)) {
+      process.stderr.write(`NOT RUN ${what}: ${message} -- a named credential is absent (#546); only a `
+        + "human can widen it, so this is counted apart from a genuine refusal.\n");
+      notRun.push(what);
+      return 0;
+    }
+    process.stderr.write(`COULD NOT AUDIT ${what}: ${message}\n`);
     refused.push(what);
     return 0;
   }
@@ -949,15 +1103,32 @@ function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "ready-label-audit" });
   /** @type {string[]} */
   const refused = [];
+  /** @type {string[]} */
+  const notRun = [];
   let findings = 0;
   for (const [index, [what, check]] of CHECKS.entries()) {
     if (index > 0) process.stdout.write("\n");
-    findings += runCheck(what, check, refused);
+    findings += runCheck(what, check, refused, notRun);
   }
+  const partial = refused.length + notRun.length;
+  if (partial > 0) {
+    /** @type {string[]} */
+    const clauses = [];
+    if (notRun.length > 0) {
+      clauses.push(`${notRun.length} could not run for #546's one named, ungrantable credential gap: `
+        + `${notRun.join(", ")}`);
+    }
+    if (refused.length > 0) {
+      clauses.push(`${refused.length} refused for an unexplained reason: ${refused.join(", ")}`);
+    }
+    process.stderr.write(`\n${partial} of ${CHECKS.length} check(s) did not answer -- ${clauses.join("; ")}. `
+      + `The count above is a PARTIAL audit and must not be read as a clean one -- an unasked question `
+      + "and a question answered `none` are different states.\n");
+  }
+  // ONLY an unexplained refusal fails the job (unchanged from before this ruling). #546's named gap is
+  // still stated as partial above, but the other checks' own findings are what decide exit 0 vs 1 --
+  // never a capability nobody here can grant.
   if (refused.length > 0) {
-    process.stderr.write(`\n${refused.length} of ${CHECKS.length} check(s) could not run: `
-      + `${refused.join(", ")}. The count above is a PARTIAL audit and must not be read as a clean `
-      + "one -- an unasked question and a question answered `none` are different states.\n");
     process.exitCode = 2;
     return;
   }
