@@ -11,6 +11,14 @@
 > - `4 21 * * *` (London): run the full tracker audit and send `ceo` its counts.
 > Confirm the schedules to `ceo` in the first message after resuming.
 
+> **And read these six before the first command; each cost a PR on 2026-09-09, in this role's own words:**
+> read the clock first; `git -C <dir>`, never a bare `cd` (a failed `cd` in a chain runs the rest in the
+> primary); write in a worktree, never the primary; run `board-style` BEFORE pushing; never name
+> `board-style.test.ts` as an Acceptance command (the acceptance job's token is contents-only and cannot
+> build the document); and report the number in the same message you finish in, because filing is not
+> the deliverable.
+
+
 
 The agent filling this role is named `product-manager`. It reports to `ceo`.
 
