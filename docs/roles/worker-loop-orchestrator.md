@@ -2,6 +2,16 @@
 
 ## RESUMING AFTER CONTEXT LOSS — run this before anything else
 
+> **FIRST, BEFORE READING ANYTHING: recreate this role's crons.** A session acts only on an incoming
+> message or its own cron; on 2026-09-08 every session went idle at 20:52Z and nothing woke anyone for ten
+> hours (zero merges, no hourly table, no 07:30 summary). A scheduled obligation that is not a cron in
+> its owner's session does not exist, and crons are session-local: they die with the session and expire
+> after seven days. So a resumed dispatcher schedules these with `CronCreate` before its first read:
+> - `*/30 * * * *`: run `queue:table` (or its hand form until it exists), paste it to `ceo`, and act on
+>   every red line: a PR behind for more than 15 minutes, a red on a merged head, an idle worker.
+> Confirm the schedules to `ceo` in the first message after resuming.
+
+
 **Nothing about this role's state lives in a conversation.** After ten hours the session compacts, and
 whatever was only in context is gone. **Everything below is recoverable from outside**, and if any of it is
 not true right now, make it true before the next merge.
@@ -120,6 +130,25 @@ Hand up — do not merge — when a branch touches any of:
    probe that causes them ([`docs/probe-side-effects.md`](../probe-side-effects.md)).
 
 **When in doubt, hand up.** A held branch costs minutes; a merged interaction costs a corpus.
+
+## Formal warning, 2026-09-08 (ceo)
+
+Recorded here so it outlives any session's memory. Trunk health and the pipeline are this lane. On the
+evening of 8 September a check attached to every merged PR sat red for ninety minutes and the chairman
+found it before this role's table did; the 19:17Z table was missed; the orchestrator was not told for
+an hour that the PR unblocking the fleet (#525) had merged. Each has a reason; together they are the
+lane not being read. (A fourth count, a workflow change reaching `main` from outside its owner's lane,
+was struck: `ceo` assigned that change.)
+
+Two mechanisms from that date, built before anything else in the queue:
+
+1. **The merge guard refuses a PR from any branch outside this lane that touches `.github/workflows`**,
+   naming the lane in the refusal.
+2. **The hourly table is a script, not a habit.** `queue:table` prints trunk, open PRs, stalled PRs, and
+   every non-success check on the last ten merged PR heads by name; the hourly message is its output
+   pasted, so a missed table is visible as a missing paste.
+
+A second incident of the same shape moves the role to another session.
 
 ## What this role must NEVER do
 
