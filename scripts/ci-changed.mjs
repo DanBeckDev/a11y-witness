@@ -203,6 +203,16 @@ export function packedFiles(repoRoot, pkgName) {
  * a test file's built counterpart simply never exists to be packed — the same fact `npm pack` already
  * knows, read once rather than re-encoded as a second, driftable pattern.
  *
+ * #720: EXTENSION-AGNOSTIC on purpose, not `.ts`/`.tsx` only. `worker-fleet`'s tsconfig sets
+ * `"include": ["src/**\/*.ts", "src/**\/*.mjs"]` (`allowJs`, no `checkJs`) so a plain `.mjs` under `src/`
+ * -- e.g. `deploy-worker.mjs` -- compiles into `dist/deploy-worker.mjs` and IS packed, exactly like a
+ * `.ts` file. The old `.tsx?` regex never matched it, so `classify()` read a real, shipped source change
+ * as `changeset: false`. The candidate is a PREFIX (`dist/<name>.`, trailing dot) rather than the two
+ * fixed `.js`/`.d.ts` suffixes, checked by `reachesPacked` below — extension-agnostic and prefix-matched
+ * is the design the stranded branch `lead/changeset-gate-asks-npm` (`consumer-visible.mjs`,
+ * `reachableOutputs`) got right, ported here rather than reviving that module: "the failure direction
+ * that matters is missing a real output, never having one candidate too many."
+ *
  * A package that ships `src` RAW (no build step -- `nvda-worker`, and `worker-fleet`'s
  * `src/local-worker`/`src/provisioning`) needs no mapping at all: the file's own path is already a
  * candidate, and its `files` field either lists that literal path or does not.
@@ -212,9 +222,31 @@ export function packedFiles(repoRoot, pkgName) {
  */
 export function candidatePackedPaths(relPath) {
   const candidates = [relPath];
-  const tsMatch = /^src\/(.*)\.tsx?$/.exec(relPath);
-  if (tsMatch) candidates.push(`dist/${tsMatch[1]}.js`, `dist/${tsMatch[1]}.d.ts`);
+  const srcMatch = /^src\/(.*)\.[^./]+$/.exec(relPath);
+  if (srcMatch) candidates.push(`dist/${srcMatch[1]}.`);
   return candidates;
+}
+
+/**
+ * #720: does `packed` contain a file reached by any of `candidates`? A candidate ending in `.` (from
+ * `candidatePackedPaths`' src->dist mapping above) matches by PREFIX -- `Set.has` alone cannot express
+ * "some packed path starts with this". `.has(c)` is always tried FIRST, and only when that misses does
+ * this fall back to iterating -- both because a prefix candidate could coincidentally be a literal packed
+ * path too, and because `getPackedFiles` is also `everythingIsPacked` (the `changed` job's cheap
+ * stand-in), whose `.has()` answers every candidate `true` and which is not itself iterable. Iterating it
+ * would throw `TypeError: packed is not iterable`, and the CLI's own `runCliIn` test (no `--precise`)
+ * caught exactly that on the first run of this fix.
+ * @param {Set<string>} packed
+ * @param {string[]} candidates
+ * @returns {boolean}
+ */
+export function reachesPacked(packed, candidates) {
+  return candidates.some((c) => {
+    if (packed.has(c)) return true;
+    if (!c.endsWith(".")) return false;
+    for (const p of packed) if (p.startsWith(c)) return true;
+    return false;
+  });
 }
 
 /**
@@ -402,7 +434,7 @@ export function classify(files, allPackages, dependencyGraph = {},
     if (!allPackages.includes(pkgName) || !isPublished(repoRoot, pkgName)) return false;
     if (!packedCache.has(pkgName)) packedCache.set(pkgName, getPackedFiles(repoRoot, pkgName));
     const packed = packedCache.get(pkgName);
-    return candidatePackedPaths(relPath).some((p) => packed.has(p));
+    return reachesPacked(packed, candidatePackedPaths(relPath));
   });
 
   // NARROW ON PURPOSE, unlike every other category above -- chairman's direction, 2026-09-06. Coverage
