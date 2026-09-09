@@ -39,8 +39,7 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
-import { disarmVerdict, armVerdict, REARM_LABEL } from "./pr-hold-state.mjs";
-import { claimStatus } from "./row-claim.mjs";
+import { disarmVerdict, armVerdict, REARM_LABEL, HOLD_PREFIX, holdersOf } from "./pr-hold-state.mjs";
 import { REPO } from "./repo-identity.mjs";
 
 const EXIT = { DONE: 0, REFUSED: 1, CANNOT_ASK: 2 };
@@ -106,7 +105,7 @@ export function holdDecision({ holders, session, steal }) {
 
 /** @param {number} number @param {string} session @param {"add"|"remove"} how */
 function writeLabel(number, session, how) {
-  writeRawLabel(number, `session:${session}`, how);
+  writeRawLabel(number, `${HOLD_PREFIX}${session}`, how);
 }
 
 /** @param {number} number @param {string} label @param {"add"|"remove"} how */
@@ -150,7 +149,10 @@ function main() {
       + "lookup.\n");
     process.exit(EXIT.CANNOT_ASK);
   }
-  const holders = claimStatus(labels).sessions;
+  // `holdersOf`, NEVER `claimStatus(...).sessions`. They read different prefixes since the 2026-09-09
+  // rename, and `claimStatus` is the ROW vocabulary -- reading it here would report every PR its author
+  // labelled as held, which is the collision this rename exists to end.
+  const holders = holdersOf(labels).map((l) => l.slice(HOLD_PREFIX.length));
   const session = flagValue(process.argv, "session");
   if (!session) {
     process.stdout.write(holders.length === 0
@@ -254,10 +256,10 @@ function takeHold(number, session, holders, steal) {
   // says the request was accepted, not that the PR now says what you think -- the same reason
   // `/health.code` is checked over HTTP rather than through the channel that performed the deploy.
   const after = prLabels(number);
-  const nowHeld = after === null ? null : claimStatus(after).sessions;
+  const nowHeld = after === null ? null : holdersOf(after).map((l) => l.slice(HOLD_PREFIX.length));
   if (nowHeld === null || nowHeld.length !== 1 || nowHeld[0] !== session) {
     process.stderr.write(`#${number}: THE WRITE DID NOT LAND AS INTENDED. Expected exactly `
-      + `session:${session}; the PR now reads `
+      + `${HOLD_PREFIX}${session}; the PR now reads `
       + `${nowHeld === null ? "unreadable" : nowHeld.join(", ") || "no holder"}.\n`
       + "  Fix it by hand with `gh pr edit --add-label/--remove-label` before anyone acts on this PR.\n");
     return EXIT.CANNOT_ASK;
