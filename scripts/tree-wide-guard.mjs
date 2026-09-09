@@ -34,9 +34,34 @@ export function declareTreeWideGuard() {
   return true;
 }
 
+// PER-PROCESS CACHE, keyed by the exact argv -- `node:test` runs each *.test.ts file in its OWN child
+// process (measured directly, 2026-09-09: 18 distinct PIDs across an 18-file guards:sweep run), so this
+// cannot share a spawn ACROSS guards the way one shared module might suggest -- but several guards call
+// `walkTree` more than once with the SAME roots within their own file (`control-plane-checkout-is-one-
+// fact.test.ts` and `referenced-scripts.test.ts` each ask for the whole tree twice; `walkTree`'s own test
+// asks for the same kind+root pair from two different tests), and every one of those repeats is a real,
+// avoidable spawn this closes.
+/** @type {Map<string, string>} */
+const lsFilesCache = new Map();
+/** A `Map.set` on an EXISTING key does not grow `.size` whether or not the cache actually short-circuited
+ *  -- so `.size` alone cannot prove a repeat call skipped the spawn. This counts the spawns themselves. */
+let realSpawnCount = 0;
 /** @type {(args: string[]) => string} */
-const defaultGitLsFiles = (args) =>
-  execFileSync("git", ["ls-files", ...args], { encoding: "utf8", env: sandboxGitEnv() });
+const defaultGitLsFiles = (args) => {
+  const key = JSON.stringify(args);
+  const cached = lsFilesCache.get(key);
+  if (cached !== undefined) return cached;
+  realSpawnCount += 1;
+  const out = execFileSync("git", ["ls-files", ...args], { encoding: "utf8", env: sandboxGitEnv() });
+  lsFilesCache.set(key, out);
+  return out;
+};
+
+/** Test-only: how many times this process has ACTUALLY spawned `git ls-files` (never the cache-hit count)
+ *  -- a repeated call with the same argv must not increment this, or the cache above guards nothing. */
+export function _lsFilesSpawnCountForTests() {
+  return realSpawnCount;
+}
 
 /**
  * One tracked file `walkTree` found, paired with the `ts.ScriptKind` a correct parse must use --
