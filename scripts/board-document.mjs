@@ -152,6 +152,25 @@ function section2() {
   ].join("\n");
 }
 
+/**
+ * THE THREE-EDITION RULE, #756-adjacent, `ceo` 2026-09-09: an achievement stays in the BODY for at most
+ * three editions, then lives in the record and the appendix. It exists so the two-page cap is met by a
+ * rule rather than by a hand decision each time the body fills -- and a decision taken by hand each week
+ * is one that will be taken badly on the week nobody has time.
+ *
+ * `inBody: false` is what carries it. It is a FIELD ON THE RECORD rather than a date computed here,
+ * because "three editions" is a judgement about what the board has already read, and the record is where
+ * the rest of this document's judgements already live (`order`, `boardClaim`, `affirmed`).
+ *
+ * ABSENT MEANS IN THE BODY. A record written before this rule existed, or by anyone who has not read it,
+ * renders exactly as it did -- so the rule can never silently empty section 3 by being forgotten. Only an
+ * explicit `inBody: false` retires one.
+ * @param {any[]} achievements
+ */
+function inBody(achievements) {
+  return achievements.filter((/** @type {any} */ a) => a.inBody !== false);
+}
+
 /** @param {any} d */
 function section3(d) {
   // THE COUNT COMES FROM THE LIST, and this line is why the rule exists. It read "four" as a literal
@@ -159,11 +178,16 @@ function section3(d) {
   // by five people including the one who wrote it, caught by nobody, because a numeral in prose looks
   // like a fact rather than a claim. Every other count in this file was already derived; this was the
   // one that was typed. See issue #284.
-  const n = d.achievements.length;
+  // THE COUNT MATCHES THE BULLETS, which is the whole of #284's rule and the reason `inBody` filters here
+  // rather than only at the loop below. `ceo`'s first wording had the bullets filter and the count not,
+  // which would have printed "We made five things demonstrable today" above three bullets -- #284's exact
+  // defect, reintroduced by the fix for a different one. Corrected in the ruling the same hour.
+  const shown = inBody(d.achievements);
+  const n = shown.length;
   const L = [`## We made ${numberWord(n).toLowerCase()} thing${n === 1 ? "" : "s"} demonstrable today `
     + `that ${n === 1 ? "was" : "were"} previously only claimed.`];
   L.push("");
-  if (d.achievements.length === 0) {
+  if (n === 0) {
     L.push("Nothing was recorded for this period. That is a statement about our record-keeping and not "
       + "necessarily about the work: this section is written by hand, because no automated source can "
       + "tell you what the product can now do that it could not before. An empty section means nobody "
@@ -173,7 +197,7 @@ function section3(d) {
   L.push("These are capabilities rather than activity, and the evidence for each is in the "
     + "appendix.");
   L.push("");
-  for (const a of d.achievements) L.push(`- **${a.boardClaim ?? a.claim}**`);
+  for (const a of shown) L.push(`- **${a.boardClaim ?? a.claim}**`);
   L.push("");
 
   return L.join("\n");
@@ -630,7 +654,14 @@ function appendix(d) {
   ];
   throughputBackground(L);
   if (d.achievements.length > 0) {
-    L.push("### Evidence for each capability claimed in section 3.");
+    // THE APPENDIX DOES NOT FILTER, and its heading carries the total so the whole number is on the page
+    // without spending body words on it. "Lives in the record and the appendix" is what retirement MEANS:
+    // a retired achievement is still a thing the product can do, and a reader who wants the full list must
+    // not have to ask for it.
+    L.push(`### Evidence for every achievement to date: ${d.achievements.length}.`);
+    L.push("");
+    L.push(`The ${inBody(d.achievements).length} listed in section 3 are the most recent; the rest were `
+      + "carried in earlier editions and are kept here.");
     L.push("");
     for (const a of d.achievements) {
       L.push(`**${a.boardClaim ?? a.claim}**`);
