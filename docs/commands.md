@@ -24,6 +24,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/close-merged-rows.mjs` — close the tracker rows a merge landed, or refuse and say why
 - `node scripts/close-rows-for-merged-pr.mjs` — close the issues a merged PR declared, because a bot merge does not close them itself
 - `node scripts/close-rows-sweep.mjs` — a backstop sweep for close-rows.yml, which fires for some merges and silently not others
+- `node scripts/closes-mismatch-check.mjs` — refuse when a PR's declared Closes line disagrees with what GitHub will actually close
 - `node scripts/control-plane-hygiene.mjs` — print every control-plane hygiene number fresh, measured by command, never typed once
 - `node scripts/coverage-failure-classifier.mjs` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
 - `node scripts/generate-commands-doc.mjs` — regenerate docs/commands.md from every script's own `// command:` header
@@ -57,4 +58,5 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/trunk-sweep.mjs` — sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
 - `node scripts/update-branch-sweep.mjs` — push every armed, green-or-running PR up to main's new tip after a merge lands
 - `node scripts/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, then detach at origin/main
+- `node scripts/workflow-lane-check.mjs` — check a PR changing a lane-owned path was opened from that lane's branch, or names its exception
 - `node scripts/workflow-run-liveness.mjs` — watchdog: did CI actually run before this commit reached main, checked automatically
