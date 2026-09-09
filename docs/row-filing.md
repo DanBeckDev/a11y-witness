@@ -41,3 +41,20 @@ population's current size stays visible without depending on every filer having 
 rows seeded on 2026-09-06 being worked after they were already fixed. It also does not weaken to counting
 headings rather than content — a `## Open-check` with nothing under it still refuses, because it asserts
 exactly what `row-claim` asserts (`hasTemplateField`'s "real content under it", not a bare heading match).
+
+## Writing a section that has no content: say so, never leave it blank
+
+Two rules from the 2026-09-09 backfill, in the guidance rather than in the heads of whoever did it.
+
+**A section that is genuinely empty gets a sentence, not a blank.** A row that changes no file writes
+`Region: none — this row changes no file, because …`, and a row with nothing to invert says so under
+Mutation. *"This row touches nothing"* and *"nobody wrote the section down"* are different states and no
+audit can tell them apart, so a blank leaves the row in the missing-section count forever and reads as an
+oversight. #149 (a parent that deletes nothing), #72 (a change only an npm org owner can make) and #668
+(a count each session accounts for) are the worked examples.
+
+**And an invented section is worse than an absent one.** A plausible-looking Acceptance gets built
+against; a blank one is visible. Where the sections are written by somebody other than the filer — the
+backfill marked each *"sections written by the PM from the filing, filer to confirm"* — the mark is an
+invitation to **replace**, never to append: a second `## Acceptance` beside the first is what #746
+measured going red as `DUPLICATE -- 2 sections found`.

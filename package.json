@@ -18,6 +18,7 @@
     "branches:stranded": "node scripts/stranded-branches.mjs",
     "queue:table": "node scripts/queue-table.mjs",
     "board:document": "node scripts/board-document.mjs",
+    "tracker:comment": "node scripts/tracker-comment.mjs",
     "board:record": "node scripts/board-record.mjs",
     "board:report": "node scripts/board-report.mjs",
     "jobs:check": "node scripts/check-scheduled-jobs.mjs",
