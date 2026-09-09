@@ -828,7 +828,7 @@ And `npm run primary:update` is the only sanctioned way to move the primary. Aft
 | what is using the CPU | what actually helps | what does nothing |
 |---|---|---|
 | nine sessions running suites | serialise pushes, run scoped test files | pruning worktrees |
-| `mds_stores` indexing 106 worktrees | prune; `.metadata_never_index` in each root | serialising pushes |
+| `mds_stores` indexing 106 worktrees | **prune** — the `.metadata_never_index` marker was measured and does NOT help (volume root only; per-directory exclusion is the Privacy list, a machine-owner action) | serialising pushes; the marker |
 | a VM or a video call somebody else started | wait, and stop throttling ourselves harder | anything we do |
 
 So the table names the top five each cycle and **derives the advice from them**. When a user application (Zoom, a browser playing video, a screen share) is among them, somebody is *using* this machine rather than sharing it, and the org throttles to one push at a time until the next table shows it gone. When none of the five is ours, the table says so explicitly — because the honest instruction is to wait, and a session told to throttle harder will comply and see nothing improve.
