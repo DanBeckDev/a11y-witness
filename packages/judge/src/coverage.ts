@@ -21,6 +21,8 @@
  * on such a page. Coverage is a property of the shipped model, not of one run.
  */
 
+import { CRITERION_COVERAGE } from "./criterion-coverage.js";
+
 /**
  * Criteria the trained scorer has a head for. Must equal the keys of `criteria` in the shipped
  * `training-report.json`.
@@ -96,6 +98,31 @@ export const RULE_CRITERIA = ["1.1.1", "1.3.1", "1.4.2", "1.4.13", "2.1.1", "2.1
 /** Everything the shipped judge can return a finding for, deduplicated and sorted. */
 export function assessedCriteria(): string[] {
   return [...new Set([...SCORED_CRITERIA, ...RULE_CRITERIA])].sort();
+}
+
+/**
+ * Which `RULE_CRITERIA` members `criterion-coverage.ts` itself declares cannot fire on a real-page
+ * capture — sorted, deduplicated by construction (`RULE_CRITERIA` has no duplicates).
+ *
+ * "The rules can emit it" (`RULE_CRITERIA`) and "it can produce a finding on a page you do not own"
+ * (this) are different claims, and #171 exists because `action.yml` stated the second as though it were
+ * a hand-counted subtraction from the first rather than a read of `CRITERION_COVERAGE`'s own
+ * `realPageEvidence` field — the one place that fact is already recorded, for whatever reason applies to
+ * each criterion (an opt-in probe that presses or types, a probe not yet enabled for real-page captures,
+ * or a probe that runs and has simply never observed the failure on a real page). A criterion absent from
+ * `CRITERION_COVERAGE`, or present without `realPageEvidence`, is treated as available — the field's own
+ * documented default.
+ */
+export function realPageUnfireableCriteria(): string[] {
+  return [...RULE_CRITERIA]
+    .filter((criterion) => CRITERION_COVERAGE[criterion]?.realPageEvidence?.available === false)
+    .sort();
+}
+
+/** `RULE_CRITERIA` minus `realPageUnfireableCriteria()` — what actually always runs on a real page. */
+export function realPageAssessableCriteria(): string[] {
+  const unfireable = new Set(realPageUnfireableCriteria());
+  return [...RULE_CRITERIA].filter((criterion) => !unfireable.has(criterion)).sort();
 }
 
 /**
