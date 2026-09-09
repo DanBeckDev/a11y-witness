@@ -783,7 +783,15 @@ export function focusLossVerdict(log: FocusLogEvent[], i: number): FocusLossVerd
   const holdPhrase = heldMs === null
     ? "focus was never fully received before it was removed"
     : `focus held ${heldMs}ms`;
-  return { kind: "finding", evidence: `${event.name || "unnamed control"} (id ${event.id}): ${holdPhrase}` };
+  // #811: `atMs` IN THE EVIDENCE, not just the log -- `ruleFindings`'s `add()` dedups globally on
+  // `wcag|evidence`, and three genuinely separate focusout events on the same control produce this exact
+  // text three times if nothing distinguishes them. The V1 rehearsal's own log has this shape verbatim:
+  // `BUTTON (id 2)` loses an unwitnessed focus at atMs 82460, 82486 and 82488 -- three real events 26ms
+  // and 2ms apart, not one repeated read of the same moment. Folding the event's own time into the
+  // evidence folds it into the dedup key for free, with no change to `add()` itself or its other 15 call
+  // sites (`packages/judge/src/rules.ts:1533`'s own comment names the audit).
+  return { kind: "finding",
+    evidence: `${event.name || "unnamed control"} (id ${event.id}, at ${event.atMs}ms): ${holdPhrase}` };
 }
 
 function addFocusEventFindings(input: RuleInput, add: AddFinding): void {
@@ -1568,6 +1576,41 @@ function addImageAlternatives(transcript: string[], add: AddFinding): void {
   }
 }
 
+/**
+ * #811: `add()`'s dedup key is `` `${wcag}|${evidence}` ``, GLOBAL and SHARED across every rule below.
+ * That is deliberate and stays — it is what lets `addUnnamedControls` be called twice (transcript and
+ * sweep channels) without double-counting the same real control seen twice. The defect was narrower: a
+ * rule whose evidence omits a REAL fact the underlying data already carries can produce byte-identical
+ * text for genuinely distinct real occurrences, which this key then silently collapses.
+ *
+ * AUDITED, per this issue's own acceptance criterion, against every other caller below:
+ *
+ *   FIXED — `focusLossVerdict` (2.4.7, `addFocusEventFindings`). `FocusLogEvent` already carries a real
+ *   `atMs` per entry that the evidence string dropped; two genuinely separate focusout events on the same
+ *   control 26ms apart produced identical text. `atMs` is now folded into the evidence itself, which folds
+ *   it into this key for free — verified against the V1 rehearsal's own log (`rules.test.ts`, "#811: two
+ *   genuinely distinct focusout events...").
+ *
+ *   NOT FIXED, evidence is already complete — `addImageAlternatives`, `addUnnamedControls` (both
+ *   channels), `addUnnamedFrames`, `addVagueLinks`: evidence IS the full announced/transcript line, so two
+ *   entries colliding means the real announced text was identical, not that a fact was dropped. (Frames
+ *   truncate that line to 80 chars, which is a real but DIFFERENT defect — evidence LOSS by truncation,
+ *   not an unfolded occurrence fact — and is out of this row's scope.)
+ *
+ *   NOT FIXED, no real fact to fold in — `addSilentStateChanges` (4.1.2 state-change-silent) and
+ *   `addAutoplayingAudio` (1.4.2): both iterate a SET of distinct probed elements (one activation attempt
+ *   per disclosure control; one entry per `<audio>`/`<video>` tag), and neither's underlying type carries
+ *   any per-entry id, index or timestamp at all (`{control?, after?}[]`; `{tag, autoplay, muted, controls,
+ *   loop}[]`). Inventing an index here would not fold in a real captured fact the way `atMs` does — it
+ *   would manufacture distinctness the evidence cannot actually support, for a collision this repo has no
+ *   real-page case of.
+ *
+ *   NOT REACHABLE — every other rule (`addErrorWithoutRemedy`, `addContextChanges` x2,
+ *   `addFocusRevealFindings`, `addKeyboardTrap`, `addStaleRouteTitle`, `addKeyboardUnreachableControl`,
+ *   `addInertSkipLink`, `addBrokenFocusOrder`, `addMissingHeadings`, `addUnnamedGraphics`) calls `add()`
+ *   at most once per criterion per capture — there is no second call from the same function that could
+ *   collide with the first.
+ */
 export function ruleFindings(input: RuleInput): Finding[] {
   const findings: Finding[] = [];
   const seen = new Set<string>();
