@@ -346,21 +346,41 @@ export function livesStateLabels(labels) {
  * 15 were finished or dead -- one claimed THIRTY HOURS earlier with no branch ever pushed. A claim
  * nobody can falsify is not a status, it is a decoration.
  *
- * WHY BOTH SIGNALS, AND WHY NEITHER ALONE. An open PR is proof of work in flight. A recent push is proof
- * of work in progress that has not opened one yet. Requiring a PR alone would flag every session in its
- * first hour; requiring a push alone would flag a session whose PR is green and waiting on CI. A row is
- * only stale when NEITHER holds.
+ * WHY EACH SIGNAL, AND WHY NONE ALONE. An open PR is proof of work in flight. A recent push is proof of
+ * work in progress that has not opened one yet. A recent COMMENT is proof of work that has produced no
+ * commit at all -- a measurement posted, a plan written before the act, a deploy reported -- which is a
+ * whole class of row on this tracker. Requiring a PR alone would flag every session in its first hour;
+ * requiring a push alone flags a session whose only artefact so far is what it wrote on the row. A row is
+ * stale only when NONE holds.
+ *
+ * THE COMMENT LEG IS #723's, AND THIS CHECK DISAGREED WITH IT UNTIL #756. `ceo`'s release rule reads a
+ * claim as live on a push OR a comment; this read only the push, so on 2026-09-09 it reported #426 as a
+ * DEAD-CLAIM while a comment 47 minutes old sat on it, and `tracker-auditor` had to overrule the tool to
+ * follow the rule. A guard that disagrees with the rule it enforces trains its reader to overrule it, and
+ * this one survived because it erred safe: nobody was harmed, so nobody fixed it, and what got built was
+ * the habit of skipping its output.
+ *
+ * "BY THE CLAIMANT" IS NOT MEASURABLE HERE, AND SAYING SO IS PART OF THE FIX. `ceo`'s rule says a comment
+ * BY THE CLAIMANT. Every session in this repository posts as the same GitHub user -- the identical
+ * limitation `docs/board/reported/meta.json` records for the capacity metric ("two assignable accounts and
+ * nine sessions") -- so `user.login` cannot name which session wrote a comment. Nor does the text: checked
+ * against the live case, all three of #426's recent comments name NEITHER of its two claiming sessions.
+ * So this counts any comment on the row, and the gap is filed rather than hidden. The error is toward NOT
+ * releasing a claim, which is the safe direction for a release authority, and it is the reading
+ * `tracker-auditor` was already applying.
  *
  * `behind` is deliberately NOT a signal here: during a drain every merge puts every branch behind, and
  * #406 sat at behind=55 while entirely healthy.
  *
  * @param {{ number: number, title: string, labels: string[] }[]} issues
  * @param {{ hasOpenPr: Map<number, boolean>, lastPushMinutes: Map<number, number>,
- *           claimedMinutes: Map<number, number> }} activity  the three facts, which travel together
+ *           claimedMinutes: Map<number, number>, lastCommentMinutes?: Map<number, number> }} activity
+ *   the facts, which travel together. `lastCommentMinutes` is OPTIONAL so an older caller's three-fact
+ *   shape still type-checks and still decides -- absent reads as "no comment seen", never as "fresh".
  * @param {number} staleAfterMinutes
  */
 export function claimsNobodyIsWorking(issues, activity, staleAfterMinutes = 240) {
-  const { hasOpenPr, lastPushMinutes, claimedMinutes } = activity;
+  const { hasOpenPr, lastPushMinutes, claimedMinutes, lastCommentMinutes } = activity;
   const stale = [];
   for (const issue of issues) {
     if (!issue.labels.includes("in-progress")) continue;
@@ -378,6 +398,13 @@ export function claimsNobodyIsWorking(issues, activity, staleAfterMinutes = 240)
 
     const age = lastPushMinutes.get(issue.number);
     if (age !== undefined && age < staleAfterMinutes) continue;
+
+    // #723's leg, in the same window as the push. Read AFTER the push so the reported `minutes` still
+    // describes the branch: a row kept alive by a comment is a different situation from one kept alive by
+    // a push, and the line that names it should say which.
+    const commentAge = lastCommentMinutes?.get(issue.number);
+    if (commentAge !== undefined && commentAge < staleAfterMinutes) continue;
+
     stale.push({ number: issue.number, title: issue.title,
       sessions: issue.labels.filter((l) => l.startsWith("session:")),
       minutes: age ?? null, claimedMinutesAgo: claimAge ?? null });
@@ -678,7 +705,7 @@ function reportAbsentFromBoard() {
  */
 
 /**
- * The two facts `claimsNobodyIsWorking` needs, read from the real repository.
+ * The facts `claimsNobodyIsWorking` needs, read from the real repository.
  *
  * SEPARATED FROM THE DECISION so the decision can be driven by fixtures -- the live tracker is clean
  * most of the time, so a check exercised only against it is one that has never been seen to fire.
@@ -693,7 +720,9 @@ export function fetchClaimActivity(numbers, { run = defaultRun } = {}) {
   const lastPushMinutes = new Map();
   /** @type {Map<number, number>} */
   const claimedMinutes = new Map();
-  if (numbers.length === 0) return { hasOpenPr, lastPushMinutes, claimedMinutes };
+  /** @type {Map<number, number>} */
+  const lastCommentMinutes = new Map();
+  if (numbers.length === 0) return { hasOpenPr, lastPushMinutes, claimedMinutes, lastCommentMinutes };
 
   const open = run("gh", ["pr", "list", "--repo", REPO, "--state", "open", "--limit", "100",
     "--json", "number,body,headRefName"]);
@@ -717,7 +746,18 @@ export function fetchClaimActivity(numbers, { run = defaultRun } = {}) {
       if (at) claimedMinutes.set(n, Math.floor((Date.now() - Date.parse(at)) / 60000));
     } catch { /* a row whose timeline cannot be read is left absent, never assumed fresh */ }
   }
-  return { hasOpenPr, lastPushMinutes, claimedMinutes };
+  // #723/#756: THE NEWEST COMMENT'S AGE. Comments come back oldest-first, so `last` is the newest --
+  // `first` would answer "when was this row first discussed", which is a different question and would
+  // make every long-lived row read as dead. See `claimsNobodyIsWorking` for why this counts ANY comment
+  // rather than the claimant's: session authorship is not observable through GitHub here.
+  for (const n of numbers) {
+    try {
+      const at = run("gh", ["api", `repos/${REPO}/issues/${n}/comments`, "--paginate", "--jq",
+        "[.[].created_at]|last"]).trim();
+      if (at) lastCommentMinutes.set(n, Math.floor((Date.now() - Date.parse(at)) / 60000));
+    } catch { /* a row whose comments cannot be read is left absent, never assumed fresh */ }
+  }
+  return { hasOpenPr, lastPushMinutes, claimedMinutes, lastCommentMinutes };
 }
 
 /**
@@ -752,13 +792,15 @@ function reportDeadClaims() {
   const claimed = issues.filter((i) => i.labels.includes("in-progress"));
   const stale = claimsNobodyIsWorking(claimed, fetchClaimActivity(claimed.map((i) => i.number)));
   if (stale.length === 0) {
-    process.stdout.write("OK  every `in-progress` row has an open PR or a push in the last four hours\n");
+    process.stdout.write("OK  every `in-progress` row has an open PR, a push, or a comment in the last "
+      + "four hours -- the same three legs as `ceo`'s release rule (#723)\n");
     return 0;
   }
   for (const { number, title, sessions, minutes } of stale) {
     const held = sessions.length > 0 ? sessions.join(", ") : "nobody (no session label)";
     const age = minutes === null ? "no branch at all" : `last push ${minutes} min ago`;
-    process.stdout.write(`DEAD-CLAIM  #${number} "${title}" -- held by ${held}, no open PR, ${age}\n`);
+    process.stdout.write(`DEAD-CLAIM  #${number} "${title}" -- held by ${held}, no open PR, ${age}, `
+      + "no comment in the window\n");
   }
   process.stderr.write(`\n${stale.length} \`in-progress\` row(s) nobody is working. A claim with no `
     + "holder is invisible to everyone reading the board.\n");
