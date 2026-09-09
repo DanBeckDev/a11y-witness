@@ -84,6 +84,20 @@ export function prRow(pr, behind, now) {
     // A PR can be stalled by being behind and untouched, which is the state `update-branch` skips
     // because it only carries GREEN PRs -- so a red PR that nobody pushes is invisible to the train.
     stalled: (behind ?? 0) > 0 && idleMinutes >= STALL_MINUTES,
+    // ABSORBED (#600) IS A DIFFERENT STATE AND THE PREDICATE ABOVE CANNOT SEE IT. `update-branch` carries
+    // only GREEN PRs, so a PR that is behind AND red cannot be carried at all -- it falls further behind
+    // while its owner fixes the red, and the train will not touch it BECAUSE it is red. An owner actively
+    // pushing fixes keeps `updatedAt` fresh, so such a PR is never "untouched" and never reads as stalled,
+    // while being the one that can least escape. Measured 2026-09-09: #564 was carried to zero behind at
+    // 07:30:30Z and read 14 behind eight minutes and seven merges later.
+    //
+    // AND THE OLD PREDICATE'S FALSE NEGATIVES WERE CONCENTRATED WHERE THE EFFORT WAS -- product-manager's
+    // sentence, and it is the reason this is a defect rather than a gap: "behind AND untouched for 90
+    // minutes" encodes an assumption that an unattended PR is the one in trouble. An absorbed PR is the
+    // opposite; its owner is attending to it constantly, which is exactly what keeps it out of the table.
+    // A predicate whose false negatives sit in the cases with the most human effort behind them is worse
+    // than no predicate, because it converts effort into invisibility.
+    absorbed: (behind ?? 0) > 0 && (pr.redChecks?.length ?? 0) > 0,
     red: pr.redChecks,
   };
 }
@@ -170,16 +184,41 @@ const real = (/** @type {string | undefined} */ v) => (v && v !== ZERO_DATE ? v 
 const stampOf = (/** @type {{completedAt?: string, startedAt?: string}} */ c) =>
   real(c.completedAt) || real(c.startedAt) || "";
 
-/** The last N merged PRs and each head's checks. */
+/**
+ * The last N merged PRs, each head's checks, and WHEN THE OLDEST OF THEM MERGED.
+ *
+ * The window is not decoration. A bare "10" tells a reader nothing about whether that is ten of ten or
+ * ten of two hundred, or whether it covers an hour or a fortnight -- product-manager's requirement, and
+ * they are right that a count without its denominator and its window is not a measurement. It is the
+ * difference between "a check has been red all morning" and "a check was red once, months ago".
+ */
 export function recentlyMerged(limit = MERGED_HEADS_EXAMINED) {
   const prs = ask(() => JSON.parse(gh(["pr", "list", "--state", "merged", "--limit", String(limit),
-    "--json", "number,statusCheckRollup"])));
+    "--json", "number,statusCheckRollup,mergedAt"])));
   if (!Array.isArray(prs)) return null;
   return prs.map((/** @type {any} */ pr) => ({
     number: pr.number,
+    mergedAt: pr.mergedAt ?? null,
     checks: newestPerName(pr.statusCheckRollup ?? [])
       .map((c) => ({ name: c.name, conclusion: c.conclusion ?? "" })),
   }));
+}
+
+/**
+ * The required status-check contexts on `main`, or `null` if the lookup failed.
+ *
+ * A check that is NOT in this list blocks nothing, and that is the whole reason a red one is tolerable
+ * and therefore the reason it goes unread for ninety minutes. Saying so on the line turns "a red check on
+ * every merge" into "one specific NON-BLOCKING check on every merge" -- different sentences, and only the
+ * second is true. `null` prints as unknown rather than as "not required", because guessing in that
+ * direction understates the problem.
+ */
+export function requiredContexts() {
+  return ask(() => {
+    const contexts = JSON.parse(gh(["api", `repos/${REPO}/branches/main/protection`,
+      "--jq", ".required_status_checks.contexts"]));
+    return Array.isArray(contexts) ? contexts : null;
+  });
 }
 
 /**
@@ -216,39 +255,70 @@ export function renderOpenPRs(prs) {
 
 /** @param {any[]} prs @returns {string[]} */
 export function renderStalled(prs) {
-  const stalled = prs.filter((r) => r.stalled);
-  return stalled.length
-    ? stalled.map((r) => `   #${r.number}  ${r.owner}  behind=${r.behind}  idle ${r.idleMinutes}m`)
-    : ["   none"];
+  const lines = [
+    ...prs.filter((r) => r.absorbed).map((r) =>
+      `   #${r.number}  ${r.owner}  behind=${r.behind}  ABSORBED (behind AND red -- the train will not `
+      + `carry it, #600). red: ${r.red.join(" ")}`),
+    ...prs.filter((r) => r.stalled && !r.absorbed).map((r) =>
+      `   #${r.number}  ${r.owner}  behind=${r.behind}  idle ${r.idleMinutes}m`),
+  ];
+  return lines.length ? lines : ["   none"];
 }
 
-/** @param {any[] | null} merged @returns {{lines: string[], incomplete: boolean}} */
-export function renderMergedChecks(merged) {
+/**
+ * The window these merged PRs span: the oldest merge time among them.
+ * @param {{mergedAt?: string | null}[]} merged
+ */
+export function windowOf(merged) {
+  const stamps = merged.map((pr) => pr.mergedAt).filter((/** @type {any} */ t) => typeof t === "string");
+  return stamps.length === 0 ? null : stamps.sort()[0];
+}
+
+/**
+ * @param {any[] | null} merged @param {string[] | null} required
+ * @returns {{lines: string[], incomplete: boolean}}
+ */
+export function renderMergedChecks(merged, required) {
   if (!merged) return { lines: ["   ? could not list merged PRs"], incomplete: true };
+  // AN EMPTY LIST AND UNREADABLE TIMES ARE DIFFERENT ANSWERS. Nothing merged is a legitimate state on a
+  // quiet repository and needs no window; PRs that merged whose times could not be read is a lookup that
+  // failed, and only the second may make the table INCOMPLETE. Collapsing them would report a quiet hour
+  // as a broken one, which is the "could not ask" versus "asked and got nothing" distinction this
+  // repository treats as its oldest defect.
+  const since = windowOf(merged);
+  const timesMissing = merged.length > 0 && since === null;
+  const header = merged.length === 0
+    ? "   (no merged PRs in range)"
+    : `   since ${since ?? "(merge times unreadable)"}`;
   const { byName, unreadable } = nonSuccessByName(merged);
-  const lines = byName.size === 0 ? ["   none"] : [...byName.entries()]
+  const blocking = (/** @type {string} */ name) => (required === null
+    ? "  (required? unknown)"
+    : required.includes(name) ? "  ** REQUIRED -- this one blocks **" : "  (non-blocking)");
+  const lines = [header, ...(byName.size === 0 ? ["   none"] : [...byName.entries()]
     .sort((a, b) => b[1].length - a[1].length)
     .map(([name, prsWith]) => `   ${name.padEnd(18)} ${prsWith.length} of ${merged.length}  `
-      + `(#${prsWith.slice(0, 6).join(", #")}${prsWith.length > 6 ? ", ..." : ""})`);
+      + `(#${prsWith.slice(0, 6).join(", #")}${prsWith.length > 6 ? ", ..." : ""})${blocking(name)}`))];
   if (unreadable.length > 0) lines.push(`   ? checks unreadable on #${unreadable.join(", #")}`);
-  return { lines, incomplete: unreadable.length > 0 };
+  return { lines, incomplete: unreadable.length > 0 || timesMissing || required === null };
 }
 
-/** @param {{trunk: any, prs: any[] | null, merged: any[] | null, now: Date, fetched?: boolean}} data */
-export function render({ trunk, prs, merged, now, fetched = true }) {
+/** @param {{trunk: any, prs: any[] | null, merged: any[] | null, now: Date, fetched?: boolean,
+ *   required?: string[] | null}} data */
+export function render({ trunk, prs, merged, now, fetched = true, required = null }) {
   const sections = [
     { heading: "1. TRUNK", body: renderTrunk(trunk) },
     { heading: "2. OPEN PRs  (behind is COUNTED, never read off mergeStateStatus)", body: renderOpenPRs(prs) },
     {
-      heading: `3. STALLED  (behind and untouched for ${STALL_MINUTES}+ minutes -- the train carries only`
-        + " green PRs, so a red one nobody pushes is invisible to it)",
+      heading: `3. STALLED OR ABSORBED  (behind and untouched for ${STALL_MINUTES}+ minutes, OR behind`
+        + " and red -- the train carries only green PRs, so a red one can never catch up however hard its"
+        + " owner pushes, #600)",
       body: { lines: renderStalled(prs ?? []), incomplete: false },
     },
     {
       heading: [`4. NON-SUCCESS CHECKS ON THE LAST ${MERGED_HEADS_EXAMINED} MERGED PR HEADS, BY NAME`,
         "   (the view the chairman reads. A check red here blocks nothing and is therefore the red people",
         "    stop reading -- which is exactly how one sat on seven merged PRs for ninety minutes.)"].join("\n"),
-      body: renderMergedChecks(merged),
+      body: renderMergedChecks(merged, required),
     },
   ];
   // EVERY SECTION IS PRINTED, including the empty ones. A section that vanishes when it has nothing to
@@ -290,7 +360,7 @@ export function collect(now = new Date()) {
       : null;
     return prRow(pr, behind, now);
   });
-  return { trunk, prs, merged: recentlyMerged(), now, fetched };
+  return { trunk, prs, merged: recentlyMerged(), now, fetched, required: requiredContexts() };
 }
 
 function main() {
