@@ -186,48 +186,42 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
-        # #568: BARE `cache: npm` (no cache-dependency-path) is a HARD FAILURE on a consumer with no
-        # lockfile, not "at worst a cache miss" -- this comment used to claim the opposite, unverified
-        # against setup-node's own source. Its `restoreCache` calls `findLockFile()` when
-        # `cache-dependency-path` is unset, which does `fs.readdirSync(GITHUB_WORKSPACE)` -- the
-        # CONSUMER's own checkout -- and THROWS if none of package-lock.json/npm-shrinkwrap.json/yarn.lock
-        # is present there (github.com/actions/setup-node, src/cache-restore.ts). A consumer with no
-        # lockfile at all -- exactly what the V1 rehearsal's throwaway repo is, correctly, since it is not
-        # an npm project -- died at this step in 42 s, before NVDA, Edge, the page or the judge were ever
-        # reached.
+        # #568: NO `cache:` HERE AT ALL -- two prior attempts at `cache: npm` with a `cache-dependency-path`
+        # pointing at the ACTION's own lockfile both shipped and both failed live, and the reason rules the
+        # whole approach out, not just those two attempts.
         #
-        # `cache-dependency-path` names the ACTION's OWN lockfile instead, so this never depends on
-        # anything in the consumer's repo. This is NOT the same fix the "no encoder cache" comment two
-        # cache steps down describes and abandoned -- that failure is `actions/cache@v4`'s `path:` input
-        # (what gets ARCHIVED) going through `@actions/glob`'s `Pattern.fixupPattern`, which rejects a `.`
-        # segment anywhere but FIRST. `cache-dependency-path` here goes through the identical validator
-        # (`glob.hashFiles` -> `Globber.create` -> the same `Pattern` class -- confirmed by reading the
-        # `internal-pattern.ts` source inside the upstream `actions/toolkit` monorepo's glob package,
-        # never assumed), but a LEADING `.` segment is explicitly handled, not rejected: `fixupPattern`
-        # rewrites a pattern starting with `.` + path.sep by substituting `process.cwd()` for the `.`
-        # before ever reaching the "must not contain `.` unless first" assertion. So this differs from
-        # the encoder-cache case in exactly the way that matters:
-        # `github.action_path` is a LOCAL action's `.` (uses: ./, this repo's own action-smoke.yml) or a
-        # REAL absolute checkout path (uses: DanBeckDev/a11y-witness@<ref>, every real consumer) -- in
-        # neither case does a `.` segment land anywhere but first, so the "must not contain `.` unless
-        # first" rejection this action.yml already hit once for a DIFFERENT cache step does not apply here.
+        # `cache: npm` (bare, no cache-dependency-path) is a HARD FAILURE on a consumer with no lockfile of
+        # their own, not "at worst a cache miss" -- the ORIGINAL comment here claimed the opposite,
+        # unverified against setup-node's own source. `restoreCache`'s `findLockFile()` does
+        # `fs.readdirSync(GITHUB_WORKSPACE)` -- the CONSUMER's own checkout -- and THROWS if none of
+        # package-lock.json/npm-shrinkwrap.json/yarn.lock is present there. A consumer with no lockfile at
+        # all -- exactly what the V1 rehearsal's throwaway repo is, correctly, since it is not an npm
+        # project -- died at this step in 42 s, before NVDA, Edge, the page or the judge were ever reached.
         #
-        # THE FIRST VERSION OF THIS FIX USED `/package-lock.json` AND STILL FAILED LIVE, with
-        # "Some specified paths were not resolved, unable to cache dependencies." -- glob.hashFiles's own
-        # empty-match error, not the `.`/`..` rejection reasoned about above. `github.action_path` on the
-        # only runner this action ever executes on (windows-2022, every job here) is a BACKSLASH path
-        # (`D:\a\_actions\DanBeckDev\a11y-witness\main`), and string-concatenating a forward slash onto it
-        # produces a MIXED-separator string. `@actions/glob`'s `Path` splits into segments using the OS's
-        # own `path.sep` -- backslash on Windows -- so that trailing `/package-lock.json` was never
-        # recognised as a separate segment at all; it was swallowed into the FINAL segment's literal name
-        # ("main/package-lock.json", a filename containing a slash), which of course matches nothing on
-        # disk. Confirmed against a real windows-2022 run (DanBeckDev/a11ign-v1-rehearsal, PR #1), not
-        # reasoned from the source alone this time -- the first fix WAS reasoned from source alone and
-        # that is exactly what missed this. A trailing backslash is what `fixupPattern`'s own leading-`.`
-        # substitution checks for too (`pattern.startsWith(`.${path.sep}`)`), so it is the separator this
-        # runtime actually uses, not merely "a" separator that happens to parse.
-        cache: npm
-        cache-dependency-path: ${{ github.action_path }}\package-lock.json
+        # The first two fixes pointed `cache-dependency-path` at the action's OWN lockfile
+        # (`${{ github.action_path }}/package-lock.json`, then with a corrected backslash separator after
+        # the first attempt's mixed-separator bug), reasoning that this never depends on the consumer's
+        # repo. BOTH shipped and BOTH still failed live with the identical
+        # "Some specified paths were not resolved, unable to cache dependencies." -- confirmed via a direct
+        # debug probe calling `@actions/glob`'s own `hashFiles()` on the runner, with the target file's
+        # presence independently confirmed by a plain `bash -f` test at the same path.
+        #
+        # THE ACTUAL, UNCONFOUNDED CAUSE, found by reading `@actions/glob`'s `internal-hash-files.ts`:
+        # `hashFiles()` silently RESTRICTS every result to paths inside `GITHUB_WORKSPACE` unless the
+        # caller passes `{ allowFilesOutsideWorkspace: true }` -- any resolved root outside the workspace is
+        # skipped entirely (`resolvedRoots.length === 0` -> returns `''`, no match, no thrown error, which
+        # is exactly the silent-empty-hash symptom the probe reproduced for every pattern shape tried,
+        # including a bare recursive `**/package-lock.json`). `setup-node`'s own `restoreCache` calls
+        # `glob.hashFiles(lockFilePath)` with NO options object at all, so it can never opt into hashing a
+        # file outside the workspace -- meaning `cache-dependency-path` CANNOT be pointed at anything
+        # outside the consumer's own checkout, full stop, regardless of separator, quoting, or `.`-handling.
+        # Every reasoning about `Pattern.fixupPattern`'s `.`/`..` rejection in the two prior attempts was
+        # real and correct, and irrelevant: the request never even reached pattern matching.
+        #
+        # So caching here is not achievable through `cache-dependency-path` at all, and this step simply
+        # does not cache -- ~18 s per run, on an install of the action's OWN small package.json, which is
+        # cheap next to NVDA setup, Edge policy and a real capture. `npm ci` below still installs correctly;
+        # it is just never cache-accelerated.
 
     # Installed into the ACTION's own checkout, not the caller's workspace: `github.action_path` is where
     # this action's package.json lives, and the caller's repository has nothing to do with it.
