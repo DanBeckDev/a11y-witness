@@ -45,6 +45,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
 - `node scripts/prune-worktrees.mjs` — remove fully-merged, clean linked worktrees, and name every other one as dirty
 - `node scripts/queue-stalled.mjs` — name the armed, green PRs that can never merge because they are behind and conflicting
+- `node scripts/queue-table.mjs` — print the pipeline's four sections -- trunk, open PRs, stalled work, and red checks on merged PRs
 - `node scripts/ready-label-audit.mjs` — audit the tracker's ready label for contradictions, debris, and rows absent from the board
 - `node scripts/reconstitution-drill.mjs` — run the contingency drill: clone, compose each agent's first message, from nothing but a checkout
 - `node scripts/row-claim.mjs` — check, claim, or decline a tracker row by reading its labels, the record, never git history
@@ -58,4 +59,5 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/trunk-sweep.mjs` — sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
 - `node scripts/update-branch-sweep.mjs` — push every armed, green-or-running PR up to main's new tip after a merge lands
 - `node scripts/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, then detach at origin/main
+- `node scripts/workflow-lane-check.mjs` — check a PR changing a lane-owned path was opened from that lane's branch, or names its exception
 - `node scripts/workflow-run-liveness.mjs` — watchdog: did CI actually run before this commit reached main, checked automatically

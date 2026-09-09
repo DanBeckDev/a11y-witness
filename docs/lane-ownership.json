@@ -1,0 +1,14 @@
+{
+  "_owner": "ceo",
+  "_why": "ceo's ruling 2026-09-08: 'a workflow change outside its owner's lane reached main through a pipeline you own without you refusing it.' A lane is who may CHANGE a path, which is a different question from owned-path-facts.json's (what a change to a path must DECLARE) -- so it is a separate file with a separate owner. Data, so ceo can move a lane without touching scripts/workflow-lane-check.mjs, and so the mechanism cannot quietly decide who owns what.",
+  "_exception": "A lane is not a wall. ceo assigns across lanes deliberately -- #548 was ceo's assignment to the PM, in ceo's words, and the PM asked first. The exception is a line in the PR body, and it is PRINTED by the check rather than merely accepted, so a deliberate crossing is in the log rather than in somebody's memory. See the Lane-exception format in the script's header.",
+  "lanes": [
+    {
+      "lane": "the pipeline",
+      "owner": "dispatcher",
+      "branchPrefixes": ["dispatcher/", "revert/"],
+      "paths": [".github/workflows/"],
+      "why": "trunk health and the merge queue. A workflow edited by a session that is not watching the queue is a red check nobody owns -- measured 2026-09-08, when a pull_request trigger attached a failing audit to seven merged PRs and sat red for ninety minutes before anyone in the org read the view the chairman reads. revert/ is here because trunk-guard's own decideRevert opens those branches and they carry whatever the reverted commit touched."
+    }
+  ]
+}
