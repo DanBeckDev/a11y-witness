@@ -211,9 +211,23 @@ runs:
         # REAL absolute checkout path (uses: DanBeckDev/a11y-witness@<ref>, every real consumer) -- in
         # neither case does a `.` segment land anywhere but first, so the "must not contain `.` unless
         # first" rejection this action.yml already hit once for a DIFFERENT cache step does not apply here.
-        # Proved live via the composite action itself, never by reasoning alone -- see the PR body.
+        #
+        # THE FIRST VERSION OF THIS FIX USED `/package-lock.json` AND STILL FAILED LIVE, with
+        # "Some specified paths were not resolved, unable to cache dependencies." -- glob.hashFiles's own
+        # empty-match error, not the `.`/`..` rejection reasoned about above. `github.action_path` on the
+        # only runner this action ever executes on (windows-2022, every job here) is a BACKSLASH path
+        # (`D:\a\_actions\DanBeckDev\a11y-witness\main`), and string-concatenating a forward slash onto it
+        # produces a MIXED-separator string. `@actions/glob`'s `Path` splits into segments using the OS's
+        # own `path.sep` -- backslash on Windows -- so that trailing `/package-lock.json` was never
+        # recognised as a separate segment at all; it was swallowed into the FINAL segment's literal name
+        # ("main/package-lock.json", a filename containing a slash), which of course matches nothing on
+        # disk. Confirmed against a real windows-2022 run (DanBeckDev/a11ign-v1-rehearsal, PR #1), not
+        # reasoned from the source alone this time -- the first fix WAS reasoned from source alone and
+        # that is exactly what missed this. A trailing backslash is what `fixupPattern`'s own leading-`.`
+        # substitution checks for too (`pattern.startsWith(`.${path.sep}`)`), so it is the separator this
+        # runtime actually uses, not merely "a" separator that happens to parse.
         cache: npm
-        cache-dependency-path: ${{ github.action_path }}/package-lock.json
+        cache-dependency-path: ${{ github.action_path }}\package-lock.json
 
     # Installed into the ACTION's own checkout, not the caller's workspace: `github.action_path` is where
     # this action's package.json lives, and the caller's repository has nothing to do with it.
