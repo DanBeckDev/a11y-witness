@@ -136,12 +136,49 @@ is one reporting success having drained nothing:
   STRANDED, not slow, and it reads as CLEAN to anything asking `mergeStateStatus`, which is why
   `merge-guard.mjs` asks the check runs instead.
 
+## There was never a race to win
+
+**Arming is the mechanism. The train is the carry. A hand merge does the pipeline's work and loses to it.**
+
+Measured 2026-09-09. A session pushed, fetched, merged, verified and then raced `gh pr merge` against a
+queue moving every four minutes. Their PR went **fully green on four separate head SHAs** and each time
+`CLEAN` flipped to `BEHIND` before the merge landed; main went from 5 to 12 to 13 to 27 commits ahead of
+their last sync. They reported it as a race they kept losing and asked for a faster path.
+
+There was no race. The PR was **armed**, so GitHub merges it the moment the required context is green and
+the branch is current — the merge was never theirs to invoke. And `update-branch` was already carrying
+it: the *"two merge commits pushed directly onto my branch"* they attributed to another session was the
+sweep doing their carry while they carried by hand. **Two actors on one branch**, clean only because
+their merges were no-ops on top of the sweep's.
+
+So: **push when your content changes, then leave it alone.** The `CLEAN → BEHIND` flip is the train
+working, not the race being lost.
+
+**When it genuinely does stall**, and this is #600 in its green form: with merges every four minutes and
+CI at five, an armed PR can be green-then-behind indefinitely without ever merging. That is the merge
+queue's job (C4). Until it exists, a PR that has gone green-then-behind **three times** may be granted a
+*runway window* — every other armed PR held (label plus disarm, read back), the starved one lands, the
+holds released **with the reason printed**. Logged in the table each time, used sparingly, and never for
+the dispatcher's own PRs without saying so in the same message.
+
+**A remedy used before its condition is met is how a remedy stops being believed**, so the third
+green-then-behind is the condition rather than the impatience.
+
 ## `update-branch` moves your branch under you — a non-fast-forward is the train, not a violation
 
 The `update-branch` job in `.github/workflows/auto-arm.yml` runs `scripts/update-branch-sweep.mjs` on
-**every push to `main`**, and it pushes to *other people's branches*: `main`'s protection runs with
-`strict=false` (#277), so an armed PR merges the instant its own `gate` is green without containing
-whatever landed since, and every merge therefore leaves every other open PR one commit further behind.
+**every push to `main`**, and it pushes to *other people's branches*: every merge leaves every other open
+PR one commit further behind, and something has to close that gap.
+
+> **THIS PARAGRAPH SAID `strict=false` (#277) UNTIL 2026-09-09, AND THE PROTECTION IS NOW STRICT.**
+> Measured: `gh api repos/<owner>/<repo>/branches/main/protection` returns
+> `{"contexts": ["gate"], "strict": true}`. Under `strict=false` the reasoning was that an armed PR
+> merges the instant its own `gate` is green **without** containing what landed since, so the sweep
+> existed to stop PRs drifting. Under `strict=true` GitHub itself refuses the merge until the branch
+> contains `main`'s tip — so the sweep is not preventing drift, it is **the only thing that makes an
+> armed PR mergeable at all**. Same job, and it matters more than it did, not less. The other
+> `strict=false` mentions in this file are stale for the same reason and are corrected where they are
+> load-bearing.
 `queue-stalled.mjs` only ever REPORTS that drift; this job is the half that fixes it.
 
 **So a `git push` to your own branch can be rejected as non-fast-forward while you did nothing wrong.**
@@ -155,7 +192,7 @@ to green and it had merged. `main` moves fast enough for this to recur inside on
 prepared.
 
 **The recovery is `git pull` and merge, never `git push --force`.** Both trees are real work: the
-sweep's push is what keeps your PR mergeable under `strict=false`, and force-pushing over it silently
+sweep's push is what keeps your PR mergeable under strict protection, and force-pushing over it silently
 discards a merge the pipeline made on your behalf, putting the PR back behind `main` with a head no
 check run has seen. `--force-with-lease` is not the fix either, but it is not the hazard — it REFUSES,
 because the remote moved, which is the same answer a plain `push` already gave you. Merge the two, push, and let the sweep and your own
