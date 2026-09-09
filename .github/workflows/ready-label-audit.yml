@@ -73,8 +73,22 @@ concurrency:
   # One verdict at a time; the newest is the true one. This audit reads live state and accumulates
   # nothing, so a cancelled run loses nothing a later one will not recompute -- same choice and same
   # reason as board-liveness.yml.
-  group: ready-label-audit
-  cancel-in-progress: true
+  #
+  # AND IT DID NOTHING, WHICH IS #851's FINDING RATHER THAN ITS FIX. `cancel-in-progress` cancels a run
+  # that is IN PROGRESS when a new one starts, and this job takes a minute or two -- checkout, `npm ci`,
+  # then the audit -- so it only ever collapses events arriving CLOSER together than that. Measured
+  # 2026-09-09: 80 runs in one hour, 79 on `issues` events, each running to completion because a
+  # session's label writes land seconds apart while the runs between them finish.
+  #
+  # The group was never what was missing. The DEBOUNCE below is: it parks an event-driven run long enough
+  # that the next event's run cancels it BEFORE it has checked anything out or made a single API call.
+  # Concurrency without a debounce is a cancel that arrives after the cost has been paid.
+  #
+  # THE SCHEDULED RUN IS IN ITS OWN GROUP AND IS NEVER CANCELLED. It is the run that must happen -- the
+  # one a day with no label activity depends on -- and sharing a group with a burst of label events makes
+  # the hourly audit whatever survives the burst, which is nothing.
+  group: ready-label-audit-${{ github.event_name == 'schedule' && 'schedule' || 'events' }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 permissions:
   contents: read
@@ -92,6 +106,22 @@ jobs:
       # fetch-depth 0 because the dead-claim check reads `git for-each-ref refs/remotes/origin` to date
       # each row's branch, and the default single-branch fetch leaves only origin/main -- so every claimed
       # row would read "no branch at all", which is the strongest DEAD-CLAIM sentence this audit prints.
+      # DEBOUNCE, AND IT IS THE FIRST STEP FOR A REASON: everything after it costs -- a checkout, an
+      # `npm ci`, and an audit that reads the tracker. A run cancelled while parked here has spent
+      # nothing. A claim writes several labels within seconds and a session working through rows writes
+      # dozens over minutes; two minutes collapses each burst to the one run with something new to say.
+      #
+      # ONLY FOR `issues` EVENTS. The schedule must not be delayed -- it exists for the day nobody
+      # touches a label -- and `workflow_dispatch` is somebody waiting at a terminal.
+      #
+      # A `sleep` rather than a real debouncer because there is nothing to debounce WITH: Actions gives a
+      # workflow no queue to inspect, and the only mechanism that collapses runs is `cancel-in-progress`
+      # firing on an overlap. The sleep manufactures the overlap. Said plainly rather than dressed up,
+      # because a bare `sleep` in a workflow is exactly the shape somebody deletes as pointless.
+      - name: Debounce a burst of label events (#851)
+        if: github.event_name == 'issues'
+        run: sleep 120
+
       - uses: actions/checkout@v4
         with: { ref: main, fetch-depth: 0 }
       - uses: actions/setup-node@v4
