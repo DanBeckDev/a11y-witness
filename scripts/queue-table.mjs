@@ -43,6 +43,7 @@ import { behindByCount } from "./queue-stalled.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { newestPerName } from "./newest-check-run.mjs";
+import { holdersOf } from "./pr-hold-state.mjs";
 
 export const EXIT = { EXAMINED: 0, INCOMPLETE: 2 };
 
@@ -78,8 +79,20 @@ export const MERGED_HEADS_EXAMINED = 10;
 /** A PR whose head has not moved in this long, while it is behind, is stalled rather than waiting. */
 export const STALL_MINUTES = 90;
 
-const gh = (/** @type {string[]} */ args) =>
-  execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+/** Every `gh` call this process has made. The table reports its own cost, so the budget has a consumer
+ *  attached rather than only a level -- "4200 left" and "4200 left, and this table spent 40" are
+ *  different facts, and only the second says whether we are the reason. */
+let ghCalls = 0;
+
+/** @returns {number} */
+export function ghCallsMade() { return ghCalls; }
+
+const gh = (/** @type {string[]} */ args) => {
+  // `rate_limit` is the one gh call that does not count against the limit, so it must not count here
+  // either -- a meter that includes reading the meter reports its own observation as consumption.
+  if (!(args[0] === "api" && args[1] === "rate_limit")) ghCalls += 1;
+  return execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+};
 const git = (/** @type {string[]} */ args) => {
   try {
     return { status: 0, stdout: execFileSync("git", args, { encoding: "utf8", env: sandboxGitEnv() }) };
@@ -94,8 +107,14 @@ const ask = (fn) => { try { return fn(); } catch { return null; } };
 /**
  * PURE. One PR's row, from facts already gathered -- so every shape is exercisable without a network.
  *
- * @param {{number: number, headRefName: string, headRefOid: string, mergeStateStatus: string,
- *   armed: boolean, updatedAt: string, redChecks: string[] | null}} pr
+ * `mergeStateStatus` IS GONE, and this row is what it was for. It is GraphQL-only, it reads BLOCKED for
+ * a stale base and for a failing required check identically (see this file's header), and section 2's own
+ * heading says behind is COUNTED rather than read off it. Everything the row prints -- how far behind,
+ * whether armed, which checks are red -- now comes from git and from `check-runs`, neither of which can
+ * be rate-limited out from under the table.
+ *
+ * @param {{number: number, headRefName: string, headRefOid: string,
+ *   armed: boolean, holders?: string[], updatedAt: string, redChecks: string[] | null}} pr
  * @param {number | null} behind
  * @param {Date} now
  */
@@ -107,7 +126,7 @@ export function prRow(pr, behind, now) {
     owner,
     behind,
     armed: pr.armed,
-    status: pr.mergeStateStatus,
+    holders: pr.holders ?? [],
     idleMinutes,
     // A PR can be stalled by being behind and untouched, which is the state `update-branch` skips
     // because it only carries GREEN PRs -- so a red PR that nobody pushes is invisible to the train.
@@ -169,21 +188,65 @@ export function trunkState() {
     : { sha, runId: "(no run)", conclusion: "(none)", status: "(none)" };
 }
 
-/** Every open PR, with its red check names. `null` red list means the lookup failed for that PR. */
+/**
+ * Every open PR, with its red check names. `null` red list means the lookup failed for that PR.
+ *
+ * REST, NOT `gh pr list`. On 2026-09-09 the shared GraphQL pool reached 5000 of 5000 and every
+ * `gh pr list`, `gh pr view` and `gh pr checks` in every session failed for twenty-two minutes -- and
+ * `auto-arm` with them, so nothing could be armed account-wide. **This table opened with a `gh pr list`,
+ * so it could not run during the outage it exists to report.** The hand form through
+ * `gh api repos/.../pulls` and `check-runs` produced the whole table on 19 core calls and zero GraphQL.
+ *
+ * AND THE ONE FIELD THAT FORCED GRAPHQL IS THE ONE THIS TABLE ALREADY REFUSES TO TRUST.
+ * `mergeStateStatus` is GraphQL-only, and section 2's own heading reads "behind is COUNTED, never read
+ * off mergeStateStatus" -- it is counted from git, which costs nothing and cannot be rate-limited. So the
+ * field is gone rather than fetched per-PR: dropping it removes a GraphQL dependency AND a number the
+ * table was already declining to believe.
+ *
+ * `auto_merge` and `updated_at` come back on the REST list; check conclusions come from `check-runs`,
+ * which is core and kept working throughout.
+ *
+ * PROVEN AGAINST AN ARMED PR, 2026-09-09 15:06Z. When this was written every open PR read
+ * `auto_merge: null`, which was CORRECT -- all of them opened after 14:41Z with a failing `arm` job, so
+ * none was armed. Consistent with the known state is not the same as proven, and the difference matters
+ * here because a false "UNARMED" is wrong in the reassuring direction: it reads as work still to do
+ * rather than as a table that has stopped seeing. So it was left stated as unproven until it could be
+ * read non-null.
+ *
+ * It now is, and against a SECOND API rather than a re-read of the same one: REST `auto_merge` and
+ * GraphQL `autoMergeRequest` agree on #805 (armed/MERGE), #799 (armed/MERGE) and #742 (null/null, a
+ * draft nothing armed). The negative case is the half that matters -- two APIs agreeing on a positive
+ * would not distinguish a field that is always truthy.
+ *
+ * If this regresses, `armed` silently becomes always-false and NO TEST ON A FIXTURE CAN SEE IT, because
+ * the fixtures supply the field. The check is a live one or it is nothing.
+ */
 export function openPRs() {
-  const prs = ask(() => JSON.parse(gh(["pr", "list", "--state", "open", "--limit", "100", "--json",
-    "number,headRefName,headRefOid,mergeStateStatus,updatedAt,autoMergeRequest,statusCheckRollup"])));
+  const prs = ask(() => JSON.parse(gh(["api", `repos/${REPO}/pulls?state=open&per_page=100`])));
   if (!Array.isArray(prs)) return null;
   return prs.map((/** @type {any} */ pr) => ({
     number: pr.number,
-    headRefName: pr.headRefName,
-    headRefOid: pr.headRefOid,
-    mergeStateStatus: pr.mergeStateStatus,
-    updatedAt: pr.updatedAt,
-    armed: Boolean(pr.autoMergeRequest),
-    redChecks: newestPerName(pr.statusCheckRollup ?? [])
-      .filter(isRed)
-      .map((c) => c.name),
+    headRefName: pr.head?.ref ?? "?",
+    headRefOid: pr.head?.sha ?? "",
+    updatedAt: pr.updated_at,
+    armed: Boolean(pr.auto_merge),
+    // THE HOLD LABEL COMES BACK ON THE SAME PAYLOAD, so reading it costs nothing. It has to be read,
+    // because a held PR is DISARMED ON PURPOSE (`pr-hold.mjs` disarms as part of taking the hold) and
+    // "UNARMED" for a held PR is a true word for the wrong reason -- it reads as nobody has got to it
+    // yet, when somebody has decided it must not merge. #819 sat in section 2 as UNARMED at 15:37Z while
+    // ceo held it pending a gate stage. Wrong in the reassuring direction, which is the only direction
+    // that matters in a table people scan.
+    // `holdersOf`, THE PREDICATE THE ARM PATH ITSELF USES -- never this file's own copy of the prefix.
+    //
+    // This read is what found the collision it now has to survive. Written against `session:`, it printed
+    // #820 as HELD+ARMED; the answer was that `session:` meant OWNERSHIP -- twelve PRs carried it that
+    // day to say whose they were -- and holds moved to `hold:` within the hour. A table carrying its own
+    // literal would have gone on reporting every owned PR as held, which is a table lying about the exact
+    // thing it just found. Importing the predicate means this row follows the rename by construction
+    // rather than by somebody remembering, and it agrees with `arm-pr`/`auto-arm-sweep` at every instant
+    // including the one where main has the rename and this branch has not been carried yet.
+    holders: holdersOf((pr.labels ?? []).map((/** @type {any} */ l) => String(l?.name ?? ""))),
+    redChecks: checksOnSha(pr.head?.sha ?? "")?.filter(isRed).map((c) => c.name) ?? null,
   }));
 }
 
@@ -302,8 +365,14 @@ export function renderOpenPRs(prs) {
   const lines = prs.map((row) => {
     const behind = row.behind === null ? "?" : String(row.behind);
     const red = row.red === null ? " red:?" : row.red.length ? ` red: ${row.red.join(" ")}` : "";
-    return `   #${row.number}  ${row.owner.padEnd(11)} behind=${behind.padEnd(3)} `
-      + `${row.armed ? "armed  " : "UNARMED"} ${row.status.padEnd(9)}${red}`;
+    // HELD OUTRANKS UNARMED, because a held PR is unarmed BY DECISION. Held-and-armed is printed as
+    // its own word rather than folded into either: it is `pr-hold`'s failure state (#645) -- the label
+    // says stop and auto-merge says go -- and a table that renders it as plain "HELD" hides exactly the
+    // pair the hold exists to prevent.
+    const arm = row.holders.length
+      ? (row.armed ? `HELD+ARMED(${row.holders.join(",")})` : `HELD(${row.holders.join(",")})`)
+      : (row.armed ? "armed  " : "UNARMED");
+    return `   #${row.number}  ${row.owner.padEnd(11)} behind=${behind.padEnd(3)} ${arm}${red}`;
   });
   return { lines, incomplete: prs.some((r) => r.behind === null || r.red === null) };
 }
@@ -418,6 +487,117 @@ function gitProcessCount() {
     // Exit 1 is pgrep's documented "nothing matched" -- a real measurement of zero.
     return /** @type {{status?: number}} */ (err).status === 1 ? 0 : null;
   }
+}
+
+/**
+ * The API budget this table is spending, and what is left.
+ *
+ * On 2026-09-09 the GraphQL limit reached 0 of 5000 and every `gh` call in one session failed, with the
+ * cause given as nine sessions polling one account. **Measured from this session at the same moment:
+ * 5000 remaining, 0 used, on every resource — and a reset time forty minutes later than the exhausted
+ * one.** Two reset times are two windows, and a rate-limit window is per TOKEN rather than per account.
+ *
+ * So the interesting number is not only "how much is left" but **whether it falls when this session is
+ * idle** — a shared window does, a private one does not. Printing it every table answers that by
+ * measurement, in an hour, instead of by asking nine sessions what their environment holds.
+ *
+ * `gh api rate_limit` DOES NOT COUNT against the limit, which is the only reason this is free to print.
+ *
+ * @returns {{core: Pool | null, graphql: Pool | null} | null}
+ */
+export function apiBudget() {
+  // TWO POOLS, BOTH SHARED, AND ONLY THE HEADERS TELL THE TRUTH.
+  //
+  // `gh api rate_limit` reports zero used, always, for these tokens. Measured 2026-09-09: after five real
+  // calls it still read `core used 0, remaining 5000` on every resource while the same call's headers read
+  // `X-Ratelimit-Used: 2109`. The first version of this function used that endpoint and would have printed
+  // `5000/5000` on every table while the budget ran to zero -- a meter reading full as the tank empties,
+  // the exact failure it was written to catch.
+  //
+  // CORE AND GRAPHQL ARE SEPARATE POOLS WITH SEPARATE RESETS, and both are shared across every session
+  // authenticating as the same user. `gh pr list`, `gh issue list` and `gh pr view` spend GRAPHQL; `gh api`
+  // spends CORE. On 2026-09-09 graphql reached 0 of 5000 while core sat at 2110 -- so a table reading only
+  // one pool reports a healthy budget during an outage of the other. Comparing one pool's reset against the
+  // other's is what produced "our windows are separate", which was wrong: they are separate POOLS, not
+  // separate windows, and the counter is shared within each.
+  //
+  // Each read costs one call of its own kind, which is the cheapest honest price: the headers come back on
+  // a request that has to be made to learn anything at all.
+  const core = poolFromHeaders(["api", `repos/${REPO}`, "-i", "--jq", ".name"]);
+  const graphql = poolFromHeaders(["api", "graphql", "-f", "query=query { viewer { login } }", "-i"]);
+  return core === null && graphql === null ? null : { core, graphql };
+}
+
+/**
+ * One pool, read from the `X-Ratelimit-*` headers of a real call. `null` when the call or the parse fails
+ * -- never a zero, because "I could not ask" and "nothing is left" are the two states this whole line
+ * exists to keep apart.
+ *
+ * @param {string[]} args
+ * @returns {Pool | null}
+ */
+function poolFromHeaders(args) {
+  // THE HEADERS COME BACK ON THE 403, AND THE CALL FAILS EXACTLY WHEN THE POOL IS EXHAUSTED. Measured
+  // 2026-09-09: with graphql at 0 of 5000, `gh api graphql -i` exits non-zero -- so a plain `ask()` here
+  // returned null and the line read `graphql UNREADABLE` during the one outage it exists to report.
+  //
+  // An instrument that fails precisely when its subject fails reports the alarming state as no state.
+  // `execFileSync` puts the response on the thrown error's `stdout`, and GitHub sends `X-Ratelimit-*` on
+  // a rate-limited response like any other, so the answer is there either way.
+  let raw;
+  try {
+    raw = execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    raw = /** @type {{stdout?: string}} */ (error).stdout ?? "";
+  }
+  if (!raw) return null;
+  const read = (/** @type {string} */ name) => {
+    const m = new RegExp(`^${name}:\\s*(\\d+)`, "im").exec(raw);
+    return m ? Number(m[1]) : null;
+  };
+  const remaining = read("X-Ratelimit-Remaining");
+  const limit = read("X-Ratelimit-Limit");
+  const reset = read("X-Ratelimit-Reset");
+  if (remaining === null || limit === null) return null;
+  return {
+    remaining, limit, used: limit - remaining,
+    resetInMinutes: reset === null ? null : Math.max(0, Math.round((reset * 1000 - Date.now()) / 60000)),
+  };
+}
+
+/**
+ * How the budget line reads. A remaining count with no window is not a measurement -- 4000 left with
+ * fifty minutes to go and 4000 left with two are different states -- so the reset is always beside it.
+ *
+ * @typedef {{remaining: number, limit: number, used: number, resetInMinutes: number | null}} Pool
+ * @param {{core: Pool | null, graphql: Pool | null} | null} budget
+ * @param {number} spent how many `gh` calls this table itself made
+ * @returns {string}
+ */
+export function renderBudget(budget, spent) {
+  if (budget === null) return `   api budget: could not read either pool (this table spent ${spent} call(s))`;
+  /** @param {string} name @param {ReturnType<typeof poolFromHeaders>} p */
+  const line = (name, p) => p === null
+    ? `${name} UNREADABLE`
+    : `${name} ${p.remaining}/${p.limit}` + (p.resetInMinutes === null ? "" : ` (${p.resetInMinutes}m)`);
+  const lines = [`   api budget: ${line("core", budget.core)}   ${line("graphql", budget.graphql)}`
+    + `   this table spent ${spent}`];
+  // EXHAUSTED IS ITS OWN LINE, not a small number in a row of numbers. graphql reaching 0 takes out every
+  // `gh pr list` and `gh issue list` -- which is most of this table -- while core still reads healthy.
+  /** @type {[string, Pool | null][]} */
+  const pools = [["core", budget.core], ["graphql", budget.graphql]];
+  for (const [name, p] of pools) {
+    if (p === null) continue;
+    if (p.remaining === 0) {
+      lines.push(`   ^ ${name.toUpperCase()} IS EXHAUSTED. `
+        + (name === "graphql" ? "`gh pr list`/`gh issue list`/`gh pr view` all fail until it resets."
+          : "`gh api` calls all fail until it resets.")
+        + " The pool is SHARED across every session on this account.");
+    } else if (p.remaining < p.limit / 10) {
+      lines.push(`   ^ ${name} under 10% -- read state once per action, and let git answer what git can.`);
+    }
+  }
+  return lines.join("\n");
 }
 
 export function hostState() {
@@ -602,6 +782,20 @@ export function renderHost(host, previousPageouts = null) {
   return { lines, incomplete: false };
 }
 
+/**
+ * Section 5's own lines plus the API budget, appended LAST so it reads as a footer on the host section
+ * rather than as another host metric -- it is a fact about this table's cost, not about the machine.
+ *
+ * Its `incomplete` is section 5's unchanged: a budget we could not read is reported in the line itself
+ * and does not make the host section incomplete, because the host was read fine.
+ *
+ * @param {{lines: string[], incomplete: boolean}} host
+ * @returns {{lines: string[], incomplete: boolean}}
+ */
+function withBudget(host) {
+  return { lines: [...host.lines, renderBudget(apiBudget(), ghCallsMade())], incomplete: host.incomplete };
+}
+
 /** @param {{trunk: any, prs: any[] | null, merged: any[] | null, now: Date, fetched?: boolean,
  *   required?: string[] | null, host?: ReturnType<typeof hostState> | null}} data */
 export function render({ trunk, prs, merged, now, fetched = true, required = null, host = null }) {
@@ -622,7 +816,7 @@ export function render({ trunk, prs, merged, now, fetched = true, required = nul
     },
     {
       heading: "5. THIS HOST  (it was the bottleneck on 2026-09-09 and nothing said so)",
-      body: renderHost(host),
+      body: withBudget(renderHost(host)),
     },
   ];
   // EVERY SECTION IS PRINTED, including the empty ones. A section that vanishes when it has nothing to
