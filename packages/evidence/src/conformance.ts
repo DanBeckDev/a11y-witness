@@ -79,6 +79,13 @@ export interface ConformanceScopeInput {
   census?: Readonly<Record<string, number>> | null;
   /** How many DISTINCT items each sweep actually reached, from the capture's structure fields. */
   swept?: Readonly<Record<string, number>>;
+  /**
+   * `censusTargetMismatchReason`'s own sentence, when the census's CDP target could not be confirmed —
+   * see that function's header. When set, the coverage sentence states this INSTEAD of computing
+   * `sweepCoverage`, because the census it would compare against most likely describes a different
+   * document. `null`/absent means the census (if any) is trusted.
+   */
+  censusMismatchReason?: string | null;
 }
 
 /** One element type's reach: how many the screen reader got to, against how many exist. */
@@ -149,6 +156,11 @@ export function censusFromDiagnostics(diagnostics: readonly unknown[]): Record<s
     (d): d is Record<string, unknown> =>
       typeof d === "object" && d !== null && (d as { event?: unknown }).event === "structureCensus");
   if (!mark || typeof mark.error === "string") return null;
+  // #685/#691: a FALLBACK target is not a smaller page, it is an UNCONFIRMED one — the calendly incident
+  // that forced this is `censusTargetMismatchReason`'s own header. Refused here too, not only there, so
+  // every reader of this function (not just the coverage sentence) gets "coverage unknown" rather than a
+  // real-looking number describing a document nobody asked to examine.
+  if (mark.targetMatch === "fallback") return null;
   const counts: Record<string, number> = {};
   for (const [key, value] of Object.entries(mark)) {
     if (key !== "event" && key !== "atMs" && typeof value === "number") counts[key] = value;
@@ -167,8 +179,61 @@ export function censusFromDiagnostics(diagnostics: readonly unknown[]): Record<s
   return Object.keys(counts).length > 0 ? counts : null;
 }
 
+/**
+ * Names why a sweep-versus-census comparison would be meaningless on THIS capture — a calendly homepage
+ * capture whose form probe activated "Continue with Google" and navigated to `accounts.google.com`
+ * BEFORE the census ran: the sweep read 44 real headings, the census read Google's sign-in screen (1),
+ * and `conformanceFor` (`cli.ts`) printed "reach 44/1... reached in full" as though 1 were calendly's real
+ * heading count. #685, #691.
+ *
+ * **A `fallback` target match is refused outright here, regardless of `candidates`.** `pageCensus`'s own
+ * `censusTargetIsSuspect` (`verify.ts`) trusts a `candidates <= 1` fallback as a likely genuine redirect —
+ * right for the "contained" doubt it guards, where trusting a bad census wrongly just misses a real
+ * finding. Here the consequence of trusting it wrongly is a NUMBER that looks like real evidence and gets
+ * quoted as one — calendly's own `candidates: 1` fallback is exactly what produced "44/1" today — so this
+ * reader is deliberately the stricter of the two, by design rather than by drift: they answer different
+ * questions and are allowed to disagree on the same input.
+ *
+ * States what was OBSERVED, never what caused it: the actual mechanism (a probe navigating the page) is
+ * named in `capture-probes.mjs`'s own fix, not asserted here from a report reader that cannot see which
+ * probe ran. When `routeChange` carries a title transition, it is quoted as a fact this capture recorded
+ * around the same time — evidence the census's target is questionable, not a diagnosis of why.
+ *
+ * @param diagnostics a capture's diagnostic marks
+ * @param swept how many of each type the sweep actually reached (`conformanceFor`'s own `swept` shape)
+ * @param routeChange the capture's `interaction.routeChange`, if a route-change probe ran
+ * @returns a sentence, or `null` when the census's target was confirmed (or there is no census at all —
+ *   that absence is `censusFromDiagnostics` returning `null`, a different and already-handled silence)
+ */
+export function censusTargetMismatchReason(
+  diagnostics: readonly unknown[],
+  swept: Readonly<Record<string, number>>,
+  routeChange?: { titleBefore?: unknown; titleAfter?: unknown } | null,
+): string | null {
+  const mark = diagnostics.find(
+    (d): d is Record<string, unknown> =>
+      typeof d === "object" && d !== null && (d as { event?: unknown }).event === "structureCensus");
+  if (!mark || mark.targetMatch !== "fallback") return null;
+  const candidates = typeof mark.candidates === "number" ? String(mark.candidates) : "an unknown number of";
+  const compared = Object.entries(CENSUS_KEY)
+    .filter(([type, key]) => typeof mark[key] === "number" && typeof swept[type] === "number")
+    .map(([type, key]) => `${type} ${swept[type]} swept against ${mark[key]} the census claims`);
+  const numbers = compared.length > 0 ? ` (${compared.join("; ")})` : "";
+  const titleNote = typeof routeChange?.titleBefore === "string" && typeof routeChange?.titleAfter === "string"
+    ? ` A title change this capture recorded around the same time — "${routeChange.titleBefore}" to `
+      + `"${routeChange.titleAfter}" — is consistent with the browser having already left the requested `
+      + "page."
+    : "";
+  return ` The browser's element census could not confirm it was reading the requested page — its CDP `
+    + `target fell back among ${candidates} candidate page(s)${numbers}. Treat this capture's coverage as `
+    + `UNKNOWN, not as the numbers above: the census most likely describes a different document, and `
+    + `reading its small count as this page's real total is how "reached in full" gets printed over a `
+    + `page that was never examined.${titleNote}`;
+}
+
 /** The coverage sentence, or "" when there is no ground truth to state it against. */
 function coverageSentence(input: ConformanceScopeInput): string {
+  if (input.censusMismatchReason) return input.censusMismatchReason;
   const coverage = sweepCoverage(input);
   if (coverage.length === 0) {
     return input.census === null
