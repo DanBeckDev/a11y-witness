@@ -2,6 +2,16 @@
 
 ## RESUMING AFTER CONTEXT LOSS — run this before anything else
 
+> **FIRST, BEFORE READING ANYTHING: recreate this role's crons.** A session acts only on an incoming
+> message or its own cron; on 2026-09-08 every session went idle at 20:52Z and nothing woke anyone for ten
+> hours (zero merges, no hourly table, no 07:30 summary). A scheduled obligation that is not a cron in
+> its owner's session does not exist, and crons are session-local: they die with the session and expire
+> after seven days. So a resumed dispatcher schedules these with `CronCreate` before its first read:
+> - `*/30 * * * *`: run `queue:table` (or its hand form until it exists), paste it to `ceo`, and act on
+>   every red line: a PR behind for more than 15 minutes, a red on a merged head, an idle worker.
+> Confirm the schedules to `ceo` in the first message after resuming.
+
+
 **Nothing about this role's state lives in a conversation.** After ten hours the session compacts, and
 whatever was only in context is gone. **Everything below is recoverable from outside**, and if any of it is
 not true right now, make it true before the next merge.
