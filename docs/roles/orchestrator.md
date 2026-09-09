@@ -16,6 +16,16 @@ heads is the fact-stated-twice defect one layer up.
 - **Cross-cutting review.** Whether two independently correct changes combine into a defect.
 - **The primary checkout**, and therefore the rule below.
 
+## Where `A11Y_CONTROL_HOST` comes from — recorded 2026-09-09
+
+It is not in the tree and never will be (#83: no addresses in source). A session that has not been told
+it cannot deploy, and that is the intended state, not a gap. Obtain it from one of two places and
+nowhere else: the installed file on the control plane, `/etc/a11ign/control-host`, written by
+`fleet:control-host-install` (#285); or `eval "$(npm run --silent fleet:env)"`, which reads the
+inventory. Do not read it out of `inventory.yml` by hand and do not paste it into a message, a row, or
+a record. On 2026-09-09 three deploy attempts failed for three different reasons and the first was this
+value being unset in the shell; the fix was knowing where it lives, which is why this section exists.
+
 ## THE PRIMARY CHECKOUT IS THE FLEET-DRIVING TREE
 
 **Nothing is ever checked out or edited in it. Feature work is worktrees only.**
