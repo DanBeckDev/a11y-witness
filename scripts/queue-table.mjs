@@ -114,7 +114,7 @@ const ask = (fn) => { try { return fn(); } catch { return null; } };
  * be rate-limited out from under the table.
  *
  * @param {{number: number, headRefName: string, headRefOid: string,
- *   armed: boolean, updatedAt: string, redChecks: string[] | null}} pr
+ *   armed: boolean, holders?: string[], updatedAt: string, redChecks: string[] | null}} pr
  * @param {number | null} behind
  * @param {Date} now
  */
