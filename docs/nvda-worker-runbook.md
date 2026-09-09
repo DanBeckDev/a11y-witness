@@ -661,11 +661,17 @@ on-demand only.
   like the older numbers, check `/health.vitals.recoveries` first — that is the fault returning, not the
   host being busy. Historic figures in this repo of "13–19 s", "27 s", and "45 s" all predate the fix.
 - Quote the host state with any timing number. Your own `npm test` or a browser competes with the guests.
+> **EVERY FIGURE IN THIS SECTION IS MEASURED ON THE SYNTHETIC CORPUS, AND IT SAID SO NOWHERE UNTIL
+> 2026-09-09.** A corpus capture is ~12 s of a generated page; a real page is four to eight minutes
+> (#311). The two populations do not share a shape, and the headline below — `windowsActivate` at ~37%,
+> "the biggest remaining cost" — is **0.1% of a real page**. It is not wrong; it is bounded, and the
+> boundary is the part that was missing. See *What a REAL page is made of* immediately after it.
+
 - **The largest single phase is `windowsActivate`, at ~10 s, and it is Edge starting.** Edge is
   launched *and quit* for every capture, so its cold start is on the critical path every time —
   `waitedMs: 10784` against an 800 ms settle. That is ~37% of a capture, and it is the biggest
-  remaining cost. Three routes were evaluated; **two of them are dead ends, and the analysis is worth
-  keeping so nobody re-derives it.**
+  remaining cost **of a corpus capture**. Three routes were evaluated; **two of them are dead ends, and
+  the analysis is worth keeping so nobody re-derives it.**
 
   | route | verdict |
   |---|---|
@@ -686,3 +692,58 @@ on-demand only.
   measurement. If it reports CHANGED, the recapture is genuinely required, and the cheap moment to pay
   it is **bundled with any other pending `CAPTURE_PROTOCOL_VERSION` bump**, so 2,122 captures are
   recaptured once rather than twice.
+
+#### What a REAL page is made of — #397, measured 2026-09-09
+
+##### What CLAUDE.md said until 2026-09-09, kept verbatim
+
+Both sentences are right about the corpus and wrong about a real page, and neither said which. Kept
+here in full rather than deleted, because a figure with its population attached is worth more than a
+figure removed — and because `claude-md-content-preservation.test.ts` requires that anything trimmed
+out of CLAUDE.md still exist somewhere a reader can find it:
+
+> The largest single capture phase is `windowsActivate` (~10 s, ~37%) — Edge cold-starting every time. Keeping Edge alive between captures is the only real fix. [Route analysis →](docs/nvda-worker-runbook.md#capture-timing-and-the-windowsactivate-cost-analysis-from-environment-facts)
+
+> Other probes beyond the default set are opt-in over the wire (`probeFocus`) so a capture
+> never pays for evidence nobody asked for. `focusOrder` costs ~8 s on top of a ~15 s capture.
+
+
+Three pre-registered pages, per-phase from the captures' own `atMs` marks, on the fleet at `8c80f066`
+(nine boxes, CONSISTENT, deployed 07:59:47Z). **The marks cover 97% of wall clock on all three**, so
+almost nothing is unaccounted for.
+
+| phase | hubspot (271 s) | calendly (267 s) | ikea (471 s) |
+|---|---|---|---|
+| **sweep** | **88.5 s / 32.7%** | **104.5 s / 39.2%** | **369.9 s / 78.5%** |
+| readThrough | 27.6 s / 10.2% | 51.2 s / 19.2% | 54.4 s / 11.5% |
+| titleSource | 36.2 s / 13.3% | 36.3 s / 13.6% | — |
+| focusOrder | 72.5 s / 26.7% | 16.3 s / 6.1% | — |
+| focusReveal | 14.7 s / 5.4% | 18.1 s / 6.8% | — |
+| **`windowsActivate`** | **318 ms** | **306 ms** | **321 ms** |
+
+**`windowsActivate` is a third of a second**, three independent measurements agreeing to within 5% —
+the result here I would defend hardest. The three routes analysed above are optimising it, and on a
+real page there is nothing there to win. Keep them for the corpus; do not quote them as "the biggest
+remaining cost" without naming which population.
+
+**`sweep` is the largest phase on every page and the only one that scales with the page** — and 78.5%
+of IKEA's run on its own, which is the whole explanation for why that page is 471 s while the other
+two are within 1.5% of each other. **This does not say the sweeps are wasteful**: `collectByType` walks
+the page by quick-navigation and that is how this tool sees structure at all. #397 asked what the time
+is made of, not what to cut; whether the cost is reducible is a separate and bigger question, and one
+run per page is not enough to open it on.
+
+**`focusOrder` is not ~8 s here either** — 72.5 s, 16.3 s, and outside ikea's top six. Wrong in both
+directions against the corpus figure, and by an order of magnitude on hubspot.
+
+n=1 per page, one fleet, one day; every split except `windowsActivate` and the `sweep` share is a
+single observation. The captures are on disk and re-readable — the first time this question could be
+answered from artefacts rather than by re-running it, which is #431 landing the same morning:
+
+```
+runs/witness/2026-09-09T08-04-30-422Z-www-hubspot-com.json    271s
+runs/witness/2026-09-09T08-12-27-003Z-calendly-com.json       267s
+runs/witness/2026-09-09T08-20-19-020Z-www-ikea-com.json       471s
+```
+
+Local and gitignored, so the paths are the record that the next re-check has something to read.
