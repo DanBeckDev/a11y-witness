@@ -17,6 +17,7 @@
 // happened -- the cost belongs at the point of failure, never on the happy path.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 
@@ -125,4 +126,4 @@ function main() {
     + "current build, or this text does not match a resolution failure this tool recognises.\n");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
