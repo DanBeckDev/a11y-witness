@@ -415,7 +415,7 @@ export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.
     }
     const reported = { path: entry.path, branch: entry.branch };
     const assessment = assessWorktree(repoRoot, entry, { run, now });
-    const verdict = classify({ branch: entry.branch, ...assessment });
+    const verdict = classify(assessment);
     if (verdict === "remove") {
       // `dryRun` SKIPS THE REMOVAL AND NOTHING ELSE -- same walk, same predicate, same buckets. The
       // listing has to come from the tool that owns the decision, because the alternative was measured:
