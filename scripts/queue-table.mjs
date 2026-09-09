@@ -132,13 +132,23 @@ export function fetchRemoteBranchesChecked({ run = defaultRunGit } = {}) {
   /** @type {string} */
   let localRaw;
   try {
-    localRaw = run(["for-each-ref", "--format=%(refname:short)", "refs/remotes/origin"]);
+    // `%(symref)` is EMPTY for a real branch and non-empty for a symbolic ref -- `refs/remotes/origin/HEAD`
+    // is the one guaranteed member of this remote-tracking tree, and it is not a branch: it is a pointer
+    // to whichever branch the remote calls its default (`origin/main` here). Read by symref rather than
+    // by name, because `%(refname:short)` COLLAPSES `origin/HEAD` to the bare string `origin` -- one path
+    // segment, indistinguishable in NAME from the exact anomaly this census exists to catch (a real
+    // branch pushed with no owner prefix). tracker-auditor measured this against #878's own build:
+    // treating it as a branch would have made this census flag `origin` as a stray on every single run,
+    // a false finding baked into the tool by its own first version.
+    localRaw = run(["for-each-ref", "--format=%(refname:short)%09%(symref)", "refs/remotes/origin"]);
   } catch (cause) {
     throw new Error(`queue-table: could not list remote-tracking branches -- refusing to census. `
       + `${/** @type {Error} */ (cause).message}`, { cause });
   }
   const branches = localRaw.split("\n").map((l) => l.trim()).filter(Boolean)
-    .map((r) => r.replace(/^origin\//, "")).filter((n) => n !== "HEAD");
+    .map((l) => l.split("\t"))
+    .filter(([, symref]) => !symref)
+    .map(([name]) => name.replace(/^origin\//, ""));
   /** @type {string} */
   let remoteRaw;
   try {
@@ -184,8 +194,8 @@ export function renderBranchPrefixes(census) {
   const { total, noPrefix } = branchPrefixCensus(census.branches);
   if (noPrefix.length === 0) {
     return {
-      lines: [`   OK  ${total} of ${census.remoteCount} remote branch(es) checked, every one but \`main\` `
-        + "carries an owner prefix"],
+      lines: [`   OK  ${total} of ${census.remoteCount} remote branch(es) checked (symbolic refs `
+        + "excluded), every one but `main` carries an owner prefix"],
       incomplete: false,
     };
   }
@@ -925,8 +935,11 @@ export function render({ trunk, prs, merged, now, fetched = true, required = nul
       body: withBudget(renderHost(host)),
     },
     {
-      heading: "6. BRANCH PREFIXES  (#790 -- a branch can exist with no owner prefix at all, and only "
-        + "naming it, never assuming one, tells it apart from a normal role branch)",
+      heading: "6. BRANCH PREFIXES  (#790 -- a REAL branch can exist with no owner prefix at all, and only "
+        + "naming it, never assuming one, tells it apart from a normal role branch. `origin/HEAD`, a "
+        + "symbolic ref rather than a branch, is excluded by `%(symref)`, not by name -- its short form "
+        + "collapses to the bare string `origin`, which would otherwise read exactly like the anomaly "
+        + "this section exists to catch)",
       body: renderBranchPrefixes(branchCensus),
     },
   ];
