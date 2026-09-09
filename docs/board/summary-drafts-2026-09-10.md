@@ -345,7 +345,9 @@ tonight. Every figure below is read from the row it is recorded on, not relayed.
   of its four acceptance clauses had already shipped and nobody had closed the row.
 - **#881 was filed from that same run**, and it is the more interesting half: **ten synthetic dataset
   captures are sitting in the real-page corpus** — five cases, `bad` and `good` each, recorded against the
-  lab's own page-server address (`http://192.168.1.79:5050/...`). Sixteen captures no declared page claims;
+  lab's own page-server address (`http://<lab>:5050/...` — the real address is on #881 and is deliberately
+  not repeated here; `internal-lan-addresses.test.ts` refuses a tracked file that carries one). Sixteen
+  captures no declared page claims;
   ten of them are not real pages at all.
 - **#311 is measured, and the promise made to an outside reader does not survive it.**
 
@@ -366,37 +368,44 @@ the risk the next section of that document already warns about. A floor of five 
 `try-it.md` has deliberately **not** been edited yet: it is a promise to an outside reader and should change
 as a decision, not as a side effect of a measurement run.
 
-### `everything`'s ten conformant records — UNDER RE-MEASUREMENT, and the correction is NOT to be written yet
+### The claim held, and the finding is that nobody was told for three days
 
-**This one is written twice on purpose. `ceo`'s instruction, and it is the right one: do not write the
-correction as a fact before the run lands.**
+**Re-measured tonight on the lab and the published figure stands. Do not write a correction; there is nothing to correct.**
 
-**What is on the record.** A lab `everything` run, last executed **2026-09-06 00:46**, stopped at `promote`
-with `RULES: FAIL — 10 conformant record(s) were failed by a deterministic rule` — `keyboard-trap-modal-cycle.good`,
-`keyboard-trap-modal-escape.good`, `image-missing-alt-behind-consent.good` and seven more, against 2,796
-records. **CLAUDE.md states the rules layer has "0 false positives across 1,183 conformant records", and
-that is the claim this project leads with.**
+A lab `everything` run from **6 September** had stopped with `RULES: FAIL — 10 conformant record(s) were
+failed by a deterministic rule`, against CLAUDE.md's published **"0 false positives across 1,183 conformant
+records"** — the claim this project leads with. Re-run at current `main`:
 
-**What is NOT known.** Whether it still happens. **The run predates several days of merges**, the two
-populations are different sizes (2,796 against 1,183), and nothing has ever compared them — which is this
-repository's most-recorded shape rather than a new discovery. It is being re-run tonight at current `main`.
+```
+RULES: PASS — all 21 of 21 from rule-ownership.json, against 2820 record(s) examined and clean
+```
 
-**So the sentence for the edition, if the result has not landed:**
+**Three days, 24 more records, three more subtypes owned, and zero conformant records failed.** The
+September failure was real when it was recorded and has been fixed since **by work that did not know it was
+fixing it.**
 
-> The rules layer's published "0 false positives across 1,183 conformant records" is **under re-measurement**.
-> A lab run from 6 September reported ten conformant records failed by a deterministic rule over a larger
-> population; it predates several days of merges and is being re-run. **We are not yet saying the claim is
-> wrong — we are saying nothing has been comparing the two numbers.**
+**So the sentence for the edition is not about the rules layer at all. It is this:** a failed lab unit
+contradicting a headline claim **sat unreported for three days after the thing it was complaining about had
+gone.** Nothing watches `lab:status`; the failure was found by a person reading it. That is what #866 exists
+to stop, and it is the honest form of this item — a near-miss in reporting, not a defect in the product.
 
-**And the sentence to use ONLY if it reproduces at current `main`:**
+**Written this way deliberately.** The draft carried an "under re-measurement" sentence and a withdrawal
+sentence side by side until the run reported, on the rule that a correction is not written as a fact before
+its measurement lands. It landed, it confirmed, and both sentences are gone.
 
-> The rules layer's published "0 false positives across 1,183 conformant records" **does not hold at current
-> `main`**: re-measured on 9 September, ten conformant records are failed by a deterministic rule. The
-> published figure is withdrawn pending the count being restated against the population it was measured on.
+### #29: the focus-event field supports one question and not the other
 
-**Neither sentence goes in until the run reports.** If the result has not landed by press time, the first one
-runs and the edition says so plainly — *"under re-measurement, result expected today"* is a legitimate thing
-for a board to be told, and far better than either a stale reassurance or a withdrawal we cannot support.
+**Five captures of one page on one worker, so a wedge would be diagnosable and nothing here is a difference
+between boxes.** `focusEvents` is present, asked, checked and five items every time; **the event count
+inside it is 302, 302, 304, 308 and one more — a spread of about 2%.**
+
+**So a criterion reading "were there focus events" is safe. One reading "how many", or comparing the event
+log between two captures, is not.** That is the distinction the row was filed to settle and a single capture
+could not.
+
+**The control is what makes it a finding about the tool rather than the page: 95 links and 19 landmarks were
+identical on all five runs**, along with thirteen other fields. A page changing under the probe would have
+moved those first. It did not — so the seven fields that vary are ours.
 
 ### What this section must NOT become
 
