@@ -94,7 +94,16 @@ provision-commit.txt
 # is present locally; it skips honestly when it is not, which is the expected state everywhere else.
 packages/control/ansible/inventory.yml
 
-# SPOTLIGHT MUST NOT INDEX A WORKTREE, and this file is how you say so per-directory.
+# `.metadata_never_index` IS IGNORED PER-DIRECTORY ON THIS MACOS, MEASURED -- and this line stays anyway.
+#
+# THE CLAIM THIS COMMENT ORIGINALLY MADE WAS FALSE. It said the marker is "how you say so
+# per-directory". Placed on all 68 worktrees at 12:47Z and verified present (53 under Documents, 15
+# under /private/tmp), `mds_stores` read 54.8% at 12:45Z and 80% at 12:52Z. No effect. On current macOS
+# the marker is honoured at a VOLUME ROOT only; per-directory exclusion is the Spotlight Privacy list,
+# which is a machine-owner action and not something this repository can do to somebody's Mac.
+#
+# The line stays because the marker file must never become a tracked artefact regardless of whether it
+# works -- see below -- and because a future macOS may honour it.
 #
 # Measured 2026-09-09: 119 worktrees on this host, `mds_stores` the top CPU consumer at 70-94% for
 # hours with no git running, and `syspolicyd`/`trustd`/`diagnosticd` filling the rest of the top five --
