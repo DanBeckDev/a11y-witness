@@ -438,6 +438,24 @@ node scripts/owned-path-signoff.mjs --diff=<file> --body=<file>   # exit 0, or w
 real one will pass** — CLAUDE.md's own rule. This is the inverse case and the rule still holds: here the
 cheap check IS the same code CI runs, so it is not a proxy at all.
 
+### Before naming a failing check, read what its JOB can do
+
+The `acceptance` job is **shallow, tokenless, and cannot build the board document**. It checks out at
+depth 1, carries `permissions: contents: read` and no `GH_TOKEN`, and runs whatever the PR body's
+Acceptance block says to run. So a body whose acceptance is `npx tsx --test .../*board*.test.ts` produces
+a list of failing board-style assertions **in that job and nowhere else** — the tests are fine, the job
+cannot assemble the document they read.
+
+Measured 2026-09-09 on #564: six assertions reported failing there, while `board-style` passed in the
+`docs` job and locally at 923 words of 925. The real reds were four different guards in the `docs` job —
+a LAN address, guest and control-plane paths, and rename literals in the record. **The same artefact has
+now misled three sessions in two days**, each of whom read the failure list and reported it as the PR's
+own.
+
+This is the diagnostics table's shape one layer out: not a wrong value, but a correct value read without
+asking what produced it. Before quoting a failing check, ask what that JOB is able to do — its checkout
+depth, its token, its permissions — the same way you would ask what window a journal was bounded to.
+
 ### Reading a dependency's source answers the question you asked, not the one next to it
 
 `worker-judge`, 2026-09-09, on their own fix and unprompted:
