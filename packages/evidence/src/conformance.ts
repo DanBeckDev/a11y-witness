@@ -253,9 +253,12 @@ export type ExaminationState = "examined" | "partial" | "not-examined";
 /**
  * How completely one type was examined, from the stop reasons the capture already carries.
  *
- * `undefined` stop is `examined`: captures predating the mark have no stop reason, and treating their
- * silence as truncation would relabel the whole corpus on a field that did not exist when it was taken.
- * The safe direction here is the one that does not invent a defect in old evidence.
+ * `undefined` stop is `examined`, and that default is a decision rather than a fallback. Captures
+ * predating the mark have no stop reason, so reading their silence as truncation would relabel the whole
+ * corpus on a field that did not exist when the evidence was taken. **Inventing a defect in old evidence
+ * is the wrong direction to be wrong in** — the same rule as a record of the past never being renamed
+ * (#534's ten rewritten capture URLs, #531's rewritten ansible transcript). A capture says what it said;
+ * a field added later cannot make it say something new about itself.
  *
  * @param stops every direction's stop reason for one type
  * @param found how many entries that type's sweep produced
