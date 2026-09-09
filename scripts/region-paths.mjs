@@ -89,3 +89,51 @@ export function declaredRegionFiles(body) {
   const section = extractRegionSection(body);
   return section === null ? null : regionPathsFromBody(section);
 }
+
+/**
+ * #707: the raw text of a row's OWN section for ANY of the three required template fields -- Region,
+ * Acceptance, or Open-check -- or `null` when the body has none. The same heading/inline shape as
+ * `extractRegionSection` above (`## <Field>`, any heading level, optional trailing colon and inline text,
+ * OR a bare `Field:` / `**Field:**` line), generalised to a field name so a third and fourth copy of the
+ * identical regex pair do not drift from each other or from Region's. `extractRegionSection` itself is
+ * left untouched rather than rewritten to call this -- #710's tests pin its exact behaviour, and the risk
+ * of a subtle regression there outweighs the small duplication of the pattern-building logic here.
+ * @param {string} body @param {string} fieldName exact label as it appears in a heading or inline colon
+ *   line, e.g. "Acceptance" or "Open-check" -- matched case-insensitively, word-bounded
+ * @returns {string | null}
+ */
+export function extractLabeledSection(body, fieldName) {
+  const escaped = fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // The trailing inline VALUE is captured ONLY after an explicit colon -- `## Field: value`. Without the
+  // colon required, a real template heading's own descriptive suffix (the actual text this repo's
+  // template uses: "## Open-check — the command that shows this row is still open", em-dash, no colon)
+  // was captured AS the value, reading a heading with real content on the FOLLOWING lines as though it
+  // had none. `.*$` after the optional group still consumes the rest of the line either way, so a
+  // colon-less descriptive heading is recognised as a bare heading and this function correctly falls
+  // through to the lines beneath it.
+  const heading = new RegExp(`^\\s*#{1,6}\\s*${escaped}\\b(?::\\s*(.*))?.*$`, "i");
+  const inline = new RegExp(`^\\s*(?:\\*\\*|__)?${escaped}:(?:\\*\\*|__)?\\s*(.*)$`, "i");
+  const lines = body.split(/\r\n|\r|\n/);
+  for (const [index, line] of lines.entries()) {
+    const headingMatch = heading.exec(line);
+    if (headingMatch) {
+      const trailingInline = (headingMatch[1] ?? "").trim();
+      return trailingInline.length > 0 ? trailingInline : linesUntilNextHeading(lines, index + 1).join("\n").trim();
+    }
+    const inlineMatch = inline.exec(line);
+    if (inlineMatch) return inlineMatch[1].trim();
+  }
+  return null;
+}
+
+/**
+ * #707: does `body` state a non-empty value for `fieldName` -- naming the field itself is not enough, the
+ * "I checked" shape #603's owned-path sign-off already refuses by name. `null`/empty-after-trim text (a
+ * heading with nothing under it before the next one) reads as absent, not present-but-blank.
+ * @param {string} body @param {string} fieldName
+ * @returns {boolean}
+ */
+export function hasTemplateField(body, fieldName) {
+  const section = extractLabeledSection(body, fieldName);
+  return section !== null && section.trim().length > 0;
+}
