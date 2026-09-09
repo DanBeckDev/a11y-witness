@@ -14,11 +14,37 @@ on:
   workflow_dispatch:
 
 jobs:
+  check-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Refuse a pin that is not an ancestor of the commit this run is executing at
+        run: |
+          if ! git merge-base --is-ancestor 02ad283c4333f04e3c6b4460b871d2163cd11528 "${{ github.sha }}"; then
+            echo "::error::consumer-gate.yml's uses: step is pinned to 02ad283c4333f04e3c6b4460b871d2163cd11528, which is not an"
+            echo "::error::ancestor of the commit this run is executing at, ${{ github.sha }} (ref"
+            echo "::error::${{ github.ref_name }}, ${{ github.event_name }}) -- regenerate (node"
+            echo "::error::scripts/generate-consumer-gate.mjs) against a commit in this history"
+            exit 1
+          fi
+      - name: Refuse a pin that predates a change to what it pins
+        run: |
+          changed=$(git diff --name-only 02ad283c4333f04e3c6b4460b871d2163cd11528 "${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)
+          if [ -n "$changed" ]; then
+            echo "::error::consumer-gate.yml is pinned to 02ad283c4333f04e3c6b4460b871d2163cd11528, but this changed since:"
+            echo "::error::$changed"
+            echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) and dispatch again"
+            exit 1
+          fi
+
   a11y:
+    needs: [check-pin]
     runs-on: windows-2022          # NVDA needs Windows; GitHub hosts these
     steps:
       - uses: actions/checkout@v4
-      - uses: DanBeckDev/a11y-witness@3f4c889dc705556aca5b49a8bb66157ac4e67e45
+      - uses: DanBeckDev/a11y-witness@02ad283c4333f04e3c6b4460b871d2163cd11528
         with:
           url: https://www.w3.org/WAI/demos/bad/before/home.html
           task: Find the main navigation and reach the survey.
