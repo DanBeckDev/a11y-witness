@@ -93,3 +93,19 @@ provision-commit.txt
 # the control plane. `inventory-example-parity.test.ts` keeps the two in shape-sync whenever the real file
 # is present locally; it skips honestly when it is not, which is the expected state everywhere else.
 packages/control/ansible/inventory.yml
+
+# SPOTLIGHT MUST NOT INDEX A WORKTREE, and this file is how you say so per-directory.
+#
+# Measured 2026-09-09: 119 worktrees on this host, `mds_stores` the top CPU consumer at 70-94% for
+# hours with no git running, and `syspolicyd`/`trustd`/`diagnosticd` filling the rest of the top five --
+# Spotlight and Gatekeeper walking every checkout, each a full copy of the source tree. The prune took it
+# to 67; the marker stops the remainder being walked at all.
+#
+# IGNORED RATHER THAN TRACKED, deliberately. A tracked `.metadata_never_index` would appear in every
+# worktree automatically, which sounds better and is worse: it would also sit in the PRIMARY checkout and
+# in every consumer's clone, making a decision about somebody else's machine that is not ours to make.
+# Ignored means `scripts/spotlight-exclude.mjs` places them locally and nobody's `git status` shows one --
+# which is the whole reason this line comes first: without it, 67 untracked files appear across nine
+# sessions' working directories, and `git add -A` sweeping another agent's files is the incident the
+# pre-commit hook exists to catch.
+.metadata_never_index
