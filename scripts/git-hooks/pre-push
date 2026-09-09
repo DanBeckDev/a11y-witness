@@ -239,12 +239,31 @@ if git rev-parse --verify -q origin/main >/dev/null && git merge-base --is-ances
     # whole push died silently, mid-loop, with no message. A guard that aborts the hook is worse than no
     # guard: it fails every push for a reason that looks like nothing at all.
     if [ -z "$exported" ]; then continue; fi
-    after="$(git show "HEAD:$changed_file" 2>/dev/null || true)"
+    # A FILE, NEVER A PIPE -- `printf '%s' "$after" | grep -q` REFUSED A PUSH OVER SYMBOLS THAT WERE THERE.
+    # `grep -q` exits at its FIRST match, so `printf` is killed by SIGPIPE (141) whenever the file is
+    # larger than the pipe buffer and the match lands early -- and `set -o pipefail` above makes 141 the
+    # PIPELINE's status, which is indistinguishable here from "not found". Measured 2026-09-09 on
+    # `real-page-corpus.mjs` (73 KB, `assertDisjoint` first at byte 1878): a REFUSAL naming two symbols
+    # sitting in plain sight, and a NONDETERMINISTIC one -- three consecutive runs of the same loop over
+    # the same file flagged three different sets, because whether `printf` finishes writing before `grep`
+    # exits is a race against a 64 KB kernel buffer.
+    #
+    # It can only ever refuse WRONGLY, never pass wrongly: a genuinely absent symbol makes grep read to
+    # EOF, so printf always completes and the status is grep's own 1. That asymmetry is the worse of the
+    # two -- a guard that refuses correct pushes is one people learn to override, which is how
+    # `A11Y_SKIP_VERIFY=1` came to be used six times in one evening.
+    #
+    # The general form is this file's own `| tail` lesson pointed at the WRITER rather than the reader:
+    # under `pipefail`, never put a large writer upstream of a reader that exits early. Third instance of
+    # a status-that-is-not-the-command's in this block alone, after the two `set -e` notes above.
+    after_file="$(mktemp)"
+    git show "HEAD:$changed_file" > "$after_file" 2>/dev/null || true
     while IFS= read -r symbol; do
       if [ -z "$symbol" ]; then continue; fi
       resolve_checked=$((resolve_checked + 1))
-      printf '%s' "$after" | grep -q "\b${symbol}\b" || resolve_lost+=("$changed_file :: $symbol")
+      grep -q "\b${symbol}\b" "$after_file" || resolve_lost+=("$changed_file :: $symbol")
     done <<< "$exported"
+    rm -f "$after_file"
   done < <(git diff --name-only origin/main..HEAD)
 
   echo "pre-push: resolve-toward-main — $resolve_checked exported symbol(s) checked across the files this" >&2
@@ -313,7 +332,10 @@ note_if_untouched() {
   [ -n "$mentioned" ] || return 0
   local p
   for p in $mentioned; do
-    printf '%s\n' "$PUSHED_FILES" | grep -qxF "$p" && return 0
+    # A here-string, not `printf | grep -q`: the same SIGPIPE-under-`pipefail` fault the B5 block above
+    # records in full. It needs a >64 KB path list to bite here rather than a 73 KB source file, so it has
+    # never been seen -- and "not yet reached" is not a different defect from "reached".
+    grep -qxF "$p" <<< "$PUSHED_FILES" && return 0
   done
   echo "            NOTE: this failure is in file(s) this push does not touch — probably not your change:"
   echo "$mentioned" | sed 's/^/              /'
