@@ -521,7 +521,22 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
       + "for the full argument and the measured incident.",
   },
   "1.3.5": {
-    status: "reachable", needs: ["dom"], channels: ["formInputs"],
+    // PARTIAL, NOT `reachable` — corrected during #869's own review. `assessedCriteria()` and this file's
+    // own "the assessed entries are exactly what the judge can return a finding for" test define
+    // `assessed`/`partial` as CODE EXISTS to decide the subtype, a claim independent of whether it has
+    // fired on any real page -- `realPageEvidence` below is the SEPARATE, already-established mechanism
+    // for that second fact, and 1.4.2 is the exact precedent: `status: "assessed"`, ZERO real-page
+    // firings in 89 captures, `realPageEvidence: { available: false }` stating so. Leaving 1.3.5 at
+    // `reachable` after `addUnidentifiedInputPurpose` (#869) landed was this test's OTHER failure
+    // direction, named in this file's own header: "a map that says a criterion is unreachable after
+    // someone made it work is a roadmap that sends people to build what exists."
+    //
+    // `partial`, not `assessed`, because the rule covers only ONE of F107's two failure conditions (an
+    // invalid token; never a valid token used for the wrong field) and never the criterion's own
+    // alternative-methods clause -- see `addUnidentifiedInputPurpose`'s own comment (rules.ts) and
+    // `act-rules.ts`'s `secondary` mapping for the full argument. One bullet of a multi-part failure
+    // surface reached is `partial`, the same shape 1.4.13 already uses for the identical reason.
+    status: "partial", needs: ["dom"], channels: ["formInputs"],
     realPageEvidence: {
       available: false,
       because: "`RuleInput.formInputs` has no worker-side census on any capture -- #170 (mirroring "
@@ -532,13 +547,15 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
     },
     note: "Identify Input Purpose is the `autocomplete` attribute against a fixed token list -- "
       + "deterministic, and squarely a rule. Needs the DOM, like 1.4.2. `addUnidentifiedInputPurpose` "
-      + "(issue #79, built by #869) decides the F107 half of it in code today, but stays `reachable` "
-      + "rather than `partial` here: `RuleInput.formInputs` has no worker-side census on any capture yet, "
-      + "so `rules:coverage` reads this subtype as NEVER FIRED ANYWHERE and the stranger-facing count in "
-      + "action.yml/RELEASE.md must not include a criterion that cannot fire on a page anyone actually "
-      + "points this tool at. #170 is the worker-side census that earns the flip to `partial` once a real "
-      + "page fires the rule. (#89, the PR issue #79 was closed on, never wrote this rule at all -- see "
-      + "issue #869.)",
+      + "(issue #79, built by #869) decides ONE of F107's two failure conditions in code today (an "
+      + "invalid token; never a valid token on the wrong field, and never the alternative-methods clause) "
+      + "-- `partial`, matching 1.4.13's identical reasoning for a subtype that reaches part of its "
+      + "criterion. `RuleInput.formInputs` has no worker-side census on any capture yet, so "
+      + "`rules:coverage` reads this subtype as NEVER FIRED ANYWHERE -- see `realPageEvidence` above, "
+      + "which is what keeps the stranger-facing real-page count in action.yml/RELEASE.md honest without "
+      + "needing `status` itself to carry that fact. #170 is the worker-side census that would let a real "
+      + "page actually fire the rule. (#89, the PR issue #79 was closed on, never wrote this rule at all "
+      + "-- see issue #869.)",
   },
   "3.1.1": { status: "reachable", needs: ["dom"], channels: ["transcript"], note: "Language of Page: `<html lang>`. THE CONCLUSION STANDS AND ITS STATED MECHANISM WENT STALE on 2026-09-03. This read \"NVDA switching SYNTHESISER LANGUAGE is an indirect and unreliable proxy\", which described NVDA at its defaults; `speech.reportLanguage` has been ON since that date, so NVDA SPEAKS the language and it lands in the transcript as text. The signal is therefore direct, not a proxy -- and the criterion is still not decidable from it, for the reason 3.1.2 records: an announcement CONFIRMS a language was declared, while SILENCE is what both a missing `lang` and a page matching NVDA's own default produce. Absence is the failure here, so the transcript can satisfy but never accuse, and the attribute remains the fact. Keeping a stale mechanism beside a right answer is how a reader concludes the answer was never re-examined.", },
   // 3.1.2 CLAIMED THE TRANSCRIPT AND THE TRANSCRIPT CANNOT CARRY IT — corrected 2026-09-01, measured.
