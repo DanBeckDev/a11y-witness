@@ -54,9 +54,17 @@ captured: a button whose announced name shares a meaningful word with the task g
 whatever the screen reader says next is recorded. The word match is the safety guard — *"show only bags"*
 activates a **Bags** button and never a **Delete account** one.
 
-**Point it at the page with your contact form on it.** A long page with a form exercises far more of this
-layer than a page of text alone — the form is where the announcements this tool exists to hear actually
-happen.
+**Don't have a page picked yet?** Point it at `https://www.w3.org/WAI` — the W3C's own accessibility
+site — for a first look before choosing anything of your own. We have already run it there
+([`docs/github-action.md`](./github-action.md#tested-against-real-sites-in-the-wild)): 143 announcements,
+zero findings, and not marginally — a false positive on the W3C's own site would have been damning, so
+that is a real, meaningful result rather than an untested placeholder. It is a safe page to point either
+the CLI or the Action at: informational, nothing to submit, so a `task` about learning something on the
+page (`"Learn about web accessibility"`) is enough — no contact form, no risk of pressing anything real.
+
+**Once you have seen real output, point it at the page with your contact form on it.** A long page with a
+form exercises far more of this layer than a page of text alone — the form is where the announcements
+this tool exists to hear actually happen.
 
 **Expect five to eight minutes for a real page.** Measured on three dissimilar real pages (#311): 4 m 38 s,
 4 m 50 s and 7 m 54 s, none of which timed out — three different page shapes landing within a few percent
