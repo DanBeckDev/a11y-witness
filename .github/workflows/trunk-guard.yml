@@ -184,7 +184,18 @@ jobs:
             echo "result=pass" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git worktree add /tmp/parent "$BEFORE" --detach
+          # #775: A CLONE, NEVER A LINKED WORKTREE. `git worktree add` pins the WORKING TREE at `$BEFORE`
+          # but shares the underlying repository -- objects AND refs -- with this checkout, so
+          # `refs/remotes/origin/main` inside the pinned worktree was never `$BEFORE`'s own `origin/main`,
+          # it was whatever `origin/main` is in the SHARED repository right now. #744 (PR #774) proved this
+          # with a real reproduction: any test the parent's own suite runs that reads `origin/main`
+          # directly (this repo has several) sees main AS IT IS NOW, not as it was when the parent was
+          # last green -- which is exactly how a correct revert was declined as unattributable on #718. A
+          # fresh clone has its own independent `.git`, so its `refs/remotes/origin/main` can be set to
+          # `$BEFORE` without touching this checkout's real one.
+          git clone --quiet . /tmp/parent
+          git -C /tmp/parent update-ref refs/remotes/origin/main "$BEFORE"
+          git -C /tmp/parent checkout --quiet --detach "$BEFORE"
           cd /tmp/parent
           # `|| true` on each: a re-check that CANNOT RUN must report unknown rather than fail, and a
           # non-zero from `npm ci` is not the same answer as a non-zero from the suite.
