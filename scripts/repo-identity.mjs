@@ -33,6 +33,15 @@ export const REPO_GIT_URL = `${REPO_URL}.git`;
 // still has to resolve on GitHub TODAY, so those specific lines keep citing REPO, not PRODUCT_REPO --
 // #325 (the transfer rehearsal) is what changes them, once #63 makes PRODUCT_REPO true operationally too.
 // `repo-identity-consolidated.test.ts`'s SITES list is which sites use which constant.
+//
+// THE `uses:` EXCEPTION IS AN INSTANCE OF A WIDER RULE, NOT A SPECIAL CASE -- #647, after `uses:` lines
+// (right) and badge images plus provisioning clone targets (found wrong, #569/#604) all needed the SAME
+// answer independently. Before adding a new SITES entry, ask: does something -- a human copying a command
+// verbatim, or a machine with no human in the loop -- RESOLVE this URL as a normal, unmediated step of
+// using this repository TODAY? If yes, REPO. If it is prose a reader reads, interprets, and would
+// naturally substitute the current name into (a mention in passing, a metadata field nobody automatically
+// visits, a hyperlink a reader consciously clicks and can recover from), PRODUCT_REPO is correct. See
+// `repo-identity-consolidated.test.ts`'s own header for the full reasoning and worked examples.
 export const PRODUCT_REPO = "a11ign/a11ign";
 export const PRODUCT_REPO_URL = `https://github.com/${PRODUCT_REPO}`;
 export const PRODUCT_GIT_URL = `${PRODUCT_REPO_URL}.git`;

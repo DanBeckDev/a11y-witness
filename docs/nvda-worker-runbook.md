@@ -78,7 +78,7 @@ provisioning:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-irm https://raw.githubusercontent.com/a11ign/a11ign/main/packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1 | iex
+irm https://raw.githubusercontent.com/DanBeckDev/a11y-witness/main/packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1 | iex
 ```
 
 > **Do not reach for `winget` here.** On a freshly installed Windows it does not exist:
