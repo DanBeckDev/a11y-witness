@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import {
   captureDoubt, captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle,
   captureRanRequestedProbes, probeStates, sweepCompleteness, captureReachedThePage, domCensus, pageCensus,
-  censusTargetIsSuspect, censusSuspectReason, submitNavigatedTheDocument,
+  censusTargetIsSuspect, censusSuspectReason, submitNavigatedTheDocument, earlyContainmentVerdict,
 } from "./verify.js";
 import type { CapturedAnnouncements } from "./verify.js";
 
@@ -215,6 +215,65 @@ test("a capture held inside a consent modal is REJECTED, though every other gate
     "the title gate genuinely cannot see this — that is why a second gate exists");
   assert.equal(captureReachedThePage(walled), false);
   assert.equal(captureDoubt(walled, "The Register: Enterprise Technology News"), "contained");
+});
+
+// --- The same "contained" verdict, read EARLY off in-flight `/progress` marks -- #426 ---
+
+/** The two marks `/progress`'s `phases` carries once the structural sweep and the census have both run --
+ * `sweepEveryStructuralType`'s `structural` mark and `navigateByStructureThenAudit`'s `structureCensus`
+ * mark, in the order a real capture actually produces them. */
+const inFlightMarks = (reachedHeadings: number, exposedHeadings: number, structuralAtMs = 8000) => [
+  { event: "structural", atMs: structuralAtMs, headings: reachedHeadings, landmarks: 0, formFields: 0, roundTrips: 4 },
+  { event: "structureCensus", atMs: structuralAtMs + 400, heading: exposedHeadings, names: [] },
+];
+
+test("the register's consent wall reads 'contained' EARLY, off the same two marks the finished verdict uses", () => {
+  // Numerically the walled fixture above, but read mid-capture: only the two marks that decide it, not the
+  // whole finished capture. `captureReachedThePage(walled)` and this must agree -- same threshold, same
+  // numbers, read at two different times.
+  const verdict = earlyContainmentVerdict(inFlightMarks(1, 463));
+  assert.deepEqual(verdict, { decided: true, contained: true, observedAtMs: 8000 });
+});
+
+test("a healthy in-flight capture reads 'not contained', not merely 'undecided'", () => {
+  const verdict = earlyContainmentVerdict(inFlightMarks(37, 38));
+  assert.deepEqual(verdict, { decided: true, contained: false });
+});
+
+test("before EITHER mark has arrived, the verdict is UNDECIDED -- never read as cleared", () => {
+  // The gap this exists to close: "no doubt yet" and "decided, not contained" must never collapse into
+  // one state, or a caller watching for the FIRST decided verdict would print "not contained" the instant
+  // polling starts, before the sweep has told it anything.
+  assert.deepEqual(earlyContainmentVerdict([]), { decided: false });
+  // Only the sweep's own mark has arrived -- the census (the oracle) has not, so there is nothing yet to
+  // compare the reached count against.
+  assert.deepEqual(
+    earlyContainmentVerdict([{ event: "structural", atMs: 4000, headings: 1 }]),
+    { decided: false },
+  );
+  // Only the census has arrived -- the sweep has not yet reported what it reached.
+  assert.deepEqual(
+    earlyContainmentVerdict([{ event: "structureCensus", atMs: 4000, heading: 463 }]),
+    { decided: false },
+  );
+});
+
+test("a small page cannot be judged early either, for the identical reason it cannot be judged at the end", () => {
+  // Reuses `reachedEnoughHeadings`'s own floor (CENSUS_HEADINGS_TO_JUDGE) rather than a second one -- a
+  // page with 3 headings reached 0 tells this heuristic nothing, exactly as it tells the finished-capture
+  // gate nothing.
+  assert.deepEqual(earlyContainmentVerdict(inFlightMarks(0, 3)), { decided: true, contained: false });
+});
+
+test("a suspect census (unconfirmed CDP target) reads as decided-and-clear early too, not as undecided", () => {
+  // `pageCensus` already treats a suspect census as "cannot judge" (-> `reachedEnoughHeadings` returns
+  // true), and that must reach this reader unchanged -- the census MARK has arrived, so this is a decided
+  // verdict, not a pending one.
+  const marks = [
+    { event: "structural", atMs: 5000, headings: 1 },
+    { event: "structureCensus", atMs: 5300, heading: 463, targetMatch: "fallback", candidates: 2 },
+  ];
+  assert.deepEqual(earlyContainmentVerdict(marks), { decided: true, contained: false });
 });
 
 test("a healthy capture of a big page is accepted", () => {

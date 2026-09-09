@@ -27,7 +27,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { FAULT } from "../../nvda-worker/src/capture-faults.mjs";
 import {
-  FAULT_REMEDIATION, remediationFor, formatFaultMessage, formatDoubtMessage, type FaultRemediation,
+  FAULT_REMEDIATION, remediationFor, formatFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice,
+  type FaultRemediation,
 } from "./fault-remediation.js";
 
 const SCORE_PY_PATH = fileURLToPath(new URL("../../scorer/python/score.py", import.meta.url));
@@ -124,6 +125,18 @@ test("#398: a CaptureDoubt gets the full WHAT/TRY/WHERE treatment, worded as a d
   assert.match(message, new RegExp(remediation.what.slice(0, 40).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(message, new RegExp(remediation.tryThis.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(message, new RegExp(remediation.whereToLook.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("#426: the early notice says WHEN it looked and that this is not the final result", () => {
+  const message = formatEarlyContainmentNotice(8234);
+  assert.match(message, /8\.2s/, "the observation time must survive, so 'a capture is not an instant' "
+    + "does not become an unstated assumption");
+  assert.match(message, /not the final result/i, "must not read like the same VERDICT formatDoubtMessage prints");
+  assert.doesNotMatch(message, /worker's capture failed/i);
+  // Gets the SAME remediation table entry as the finished "contained" doubt -- one WHAT/TRY/WHERE, not a
+  // second copy that could drift from it.
+  const remediation = remediationFor("contained")!;
+  assert.match(message, new RegExp(remediation.tryThis.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("#336: the progress argument reports how far a PARTIAL capture got, when the worker said", () => {
