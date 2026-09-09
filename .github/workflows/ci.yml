@@ -352,7 +352,16 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
+      # `fetch-depth: 0` because the lane step below diffs `origin/<base>...HEAD`, and a three-dot diff
+      # needs a MERGE BASE. On the default shallow checkout there is none, and git does not degrade: it
+      # exits 128 with `fatal: ...: no merge base`, which under `bash -e` fails the step BEFORE the check
+      # runs. Measured 2026-09-09 by reproducing it in a `--depth=1` clone, after the check refused its own
+      # first PR and the refusal was nothing to do with lanes. `ownedPaths` already carries this for the
+      # identical reason and is the shape copied here -- a check that cannot ask must say so, and one that
+      # cannot even start says something worse: a real-sounding failure with the wrong cause on it.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - uses: actions/cache@v4
@@ -405,8 +414,7 @@ jobs:
           # the inline form by name, and it is right to: the flag parser downstream is not the boundary.
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          git fetch --depth=1 origin "$GITHUB_BASE_REF"
-          git diff --name-only FETCH_HEAD...HEAD > /tmp/lane-changed.txt
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > /tmp/lane-changed.txt
           printf '%s' "$PR_BODY" > /tmp/lane-body.txt
           node scripts/workflow-lane-check.mjs \
             --diff=/tmp/lane-changed.txt \
