@@ -116,7 +116,61 @@ name, and "click here" has one. Meanwhile axe found four things a screen reader 
 Neither layer subsumes the other — and the accessible twin is clean on both, which matters more than the
 findings.
 
+### The V1 rehearsal — a standing release gate, not a one-off (#813)
+
+**Before `publish-for-real` is typed, a session that built none of the release follows only the public
+documentation, from a fresh clone, against a site we do not own — and the release waits on the reading of
+what came back.** Not a smoke test: a smoke test asks whether the thing runs; this asks whether the report
+is worth a stranger's nine minutes, a judgement only somebody who did not build it can make.
+
+**Owner: whoever holds the publish.** Not a role that can be delegated to whoever is free — the gate's
+whole premise is that the runner supplies no context the public docs do not themselves give, and the
+person about to type `publish-for-real` is the one whose judgement the release is actually waiting on.
+
+**Five requirements, and all five must hold or the run is not the gate:**
+
+1. **A session that built none of the release runs it.** Somebody who wrote the code cannot read its
+   output as a stranger; they supply the missing context without noticing. **This is why a session that
+   built the release cannot satisfy this gate itself, however carefully it tries** — the thing being
+   tested is precisely the knowledge a builder cannot un-know.
+2. **A fresh clone and only the public documentation** — `README.md`, `docs/try-it.md`,
+   `docs/github-action.md`. Reaching for internal knowledge is the failure being tested for, not a
+   shortcut past it.
+3. **A site we do not own**, with a real task. A page we built cannot falsify our assumptions about pages
+   we did not.
+4. **The reading is the deliverable, not the run.** The four questions `docs/try-it.md` already asks —
+   did it see the real page, did I believe the findings, were the referrals worth reading, was it worth
+   the minutes — answered in writing, with every finding the rule demands it for (`rules.ts:699`, 2.4.7)
+   read individually against its stored log.
+5. **Everything the reading surfaces is filed, not fixed in place.** Fixing as you go destroys the record
+   of what a first reader actually met, which is the one thing no internal test can produce a second time.
+
+**Most recent rehearsal:** 2026-09-09, run
+[34364673899](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/34364673899), against
+`a11y-witness@8849f92d` (the commit `DanBeckDev/a11y-witness@main` resolved to at the time). Full reading:
+[#324](https://github.com/DanBeckDev/a11y-witness/issues/324). It produced **five** filed defects, every
+one surviving a fully green internal suite — the argument for why this gate exists rather than a good
+idea:
+
+| | |
+|---|---|
+| #796 | broken links, missing `permissions:` in every quickstart snippet, a public-claim guard too narrow to see the one file readers are told to copy (merged) |
+| #801 / #808 | the PR comment's first line read `No blocking findings: Yes` above six 🔴 serious findings — the wording `report.ts` was rewritten to remove, still live in `action/summary.ts` because the fix reached one of two consumers of the same function (merged) |
+| #811 | the finding list under-reported: seven genuine focus losses detected, five emitted, because a shared dedup keyed on `wcag|evidence` collapses repeated occurrences that word themselves identically |
+| #812 | a finding whose quoted before/after names two *different* controls, passing its own equality check only because both happen to contain the word "collapsed" |
+
+**A rehearsal covers the commit it ran against, and only that one.** "A rehearsal was run once" and "a
+rehearsal covers this release" are different claims — the table above is evidence for the first, not
+proof of the second. Whenever the current commit is not the one named above, no rehearsal covers it, and
+the entry in **NOT verified** below is not a formality: it is the honest state until a fresh rehearsal
+names a newer commit here.
+
 ## NOT verified
+
+- **This release, if its commit is not `8849f92d` (the rehearsal above).** A rehearsal names the one
+  commit it actually ran against; it does not extend forward by assumption to whatever HEAD has become
+  since. Run the rehearsal again and update the entry above with its date, run URL and commit before
+  treating the outward-facing path as covered.
 
 - **The `anthropic` and `openai` judge backends.** Written to their SDK specs and unexercised; this project
   keeps no metered key. They are opt-in, never the default.
