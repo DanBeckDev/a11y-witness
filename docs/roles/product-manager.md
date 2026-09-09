@@ -73,6 +73,13 @@ Three constraints from that date, enforced rather than remembered:
 
 A second incident of the same shape moves the role to another session.
 
+**Fifth instance, 2026-09-09 10:20Z (ceo).** `npm run worktrees:prune` was run to read its breakdown; the
+tool mutated by default and removed three merged, clean worktrees belonging to other sessions. No work
+was lost, the incident was reported in the same minute as constraint (3) requires, and the tool's default
+now flips to reporting with `--apply` as the mutation (#669). The role's own sentence is the record: the
+tool's safety precondition is about the BRANCH and the hazard is about the SESSION, and a merged, clean
+worktree can still be somebody's current directory.
+
 **Fourth Acceptance-line slip, 2026-09-09 (ceo).** #576, #587, #599 and #619 each named a correct check
 for the wrong job: `board-style.test.ts` imports `collect`, which shells out to `gh`, and the acceptance
 job's token is contents-only, so the check cannot run where it was named. The role's own rule from it,
