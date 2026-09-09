@@ -169,3 +169,24 @@ export function formatFaultMessage(fault: string, message: string | undefined,
 export function formatDoubtMessage(doubt: string, detail: string): string {
   return `This capture may not describe the page: ${detail} (${doubt}).${remediationTail(doubt)}`;
 }
+
+/**
+ * The early, IN-FLIGHT half of #398's "contained" doubt — #426. `formatDoubtMessage` above is a VERDICT
+ * printed once the whole capture has finished; this is an observation from partway through it, and the
+ * wording says so rather than reading like the final answer. "A capture is not an instant" (this
+ * project's own rule, `verify.ts`'s consent-overlay incident): the overlay was present for some probes
+ * and gone for others on a real page, so a notice that does not say WHEN it looked inherits that
+ * ambiguity instead of resolving it.
+ *
+ * Never a rejection, and cannot become one from here — `capture-client.mjs`'s `onProgress` return value
+ * is unused, so nothing this prints can touch whether the capture continues. It fires once per capture
+ * (`cli.ts`'s `captureViaWorker` tracks that) precisely so five minutes of silence does not read as five
+ * minutes of the SAME warning repeating.
+ */
+export function formatEarlyContainmentNotice(observedAtMs: number): string {
+  const seconds = (observedAtMs / 1000).toFixed(1);
+  return `NOTICE (as of ${seconds}s into this capture — not the final result): the screen reader had `
+    + `reached almost none of this page's headings at that point, the shape a consent overlay Escape `
+    + `could not dismiss leaves. The capture is still running; this may still clear.`
+    + `${remediationTail("contained")}`;
+}
