@@ -48,6 +48,18 @@ export interface SweepOutcome {
   /** The element type swept: "heading", "link", "landmark", ... */
   type: string;
   stop?: SweepStop | string;
+  /**
+   * How many quick-navigation trips THIS DIRECTION made, and how many distinct items the whole sweep
+   * reached — #887. Optional, because a capture taken before they were read carries neither and must not
+   * be told what it did not record.
+   *
+   * They are here because `stop` alone cannot answer whether a sweep that ran out ran out OF THE PAGE.
+   * `exhausted` is NVDA's own "no next link", which is true about the caret's current scope — and on
+   * `781-r1-hubspot/capture-1` that scope was an open chat dialog. A sweep cannot have visited more
+   * elements than it made trips, so trips are the number that can contradict the claim.
+   */
+  trips?: number;
+  found?: number;
 }
 
 export interface ConformanceRequirement {
@@ -519,7 +531,7 @@ export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcom
   for (const mark of diagnostics) {
     const m = mark as {
       event?: string; type?: string; prevStop?: string; nextStop?: string; truncated?: boolean;
-      stop?: string;
+      stop?: string; prevTrips?: number; nextTrips?: number; found?: number;
     };
     // The focus probe is not a quick-nav sweep, but it truncates the same way — it stops after a fixed
     // number of Tab presses — and the consequence is identical: content past that point was never
@@ -539,8 +551,16 @@ export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcom
       continue;
     }
     if (m?.event !== "sweep") continue;
-    for (const stop of [m.prevStop, m.nextStop]) {
-      if (stop !== undefined) out.push({ type: String(m.type ?? "unknown"), stop });
+    for (const [stop, trips] of [[m.prevStop, m.prevTrips], [m.nextStop, m.nextTrips]] as const) {
+      if (stop !== undefined) {
+        out.push({
+          type: String(m.type ?? "unknown"), stop,
+          // Carried through rather than recomputed downstream: this is the one place that reads the
+          // sweep mark, and a second reader of the same fields is how two answers to one question start.
+          ...(typeof trips === "number" ? { trips } : {}),
+          ...(typeof m.found === "number" ? { found: m.found } : {}),
+        });
+      }
     }
   }
   return out;
@@ -571,8 +591,101 @@ function renderSentence(input: ConformanceScopeInput): string {
   return input.documentIdentity ? ` ${identitySentence(input.documentIdentity)}` : "";
 }
 
+/**
+ * A SWEEP THAT RAN OUT AFTER FEWER TRIPS THAN THE CENSUS COUNTS — #887.
+ *
+ * **`exhausted` is the one stop reason this codebase treats as authoritative rather than inferred**, and
+ * it is NVDA's own "no next link". That answer is true about the caret's CURRENT SCOPE, which is not
+ * always the page.
+ *
+ * Measured on `runs/781-r1-hubspot.json/capture-1`: the `landmark` sweep's last stop was literally
+ * `"Hub Bot, dialog"` — it walked into HubSpot's chat widget and left the caret inside an open dialog.
+ * The three sweeps that ran while it was open each truthfully exhausted that dialog:
+ *
+ *     formField  found 12, and every one of them is a chat-widget control
+ *     graphic    found 2   ("Avatar of Hub Bot", "Message History ... Avatar of Hub Bot")
+ *     link       found 1   ("privacy policy, link")   against a census of 79
+ *
+ * The `list` sweep, after the dialog closed, found the real page's 22 lists, and the `frame` sweep saw
+ * the widget as `"... Open live chat, button, opens dialog"` — closed again. **Nothing was wrong with the
+ * page, the worker or the build.** The report then rendered "every structural sweep ran until the page
+ * ran out of elements" over a capture that had examined a chat dialog.
+ *
+ * ## THE NUMBER THIS COMPARES, AND WHAT IT DOES NOT PROVE
+ *
+ * **A sweep cannot have visited more elements than it made trips.** 8 trips against a census of 79 links
+ * is arithmetic, not a threshold somebody chose, and it needs no constant.
+ *
+ * It does NOT prove the sweep was scoped wrongly. The census counts AX nodes in roles the quick-navigation
+ * key may not reach at all — #800's finding, and the reason `formControl` and `f` disagree — so a sweep
+ * can legitimately make fewer trips than the census has elements.
+ *
+ * **Which is why this WITHHOLDS a claim rather than making one.** Requirement 2's full-page sentence is an
+ * affirmative assertion that the page ran out; withholding it needs doubt, not proof, and that asymmetry
+ * is the whole reason this direction is safe. The numbers are named so a reader can weigh them.
+ *
+ * Only sweeps where BOTH directions ran out are considered — a half-exhausted sweep is already truncated
+ * and `truncatedSweeps` reports it.
+ */
+export function ranOutShortOfTheCensus(input: ConformanceScopeInput): {
+  type: string, found: number, census: number, trips: number
+}[] {
+  const census = input.census;
+  if (!census) return [];
+  const byType = new Map<string, { ranOut: boolean, bothSeen: number, trips: number, found: number }>();
+  for (const sweep of input.sweeps ?? []) {
+    // No trips recorded means a capture from before #887, and it cannot answer this question. Absent is
+    // not zero -- reading it as zero would refuse the claim on every capture ever taken.
+    if (typeof sweep.trips !== "number" || typeof sweep.found !== "number") continue;
+    const seen = byType.get(sweep.type)
+      ?? { ranOut: true, bothSeen: 0, trips: 0, found: sweep.found };
+    seen.ranOut = seen.ranOut && SWEEP_RAN_OUT.includes(sweep.stop as SweepStop);
+    seen.bothSeen += 1;
+    seen.trips += sweep.trips;
+    byType.set(sweep.type, seen);
+  }
+  const out: { type: string, found: number, census: number, trips: number }[] = [];
+  for (const [type, seen] of byType) {
+    // BOTH directions, or the sweep is truncated rather than short — a different finding, reported
+    // elsewhere, and reporting it twice would double-count the same capture's incompleteness.
+    if (!seen.ranOut || seen.bothSeen < 2) continue;
+    const key = CENSUS_KEY[type as keyof typeof CENSUS_KEY];
+    const present = key ? census[key] : undefined;
+    // NO CENSUS ENTRY, NO COMPARISON. `list` and `frame` have no census key, and inventing a denominator
+    // is worse than having none -- `sweepCoverage` makes the same choice for the same reason.
+    if (typeof present !== "number" || seen.trips >= present) continue;
+    out.push({ type, found: seen.found, census: present, trips: seen.trips });
+  }
+  return out;
+}
+
 function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
   const truncated = truncatedSweeps(input.sweeps);
+  const short = ranOutShortOfTheCensus(input);
+  // A SWEEP THAT SAID IT RAN OUT, HAVING MADE FEWER TRIPS THAN THE CENSUS COUNTS, CANNOT SUPPORT THE
+  // FULL-PAGE SENTENCE — #887. Checked before the truncation branch because a capture can have both, and
+  // the affirmative claim must be withheld if EITHER is true. Reported in its own words rather than
+  // folded into "truncated": a truncated sweep is honest about stopping early, and this one is not.
+  if (truncated.length === 0 && short.length > 0) {
+    const detail = short
+      .map((s) => `${s.type} (${s.found} found in ${s.trips} trips, census ${s.census})`).join(", ");
+    return {
+      number: 2,
+      name: "Full pages",
+      establishes: "Part of the page was examined.",
+      limitation: "A sweep reported that the page RAN OUT of elements after fewer trips than the page's "
+        + `own accessibility census counts: ${detail}. A sweep cannot have visited more elements than it `
+        + "made trips, so the run cannot claim it examined them. `exhausted` is the screen reader's own "
+        + "\"no next link\", which is true about wherever its cursor was — on the capture this check was "
+        + "written from, that was an open chat dialog, and every sweep inside it ran out honestly while "
+        + "the page went unexamined. This does not establish that anything was missed: the census counts "
+        + "elements a quick-navigation key may not reach at all. It establishes that the full-page claim "
+        + "is not supported." + coverageSentence(input)
+        + " Separately: one viewport only, iframes not entered, and any state reachable without a URL "
+        + "change is part of this same page and was not examined."
+        + renderSentence(input) + activationSentence(input),
+    };
+  }
   if (truncated.length === 0) {
     return {
       number: 2,
