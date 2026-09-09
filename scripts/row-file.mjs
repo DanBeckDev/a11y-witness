@@ -3,6 +3,24 @@
 // command: refuse to file a backlog row via `gh issue create` when its body is missing a required section
 // #735: THE SAME GATE #707 PUT ON THE CLAIM SIDE, CALLED FROM THE FILING SIDE INSTEAD.
 //
+// #771: NOTHING RECORDS WHO FILED A ROW, SO A BACKFILL LIST CANNOT BE ADDRESSED. GitHub's `author` is the
+// one fleet account for every row, and a `session:` label means CLAIMED, not filed (the 2026-09-09
+// ruling) -- so for 25 of 27 rows measured missing a required section, nothing named who filed it, and an
+// instruction to "send each filer its incomplete rows" could not be carried out. The two that COULD be
+// attributed were attributed by accident: two from a session's own memory of filing them, one because
+// `orchestrator` happened to write "Filed by `orchestrator`" in prose. That last one is the whole
+// argument -- the information is useful, somebody wrote it by hand once, and nothing asked for it.
+//
+// So this writes `Filed-by: <session>` into the body -- a body LINE, never a label. A label means
+// CLAIMED (the same ruling), and a `filed-by:*` label would put two different meanings in one namespace,
+// exactly the collision #683 records: `session:` was asked to be both a claim about the present and a
+// record of the past, and removing it on close (#754) destroyed the second. A body line has the property
+// the label lacked: it is a record, so nothing later ever needs to remove it.
+//
+// `--session=<name>`, REQUIRED, the identical flag `row-claim.mjs` already uses for the same fact --
+// never a separately-named flag (`--filed-by=`) a caller could set to anything unrelated to who is
+// actually running this. One place a session states its identity, not two that could disagree.
+//
 // `.github/ISSUE_TEMPLATE/backlog-row.yml` marks Region, Acceptance and Open-check `required` -- but that
 // is a GitHub issue FORM, and forms apply only in the web UI. Every row this fleet files goes through
 // `gh issue create --body`, which bypasses the form entirely, and nobody discovered a row was incomplete
@@ -122,6 +140,47 @@ export function fileRefusalReason(body) {
 }
 
 /**
+ * The `--session=<name>` value, or `null` when absent -- the same convention `row-claim.mjs` requires for
+ * dispatch/claim/decline, reused rather than a second, independently-typed flag.
+ * @param {string[]} argv
+ * @returns {string | null}
+ */
+export function sessionFromArgv(argv) {
+  const flag = argv.find((a) => a.startsWith("--session="));
+  return flag ? flag.slice("--session=".length) : null;
+}
+
+/**
+ * `body` with a trailing `Filed-by: <session>` line -- the whole of #771's record. Appended after the
+ * body's own trailing whitespace is trimmed, so it always lands on its own line regardless of whether the
+ * caller's body already ended with one.
+ * @param {string} body @param {string} session
+ * @returns {string}
+ */
+export function appendFiledBy(body, session) {
+  return `${body.replace(/\s+$/, "")}\n\nFiled-by: ${session}\n`;
+}
+
+/**
+ * `argv` with any `--body`/`--body-file` form removed and replaced by a single `--body <augmentedBody>`,
+ * and `--session=` removed entirely -- `gh issue create` has no such flag and would refuse it as unknown.
+ * Every other argument (title, labels, ...) passes through in its original position, unchanged.
+ * @param {string[]} argv @param {string} session @param {string} body the body BEFORE augmentation
+ * @returns {string[]}
+ */
+export function withFiledBy(argv, session, body) {
+  const kept = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--body" || arg === "--body-file" || arg === "--session") { i += 1; continue; }
+    if (arg.startsWith("--body=") || arg.startsWith("--body-file=") || arg.startsWith("--session=")) continue;
+    kept.push(arg);
+  }
+  kept.push("--body", appendFiledBy(body, session));
+  return kept;
+}
+
+/**
  * Every argument, unchanged, straight to the real `gh issue create`.
  * @param {string[]} argv
  */
@@ -130,21 +189,28 @@ function spawnGhIssueCreate(argv) {
 }
 
 /**
- * Checks, then (only if it passes) files -- injectable `spawnGh` so a test can prove the passthrough
- * happens, and happens with the EXACT argv given, without spawning a real `gh` or reaching GitHub. This
- * wrapper adds exactly one check and must not otherwise alter what gets filed or how `gh` itself behaves.
+ * Checks, then (only if it passes) files, with `Filed-by:` appended into the body that actually reaches
+ * `gh` -- injectable `spawnGh` so a test can prove the passthrough happens, and happens with the argv
+ * this function actually builds, without spawning a real `gh` or reaching GitHub.
  * @param {string[]} argv
  * @param {{ spawnGh?: (argv: string[]) => void }} [deps]
  * @returns {number} the process exit code
  */
 export function createIssue(argv, { spawnGh = spawnGhIssueCreate } = {}) {
-  const reason = fileRefusalReason(bodyFromArgv(argv));
+  const session = sessionFromArgv(argv);
+  if (!session) {
+    process.stderr.write("row-file: --session=<name> is required -- Filed-by: is taken from the session "
+      + "filing the row, never guessed and never left blank.\n");
+    return 1;
+  }
+  const body = bodyFromArgv(argv);
+  const reason = fileRefusalReason(body);
   if (reason) {
     process.stderr.write(`${reason}\n`);
     return 1;
   }
   try {
-    spawnGh(argv);
+    spawnGh(withFiledBy(argv, session, /** @type {string} */ (body)));
     return 0;
   } catch (error) {
     return /** @type {{ status?: number }} */ (error).status ?? 1;
@@ -152,7 +218,8 @@ export function createIssue(argv, { spawnGh = spawnGhIssueCreate } = {}) {
 }
 
 function main() {
-  refuseUnknownFlags(KNOWN_GH_ISSUE_CREATE_FLAGS, { entry: import.meta.url, command: "npm run row-file --" });
+  refuseUnknownFlags([...KNOWN_GH_ISSUE_CREATE_FLAGS, "--session="],
+    { entry: import.meta.url, command: "npm run row-file --" });
   process.exitCode = createIssue(process.argv.slice(2));
 }
 

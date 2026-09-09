@@ -4,6 +4,8 @@ Drive a real screen reader over a page in CI and report what it announced.
 
 ```yaml
 runs-on: windows-2022          # NVDA is Windows-only; the action fails fast and says so otherwise
+permissions:
+  pull-requests: write        # for the PR comment below; omit it and the report still runs, only quieter
 steps:
   - uses: actions/checkout@v4
   - uses: DanBeckDev/a11y-witness@main
