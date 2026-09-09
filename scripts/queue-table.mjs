@@ -302,9 +302,102 @@ export function renderMergedChecks(merged, required) {
   return { lines, incomplete: unreadable.length > 0 || timesMissing || required === null };
 }
 
+/**
+ * THE HOST ITSELF, because on 2026-09-09 it was the bottleneck and nothing said so.
+ *
+ * At 08:57Z this machine had four PRs reading as "not carried by their owners" for twenty minutes. Every
+ * one of those carries is a `git merge` plus a pre-push gate running lint and typecheck, and there were
+ * 58 concurrent git processes on one repository and 164 worktrees for Spotlight to index. The table named
+ * four idle owners and the truth was one contended machine -- **attributing a machine fault to people,
+ * which is the worst thing a status table can do.**
+ *
+ * WHICH NUMBER, AND THIS TOOK TWO WRONG ANSWERS TO SETTLE.
+ *
+ * NOT `free`. macOS keeps it small by design and inactive pages are reclaimable, so a low free figure is
+ * the normal state of a working machine. The first version of this section keyed its threshold on free --
+ * quoting CLAUDE.md's warning not to trust it, in the same comment.
+ *
+ * AND `Pages occupied by compressor` IS FOUR WORDS BEFORE ITS NUMBER. An awk taking `$3` gets the word
+ * "by" and prints 0, which reads as "no memory pressure at all" on a host holding 12 GB compressed. Two
+ * sessions measured this host minutes apart and got 0 MB and 12,344 MB; the difference was the field
+ * index. **A parse error in a metric is indistinguishable from good news** -- so this counts pages by a
+ * labelled regex and multiplies by the page size `vm_stat` itself reports, never by a hard-coded 4096 or
+ * a positional field.
+ *
+ * THE THRESHOLD KEYS ON LOAD AND THE GIT COUNT, not on memory. Both are unambiguous, neither needs a
+ * baseline, and they are what actually made the carries slow: git contention on one repository, and a
+ * load average of 15 on 14 cores. The compressor is REPORTED beside them because 12 GB of it is a real
+ * finding, and it becomes a threshold only once its delta has a baseline -- CLAUDE.md's own rule that
+ * paging must be read as a delta, since the counters are since-boot and 6.6 GB left from an incident
+ * hours ago is indistinguishable from a host swapping right now.
+ *
+ * @returns {{compressedMb: number, inactiveMb: number, freeMb: number, pageouts: number,
+ *   load: number | null, gitProcesses: number | null, worktrees: number} | null}
+ */
+export function hostState() {
+  const stat = ask(() => execFileSync("vm_stat", [], { encoding: "utf8" }));
+  if (stat === null) return null;
+  const pageSize = Number((/page size of (\d+)/.exec(stat) ?? [])[1] ?? 16384);
+  // LABELLED, never positional: the compressor's label is four words long and a positional read of it
+  // returns the word "by" as a number, which is 0, which reads as good news.
+  const mb = (/** @type {string} */ label) => {
+    const m = new RegExp(`${label}:\\s+(\\d+)`).exec(stat);
+    return m ? Math.round((Number(m[1]) * pageSize) / 1048576) : 0;
+  };
+  const count = (/** @type {string} */ label) => {
+    const m = new RegExp(`${label}:\\s+(\\d+)`).exec(stat);
+    return m ? Number(m[1]) : 0;
+  };
+  return {
+    compressedMb: mb("Pages occupied by compressor"),
+    inactiveMb: mb("Pages inactive"),
+    freeMb: mb("Pages free"),
+    pageouts: count("Pageouts"),
+    load: ask(() => Number(execFileSync("sysctl", ["-n", "vm.loadavg"], { encoding: "utf8" })
+      .replace(/[{}]/g, "").trim().split(/\s+/)[0])),
+    gitProcesses: ask(() => execFileSync("pgrep", ["-x", "git"], { encoding: "utf8" })
+      .trim().split("\n").filter(Boolean).length) ?? 0,
+    worktrees: ask(() => execFileSync("git", ["worktree", "list"],
+      { encoding: "utf8", env: sandboxGitEnv() }).trim().split("\n").length) ?? 0,
+  };
+}
+
+/** Concurrent git processes above which a carry is contending rather than working. */
+export const GIT_PROCESS_CEILING = 10;
+
+/** Load average above which the gate is slow because the host is, not because anything is wrong. */
+export const LOAD_CEILING = 12;
+
+/**
+ * @param {ReturnType<typeof hostState>} host
+ * @param {number | null} previousPageouts a prior table's reading, so paging reads as a DELTA
+ * @returns {{lines: string[], incomplete: boolean}}
+ */
+export function renderHost(host, previousPageouts = null) {
+  if (!host) return { lines: ["   ? could not read the host"], incomplete: true };
+  const delta = previousPageouts === null
+    ? "(no baseline yet)"
+    : `+${host.pageouts - previousPageouts} since the last table`;
+  const lines = [
+    `   compressed ${host.compressedMb} MB   inactive ${host.inactiveMb} MB   free ${host.freeMb} MB`,
+    `   pageouts ${delta}   load ${host.load ?? "?"}   git ${host.gitProcesses}   `
+      + `worktrees ${host.worktrees}`,
+  ];
+  const contended = (host.load ?? 0) > LOAD_CEILING
+    || (host.gitProcesses ?? 0) > GIT_PROCESS_CEILING;
+  if (contended) {
+    lines.push("   ^ THE HOST IS CONTENDED. A carry is a merge plus a pre-push gate running lint and",
+      "     typecheck; at this load those are minutes rather than seconds. A PR that is not carried",
+      "     right now is a busy machine, NOT an idle owner -- do not name people for it.",
+      "     Cheapest relief, in order: remove every worktree whose PR has merged (Spotlight indexes",
+      "     every one of them), and stop running `npm test` locally -- the pre-push gate is enough.");
+  }
+  return { lines, incomplete: false };
+}
+
 /** @param {{trunk: any, prs: any[] | null, merged: any[] | null, now: Date, fetched?: boolean,
- *   required?: string[] | null}} data */
-export function render({ trunk, prs, merged, now, fetched = true, required = null }) {
+ *   required?: string[] | null, host?: ReturnType<typeof hostState> | null}} data */
+export function render({ trunk, prs, merged, now, fetched = true, required = null, host = null }) {
   const sections = [
     { heading: "1. TRUNK", body: renderTrunk(trunk) },
     { heading: "2. OPEN PRs  (behind is COUNTED, never read off mergeStateStatus)", body: renderOpenPRs(prs) },
@@ -319,6 +412,10 @@ export function render({ trunk, prs, merged, now, fetched = true, required = nul
         "   (the view the chairman reads. A check red here blocks nothing and is therefore the red people",
         "    stop reading -- which is exactly how one sat on seven merged PRs for ninety minutes.)"].join("\n"),
       body: renderMergedChecks(merged, required),
+    },
+    {
+      heading: "5. THIS HOST  (it was the bottleneck on 2026-09-09 and nothing said so)",
+      body: renderHost(host),
     },
   ];
   // EVERY SECTION IS PRINTED, including the empty ones. A section that vanishes when it has nothing to
@@ -360,7 +457,8 @@ export function collect(now = new Date()) {
       : null;
     return prRow(pr, behind, now);
   });
-  return { trunk, prs, merged: recentlyMerged(), now, fetched, required: requiredContexts() };
+  return { trunk, prs, merged: recentlyMerged(), now, fetched, required: requiredContexts(),
+    host: hostState() };
 }
 
 function main() {
