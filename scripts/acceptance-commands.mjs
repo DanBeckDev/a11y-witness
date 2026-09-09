@@ -1054,6 +1054,18 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists, ca
   const executable = stripTrailingCommentary(command);
   const classification = classifyCommand(executable, { commandExists: exists, capabilities, section: prefix });
   if (classification.verdict === "refused") {
+    // A WHOLE-SUITE COMMAND IS THE ONE REFUSAL THAT FAILS. Every other REFUSED is a legitimate "not this
+    // job's to run": the author named a file, and this job cannot run that particular file. `npm test`
+    // names nothing -- so a refusal of it means the PR has declared no acceptance this job can act on at
+    // all, and reporting that as a pass is how "verified" comes to mean "unexamined" (ceo, 2026-09-09).
+    // The message names the fix rather than the state, because a refusal a reader cannot follow is one
+    // they route around.
+    if (runsTheWholeSuite(executable)) {
+      return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}\n`
+        + "  Name the files this change is verified by. This job has no token and no corpus, and it runs "
+        + "commands taken from a PR body, so it cannot run the whole suite -- a PR whose author cannot "
+        + "name a file that verifies it has no acceptance.", ok: false };
+    }
     return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
   }
   // #446: A THIRD, DISTINCT LINE SHAPE -- neither RAN nor REFUSED, so it cannot be mistaken for either.
