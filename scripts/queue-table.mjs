@@ -34,6 +34,7 @@
  * that quietly omits the PR it could not read is worse than no table: the reader counts what is there.
  */
 import { execFileSync } from "node:child_process";
+import { loadavg } from "node:os";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -331,9 +332,23 @@ export function renderMergedChecks(merged, required) {
  * paging must be read as a delta, since the counters are since-boot and 6.6 GB left from an incident
  * hours ago is indistinguishable from a host swapping right now.
  *
- * @returns {{compressedMb: number, inactiveMb: number, freeMb: number, pageouts: number,
- *   load: number | null, gitProcesses: number | null, worktrees: number} | null}
+ * @typedef {{compressedMb: number, inactiveMb: number, freeMb: number, pageouts: number,
+ *   load: number | null, gitProcesses: number | null, worktrees: number}} HostState
+ *
+ * `load` and `gitProcesses` are declared NULLABLE even though `os.loadavg()` cannot fail today. The
+ * type is what stops the next reader writing `host.load > LOAD_CEILING` and getting `false` from a
+ * missing reading -- the exact expression this commit removes. A type that forbids the absent case is
+ * how the absent case stops being handled.
+ *
+ * @returns {HostState | null}
  */
+/** Whether `pgrep` can be run at all, so a failed count is told apart from a count of none. */
+function gitIsAskable() {
+  return ask(() => execFileSync("pgrep", ["-x", "definitely-no-such-process-name"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })) !== null
+    || ask(() => execFileSync("pgrep", ["-V"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })) !== null;
+}
+
 export function hostState() {
   const stat = ask(() => execFileSync("vm_stat", [], { encoding: "utf8" }));
   if (stat === null) return null;
@@ -353,10 +368,18 @@ export function hostState() {
     inactiveMb: mb("Pages inactive"),
     freeMb: mb("Pages free"),
     pageouts: count("Pageouts"),
-    load: ask(() => Number(execFileSync("sysctl", ["-n", "vm.loadavg"], { encoding: "utf8" })
-      .replace(/[{}]/g, "").trim().split(/\s+/)[0])),
+    // NO SUBPROCESS FOR THE LOAD. This asked `sysctl`, which lives in /usr/sbin -- not on the PATH a
+    // node script inherits from a shell that exported a minimal one. It returned null for ninety
+    // minutes on a host whose real load was 15.08 against a ceiling of 12, and the table printed
+    // `load ?` beside "the host is fine". `os.loadavg()` is the same number from the same kernel with
+    // nothing between, so there is no failure mode left to swallow.
+    load: loadavg()[0],
+    // UNREADABLE IS NOT ZERO. `pgrep` exits 1 when nothing matches AND when it cannot run, so `?? 0`
+    // folded "I could not ask" into "there are none" -- and none is the reassuring answer. Kept
+    // separate, and `hostContention` below refuses to call a host uncontended on a count it does not
+    // have.
     gitProcesses: ask(() => execFileSync("pgrep", ["-x", "git"], { encoding: "utf8" })
-      .trim().split("\n").filter(Boolean).length) ?? 0,
+      .trim().split("\n").filter(Boolean).length) ?? (gitIsAskable() ? 0 : null),
     worktrees: ask(() => execFileSync("git", ["worktree", "list"],
       { encoding: "utf8", env: sandboxGitEnv() }).trim().split("\n").length) ?? 0,
   };
@@ -369,7 +392,28 @@ export const GIT_PROCESS_CEILING = 10;
 export const LOAD_CEILING = 12;
 
 /**
- * @param {ReturnType<typeof hostState>} host
+ * Whether the host is contended, and -- the part a boolean alone destroys -- WHICH readings are missing.
+ *
+ * THE ABSENCE OF A MEASUREMENT IS NOT THE MEASUREMENT ZERO. This was `(host.load ?? 0) > LOAD_CEILING`,
+ * which answers "is the load above 12" with "no" when the load could not be read at all -- and `no`
+ * here means "the host is fine", printed under a heading that exists because this host was the
+ * bottleneck and nothing said so. A metric that fails into the reassuring answer is worse than no
+ * metric, because it is believed.
+ *
+ * @param {{load: number | null, gitProcesses: number | null}} host
+ * @returns {{contended: boolean, unknown: string[]}}
+ */
+export function hostContention(host) {
+  const unknown = [];
+  if (host.load === null || Number.isNaN(host.load)) unknown.push("load");
+  if (host.gitProcesses === null) unknown.push("git process count");
+  const contended = (host.load !== null && !Number.isNaN(host.load) && host.load > LOAD_CEILING)
+    || (host.gitProcesses !== null && host.gitProcesses > GIT_PROCESS_CEILING);
+  return { contended, unknown };
+}
+
+/**
+ * @param {HostState | null} host
  * @param {number | null} previousPageouts a prior table's reading, so paging reads as a DELTA
  * @returns {{lines: string[], incomplete: boolean}}
  */
@@ -380,11 +424,15 @@ export function renderHost(host, previousPageouts = null) {
     : `+${host.pageouts - previousPageouts} since the last table`;
   const lines = [
     `   compressed ${host.compressedMb} MB   inactive ${host.inactiveMb} MB   free ${host.freeMb} MB`,
-    `   pageouts ${delta}   load ${host.load ?? "?"}   git ${host.gitProcesses}   `
+    `   pageouts ${delta}   load ${host.load === null ? "?" : host.load.toFixed(2)}   `
+      + `git ${host.gitProcesses ?? "?"}   `
       + `worktrees ${host.worktrees}`,
   ];
-  const contended = (host.load ?? 0) > LOAD_CEILING
-    || (host.gitProcesses ?? 0) > GIT_PROCESS_CEILING;
+  const { contended, unknown } = hostContention(host);
+  if (unknown.length > 0) {
+    lines.push(`   ^ COULD NOT READ: ${unknown.join(", ")} -- not a reading of zero, and not a`,
+      "     verdict that the host is fine. Every threshold below is answered on what was read.");
+  }
   if (contended) {
     lines.push("   ^ THE HOST IS CONTENDED. A carry is a merge plus a pre-push gate running lint and",
       "     typecheck; at this load those are minutes rather than seconds. A PR that is not carried",
