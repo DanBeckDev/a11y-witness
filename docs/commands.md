@@ -45,6 +45,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
 - `node scripts/prune-worktrees.mjs` — remove fully-merged, clean linked worktrees, and name every other one as dirty
 - `node scripts/queue-stalled.mjs` — name the armed, green PRs that can never merge because they are behind and conflicting
+- `node scripts/queue-table.mjs` — print the pipeline's four sections -- trunk, open PRs, stalled work, and red checks on merged PRs
 - `node scripts/ready-label-audit.mjs` — audit the tracker's ready label for contradictions, debris, and rows absent from the board
 - `node scripts/reconstitution-drill.mjs` — run the contingency drill: clone, compose each agent's first message, from nothing but a checkout
 - `node scripts/row-claim.mjs` — check, claim, or decline a tracker row by reading its labels, the record, never git history
