@@ -55,6 +55,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/row-reachability.mjs` — compute whether a row is actually startable from the tree, never from a label alone
 - `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
 - `node scripts/select-changed-tests.mjs` — pick only the test files that reference a changed file, narrower than package scoping
+- `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
 - `node scripts/stash-whose.mjs` — list every git stash entry with the branch it was made on, since git alone will not say
 - `node scripts/stranded-branches.mjs` — find pushed branches with no open PR, which are otherwise invisible to CI and review
 - `node scripts/trunk-revert-guard.mjs` — compare main's before/after state on a merge and refuse one that silently deletes prior work
