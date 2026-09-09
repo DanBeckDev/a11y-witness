@@ -170,18 +170,34 @@ across the day by `dispatcher`, **by classifying each merge's declared command r
 log: 55 classified, of which 5 were confirmed from the logs themselves.** So 55 is a classified count with
 five verified, not 55 read one by one — **and the board is told that rather than the round number alone.**
 
-### Whether that code was tested anyway — WRITE ONE OF THESE, NOT BOTH
+### And that code WAS tested — the reading came back, so this sentence is settled
 
-**`dispatcher` sends the trunk-guard reading before 21:04.** A separate check runs the whole suite after
-every merge; the question is whether it ran those tests, skipped them, or never reached them. **Fill in
-the sentence the reading supports and delete the other.** Do not hedge across both: a correction that
-declines to say which is true teaches the reader that we do not know, when by then we will.
+**Resolved by `dispatcher`'s trunk-guard reading, 2026-09-09.** A separate check runs the whole suite
+after every merge, with a working credential:
 
-> **If the suite ran them:** the code was tested by the check that runs everything after a change lands —
-> what failed is the one that was supposed to say so *before*, and no untested change reached us.
+```
+trunk-guard on 5d1ca43b   4,559 tests   0 failures   31 skips, none of them a credential skip
+```
 
-> **If it did not:** 55 changes merged today with nothing having run their own stated proof, and we are
-> establishing now which of them are covered by other means.
+**It executed every file the 55 acceptances named**, including the two live tracker tests the pull-request
+job refuses.
+
+> **The board sentence:** the code was tested — by the check that runs everything after a change lands.
+> What failed is the one that was supposed to say so **before**, and no untested change reached us.
+
+**Say it in that order.** *"55 reported success without running anything"* followed by *"and it was tested
+anyway"* is the truth; the reverse order reads as an excuse with a fact attached.
+
+### The one clause that is not yet settled
+
+**12 of today's 146 trunk runs failed** — ten of them the two red-main episodes, each with a single known
+inherited assertion. `dispatcher` is computing which of the 55 merged inside those windows and reading
+each run's own failure line. **If any failure line is not the known one, that change re-verifies tonight.**
+
+> **FILL THIS FROM `dispatcher`'S LIST BEFORE 21:04**, as a number and not as a reassurance: *"of the 55,
+> N merged during a window when the full suite was failing; each was checked against that run's own
+> failure line, and M re-verified tonight."* If the answer is none, say none — **a clause deleted for
+> being empty reads as a clause nobody checked.**
 
 ### The rest of the process line
 
