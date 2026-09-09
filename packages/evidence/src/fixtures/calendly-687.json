@@ -1,5 +1,5 @@
 {
-  "_provenance": "Generated from the two real capture records named in issue #687 acceptance clause 1. TWICE REDUCED, and neither reduction touches what documentIdentity reads: (1) only the three marks it reads are kept -- the bulk arrays (names, graphicUnnamedDetail, graphicExemptedDetail, unnamedGraphics, candidateUrls) are dropped; (2) every recorded URL keeps its origin and path and has its query replaced with the literal ?…(query dropped), because servedPathOf discards the query and the real one is expired OAuth handshake state. document-identity.test.ts asserts this fixture and the real files on disk produce identical identities, so neither reduction can drift unnoticed.",
+  "_provenance": "Generated from the two real capture records named in issue #687 acceptance clause 1. TWICE REDUCED, and neither reduction touches what documentIdentity reads: (1) only the three marks it reads are kept -- the bulk arrays (names, graphicUnnamedDetail, graphicExemptedDetail, unnamedGraphics, candidateUrls) are dropped; (2) every recorded URL keeps its origin, path and query parameter NAMES, and every query VALUE is emptied, because the values are per-request OAuth nonces and the names are what droppedQueryParams counts. document-identity.test.ts asserts this fixture and the real files on disk produce identical identities AND identical dropped-parameter counts, so neither reduction can drift unnoticed.",
   "captures": [
     {
       "source": "runs/witness/2026-09-09T10-42-55-274Z-calendly-com.json",
@@ -126,7 +126,7 @@
             },
             "targetMatch": "fallback",
             "candidates": 1,
-            "targetUrl": "https://accounts.google.com/v3/signin/identifier?…(query dropped)",
+            "targetUrl": "https://accounts.google.com/v3/signin/identifier?opparams=&dsh=&access_type=&client_id=&code_challenge=&code_challenge_method=&include_granted_scopes=&o2v=&prompt=&redirect_uri=&response_type=&scope=&service=&state=&flowName=&continue=&app_domain=&rart=",
             "expectedUrl": "https://calendly.com/"
           },
           {
@@ -144,7 +144,7 @@
             "tabbable": 11,
             "targetMatch": "fallback",
             "candidates": 1,
-            "targetUrl": "https://accounts.google.com/v3/signin/identifier?…(query dropped)",
+            "targetUrl": "https://accounts.google.com/v3/signin/identifier?opparams=&dsh=&access_type=&client_id=&code_challenge=&code_challenge_method=&include_granted_scopes=&o2v=&prompt=&redirect_uri=&response_type=&scope=&service=&state=&flowName=&continue=&app_domain=&rart=",
             "expectedUrl": "https://calendly.com/"
           }
         ]

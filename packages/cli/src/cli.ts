@@ -42,7 +42,7 @@ import { captureDoubt, captureMentionsTitle, oracleCounts, earlyContainmentVerdi
   from "@a11ign/evidence/verify";
 import { scorerPaths as scorerArtefact } from "@a11ign/scorer";
 import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics,
-  censusCountsDistinctNames, type ConformanceRequirement }
+  censusCountsDistinctNames, censusTargetMismatchReason, type ConformanceRequirement }
   from "@a11ign/evidence/conformance";
 import { assessedCriteria } from "@a11ign/judge/coverage";
 import { earlReport } from "@a11ign/evidence/earl";
@@ -766,6 +766,13 @@ export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): 
   const diagnostics = (cap as { diagnostics?: unknown[] }).diagnostics ?? [];
   const census = censusFromDiagnostics(diagnostics);
   const structure = (cap.structure ?? {}) as Record<string, unknown[] | undefined>;
+  // Singular keys to match the census vocabulary; the structure fields are plural.
+  const swept = {
+    heading: structure.headings?.length ?? 0,
+    landmark: structure.landmarks?.length ?? 0,
+    link: structure.links?.length ?? 0,
+    graphic: structure.graphics?.length ?? 0,
+  };
   return conformanceScope({
     assessedCriteria: assessedCriteria(),
     sweeps: sweepOutcomes(diagnostics),
@@ -777,13 +784,14 @@ export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): 
     // WHICH DOCUMENT THIS REPORT IS ABOUT (#687). Read from the same diagnostics, for the same reason the
     // census is: the served URL and the title are already on the record and nothing consumed them.
     documentIdentity: documentIdentity(cap as unknown as Record<string, unknown>),
-    // Singular keys to match the census vocabulary; the structure fields are plural.
-    swept: {
-      heading: structure.headings?.length ?? 0,
-      landmark: structure.landmarks?.length ?? 0,
-      link: structure.links?.length ?? 0,
-      graphic: structure.graphics?.length ?? 0,
-    },
+    swept,
+    // #685/#691: the calendly case where a probe navigated to accounts.google.com before the census ran,
+    // and "reach 44/1" got printed and quoted as though 1 were this page's real heading count.
+    censusMismatchReason: censusTargetMismatchReason(
+      diagnostics, swept,
+      (cap as { interaction?: { routeChange?: { titleBefore?: unknown; titleAfter?: unknown } } })
+        .interaction?.routeChange,
+    ),
   });
 }
 

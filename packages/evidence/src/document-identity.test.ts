@@ -210,6 +210,13 @@ test("the real capture records on disk say the same thing as the fixture", (t) =
   // The fixture is a REDUCTION of these records, so the identities it produces must be identical.
   assert.equal(identities[0].digest, documentIdentity(first.capture).digest);
   assert.equal(identities[1].digest, documentIdentity(second.capture).digest);
+  // AND THE DROPPED-PARAMETER COUNT, which the digest does not cover. The fixture empties every query
+  // VALUE and keeps every NAME precisely so this stays true; an earlier reduction replaced the whole
+  // query with one placeholder and silently turned a count of 15 into a count of 1.
+  assert.equal(identities[0].droppedQueryParams, documentIdentity(first.capture).droppedQueryParams);
+  assert.equal(identities[1].droppedQueryParams, documentIdentity(second.capture).droppedQueryParams);
+  assert.ok((identities[0].droppedQueryParams ?? 0) > 1,
+    "the sign-in URL carries several nonce parameters; a count of 0 or 1 means the fixture flattened them");
 });
 
 /**

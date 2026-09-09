@@ -194,6 +194,12 @@ function main() {
   for (const p of unexplained) console.error(`  ${p}`);
   console.error("Content reverts without a matching deletion are out of scope for this check -- see the "
     + "script's own header.");
+  console.error("#655: this is NOT auto-reverted -- trunk-guard.yml's decideRevert deliberately treats a "
+    + "trunkGate-only failure as a question this merge's own two parents cannot answer by re-running a "
+    + "suite, so it always records `pass` there and takes no automatic action. A human decides: read the "
+    + "paths above against what this merge actually resolved. If the deletion was accidental (the #232 "
+    + `shape), revert the merge and push: git revert -m 1 ${merge}. If it was deliberate, no action is `
+    + "needed here.");
   process.exit(EXIT.REFUSE);
 }
 
