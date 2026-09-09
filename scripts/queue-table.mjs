@@ -577,9 +577,22 @@ function poolFromHeaders(args) {
 export function renderBudget(budget, spent) {
   if (budget === null) return `   api budget: could not read either pool (this table spent ${spent} call(s))`;
   /** @param {string} name @param {ReturnType<typeof poolFromHeaders>} p */
+  // EVERY NUMBER CARRIES ITS WORD, AND A BARE FRACTION IS BANNED HERE.
+  //
+  // This line read `core 4961/5000` until 2026-09-09 17:2xZ, and I read my own line as used-of-limit --
+  // declared an account-wide exhaustion that was not happening, froze eight sessions, cancelled two
+  // scheduled passes and asked every session to hunt a loop that did not exist. 4961 was REMAINING; 39
+  // was used. ceo read the same pair of headers in the opposite direction a quarter of an hour earlier.
+  //
+  // `4961/5000` is the natural spelling of a budget SPENT, which is what a reader arrives expecting, and
+  // nothing in the glyphs says otherwise. It was believable because it agreed with the day: there HAD
+  // been a real exhaustion at 14:41Z and a figure that fits the story gets less scrutiny than one that
+  // does not. So the words go beside the numbers, and the reset says `resets in`, so it cannot be read
+  // as budget either.
   const line = (name, p) => p === null
     ? `${name} UNREADABLE`
-    : `${name} ${p.remaining}/${p.limit}` + (p.resetInMinutes === null ? "" : ` (${p.resetInMinutes}m)`);
+    : `${name} ${p.used} used, ${p.remaining} remaining of ${p.limit}`
+      + (p.resetInMinutes === null ? "" : ` (resets in ${p.resetInMinutes}m)`);
   const lines = [`   api budget: ${line("core", budget.core)}   ${line("graphql", budget.graphql)}`
     + `   this table spent ${spent}`];
   // EXHAUSTED IS ITS OWN LINE, not a small number in a row of numbers. graphql reaching 0 takes out every
