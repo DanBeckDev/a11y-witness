@@ -11,9 +11,18 @@
 // walks; this stops it walking the ones that must stay -- 54 dirty and 9 cherry-picked at the time of
 // writing, none of them removable, all of them indexed.
 //
-// A MARKER IS PLACED, NEVER A VOLUME DISABLED. `mdutil -i off` acts on a whole volume and is the
-// chairman's machine to decide about; `.metadata_never_index` is a per-directory opt-out that affects
-// exactly the directories this repository created. Reversible with `rm`, and this script reports what it
+// MEASURED, AND IT DOES NOT WORK: this comment claimed `.metadata_never_index` is "a per-directory
+// opt-out". Placed on all 68 worktrees at 12:47Z and verified present; `mds_stores` was 54.8% at 12:45Z
+// and 80% at 12:52Z. No effect. On current macOS the marker is honoured at a VOLUME ROOT only, and
+// per-directory exclusion is the Spotlight Privacy list -- a machine-owner action, not something this
+// repository can perform on somebody's Mac.
+//
+// THIS SCRIPT IS KEPT ANYWAY, and only for what it actually does: it enumerates every worktree and
+// reports which carry the marker. That is the list somebody needs to hand to the Privacy list, and it
+// costs nothing. A future macOS may honour the file. What it must not do is be cited as the reason
+// indexing fell -- the number that would show that has been measured twice and did not move.
+//
+// `mdutil -i off` acts on a whole volume and remains the chairman's machine to decide about. Reversible with `rm`, and this script reports what it
 // would do unless told to act -- #669's lesson, in the file written the same day: a command whose name
 // reads as a report is one somebody runs to look.
 import { execFileSync } from "node:child_process";
